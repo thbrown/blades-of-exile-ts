@@ -21,8 +21,21 @@ page.on('console', (m) => {
 // twenty-five times waits for twenty-five of them — at the shipped 3x pace this
 // gate would take minutes. The ordering being checked is the same either way.
 await page.goto(process.argv[2] ?? 'http://localhost:5199/?pace=1');
-await page.waitForFunction(() => window.__session !== undefined, { timeout: 20000 });
+
+// No `?scenario=` means the startup screen, so this is also the check that it
+// works: the four bundled scenarios are offered by their real titles, and
+// clicking one starts the game.
+await page.waitForSelector('.startup .startup-choice', { timeout: 20000 });
+const startupChoices = await page.evaluate(() =>
+  [...document.querySelectorAll('.startup .startup-choice strong')].map((e) => e.textContent));
+await page.screenshot({ path: `${SHOTS}/00-startup.png` });
+const valley = page.locator('.startup .startup-choice', { hasText: 'Valley of Dying Things' });
+await valley.first().click();
+console.log('STARTUP:', JSON.stringify(startupChoices));
+
+await page.waitForFunction(() => window.__session !== undefined, { timeout: 30000 });
 await page.waitForTimeout(600);
+const startupGone = await page.evaluate(() => document.querySelector('.startup') === null);
 
 const shot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png`, clip: { x: 12, y: 12, width: 1210, height: 860 } });
 
@@ -2043,6 +2056,33 @@ if (pickerRow !== null) {
 await shot('02k-menu-load');
 console.log('MENU LOAD:', JSON.stringify({ fileMenu, ...menuLoad }));
 
+// M7's own demo: quit mid-dungeon, come back, continue. The page is reloaded
+// with no `?scenario=` at all, so the whole cold path runs — startup screen,
+// Continue list, scenario fetch, save applied — and the party has to come back
+// with the gold it was saved with.
+await page.evaluate(async () => {
+  const store = await import('/src/platform/saveStore.ts');
+  window.__univ.party.gold = 7171;
+  await store.putSave('ResumeSlot', window.__saveGame());
+});
+await page.goto(process.argv[2] ?? 'http://localhost:5199/?pace=1');
+await page.waitForSelector('.startup .startup-choice', { timeout: 20000 });
+const resumeOffered = await page.evaluate(() =>
+  [...document.querySelectorAll('.startup .startup-choice strong')].map((e) => e.textContent));
+await page.screenshot({ path: `${SHOTS}/00b-startup-resume.png` });
+await page.locator('.startup .startup-choice', { hasText: 'ResumeSlot' }).first().click();
+await page.waitForFunction(() => window.__session !== undefined, { timeout: 30000 });
+await page.waitForTimeout(800);
+const resumed = await page.evaluate(() => ({
+  offered: null,
+  gold: window.__univ.party.gold,
+  slot: window.__univ.saveSlot,
+  inTown: window.__session.inTown,
+  tail: window.__univ.transcript.slice(-2),
+}));
+await shot('02l-resumed');
+console.log('RESUME:', JSON.stringify({ resumeOffered, ...resumed }));
+
 // Spell targeting: the crosshair follows the cursor, and the click lands where
 // it points. Both were broken once — every targeting click was reduced to one
 // step toward the target, so no spell could reach past an adjacent square.
@@ -2492,6 +2532,13 @@ const ok =
     && (saved.monsterHealth === null || saved.monsterHealth === 1))) &&
   // The File menu is the only route to Open that works in every browser, so
   // the whole path — menu, picker, load — is driven for real.
+  // The startup screen names all four bundled scenarios and gets out of the way.
+  startupChoices.length === 4 &&
+  startupChoices.includes('Valley of Dying Things') &&
+  startupGone === true &&
+  // …and comes back offering the saved game, which resumes into its own world.
+  resumeOffered.includes('ResumeSlot') &&
+  resumed.gold === 7171 && resumed.slot === 'ResumeSlot' && resumed.inTown === true &&
   fileMenu.some((label) => label.startsWith('Open Game')) &&
   menuLoad.row === 'clicked' && menuLoad.gold === 8888 &&
   menuLoad.slot === 'VerifySlot' && menuLoad.dialogGone === true &&

@@ -86,6 +86,12 @@
           transform: rotate(360deg);
         }
       }
+      /* Empty until the game is running, and an empty bar looks broken. */
+      #game-menu-bar:empty,
+      body.starting #canvas-wrap,
+      body.starting #status {
+        display: none;
+      }
       #game-menu-bar {
         width: 1210px;
         max-width: 100%;
@@ -162,6 +168,62 @@
       .dropdown li.separator:hover {
         background: none;
       }
+      .startup {
+        width: 1210px;
+        max-width: 100%;
+        background: #222;
+        border: 1px solid #444;
+        border-radius: 4px;
+        padding: 24px 28px 28px;
+        box-sizing: border-box;
+      }
+      .startup h1 {
+        margin: 0 0 4px;
+        font-size: 22px;
+        font-weight: 600;
+      }
+      .startup h2 {
+        margin: 20px 0 8px;
+        font-size: 13px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #8fa8cd;
+      }
+      .startup-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 8px;
+      }
+      .startup-choice {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 3px;
+        text-align: left;
+        padding: 10px 12px;
+        background: #2c2c2c;
+        border: 1px solid #4a4a4a;
+        border-radius: 3px;
+        color: #ddd;
+        font: inherit;
+        cursor: pointer;
+      }
+      .startup-choice:hover,
+      .startup-choice:focus {
+        background: #3a3a55;
+        border-color: #6a8fc7;
+        outline: none;
+      }
+      .startup-choice strong {
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .startup-choice small {
+        font-size: 11px;
+        color: #999;
+        line-height: 1.35;
+      }
       #progress-wrap {
         width: 1210px;
         max-width: 100%;
@@ -180,6 +242,7 @@
   </head>
   <body>
     <nav id="game-menu-bar"></nav>
+    <div id="startup-host"></div>
     <div id="canvas-wrap">
       <canvas id="canvas" width="605" height="430"></canvas>
       <div id="spinner" aria-hidden="true"></div>

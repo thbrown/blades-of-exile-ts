@@ -54,6 +54,9 @@ import {
 } from './platform/saveStore';
 import { AutosaveReason, getAutosavePrefs, setAutosaveSink } from './game/autosave';
 import { MENU_SEPARATOR, installMenuBar } from './platform/menu';
+import { showStartupScreen } from './platform/startup';
+import { readScenarioFromXml } from './fileio/scenarioXml';
+import { parseXmlDoc } from './fileio/xml';
 import { TOWN_NUM_OUTDOORS } from './universe/party';
 import { FetchSource } from './fileio/source';
 import { InputRouter } from './platform/input';
@@ -75,10 +78,29 @@ const ANIM_INTERVAL_MS = 250;
 
 const DEFAULT_SCENARIO = 'valleydy';
 
-function scenarioFromQuery(): string {
+/**
+ * `?scenario=` names a scenario directly and skips the startup screen — which
+ * is what a direct link, a cross-scenario load and the headless verifier all
+ * want. Null means "ask".
+ */
+function scenarioFromQuery(): string | null {
   const q = new URLSearchParams(window.location.search).get('scenario');
-  return q && /^[a-z0-9_-]+$/i.test(q) ? q : DEFAULT_SCENARIO;
+  return q && /^[a-z0-9_-]+$/i.test(q) ? q : null;
 }
+
+/**
+ * The scenarios shipped in `public/scenarios`. There's no directory listing to
+ * fetch over HTTP, so the ids live here; their titles and teasers come out of
+ * each one's own `scenario.xml`, so nothing is duplicated but the id.
+ */
+const BUNDLED_SCENARIOS = ['valleydy', 'stealth', 'zakhazi', 'busywork'];
+
+/**
+ * A save for a scenario other than the one running can't be applied in place —
+ * the whole world would have to be re-fetched. Instead the slot is parked here
+ * and the page reopened on the right scenario, which `main` then notices.
+ */
+const PENDING_SAVE_KEY = 'exile-js.pendingSave';
 
 /**
  * `?pace=` overrides the combat animation speed: 1 is normal, larger is slow
@@ -91,8 +113,15 @@ function applyPaceFromQuery(): void {
   if (Number.isFinite(n) && n > 0) setCombatPace(n);
 }
 
+const LOADING_UI = ['spinner', 'loading-file', 'progress-wrap'];
+
 function hideLoadingUi(): void {
-  for (const id of ['spinner', 'loading-file', 'progress-wrap']) document.getElementById(id)?.classList.add('hidden');
+  for (const id of LOADING_UI) document.getElementById(id)?.classList.add('hidden');
+}
+
+/** The spinner starts visible; the startup screen hides it and this puts it back. */
+function showLoadingUi(): void {
+  for (const id of LOADING_UI) document.getElementById(id)?.classList.remove('hidden');
 }
 
 async function main(): Promise<void> {
@@ -103,7 +132,47 @@ async function main(): Promise<void> {
   const ctx = canvas.getContext('2d')!;
 
   applyPaceFromQuery();
-  const name = scenarioFromQuery();
+  // The startup screen, unless a scenario was named outright. It needs the
+  // save list and each scenario's title, both cheap: four small XML headers and
+  // one IndexedDB read, against the megabytes the scenario itself will cost.
+  let name = scenarioFromQuery();
+  let openSlot = window.sessionStorage.getItem(PENDING_SAVE_KEY);
+  window.sessionStorage.removeItem(PENDING_SAVE_KEY);
+  if (name === null) {
+    hideLoadingUi();
+    document.body.classList.add('starting');
+    status.textContent = 'Choose a game.';
+    const headers = await Promise.all(BUNDLED_SCENARIOS.map(async (id) => {
+      try {
+        const url = `${import.meta.env.BASE_URL}scenarios/${id}/scenario.xml`;
+        const hdr = readScenarioFromXml(await parseXmlDoc(await (await fetch(url)).text(), url));
+        return { id, title: hdr.title, blurb: hdr.teasers.find((t) => t !== '') ?? '' };
+      } catch {
+        // A scenario that won't even parse its header is still offered by id,
+        // so the screen never comes up empty because of one bad directory.
+        return { id, title: id, blurb: '' };
+      }
+    }));
+    const saves = saveStoreAvailable() ? await listSaves() : [];
+    const choice = await showStartupScreen(
+      document.getElementById('startup-host')!,
+      headers,
+      saves.map((slot) => ({
+        slot: slot.name,
+        scenarioId: slot.preview.scenarioId,
+        // The scenario's title if it is one of the bundled four, else its id —
+        // a save can name a scenario that isn't installed, which is the case
+        // the C++ shows "could not be found" for.
+        label: `${headers.find((h) => h.id === slot.preview.scenarioId)?.title
+          ?? slot.preview.scenarioId} — day ${Math.floor(slot.preview.age / 3700) + 1}`
+          + ` (${new Date(slot.savedAt).toLocaleString()})`,
+      })),
+    );
+    name = choice.scenarioId;
+    openSlot = choice.slot ?? null;
+    document.body.classList.remove('starting');
+  }
+  showLoadingUi();
 
   // Progress UI: total starts at the fixed-size loads (opcodes, string
   // tables, dialog defs, sheets, fonts, scenario.xml itself) and grows once
@@ -732,10 +801,19 @@ async function main(): Promise<void> {
     try {
       const preview = readSavePreview(data);
       if (preview.scenarioId !== scen.id) {
-        univ.addStringToBuf(
-          `That game was played in "${preview.scenarioId}", not "${scen.id}". ` +
-          `Open ?scenario=${preview.scenarioId} first.`);
-        redraw();
+        // Another scenario means another world to fetch, so the page reopens on
+        // it and picks the slot back up. Only a stored slot can make that trip;
+        // an imported file's bytes have nowhere to wait.
+        if (picked === 'file') {
+          univ.addStringToBuf(
+            `That game was played in "${preview.scenarioId}", not "${scen.id}". ` +
+            `Open that scenario first, then import it.`);
+          redraw();
+          return;
+        }
+        window.sessionStorage.setItem(PENDING_SAVE_KEY, picked.slice('slot:'.length));
+        window.location.href =
+          `${import.meta.env.BASE_URL}?scenario=${encodeURIComponent(preview.scenarioId)}`;
         return;
       }
       applySave(data, univ);
@@ -1824,6 +1902,23 @@ async function main(): Promise<void> {
     startAnimLoop();
     return new Promise<void>((resolve) => { setTimeout(resolve, ms); });
   });
+
+  // A saved game chosen on the startup screen (or parked by a cross-scenario
+  // load) is applied now that the world it belongs to is in place. It runs over
+  // the new game `startNewGame` just began, which is exactly what
+  // `load_party` does to the C++'s freshly-constructed universe.
+  if (openSlot !== null) {
+    try {
+      const data = await getSave(openSlot);
+      if (data === null) throw new Error(`no saved game called "${openSlot}"`);
+      applySave(data, univ);
+      univ.saveSlot = openSlot;
+      resumeAfterLoad();
+      univ.addStringToBuf(`Game loaded: ${openSlot}.`);
+    } catch (err) {
+      univ.addStringToBuf(`Load failed: ${String(err)}`);
+    }
+  }
 
   hideLoadingUi();
   setStatus();
