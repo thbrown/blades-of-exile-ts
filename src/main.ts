@@ -52,6 +52,7 @@ import { applySave, readSavePreview, saveGame } from './fileio/saveIo';
 import {
   SaveSlot, exportSave, getSave, importSave, listSaves, putSave, saveStoreAvailable,
 } from './platform/saveStore';
+import { AutosaveReason, getAutosavePrefs, setAutosaveSink } from './game/autosave';
 import { TOWN_NUM_OUTDOORS } from './universe/party';
 import { FetchSource } from './fileio/source';
 import { InputRouter } from './platform/input';
@@ -629,12 +630,60 @@ async function main(): Promise<void> {
     }
     try {
       await putSave(name, data);
+      univ.saveSlot = name;
       univ.addStringToBuf(`Game saved: ${name}.`);
     } catch (err) {
       univ.addStringToBuf(`Save failed: ${String(err)}`);
     }
     redraw();
   };
+
+  /**
+   * `try_auto_save`'s back half (boe.fileio.cpp:520). The C++ refuses until
+   * there is a file to autosave *beside* — "Autosave: Make a manual save
+   * first." — and then rotates through `<name>.auto/1..5`, overwriting the
+   * oldest once the ring is full. Here the ring is five IndexedDB slots named
+   * after the manual one, and `univ.saveSlot` is `univ.file`.
+   *
+   * Fire and forget: the trigger sites are inside `increase_age` and
+   * `start_town_mode`, neither of which can wait on a promise.
+   */
+  const autoSlotName = (base: string, n: number): string => `${base}.auto ${n}`;
+
+  const doAutoSave = (reason: AutosaveReason): void => {
+    if (!saveStoreAvailable()) return;
+    const base = univ.saveSlot;
+    if (base === null) {
+      univ.addStringToBuf('Autosave: Make a manual save first.');
+      return;
+    }
+    const max = getAutosavePrefs().max;
+    void (async () => {
+      try {
+        const slots = await listSaves();
+        const mine = new Map(slots
+          .filter((s) => s.name.startsWith(`${base}.auto `))
+          .map((s) => [s.name, s]));
+        let target = '';
+        for (let n = 1; n <= max; n++) {
+          if (!mine.has(autoSlotName(base, n))) {
+            target = autoSlotName(base, n);
+            break;
+          }
+        }
+        if (target === '') {
+          // The ring is full, so the oldest goes.
+          target = [...mine.values()].sort((a, b) => a.savedAt - b.savedAt)[0]!.name;
+        }
+        await putSave(target, saveGame(univ));
+        univ.addStringToBuf(`Autosave: Game saved (${reason}).`);
+      } catch (err) {
+        univ.addStringToBuf(`Autosave: Save not completed (${String(err)})`);
+      }
+      redraw();
+    })();
+  };
+  setAutosaveSink(doAutoSave);
 
   const resumeAfterLoad = (): void => {
     session.resumeLoadedGame();
@@ -689,6 +738,10 @@ async function main(): Promise<void> {
         return;
       }
       applySave(data, univ);
+      // The C++ sets `univ.file` from what it loaded, so the autosave keeps
+      // rotating alongside the same manual save. An imported file has no slot
+      // of its own until it is saved.
+      univ.saveSlot = picked === 'file' ? null : picked.slice('slot:'.length);
       resumeAfterLoad();
       univ.addStringToBuf('Game loaded.');
       redraw();

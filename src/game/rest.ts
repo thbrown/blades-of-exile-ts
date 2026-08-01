@@ -5,6 +5,7 @@
  */
 
 import { ItemAbil } from '../data/item';
+import { tryAutoSave } from './autosave';
 import { hasAbilEquip } from '../universe/inventory';
 import { MainStatus, Status, Trait } from '../universe/skills';
 import { Universe } from '../universe/universe';
@@ -107,5 +108,6 @@ export function handleRest(
   univ.party.food -= 6;
   doRest(univ, 1200, univ.rng.getRan(5, 1, 10), 50, isOutdoors);
   say('  Rest successful.');
+  tryAutoSave('RestComplete');
   return true;
 }

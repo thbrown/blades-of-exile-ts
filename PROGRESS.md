@@ -1595,8 +1595,8 @@ playthrough will hit it:
 2. ~~**The job-bank board**~~ — **done** (2026-07-28), see the entry below.
    What's left of the quest UI is the quest pane of the item window.
 3. ~~**Alchemy** (`A`)~~ — **done** (2026-07-28), see the entry below.
-4. **`increase_age`'s remaining upkeep**: the autosave (needs M7's save
-   system). ~~Hunger~~ landed 2026-07-28 — see the entry below.
+4. ~~**`increase_age`'s remaining upkeep**~~ — ~~the autosave~~ landed
+   2026-08-01, ~~hunger~~ 2026-07-28. Both have entries below.
 5. **The dialogxml toolkit** — the parser, the widget renderer and the first
    converted call site (`pc-info.xml`) landed 2026-07-28; see the entry below.
    Since then: `quest-info`, `get-items`, `item-info`, the eight `cStrDlog`
@@ -1610,7 +1610,8 @@ playthrough will hit it:
 7b. ~~**M7 — save/load**~~ — the `.exg` round trip, the IndexedDB slots and
    Ctrl+S/Ctrl+L landed 2026-08-01; see the entry at the bottom. What's left of
    M7 is the scenario picker (choosing a scenario or a saved game before the
-   game starts, rather than `?scenario=`) and `try_auto_save`.
+   game starts, rather than `?scenario=`). ~~`try_auto_save`~~ landed
+   2026-08-01 — see the entry at the bottom.
 8. Part 2 (Exile 3) hasn't started; E3-0 (format groundwork) can proceed in
    parallel at any time.
 
@@ -2679,3 +2680,29 @@ playthrough will hit it:
     step that saves the live game, wrecks the world, loads it back and checks
     the gold, an SDF, a wounded PC, the party's square and a wounded monster
     all came back.
+
+- **The autosave (M7, 2026-08-01).** `game/autosave.ts` ports `try_auto_save`
+  (boe.fileio.cpp:520) and `check_autosave_trigger` (:513): a master `Autosave`
+  switch, then a per-reason `Autosave_<reason>` preference on top of it. Five of
+  the six reasons default on; **Eat defaults off**, since it fires far more
+  often than the rest (`autosave_trigger_defaults`, :504).
+  - It is a module-level hook, like `setPrintResult` and `setLivingSound`: the
+    call sites are inside `increase_age`, `start_town_mode` and `end_combat`,
+    none of which has the host to hand — which is why the C++ reaches for a
+    global there too. Uninstalled, as in every test, it does nothing.
+  - Wired at four of the six C++ sites: `EnterTown` (start_town_mode's last
+    line), `ExitTown` (handle_action's `if(left_town)`), `RestComplete` (only
+    when the rest actually happens) and `EndOutdoorCombat` (**only** an outdoor
+    fight — `if(which_combat_type == 0)`). `Eat` is wired too, defaulting off.
+    `TownWaitComplete` has nowhere to go yet: this port has no `handle_town_wait`,
+    the fifty-turn wait in town.
+  - `univ.saveSlot` is `cUniverse::file`. The C++ refuses to autosave until
+    there is a manual save to sit beside — "Autosave: Make a manual save
+    first." — and then rotates through `<name>.auto/1..5`, overwriting the
+    oldest once the ring is full. Here that is five IndexedDB slots named after
+    the manual one. Loading a slot adopts it; **importing a file does not**,
+    since an imported `.exg` has no slot of its own until it is saved.
+  - Tests: `test/autosave.test.ts` (7) covers the defaults, both directions of
+    a per-reason override, the master switch, and that EnterTown, ExitTown and
+    RestComplete fire where they should — RestComplete only on a rest that was
+    not refused.

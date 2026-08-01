@@ -33,6 +33,12 @@ export class Universe {
   curPc = 0;
   /** Scrolling text pane contents, oldest first. */
   transcript: string[] = [];
+  /**
+   * `cUniverse::file` — the save this game was last written to or loaded from,
+   * null for one that has never been saved. The autosave refuses to run until
+   * there is one, and names its rotating slots after it.
+   */
+  saveSlot: string | null = null;
 
   constructor(
     readonly scenario: Scenario,

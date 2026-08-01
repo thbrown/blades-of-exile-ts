@@ -17,6 +17,7 @@
  */
 
 import { DamageType } from '../data/monster';
+import { tryAutoSave } from './autosave';
 import { ItemAbil } from '../data/item';
 import { hasAbilEquip } from '../universe/inventory';
 import { Player } from '../universe/player';
@@ -164,7 +165,9 @@ export async function increaseAgeEffects(session: GameSession): Promise<void> {
     } else {
       session.sound?.play(6);
       univ.addStringToBuf('You eat.');
-      // TODO(M7): `try_auto_save("Eat")` — eating is the C++'s autosave point.
+      // The one trigger that defaults *off*, since it fires far more often
+      // than the rest (autosave_trigger_defaults, boe.fileio.cpp:504).
+      tryAutoSave('Eat');
     }
   }
 
