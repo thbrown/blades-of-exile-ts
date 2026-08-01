@@ -13,7 +13,8 @@
   **L** pick a lock, **1-6** whose pack shows, **9** the special items and
   **0** the quests,
   **a** the automap (drag it by its window), **A** alchemy (in town),
-  **File > Open Game** (or **Ctrl+O**) loads and **Ctrl+S** saves,
+  **File > Open Game** (or **Ctrl+O**) loads and **Ctrl+S** saves; opening the
+  page with no `?scenario=` shows the startup screen,
   **m**/**p** spells, **s** shoot (in combat: arms the
   missile, then click a square; **s** or Escape cancels). Keys for things not
   built yet say which milestone they're
@@ -783,9 +784,10 @@ Notes for M2 implementer:
       job banks, special items, the three timer kinds, **item Use** ✅
       (2026-07-27) and **boats/horses** ✅ (2026-07-27); alchemy, traps,
       job-bank dialog and end-scenario open
-- [ ] **M7 — Save/load (.exg) + startup flow**: the tag file, the tarball, the
-      whole `.exg` round trip, the IndexedDB slots and Ctrl+S/Ctrl+L ✅
-      (2026-08-01); the scenario picker and the autosave still open
+- [x] **M7 — Save/load (.exg) + startup flow** (2026-08-01): the tag file, the
+      tarball, the whole `.exg` round trip, the IndexedDB slots, the File menu,
+      the autosave and the startup screen. Open: preferences for the autosave
+      triggers, and the legacy v1 save format (an M8 stretch)
 - [ ] **M8 — Fidelity hardening** (replay golden masters)
 
 ## Milestones (Part 2: Exile 3)
@@ -1607,11 +1609,9 @@ playthrough will hit it:
    below. The one thing left in that area is `AFFECT_SOUL_CRYSTAL`, which needs
    the creature-context plumbing described there.
 7. M2's last leftover is the replay driver.
-7b. ~~**M7 — save/load**~~ — the `.exg` round trip, the IndexedDB slots and
-   Ctrl+S/Ctrl+L landed 2026-08-01; see the entry at the bottom. What's left of
-   M7 is the scenario picker (choosing a scenario or a saved game before the
-   game starts, rather than `?scenario=`). ~~`try_auto_save`~~ landed
-   2026-08-01 — see the entry at the bottom.
+7b. ~~**M7 — save/load**~~ — **done** (2026-08-01): the `.exg` round trip, the
+   IndexedDB slots, the File menu, the autosave and the startup screen. See the
+   entries at the bottom.
 8. Part 2 (Exile 3) hasn't started; E3-0 (format groundwork) can proceed in
    parallel at any time.
 
@@ -2734,3 +2734,35 @@ playthrough will hit it:
     reveal it. The step added with the fix clicks the File menu, clicks Open
     Game…, clicks the slot in the picker and checks the party came back. Driving
     the real route is the only thing that would have caught this.
+
+- **The startup screen (M7, 2026-08-01).** The last of M7, and the thing that
+  makes "quit mid-dungeon, reload, continue" a route a player can actually
+  take rather than a URL they have to know.
+  - `platform/startup.ts` stands in for `MODE_STARTUP` (boe.consts.hpp:99) and
+    `draw_startup` (boe.graphics.cpp:288). The original's splash has five
+    buttons and reaches the scenario list through a second dialog; this is the
+    same two choices on one screen, because **the web build has a question the
+    original doesn't** — which scenario's *files* to fetch. The sheets, the
+    strings and the Universe all need that answer before anything can start, so
+    it is asked first rather than last.
+  - Plain DOM, no canvas: it runs before the graphics sheets have loaded. The
+    menu bar and the canvas are hidden while it is up (`body.starting`, plus a
+    `:empty` rule on the bar, which is otherwise an empty grey stripe).
+  - Each scenario's title and teaser come from its own `scenario.xml` header —
+    four small fetches — so only the four ids are written down anywhere.
+  - **`?scenario=` skips the screen**, which is what a direct link, the
+    cross-scenario load below and the headless verifier all want.
+  - **Loading a save for another scenario works now.** It can't be applied in
+    place — the whole world would have to be re-fetched — so the slot is parked
+    in `sessionStorage` and the page reopened on the right scenario, which
+    `main` notices and applies once the world is up. Only a *stored* slot can
+    make that trip; an imported file's bytes have nowhere to wait, so that case
+    still says to open the scenario first.
+  - A save chosen on the startup screen is applied over the new game
+    `startNewGame` has just begun — which is exactly what `load_party` does to
+    the C++'s freshly constructed universe.
+  - `verify-screen.mjs` now enters through the startup screen instead of
+    `?scenario=`, so the cold path is exercised on every run, and gained a
+    closing step that saves, reloads the page with no query at all, finds the
+    slot under "Continue a saved game", clicks it and checks the party came
+    back with the gold it was saved with. That is M7's demo, driven end to end.
