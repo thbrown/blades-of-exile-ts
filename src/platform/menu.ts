@@ -1,0 +1,128 @@
+/**
+ * The menu bar — the browser-layer replacement for the original's OS menus,
+ * lifted from the WASM build's `web/menu.js` + `web/shell.html`.
+ *
+ * It exists for a reason beyond discoverability: **the File shortcuts can't all
+ * be keyboard shortcuts.** Ctrl+L and Cmd+L are reserved by Chrome and Firefox
+ * for the address bar and cannot be intercepted by a page at all — a keydown
+ * handler never even runs — so a load bound to them silently does nothing. The
+ * menu sidesteps the whole question.
+ *
+ * Deliberately plain DOM: the game is one canvas plus this bar, and a framework
+ * would be the only one in the project.
+ */
+
+export interface MenuItem {
+  label: string;
+  /** Shown right-aligned; purely a hint, the binding lives in the key handler. */
+  shortcut?: string;
+  action: () => void;
+  /** Re-asked every time the menu opens, so items can grey themselves out. */
+  enabled?: () => boolean;
+}
+
+/** A horizontal rule between groups of items. */
+export const MENU_SEPARATOR = Symbol('separator');
+
+export interface Menu {
+  label: string;
+  items: (MenuItem | typeof MENU_SEPARATOR)[];
+}
+
+export interface MenuBar {
+  /** Re-evaluate every item's `enabled`. Called on open, and after an action. */
+  refresh(): void;
+  /** Whether a dropdown is showing — the input router treats it like a dialog. */
+  readonly open: boolean;
+}
+
+export function installMenuBar(host: HTMLElement, menus: Menu[]): MenuBar {
+  host.textContent = '';
+  const entries: { root: HTMLElement; items: { el: HTMLElement; item: MenuItem }[] }[] = [];
+
+  const closeAll = (): void => {
+    for (const entry of entries) entry.root.classList.remove('open');
+  };
+
+  const refresh = (): void => {
+    for (const entry of entries) {
+      for (const { el, item } of entry.items) {
+        const on = item.enabled?.() ?? true;
+        el.classList.toggle('disabled', !on);
+      }
+    }
+  };
+
+  for (const menu of menus) {
+    const root = document.createElement('div');
+    root.className = 'menu-item';
+    root.append(menu.label);
+    const dropdown = document.createElement('ul');
+    dropdown.className = 'dropdown';
+    const items: { el: HTMLElement; item: MenuItem }[] = [];
+
+    for (const entry of menu.items) {
+      const li = document.createElement('li');
+      if (entry === MENU_SEPARATOR) {
+        li.className = 'separator';
+        dropdown.append(li);
+        continue;
+      }
+      li.append(entry.label);
+      if (entry.shortcut !== undefined) {
+        const hint = document.createElement('span');
+        hint.textContent = entry.shortcut;
+        li.append(hint);
+      }
+      li.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if (li.classList.contains('disabled')) return;
+        closeAll();
+        entry.action();
+        refresh();
+      });
+      items.push({ el: li, item: entry });
+      dropdown.append(li);
+    }
+
+    root.append(dropdown);
+    root.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const wasOpen = root.classList.contains('open');
+      closeAll();
+      if (!wasOpen) {
+        refresh();
+        root.classList.add('open');
+      }
+    });
+    // Once one menu is open, sliding across the bar switches between them, the
+    // way a real menu bar behaves.
+    root.addEventListener('mouseenter', () => {
+      if (!entries.some((e) => e.root.classList.contains('open'))) return;
+      closeAll();
+      refresh();
+      root.classList.add('open');
+    });
+
+    host.append(root);
+    entries.push({ root, items });
+  }
+
+  document.addEventListener('click', closeAll);
+  // Capture phase, so Escape closes the menu before the game's key handler
+  // sees it and cancels whatever the player was doing.
+  window.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape') return;
+    if (!entries.some((e) => e.root.classList.contains('open'))) return;
+    ev.stopPropagation();
+    closeAll();
+  }, true);
+
+  refresh();
+  return {
+    refresh,
+    get open() {
+      return entries.some((e) => e.root.classList.contains('open'));
+    },
+  };
+}

@@ -86,6 +86,82 @@
           transform: rotate(360deg);
         }
       }
+      #game-menu-bar {
+        width: 1210px;
+        max-width: 100%;
+        height: 26px;
+        background: #2a2a2a;
+        border: 1px solid #444;
+        border-radius: 3px;
+        display: flex;
+        align-items: stretch;
+        font-size: 13px;
+        color: #ddd;
+        user-select: none;
+        position: relative;
+        z-index: 10;
+      }
+      .menu-item {
+        padding: 0 10px;
+        cursor: pointer;
+        position: relative;
+        display: flex;
+        align-items: center;
+        white-space: nowrap;
+      }
+      .menu-item:hover,
+      .menu-item.open {
+        background: #4a4a6a;
+      }
+      .dropdown {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        background: #2a2a2a;
+        border: 1px solid #555;
+        min-width: 230px;
+        z-index: 200;
+        padding: 3px 0;
+        box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.5);
+        list-style: none;
+        margin: 0;
+      }
+      .menu-item.open .dropdown {
+        display: block;
+      }
+      .dropdown li {
+        list-style: none;
+        padding: 5px 20px 5px 14px;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        align-items: center;
+      }
+      .dropdown li:hover {
+        background: #4a4a6a;
+      }
+      .dropdown li.disabled {
+        color: #666;
+        cursor: default;
+      }
+      .dropdown li.disabled:hover {
+        background: none;
+      }
+      .dropdown li span {
+        color: #888;
+        font-size: 11px;
+      }
+      .dropdown li.separator {
+        padding: 0;
+        margin: 3px 0;
+        border-top: 1px solid #444;
+        cursor: default;
+      }
+      .dropdown li.separator:hover {
+        background: none;
+      }
       #progress-wrap {
         width: 1210px;
         max-width: 100%;
@@ -103,6 +179,7 @@
     </style>
   </head>
   <body>
+    <nav id="game-menu-bar"></nav>
     <div id="canvas-wrap">
       <canvas id="canvas" width="605" height="430"></canvas>
       <div id="spinner" aria-hidden="true"></div>

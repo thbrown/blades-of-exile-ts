@@ -13,7 +13,7 @@
   **L** pick a lock, **1-6** whose pack shows, **9** the special items and
   **0** the quests,
   **a** the automap (drag it by its window), **A** alchemy (in town),
-  **Ctrl+S**/**Ctrl+L** save and load,
+  **File > Open Game** (or **Ctrl+O**) loads and **Ctrl+S** saves,
   **m**/**p** spells, **s** shoot (in combat: arms the
   missile, then click a square; **s** or Escape cancels). Keys for things not
   built yet say which milestone they're
@@ -2706,3 +2706,31 @@ playthrough will hit it:
     a per-reason override, the master switch, and that EnterTown, ExitTown and
     RestComplete fire where they should — RestComplete only on a rest that was
     not refused.
+
+- **The load that could never have worked, and the menu bar (2026-08-01).**
+  Reported from play-testing: saving worked, opening did nothing at all. The
+  save/load code was fine — a headless driver saved, reloaded the page, opened
+  the slot and got the game back. **The binding was the bug: Chrome and Firefox
+  reserve Ctrl/Cmd+L for the address bar and a page cannot intercept it.** The
+  keydown handler is never called, `preventDefault` has nothing to prevent, and
+  the flow simply never starts. Ctrl+S *is* interceptable, which is exactly why
+  one of the two appeared to work.
+  - `platform/menu.ts` + the markup and CSS in `index.html` port the WASM
+    build's `web/menu.js` / `web/shell.html` menu bar: a File menu with New
+    Game, Open Game…, Save Game… and Export, items that grey themselves out
+    (Save and Export ask `canSaveNow`, so both are dead in combat), hover to
+    slide between menus once one is open, and Escape to close — registered in
+    the **capture** phase so it closes the menu instead of cancelling whatever
+    the player was doing on the canvas.
+  - The convenience shortcut for Open is **Ctrl+O** now. The menu is the route
+    that works everywhere, and it is also the only way a player would ever find
+    any of this: none of it is on the game's own toolbar, which is the
+    original's and has no room.
+  - New Game reloads the page. A reload genuinely *is* a new game, and it is the
+    one way to get a clean Universe without rebuilding every reference into it.
+  - **The lesson for the harness**: `verify-screen.mjs`'s first save/load step
+    called `__saveGame`/`__loadGame` directly, so it passed against a binding no
+    real browser can deliver — and headless Chromium has no address bar to
+    reveal it. The step added with the fix clicks the File menu, clicks Open
+    Game…, clicks the slot in the picker and checks the party came back. Driving
+    the real route is the only thing that would have caught this.

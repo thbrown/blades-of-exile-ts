@@ -2005,6 +2005,44 @@ const saved = await page.evaluate(async () => {
 await shot('02j-loaded-save');
 console.log('SAVE/LOAD:', JSON.stringify(saved));
 
+// ...and the route a player actually takes. Ctrl+L was the first binding for
+// Open and it can never work — Chrome and Firefox reserve Ctrl/Cmd+L for the
+// address bar, so the page's keydown handler is never called. Driving the menu
+// and the picker for real is the only test that would have caught it, which is
+// why this one clicks every step instead of calling __loadGame.
+const menuItems = await page.evaluate(async () => {
+  const store = await import('/src/platform/saveStore.ts');
+  window.__univ.party.gold = 8888;
+  await store.putSave('VerifySlot', window.__saveGame());
+  window.__univ.party.gold = 3;
+  return null;
+});
+void menuItems;
+await page.click('#game-menu-bar .menu-item');
+const fileMenu = await page.evaluate(() =>
+  [...document.querySelectorAll('#game-menu-bar .dropdown li')].map((li) => li.textContent));
+await page.click('#game-menu-bar .dropdown li:nth-child(2)'); // Open Game…
+await page.waitForTimeout(300);
+const pickerRow = await page.evaluate(() =>
+  window.__dialogs.active?.placedRows?.find((r) => r.name === 'slot:VerifySlot')?.rect ?? null);
+let menuLoad = { picker: fileMenu, row: pickerRow, gold: null };
+if (pickerRow !== null) {
+  const box = await page.locator('#canvas').boundingBox();
+  await page.mouse.click(
+    box.x + ((pickerRow.left + pickerRow.right) / 2) * (box.width / 605),
+    box.y + ((pickerRow.top + pickerRow.bottom) / 2) * (box.height / 430));
+  await page.waitForTimeout(600);
+  menuLoad = await page.evaluate(() => ({
+    picker: null,
+    row: 'clicked',
+    gold: window.__univ.party.gold,
+    slot: window.__univ.saveSlot,
+    dialogGone: window.__dialogs.active === null,
+  }));
+}
+await shot('02k-menu-load');
+console.log('MENU LOAD:', JSON.stringify({ fileMenu, ...menuLoad }));
+
 // Spell targeting: the crosshair follows the cursor, and the click lands where
 // it points. Both were broken once — every targeting click was reduced to one
 // step toward the target, so no spell could reach past an adjacent square.
@@ -2452,6 +2490,11 @@ const ok =
     && saved.at.x === saved.wanted.x && saved.at.y === saved.wanted.y
     && saved.mode === 1
     && (saved.monsterHealth === null || saved.monsterHealth === 1))) &&
+  // The File menu is the only route to Open that works in every browser, so
+  // the whole path — menu, picker, load — is driven for real.
+  fileMenu.some((label) => label.startsWith('Open Game')) &&
+  menuLoad.row === 'clicked' && menuLoad.gold === 8888 &&
+  menuLoad.slot === 'VerifySlot' && menuLoad.dialogGone === true &&
   errors.length === 0;
 console.log(ok ? 'PASS' : 'FAIL');
 process.exit(ok ? 0 : 1);

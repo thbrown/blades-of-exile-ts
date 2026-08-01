@@ -53,6 +53,7 @@ import {
   SaveSlot, exportSave, getSave, importSave, listSaves, putSave, saveStoreAvailable,
 } from './platform/saveStore';
 import { AutosaveReason, getAutosavePrefs, setAutosaveSink } from './game/autosave';
+import { MENU_SEPARATOR, installMenuBar } from './platform/menu';
 import { TOWN_NUM_OUTDOORS } from './universe/party';
 import { FetchSource } from './fileio/source';
 import { InputRouter } from './platform/input';
@@ -1556,7 +1557,11 @@ async function main(): Promise<void> {
         void saveGameFlow();
         return;
       }
-      if ((event.ctrlKey || event.metaKey) && (key === 'l' || key === 'L')) {
+      // Ctrl+O, *not* Ctrl+L: Chrome and Firefox reserve Ctrl/Cmd+L for the
+      // address bar and a page cannot intercept it — the keydown handler never
+      // runs at all, so a load bound there silently does nothing. The File menu
+      // is the reliable route; this is the convenience binding.
+      if ((event.ctrlKey || event.metaKey) && (key === 'o' || key === 'O')) {
         event.preventDefault();
         void loadGameFlow();
         return;
@@ -1827,6 +1832,53 @@ async function main(): Promise<void> {
     screen.animFrame++;
     redraw();
   }, ANIM_INTERVAL_MS);
+
+  // The File menu. It is the only route to Open that works everywhere, and it
+  // is how a player finds any of this — none of it is on the game's own
+  // toolbar, which is the original's and has no room.
+  const menuHost = document.getElementById('game-menu-bar');
+  if (menuHost !== null) {
+    installMenuBar(menuHost, [{
+      label: 'File',
+      items: [
+        {
+          label: 'New Game',
+          action: () => {
+            // A reload *is* a new game, and is the one way to get a genuinely
+            // clean Universe without rebuilding every reference into it.
+            if (window.confirm('Start a new game? Anything unsaved will be lost.')) {
+              window.location.reload();
+            }
+          },
+        },
+        {
+          label: 'Open Game…',
+          shortcut: 'Ctrl-O',
+          action: () => { void loadGameFlow(); },
+        },
+        MENU_SEPARATOR,
+        {
+          label: 'Save Game…',
+          shortcut: 'Ctrl-S',
+          action: () => { void saveGameFlow(); },
+          enabled: () => canSaveNow() === null,
+        },
+        {
+          label: 'Export to a file…',
+          action: () => {
+            const refusal = canSaveNow();
+            if (refusal !== null) {
+              univ.addStringToBuf(refusal);
+              redraw();
+              return;
+            }
+            exportSave(univ.saveSlot ?? univ.party.pcs[0]?.name ?? 'exile', saveGame(univ));
+          },
+          enabled: () => canSaveNow() === null,
+        },
+      ],
+    }]);
+  }
 
   // Handles for headless verification and manual debugging.
   Object.assign(window as unknown as Record<string, unknown>, {
