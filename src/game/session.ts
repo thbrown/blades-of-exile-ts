@@ -231,6 +231,43 @@ export class GameSession {
       SpecCtx.STARTUP, SpecCtxType.SCEN, this.univ.scenario.initSpec, loc(0, 0));
   }
 
+  /**
+   * The tail of `load_party` (boe.fileio.cpp:143): a restored Universe needs
+   * the session put back in step with it. Everything transient is dropped — a
+   * save can't be taken mid-shop or mid-spell, and combat isn't saved at all
+   * (`save_party` refuses in `MODE_COMBAT`), so the game always resumes
+   * standing in a town or on the world map.
+   *
+   * Deliberately *not* `startTownMode`: the town's creatures, items, fields and
+   * terrain all came out of the save, and repopulating would put the dead back
+   * on their feet. Only the lighting is recomputed, since it is derived.
+   */
+  resumeLoadedGame(): void {
+    this.talk = null;
+    this.shop = null;
+    this.itemShop = null;
+    this.missile = null;
+    this.spellTargeting = null;
+    this.townTarget = null;
+    this.arena = null;
+    this.storeWanderingSpecial = null;
+    this.combatActivePc = NO_ONE;
+    this.spellTarget = 6;
+    this.univ.curPc = 0;
+    const town = this.univ.town;
+    if (town !== null) {
+      this.mode = GameMode.TOWN;
+      this.setUpLights(town);
+      this.center = { ...this.univ.party.townLoc };
+      this.updateExplored(this.univ.party.townLoc);
+    } else {
+      this.mode = GameMode.OUTDOORS;
+      this.univ.party.townNum = TOWN_NUM_OUTDOORS;
+      this.center = { ...this.univ.party.outLoc };
+      this.updateExplored(this.univ.party.outLoc);
+    }
+  }
+
   private get preModes(): PreModes {
     return { shop: this.preShopMode, talk: this.preTalkMode };
   }

@@ -287,6 +287,7 @@ export function readScenarioFromXml(root: Element, fname = 'scenario.xml'): Scen
 export function emptyScenario(hdr: ScenarioHeader): Scenario {
   return {
     ...hdr,
+    id: '',
     terTypes: [],
     scenItems: [],
     scenMonsters: [],

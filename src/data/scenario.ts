@@ -16,6 +16,12 @@ import { Timer, Town } from './town';
 import { Vehicle } from './vehicle';
 
 export interface Scenario {
+  /**
+   * The scenario's directory name (`ScenarioSource.id`) — the string a save
+   * file records so it can find this scenario again on load. Not part of the
+   * scenario data itself, which is why it isn't in the header.
+   */
+  id: string;
   title: string;
   teasers: string[];
   introMsgs: string[];

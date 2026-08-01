@@ -1,0 +1,321 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { GameRng } from '../src/core/rng';
+import { FieldType } from '../src/data/fields';
+import { ItemType, presetItem, ItemPreset } from '../src/data/item';
+import { QuestStatus } from '../src/data/quest';
+import { Scenario } from '../src/data/scenario';
+import { loadScenario } from '../src/fileio/loadScenario';
+import {
+  loadSave, openSave, readSavePreview, saveGame, serialiseSave,
+} from '../src/fileio/saveIo';
+import { FsSource } from '../src/fileio/source';
+import { buildOpcodeTable } from '../src/fileio/specialParse';
+import { GameSession } from '../src/game/session';
+import { EncNoteType, TOWN_NUM_OUTDOORS } from '../src/universe/party';
+import { PartyPreset } from '../src/universe/player';
+import { MainStatus, Status } from '../src/universe/skills';
+import { Universe } from '../src/universe/universe';
+
+const opcodes = buildOpcodeTable(
+  readFileSync(new URL('../public/data/strings/specials-opcodes.txt', import.meta.url), 'utf8'),
+);
+
+let scen: Scenario;
+
+beforeAll(async () => {
+  scen = await loadScenario(
+    new FsSource(fileURLToPath(new URL('../public/scenarios/valleydy', import.meta.url))),
+    opcodes,
+  );
+});
+
+/** A fresh game, already standing in the scenario's start town. */
+async function newGame(): Promise<GameSession> {
+  const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+  await session.startNewGame();
+  return session;
+}
+
+/** Save and load again, giving back the restored universe. */
+function roundTrip(univ: Universe): Universe {
+  return loadSave(saveGame(univ), scen, new GameRng());
+}
+
+describe('the scenario id a save records', () => {
+  it('comes from the source directory', () => {
+    expect(scen.id).toBe('valleydy');
+  });
+});
+
+describe('.exg round trip', () => {
+  let univ: Universe;
+
+  beforeEach(async () => {
+    univ = (await newGame()).univ;
+  });
+
+  it('writes the files load_party_v2 looks for', () => {
+    const ball = serialiseSave(univ);
+    expect(ball.files.map((f) => f.name)).toEqual([
+      'save/party.txt',
+      'save/pc1.txt', 'save/pc2.txt', 'save/pc3.txt',
+      'save/pc4.txt', 'save/pc5.txt', 'save/pc6.txt',
+      'save/scenario.txt',
+      'save/setup.dat',
+      'save/town.txt',
+      'save/townmaps.dat',
+      'save/out.txt',
+      'save/outmaps.dat',
+    ]);
+  });
+
+  it('gzips, and reads either the gzipped or the plain form', () => {
+    const gzipped = saveGame(univ);
+    expect([gzipped[0], gzipped[1]]).toEqual([0x1f, 0x8b]);
+    expect(openSave(gzipped).has('save/party.txt')).toBe(true);
+    expect(openSave(serialiseSave(univ).serialise()).has('save/party.txt')).toBe(true);
+  });
+
+  it('restores the party sheet', () => {
+    univ.party.gold = 1234;
+    univ.party.food = 77;
+    univ.party.age = 5555;
+    univ.party.easyMode = true;
+    univ.party.lightLevel = 9;
+    univ.party.totalMKilled = 12;
+    univ.party.totalXpGained = 340;
+    const back = roundTrip(univ).party;
+    expect(back.gold).toBe(1234);
+    expect(back.food).toBe(77);
+    expect(back.age).toBe(5555);
+    expect(back.easyMode).toBe(true);
+    expect(back.lightLevel).toBe(9);
+    expect(back.totalMKilled).toBe(12);
+    expect(back.totalXpGained).toBe(340);
+  });
+
+  it('restores the party position, in the town and on the world map', () => {
+    univ.party.townLoc = { x: 13, y: 21 };
+    univ.party.outLoc = { x: 51, y: 62 };
+    univ.party.locInSec = { x: 3, y: 14 };
+    univ.party.outdoorCorner = { x: 1, y: 2 };
+    univ.party.iwc = { x: 1, y: 0 };
+    const back = roundTrip(univ).party;
+    expect(back.townLoc).toEqual({ x: 13, y: 21 });
+    expect(back.outLoc).toEqual({ x: 51, y: 62 });
+    expect(back.locInSec).toEqual({ x: 3, y: 14 });
+    expect(back.outdoorCorner).toEqual({ x: 1, y: 2 });
+    expect(back.iwc).toEqual({ x: 1, y: 0 });
+  });
+
+  it('restores the Stuff Done Flags, including the magic pointers', () => {
+    univ.party.stuffDone[7]![3] = 42;
+    univ.party.stuffDone[300]![49] = 1;
+    univ.party.magicPtrs[0] = 17;
+    univ.party.magicPtrs[5] = 9;
+    univ.party.pointers.set(101, [4, 5]);
+    const back = roundTrip(univ).party;
+    expect(back.stuffDone[7]![3]).toBe(42);
+    expect(back.stuffDone[300]![49]).toBe(1);
+    expect(back.stuffDone[8]![3]).toBe(0);
+    expect(back.magicPtrs[0]).toBe(17);
+    expect(back.magicPtrs[5]).toBe(9);
+    expect(back.pointers.get(101)).toEqual([4, 5]);
+  });
+
+  it('restores every PC, their skills, spells, traits and pack', () => {
+    const pc = univ.party.pcs[1]!;
+    pc.name = 'Testy';
+    pc.curHealth = 3;
+    pc.maxHealth = 40;
+    pc.curSp = 7;
+    pc.maxSp = 21;
+    pc.experience = 800;
+    pc.level = 6;
+    pc.skills[3] = 11;
+    pc.status[Status.POISON] = 4;
+    pc.mageSpells[40] = true;
+    pc.priestSpells[3] = false;
+    pc.traits[2] = true;
+    pc.items[4] = presetItem(ItemPreset.POTION);
+    pc.items[4].charges = 3;
+    pc.equip[0] = true;
+
+    const back = roundTrip(univ).party.pcs[1]!;
+    expect(back.name).toBe('Testy');
+    expect(back.mainStatus).toBe(MainStatus.ALIVE);
+    expect(back.curHealth).toBe(3);
+    expect(back.maxHealth).toBe(40);
+    expect(back.curSp).toBe(7);
+    expect(back.maxSp).toBe(21);
+    expect(back.experience).toBe(800);
+    expect(back.level).toBe(6);
+    expect(back.skills[3]).toBe(11);
+    expect(back.status[Status.POISON]).toBe(4);
+    expect(back.mageSpells[40]).toBe(true);
+    expect(back.priestSpells[3]).toBe(false);
+    expect(back.traits[2]).toBe(true);
+    expect(back.equip[0]).toBe(true);
+    expect(back.items[4]!.variety).toBe(pc.items[4]!.variety);
+    expect(back.items[4]!.name).toBe(pc.items[4]!.name);
+    expect(back.items[4]!.charges).toBe(3);
+    expect(back.items[5]!.variety).toBe(ItemType.NO_ITEM);
+  });
+
+  it('keeps the poisoned weapon pointing at the right slot', () => {
+    const pc = univ.party.pcs[0]!;
+    pc.items[2] = presetItem(ItemPreset.KNIFE);
+    pc.weapPoisoned = pc.items[2]!;
+    const back = roundTrip(univ).party.pcs[0]!;
+    expect(back.weapPoisoned).toBe(back.items[2]);
+  });
+
+  it('restores quests, special items, alchemy and the job boards', () => {
+    univ.party.activeQuests.set(2, { status: QuestStatus.COMPLETED, start: 3, source: 1 });
+    univ.party.specItems.add(4);
+    univ.party.alchemy[6] = true;
+    univ.party.jobBanks = [{ jobs: [1, 2, -1, -1, -1, -1], anger: 3, inited: true }];
+    univ.party.imprisonedMonst[0] = 55;
+    univ.party.mNoted.add(19);
+    univ.party.record(EncNoteType.TOWN, 'A note worth keeping', 'Fort Talrus');
+
+    const back = roundTrip(univ).party;
+    expect(back.activeQuests.get(2)).toEqual({
+      status: QuestStatus.COMPLETED, start: 3, source: 1,
+    });
+    expect(back.specItems.has(4)).toBe(true);
+    expect(back.alchemy[6]).toBe(true);
+    expect(back.jobBanks[0]).toEqual({ jobs: [1, 2, -1, -1, -1, -1], anger: 3, inited: true });
+    expect(back.imprisonedMonst[0]).toBe(55);
+    expect(back.mNoted.has(19)).toBe(true);
+    expect(back.specialNotes).toEqual([
+      { type: EncNoteType.TOWN, theStr: 'A note worth keeping', where: 'Fort Talrus' },
+    ]);
+  });
+
+  it('loses which soul-crystal slot a monster was in, as the C++ does', () => {
+    // cParty::readFrom reads the slot number and then stores into the *loop
+    // counter* instead (party.cpp:993), so a crystal whose earlier slots are
+    // empty comes back compacted to the front. Kept, and pinned here.
+    univ.party.imprisonedMonst = [0, 0, 77, 0];
+    const back = roundTrip(univ).party;
+    expect(back.imprisonedMonst).toEqual([77, 0, 0, 0]);
+  });
+
+  it('restores the party timers', () => {
+    univ.party.partyEventTimers = [
+      { time: 0, nodeType: 0, node: -1 },
+      { time: 30, nodeType: 2, node: 7 },
+    ];
+    const back = roundTrip(univ).party;
+    // The blank slot is skipped by the writer but its numbering survives.
+    expect(back.partyEventTimers[1]).toEqual({ time: 30, nodeType: 2, node: 7 });
+  });
+
+  it('restores the town: creatures, dropped items, terrain and fields', () => {
+    const town = univ.town!;
+    const rat = town.monsters.find((m) => m.isAlive)!;
+    rat.health = 2;
+    rat.curLoc = { x: 9, y: 9 };
+    rat.status[Status.POISON] = 2;
+    town.monstHostile = true;
+    town.items.push({ ...presetItem(ItemPreset.KNIFE), itemLoc: { x: 8, y: 8 } });
+    town.setField(5, 6, FieldType.WALL_FIRE);
+    town.makeExplored(4, 4);
+    town.record.terrain[3]![3] = 17;
+
+    const back = roundTrip(univ);
+    expect(back.party.townNum).toBe(univ.party.townNum);
+    expect(back.town).not.toBeNull();
+    expect(back.town!.monstHostile).toBe(true);
+    const backRat = back.town!.monsters.find((m) => m.curLoc.x === 9 && m.curLoc.y === 9)!;
+    expect(backRat.health).toBe(2);
+    // Only living creatures are written; the gaps between them come back dead
+    // rather than as blank creatures standing in the town.
+    expect(back.town!.monsters.filter((m) => m.isAlive).length)
+      .toBe(town.monsters.filter((m) => m.isAlive).length);
+    expect(backRat.status[Status.POISON]).toBe(2);
+    expect(back.town!.items.some((i) => i.itemLoc.x === 8 && i.itemLoc.y === 8)).toBe(true);
+    expect(back.town!.hasField(5, 6, FieldType.WALL_FIRE)).toBe(true);
+    expect(back.town!.isExplored(4, 4)).toBe(true);
+    expect(back.town!.record.terrain[3]![3]).toBe(17);
+  });
+
+  it('restores the outdoor window and the explored maps', () => {
+    univ.out.terrain[10]![11] = 23;
+    univ.out.explored[10]![11] = 1;
+    scen.towns[0]!.maps[5]![6] = 1;
+    scen.outdoors[0]![0]!.maps[7]![8] = 1;
+
+    const back = roundTrip(univ);
+    expect(back.out.terrain[10]![11]).toBe(23);
+    expect(back.out.explored[10]![11]).toBe(1);
+    expect(scen.towns[0]!.maps[5]![6]).toBe(1);
+    expect(scen.towns[0]!.maps[6]![5]).toBe(0);
+    expect(scen.outdoors[0]![0]!.maps[7]![8]).toBe(1);
+  });
+
+  it('restores unlocked doors and town visibility', () => {
+    scen.towns[1]!.doorUnlocked = [{ x: 4, y: 5 }];
+    scen.towns[1]!.canFind = true;
+    scen.towns[2]!.canFind = false;
+    const data = saveGame(univ);
+    scen.towns[1]!.doorUnlocked = [];
+    scen.towns[1]!.canFind = false;
+    scen.towns[2]!.canFind = true;
+    loadSave(data, scen, new GameRng());
+    expect(scen.towns[1]!.doorUnlocked).toEqual([{ x: 4, y: 5 }]);
+    expect(scen.towns[1]!.canFind).toBe(true);
+    expect(scen.towns[2]!.canFind).toBe(false);
+  });
+
+  it('restores the boats and horses the party owns', () => {
+    univ.party.boats = [{
+      loc: { x: 3, y: 4 }, sector: { x: 1, y: 1 }, whichTown: 200,
+      exists: true, property: false, pic: 0, name: 'boat',
+    }];
+    univ.party.inBoat = 0;
+    const back = roundTrip(univ).party;
+    expect(back.inBoat).toBe(0);
+    expect(back.boats[0]!.loc).toEqual({ x: 3, y: 4 });
+    expect(back.boats[0]!.exists).toBe(true);
+    expect(back.boats[0]!.property).toBe(false);
+  });
+
+  it('saves a party standing outdoors with no town file at all', () => {
+    univ.party.townNum = TOWN_NUM_OUTDOORS;
+    univ.town = null;
+    const ball = serialiseSave(univ);
+    expect(ball.has('save/town.txt')).toBe(false);
+    const back = loadSave(ball.serialise(), scen, new GameRng());
+    expect(back.party.townNum).toBe(TOWN_NUM_OUTDOORS);
+    expect(back.town).toBeNull();
+  });
+
+  it('survives a second round trip byte for byte', () => {
+    univ.party.gold = 999;
+    const once = serialiseSave(univ).text('save/party.txt');
+    const twice = serialiseSave(roundTrip(univ)).text('save/party.txt');
+    expect(twice).toBe(once);
+  });
+});
+
+describe('the save preview', () => {
+  it('reads the scenario, the party and the PCs without a scenario loaded', async () => {
+    const univ = (await newGame()).univ;
+    univ.party.gold = 4242;
+    const preview = readSavePreview(saveGame(univ));
+    expect(preview.scenarioId).toBe('valleydy');
+    expect(preview.gold).toBe(4242);
+    expect(preview.townNum).toBe(univ.party.townNum);
+    expect(preview.pcs).toHaveLength(6);
+    expect(preview.pcs[0]!.name).toBe(univ.party.pcs[0]!.name);
+    expect(preview.pcs[0]!.mainStatus).toBe(MainStatus.ALIVE);
+  });
+
+  it('refuses a file that is not a save', () => {
+    expect(() => readSavePreview(new Uint8Array(1024))).toThrow(/save\/party.txt/);
+  });
+});

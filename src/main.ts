@@ -48,6 +48,11 @@ import { TerSpec } from './data/terrain';
 import { GameSession } from './game/session';
 import { TalkAction } from './game/talk';
 import { loadOpcodes, loadScenario } from './fileio/loadScenario';
+import { applySave, readSavePreview, saveGame } from './fileio/saveIo';
+import {
+  SaveSlot, exportSave, getSave, importSave, listSaves, putSave, saveStoreAvailable,
+} from './platform/saveStore';
+import { TOWN_NUM_OUTDOORS } from './universe/party';
 import { FetchSource } from './fileio/source';
 import { InputRouter } from './platform/input';
 import { Snd, SoundPlayer } from './platform/sound';
@@ -552,6 +557,145 @@ async function main(): Promise<void> {
       makePotion(session, who, which, (n) => sound.play(n));
     setStatus();
     redraw();
+  };
+
+  /**
+   * Saving and loading. The C++ hangs these off the File menu and a native file
+   * picker; this port has neither, so the slots live in IndexedDB
+   * (`platform/saveStore.ts`) and the picker is a dialog. Ctrl+S saves, Ctrl+L
+   * loads, and both slot lists carry an Export/Import row so the very same
+   * `.exg` bytes can move to and from the desktop build.
+   *
+   * `save_party` refuses in combat (boe.actions.cpp's File menu gate), and so
+   * does this: half a fight is not a resumable state.
+   */
+  const slotLabel = (slot: SaveSlot): string => {
+    const when = new Date(slot.savedAt);
+    const where = slot.preview.townNum >= TOWN_NUM_OUTDOORS
+      ? 'Outdoors'
+      : scen.towns[slot.preview.townNum]?.name ?? `Town ${slot.preview.townNum}`;
+    const day = Math.floor(slot.preview.age / 3700) + 1;
+    return `${slot.name} — ${where}, day ${day} (${when.toLocaleString()})`;
+  };
+
+  const canSaveNow = (): string | null => {
+    if (isCombat(session.mode)) return 'Save: Not in combat.';
+    if (session.mode !== GameMode.TOWN && session.mode !== GameMode.OUTDOORS)
+      return "Save: Finish what you're doing first.";
+    return null;
+  };
+
+  const saveGameFlow = async (): Promise<void> => {
+    if (dialogs.active) return;
+    const refusal = canSaveNow();
+    if (refusal !== null) {
+      univ.addStringToBuf(refusal);
+      redraw();
+      return;
+    }
+    if (!saveStoreAvailable()) {
+      univ.addStringToBuf('Save: no save storage in this browser.');
+      redraw();
+      return;
+    }
+    const data = saveGame(univ);
+    const slots = await listSaves();
+    const picked = await dialogs.run({
+      text: 'Save the game in which slot?',
+      rows: [
+        { name: 'new', label: 'New slot…' },
+        { name: 'file', label: 'Export to a file…' },
+        ...slots.map((slot) => ({ name: `slot:${slot.name}`, label: `Overwrite ${slotLabel(slot)}` })),
+      ],
+      escapeButton: 'cancel',
+      buttons: [{ name: 'cancel', label: 'Cancel' }],
+    });
+    if (picked === 'cancel') {
+      redraw();
+      return;
+    }
+    if (picked === 'file') {
+      exportSave(univ.party.pcs[0]?.name ?? 'exile', data);
+      univ.addStringToBuf('Game exported.');
+      redraw();
+      return;
+    }
+    const name = picked === 'new'
+      ? (await askForText('Name this saved game:')).trim()
+      : picked.slice('slot:'.length);
+    if (name === '') {
+      redraw();
+      return;
+    }
+    try {
+      await putSave(name, data);
+      univ.addStringToBuf(`Game saved: ${name}.`);
+    } catch (err) {
+      univ.addStringToBuf(`Save failed: ${String(err)}`);
+    }
+    redraw();
+  };
+
+  const resumeAfterLoad = (): void => {
+    session.resumeLoadedGame();
+    screen.mapVisible = false;
+    screen.itemWindow.setStatWindowForPc(univ, 0);
+    setStatus();
+    redraw();
+  };
+
+  const loadGameFlow = async (): Promise<void> => {
+    if (dialogs.active) return;
+    if (isCombat(session.mode)) {
+      univ.addStringToBuf('Load: Not in combat.');
+      redraw();
+      return;
+    }
+    const slots = saveStoreAvailable() ? await listSaves() : [];
+    const picked = await dialogs.run({
+      text: slots.length > 0 ? 'Load which saved game?' : 'No saved games in this browser.',
+      rows: [
+        { name: 'file', label: 'Import a file…' },
+        ...slots.map((slot) => ({ name: `slot:${slot.name}`, label: slotLabel(slot) })),
+      ],
+      escapeButton: 'cancel',
+      buttons: [{ name: 'cancel', label: 'Cancel' }],
+    });
+    if (picked === 'cancel') {
+      redraw();
+      return;
+    }
+
+    let data: Uint8Array | null = null;
+    if (picked === 'file') {
+      const chosen = await importSave();
+      data = chosen?.data ?? null;
+    } else {
+      data = await getSave(picked.slice('slot:'.length));
+    }
+    if (data === null) {
+      redraw();
+      return;
+    }
+    // A save belongs to one scenario, and swapping scenarios means reloading
+    // the whole world — which this port does by restarting on the new one.
+    try {
+      const preview = readSavePreview(data);
+      if (preview.scenarioId !== scen.id) {
+        univ.addStringToBuf(
+          `That game was played in "${preview.scenarioId}", not "${scen.id}". ` +
+          `Open ?scenario=${preview.scenarioId} first.`);
+        redraw();
+        return;
+      }
+      applySave(data, univ);
+      resumeAfterLoad();
+      univ.addStringToBuf('Game loaded.');
+      redraw();
+    } catch (err) {
+      univ.addStringToBuf(`Load failed: ${String(err)}`);
+      redraw();
+    }
   };
 
   /**
@@ -1349,8 +1493,22 @@ async function main(): Promise<void> {
       screen.hover = null;
       redraw();
     },
-    onKey: async (key) => {
+    onKey: async (key, event) => {
       if (dialogs.handleKey(key)) return;
+      // The File menu the original has and this port doesn't: Ctrl+S and
+      // Ctrl+L. Checked before everything else so they work in any mode that
+      // will have them, and so the browser's own Save Page doesn't fire.
+      if ((event.ctrlKey || event.metaKey) && (key === 's' || key === 'S')) {
+        event.preventDefault();
+        void saveGameFlow();
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && (key === 'l' || key === 'L')) {
+        event.preventDefault();
+        void loadGameFlow();
+        return;
+      }
+      if (event.ctrlKey || event.metaKey) return;
       // The map window's own key handler: Escape closes it, and it says so.
       if (screen.mapVisible && key === 'Escape') {
         screen.mapVisible = false;
@@ -1639,6 +1797,13 @@ async function main(): Promise<void> {
     __setLivingSound: (fn: ((which: number) => void) | null) =>
       setLivingSound(fn ?? playSound),
     __dialogs: dialogs,
+    // Save/load without the picker, so the verifier can round-trip a real game
+    // through the real serialiser.
+    __saveGame: () => saveGame(univ),
+    __loadGame: (data: Uint8Array) => {
+      applySave(data, univ);
+      resumeAfterLoad();
+    },
     __watchAnim: (onMissile: ((m: Missile) => void) | null, onBoom: ((b: Boom) => void) | null) => {
       missileWatcher = onMissile;
       boomWatcher = onBoom;

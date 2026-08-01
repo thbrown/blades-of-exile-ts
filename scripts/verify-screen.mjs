@@ -1964,6 +1964,47 @@ const pattern = await page.evaluate(async () => {
 await shot('02i-spell-pattern');
 console.log('SPELL PATTERN:', JSON.stringify(pattern));
 
+// M7: the save file. Write a real .exg out of the live game, change the world
+// underneath it, load it back and check the world came with it — the party
+// sheet, where they are standing, an SDF, a dropped item and a wounded monster.
+const saved = await page.evaluate(async () => {
+  const s = window.__session;
+  const u = s.univ;
+  if (!u.town) return { skipped: 'not in a town' };
+  if (s.mode === 9) s.endCombat();
+  u.party.gold = 4321;
+  u.party.stuffDone[9][9] = 7;
+  const pc = u.party.pcs[0];
+  pc.curHealth = Math.max(1, pc.maxHealth - 3);
+  const where = { ...u.party.townLoc };
+  const monster = u.town.monsters.find((m) => m.isAlive) ?? null;
+  if (monster) monster.health = 1;
+  const data = window.__saveGame();
+  // Everything the load has to undo.
+  u.party.gold = 1;
+  u.party.stuffDone[9][9] = 0;
+  pc.curHealth = pc.maxHealth;
+  if (monster) monster.health = 999;
+  u.party.townLoc = { x: 1, y: 1 };
+  window.__loadGame(data);
+  const backMonster = u.town.monsters.find((m) => m.isAlive) ?? null;
+  return {
+    // A gzip member, which is what the desktop build reads.
+    magic: [data[0], data[1]],
+    bytes: data.length,
+    gold: u.party.gold,
+    sdf: u.party.stuffDone[9][9],
+    health: pc.curHealth,
+    maxHealth: pc.maxHealth,
+    at: { ...u.party.townLoc },
+    wanted: where,
+    mode: s.mode,
+    monsterHealth: backMonster ? backMonster.health : null,
+  };
+});
+await shot('02j-loaded-save');
+console.log('SAVE/LOAD:', JSON.stringify(saved));
+
 // Spell targeting: the crosshair follows the cursor, and the click lands where
 // it points. Both were broken once — every targeting click was reduced to one
 // step toward the target, so no spell could reach past an adjacent square.
@@ -2404,6 +2445,13 @@ const ok =
   (pattern.skipped !== undefined || (pattern.counts.forceWall > 0
     && pattern.counts.ice > 0 && pattern.counts.blades > 0
     && pattern.counts.antimagic > 0)) &&
+  // The .exg round trip: gzipped bytes out, and the whole world back in.
+  (saved.skipped !== undefined || (saved.magic[0] === 0x1f && saved.magic[1] === 0x8b
+    && saved.bytes > 0 && saved.gold === 4321 && saved.sdf === 7
+    && saved.health === saved.maxHealth - 3
+    && saved.at.x === saved.wanted.x && saved.at.y === saved.wanted.y
+    && saved.mode === 1
+    && (saved.monsterHealth === null || saved.monsterHealth === 1))) &&
   errors.length === 0;
 console.log(ok ? 'PASS' : 'FAIL');
 process.exit(ok ? 0 : 1);

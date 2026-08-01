@@ -130,6 +130,59 @@ export const talkNodes = [
 ] as const;
 
 /**
+ * `main_status` (estreams.cpp:816) — eMainStatus. The eight split-party
+ * variants sit at 10..17, so the two blank slots at 8 and 9 are load-bearing.
+ */
+export const mainStatusNames = [
+  'empty', 'alive', 'dead', 'dust', 'stone', 'fled', 'surface', 'won', '', '',
+  'split', 'split-alive', 'split-dead', 'split-dust', 'split-stone', 'split-fled',
+  'split-surface', 'split-won',
+] as const;
+
+/** `note_types` (estreams.cpp:583) — eEncNoteType. */
+export const encNoteTypes = ['SCEN', 'OUT', 'TOWN'] as const;
+
+/** `party_status` (estreams.cpp:598) — ePartyStatus. */
+export const partyStatusNames = ['STEALTH', 'FLIGHT', 'DETECT', 'FIREWALK'] as const;
+
+/** `quest_status` (estreams.cpp:613) — eQuestStatus. */
+export const questStatusNames = ['avail', 'start', 'done', 'fail'] as const;
+
+/** `creature_status_strs` (estreams.cpp:837) — eCreatureStatus. */
+export const creatureStatusNames = ['dead', 'idle', 'alerted'] as const;
+
+/**
+ * writeEnum (estreams.cpp:235) — numeric value → tag string, falling back to
+ * the caller's default when the value isn't in the table. Note eStatus::MAIN is
+ * -1, hence the explicit offset argument.
+ */
+export function writeEnumTag(
+  tags: readonly string[],
+  value: number,
+  def: string,
+  offset = 0,
+): string {
+  const tag = tags[value + offset];
+  return tag === undefined || tag === '' ? def : tag;
+}
+
+/**
+ * readEnum's other half (estreams.cpp:238): a tag that is all digits is taken
+ * as the number itself, which is how the format tolerates a value the writer
+ * had no name for.
+ */
+export function readEnumTagOrNumber(
+  tags: readonly string[],
+  value: string,
+  def: number,
+  offset = 0,
+): number {
+  if (/^-?\d+$/.test(value)) return parseInt(value, 10);
+  const idx = tags.indexOf(value);
+  return idx < 0 ? def : idx - offset;
+}
+
+/**
  * readEnum: tag string → numeric enum value. Throws on unknown tags, like
  * the C++ stream operators setting failbit.
  */

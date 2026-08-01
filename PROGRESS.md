@@ -13,6 +13,7 @@
   **L** pick a lock, **1-6** whose pack shows, **9** the special items and
   **0** the quests,
   **a** the automap (drag it by its window), **A** alchemy (in town),
+  **Ctrl+S**/**Ctrl+L** save and load,
   **m**/**p** spells, **s** shoot (in combat: arms the
   missile, then click a square; **s** or Escape cancels). Keys for things not
   built yet say which milestone they're
@@ -782,7 +783,9 @@ Notes for M2 implementer:
       job banks, special items, the three timer kinds, **item Use** ✅
       (2026-07-27) and **boats/horses** ✅ (2026-07-27); alchemy, traps,
       job-bank dialog and end-scenario open
-- [ ] **M7 — Save/load (.exg) + startup flow**
+- [ ] **M7 — Save/load (.exg) + startup flow**: the tag file, the tarball, the
+      whole `.exg` round trip, the IndexedDB slots and Ctrl+S/Ctrl+L ✅
+      (2026-08-01); the scenario picker and the autosave still open
 - [ ] **M8 — Fidelity hardening** (replay golden masters)
 
 ## Milestones (Part 2: Exile 3)
@@ -1604,6 +1607,10 @@ playthrough will hit it:
    below. The one thing left in that area is `AFFECT_SOUL_CRYSTAL`, which needs
    the creature-context plumbing described there.
 7. M2's last leftover is the replay driver.
+7b. ~~**M7 — save/load**~~ — the `.exg` round trip, the IndexedDB slots and
+   Ctrl+S/Ctrl+L landed 2026-08-01; see the entry at the bottom. What's left of
+   M7 is the scenario picker (choosing a scenario or a saved game before the
+   game starts, rather than `?scenario=`) and `try_auto_save`.
 8. Part 2 (Exile 3) hasn't started; E3-0 (format groundwork) can proceed in
    parallel at any time.
 
@@ -2600,3 +2607,75 @@ playthrough will hit it:
       one recipe valleydy's test party has is `potion2`, not `potion1`.
   - Tests: 3 more in `test/dialogXml.test.ts`; `verify-screen.mjs`'s job-board
     and alchemy steps now read the real controls and click a real Take.
+
+- **M7: saved games (2026-08-01).** `.exg` files, written and read the way the
+  desktop build does, so a game saved here opens there and back again.
+  - `fileio/tagfile.ts` ports `cTagFile` (tagfile.cpp) and the two string
+    helpers under it (`maybe_quote_string` / `read_maybe_quoted_string`,
+    fileio.cpp:146/182). A file is pages separated by form feeds; a page is
+    `KEY value value` lines whose keys repeat freely, so a page keeps both the
+    ordered list it writes back out and a per-key list with **its own read
+    cursor** — which is how `cCreature` writes `TALK` twice (the personality,
+    then the on-talk special) and reads them back in order.
+  - `fileio/tarball.ts` ports the ustar container. Two writer quirks are kept
+    because the C++'s own reader depends on them: it writes **no
+    end-of-archive marker**, and the header checksum goes in with `%o` — no
+    zero padding, and the NUL that terminates it leaves the rest of the field
+    as the spaces it was primed with.
+  - `fileio/saveIo.ts` is the rest: `writeTo`/`readFrom` for cItem, cMonster,
+    `uAbility`, cCreature, cVehicle, `cOutdoors::cCreature`, cPlayer, cParty,
+    cCurTown and cCurOut, plus `save_party_const` and `load_party_v2`
+    themselves. `saveGame` gzips (fflate); `openSave` accepts either the
+    gzipped desktop form or the WASM build's plain tarball.
+  - **`applySave` writes into an existing Universe** rather than building one
+    and moving it over, as the C++ does, because the session, the screen and
+    every host callback hold a reference to it. `session.resumeLoadedGame()` is
+    the tail of `load_party`: it drops everything transient and recomputes the
+    lighting, and deliberately does **not** call `startTownMode` — the town's
+    creatures, items, fields and terrain all came out of the save, and
+    repopulating would put the dead back on their feet.
+  - `platform/saveStore.ts` is the browser's Saved Games folder: IndexedDB
+    slots keyed by name, each with the `preview` the picker draws (`load_party`
+    with `preview = true` reads only party.txt and the six PC pages, which is
+    what `readSavePreview` does), plus Export/Import moving the very same bytes
+    to and from disk. **Ctrl+S** saves and **Ctrl+L** loads; both refuse in
+    combat, as the C++'s File menu does.
+  - *Gotcha*: a default `cCreature` is **DEAD** (creature.hpp:24) and this
+    port's default is IDLE. Only living creatures are written, so the slots
+    between them have to be explicitly killed on load or a blank live creature
+    stands invisibly in the middle of the town. Found by the verify script.
+  - *Gotcha kept*: `cParty::readFrom` reads a soul crystal's slot number and
+    then stores into the **loop counter** instead (party.cpp:993), so a crystal
+    whose earlier slots are empty comes back compacted to the front. Pinned by
+    a test.
+  - *Gotcha*: `boost::dynamic_bitset::operator<<` prints from the highest index
+    down, so every line of `townmaps.dat` and `outmaps.dat` reads **right to
+    left**. The C++'s `maps[y]` is indexed by x and this port's `maps[x][y]` is
+    the transpose, so both the order and the axes flip.
+  - *Gotcha*: a bare keyword line (`OBOE`, `IDENTIFIED`) parses to exactly
+    **one empty value**, because the C++ only sets eofbit after the read that
+    fails. Kept, since `page.contains` is what those tags are for.
+  - *Gotcha*: `maybe_quote_string` picks the double quote only when it appears
+    **strictly fewer** times than the apostrophe, so a string with two `"` and
+    one `'` is wrapped in apostrophes and the apostrophe escaped — more
+    escaping, not less. Its own comment claims the opposite.
+  - **Not in the file, because this port doesn't model them** (each marked
+    TODO(M7) where it would go): the journal, conversation notes, stored PCs,
+    campaign flags, the split party, `hostiles_present`, `less_wm`, the
+    save-slot number, the per-town creature save slots and `cParty::setup` —
+    whose `save/setup.dat` is written as the bare `OBOE` page the C++ writes
+    for an empty array. A save moves between the two builds with those at their
+    defaults.
+  - `Scenario.id` is new: the scenario's directory name, which is what
+    `SCENARIO` records and what a load checks before it will apply a save.
+    `ScenarioSource` supplies it.
+  - Tests: `test/tagfile.test.ts` (18) covers the quoting rules in both
+    directions, pages, repeated keys, the read cursor, sparse arrays and the
+    tar header; `test/saveIo.test.ts` (19) round-trips the party sheet,
+    position, SDFs, all six PCs with their packs, quests, timers, vehicles,
+    the town with its creatures and fields, the outdoor window and the fog,
+    checks the file list matches what `load_party_v2` opens, and pins that a
+    second round trip is byte for byte identical. `verify-screen.mjs` gained a
+    step that saves the live game, wrecks the world, loads it back and checks
+    the gold, an SDF, a wounded PC, the party's square and a wounded monster
+    all came back.

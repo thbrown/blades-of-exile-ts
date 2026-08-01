@@ -29,6 +29,7 @@ export async function loadScenario(
     await parseXmlDoc(await src.getText('scenario.xml'), 'scenario.xml'),
   );
   const scen = emptyScenario(hdr);
+  scen.id = src.id;
   onExtraFilesKnown?.(4 + scen.numTowns * 4 + scen.outWidth * scen.outHeight * 3);
 
   scen.terTypes = readTerrainFromXml(
