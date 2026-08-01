@@ -63,18 +63,36 @@ function toInt16(n: number): number {
 export class GameRng {
   readonly game = new MT19937();
   readonly unique = new MT19937();
+  /**
+   * How many numbers have been drawn from each stream. Not in the C++ — this is
+   * the fingerprint replay verification leans on. `get_ran`'s **call order** is
+   * part of the spec, so two runs that agree on every visible value but
+   * disagree here have diverged somewhere that hasn't surfaced yet.
+   */
+  gameDraws = 0;
+  uniqueDraws = 0;
 
   seedGame(seed: number): void {
     this.game.seed(seed);
+    this.gameDraws = 0;
   }
 
   /** Verbatim port of get_ran(times, min, max, use_unique_ran). */
   getRan(times: number, min: number, max: number, useUnique = false): number {
     if (max < min) max = min;
+    // Note the early return: a zero-width range draws *nothing*, so it doesn't
+    // move the stream and mustn't count as a draw either.
     if (max === min) return toInt16(times * min);
     let toRet = 0;
     for (let i = 1; i < times + 1; i++) {
-      const store = useUnique ? this.unique.next() : this.game.next();
+      let store: number;
+      if (useUnique) {
+        store = this.unique.next();
+        this.uniqueDraws++;
+      } else {
+        store = this.game.next();
+        this.gameDraws++;
+      }
       toRet = toInt16(toRet + min + (store % (max - min + 1)));
     }
     return toRet;

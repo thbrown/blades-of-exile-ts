@@ -10,6 +10,7 @@
  */
 
 import { QuestStatus } from '../data/quest';
+import { ReplayRecorder } from '../replay/recorder';
 import { tryAutoSave } from './autosave';
 import { Direction, Location, dist, loc, locsEqual, minmax, shiftLoc } from '../core/location';
 import { SIGHT_BLOCKED, canSee } from '../core/sight';
@@ -187,6 +188,13 @@ export class GameSession {
   private numTownMoves = 0;
   /** Optional; when absent the game runs silently (as tests do). */
   sound: SoundPlayer | null = null;
+  /**
+   * Set while a replay is being recorded. The C++ records from inside each
+   * input handler through a global; this port hands the recorder to the
+   * session and the same handful of entry points report to it. Null costs
+   * nothing, which is the normal case.
+   */
+  recorder: ReplayRecorder | null = null;
   /** Non-null while a conversation is open. */
   talk: TalkState | null = null;
   /** Non-null while a shop is open. */
@@ -342,6 +350,9 @@ export class GameSession {
 
   /** handle_action's movement branch (boe.actions.cpp:740-815). */
   async moveTo(destination: Location): Promise<boolean> {
+    // `record_action("move", …)` at the top of handle_move: what is recorded is
+    // the square asked for, not whether the step turned out to be legal.
+    this.recorder?.recordLoc('move', destination);
     let moved = false;
     this.pendingOutDest = null;
     if (this.inTown) {
@@ -1043,6 +1054,7 @@ export class GameSession {
    * transcript when the party can't.
    */
   rest(): boolean {
+    this.recorder?.record('handle_rest');
     const where = this.inTown ? this.univ.party.townLoc : this.univ.party.outLoc;
     const ter = this.inTown
       ? this.univ.town?.record.terrain[where.x]?.[where.y]
@@ -1060,6 +1072,7 @@ export class GameSession {
    * used" one runs a chain. Returns false when there's nothing to use.
    */
   async useSpace(where: Location): Promise<boolean> {
+    this.recorder?.recordLoc('handle_use_space', where);
     const from = this.inTown ? this.univ.party.townLoc : this.univ.party.outLoc;
     if (dist(from, where) > 1) {
       this.univ.addStringToBuf('  That is too far away.');
@@ -1160,6 +1173,7 @@ export class GameSession {
    * listed here once those exist.
    */
   lookAt(where: Location): number {
+    this.recorder?.recordLoc('handle_look', where);
     const { univ } = this;
     const town = univ.town;
     // handle_look draws its line from the acting PC in MODE_LOOK_COMBAT and
@@ -2370,6 +2384,7 @@ export class GameSession {
    * fight inside a town, which is all this port supports so far.
    */
   startCombat(direction: Direction): void {
+    this.recorder?.recordValue('handle_combat_switch', direction);
     if (!this.univ.town) return;
     startTownCombat(this, direction);
     this.whichCombatType = 1;
@@ -2383,6 +2398,7 @@ export class GameSession {
    * caged apart from the rest — with the refusal already in the transcript.
    */
   endCombat(): boolean {
+    this.recorder?.record('handle_combat_switch');
     if (this.mode !== GameMode.COMBAT) return false;
     if (this.whichCombatType === 0) {
       const ended = this.endOutdoorCombat();
@@ -2444,6 +2460,7 @@ export class GameSession {
    * spent, and webs get torn at.
    */
   async pause(): Promise<void> {
+    this.recorder?.record('handle_pause');
     if (this.mode === GameMode.COMBAT) {
       const pc = this.univ.currentPc;
       pc.parry = 100;

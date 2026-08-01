@@ -776,7 +776,7 @@ Notes for M2 implementer:
 
 - [x] **M0 — Skeleton**: Vite+TS(strict)+Vitest scaffold; `core/` (mt19937 rng, location) with tests; assets copied to `public/data`; tile-grid demo page
 - [x] **M1 — Scenario loads, outdoor walkabout**: XML/.map/.spec parsers, terrain view, outdoor movement (gzip+tar for packed .boes deferred to file-upload work; items/monsters XML land with M2)
-- [ ] **M2 — Towns + full 605×430 shell**: town enter/exit ✅, UI chrome ✅, pregen party ✅, GameSession/Universe ✅, sound ✅, line-of-sight fog + lighting ✅, terrain trim + roads ✅, floor items ✅, inventory panel ✅, fields overlay ✅; replay driver still open
+- [x] **M2 — Towns + full 605×430 shell**: town enter/exit ✅, UI chrome ✅, pregen party ✅, GameSession/Universe ✅, sound ✅, line-of-sight fog + lighting ✅, terrain trim + roads ✅, floor items ✅, inventory panel ✅, fields overlay ✅, **replay driver ✅ (2026-08-01)**
 - [ ] **M3 — Dialog toolkit + talk + shops**: talking ✅, minimal async modal dialog ✅, doors + look + signs ✅, item/equip model + inventory panel ✅, shops ✅, sell/identify/recharge ✅, training ✅, inns ✅, **item Use ✅ (2026-07-27)**; enchanting and full dialogxml still open
 - [x] **M4 — Specials interpreter (breadth-first)**: VM core (pointers, queueing, messages) + all seven opcode groups; triggers wired for movement, look, town entry/exit, use-space, call-special terrain and the two talk nodes. Opcodes needing combat/fields/timers/quests report themselves and wait for M5/M6.
 - [x] **M5 — Combat**: M5a ✅ (the iLiving seam, damage/status, combat mode, melee); M5b ✅ (monster turns, melee AI, town *and outdoor* encounters, the `uAbility` port, missiles on both sides, breath, summons, touch abilities, on-hit weapon abilities, **monster spellcasting**); M5c ✅ (spell patterns, `process_fields`, the 147-spell table, `pc_can_cast_spell`, town/combat/targeted/multi-target casting, and the real casting dialog). Remaining odds and ends: `record_monst` (Capture Soul/Simulacrum), `do_mindduel`, and the SPECIAL monster ability.
@@ -1608,7 +1608,11 @@ playthrough will hit it:
 6. ~~Odds and ends left over from M5~~ — **done** (2026-07-28), see the entry
    below. The one thing left in that area is `AFFECT_SOUL_CRYSTAL`, which needs
    the creature-context plumbing described there.
-7. M2's last leftover is the replay driver.
+7. ~~M2's last leftover is the replay driver.~~ — **done** (2026-08-01); see
+   the entry at the bottom. What it doesn't yet do is run the C++'s *own*
+   replays: those open with a startup flow (party files, the file picker,
+   preferences) this port has no equivalent of, so curating that subset is M8
+   work.
 7b. ~~**M7 — save/load**~~ — **done** (2026-08-01): the `.exg` round trip, the
    IndexedDB slots, the File menu, the autosave and the startup screen. See the
    entries at the bottom.
@@ -2766,3 +2770,62 @@ playthrough will hit it:
     closing step that saves, reloads the page with no query at all, finds the
     slot under "Continue a saved game", clicks it and checks the party came
     back with the gold it was saved with. That is M7's demo, driven end to end.
+
+- **The replay driver, and two real bugs it found on the first run (M2's last
+  leftover, 2026-08-01).** `src/replay/` is `src/tools/replay.cpp` and
+  `replay_action` (boe.main.cpp:647): `format.ts` reads and writes the
+  `<actions>` document, `recorder.ts` is `record_action`, `driver.ts` is the
+  dispatcher and the loop that feeds it.
+  - What is recorded is the **semantic** action, not the keystroke — `move` with
+    a destination, not "the right arrow went down" — so a replay survives a
+    change to the key bindings and tests the rules rather than the UI.
+  - `ReplaySource.pop(expected)` keeps `pop_next_action`'s discipline and its
+    two error strings: **asking for a different kind of action than was
+    recorded throws**. That is the property the format exists for — a
+    control-flow divergence surfaces at the first input it changes instead of
+    quietly producing a different game.
+  - `GameSession.recorder` is null unless something is recording; `moveTo`,
+    `pause`, `rest`, `lookAt`, `useSpace` and both halves of
+    `handle_combat_switch` report to it.
+  - An action with no handler here is **counted and named** in the result, not
+    skipped silently; `onUnsupported: 'skip'` is for surveying a file to see how
+    far the port gets, which is what curating the C++'s replays will need.
+  - `GameRng` gained `gameDraws`/`uniqueDraws`. Not in the C++ — it is the
+    fingerprint the verification leans on, because `get_ran`'s *call order* is
+    part of the spec and two runs can agree on every visible value while having
+    diverged somewhere that hasn't surfaced yet. Note a zero-width range returns
+    early and draws nothing, so it doesn't count.
+  - **Bug found: the game was not deterministic between two runs of the same
+    code.** Recording a walk and replaying it gave different RNG draw counts
+    (2888 vs 2893) and left the party on a different square. The cause is that
+    some chains are launched fire-and-forget (`void this.runSpecial(…)`), so
+    without waiting the next action interleaves with the last one's tail. The
+    C++ can't have this problem — it is single-threaded and blocking, so a
+    chain always finishes before `handle_action` is entered again. `runReplay`
+    now awaits `session.settled()` after every action, which is the same rule
+    the live UI enforces through `flushingInput` and the same rule
+    `verify-screen.mjs`'s `idle()` already followed.
+  - **Bug found: `applyReplaySeed` re-seeded a live session, which is wrong.**
+    The C++ pops `<srand>` during startup, *before* the party or the scenario
+    exist (boe.main.cpp:1174) — and constructing a Universe and starting a game
+    already draws ~2,850 numbers, so seeding afterwards rewinds the stream and
+    every replayed action reads from the wrong place. It is `rngForReplay(replay)`
+    now, handing back an rng to *build* the session on, so the mistake can't be
+    written.
+  - **Worth knowing, and it is not a bug**: a `Universe` does not own its
+    `Scenario`. The scenario accumulates per-playthrough state the party writes
+    back into it — each town's explored map, its unlocked doors, its items-taken
+    flags, its current terrain — which is exactly why a save file carries
+    `save/scenario.txt` and `save/townmaps.dat`. **Two sessions sharing one
+    scenario object do not start from the same world**, and the second draws
+    differently from the RNG on its first step. Replay verification therefore
+    loads its own copy per session. This also means a test that reuses a
+    `beforeAll` scenario across sessions is comparing two different worlds; the
+    existing suites get away with it because they assert on one session each.
+  - Tests: `test/replay.test.ts` (12) covers the document round trip, the C++'s
+    own `(x,y)` spelling, an unknown action surviving the parser for the driver
+    to judge, all four `pop_next_action` behaviours, and the one that matters —
+    record a real walk through Fort Talrus, replay it into a game that knows
+    nothing but the seed, and assert the two end states match down to the RNG
+    draw count, with a second test on a different seed proving the check has
+    teeth.
