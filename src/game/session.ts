@@ -2524,6 +2524,122 @@ export class GameSession {
   }
 
   /**
+   * handle_wait (boe.actions.cpp:1296) — the **w** key, which is not Space.
+   * Space is `handle_pause`, one turn; this is the *long* wait, up to eighty.
+   *
+   * **The combat arm of the C++'s own dispatcher is dead code, and it is kept
+   * dead here.** It reads:
+   *
+   *     if(overall_mode == MODE_TOWN)   handle_town_wait(...);
+   *     else if(!is_town())             "Wait: In town only."
+   *     else if(overall_mode == MODE_COMBAT) { handle_stand_ready(...); ... }
+   *
+   * — but `is_town()` (boe.locutils.cpp:60) is `mode > OUTDOORS && mode <
+   * COMBAT`, so it is **false** in combat and the second arm swallows it.
+   * Waiting in a fight says "In town only.", which reads like a bug and is
+   * what the original does; the third arm can only ever be reached with
+   * `cartoon_happening` set, which no player input does. The stand-ready it
+   * wanted is on Space instead (`pause`), so nothing is actually lost.
+   *
+   * The last arm — a town mode that isn't plain MODE_TOWN, i.e. mid-talk or
+   * mid-targeting — is the one that tells you to finish up first.
+   */
+  async wait(): Promise<void> {
+    this.recorder?.record('handle_wait');
+    if (this.mode === GameMode.TOWN) {
+      await this.townWait();
+      return;
+    }
+    if (!isTown(this.mode)) {
+      this.univ.addStringToBuf('Wait: In town only.');
+      return;
+    }
+    this.univ.addStringToBuf("Wait: Finish what you're doing first.");
+  }
+
+  /**
+   * handle_town_wait (boe.actions.cpp:1242) — stand still for up to eighty
+   * turns, and stop the moment anything happens.
+   *
+   * The C++ draws the rest screen and sleeps between iterations; here the loop
+   * just runs, the same way `doRest` does. What matters is the sequence, since
+   * `get_ran`'s call order is part of the spec.
+   */
+  private async townWait(): Promise<void> {
+    const { univ } = this;
+    // The opening test is also the loop's guard, so a monster already in sight
+    // means the whole thing is one line and no time passes at all.
+    const storeHp: number[] = [];
+    const storeAlive: boolean[] = [];
+    if (this.partySeesAMonst()) {
+      univ.addStringToBuf('Long wait: Monster in sight.');
+    } else {
+      univ.addStringToBuf('Long wait...');
+      // `play_sound(-20)`: negative is the C++'s "don't wait for it", which is
+      // the only kind this port has.
+      this.sound?.play(20);
+      for (const pc of univ.party.pcs) {
+        storeHp.push(pc.curHealth);
+        storeAlive.push(pc.isAlive);
+        // Settling in tears you free of any webs, before the baseline is used
+        // to decide whether you were interrupted.
+        pc.status[Status.WEBS] = 0;
+      }
+    }
+
+    let interrupted = false;
+    for (let i = 0; i < 80 && !this.partySeesAMonst() && !interrupted; i++) {
+      // `increase_age(false)` — this port folds the clock tick into the move
+      // functions rather than into the upkeep, so a waiting turn has to tick
+      // it here. One per turn: the long wait is a town action.
+      univ.party.age++;
+      await increaseAgeEffects(this);
+      specialIncreaseAge(this, 1);
+      await processFields(this);
+      doMonsters(this);
+      await doMonsterTurn(this);
+      // **A different roll from the one an ordinary town turn makes.** The
+      // turn-by-turn one (boe.actions.cpp:1989) is
+      // `get_ran(1,1,160 - difficulty + less_wm*200) == 2`; the long wait's is
+      // `== 10` and carries no `less_wm` term. Kept as written — waiting and
+      // walking really do attract wandering monsters at different rates.
+      const difficulty = univ.townRecord?.difficulty ?? 0;
+      if (univ.rng.getRan(1, 1, Math.max(1, 160 - difficulty)) === 10) {
+        createWandMonst(this);
+      }
+      for (let j = 0; j < 6; j++) {
+        const pc = univ.party.pcs[j];
+        if (pc === undefined) continue;
+        // Losing health *or* dying ends it. The two tests are separate because
+        // a PC already on 0 health can die without their health changing — the
+        // C++ has a comment about the bug that used to be here.
+        if (pc.curHealth < (storeHp[j] ?? 0) || pc.isAlive !== (storeAlive[j] ?? false)) {
+          interrupted = true;
+          univ.addStringToBuf('  Waiting interrupted.');
+          break;
+        }
+      }
+      if (this.partySeesAMonst()) {
+        interrupted = true;
+        univ.addStringToBuf('  Monster sighted!');
+      }
+      if (!univ.party.isAlive()) break;
+    }
+    this.checkGameOver();
+    // Only a wait that ran its full course quietly is worth a save point.
+    if (!this.partySeesAMonst() && !interrupted) tryAutoSave('TownWaitComplete');
+  }
+
+  /**
+   * party_sees_a_monst (boe.locutils.cpp:506) — is a *hostile* monster in
+   * sight? A friendly townsperson walking past doesn't interrupt anything.
+   */
+  partySeesAMonst(): boolean {
+    return (this.univ.town?.monsters ?? []).some(
+      (m) => m.isAlive && !m.isFriendly && this.partyCanSeeMonst(m));
+  }
+
+  /**
    * handle_pause — "stand ready" in combat (parry 100, which also means the
    * to-hit bonus caps out), or a plain pause otherwise. Either way it's a turn
    * spent, and webs get torn at.

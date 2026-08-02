@@ -22,6 +22,10 @@
 import { Direction } from '../core/location';
 import { GameRng } from '../core/rng';
 import { Spell } from '../data/spell';
+import { ItemWinMode, ItemWindow } from '../game/itemWindow';
+import { takeAp } from '../game/combat';
+import { GetItemsPick } from '../game/getItems';
+import { useItem } from '../game/itemUse';
 import { GameMode, isCombat } from '../game/modes';
 import { GameSession } from '../game/session';
 import { SpellPick } from '../game/spellPick';
@@ -91,6 +95,17 @@ export async function runReplay(
    * `cDialog::run` does with the same recorded clicks.
    */
   let picking: SpellPick | null = null;
+  /**
+   * `stat_window` and the list behind it. The C++ keeps these as globals beside
+   * the item pane; here they live on the renderer, which a headless driver has
+   * none of — so it keeps its own, which is all the item actions need.
+   */
+  const win = new ItemWindow();
+  /**
+   * The get-items screen, while one is open — `show_get_items`'s own loop,
+   * which unlike the spell picker stays up across many clicks.
+   */
+  let getting: GetItemsPick | null = null;
 
   while (!source.exhausted) {
     const at = source.position;
@@ -135,6 +150,21 @@ export async function runReplay(
           break;
         case 'handle_rest':
           session.rest();
+          break;
+        case 'handle_wait':
+          // The long wait, which is **w** and not Space. Up to eighty turns
+          // pass here, so it is one of the biggest single state changes a
+          // recording can contain.
+          await session.wait();
+          break;
+        case 'arrow_button_click':
+          // Cosmetic, and the C++ says so in as many words at the recording
+          // site (boe.graphics.cpp:497): "In a replay, this action is purely
+          // cosmetic, for playing the animation and sound accompanying a click
+          // on a button whose real action is recorded afterward." It draws the
+          // button depressed and returns true; the click it belongs to arrives
+          // as the next action. The rectangle it carries is where the button
+          // was on screen, which this port lays out for itself.
           break;
         case 'handle_combat_switch':
           // One action for both halves in the C++: it is a toggle, and the
@@ -277,6 +307,13 @@ export async function runReplay(
           options.onClick?.(id, Number(action.info.mods ?? '0'));
           // While the spell picker is up it is modal, so the clicks belong to
           // it — the same way the C++'s `cDialog::run` takes them.
+          // The get-items screen is modal in the same way, and it stays open:
+          // the six PC buttons, the eight lettered rows and the arrows all
+          // answer here until `done` closes it.
+          if (getting !== null) {
+            if (getting.click(id) === 'done') getting = null;
+            break;
+          }
           if (picking !== null) {
             const decided = picking.click(id);
             if (decided === 'cancel') picking = null;
@@ -328,13 +365,72 @@ export async function runReplay(
           await options.onLoadParty(decodeReplayFile(action.text));
           break;
         }
+        // **`set_stat_window` is not a view, and treating it as one was wrong.**
+        // It was in the no-op list below on the reasoning that it only decides
+        // what the item pane paints — but `stat_window` is also *whose pack*
+        // every item action indexes into: `handle_equip_item` is
+        // `equip_item(stat_window, item_hit)`, and so are use, drop and give
+        // (boe.actions.cpp:1090, :1108). Skipping it meant a recording that
+        // flipped to another PC's pack and equipped something would equip the
+        // wrong PC's item, silently.
+        case 'set_stat_window':
+          win.setStatWindow(session.univ, numberFromAction(action) as ItemWinMode);
+          break;
+        case 'handle_switch_pc_items':
+          // boe.actions.cpp:1051 — the six tabs under the item pane. Out of
+          // combat this also changes who is *active*; in combat it only
+          // changes the page, since the turn order decides who acts.
+          if (!isCombat(session.mode)) session.univ.curPc = numberFromAction(action);
+          win.setStatWindow(session.univ, numberFromAction(action) as ItemWinMode);
+          break;
+        case 'handle_equip_item':
+          // `prime_time()` (boe.actions.cpp:295) is the gate on all of these:
+          // outdoors, town or combat, and nothing half-finished. Equipping
+          // costs one action point, using costs three.
+          if (session.primeTime) {
+            session.toggleEquip(win.pcPage, numberFromAction(action));
+            takeAp(session.univ, 1);
+          } else session.univ.addStringToBuf("Equip: Finish what you're doing first.");
+          break;
+        case 'handle_use_item':
+          if (!session.primeTime) {
+            session.univ.addStringToBuf("Use item: Finish what you're doing first.");
+            break;
+          }
+          await useItem(session, win.pcPage, numberFromAction(action));
+          takeAp(session.univ, 3);
+          break;
+        case 'handle_trade_places':
+          session.tradePlaces(numberFromAction(action));
+          break;
+        case 'handle_get_items': {
+          // boe.actions.cpp:1389. In town the sweep is from the party's square,
+          // in combat from the **acting PC's** — and there it costs four action
+          // points whether or not anything was picked up.
+          const inFight = isCombat(session.mode);
+          const from = inFight
+            ? session.univ.currentPc.combatPos : session.univ.party.townLoc;
+          const { items } = session.reachableItems(from);
+          // `get_item` only puts the screen up when there is something to put
+          // on it, so with an empty square the `click_control`s that would have
+          // answered it are simply not in the recording either.
+          getting = items.length > 0 ? new GetItemsPick(session, items) : null;
+          if (inFight) {
+            takeAp(session.univ, 4);
+            session.afterCombatAction();
+          }
+          break;
+        }
         case 'display_map':
         case 'close_map':
         case 'close_window':
-        case 'set_stat_window':
         case 'show_inventory':
         case 'print_party_stats':
         case 'debug_print_location':
+        // `show_item_info` and `give_pc_info` open the item and character
+        // sheets. Both read the universe and paint it; neither takes a turn.
+        case 'show_item_info':
+        case 'give_pc_info':
           break;
         default: {
           result.unsupported[action.type] = (result.unsupported[action.type] ?? 0) + 1;

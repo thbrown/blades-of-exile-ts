@@ -1753,10 +1753,16 @@ async function main(): Promise<void> {
         case 'e': case 'E':
           if (inCombat) session.endCombat();
           break;
-        case 'w': case 'W':
         case ' ':
-          // Wait: stand ready in combat, pause otherwise.
+          // Space is `handle_pause` (boe.actions.cpp:3003): one turn — stand
+          // ready in combat, pause otherwise.
           await session.pause();
+          break;
+        case 'w': case 'W':
+          // **w is `handle_wait`, not `handle_pause`** (boe.actions.cpp:3094).
+          // They were both wired to `pause` here, so the long wait — up to
+          // eighty turns of standing still in town — had no key at all.
+          await session.wait();
           break;
         case 'd': case 'D':
           if (inCombat) session.parry();

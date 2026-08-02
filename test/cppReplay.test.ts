@@ -39,13 +39,17 @@ const opcodes = buildOpcodeTable(
   readFileSync(new URL('../public/data/strings/specials-opcodes.txt', import.meta.url), 'utf8'),
 );
 
-/** The three that run end to end today. Adding to this list is the progress. */
+/** The ones that run end to end today. Adding to this list is the progress. */
 const FILES = [
   'VoDT_02-05-2025_13-51-24.xml',
   'bg-flicker-boom-space.xml',
   // Casts a spell through the picker: handle_spellcast, then `other` to reach
   // the second page of the list, `spell21`, `cast`.
   'Shockwave.xml',
+  // Three actions, and all three are the point: this is the desktop build's own
+  // regression for the **long wait**, which is eighty turns of clock, monsters
+  // and RNG behind a single `handle_wait`.
+  'VoDT_28-03-2025_11-09-25.xml',
 ];
 
 /**

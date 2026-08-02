@@ -5,6 +5,7 @@ import { Direction } from '../src/core/location';
 import { GameRng } from '../src/core/rng';
 import { FieldType } from '../src/data/fields';
 import { ItemType } from '../src/data/item';
+import { Attitude } from '../src/data/monster';
 import { SECTOR_SIZE } from '../src/data/outdoors';
 import { Scenario } from '../src/data/scenario';
 import { SpecType, emptySpecialNode } from '../src/data/special';
@@ -648,5 +649,79 @@ describe('the end of the scenario', () => {
     s.pause();
     await flush();
     expect(died).toBe(2);
+  });
+});
+
+/**
+ * handle_wait (boe.actions.cpp:1296) — the **w** key. Not `handle_pause`,
+ * which is Space; this is the long wait, and its dispatcher has an arm the
+ * C++ can never reach.
+ */
+describe('the long wait', () => {
+  it('refuses outdoors, where the C++ has nowhere to wait', async () => {
+    const s = newSession();
+    s.startNewGame();
+    const rect = s.univ.town!.record.inTownRect;
+    await s.moveTo({ x: s.univ.party.townLoc.x, y: rect.bottom });
+    expect(s.mode).toBe(GameMode.OUTDOORS);
+    await s.wait();
+    expect(s.univ.transcript.at(-1)).toBe('Wait: In town only.');
+  });
+
+  /**
+   * The dead arm. `handle_wait`'s third branch is `overall_mode == MODE_COMBAT`,
+   * but the second is `!is_town()` — and `is_town()` is `mode > OUTDOORS &&
+   * mode < COMBAT`, so combat never gets past it. Waiting in a fight says "In
+   * town only.", which reads like a bug and is what the original does.
+   */
+  it('says "In town only." in combat, because that arm is unreachable', async () => {
+    const s = newSession();
+    s.startNewGame();
+    s.startCombat(s.univ.party.direction);
+    expect(s.mode).toBe(GameMode.COMBAT);
+    await s.wait();
+    expect(s.univ.transcript.at(-1)).toBe('Wait: In town only.');
+  });
+
+  /**
+   * The opening test is also the loop's guard, so a hostile monster already in
+   * sight means the whole thing is one line and **no time passes at all**.
+   */
+  it('will not start with a hostile monster in sight, and costs nothing', async () => {
+    const s = newSession();
+    s.startNewGame();
+    // Fort Talrus's own rats are elsewhere in the fort at the start; put one
+    // where the party can actually see it.
+    const rat = s.univ.town!.monsters.find((m) => m.isAlive)!;
+    rat.attitude = Attitude.HOSTILE_A;
+    rat.curLoc = { x: s.univ.party.townLoc.x + 1, y: s.univ.party.townLoc.y };
+    expect(s.partySeesAMonst()).toBe(true);
+
+    const before = s.univ.party.age;
+    await s.wait();
+    expect(s.univ.transcript.at(-1)).toBe('Long wait: Monster in sight.');
+    expect(s.univ.party.age).toBe(before);
+  });
+
+  it('runs its eighty turns when nothing is in sight', async () => {
+    const s = newSession();
+    s.startNewGame();
+    // Clear the town so the loop has nothing to interrupt it.
+    for (const m of s.univ.town!.monsters) m.active = 0;
+    expect(s.partySeesAMonst()).toBe(false);
+    const before = s.univ.party.age;
+    await s.wait();
+    expect(s.univ.transcript.some((l) => l === 'Long wait...')).toBe(true);
+    expect(s.univ.party.age).toBe(before + 80);
+  });
+
+  /** Webs are torn free as the party settles in, before the baseline is taken. */
+  it('clears webs on the way in', async () => {
+    const s = newSession();
+    s.startNewGame();
+    for (const m of s.univ.town!.monsters) m.active = 0;
+    s.univ.party.pcs[0]!.status[Status.WEBS] = 5;
+    await s.wait();
+    expect(s.univ.party.pcs[0]!.status[Status.WEBS]).toBe(0);
   });
 });

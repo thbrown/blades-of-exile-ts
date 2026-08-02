@@ -14,21 +14,23 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-// Kept in step with the switch in src/replay/driver.ts. Listed rather than
-// imported because this script is plain Node and the driver is TypeScript.
-const HANDLED = new Set([
-  'move', 'handle_pause', 'handle_rest', 'handle_combat_switch', 'handle_look',
-  'handle_use_space', 'handle_switch_pc', 'click_control', 'handle_parry',
-  'handle_toggle_active', 'handle_missile', 'handle_target_space', 'screen_shift',
-  'handle_begin_look', 'handle_begin_talk', 'handle_talk', 'click_talk_rect',
-  'handle_spellcast',
-  'load_prefs', 'feature_flags', 'srand', 'scenario', 'change_fps',
-  // The startup preamble, which `replayStartup` reads before the session exists.
-  'startup_button_click', 'fancy_file_picker', 'load_party',
-  // Views: they read the universe and paint, and change nothing in it.
-  'display_map', 'close_map', 'close_window', 'set_stat_window', 'show_inventory',
-  'print_party_stats', 'debug_print_location',
-]);
+// **Read out of the driver rather than listed here.** This used to be a
+// hand-kept copy of the switch in src/replay/driver.ts, which meant the survey
+// could quietly disagree with the thing it is surveying — and it did: two
+// handlers were added and the report still called them gaps, which is exactly
+// the wrong direction for a tool whose job is deciding what to write next.
+// Scraping the `case '...':` labels is crude, but it cannot drift, and a
+// mistake here shows up immediately as a file that "should" run and doesn't.
+// The startup preamble is added separately: `replayStartup` consumes those
+// before the session exists, so they never reach the driver's switch.
+const driverSrc = readFileSync(
+  new URL('../src/replay/driver.ts', import.meta.url), 'utf8');
+const HANDLED = new Set(
+  [...driverSrc.matchAll(/^\s*case '([a-z_]+)':/gm)].map((m) => m[1]));
+for (const n of ['startup_button_click']) HANDLED.add(n);
+if (HANDLED.size < 20) {
+  throw new Error(`only ${HANDLED.size} handlers scraped from driver.ts — the shape changed`);
+}
 
 const root = process.argv[2] ?? '../exile-wasm/test/replays';
 // Extra action names to treat as handled, comma-separated — for asking "if I

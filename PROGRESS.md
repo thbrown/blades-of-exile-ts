@@ -8,7 +8,8 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - Keys follow the original's `handle_keystroke` (boe.actions.cpp:2772):
   arrows/keypad move, **f** fight (and end a fight), **e** end combat,
-  **w**/Space wait — stand ready in combat, **d** parry, **x** hold the turn on
+  **Space** pause one turn (stand ready in combat), **w** the *long* wait — up
+  to eighty turns, town only, **d** parry, **x** hold the turn on
   one PC, **t** talk, **l** look, **u** use, **b** bash, **g** get, **r** rest,
   **L** pick a lock, **1-6** whose pack shows, **9** the special items and
   **0** the quests,
@@ -3071,3 +3072,89 @@ The M6 list below is kept for the history of what it covered:
     undetected.
   - The remaining stops are no longer one wall but ~20 separate divergences,
     each with a square and an action number attached. That is what M8 is now.
+
+- **The long wait, the item panel, and the survey tool that was lying (M8,
+  2026-08-02).** Third slice of M8. The driver's biggest single wall —
+  `arrow_button_click`, the first gap in **23 of 97** files — turned out to
+  cost one line, and clearing it exposed the shape of everything behind it.
+  - **`arrow_button_click` is cosmetic, and the C++ says so at the recording
+    site** (boe.graphics.cpp:497): "In a replay, this action is purely
+    cosmetic, for playing the animation and sound accompanying a click on a
+    button whose real action is recorded afterward." It draws the button
+    depressed, returns true, and the click it belongs to arrives as the next
+    action. A no-op with the reasoning written down.
+  - **`handle_wait` was never ported at all** — and it is **w**, not Space.
+    Space is `handle_pause` (boe.actions.cpp:3003), one turn; **w** is
+    `handle_wait` (:3094), the *long* wait. Both keys were wired to `pause()`
+    here, so eighty turns of standing still in town had no key in the game.
+    `session.wait()` and `session.townWait()` port it, with
+    `partySeesAMonst` (boe.locutils.cpp:506) under them.
+    - *Gotcha, and the reason the combat arm looks missing*: **the C++'s own
+      third branch is dead code.** `handle_wait` reads `if(MODE_TOWN) … else
+      if(!is_town()) "Wait: In town only." else if(MODE_COMBAT)
+      handle_stand_ready()` — but `is_town()` is `mode > OUTDOORS && mode <
+      COMBAT` (boe.locutils.cpp:60), so it is **false** in combat and the
+      second arm swallows it. Waiting in a fight says "In town only.", which
+      reads like a bug and is what the original does. Kept, commented, and
+      pinned by a test. Nothing is lost: the stand-ready it wanted is on Space.
+    - *Gotcha*: **the long wait rolls for wandering monsters differently from
+      an ordinary turn.** A walking turn is `get_ran(1,1,160 - difficulty +
+      less_wm*200) == 2` (boe.actions.cpp:1989); the long wait's is `== 10`
+      with no `less_wm` term. Waiting and walking really do attract monsters at
+      different rates.
+    - *Gotcha*: the interruption test checks health **and** aliveness
+      separately, because a PC already on 0 health can die without their health
+      changing — the C++ has its own comment about the bug that used to be here.
+    - The opening "Monster in sight" test is also the loop's guard, so a wait
+      that refuses costs **no time at all**.
+  - **`set_stat_window` was in the driver's no-op list, and that was wrong.**
+    It was filed under "views: they read the universe and paint" — but
+    `stat_window` is also *whose pack* every item action indexes into
+    (`equip_item(stat_window, item_hit)`, boe.actions.cpp:1090). A recording
+    that flipped to another PC's page and equipped something would have
+    equipped the wrong PC's item, silently. The driver keeps its own
+    `ItemWindow` now, since the C++'s globals live on the renderer here and a
+    headless driver has none.
+  - With it, the whole item-panel family: `handle_switch_pc_items`,
+    `handle_equip_item` (1 AP), `handle_use_item` (3 AP), `handle_trade_places`,
+    and `show_item_info` / `give_pc_info` as the views they genuinely are. All
+    gated on `prime_time()` (boe.actions.cpp:295) as the C++ gates them.
+  - **`game/getItems.ts` is `show_get_items` with no screen attached** —
+    the `spellPick.ts` treatment applied to the pick-up-items screen, and for
+    the same reason: the C++'s modal `cDialog::run` takes clicks by *control
+    name*, a replay records those names, and the driver has to answer
+    `item1-key` / `pc2` / `done` without a canvas. `GetItemsDialog` is left
+    with the drawing and delegates every control to `pick.click(id)`. One
+    implementation on both sides of that seam is the point — a divergence
+    between what the player sees and what a recording replays is exactly the
+    class of bug M8 exists to find.
+  - **`scripts/survey-replays.mjs` was reporting handlers it already had as
+    gaps.** Its `HANDLED` set was a hand-kept copy of the driver's switch, and
+    two additions had already drifted out of step — the wrong direction
+    entirely for a tool whose only job is deciding what to write next. It
+    scrapes the `case '…':` labels out of `driver.ts` now. Crude, but it cannot
+    drift, and a mistake shows up immediately as a file that "should" run and
+    doesn't.
+  - **Where it stands**: 15 of 97 files use only handled actions (was 8), 3,616
+    actions dispatch (was 3,133), and four run end to end —
+    `VoDT_28-03-2025_11-09-25.xml` joins the curated set, and it is worth its
+    three actions: it is the desktop build's own regression for the long wait,
+    which is eighty turns of clock, monsters and RNG behind one `handle_wait`.
+  - **The wall is now one thing, and it is not a missing handler.** Running the
+    whole corpus, the stop reasons are: **35 movement desyncs**, 8
+    `scrollbar_setPosition`, 7 "handle_target_space with nothing armed", 14
+    files that cannot start at all (no `<load_party>`, a party with no
+    scenario, or the new-party flow), and a dozen one-off handlers. The 35 are
+    the milestone: each is a square where this port lets the party through and
+    the C++ does not, or the reverse.
+    - Worth knowing for whoever picks that up: **the recording never states
+      where the party was**, only where each step was aimed, so a desync is
+      diagnosed by inference — every recorded destination is one square from
+      the recording's own position, and a run of them pins it. Tracing one file
+      by hand (`VoDT_06-04-2025_11-39-05.xml`, which fails six actions in) is
+      how the shape of these was established.
+    - *Ruled out*: it is **not** the specials being inert. The replay harness
+      never calls `attachSpecials`, so scripting really is switched off in
+      these runs — but attaching a host that answers every dialog changes
+      nothing about where that file diverges. Worth fixing on its own account;
+      it is not the cause of the 35.
