@@ -50,6 +50,10 @@ const FILES = [
   // regression for the **long wait**, which is eighty turns of clock, monsters
   // and RNG behind a single `handle_wait`.
   'VoDT_28-03-2025_11-09-25.xml',
+  // 152 actions through Za-Khazi, and the longest run here that exercises
+  // scripting: it only completes because the driver answers the specials'
+  // dialogs from the recording now.
+  'ZKR_14-05-2025_13-29-14.xml',
 ];
 
 /**
@@ -66,6 +70,8 @@ function loadScen(id: string): Promise<Scenario> {
 
 interface RunOutcome {
   ran: number;
+  /** Actions consumed by dialogs rather than by the driver's switch. */
+  answered: number;
   total: number;
   error: string | null;
   errorAt: number;
@@ -111,6 +117,7 @@ async function play(file: string): Promise<RunOutcome> {
 
   return {
     ran: result.ran,
+    answered: result.answered,
     total: replay.actions.length - start.consumed,
     error: result.error,
     errorAt: result.errorAt,
@@ -134,7 +141,9 @@ describe("the C++ build's own replays", () => {
       // that diverged rather than just the count.
       expect(`${out.error ?? 'ok'} at ${out.errorAt}`).toBe('ok at -1');
       expect(out.unsupported).toEqual({});
-      expect(out.ran).toBe(out.total);
+      // The dialogs pull from the same stream, so a finished file is the two
+      // counts together — see `ReplayResult.answered`.
+      expect(out.ran + out.answered).toBe(out.total);
     }, 120000);
   }
 

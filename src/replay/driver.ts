@@ -35,6 +35,7 @@ import { cancelTownTargeting, castTownSpell } from '../game/spellTarget';
 import { castSpell } from '../game/spellTown';
 import { Skill } from '../universe/skills';
 import { Replay, ReplaySource, locationFromAction, numberFromAction } from './format';
+import { makeReplayHost } from './host';
 import { STARTUP_ACTIONS, decodeReplayFile } from './startup';
 
 export interface ReplayResult {
@@ -46,6 +47,13 @@ export interface ReplayResult {
   error: string | null;
   /** The index of the action that failed, or -1. */
   errorAt: number;
+  /**
+   * How many actions the *dialogs* consumed rather than the driver's switch.
+   * The host pulls from the same stream, so a run that finished the file has
+   * `ran + answered === actions`, and treating `ran` alone as the total makes a
+   * complete run look one action short for every message box it dismissed.
+   */
+  answered: number;
 }
 
 export interface ReplayOptions {
@@ -74,6 +82,17 @@ export interface ReplayOptions {
    * name a different scenario, whose files have to be fetched first.
    */
   onLoadParty?: (save: Uint8Array) => void | Promise<void>;
+  /**
+   * Leave the session's scripting alone instead of attaching the replay host.
+   *
+   * The default — attaching it — is what the C++ does, and running without it
+   * is what made the corpus look like a rules problem: with scripting off, a
+   * special that blocks a step never gets the chance to unblock it, and the
+   * party stops one square short of the recording for reasons that have nothing
+   * to do with movement. This escape hatch exists for a caller that has already
+   * installed a host of its own.
+   */
+  keepSpecials?: boolean;
 }
 
 /**
@@ -88,7 +107,18 @@ export async function runReplay(
 ): Promise<ReplayResult> {
   const source = new ReplaySource(replay.actions, options.from ?? 0);
   const onUnsupported = options.onUnsupported ?? 'stop';
-  const result: ReplayResult = { ran: 0, unsupported: {}, error: null, errorAt: -1 };
+  const result: ReplayResult = {
+    ran: 0, unsupported: {}, error: null, errorAt: -1, answered: 0,
+  };
+  // **Scripting on, answered from the recording.** The host pulls from this
+  // same source, which is how the C++'s modal dialogs behave: `cDialog::run`
+  // pops actions off the stream the outer handler is walking, so a message
+  // raised mid-move eats the click that dismissed it and the move goes on.
+  if (options.keepSpecials !== true) {
+    session.attachSpecials(makeReplayHost(session, source, {
+      onAnswered: () => { result.answered++; },
+    }));
+  }
   /**
    * The spell picker, while one is open. `handle_spellcast` puts it up and the
    * `click_control`s that follow answer it, which is what the C++'s modal
@@ -167,10 +197,24 @@ export async function runReplay(
           // was on screen, which this port lays out for itself.
           break;
         case 'handle_combat_switch':
-          // One action for both halves in the C++: it is a toggle, and the
-          // direction only matters on the way in.
-          if (action.text === '') session.endCombat();
-          else session.startCombat(numberFromAction(action) as Direction);
+          // **The C++ records this with empty text, always** — `record_action
+          // ("handle_combat_switch", "")` (boe.actions.cpp:1317). It is a pure
+          // mode toggle and carries no argument at all.
+          //
+          // This port used to read the text and treat "" as "end combat", so it
+          // could **never start a fight**: every recorded toggle took the end
+          // branch. A recording that entered combat then went on playing town
+          // moves here, and the first thing that needed a fight — a missile —
+          // said "Shoot: Only in combat." with fifty actions of nonsense behind
+          // it.
+          //
+          // The direction is the party's own facing, set by the last move, not
+          // anything the recording states.
+          if (session.mode === GameMode.TOWN) {
+            session.startCombat(session.univ.party.direction);
+          } else if (session.mode === GameMode.COMBAT) {
+            session.endCombat();
+          }
           break;
         case 'handle_look':
           session.lookAt(locationFromAction(action, 'destination'));

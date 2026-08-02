@@ -11,11 +11,13 @@ so nothing outside this directory is needed but the scenario itself
 
 Curated by `scripts/survey-replays.mjs`, which reports how far each of the 97
 files the C++ ships gets before hitting an action this port has no handler for.
-**These four are the ones that currently run end to end.** The rest stop on a
+**These five are the ones that currently run end to end.** The rest stop on a
 divergence the driver now detects: a recorded `move` is always one square from
 where the party is, so anything further means the two games have drifted apart
 and the run says exactly where. Chasing those down one at a time is what M8 is
-— 35 of the 97 now stop that way, which is the milestone's remaining work.
+— 29 of the 97 now stop that way, which is the milestone's remaining work.
+Note a finished run is `ran + answered`: the dialogs pull from the same stream,
+so a file is complete when the two together reach the action count.
 
 Note the recording never states where the party *was*, only where each step was
 aimed. A desync is therefore diagnosed by inference: every recorded destination

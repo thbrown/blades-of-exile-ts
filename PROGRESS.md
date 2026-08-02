@@ -3153,8 +3153,79 @@ The M6 list below is kept for the history of what it covered:
       the recording's own position, and a run of them pins it. Tracing one file
       by hand (`VoDT_06-04-2025_11-39-05.xml`, which fails six actions in) is
       how the shape of these was established.
-    - *Ruled out*: it is **not** the specials being inert. The replay harness
-      never calls `attachSpecials`, so scripting really is switched off in
-      these runs — but attaching a host that answers every dialog changes
-      nothing about where that file diverges. Worth fixing on its own account;
-      it is not the cause of the 35.
+    - *Wrongly ruled out, corrected the same day* — see the entry below. The
+      claim here was that the inert specials were not the cause, on the
+      strength of one file where attaching a host changed nothing. That
+      generalised from a single sample and was wrong: for the town cases it is
+      decisive.
+
+- **The replays were running with scripting switched off (M8, 2026-08-02).**
+  Fourth slice of M8, and it undoes a wrong conclusion recorded in the slice
+  above: the 35 movement desyncs were blamed on movement rules, and most of
+  them were not about movement at all.
+  - **`src/replay/inferMoves.ts` is what settled it.** A replay records where
+    each step was *aimed*, never where the party stood, so a desync says the two
+    games disagree but not about what — and any of the fifty moves before it
+    could be the cause. Two facts make the stream far more informative than it
+    looks: every destination is within one square of the position it was aimed
+    from, and a move either succeeds or is refused with no third option. That
+    turns the destination list into a constraint problem — run the candidates
+    forward, then backwards keeping only those consistent with the rest of the
+    file — and it collapses hard, usually to the C++'s own trajectory,
+    recovered from a file that never wrote it down.
+    - The backward half is what does the work: a candidate can survive the next
+      destination and be killed by the one after it.
+    - It reports `unknown` rather than guessing, and that is most of a real
+      file: **diagonals keep both readings alive**, since a refused step to
+      (5,5) still leaves (5,6) one diagonal away. The **last** move of any file
+      is always unknown — nothing follows to constrain it.
+    - A destination nothing could reach is a **relocation**, not a
+      contradiction: a town entrance, a stairway, or the outdoor window sliding
+      and renumbering every coordinate. The walk restarts there knowing only
+      that the party was one of nine squares.
+  - **What it showed**: file after file, the recording walks on and this port
+    stops one square short. On `ASR_10-05-2025_08-18-51` the party climbs from
+    (9,36) to (9,31) and then refuses (9,30) **silently**. The square is a
+    Closed Portcullis (terrain 130, `blockage: move-and-shoot`, with an
+    `unlock` special) — and the refusal was correct *given that nothing was
+    there to open it*.
+  - **The cause: the replay harness never called `attachSpecials`.** Scripting
+    was inert for the whole corpus. A scripted square did nothing, a message box
+    was never raised, and — the part that bit — a special that blocks a step
+    never got the chance to unblock it. The desyncs were being reported against
+    movement rules that were perfectly correct.
+  - **`src/replay/host.ts`** is the fix, and its shape is the C++'s own. Dialogs
+    there are modal: `cDialog::run` pops actions off the *same* stream the outer
+    handler is walking, so a message raised mid-move consumes the
+    `click_control` that dismissed it and the move carries on. The host
+    therefore holds the driver's `ReplaySource` and reads from it when it needs
+    an answer. `runReplay` attaches it by default (`keepSpecials` opts out).
+    - `message` takes any click — a message box has one way out. `choice` maps
+      the recorded control id to the button index, and **throws** if it is not
+      one of the buttons.
+    - `story`, `askText` and `selectPc` throw **by name** rather than returning
+      a plausible default: paging depends on how far the player read, text is
+      answered by `field_input` rather than a click, and select-PC's control
+      ids are not pinned down here yet. A file using one fails honestly.
+    - *Consequence worth knowing*: **`result.ran` no longer equals the action
+      count on a finished file.** The dialogs consume actions from the same
+      stream, so a completed run is `ran + answered`, and the new `answered`
+      field is why `ZKR_14-05-2025_13-29-14` reads 152 + 1 rather than looking
+      one short.
+  - **A second real driver bug, found the same way**: `handle_combat_switch` is
+    recorded with **empty text, always** (`record_action("handle_combat_switch",
+    "")`, boe.actions.cpp:1317) — it is a pure mode toggle carrying no argument.
+    The driver read that text and treated `""` as "end combat", so it could
+    **never start a fight**: a recording that entered combat went on playing
+    town moves here, and the first thing needing a fight said "Shoot: Only in
+    combat." with fifty actions of nonsense behind it. It toggles on the mode
+    now, and the direction is the party's own facing as the C++ uses.
+  - **Where it stands**: 4,082 actions dispatch (was 3,133 at the start of the
+    day), five files run end to end, and the desyncs are down from 35 to **29** —
+    and the ones that remain are *later* ones, on files that now get several
+    times further. `ZKR_14-05-2025_13-29-14` joins the curated set as the
+    longest run that exercises scripting; it only completes because the dialogs
+    are answered.
+  - The next walls, in order: 29 desyncs, `scrollbar_setPosition` (9),
+    "handle_target_space with nothing armed" (7), and `spell_forced` (5) — the
+    "hit m again to recast" shortcut, which rose as files reached further.
