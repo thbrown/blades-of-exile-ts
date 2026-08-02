@@ -23,6 +23,7 @@ import { Direction } from '../core/location';
 import { GameRng } from '../core/rng';
 import { GameSession } from '../game/session';
 import { Replay, ReplaySource, locationFromAction, numberFromAction } from './format';
+import { STARTUP_ACTIONS, decodeReplayFile } from './startup';
 
 export interface ReplayResult {
   /** How many actions were dispatched to a handler. */
@@ -45,6 +46,22 @@ export interface ReplayOptions {
   onUnsupported?: 'stop' | 'skip';
   /** Answers `click_control`; the driver only records which id came up. */
   onClick?: (id: string, mods: number) => void;
+  /**
+   * The action to start at. `replayStartup` reports how many leading actions
+   * are the splash screen and the file picker rather than the game; the caller
+   * has already acted on them by building the session, so playback resumes
+   * after them. Positions in the result stay absolute.
+   */
+  from?: number;
+  /**
+   * A `load_party` reached mid-run — the recording loaded a saved game partway
+   * through, which several of the C++'s own replays do (twice in a row, in one
+   * case). It is a real state change, not window furniture, so without a
+   * handler it counts as a gap rather than being skipped. The caller supplies
+   * it because only the caller can say what applying a save means here: it may
+   * name a different scenario, whose files have to be fetched first.
+   */
+  onLoadParty?: (save: Uint8Array) => void | Promise<void>;
 }
 
 /**
@@ -57,7 +74,7 @@ export async function runReplay(
   replay: Replay,
   options: ReplayOptions = {},
 ): Promise<ReplayResult> {
-  const source = new ReplaySource(replay.actions);
+  const source = new ReplaySource(replay.actions, options.from ?? 0);
   const onUnsupported = options.onUnsupported ?? 'stop';
   const result: ReplayResult = { ran: 0, unsupported: {}, error: null, errorAt: -1 };
 
@@ -82,13 +99,70 @@ export async function runReplay(
           else session.startCombat(numberFromAction(action) as Direction);
           break;
         case 'handle_look':
-          session.lookAt(locationFromAction(action));
+          session.lookAt(locationFromAction(action, 'destination'));
+          break;
+        case 'handle_talk':
+          await session.talkTo(locationFromAction(action));
+          break;
+        case 'click_talk_rect':
+          // The C++ records the whole word rect — the text, its rectangle, its
+          // colour and its node — but only `node` is a game input; the rest is
+          // what the click has to *draw* while it flashes (`click_talk_rect`,
+          // boe.newgraph.cpp:951), and the caller then runs `handle_talk_node`.
+          // Ask About is `node` -1 here as it is there, and its topic arrives
+          // as the `field_input` that follows.
+          session.chooseTalkNode(Number(action.info.node ?? '-1'));
           break;
         case 'handle_use_space':
           await session.useSpace(locationFromAction(action));
           break;
         case 'handle_switch_pc':
           session.univ.curPc = numberFromAction(action);
+          break;
+        case 'handle_parry':
+          session.parry();
+          break;
+        case 'handle_toggle_active':
+          session.toggleActivePc();
+          break;
+        case 'handle_missile':
+          // load_missile: arms whatever the acting PC has and drops into
+          // FIRING/THROWING. The shot itself is the `handle_target_space` that
+          // follows.
+          session.startMissile();
+          break;
+        case 'handle_target_space': {
+          // One action for every kind of targeting the C++ has. Only the
+          // missile half is reachable here: a spell gets to targeting through
+          // `handle_spellcast`, whose spell picker is a dialog, and that is the
+          // next piece of this work.
+          const target = locationFromAction(action, 'destination');
+          if (session.missile === null) {
+            result.unsupported[action.type] = (result.unsupported[action.type] ?? 0) + 1;
+            if (onUnsupported === 'stop') {
+              result.error = 'handle_target_space with nothing armed: a spell, not a shot';
+              result.errorAt = at;
+              return result;
+            }
+            continue;
+          }
+          await session.fireMissileAt(target);
+          break;
+        }
+        case 'screen_shift':
+          // Scrolling the view while aiming. It moves no one, but it is not a
+          // no-op either: what the party can *see* from the scrolled view is
+          // what the targeting modes are allowed to reach.
+          session.screenShift(
+            Number(action.info.dx ?? '0'), Number(action.info.dy ?? '0'));
+          break;
+        // Entering look or talk mode. In the C++ these are `overall_mode`
+        // changes that print a prompt; the work is done by the `handle_look` /
+        // `handle_talk` that follows. This port has no session-level look or
+        // talk *mode* — main.ts holds a `pending` flag instead — so there is
+        // nothing here to change and nothing that can diverge.
+        case 'handle_begin_look':
+        case 'handle_begin_talk':
           break;
         case 'click_control':
           options.onClick?.(action.info.id ?? '', Number(action.info.mods ?? '0'));
@@ -101,10 +175,49 @@ export async function runReplay(
         case 'scenario':
         case 'change_fps':
           break;
+        // Views, not moves. The automap and the character sheet are drawn from
+        // the universe and change nothing in it — `draw_map` and `give_pc_info`
+        // read state and paint. The C++ records them because they are windows
+        // it has to open and close on the way through, and this port has no
+        // window to open from a headless driver. Nothing diverges by skipping
+        // them: no clock, no RNG draw, no action points.
+        // The file picker itself carries nothing: the slot it chose arrives as
+        // the `click_control`s after it, and the bytes as the `load_party`
+        // after those.
+        case 'fancy_file_picker':
+          break;
+        case 'load_party': {
+          if (!options.onLoadParty) {
+            result.unsupported[action.type] = (result.unsupported[action.type] ?? 0) + 1;
+            if (onUnsupported === 'stop') {
+              result.error = 'load_party mid-run, and no onLoadParty handler';
+              result.errorAt = at;
+              return result;
+            }
+            continue;
+          }
+          await options.onLoadParty(decodeReplayFile(action.text));
+          break;
+        }
+        case 'display_map':
+        case 'close_map':
+        case 'close_window':
+        case 'set_stat_window':
+        case 'show_inventory':
+        case 'print_party_stats':
+        case 'debug_print_location':
+          break;
         default: {
           result.unsupported[action.type] = (result.unsupported[action.type] ?? 0) + 1;
           if (onUnsupported === 'stop') {
-            result.error = `no handler for '${action.type}'`;
+            // A startup action reached *here* rather than in the preamble means
+            // the recording loaded a save or changed scenario mid-run. That is
+            // a real game action, and skipping it would give a different game
+            // from the one recorded — so it is a gap like any other, and says
+            // so with the reason attached.
+            result.error = STARTUP_ACTIONS.has(action.type)
+              ? `'${action.type}' mid-run: the recording restarts or reloads here`
+              : `no handler for '${action.type}'`;
             result.errorAt = at;
             return result;
           }

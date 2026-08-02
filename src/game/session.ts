@@ -10,6 +10,7 @@
  */
 
 import { QuestStatus } from '../data/quest';
+import { locationText } from '../replay/format';
 import { ReplayRecorder } from '../replay/recorder';
 import { tryAutoSave } from './autosave';
 import { Direction, Location, dist, loc, locsEqual, minmax, shiftLoc } from '../core/location';
@@ -1179,7 +1180,12 @@ export class GameSession {
    * listed here once those exist.
    */
   lookAt(where: Location): number {
-    this.recorder?.recordLoc('handle_look', where);
+    // The C++ records this one as an info map, not a bare value
+    // (boe.actions.cpp:682) — so a recording made here reads there. This port
+    // has no quick-look modifier, hence the two constant fields.
+    this.recorder?.record('handle_look', {
+      destination: locationText(where), right_button: 'false', mods: '0',
+    });
     const { univ } = this;
     const town = univ.town;
     // handle_look draws its line from the acting PC in MODE_LOOK_COMBAT and

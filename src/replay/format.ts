@@ -37,10 +37,20 @@ export interface Replay {
   actions: ReplayAction[];
 }
 
-/** `location_from_action` — the text is `(x,y)`. */
-export function locationFromAction(action: ReplayAction): Location {
-  const m = /^\s*\(?\s*(-?\d+)\s*,\s*(-?\d+)\s*\)?\s*$/.exec(action.text);
-  if (m === null) throw new Error(`replay: '${action.type}' is not a location: "${action.text}"`);
+/**
+ * `location_from_action` — the text is `(x,y)`.
+ *
+ * `field` names a child element to read instead, for the actions the C++
+ * records as an info map rather than a bare value: `handle_look` carries
+ * `destination`, `right_button` and `mods`, and `handle_target_space` carries
+ * `destination` and `num_targets_left`. The fallback to the element's own text
+ * is deliberate — it is what a recording made by *this* port used to write, and
+ * what several of the C++'s older replays write too.
+ */
+export function locationFromAction(action: ReplayAction, field?: string): Location {
+  const text = (field !== undefined ? action.info[field] : undefined) ?? action.text;
+  const m = /^\s*\(?\s*(-?\d+)\s*,\s*(-?\d+)\s*\)?\s*$/.exec(text);
+  if (m === null) throw new Error(`replay: '${action.type}' is not a location: "${text}"`);
   return { x: Number(m[1]), y: Number(m[2]) };
 }
 
@@ -144,9 +154,17 @@ function elementText(el: Element): string {
  * word for word, since they are what a desync looks like.
  */
 export class ReplaySource {
-  private at = 0;
+  private at: number;
 
-  constructor(private readonly actions: readonly ReplayAction[]) {}
+  /**
+   * `from` starts playback partway in, which is how the startup preamble is
+   * skipped: `replayStartup` has already acted on those actions by choosing the
+   * scenario and the save. Positions reported stay absolute, so an error still
+   * names the action's place in the file.
+   */
+  constructor(private readonly actions: readonly ReplayAction[], from = 0) {
+    this.at = from;
+  }
 
   get exhausted(): boolean {
     return this.at >= this.actions.length;

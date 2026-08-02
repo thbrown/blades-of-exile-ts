@@ -790,7 +790,10 @@ Notes for M2 implementer:
       tarball, the whole `.exg` round trip, the IndexedDB slots, the File menu,
       the autosave and the startup screen. Open: preferences for the autosave
       triggers, and the legacy v1 save format (an M8 stretch)
-- [ ] **M8 — Fidelity hardening** (replay golden masters)
+- [ ] **M8 — Fidelity hardening** (replay golden masters): begun 2026-08-02 —
+      the startup preamble, the survey tool, and the first three of the C++'s
+      own replays running end to end. Next: `handle_spellcast` (blocks 41 of
+      the 97), then captured end states.
 
 ## Milestones (Part 2: Exile 3)
 
@@ -1588,15 +1591,20 @@ definitions is still the long-term M3 item.
 
 ## Next steps
 
-**M5, M6 and M7 are all closed.** M6's last piece — the two endings, party
-death and end-scenario — landed 2026-08-01; see the entry at the bottom. The
-next milestone is **M8, fidelity hardening**, and the two things standing in
-front of it are:
+**M5, M6 and M7 are all closed**, and **M8 has started** (2026-08-02): the
+C++'s own replays run here now — three of them end to end, and 4,051 of the
+corpus's actions dispatch without a desync, up from none. See the entry at the
+bottom. What M8 still owes:
 
-- **The C++'s own replays.** The driver exists (2026-08-01) but the recorded
-  files open with a startup flow — party files, the file picker, preferences —
-  that this port has no equivalent of, so the usable subset has to be curated
-  and the missing actions taught to `driver.ts`.
+- **`handle_spellcast`** — the first gap in **41** of the 97 files, and by a
+  long way the next thing to write. Its spell picker is a dialog, so the driver
+  has to answer `click_control` against the real dialogxml definitions, which
+  it currently only records.
+- **Captured end states.** "Runs without desyncing" is a strong check but not
+  the golden master: matching the C++'s *final* party, SDFs and position needs
+  reference snapshots taken from a run of the desktop build.
+- `pick_a_scen` — the other startup shape, 7 files, which starts a fresh party
+  from the scenario picker.
 - **The dialogxml leftovers**: `display_pc`'s spell lists, and `cThreeChoice`,
   which builds its controls at runtime rather than from a definition.
 
@@ -2915,3 +2923,78 @@ The M6 list below is kept for the history of what it covered:
   through `__watchAnim` as they are raised now, like the two spell steps do.
   Worth remembering when adding a step: **anything on `screen.booms` or
   `screen.missiles` is gone by the time the action that raised it returns.**
+
+- **M8 begins: the C++'s own replays run here (2026-08-02).** The driver landed
+  2026-08-01 able to run recordings *this port* made; pointed at the 97 files
+  the desktop build ships, it got through **none of them** — every single one
+  died on action three. Those files are the golden masters M8 is about, so this
+  is the work that unblocks the milestone.
+  - **`scripts/survey-replays.mjs` is the curation tool**, and writing it first
+    was worth it: it reads the corpus as text (no engine, no scenario data) and
+    reports which action types appear, how far each file gets, and — the useful
+    column — *which unhandled action blocks the most files first*, as opposed to
+    which merely appears most often. The answer was unambiguous:
+    `startup_button_click` was the first gap in **81 of 97**. `--assume=a,b,c`
+    asks "if I wrote these next, how much further would the corpus get?" before
+    writing them.
+  - **`src/replay/startup.ts`** is what that bought. The dominant shape, 80
+    files of the 97, is `startup_button_click{Load Game}` → `fancy_file_picker`
+    → two `click_control`s → `load_party`, and the last line is the good news:
+    **the replay carries the whole `.exg` inline, base64-encoded.** Nothing has
+    to be reconstructed. `replayStartup` hands back those bytes and the scenario
+    they belong to; the caller builds a session on it, applies the save, and
+    playback starts at the first real action (`runReplay`'s new `from`).
+    - All 80 of those saves read cleanly through `saveIo.ts` — 42 valleydy ones
+      apply into a live Universe without a single failure. The `.exg` port was
+      already right; the startup flow was the whole barrier.
+    - *Gotcha*: `cParty::scen_name` is the **packaged file's** name
+      (`valleydy.boes`) while this port's `Scenario.id` is the directory
+      (`valleydy`), since `ScenarioSource` has no archive to name. Both
+      spellings are on the result — `scenarioDirOf` converts — because a save
+      written back out has to carry the C++'s.
+    - *Gotcha*: four of the saves have an **empty** scenario name. That is the
+      C++'s "party in memory" state — a party made with Make New Party and not
+      yet taken to a scenario. There is no world to build a session on, so those
+      are refused with a reason rather than started on a guess.
+    - A `load_party` reached **mid-run** is a real game action (the player
+      loading a save), and one file does it twice in a row at the start. It goes
+      to an `onLoadParty` callback the caller supplies, because only the caller
+      can say what applying a save means — it may name another scenario, whose
+      files have to be fetched first. Without a handler it counts as a gap; it
+      is never skipped.
+  - **A real format bug the corpus found**: this port recorded `handle_look` as
+    a bare `(x,y)`, but the C++ records it as an info map with `destination`,
+    `right_button` and `mods` (boe.actions.cpp:682) — so every recording made
+    here was unreadable there, and every one of theirs threw "is not a location"
+    here. `locationFromAction` takes an optional field name now and falls back
+    to the element's own text, and the recorder writes the C++'s shape.
+  - New handlers, in the order the survey said to write them: `handle_talk` +
+    `click_talk_rect` (11 files), `handle_missile` + `handle_target_space`,
+    `handle_parry`, `handle_toggle_active`, `screen_shift`, and
+    `handle_begin_look`/`handle_begin_talk` as no-ops — those two are
+    `overall_mode` changes that print a prompt, and this port has no
+    session-level look or talk *mode* (main.ts holds a `pending` flag), so there
+    is nothing to change and nothing that can diverge.
+    - `click_talk_rect` records the whole word rect — text, rectangle, colour,
+      node — but only `node` is an input; the rest is what the click has to
+      *draw* while it flashes.
+    - The **view** actions (`display_map`, `close_window`, `set_stat_window`,
+      `show_inventory`, …) are no-ops with the reasoning written down: they read
+      the universe and paint. No clock, no RNG draw, no action points.
+  - **Where it stands**: 3 files run end to end, 4,051 actions dispatch, and
+    nothing throws — every remaining stop is a clean "no handler for X". The
+    next wall is `handle_spellcast`, the first gap in **41** files, and it is a
+    different kind of work: its spell picker is a dialog, so the driver has to
+    answer `click_control` against the real dialogxml definitions rather than
+    just recording which id came up.
+  - **What this does not yet prove.** "Runs without desyncing" is strong — the
+    format is *pulled*, so a diverged rule changes what the player did next and
+    the run fails at that action — but it is not the golden master. Matching the
+    C++'s *final* party, SDFs and position needs snapshots captured from a run
+    of the desktop build. That is the next thing after the driver reaches more
+    of the corpus.
+  - `test/replays/cpp/` holds the three curated files (with a README saying how
+    they were chosen and how to add more) and `test/cppReplay.test.ts` runs
+    them, plus the determinism check — the same file twice, compared on the RNG
+    draw count as well as the party, since two runs can agree on every visible
+    value while having diverged somewhere that hasn't surfaced yet.
