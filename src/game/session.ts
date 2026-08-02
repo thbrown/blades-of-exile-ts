@@ -889,22 +889,28 @@ export class GameSession {
 
     if (!town.isOnMap(destination.x, destination.y)) return false;
 
-    // Walking into something hostile starts a fight rather than bouncing off.
-    const blocker = town.monsterAt(destination);
-    if (blocker) {
-      if (!blocker.isFriendly) {
-        party.direction = setDirection(party.townLoc, destination);
-        this.startCombat(party.direction);
-        return false;
-      }
-      this.univ.addStringToBuf('Blocked: a creature is in the way.');
-      return false;
-    }
+    /**
+     * **A creature in the way just blocks the step.** This port used to start a
+     * fight instead — "walking into something hostile starts a fight rather
+     * than bouncing off" — which is an invention: `start_town_combat` has
+     * exactly three callers in the C++ (`handle_combat_switch`, and two
+     * specials), and walking is not one of them. In the original you bump into
+     * a monster, read "Blocked: east", and press **C** if you want the fight.
+     *
+     * It desynced any recording where the player brushed past something, and
+     * it is the kind of "improvement" the fidelity rule exists to catch.
+     */
+    const monsterThere = town.monsterAt(destination);
 
     party.direction = setDirection(party.townLoc, destination);
 
     // check_special_terrain for TOWN_MOVE (boe.specials.cpp:152).
-    if (!this.checkSpecialTerrain(destination)) return false;
+    //
+    // **Gated on there being no monster on the square** — the C++ only calls it
+    // `if(univ.target_there(destination, TARG_MONST) == nullptr)`
+    // (boe.actions.cpp:4152), so a creature standing on a scripted square stops
+    // the script from running as well as stopping the step.
+    if (monsterThere === null && !this.checkSpecialTerrain(destination)) return false;
 
     // town_move_party's boat/horse handling (boe.actions.cpp:4159): a leave,
     // a diagonal refusal, a bridge prompt, or boarding a vehicle waiting on
@@ -924,7 +930,7 @@ export class GameSession {
     // square still runs its special when the terrain is a door or a
     // call-special type (boe.specials.cpp:243).
     const special = this.specialAt(destination);
-    if (special >= 0) {
+    if (special >= 0 && monsterThere === null) {
       const terSpec = this.univ.terrainType(
         town.record.terrain[destination.x]![destination.y]!).special;
       // A CANT_ENTER node with ex2a set says "run me even on a blocked
@@ -951,8 +957,22 @@ export class GameSession {
       }
     }
 
-    if (blockedTerrain && !vehicleForced) {
-      this.univ.addStringToBuf(`Blocked: ${DIR_NAMES[party.direction] ?? ''}`);
+    // `is_blocked` (boe.locutils.cpp:261) is more than the terrain: a creature,
+    // a force barrier or a force cage all stop the step the same way.
+    const blocked = blockedTerrain
+      || monsterThere !== null
+      || town.hasField(destination.x, destination.y, FieldType.BARRIER_FORCE)
+      || town.hasField(destination.x, destination.y, FieldType.BARRIER_CAGE);
+
+    if (blocked && !vehicleForced) {
+      // `is_door` (boe.town.cpp:1564) — a door says so instead, which is the
+      // hint that it is worth unlocking rather than walking round.
+      const terSpec = this.univ.terrainType(
+        town.record.terrain[destination.x]![destination.y]!).special;
+      const isDoor = terSpec === TerSpec.UNLOCKABLE
+        || terSpec === TerSpec.CHANGE_WHEN_STEP_ON;
+      this.univ.addStringToBuf(
+        `${isDoor ? 'Door locked' : 'Blocked'}: ${DIR_NAMES[party.direction] ?? ''}`);
       return false;
     }
 

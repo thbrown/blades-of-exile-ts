@@ -1479,8 +1479,12 @@ const realSpecialDone = await page.evaluate(() => ({
 }));
 console.log('REAL SPECIAL:', JSON.stringify(realSpecial), JSON.stringify(realSpecialDone));
 
-// 2c2. Combat: walking into a hostile creature starts a fight, the party is
-//      placed as six figures, a swing lands, and leaving regroups the party.
+// 2c2. Combat: the Combat command starts a fight, the party is placed as six
+//      figures, a swing lands, and leaving regroups the party.
+//      Note this used to enter combat by *walking into* the monster, which
+//      this port used to treat as starting a fight. That was an invention —
+//      the C++ just says "Blocked: north" — so the step now takes the route a
+//      player actually has.
 const combat = await page.evaluate(async () => {
   const s = window.__session;
   const univ = s.univ;
@@ -1491,7 +1495,10 @@ const combat = await page.evaluate(async () => {
   monst.health = monst.maxHealth = 400;
   monst.curLoc = { x: univ.party.townLoc.x, y: univ.party.townLoc.y - 1 };
   const modeBefore = s.mode;
+  // Face the monster, then start the fight the way handle_combat_switch does.
   await s.moveTo(monst.curLoc);
+  const blocked = univ.transcript.at(-1);
+  s.startCombat(univ.party.direction);
   const placed = univ.party.pcs.filter((pc) => pc.isAlive && pc.combatPos.x >= 0).length;
   // Give the acting PC a real weapon and swing until something lands.
   const pc = univ.currentPc;
@@ -1511,7 +1518,7 @@ const combat = await page.evaluate(async () => {
   }
   window.__redraw();
   return {
-    modeBefore, mode: s.mode, placed, hurt: hpBefore - monst.health,
+    modeBefore, mode: s.mode, placed, blocked, hurt: hpBefore - monst.health,
     bar: s.locationName(), tail: univ.transcript.slice(-3),
   };
 });

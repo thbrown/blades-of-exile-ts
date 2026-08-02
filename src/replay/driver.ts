@@ -34,7 +34,9 @@ import { cancelSpellTargeting, doCombatCast, placeTarget } from '../game/spellCo
 import { cancelTownTargeting, castTownSpell } from '../game/spellTarget';
 import { castSpell } from '../game/spellTown';
 import { Skill } from '../universe/skills';
-import { Replay, ReplaySource, locationFromAction, numberFromAction } from './format';
+import {
+  Replay, ReplayAction, ReplaySource, locationFromAction, numberFromAction,
+} from './format';
 import { makeReplayHost } from './host';
 import { STARTUP_ACTIONS, decodeReplayFile } from './startup';
 
@@ -93,6 +95,13 @@ export interface ReplayOptions {
    * installed a host of its own.
    */
   keepSpecials?: boolean;
+  /**
+   * Called after each action is dispatched, for tracing. The driver cannot be
+   * stepped from outside — a replay has to run in one pass now that the dialog
+   * host pulls from the same stream, so slicing the file per action would leave
+   * a message box with nothing to answer it.
+   */
+  onStep?: (at: number, action: ReplayAction) => void;
 }
 
 /**
@@ -444,6 +453,41 @@ export async function runReplay(
           await useItem(session, win.pcPage, numberFromAction(action));
           takeAp(session.univ, 3);
           break;
+        case 'scrollbar_setPosition': {
+          // `cScrollbar::setPosition` (scrollbar.cpp:52). The C++ looks the bar
+          // up by name in `event_listeners` and sets it; here the three that
+          // carry game state are set directly and the transcript's is a view.
+          //
+          // *Worth knowing*: the position is recorded **before it is clamped**,
+          // deliberately — the C++'s own comment says "so replays will verify
+          // that clamping still works" — so a recorded position can be past the
+          // end and clamping it is the behaviour under test.
+          const name = action.info.name ?? '';
+          const want = Number(action.info.newPos ?? '0');
+          const clamp = (n: number, max: number): number => Math.max(0, Math.min(max, n));
+          if (name === 'inventory-scrollbar') {
+            win.scroll = clamp(want, win.scrollMax);
+          } else if (name === 'shop-scrollbar') {
+            // The shop's row clicks are *relative* to this, so unlike the
+            // inventory's — whose recorded item indices are already absolute —
+            // this one is a real input and not a view.
+            if (session.shop) session.shop.scroll = clamp(want, session.shop.maxScroll);
+          } else if (name !== 'transcript-scrollbar') {
+            // The transcript's bar is pure view. Anything else is not, and is
+            // reported rather than guessed at — including the recordings that
+            // carry a **corrupt name**: `setPosition` falls back to the parent
+            // pane's name and, when that is empty too, writes whatever was in
+            // the uninitialised `name` field, so a few files name their bar with
+            // a run of random bytes.
+            result.unsupported[action.type] = (result.unsupported[action.type] ?? 0) + 1;
+            if (onUnsupported === 'stop') {
+              result.error = `scrollbar_setPosition for an unmodelled bar '${name}'`;
+              result.errorAt = at;
+              return result;
+            }
+          }
+          break;
+        }
         case 'handle_trade_places':
           session.tradePlaces(numberFromAction(action));
           break;
@@ -502,6 +546,7 @@ export async function runReplay(
       // RNG draw counts. The live UI enforces the same rule through
       // `flushingInput`, which drops keystrokes while anything is still going.
       await session.settled();
+      options.onStep?.(at, action);
     } catch (err) {
       result.error = String(err);
       result.errorAt = at;

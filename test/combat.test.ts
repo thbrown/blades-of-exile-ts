@@ -199,27 +199,41 @@ describe('turn order', () => {
 });
 
 describe('starting and ending combat', () => {
-  it('walking into something hostile starts a fight', async () => {
+  /**
+   * **Walking into a monster does not start a fight**, hostile or not. This
+   * port used to do that, and it was an invention: `start_town_combat` has
+   * three callers in the C++ — `handle_combat_switch` and two specials — and
+   * walking is not one of them. `is_blocked` (boe.locutils.cpp:261) counts a
+   * creature as blockage like any other, so you read "Blocked: <direction>"
+   * and press **C** if you want the fight.
+   */
+  it('walking into something hostile just blocks, and does not start a fight', async () => {
     const { univ, session } = newGame();
     const monst = hostileBeside(univ, session);
     expect(session.mode).toBe(GameMode.TOWN);
     await session.moveTo(monst.curLoc);
-    expect(session.mode).toBe(GameMode.COMBAT);
-    expect(session.whichCombatType).toBe(1);
-    // Everyone has been placed and has moves.
-    expect(univ.party.pcs[0]!.combatPos.x).toBeGreaterThanOrEqual(0);
-    expect(univ.currentPc.ap).toBeGreaterThan(0);
-    // And nothing is targeting anyone yet.
-    expect(monst.target).toBe(NO_ONE);
+    expect(session.mode).toBe(GameMode.TOWN);
+    expect(univ.transcript.at(-1)).toMatch(/^Blocked: /);
   });
 
-  it('walking into a friendly still just blocks', async () => {
+  it('walking into a friendly blocks the same way', async () => {
     const { univ, session } = newGame();
     const monst = hostileBeside(univ, session);
     monst.attitude = Attitude.FRIENDLY;
     await session.moveTo(monst.curLoc);
     expect(session.mode).toBe(GameMode.TOWN);
-    expect(univ.transcript.at(-1)).toContain('creature is in the way');
+    expect(univ.transcript.at(-1)).toMatch(/^Blocked: /);
+  });
+
+  it('starts a fight from the Combat command, which is the only way in', async () => {
+    const { univ, session } = newGame();
+    hostileBeside(univ, session);
+    session.startCombat(univ.party.direction);
+    expect(session.mode).toBe(GameMode.COMBAT);
+    expect(session.whichCombatType).toBe(1);
+    // Everyone has been placed and has moves.
+    expect(univ.party.pcs[0]!.combatPos.x).toBeGreaterThanOrEqual(0);
+    expect(univ.currentPc.ap).toBeGreaterThan(0);
   });
 
   it('placeParty spreads the party out on open ground', async () => {
@@ -242,7 +256,7 @@ describe('starting and ending combat', () => {
   it('ending combat regroups on a survivor and restores town mode', async () => {
     const { univ, session } = newGame();
     const monst = hostileBeside(univ, session);
-    await session.moveTo(monst.curLoc);
+    session.startCombat(univ.party.direction); // the Combat command, not a bump
     expect(session.mode).toBe(GameMode.COMBAT);
 
     expect(session.endCombat()).toBe(true);
@@ -256,7 +270,7 @@ describe('starting and ending combat', () => {
   it('refuses to end combat with only some of the party caged', async () => {
     const { univ, session } = newGame();
     const monst = hostileBeside(univ, session);
-    await session.moveTo(monst.curLoc);
+    session.startCombat(univ.party.direction); // the Combat command, not a bump
     univ.party.pcs[0]!.status[Status.FORCECAGE] = 20;
     univ.party.pcs[0]!.combatPos = loc(1, 1);
     univ.party.pcs[1]!.combatPos = loc(9, 9);
@@ -453,7 +467,7 @@ it('a slayer weapon adds its bonus only against the race it names', async () => 
     const { univ, session } = newGame();
     armedFighter(univ);
     const monst = hostileBeside(univ, session);
-    await session.moveTo(monst.curLoc); // starts combat
+    session.startCombat(univ.party.direction); // the Combat command, not a bump
     univ.curPc = 0;
     univ.party.pcs[0]!.ap = 4;
     expect(await session.attackAt(monst.curLoc)).toBe(true);
@@ -529,7 +543,7 @@ describe('placement, parry and holding a turn', () => {
   it('parry spends the turn and scales with the moves given up', async () => {
     const { univ, session } = newGame();
     const monst = hostileBeside(univ, session);
-    await session.moveTo(monst.curLoc);
+    session.startCombat(univ.party.direction); // the Combat command, not a bump
     const pc = univ.currentPc;
     pc.skills[Skill.DEFENSE] = 8;
     pc.ap = 8;
@@ -542,7 +556,7 @@ describe('placement, parry and holding a turn', () => {
   it('standing ready is parry pinned at 100, and clears webs', async () => {
     const { univ, session } = newGame();
     const monst = hostileBeside(univ, session);
-    await session.moveTo(monst.curLoc);
+    session.startCombat(univ.party.direction); // the Combat command, not a bump
     const pc = univ.currentPc;
     pc.status[Status.WEBS] = 5;
     pc.ap = 4;
@@ -563,7 +577,7 @@ describe('placement, parry and holding a turn', () => {
   it('X holds the turn on one PC and gives it back', async () => {
     const { univ, session } = newGame();
     const monst = hostileBeside(univ, session);
-    await session.moveTo(monst.curLoc);
+    session.startCombat(univ.party.direction); // the Combat command, not a bump
     univ.curPc = 2;
     session.toggleActivePc();
     expect(session.combatActivePc).toBe(2);

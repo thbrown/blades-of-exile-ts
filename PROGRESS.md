@@ -108,8 +108,9 @@ Notes for M2 implementer:
   `startTownCombat`/`endTownCombat`, and `pcAttack`/`pcAttackWeapon` with the
   bless/curse and dexterity adjustments, two-weapon and ambidexterity rules,
   the slith pole-arm bonus, assassination, poisoned blades and martyr's shield.
-  Session gains `startCombat`/`endCombat`/`combatMove`/`attackAt`; walking into
-  a hostile creature starts a fight. Keys: arrows move the acting PC, **C**
+  Session gains `startCombat`/`endCombat`/`combatMove`/`attackAt`. (Walking into
+  a hostile creature *used* to start a fight here; that was an invention and was
+  removed 2026-08-02 — see the M8 entry. It just blocks.) Keys: arrows move the acting PC, **C**
   starts or ends a fight, **Space** passes. The toolbar swaps to
   `FIGHT_BUTTONS` in combat, and SWORD / END / WAIT are wired.
 - **Monster turns and encounters (M5b, partial)**: `game/monsterTurn.ts` —
@@ -3229,3 +3230,62 @@ The M6 list below is kept for the history of what it covered:
   - The next walls, in order: 29 desyncs, `scrollbar_setPosition` (9),
     "handle_target_space with nothing armed" (7), and `spell_forced` (5) — the
     "hit m again to recast" shortcut, which rose as files reached further.
+
+- **A corpus runner, and an invented rule removed (M8, 2026-08-02).** Fifth
+  slice of M8.
+  - **`test/corpus.test.ts` is the milestone's progress meter**, and making it a
+    kept tool rather than a scratch file was overdue — it had been rewritten
+    three times in a day. `scripts/survey-replays.mjs` answers "which action
+    types does the driver not handle?" by reading the files as text; this
+    answers the harder question, **what actually happens when they run**, since
+    a file can use nothing but handled actions and still stop three steps in.
+    It is opt-in (`CORPUS=1`), needs `../exile-wasm` beside the repo, and
+    `ONLY=`/`VERBOSE=`/`TRACE=` narrow it to one file, add `inferMoves`'s read
+    of the recording's own path, and print every action as it is dispatched.
+    - `runReplay` grew `onStep` for that last one. The driver **cannot be
+      stepped from outside** any more: now that the dialog host pulls from the
+      same stream, slicing the file per action leaves a message box with nothing
+      to answer it.
+  - **Walking into a monster does not start a fight, and this port's doing so
+    was an invention.** `start_town_combat` has exactly three callers in the C++
+    — `handle_combat_switch` and two specials — and walking is not one of them.
+    `is_blocked` (boe.locutils.cpp:261) counts a creature as blockage like any
+    other, so the original says "Blocked: east" and waits for you to press **C**.
+    This is a **user-visible change**: you can no longer start a fight by
+    bumping into something.
+    - `town_move_party` now follows the C++'s shape properly. The square's
+      special is gated on **there being no monster on it** — the C++ only calls
+      `check_special_terrain` `if(univ.target_there(destination, TARG_MONST) ==
+      nullptr)` (boe.actions.cpp:4152) — so a creature standing on a scripted
+      square stops the script running as well as stopping the step.
+    - The blocked test is now `is_blocked`'s full set, not terrain alone: a
+      creature, a force barrier or a force cage all stop the step the same way.
+    - And `is_door` (boe.town.cpp:1564) came with it, so a door says
+      "**Door locked**: east" rather than "Blocked: east" — the hint that it is
+      worth unlocking rather than walking round.
+    - `verify-screen.mjs`'s combat step used the bump to enter a fight too. It
+      takes the real route now and asserts the bump was refused on the way, so
+      the change is pinned end to end as well as in the unit tests.
+  - **`scrollbar_setPosition`** (`cScrollbar::setPosition`, scrollbar.cpp:52)
+    was the first gap in nine files and gated about a thousand actions.
+    `inventory-scrollbar` and `shop-scrollbar` are set; the transcript's is a
+    view. Only the shop's is a real *input* — its row clicks are relative to it,
+    while the inventory's recorded item indices are already absolute.
+    - *Gotcha*: the position is recorded **before it is clamped**, deliberately.
+      The C++'s own comment says "so replays will verify that clamping still
+      works", so a recorded position can be past the end and clamping it is the
+      behaviour under test.
+    - *Gotcha*: a few recordings name their bar with a **run of random bytes**.
+      `setPosition` falls back to the parent pane's name and, when that is empty
+      too, writes whatever was in the uninitialised `name` field. Unmodelled
+      names are reported rather than guessed at.
+  - **Where it stands**: **5,147 actions dispatch** (4,082 at the start of this
+    slice, 3,133 yesterday). Five files still run end to end; the desync count
+    reads 32 rather than 29 only because more files now reach one instead of
+    stopping earlier on a scrollbar.
+  - **What the desyncs are now**, from `VERBOSE=1`: they are no longer one
+    thing. Some are this port refusing a step the recording took, some are the
+    reverse, and at least one (`ASR_05-05-2025_21-13-55`) is a **monster in a
+    different square** — `do_monsters` having moved something to (24,48) that
+    the C++ had elsewhere. That last class is monster-AI divergence and is the
+    hardest of the three; the inference tool names the square but not the rule.
