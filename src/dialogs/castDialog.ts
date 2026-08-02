@@ -99,6 +99,9 @@ export class CastDialog implements ModalScreen {
 
   get choice(): CastChoice { return this.pick.choice; }
 
+  /** `finish_pick_spell`'s tail — see `SpellPick.finish`. */
+  finish(): CastChoice | null { return this.pick.finish(); }
+
   private get caster(): number { return this.pick.caster; }
 
   private get target(): number { return this.pick.target; }

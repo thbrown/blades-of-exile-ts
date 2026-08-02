@@ -16,7 +16,7 @@
   **a** the automap (drag it by its window), **A** alchemy (in town),
   **File > Open Game** (or **Ctrl+O**) loads and **Ctrl+S** saves; opening the
   page with no `?scenario=` shows the startup screen,
-  **m**/**p** spells, **s** shoot (in combat: arms the
+  **m**/**p** spells (**M**/**P** recast the last one), **s** shoot (in combat: arms the
   missile, then click a square; **s** or Escape cancels). Keys for things not
   built yet say which milestone they're
   waiting on. In conversations: l/n/j/b/s/r/d/g/a. In shops: **a-h** buy, arrows
@@ -3374,3 +3374,46 @@ The M6 list below is kept for the history of what it covered:
     up (1 in 160 per town turn). It is pinned by unit tests instead —
     `test/featureFlags.test.ts` (11) on the mechanism, and two in
     `test/wandering.test.ts` on the behaviour each flag selects.
+
+- **The recast shortcut (M8, 2026-08-02).** Eighth slice. `spell_forced` was
+  the last big handler gap — 8 files — and it is a real game feature this port
+  simply did not have: **shift-M and shift-P recast the last spell** with no
+  picker (boe.actions.cpp:3057).
+  - **Two flags, not one.** `spell_forced` means "don't open the picker, use
+    what is stored"; `spell_recast` means "this came from the keyboard, so check
+    it is still castable". `handle_menu_spell` sets the first without the
+    second, which is why `repeat_cast_ok` hangs off `spell_recast`.
+  - **What is stored lives in two places, and they are not the same thing.**
+    - *Out of combat*: `store_mage`/`store_priest` with a caster and a target,
+      written by `do_mage_spell`/`do_priest_spell` **themselves**
+      (boe.party.cpp:631, :894) — so any cast arms the shortcut, including one
+      from an item or a menu, not just one made through the picker. One per
+      kind for the whole party.
+    - *In combat*: `last_cast[type]`/`last_target[type]` **on the PC**, written
+      by `finish_pick_spell` (:2050). Each character remembers their own,
+      because in combat the active PC casts and there is no caster to choose.
+    - The C++ keeps the first set as globals; here they hang off the session,
+      which has the same lifetime and cannot leak between two games in one
+      process. Neither set is saved — the C++ does not save them either.
+  - **Both `repeat_cast_ok` branches are real, and the feature flags from the
+    slice above are what decide them.** `store-spell-caster: fixed` recasts from
+    whoever cast it rather than from whoever the game currently thinks is
+    casting; `store-spell-target: fixed` restores what it was aimed at. 25 of
+    the corpus recordings ask for them and the rest need the old behaviour, so
+    this is the first place the flag mechanism pays for itself.
+  - `SpellPick.finish()` is `finish_pick_spell`'s tail, and it landed with two
+    refusals this port was missing: "Cast: No spell selected." (which existed)
+    and **"Cast: Need to select target."**, which did not — a targeted spell
+    with nobody picked used to be cast at whatever `spellTarget` happened to
+    hold. Both the live dialog and the driver go through it, so the
+    `last_cast` bookkeeping cannot be recorded in one and forgotten in the other.
+  - *Gotcha*: a spell that needs no target records `last_target` as **6**, not
+    the target that happened to be selected when it was cast.
+  - **Where it stands**: **6,302 actions dispatch** (5,868 at the start of this
+    slice, 3,133 yesterday morning). The handler gaps are nearly exhausted — what
+    is left is 4 × `handle_give_item` (which needs the select-PC dialog answered
+    from the stream), 3 × `field_focus`, and a scatter of one-offs. **48 of the
+    87 files now stop on a desync**, and 14 more cannot start at all (no
+    `<load_party>`, a party with no scenario, or the new-party flow). The
+    milestone is now almost entirely about rules divergence, which is what M8
+    was for.

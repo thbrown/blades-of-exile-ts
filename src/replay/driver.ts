@@ -34,6 +34,7 @@ import { combatCastSpell } from '../game/spellCombat';
 import { cancelSpellTargeting, doCombatCast, placeTarget } from '../game/spellCombatTarget';
 import { cancelTownTargeting, castTownSpell } from '../game/spellTarget';
 import { castSpell } from '../game/spellTown';
+import { repeatCastOk, storedSpell } from '../game/spellRepeat';
 import { Skill } from '../universe/skills';
 import {
   Replay, ReplayAction, ReplaySource, locationFromAction, numberFromAction,
@@ -355,17 +356,22 @@ export async function runReplay(
           // TODO(M6) on the transcript's right-hand half) — it is read so that
           // a file using it fails honestly rather than silently casting the
           // wrong thing.
-          if (action.info.spell_forced === 'true') {
-            result.unsupported[action.type] = (result.unsupported[action.type] ?? 0) + 1;
-            if (onUnsupported === 'stop') {
-              result.error = 'handle_spellcast with spell_forced: the recast shortcut is not ported';
-              result.errorAt = at;
-              return result;
-            }
-            continue;
-          }
           const type = action.info.which_type === 'priest'
             ? Skill.PRIEST_SPELLS : Skill.MAGE_SPELLS;
+          // `spell_forced` is **shift-M / shift-P**, the recast shortcut
+          // (boe.actions.cpp:3057): no picker, no clicks — it casts what is
+          // stored. `spell_recast` rides with it from the keyboard, and is what
+          // makes `repeat_cast_ok` run first; `handle_menu_spell` sets
+          // `spell_forced` alone, which is why the check hangs off the second.
+          if (action.info.spell_forced === 'true') {
+            const caster = repeatCastOk(session, type);
+            if (caster === null) break;
+            const spell = storedSpell(session, type, caster);
+            if (spell === Spell.NONE) break;
+            if (isCombat(session.mode)) await combatCastSpell(session, spell);
+            else castSpell(session, caster, spell);
+            break;
+          }
           // `can_choose_caster` is false in combat: the active PC casts, full
           // stop, and the caster buttons are inert (`pick_spell` is handed
           // `univ.cur_pc` there and 6 out of combat).
@@ -388,14 +394,13 @@ export async function runReplay(
             const decided = picking.click(id);
             if (decided === 'cancel') picking = null;
             else if (decided === 'cast') {
-              const { spell, caster, target } = picking.choice;
               const inFight = !picking.canChooseCaster;
+              // `finish_pick_spell`'s tail: its two refusals, and the
+              // `last_cast`/`last_target` the recast shortcut reads back.
+              const chosen = picking.finish();
               picking = null;
-              if (spell === Spell.NONE) {
-                // finish_pick_spell's `store_spell == 70` arm.
-                session.univ.addStringToBuf('Cast: No spell selected.');
-                break;
-              }
+              if (chosen === null) break;
+              const { spell, caster, target } = chosen;
               session.spellTarget = target;
               if (inFight) await combatCastSpell(session, spell);
               else castSpell(session, caster, spell);

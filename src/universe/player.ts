@@ -8,6 +8,7 @@
 import { Direction, Location, loc, percent } from '../core/location';
 import { GameRng } from '../core/rng';
 import { Item, ItemAbil, ItemPreset, defaultItem, presetItem } from '../data/item';
+import { Spell } from '../data/spell';
 import { getProtLevel, hasAbilEquip } from './inventory';
 import { Living, SpellNote, livingSound, printResult } from './living';
 import { Party } from './party';
@@ -112,6 +113,17 @@ export class Player extends Living {
    * re-targeting (cPlayer::last_attacked).
    */
   lastAttacked: Living | null = null;
+
+  /**
+   * The last spell this PC cast of each kind, and who it was aimed at —
+   * `cPlayer::last_cast` / `last_target`, written by `finish_pick_spell`
+   * (boe.party.cpp:2050). **In combat** the M/P shortcut recasts from these
+   * rather than from the session's stores, because there the active PC casts
+   * and each character remembers their own. Runtime only: the C++ does not
+   * save them.
+   */
+  lastCast: Partial<Record<Skill, Spell>> = {};
+  lastTarget: Partial<Record<Skill, number>> = {};
   /** The weapon carrying the poison from the Poison Weapon skill, if any. */
   weapPoisoned: Item | null = null;
 

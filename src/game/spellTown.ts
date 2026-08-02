@@ -95,6 +95,11 @@ export function doMageSpell(
 
   const where = univ.party.townLoc;
   livingSound(25);
+  // `store_mage = spell_num; store_mage_target = store_spell_target;
+  //  store_mage_caster = pc_casting;` (boe.party.cpp:631) — **every** mage
+  // spell cast out of combat updates the store, which is what the M shortcut
+  // recasts. Not the picker's job: a spell cast from an item updates it too.
+  session.mageStore = { spell: spellNum, caster: pcNum, target: session.spellTarget };
 
   const adj = freebie ? 1 : pc.statAdj(Skill.INTELLIGENCE);
   let level = freebie ? storeItemSpellLevel : pc.level;
@@ -324,6 +329,8 @@ export function doPriestSpell(
   if (!freebie && univ.currentPc.traits[Trait.ANAMA]) level++;
 
   livingSound(24);
+  // boe.party.cpp:894, the priest twin of the mage store above.
+  session.priestStore = { spell: spellNum, caster: pcNum, target: session.spellTarget };
 
   const summon = (which: number, strength: number): void => {
     if (!summonMonster(session, which, where, strength, Attitude.FRIENDLY, true)) {

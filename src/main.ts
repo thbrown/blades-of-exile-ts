@@ -35,6 +35,7 @@ import { specItemUseable } from './data/quest';
 import { trappedMonsters } from './game/soulCrystal';
 import { castTownSpell, startTownTargeting } from './game/spellTarget';
 import { CastDialog } from './dialogs/castDialog';
+import { repeatCastOk, storedSpell } from './game/spellRepeat';
 import { GetItemsDialog } from './dialogs/getItemsDialog';
 import { placeSpellPattern } from './game/spellPatterns';
 import { GameMode, isCombat, isOut, isScrollable } from './game/modes';
@@ -979,11 +980,33 @@ async function main(): Promise<void> {
     const dialog = new CastDialog(ctx, store, session, type, !inFight);
     const picked = await dialogs.runScreen(dialog);
     if (picked !== 'cast') { redraw(); return; }
-    const { spell, caster, target } = dialog.choice;
-    if (spell === Spell.NONE) { redraw(); return; }
+    // finish_pick_spell's tail: the two refusals, and the bookkeeping the M/P
+    // recast shortcut reads back.
+    const chosen = dialog.finish();
+    if (chosen === null) { setStatus(); redraw(); return; }
+    const { spell, caster, target } = chosen;
     session.spellTarget = target;
     if (inFight) await combatCastSpell(session, spell);
     else castSpell(session, caster, spell);
+    setStatus();
+    redraw();
+  };
+
+  /**
+   * The **shift-M / shift-P** shortcut: cast the last spell of this kind again,
+   * with no picker. `repeat_cast_ok` (boe.party.cpp:521) does the checking and,
+   * under the `store-spell-target` flag, restores what it was aimed at.
+   */
+  const recastFlow = async (type: Skill): Promise<void> => {
+    if (dialogs.active) return;
+    const caster = repeatCastOk(session, type);
+    if (caster !== null) {
+      const spell = storedSpell(session, type, caster);
+      if (spell !== Spell.NONE) {
+        if (isCombat(session.mode)) await combatCastSpell(session, spell);
+        else castSpell(session, caster, spell);
+      }
+    }
     setStatus();
     redraw();
   };
@@ -1814,8 +1837,14 @@ async function main(): Promise<void> {
             cancelSpellTargeting(session);
             recentre();
           } else {
-            void castSpellFlow(key === 'm' || key === 'M'
-              ? Skill.MAGE_SPELLS : Skill.PRIEST_SPELLS);
+            const spellType = key === 'm' || key === 'M'
+              ? Skill.MAGE_SPELLS : Skill.PRIEST_SPELLS;
+            // **Capital M and P are the recast shortcut** (boe.actions.cpp:3057)
+            // — `spell_forced` and `spell_recast`, which skip the picker
+            // entirely and repeat the last spell of that kind. Both keys used
+            // to open the picker here, so the shortcut did not exist.
+            if (key === 'M' || key === 'P') void recastFlow(spellType);
+            else void castSpellFlow(spellType);
           }
           break;
         case 'i': case 'z': case 'Z':

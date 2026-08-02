@@ -75,6 +75,38 @@ export class SpellPick {
     return { spell: this.spell, caster: this.caster, target: this.target };
   }
 
+  /**
+   * `finish_pick_spell`'s tail (boe.party.cpp:2050) — the two refusals, and the
+   * bookkeeping the shift-M and shift-P recast shortcut later reads back.
+   *
+   * Returns the choice, or `null` when it refuses. Cast still *closes* the
+   * dialog either way; that is the C++'s behaviour and is why this is separate
+   * from `click`.
+   */
+  finish(): CastChoice | null {
+    const { univ } = this.session;
+    if (this.spell === Spell.NONE) {
+      univ.addStringToBuf('Cast: No spell selected.');
+      return null;
+    }
+    const select = SPELLS[this.spell]?.select ?? SpellSelect.NO;
+    if (select !== SpellSelect.NO && this.target === NO_TARGET) {
+      // The C++ restores the previous target and reopens; here the caller
+      // simply gets nothing, and the player casts again.
+      univ.addStringToBuf('Cast: Need to select target.');
+      return null;
+    }
+    // `last_cast` / `last_target` — per PC, because in combat the active PC
+    // casts and each character remembers their own. A spell that needs no
+    // target records 6, not the target that happened to be selected.
+    const pc = univ.party.pcs[this.caster];
+    if (pc) {
+      pc.lastCast[this.type] = this.spell;
+      pc.lastTarget[this.type] = select === SpellSelect.NO ? NO_TARGET : this.target;
+    }
+    return this.choice;
+  }
+
   /** The spell in grid slot `i` on the current page, or NONE for an empty slot. */
   spellAt(i: number): Spell {
     const num = this.page === 0 ? i : (SPELL_INDEX[i] ?? 90);

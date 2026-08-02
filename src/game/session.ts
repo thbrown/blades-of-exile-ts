@@ -55,6 +55,7 @@ import { MainStatus, PartyStatus, Race, Skill, Status } from '../universe/skills
 import { boomSpace } from './booms';
 import { ShopItemType } from '../data/shop';
 import { ShopState, handleSale } from './shop';
+import { SpellStore, emptySpellStore } from './spellRepeat';
 import { ItemShopMode, ItemShopState, handleItemShopAction } from './itemShop';
 import { doRest, handleRest } from './rest';
 import { makeTownHostile } from './townAttitude';
@@ -148,6 +149,16 @@ export class GameSession {
    * nothing at all.
    */
   spellTarget = 6;
+
+  /**
+   * `store_mage`/`store_priest` and their caster and target — what the **M**
+   * and **P** shortcuts recast **out of combat**, written by
+   * `doMageSpell`/`doPriestSpell` (boe.party.cpp:631, :894). The C++ keeps
+   * these as globals; on the session they have the same lifetime and cannot
+   * leak between two games in one process.
+   */
+  mageStore: SpellStore = emptySpellStore();
+  priestStore: SpellStore = emptySpellStore();
 
   /**
    * The spell waiting for a square while the game is in SPELL_TARGET mode
