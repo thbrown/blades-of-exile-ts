@@ -36,7 +36,7 @@
 
 ## Current state
 
-**M2 done bar the replay driver, M3 nearly done, M4 and M5 complete, M6 begun (2026-07-27): full 605×430 UI on the real Universe/GameSession architecture. A new game starts in the scenario's start town with the pregen party; you can walk the world with line-of-sight fog, lighting, terrain trim, roads, floor items and step sounds, talk to townspeople, open and bash doors, look at things and read signs, **pick up, equip, give and drop items**, and **buy, sell, identify, recharge, train and stay the night**. Remaining M2: the replay driver. Scenario scripting runs: walking onto a scripted square, looking at one, entering or leaving a town, or using a lever fires its chain, and Fort Talrus's own messages, its Rest prompt and its walk-through-a-wall node all work. Remaining M3: enchanting (needs M5's enchantment table), job banks (M6), and the full dialogxml toolkit. Remaining M4: the opcodes that need combat, fields, timers or quests — each one says so in the transcript rather than failing silently. **Combat is playable**: the SWORD button (or **C**) starts a fight, the party spreads out as six figures with action points, and you can swing, move, swap places, kill things and earn experience. Monsters notice you, walk over and hit back, in town mode as well as in combat — so Fort Talrus's eight Giant Rats will come for you from the moment a new game starts. The `uAbility` port landed 2026-07-26, so monster abilities are real data now; monsters shoot, breathe, summon aid and land their touch attacks; the party can shoot back with **S**; projectiles fly across the screen; and `place_spell_pattern` works, so exploding weapons blast, monsters lay fields and a protective circle raises four rings of wall. **M5 is closed**: monster spellcasting, the 147-spell list, `process_fields` and the real casting dialog all landed 2026-07-26. **M6 has started**: quests, job banks, special items and the town/scenario/party timers work as of 2026-07-27, so a scripted deadline can expire and a timed node can fire — **items can be Used**: the USE button on an inventory row drinks the potion, fires the wand and reads the book — and **boats and horses work**: walk onto one to board it, dry land to leave it, Space to dismount or re-board, and `CHANGE_HORSE_OWNER`/`CHANGE_BOAT_OWNER` hand one to the party — and **the job board works**: a JOB_BANK conversation node opens it, and a quest taken there (or handed over by a RECEIVE_QUEST node) runs on the timers that were already ported — and **the item panel has all three of its pages**: the tabs along its bottom (or 9 and 0) show the party's special items and its quests, and the scrollbar beside them finally reaches the other sixteen slots of a pack.
+**M2 and M4–M7 are complete, M3 nearly so (2026-08-01): full 605×430 UI on the real Universe/GameSession architecture. A new game starts in the scenario's start town with the pregen party; you can walk the world with line-of-sight fog, lighting, terrain trim, roads, floor items and step sounds, talk to townspeople, open and bash doors, look at things and read signs, **pick up, equip, give and drop items**, and **buy, sell, identify, recharge, train and stay the night**. Scenario scripting runs: walking onto a scripted square, looking at one, entering or leaving a town, or using a lever fires its chain, and Fort Talrus's own messages, its Rest prompt and its walk-through-a-wall node all work. Remaining M3: enchanting (needs M5's enchantment table), job banks (M6), and the full dialogxml toolkit. Remaining M4: the opcodes that need combat, fields, timers or quests — each one says so in the transcript rather than failing silently. **Combat is playable**: the SWORD button (or **C**) starts a fight, the party spreads out as six figures with action points, and you can swing, move, swap places, kill things and earn experience. Monsters notice you, walk over and hit back, in town mode as well as in combat — so Fort Talrus's eight Giant Rats will come for you from the moment a new game starts. The `uAbility` port landed 2026-07-26, so monster abilities are real data now; monsters shoot, breathe, summon aid and land their touch attacks; the party can shoot back with **S**; projectiles fly across the screen; and `place_spell_pattern` works, so exploding weapons blast, monsters lay fields and a protective circle raises four rings of wall. **M5 is closed**: monster spellcasting, the 147-spell list, `process_fields` and the real casting dialog all landed 2026-07-26. **M6 has started**: quests, job banks, special items and the town/scenario/party timers work as of 2026-07-27, so a scripted deadline can expire and a timed node can fire — **items can be Used**: the USE button on an inventory row drinks the potion, fires the wand and reads the book — and **boats and horses work**: walk onto one to board it, dry land to leave it, Space to dismount or re-board, and `CHANGE_HORSE_OWNER`/`CHANGE_BOAT_OWNER` hand one to the party — and **the job board works**: a JOB_BANK conversation node opens it, and a quest taken there (or handed over by a RECEIVE_QUEST node) runs on the timers that were already ported — and **the item panel has all three of its pages**: the tabs along its bottom (or 9 and 0) show the party's special items and its quests, and the scrollbar beside them finally reaches the other sixteen slots of a pack. **M7 is closed**: the whole `.exg` round trip, the IndexedDB save slots, the File menu, the autosave and the startup screen landed 2026-08-01, and so did M2's replay driver. **M6 is closed too**: the two endings — the party-death dialog and end-scenario — landed 2026-08-01, so a game can now be won as well as lost. Next up is **M8, fidelity hardening**.
 
 M2 landed so far:
 - Town/talk/town-map parsers (`townXml.ts`, data in `town.ts`/`talking.ts`) — all 21 valleydy towns + all scenarios load.
@@ -780,10 +780,12 @@ Notes for M2 implementer:
 - [ ] **M3 — Dialog toolkit + talk + shops**: talking ✅, minimal async modal dialog ✅, doors + look + signs ✅, item/equip model + inventory panel ✅, shops ✅, sell/identify/recharge ✅, training ✅, inns ✅, **item Use ✅ (2026-07-27)**; enchanting and full dialogxml still open
 - [x] **M4 — Specials interpreter (breadth-first)**: VM core (pointers, queueing, messages) + all seven opcode groups; triggers wired for movement, look, town entry/exit, use-space, call-special terrain and the two talk nodes. Opcodes needing combat/fields/timers/quests report themselves and wait for M5/M6.
 - [x] **M5 — Combat**: M5a ✅ (the iLiving seam, damage/status, combat mode, melee); M5b ✅ (monster turns, melee AI, town *and outdoor* encounters, the `uAbility` port, missiles on both sides, breath, summons, touch abilities, on-hit weapon abilities, **monster spellcasting**); M5c ✅ (spell patterns, `process_fields`, the 147-spell table, `pc_can_cast_spell`, town/combat/targeted/multi-target casting, and the real casting dialog). Remaining odds and ends: `record_monst` (Capture Soul/Simulacrum), `do_mindduel`, and the SPECIAL monster ability.
-- [ ] **M6 — Specials depth + party ops** (valleydy completable): quests,
-      job banks, special items, the three timer kinds, **item Use** ✅
-      (2026-07-27) and **boats/horses** ✅ (2026-07-27); alchemy, traps,
-      job-bank dialog and end-scenario open
+- [x] **M6 — Specials depth + party ops** (valleydy completable): quests, job
+      banks, special items, the three timer kinds, item Use, boats/horses
+      (2026-07-27), alchemy, traps and the job-bank dialog (2026-07-28), and
+      **the two endings — party death and end-scenario** ✅ (2026-08-01). The
+      scattered `TODO(M6)` markers that remain are individual opcodes and
+      niceties, not the milestone's demo path.
 - [x] **M7 — Save/load (.exg) + startup flow** (2026-08-01): the tag file, the
       tarball, the whole `.exg` round trip, the IndexedDB slots, the File menu,
       the autosave and the startup screen. Open: preferences for the autosave
@@ -1586,10 +1588,22 @@ definitions is still the long-term M3 item.
 
 ## Next steps
 
-M5 is closed and the first slice of **M6** landed 2026-07-27 (quests, job
-banks, special items, the three timer kinds and `special_increase_age` — see
-the entry above). What M6 still owes, roughly in the order the valleydy
-playthrough will hit it:
+**M5, M6 and M7 are all closed.** M6's last piece — the two endings, party
+death and end-scenario — landed 2026-08-01; see the entry at the bottom. The
+next milestone is **M8, fidelity hardening**, and the two things standing in
+front of it are:
+
+- **The C++'s own replays.** The driver exists (2026-08-01) but the recorded
+  files open with a startup flow — party files, the file picker, preferences —
+  that this port has no equivalent of, so the usable subset has to be curated
+  and the missing actions taught to `driver.ts`.
+- **The dialogxml leftovers**: `display_pc`'s spell lists, and `cThreeChoice`,
+  which builds its controls at runtime rather than from a definition.
+
+Part 2 (Exile 3) hasn't started; E3-0 (format groundwork) can proceed in
+parallel at any time.
+
+The M6 list below is kept for the history of what it covered:
 
 1. ~~**Party ops**: boats and horses~~ — **done** (2026-07-27), see the entry
    below. ~~`force_town_enter` + `position_party`~~ — **done** (2026-07-28),
@@ -1616,8 +1630,8 @@ playthrough will hit it:
 7b. ~~**M7 — save/load**~~ — **done** (2026-08-01): the `.exg` round trip, the
    IndexedDB slots, the File menu, the autosave and the startup screen. See the
    entries at the bottom.
-8. Part 2 (Exile 3) hasn't started; E3-0 (format groundwork) can proceed in
-   parallel at any time.
+8. ~~**End-scenario and party death**~~ — **done** (2026-08-01); see the entry
+   at the bottom. That closed M6.
 
 - **Boats and horses (M6, 2026-07-27)**: `data/vehicle.ts` ports `cVehicle`
   (`loc`/`sector`/`whichTown`/`exists`/`property`/`pic`/`name`) plus
@@ -2829,3 +2843,75 @@ playthrough will hit it:
     nothing but the seed, and assert the two end states match down to the RNG
     draw count, with a second test on a different seed proving the check has
     teeth.
+
+- **The two endings (M6's last, 2026-08-01).** A game could be won or lost and
+  nothing happened: END_SCENARIO printed one line into the transcript, and the
+  death dialog was a stub offering "New Game" because the save system it wanted
+  to offer didn't exist yet. Both are real now, and both are the same piece of
+  the C++ — the tail of `advance_time` (boe.actions.cpp:1930):
+
+      if(!univ.party.is_alive()) handle_party_death();
+      else if(end_scenario)      handle_victory();
+
+  - `GameSession.checkGameOver` is that `if`/`else`, and the `else` is
+    load-bearing: **a chain that ends the scenario with the same blow that wipes
+    the party is a death, not a win.** A test pins it. `checkPartyDeath` (which
+    already existed, along with its fled-PCs rout check) is now called through
+    it, from the three places it was called from before.
+  - It is also called at the tail of `session.runSpecial`/`runSpecialRaw`. Every
+    C++ path that runs a chain returns through `handle_action`, whose last line
+    is `advance_time`, so a node that ends the scenario is acted on as soon as
+    its chain finishes — whether the player got there by walking, by talking or
+    by using something. This port only reaches the other `advance_time` callers
+    on a *move*, so a scenario ended by a conversation would otherwise have sat
+    there with the flag set.
+  - `handleVictory` clears `end_scenario` first, as the C++ does. Left set, the
+    VM's own guard at the top of `run` answers **every** later chain with
+    "nothing happened" — so forgetting that line doesn't end the game, it
+    silently kills all scripting.
+  - The original announces nothing on a win: it goes straight back to
+    `MODE_STARTUP`. That's right, not lazy — a scenario says its own goodbye
+    with a message node before the node that ends it, and anything added here
+    would be a second ending printed over the author's. `onVictory` therefore
+    just navigates to the startup screen (the page with no `?scenario=`).
+  - **`handle_death` runs on the real `party-death.xml`** now
+    (boe.actions.cpp:3713), which the dialogxml toolkit renders without a
+    builder file — three buttons, four `dlog` picts forming one 72×72 scene, and
+    no Escape button, which is what stops a dead party being played on. The C++
+    loops until one of the three takes, and that loop is the behaviour worth
+    having: **cancelling out of Restore puts the dialog straight back**. Restart
+    and Quit both reload (a reload is how this port gets a clean Universe, the
+    same reasoning as File > New Game); Quit has nowhere to go in a browser, so
+    it lands on the startup screen — the same place a victory does, and the
+    closest thing here to leaving the game.
+  - `loadGameFlow` returns whether a game was actually loaded, because the
+    death dialog has to know whether to re-ask, and takes a `force` flag that
+    skips the "Load: Not in combat." refusal. The party can very well have died
+    in a fight, and the C++ only puts that guard on the File menu, not on the
+    picker this dialog opens. A cross-scenario load counts as loaded — the page
+    is already on its way elsewhere.
+  - *Gotcha*: both game-over latches are cleared by `resumeLoadedGame`.
+    Restoring from the death dialog puts a live party back in place, and without
+    that a second wipe would never announce itself.
+  - Still not ported, marked TODO(M8) in place: `exportGraphics`,
+    `exportSummons` and `clear_stored_pcs` — the three lines of `handle_victory`
+    that carry a party out of one scenario and into the next. They need the
+    campaign-level state (custom sheets, stored PCs) that `saveIo.ts` already
+    lists as unmodelled.
+  - Tests: `test/session.test.ts` gained 5 — the win firing once when the chain
+    that set the flag finishes, the flag being cleared, the death/victory tie
+    going to death, and the latches resetting on load. `verify-screen.mjs`
+    gained the run's closing step: wipe the party, check the real definition
+    comes up with its three buttons and no escape, click Restore, cancel the
+    picker, check the death dialog is back and the party still dead, then click
+    Quit and check the startup screen appears.
+
+- **Gotcha (2026-08-01): the BOOMS step of `verify-screen.mjs` was reading the
+  screen too late.** It failed about one run in six with `boomCount: 0` while
+  every other value in the same step was right. The cause is the one the
+  missile steps already document: a swing waits for its own blast now, so by
+  the time `attackAt` returns the renderer's sweep (`booms.filter(b => b.expires
+  > now)`) may already have taken the explosion back off. It records them
+  through `__watchAnim` as they are raised now, like the two spell steps do.
+  Worth remembering when adding a step: **anything on `screen.booms` or
+  `screen.missiles` is gone by the time the action that raised it returns.**

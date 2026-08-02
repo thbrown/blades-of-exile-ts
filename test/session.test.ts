@@ -11,7 +11,7 @@ import { SpecType, emptySpecialNode } from '../src/data/special';
 import { TerObstruct, TerSpec } from '../src/data/terrain';
 import { GameMode } from '../src/game/modes';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
-import { SpecialHost } from '../src/game/specials/context';
+import { SpecCtx, SpecCtxType, SpecialHost } from '../src/game/specials/context';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
@@ -550,5 +550,103 @@ describe('party death', () => {
     s.pause();
     await flush();
     expect(fired).toBe(0);
+  });
+});
+
+describe('the end of the scenario', () => {
+  const flush = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve, 0); });
+
+  const silentHost: SpecialHost = {
+    async message() {},
+    async choice(_strs, buttons) { return buttons.length - 1; },
+    async story() {},
+    async askText() { return ''; },
+    async selectPc() { return 0; },
+    startShop() { return true; },
+    startTalk() {},
+    sound() {},
+    rest() {},
+    moveParty() {},
+    changeLevel() {},
+    endScenario() {},
+  };
+
+  /** A session whose scenario special 0 is END_SCENARIO, ready to be run. */
+  function wonSession(): GameSession {
+    const s = newSession();
+    s.startNewGame();
+    s.attachSpecials(silentHost);
+    s.univ.scenario.scenSpecials.set(0, { ...emptySpecialNode(), type: SpecType.END_SCENARIO });
+    return s;
+  }
+
+  it('handle_victory fires once the chain that ended the scenario is done', async () => {
+    const s = wonSession();
+    let won = 0;
+    s.onVictory = () => { won++; };
+    expect(s.won).toBe(false);
+    await s.runSpecial(SpecCtx.STARTUP, SpecCtxType.SCEN, 0, { x: 0, y: 0 });
+    await flush();
+    expect(won).toBe(1);
+    expect(s.won).toBe(true);
+  });
+
+  it('clears end_scenario, so the flag does not deaden every later chain', async () => {
+    const s = wonSession();
+    await s.runSpecial(SpecCtx.STARTUP, SpecCtxType.SCEN, 0, { x: 0, y: 0 });
+    await flush();
+    // `handle_victory`'s first line is `end_scenario = false`. Left set, the
+    // VM's own guard answers every subsequent chain with "nothing happened".
+    expect(s.specials!.endScenario).toBe(false);
+  });
+
+  it('announces the win only once, however many turns follow', async () => {
+    const s = wonSession();
+    let won = 0;
+    s.onVictory = () => { won++; };
+    await s.runSpecial(SpecCtx.STARTUP, SpecCtxType.SCEN, 0, { x: 0, y: 0 });
+    await flush();
+    s.pause();
+    await flush();
+    expect(won).toBe(1);
+  });
+
+  /**
+   * `advance_time`'s tail is `if(!is_alive()) ... else if(end_scenario) ...`,
+   * so a chain that ends the scenario with the same blow that wipes the party
+   * is a death, not a win.
+   */
+  it('death wins the tie against victory', async () => {
+    const s = wonSession();
+    let won = 0;
+    let died = 0;
+    s.onVictory = () => { won++; };
+    s.onPartyDeath = () => { died++; };
+    for (const pc of s.univ.party.pcs) pc.mainStatus = MainStatus.DEAD;
+    await s.runSpecial(SpecCtx.STARTUP, SpecCtxType.SCEN, 0, { x: 0, y: 0 });
+    await flush();
+    expect(died).toBe(1);
+    expect(won).toBe(0);
+  });
+
+  /**
+   * Restoring from the death dialog puts a live party back; without clearing
+   * the latch a second wipe would never announce itself.
+   */
+  it('loading a game clears both game-over latches', async () => {
+    const s = wonSession();
+    let died = 0;
+    s.onPartyDeath = () => { died++; };
+    for (const pc of s.univ.party.pcs) pc.mainStatus = MainStatus.DEAD;
+    s.pause();
+    await flush();
+    expect(died).toBe(1);
+
+    for (const pc of s.univ.party.pcs) pc.mainStatus = MainStatus.ALIVE;
+    s.resumeLoadedGame();
+    for (const pc of s.univ.party.pcs) pc.mainStatus = MainStatus.DEAD;
+    s.pause();
+    await flush();
+    expect(died).toBe(2);
   });
 });

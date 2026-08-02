@@ -19,7 +19,8 @@ import {
 import { takeAp } from './game/combat';
 import { openJobBank } from './game/jobBank';
 import { alchemyChoices, makePotion } from './game/alchemy';
-import { loadDialogDefs } from './dialogs/dialogStore';
+import { getDialogDef, loadDialogDefs } from './dialogs/dialogStore';
+import { XmlDialog } from './dialogs/xmlDialog';
 import { pcInfoDialog } from './dialogs/pcInfoDialog';
 import { itemInfoDialog } from './dialogs/itemInfoDialog';
 import { STR_DIALOG_DEFS, pictTypeOf, strDialog } from './dialogs/strDialog';
@@ -213,7 +214,7 @@ async function main(): Promise<void> {
   ];
   for (let i = 1; i <= 11; i++) sheets.push(`monst${i}`);
   const dialogNames = ['pc-info', 'quest-info', 'get-items', 'item-info', 'many-str', 'monster-info', 'job-board',
-    'pick-potion', ...STR_DIALOG_DEFS];
+    'pick-potion', 'party-death', ...STR_DIALOG_DEFS];
   addTotal(1 /* opcodes */ + STRING_TABLES.length + dialogNames.length + sheets.length
     + (document.fonts ? 4 : 0) + 1 /* scenario.xml */);
 
@@ -356,17 +357,53 @@ async function main(): Promise<void> {
   };
 
   /**
-   * party-death.xml — the whole party has died. `handle_death` offers
-   * Load/New/Quit; there's no save system yet (M7), so this only offers a
-   * fresh start. The dialog has no Escape button, which is what freezes
-   * input — `InputRouter.dialogStack` gates every game key and click while
-   * one is open, and nothing ever closes this one.
+   * `handle_death` (boe.actions.cpp:3713) on the real `party-death.xml` — the
+   * whole party has died, and the three ways out of that.
+   *
+   * The C++ loops until one of them takes: Quit leaves the program, Restart
+   * builds a new party, and Restore only returns if a file was actually
+   * loaded — cancelling the picker puts the dialog straight back up. That loop
+   * is why the dialog has no Escape button: while one is open,
+   * `InputRouter.dialogStack` gates every game key and click, so there is no
+   * way to go on playing a dead party.
+   *
+   * The two reloads are how this port gets a genuinely clean Universe, the
+   * same reasoning as File > New Game. Quit has nowhere to go in a browser, so
+   * it lands on the startup screen — which is where `handle_victory` puts you
+   * too, and the closest thing here to leaving the game.
    */
   session.onPartyDeath = () => {
-    void dialogs.run({
-      text: 'Your entire party has died.',
-      buttons: [{ name: 'new', label: 'New Game' }],
-    }).then(() => window.location.reload());
+    void (async () => {
+      for (;;) {
+        const choice = await dialogs.runScreen(
+          new XmlDialog(ctx, store, getDialogDef('party-death')));
+        if (choice === 'new') {
+          window.location.reload();
+          return;
+        }
+        if (choice === 'quit') {
+          window.location.href = import.meta.env.BASE_URL;
+          return;
+        }
+        // Restore. `force` skips the "not in combat" refusal: the party can
+        // very well have died in a fight, and the C++ only puts that guard on
+        // the File menu, not on the picker this dialog opens.
+        if (await loadGameFlow(true)) {
+          redraw();
+          return;
+        }
+      }
+    })();
+  };
+
+  /**
+   * The tail of `handle_victory` (boe.actions.cpp:1412): back to the startup
+   * screen, which here is the page with no `?scenario=` on it. The original
+   * announces nothing — the scenario has already said its own goodbye through
+   * the message node before the one that ended it — so neither does this.
+   */
+  session.onVictory = () => {
+    window.location.href = import.meta.env.BASE_URL;
   };
 
   /**
@@ -763,12 +800,21 @@ async function main(): Promise<void> {
     redraw();
   };
 
-  const loadGameFlow = async (): Promise<void> => {
-    if (dialogs.active) return;
-    if (isCombat(session.mode)) {
+  /**
+   * The Open Game flow. Returns whether a game was actually loaded, which is
+   * what the party-death dialog needs to know: `handle_death` re-asks unless
+   * the restore took. A cross-scenario load counts as taken — the page is on
+   * its way to the other scenario and nothing here should run again.
+   *
+   * `force` skips the "not in combat" refusal, for the one caller that has to
+   * ignore it: a party that died in a fight.
+   */
+  const loadGameFlow = async (force = false): Promise<boolean> => {
+    if (dialogs.active) return false;
+    if (!force && isCombat(session.mode)) {
       univ.addStringToBuf('Load: Not in combat.');
       redraw();
-      return;
+      return false;
     }
     const slots = saveStoreAvailable() ? await listSaves() : [];
     const picked = await dialogs.run({
@@ -782,7 +828,7 @@ async function main(): Promise<void> {
     });
     if (picked === 'cancel') {
       redraw();
-      return;
+      return false;
     }
 
     let data: Uint8Array | null = null;
@@ -794,7 +840,7 @@ async function main(): Promise<void> {
     }
     if (data === null) {
       redraw();
-      return;
+      return false;
     }
     // A save belongs to one scenario, and swapping scenarios means reloading
     // the whole world — which this port does by restarting on the new one.
@@ -809,12 +855,12 @@ async function main(): Promise<void> {
             `That game was played in "${preview.scenarioId}", not "${scen.id}". ` +
             `Open that scenario first, then import it.`);
           redraw();
-          return;
+          return false;
         }
         window.sessionStorage.setItem(PENDING_SAVE_KEY, picked.slice('slot:'.length));
         window.location.href =
           `${import.meta.env.BASE_URL}?scenario=${encodeURIComponent(preview.scenarioId)}`;
-        return;
+        return true;
       }
       applySave(data, univ);
       // The C++ sets `univ.file` from what it loaded, so the autosave keeps
@@ -824,9 +870,11 @@ async function main(): Promise<void> {
       resumeAfterLoad();
       univ.addStringToBuf('Game loaded.');
       redraw();
+      return true;
     } catch (err) {
       univ.addStringToBuf(`Load failed: ${String(err)}`);
       redraw();
+      return false;
     }
   };
 

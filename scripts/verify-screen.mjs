@@ -1710,6 +1710,12 @@ const booms = await page.evaluate(async () => {
   const univ = s.univ;
   const played = [];
   window.__setLivingSound((n) => played.push(n));
+  // Recorded as they are raised, not read off the screen afterwards: a swing
+  // waits for its own blast now, so by the time `attackAt` returns the
+  // renderer's sweep may already have taken the boom back off. Reading
+  // `screen.booms` after the fact made this step fail about one run in six.
+  const raised = [];
+  window.__watchAnim(null, (b) => raised.push({ ...b, where: { ...b.where } }));
   const monst = univ.town.monsters.find((m) => m.isAlive);
   if (!monst) return { skipped: true };
   monst.attitude = 1;
@@ -1727,8 +1733,9 @@ const booms = await page.evaluate(async () => {
     pc.ap = 4;
     await s.attackAt(monst.curLoc);
   }
-  const boomCount = window.__screen.booms.length;
-  const boom = boomCount > 0 ? { ...window.__screen.booms[0], where: { ...window.__screen.booms[0].where } } : null;
+  window.__watchAnim(null, null);
+  const boomCount = raised.length;
+  const boom = boomCount > 0 ? raised[0] : null;
   window.__redraw();
   window.__setLivingSound(null);
   return { boomCount, boom, played, hurt: before - monst.health };
@@ -2404,6 +2411,86 @@ const recall = await page.evaluate(() => {
 console.log('WORD OF RECALL:', JSON.stringify(recall));
 await shot('02i-word-of-recall');
 
+// The two endings. `handle_death` on the real party-death.xml: wipe the party
+// and the dialog comes up with Restore / Restart / Quit, and — the part worth
+// driving, because it is a loop in the C++ — cancelling out of Restore puts it
+// straight back rather than letting a dead party keep playing. Quit lands on
+// the startup screen, which is also where a victory goes, so this is the last
+// step: it navigates away.
+//
+// Clicks go through the canvas, not through `d.onClick`, because what is being
+// checked is that the whole route resolves: the dialog's promise, the loop
+// around it and the navigation at the end.
+const buttonRect = async (name) => page.evaluate((n) => {
+  const d = window.__dialogs.active;
+  if (!d || !d.def) return null;
+  const c = d.def.controls.find((x) => x.name === n);
+  return c ? d.screenRect(c) : null;
+}, name);
+
+await page.evaluate(async () => {
+  const s = window.__session;
+  for (const pc of s.univ.party.pcs) pc.mainStatus = 2 /* eMainStatus::DEAD */;
+  s.pause();
+  await s.settled();
+});
+await page.waitForTimeout(400);
+const death = await page.evaluate(() => {
+  const d = window.__dialogs.active;
+  if (!d || !d.def) return null;
+  const names = d.def.controls.map((c) => c.name).filter((n) => n);
+  return {
+    controls: d.def.controls.length,
+    hasLoad: names.includes('load'),
+    hasNew: names.includes('new'),
+    hasQuit: names.includes('quit'),
+    // No escape button is what stops a dead party being played on.
+    escBtn: d.def.escBtn ?? null,
+    size: { w: d.frame.right - d.frame.left, h: d.frame.bottom - d.frame.top },
+  };
+});
+await shot('02j-party-death');
+
+// Restore, then cancel the picker: the death dialog must come back.
+let deathReasked = null;
+const loadRect = await buttonRect('load');
+if (loadRect) {
+  const at = await canvasPoint((loadRect.left + loadRect.right) / 2 - 0.5,
+    (loadRect.top + loadRect.bottom) / 2 - 0.5);
+  await page.mouse.click(at.x, at.y);
+  await page.waitForTimeout(400);
+  const pickerUp = await page.evaluate(() => {
+    const d = window.__dialogs.active;
+    return d && d.spec ? d.spec.text : null;
+  });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  deathReasked = await page.evaluate(() => {
+    const d = window.__dialogs.active;
+    return {
+      back: !!(d && d.def && d.def.byName.has('quit')),
+      // Still dead, still no way back to the game.
+      alive: window.__univ.party.isAlive(),
+    };
+  });
+  deathReasked.pickerUp = pickerUp;
+}
+console.log('PARTY DEATH:', JSON.stringify({ death, deathReasked }));
+
+// Quit — back to the startup screen, the same place `handle_victory` goes.
+let deathQuit = false;
+const quitRect = await buttonRect('quit');
+if (quitRect) {
+  const at = await canvasPoint((quitRect.left + quitRect.right) / 2 - 0.5,
+    (quitRect.top + quitRect.bottom) / 2 - 0.5);
+  await page.mouse.click(at.x, at.y);
+  await page.waitForSelector('.startup .startup-choice', { timeout: 20000 }).catch(() => {});
+  deathQuit = await page.evaluate(() =>
+    document.querySelectorAll('.startup .startup-choice').length > 0);
+}
+console.log('PARTY DEATH QUIT:', deathQuit);
+await page.screenshot({ path: `${SHOTS}/02k-after-quit.png` });
+
 console.log('ERRORS:', errors.length ? errors.join(' | ') : 'none');
 await browser.close();
 
@@ -2542,6 +2629,13 @@ const ok =
   fileMenu.some((label) => label.startsWith('Open Game')) &&
   menuLoad.row === 'clicked' && menuLoad.gold === 8888 &&
   menuLoad.slot === 'VerifySlot' && menuLoad.dialogGone === true &&
+  // handle_death on party-death.xml: the real definition, its three buttons,
+  // no way out of it, and the C++'s loop — cancelling Restore re-asks.
+  death !== null && death.hasLoad && death.hasNew && death.hasQuit &&
+  death.escBtn === null && death.controls > 5 &&
+  deathReasked !== null && deathReasked.back === true && deathReasked.alive === false &&
+  // …and Quit lands on the startup screen, where handle_victory goes too.
+  deathQuit === true &&
   errors.length === 0;
 console.log(ok ? 'PASS' : 'FAIL');
 process.exit(ok ? 0 : 1);

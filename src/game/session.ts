@@ -263,6 +263,12 @@ export class GameSession {
     this.combatActivePc = NO_ONE;
     this.spellTarget = 6;
     this.univ.curPc = 0;
+    // Both latches belong to the game that just ended, not to the one being
+    // loaded over it: restoring from the death dialog puts a live party back in
+    // place, and without this a second wipe would never announce itself.
+    this.partyDead = false;
+    this.scenarioWon = false;
+    if (this.specials) this.specials.endScenario = false;
     const town = this.univ.town;
     if (town !== null) {
       this.mode = GameMode.TOWN;
@@ -393,7 +399,7 @@ export class GameSession {
       // handle_monster_actions ends with this check (boe.actions.cpp:1932) —
       // upkeep (poison, disease, a field) or a monster's turn can be what
       // finishes the party off outside of combat.
-      this.checkPartyDeath();
+      this.checkGameOver();
     }
   }
 
@@ -437,7 +443,7 @@ export class GameSession {
         if (this.univ.rng.getRan(1, 1, Math.max(2, 160 - difficulty)) === 2) {
           createWandMonst(this);
         }
-        this.checkPartyDeath();
+        this.checkGameOver();
       });
       return;
     }
@@ -1511,6 +1517,12 @@ export class GameSession {
     if (!this.specials || node < 0) return { blocked: false, forced: false };
     const result = await this.specials.run(mode, type, node, where);
     if (result.redraw) this.onRedraw?.();
+    // Every C++ path that runs a chain returns through `handle_action`, whose
+    // tail is `advance_time` — so a node that ends the scenario is acted on as
+    // soon as its chain finishes, whether the player got there by walking, by
+    // talking, or by using something. This port only reaches `advance_time`'s
+    // other callers on a *move*, so the check goes here too.
+    this.checkGameOver();
     return { blocked: result.a > 0, forced: result.b > 0 };
   }
 
@@ -1521,6 +1533,7 @@ export class GameSession {
     if (!this.specials || node < 0) return { a: -1, b: -1 };
     const result = await this.specials.run(mode, type, node, where);
     if (result.redraw) this.onRedraw?.();
+    this.checkGameOver();
     return { a: result.a, b: result.b };
   }
 
@@ -1974,11 +1987,20 @@ export class GameSession {
    * (`handle_death`, boe.actions.cpp:3713). Fires once, the first time
    * `party.isAlive()` goes false *and stays false after fled PCs are given a
    * chance to come back* — see `checkPartyDeath`; `partyDead` latches so
-   * upkeep ticking on a dead party doesn't fire it again. There's no
-   * load/new-game flow to offer yet (that needs M7's save system), so the
-   * host's only real option today is to freeze input and say what happened.
+   * upkeep ticking on a dead party doesn't fire it again. The dialog's three
+   * buttons are Restore, Restart and Quit, and all three belong to the host:
+   * only it knows about save slots and about how this port starts over.
    */
   onPartyDeath: (() => void) | null = null;
+
+  /**
+   * Set by the host: the tail of `handle_victory` (boe.actions.cpp:1412) —
+   * `reload_startup(); overall_mode = MODE_STARTUP; draw_startup(0)`. The
+   * scenario is over and won, and the original drops straight back to its
+   * splash screen with no announcement of its own; the scenario's own closing
+   * message has already been shown by the chain that set the flag.
+   */
+  onVictory: (() => void) | null = null;
 
   /**
    * Set by the host: `display_monst` (boe.infodlg.cpp:288), the monster sheet
@@ -1987,6 +2009,47 @@ export class GameSession {
    */
   onShowMonster: ((monst: Creature) => void) | null = null;
   private partyDead = false;
+  private scenarioWon = false;
+
+  /**
+   * The tail of `advance_time` (boe.actions.cpp:1930), which is the one place
+   * a game ends:
+   *
+   *     if(!univ.party.is_alive()) handle_party_death();
+   *     else if(end_scenario)      handle_victory();
+   *
+   * The `else` is load-bearing — a chain that ends the scenario with the same
+   * blow that kills the party is a **death**, not a win.
+   */
+  checkGameOver(): void {
+    this.checkPartyDeath();
+    if (this.partyDead || !this.specials?.endScenario) return;
+    this.handleVictory();
+  }
+
+  /**
+   * `handle_victory` (boe.actions.cpp:1412) — the END_SCENARIO flag come due.
+   * It clears the flag, forgets which scenario was being played, and goes back
+   * to the startup screen. It shows nothing on the way: a scenario says its own
+   * goodbye with a message node before the end-scenario node, so anything added
+   * here would be a second ending on top of the author's.
+   *
+   * TODO(M8): `exportGraphics`, `exportSummons` and `clear_stored_pcs` — the
+   * three lines that carry a party out of one scenario and into the next. They
+   * need the campaign-level state (custom sheets, stored PCs) that `saveIo.ts`
+   * already lists as unmodelled.
+   */
+  private handleVictory(): void {
+    this.scenarioWon = true;
+    if (this.specials) this.specials.endScenario = false;
+    // Fire-and-forget behind the animation queue, for the same reason the death
+    // announcement is: the blast that finished the scenario may still be on
+    // screen when the flag is read.
+    void animSettle().then(() => { this.onVictory?.(); });
+  }
+
+  /** Whether `handle_victory` has run — the game is over and won. */
+  get won(): boolean { return this.scenarioWon; }
 
   /**
    * `handle_party_death` (boe.actions.cpp:1431). `isAlive()` is `main_status
@@ -2751,7 +2814,7 @@ export class GameSession {
         `Active: ${pc.name} (#${this.univ.curPc + 1}, ${pc.ap} ap.)`);
     }
     this.onRedraw?.();
-    this.checkPartyDeath();
+    this.checkGameOver();
   }
 
   /**
