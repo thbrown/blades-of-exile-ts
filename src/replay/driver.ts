@@ -295,13 +295,22 @@ export async function runReplay(
           } else if (session.missile !== null) {
             await session.fireMissileAt(target);
           } else {
-            result.unsupported[action.type] = (result.unsupported[action.type] ?? 0) + 1;
-            if (onUnsupported === 'stop') {
-              result.error = 'handle_target_space with nothing armed';
-              result.errorAt = at;
-              return result;
-            }
-            continue;
+            // **Nothing armed is not an error — the C++ does nothing here too.**
+            // `handle_target_space` (boe.actions.cpp:866) tests four modes and
+            // plain MODE_COMBAT is none of them, so it falls through all of
+            // them, recentres and sets the mode back to MODE_COMBAT. It is what
+            // a player gets for clicking a square after a shot that never
+            // armed: pressing **s** with no bow prints "Fire: Equip a missile."
+            // and leaves the mode alone, and the click that was going to be the
+            // shot lands on nothing.
+            //
+            // The driver used to stop here, which cost seven files — on the
+            // reading that a square being targeted with nothing armed meant this
+            // port had failed to arm something the recording armed. It can mean
+            // that, but the *recording* cannot tell the two apart, and the
+            // format catches the real case anyway: a missile this port failed
+            // to fire changes what the player does next, so it surfaces at the
+            // following action rather than here.
           }
           break;
         }
@@ -488,6 +497,29 @@ export async function runReplay(
           }
           break;
         }
+        // The shop, in the four actions it is played with.
+        case 'click_shop_item':
+        case 'click_shop_item_help':
+          // Cosmetic, exactly like `arrow_button_click`: `click_shop_rect`
+          // (boe.newgraph.cpp:671) draws the row pressed, plays a sound, draws
+          // it unpressed, and changes nothing. The purchase it belongs to
+          // arrives as the `handle_sale` after it. The rectangle it carries is
+          // where the row was on screen.
+          break;
+        case 'handle_sale':
+          // **An absolute index into the shop**, not a screen row — the row a
+          // player clicked depends on where the scrollbar sits, and the C++
+          // works in `active_shop.getItem(i)`.
+          session.buyShopItem(numberFromAction(action));
+          break;
+        case 'handle_item_shop_action':
+          // Selling, identifying or recharging one of your *own* items, at a
+          // shop that offers the service. Indexed into the pack on show.
+          session.useItemShop(win.pcPage, numberFromAction(action));
+          break;
+        case 'end_shop_mode':
+          session.endShopMode();
+          break;
         case 'handle_trade_places':
           session.tradePlaces(numberFromAction(action));
           break;

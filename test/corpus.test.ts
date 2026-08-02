@@ -29,6 +29,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { describe, it } from 'vitest';
+import { GameMode } from '../src/game/modes';
 import { GameSession } from '../src/game/session';
 import { applySave, readSavePreview } from '../src/fileio/saveIo';
 import { loadScenario } from '../src/fileio/loadScenario';
@@ -96,11 +97,16 @@ async function play(path: string): Promise<Row> {
     from: start.consumed,
     onStep: process.env.TRACE
       ? (at, action) => {
-        const l = univ.party.getLoc();
+        // In combat the square that matters is the **acting PC's**, not the
+        // party's — the party's town location does not move during a fight, so
+        // printing it makes every combat trace look frozen.
+        const inFight = session.mode === GameMode.COMBAT;
+        const l = inFight ? univ.currentPc.combatPos : univ.party.getLoc();
+        const who = inFight ? ` pc${univ.curPc}:${univ.currentPc.name}` : '';
         const said = univ.transcript.slice(mark).join(' | ');
         mark = univ.transcript.length;
         trace.push(`  ${String(at).padStart(5)} ${action.type.padEnd(20)} `
-          + `${(action.text || '').padEnd(10)} -> (${l.x},${l.y}) `
+          + `${(action.text || '').padEnd(10)} -> (${l.x},${l.y})${who} `
           + `mode=${session.mode}  ${said.slice(0, 110)}`);
       }
       : undefined,

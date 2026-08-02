@@ -2381,12 +2381,23 @@ export class GameSession {
     }
   }
 
-  /** Buy the entry on a given screen row. */
+  /** Buy the entry on a given screen row — what a click on the list means. */
   buyShopRow(row: number): void {
+    const target = this.shop?.rowEntry(row);
+    if (target) this.buyShopItem(target.index);
+  }
+
+  /**
+   * `handle_sale` (boe.dlgutil.cpp:333) — buy the shop's item `index`.
+   *
+   * The **absolute** index into the shop, not a screen row: that is what the
+   * C++ works in (`active_shop.getItem(i)`) and what a replay records, while
+   * the row a player clicked depends on where the scrollbar happens to sit.
+   */
+  buyShopItem(index: number): void {
     const state = this.shop;
-    const target = state?.rowEntry(row);
-    if (!state || !target) return;
-    handleSale(this.univ, state, target.index, this.sound);
+    if (!state) return;
+    handleSale(this.univ, state, index, this.sound);
     this.recordShopStock(state);
     // A healer whose list just emptied moves on to the next PC who needs help.
     if (state.visible.length === 0) {

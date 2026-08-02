@@ -3289,3 +3289,44 @@ The M6 list below is kept for the history of what it covered:
     different square** — `do_monsters` having moved something to (24,48) that
     the C++ had elsewhere. That last class is monster-AI divergence and is the
     hardest of the three; the inference tool names the square but not the rule.
+
+- **The shop actions, and a driver that was too strict (M8, 2026-08-02).**
+  Sixth slice. Two classes cleared, ~1,700 more actions.
+  - **The shop's four actions.** `click_shop_item` and `click_shop_item_help`
+    are **cosmetic** — `click_shop_rect` (boe.newgraph.cpp:671) draws the row
+    pressed, plays a sound, draws it unpressed, and changes nothing, exactly
+    like `arrow_button_click`. The purchase arrives as the `handle_sale` after
+    it. `handle_sale`, `handle_item_shop_action` and `end_shop_mode` are the
+    real ones, and all three already existed here — this was driver wiring.
+    - `session.buyShopRow` was split: `buyShopItem(index)` is `handle_sale`'s
+      **absolute** index into the shop, which is what the C++ works in
+      (`active_shop.getItem(i)`) and what a replay records; `buyShopRow` is the
+      screen row a click lands on, which depends on where the scrollbar sits.
+  - **"handle_target_space with nothing armed" was not a divergence**, and
+    stopping on it cost seven files. `handle_target_space` (boe.actions.cpp:866)
+    tests four modes — spell target, firing/throwing, town target, fancy — and
+    plain `MODE_COMBAT` is none of them, so it **falls through all four**,
+    recentres, and sets the mode back to `MODE_COMBAT`. It is what a player gets
+    for clicking a square after a shot that never armed: pressing **s** with no
+    bow prints "Fire: Equip a missile." and leaves the mode alone, and the click
+    meant to be the shot lands on nothing.
+    - The traced case (`RangedFlickerRegression`) was exactly that: combat
+      restarts, PC0 is up, has no missile weapon, and the recorded click does
+      nothing in *either* engine. This port had been behaving identically and
+      the driver was calling it a failure.
+    - It is worth being clear about what is given up: a click with nothing
+      armed *can* mean this port failed to arm something the recording armed.
+      The recording cannot tell the two apart — but the format catches the real
+      case anyway, since a missile that never flew changes what the player does
+      next, so it surfaces at the following action instead of here.
+  - `TRACE=1` now prints the **acting PC's** square in combat rather than the
+    party's. The party's town location does not move during a fight, so every
+    combat trace read as frozen, which is what made the case above take a second
+    pass to see.
+  - **Where it stands**: **5,868 actions dispatch** (5,147 at the start of this
+    slice). The desync count reads 40 rather than 32 for the usual reason — more
+    files reach one instead of stopping earlier. The largest remaining *handler*
+    gap is `spell_forced` (8 files), the shift-M/shift-P recast shortcut, which
+    needs `last_cast`/`last_target` on the PC and the `store_mage`/`store_priest`
+    globals behind `repeat_cast_ok` (boe.party.cpp:521) — a real game feature,
+    not just driver wiring.
