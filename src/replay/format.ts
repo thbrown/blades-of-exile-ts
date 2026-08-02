@@ -34,6 +34,17 @@ export interface Replay {
   seed: number | null;
   /** Which scenario the recording was made in — this port's own addition. */
   scenario: string | null;
+  /**
+   * The `<feature_flags>` block: which feature versions the recording build
+   * had. **`null` means the file has no block at all**, which is not the same
+   * as an empty one — the C++ replaces its whole set with what it read, so a
+   * file with an empty block runs with *every* flag off.
+   *
+   * Parsed separately from `actions` because a flag can list several versions
+   * (`target-lock` has two) and the generic info map keeps only one string per
+   * child name.
+   */
+  featureFlags: Record<string, string[]> | null;
   actions: ReplayAction[];
 }
 
@@ -87,8 +98,22 @@ function escapeXml(text: string): string {
 export function writeReplay(replay: Replay): string {
   let out = '<actions>\n';
   if (replay.scenario !== null) out += `    <scenario>${escapeXml(replay.scenario)}</scenario>\n`;
+  if (replay.featureFlags !== null) {
+    out += '    <feature_flags>\n';
+    for (const [flag, versions] of Object.entries(replay.featureFlags)) {
+      out += `        <${flag}>\n`;
+      for (const v of versions) out += `            <version>${escapeXml(v)}</version>\n`;
+      out += `        </${flag}>\n`;
+    }
+    out += '    </feature_flags>\n';
+  }
   if (replay.seed !== null) out += `    <srand>${replay.seed}</srand>\n`;
   for (const action of replay.actions) {
+    // The flag block is written above, from `featureFlags`, which keeps the
+    // several versions a flag can carry. The action carries the same element
+    // flattened to one string per flag, so writing it again would emit a second
+    // block with every version dropped.
+    if (action.type === 'feature_flags') continue;
     const children = Object.entries(action.info);
     if (children.length === 0) {
       out += action.text === ''
@@ -116,7 +141,7 @@ export function parseReplay(root: Element): Replay {
   if (root.nodeName !== 'actions') {
     throw new Error(`replay: expected an <actions> document, got <${root.nodeName}>`);
   }
-  const replay: Replay = { seed: null, scenario: null, actions: [] };
+  const replay: Replay = { seed: null, scenario: null, featureFlags: null, actions: [] };
   for (let node = root.firstChild; node !== null; node = node.nextSibling) {
     if (node.nodeType !== 1) continue;
     const el = node as Element;
@@ -128,6 +153,23 @@ export function parseReplay(root: Element): Replay {
     if (el.nodeName === 'scenario') {
       replay.scenario = text;
       continue;
+    }
+    if (el.nodeName === 'feature_flags') {
+      // `<flag><version>a</version><version>b</version></flag>`, so each flag
+      // carries a *list*. Still pushed as an action as well, since the C++
+      // pops it off the same stream during startup.
+      const flags: Record<string, string[]> = {};
+      for (let f = el.firstChild; f !== null; f = f.nextSibling) {
+        if (f.nodeType !== 1) continue;
+        const flag = f as Element;
+        const versions: string[] = [];
+        for (let v = flag.firstChild; v !== null; v = v.nextSibling) {
+          if (v.nodeType !== 1) continue;
+          versions.push(elementText(v as Element));
+        }
+        flags[flag.nodeName] = versions;
+      }
+      replay.featureFlags = flags;
     }
     const info: Record<string, string> = {};
     for (let child = el.firstChild; child !== null; child = child.nextSibling) {

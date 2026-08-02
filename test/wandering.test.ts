@@ -5,7 +5,8 @@
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { resetFeatureFlags, setFeatureFlags } from '../src/game/featureFlags';
 import { GameRng } from '../src/core/rng';
 import { OutWandering, emptyOutWandering } from '../src/data/outdoors';
 import { Scenario } from '../src/data/scenario';
@@ -19,7 +20,8 @@ import { SpecCtx, SpecCtxType } from '../src/game/specials/context';
 import { ARENA_DIM, createOutCombatTerrain, startOutdoorCombat } from '../src/game/outCombat';
 import { GameSession } from '../src/game/session';
 import {
-  countWalls, doOutdoorMonsters, outEncLevTot, placeOutdWandMonst, wanderingIsNull,
+  countWalls, createWandMonst, doOutdoorMonsters, outEncLevTot, placeOutdWandMonst,
+  wanderingIsNull,
 } from '../src/game/wandering';
 import { PartyPreset } from '../src/universe/player';
 import { MainStatus } from '../src/universe/skills';
@@ -378,5 +380,89 @@ describe('the outdoor encounter specials', () => {
     for (let i = 0; i < 20 && !s.univ.party.outC.some((g) => g.exists); i++)
       await s.runSpecialRaw(SpecCtx.OUT_MOVE, SpecCtxType.OUTDOOR, 0, s.univ.party.locInSec);
     expect(s.univ.party.outC.some((g) => g.exists)).toBe(true);
+  });
+});
+
+/**
+ * The two bugs `create_wand_monst` keeps behind feature flags — the mechanism
+ * by which the C++ stays reproducible for replays recorded before the fixes.
+ *
+ * These matter for the RNG as much as for the monsters: an extra
+ * `place_monster` moves the stream, and `get_ran`'s call order is part of the
+ * spec.
+ */
+describe('the wandering-monster bugs, and the flags that decide them', () => {
+  afterEach(() => { resetFeatureFlags(); });
+
+  /**
+   * A town session whose four wandering groups are identical, so which one
+   * `get_ran` picks cannot change the answer, with a spawn point well away
+   * from the party (`create_wand_monst` rerolls a point the party can see).
+   */
+  async function townWithGroup(fourth: number): Promise<GameSession> {
+    const rng = new GameRng();
+    rng.seedGame(1);
+    const univ = new Universe(scen, rng, PartyPreset.DEFAULT);
+    const s = new GameSession(univ);
+    s.startNewGame();
+    const record = univ.townRecord!;
+    record.wandering = [[1, 0, 0, fourth], [1, 0, 0, fourth],
+      [1, 0, 0, fourth], [1, 0, 0, fourth]];
+    const rect = record.inTownRect;
+    const spot = {
+      x: Math.max(rect.left + 2, Math.min(rect.right - 2, univ.party.townLoc.x + 12)),
+      y: Math.max(rect.top + 2, Math.min(rect.bottom - 2, univ.party.townLoc.y + 12)),
+    };
+    record.wanderingLocs = [spot, spot, spot, spot];
+    return s;
+  }
+
+  /**
+   * With the bug **on** (a recording that predates the fix, or one that never
+   * mentions the flag), an empty fourth slot still gets placed — spawning the
+   * "nameless monsters of type 0 with default stats" the C++ comment describes.
+   * With the fix on, it is skipped.
+   */
+  it('places a nameless type-0 monster only when the bug is on', async () => {
+    const withBug = await townWithGroup(0);
+    setFeatureFlags({});
+    const before = withBug.univ.town!.monsters.length;
+    for (let i = 0; i < 40; i++) createWandMonst(withBug);
+    const bugged = withBug.univ.town!.monsters.length - before;
+
+    const fixed = await townWithGroup(0);
+    setFeatureFlags({ 'empty-wandering-monster-bug': ['fixed'] });
+    const before2 = fixed.univ.town!.monsters.length;
+    for (let i = 0; i < 40; i++) createWandMonst(fixed);
+    const clean = fixed.univ.town!.monsters.length - before2;
+
+    expect(bugged).toBeGreaterThan(clean);
+  });
+
+  /**
+   * **A C++ typo, reproduced.** The trailing `try_place_extra_monster()` is
+   * guarded by `has_feature_flag("too-many-extra-wandering-monsters", "fixed")`
+   * — without the `-bug` suffix the flag is registered under — so no such flag
+   * exists and it never runs. A build with the fix on therefore places the
+   * extra monster *zero* times, not once.
+   */
+  it('never places the extra monster once the fix is on, because of the C++ typo', async () => {
+    const s = await townWithGroup(2);
+    setFeatureFlags({ 'too-many-extra-wandering-monsters-bug': ['fixed'] });
+    const drawsBefore = s.univ.rng.gameDraws;
+    const before = s.univ.town!.monsters.length;
+    createWandMonst(s);
+    const placedWithFix = s.univ.town!.monsters.length - before;
+
+    const t = await townWithGroup(2);
+    setFeatureFlags({});
+    const before2 = t.univ.town!.monsters.length;
+    createWandMonst(t);
+    const placedWithBug = t.univ.town!.monsters.length - before2;
+
+    // The bug runs `try_place_extra_monster` four times; the fix runs it none.
+    expect(placedWithBug).toBeGreaterThanOrEqual(placedWithFix);
+    // And it costs RNG draws either way, which is the part replays feel.
+    expect(s.univ.rng.gameDraws).toBeGreaterThan(drawsBefore);
   });
 });

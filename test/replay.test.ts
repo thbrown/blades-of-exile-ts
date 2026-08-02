@@ -111,11 +111,15 @@ describe('the replay format', () => {
     const back = parseReplay(await parseXmlDoc(recorder.serialise(), 'replay.xml'));
     expect(back.seed).toBe(1234);
     expect(back.scenario).toBe('valleydy');
+    // `feature_flags` is an action like any other — the C++ pops it off this
+    // same stream during startup (`replay_feature_flags`, boe.main.cpp:1087) —
+    // so a recording leads with the flag set it was made under.
     expect(back.actions.map((a) => a.type))
-      .toEqual(['move', 'click_control', 'handle_pause', 'handle_switch_pc']);
-    expect(locationFromAction(back.actions[0]!)).toEqual({ x: 13, y: 40 });
-    expect(back.actions[1]!.info).toEqual({ id: 'done', mods: '0' });
-    expect(numberFromAction(back.actions[3]!)).toBe(3);
+      .toEqual(['feature_flags', 'move', 'click_control', 'handle_pause', 'handle_switch_pc']);
+    expect(back.featureFlags?.['target-lock']).toEqual(['V1', 'V2']);
+    expect(locationFromAction(back.actions[1]!)).toEqual({ x: 13, y: 40 });
+    expect(back.actions[2]!.info).toEqual({ id: 'done', mods: '0' });
+    expect(numberFromAction(back.actions[4]!)).toBe(3);
     // And the document is stable, so a recording can be diffed against itself.
     expect(writeReplay(back)).toBe(recorder.serialise());
   });
@@ -187,7 +191,9 @@ describe('recording and replaying a real game', () => {
     for (const where of back) await act(first, () => first.moveTo(where));
 
     const replay = parseReplay(await parseXmlDoc(first.recorder.serialise(), 'replay.xml'));
-    expect(replay.actions).toHaveLength(walk.length + 2 + back.length);
+    // +1 for the leading `feature_flags`, which the recorder writes so the file
+    // can be replayed against a build with a different set.
+    expect(replay.actions).toHaveLength(1 + walk.length + 2 + back.length);
     expect(replay.seed).toBe(SEED);
 
     // Replay into a game that knows nothing but the seed — and is *built* on
@@ -219,7 +225,7 @@ describe('recording and replaying a real game', () => {
   it('stops at an action it cannot run, and says which', async () => {
     const session = await newGame();
     const result = await runReplay(session, {
-      seed: null, scenario: null,
+      seed: null, scenario: null, featureFlags: null,
       actions: [
         { type: 'move', text: '(7,9)', info: {} },
         { type: 'handle_victory', text: '', info: {} },
@@ -235,7 +241,7 @@ describe('recording and replaying a real game', () => {
   it('surveys a file instead, when asked to skip', async () => {
     const session = await newGame();
     const result = await runReplay(session, {
-      seed: null, scenario: null,
+      seed: null, scenario: null, featureFlags: null,
       actions: [
         { type: 'move', text: '(7,9)', info: {} },
         { type: 'handle_victory', text: '', info: {} },

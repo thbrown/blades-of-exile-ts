@@ -13,6 +13,7 @@
  * the rules rather than of the UI.
  */
 
+import { currentFeatureFlags } from '../game/featureFlags';
 import { Location } from '../core/location';
 import { Replay, ReplayAction, locationText, writeReplay } from './format';
 
@@ -51,7 +52,15 @@ export class ReplayRecorder {
   }
 
   toReplay(): Replay {
-    return { seed: this.seed, scenario: this.scenario, actions: [...this.actions] };
+    return {
+      seed: this.seed,
+      scenario: this.scenario,
+      // `record_feature_flags` (boe.main.cpp:1071) — write down what this build
+      // was running under, so the file can be replayed against a later one.
+      // Without it a recording made here would replay with every flag off.
+      featureFlags: currentFeatureFlags(),
+      actions: [...this.actions],
+    };
   }
 
   serialise(): string {

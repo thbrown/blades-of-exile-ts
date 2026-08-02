@@ -3330,3 +3330,47 @@ The M6 list below is kept for the history of what it covered:
     needs `last_cast`/`last_target` on the PC and the `store_mage`/`store_priest`
     globals behind `repeat_cast_ok` (boe.party.cpp:521) — a real game feature,
     not just driver wiring.
+
+- **Feature flags: how the C++ reproduces its own history (M8, 2026-08-02).**
+  Seventh slice, and a mechanism this port had no notion of.
+  - **The idea.** Several of the C++'s bugs were fixed years after the replays
+    that depend on them were recorded, so rather than choosing between "correct"
+    and "reproducible" it keeps both and lets a flag decide. The build declares
+    which feature *versions* it supports (`feature_flags`, boe.main.cpp:108); a
+    recording writes down the set it had; and on playback the recorded set
+    **replaces** the build's entirely (`replay_feature_flags`, :1087).
+  - **The rule that is easy to get backwards**: an unlisted flag is **off**, not
+    defaulted — and a file with no block at all runs with *every* flag off.
+    `src/game/featureFlags.ts` holds the table, `hasFeatureFlag`,
+    `setFeatureFlags` (which **throws** when a recording needs a version this
+    build cannot produce, as the C++ does) and `resetFeatureFlags`.
+  - **Why it matters here**: of the 82 corpus recordings that carry a flag
+    block, **58 ask for `empty-wandering-monster-bug: fixed`** and the other 24
+    need the bug. This port had the buggy behaviour hard-coded, so it was wrong
+    for most of the corpus — and both flags sit inside `create_wand_monst`,
+    where an extra `place_monster` moves the RNG stream as well as adding a
+    monster. That is the shape of the monster-position desyncs.
+    Also declared across the corpus: `pacifist-spellcast-check` (70 files),
+    `talk-go-back` (33), `magic-resistance` (31), `store-spell-*` (25),
+    `resurrection-balm` (19), `conveyor-belts` (2) — all still unwired, each a
+    known behaviour switch rather than a mystery.
+  - **A C++ typo, reproduced.** `create_wand_monst`'s trailing
+    `try_place_extra_monster()` is guarded by
+    `has_feature_flag("too-many-extra-wandering-monsters", "fixed")` —
+    **without the `-bug` suffix the flag is registered under**
+    (boe.monster.cpp:92 against boe.main.cpp:132). No such flag exists, so it
+    never runs: a build with the fix on places the extra monster **zero** times
+    rather than once. Kept, because it changes the monster count *and* the
+    `get_ran` call order.
+  - `<feature_flags>` is parsed onto the `Replay` separately from the action
+    list, because a flag can carry several versions (`target-lock` has two) and
+    the generic info map keeps one string per child name. It stays in `actions`
+    as well, since the C++ pops it off the same stream. The recorder writes the
+    set it was running under, so a recording made here can be replayed against
+    a later build; `writeReplay` skips the action so the block is not emitted
+    twice with its versions flattened away.
+  - **Measured effect on the corpus today: none.** The flag wiring is right but
+    the files stop for other reasons long before a wandering-monster roll comes
+    up (1 in 160 per town turn). It is pinned by unit tests instead —
+    `test/featureFlags.test.ts` (11) on the mechanism, and two in
+    `test/wandering.test.ts` on the behaviour each flag selects.

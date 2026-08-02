@@ -24,6 +24,7 @@ import { GameRng } from '../core/rng';
 import { Spell } from '../data/spell';
 import { ItemWinMode, ItemWindow } from '../game/itemWindow';
 import { takeAp } from '../game/combat';
+import { setFeatureFlags } from '../game/featureFlags';
 import { GetItemsPick } from '../game/getItems';
 import { useItem } from '../game/itemUse';
 import { GameMode, isCombat } from '../game/modes';
@@ -119,6 +120,13 @@ export async function runReplay(
   const result: ReplayResult = {
     ran: 0, unsupported: {}, error: null, errorAt: -1, answered: 0,
   };
+  // **The recording's feature flags replace this build's, wholesale**
+  // (`replay_feature_flags`, boe.main.cpp:1087). A flag the file does not
+  // mention is *off*, not defaulted — and a file with no block at all runs with
+  // every flag off, which is why the absent case clears rather than leaving
+  // the defaults alone. Installed per run, so one replay cannot leak its set
+  // into the next.
+  setFeatureFlags(replay.featureFlags ?? {});
   // **Scripting on, answered from the recording.** The host pulls from this
   // same source, which is how the C++'s modal dialogs behave: `cDialog::run`
   // pops actions off the stream the outer handler is walking, so a message

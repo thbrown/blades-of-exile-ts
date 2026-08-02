@@ -11,6 +11,7 @@
  * fight in a generated arena — see `outCombat.ts`.
  */
 
+import { hasFeatureFlag } from './featureFlags';
 import { Location, dist, loc } from '../core/location';
 import { OutWandering } from '../data/outdoors';
 import { TerObstruct } from '../data/terrain';
@@ -221,7 +222,14 @@ export function createWandMonst(session: GameSession): void {
     const r3 = univ.rng.getRan(1, 0, 3);
     // "Buggy behavior of this code, preserved so old replays will run
     // correctly, would spawn nameless monsters of type 0 with default stats."
-    if (r3 >= 2 && !session.isBlocked(p)) placeMonster(session, group[3] ?? 0, p);
+    // Which behaviour applies is a **feature flag**, not a constant: 58 of the
+    // 82 corpus recordings that carry a flag block ask for the fix, and the
+    // rest need the bug. Hard-coding either answer is wrong for most of them.
+    const empty = (group[3] ?? 0) !== 0
+      || !hasFeatureFlag('empty-wandering-monster-bug', 'fixed');
+    if (r3 >= 2 && !session.isBlocked(p) && empty) {
+      placeMonster(session, group[3] ?? 0, p);
+    }
   };
 
   for (let i = 0; i < 4; i++) {
@@ -234,7 +242,19 @@ export function createWandMonst(session: GameSession): void {
       if (!session.isBlocked(p)) placeMonster(session, which, p);
     }
     // "…would create more than 1-2 of the last monster type, contradicting
-    // the documentation." Kept, because the fix is off by default.
+    // the documentation."
+    if (!hasFeatureFlag('too-many-extra-wandering-monsters-bug', 'fixed')) {
+      tryPlaceExtra();
+    }
+  }
+  // **A C++ typo, kept.** The trailing call is guarded by
+  // `has_feature_flag("too-many-extra-wandering-monsters", "fixed")` —
+  // *without* the `-bug` suffix the flag is actually registered under
+  // (boe.monster.cpp:92 against boe.main.cpp:132). No such flag exists, so this
+  // never runs, and a build with the fix on places the extra monster **zero**
+  // times rather than once. Reproduced rather than corrected: it changes both
+  // the monster count and the RNG call order.
+  if (hasFeatureFlag('too-many-extra-wandering-monsters', 'fixed')) {
     tryPlaceExtra();
   }
 }
