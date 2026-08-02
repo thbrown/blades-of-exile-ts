@@ -302,6 +302,47 @@ describe('.exg round trip', () => {
   });
 });
 
+/**
+ * The axis trap. `encode(vector2d)` (tagfile.hpp:383) writes one line per
+ * **row** — one `y`, with the values along it indexed by `x` — while
+ * `vector2d::operator[]` hands back a *column*, so the in-memory array is
+ * `terrain[x][y]`. Writing the file the other way round transposes the town.
+ *
+ * A round trip inside this port cannot see that: it reads back exactly what it
+ * wrote, so the transpose cancels. It took a save written by the desktop build
+ * to expose it — the party lands on the right square with every wall around it
+ * in the wrong place. That is why this test asserts against the **file text**
+ * rather than against a reloaded universe.
+ */
+describe('the town grid axes, which a round trip cannot check', () => {
+  it('writes one TERRAIN line per y, with x along it', async () => {
+    const univ = (await newGame()).univ;
+    const town = univ.town!;
+    const dim = town.record.maxDim;
+    // A mark that is only right one way round: two squares that differ, chosen
+    // so their transpose is a different pair.
+    town.record.terrain[3]![7] = 41;
+    town.record.terrain[7]![3] = 42;
+    const text = openSave(saveGame(univ)).text('save/town.txt')!;
+    const lines = text.split('\f').find((page) => page.startsWith('FIELDS'))!.split('\n')
+      .filter((l) => l.startsWith('TERRAIN'))
+      .map((l) => l.slice('TERRAIN '.length).split(' ').map(Number));
+    expect(lines).toHaveLength(dim);
+    // Line 7 (y = 7) holds 41 at position 3 (x = 3), not the other way about.
+    expect(lines[7]![3]).toBe(41);
+    expect(lines[3]![7]).toBe(42);
+  });
+
+  it('reads a foreign grid back the same way', async () => {
+    const univ = (await newGame()).univ;
+    univ.town!.record.terrain[3]![7] = 41;
+    univ.town!.record.terrain[7]![3] = 42;
+    const back = roundTrip(univ);
+    expect(back.town!.record.terrain[3]![7]).toBe(41);
+    expect(back.town!.record.terrain[7]![3]).toBe(42);
+  });
+});
+
 describe('the save preview', () => {
   it('reads the scenario, the party and the PCs without a scenario loaded', async () => {
     const univ = (await newGame()).univ;

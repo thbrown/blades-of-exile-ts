@@ -21,6 +21,7 @@ const HANDLED = new Set([
   'handle_use_space', 'handle_switch_pc', 'click_control', 'handle_parry',
   'handle_toggle_active', 'handle_missile', 'handle_target_space', 'screen_shift',
   'handle_begin_look', 'handle_begin_talk', 'handle_talk', 'click_talk_rect',
+  'handle_spellcast',
   'load_prefs', 'feature_flags', 'srand', 'scenario', 'change_fps',
   // The startup preamble, which `replayStartup` reads before the session exists.
   'startup_button_click', 'fancy_file_picker', 'load_party',

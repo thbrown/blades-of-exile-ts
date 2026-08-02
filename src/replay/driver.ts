@@ -21,7 +21,15 @@
 
 import { Direction } from '../core/location';
 import { GameRng } from '../core/rng';
+import { Spell } from '../data/spell';
+import { GameMode, isCombat } from '../game/modes';
 import { GameSession } from '../game/session';
+import { SpellPick } from '../game/spellPick';
+import { combatCastSpell } from '../game/spellCombat';
+import { cancelSpellTargeting, doCombatCast, placeTarget } from '../game/spellCombatTarget';
+import { cancelTownTargeting, castTownSpell } from '../game/spellTarget';
+import { castSpell } from '../game/spellTown';
+import { Skill } from '../universe/skills';
 import { Replay, ReplaySource, locationFromAction, numberFromAction } from './format';
 import { STARTUP_ACTIONS, decodeReplayFile } from './startup';
 
@@ -77,15 +85,51 @@ export async function runReplay(
   const source = new ReplaySource(replay.actions, options.from ?? 0);
   const onUnsupported = options.onUnsupported ?? 'stop';
   const result: ReplayResult = { ran: 0, unsupported: {}, error: null, errorAt: -1 };
+  /**
+   * The spell picker, while one is open. `handle_spellcast` puts it up and the
+   * `click_control`s that follow answer it, which is what the C++'s modal
+   * `cDialog::run` does with the same recorded clicks.
+   */
+  let picking: SpellPick | null = null;
 
   while (!source.exhausted) {
     const at = source.position;
     const action = source.pop();
     try {
       switch (action.type) {
-        case 'move':
-          await session.moveTo(locationFromAction(action));
+        case 'move': {
+          const dest = locationFromAction(action);
+          // **A recorded move is always one square.**
+          // `handle_terrain_screen_actions` (boe.actions.cpp:300) builds
+          // `move_destination` from the party's own square plus a direction —
+          // one step for a key, `get_cur_direction()` for a click — and only
+          // then calls `handle_move`. So a destination further away than that
+          // does not mean the player travelled: it means **the party is not
+          // where the recording's party was**, and everything after it is
+          // measuring a different game.
+          //
+          // This is the single most useful desync detector in the format, and
+          // it is worth spending it here rather than letting the step through:
+          // `outd_move_party` and `town_move_party` both take the destination
+          // at face value, so an undetected drift silently teleports the party
+          // and the run keeps "succeeding" for hundreds more actions.
+          const from = session.mode === GameMode.COMBAT
+            ? session.univ.currentPc.combatPos : session.univ.party.getLoc();
+          const step = Math.max(Math.abs(dest.x - from.x), Math.abs(dest.y - from.y));
+          if (step > 1) {
+            throw new Error(
+              `replay desync: the recording stepped to (${dest.x},${dest.y}), `
+              + `but the party is at (${from.x},${from.y}) — ${step} squares away`);
+          }
+          // `handle_move`'s first branch (boe.actions.cpp:750): **in combat a
+          // move drives the acting PC, not the party.** The driver used to send
+          // every recorded move to `moveTo`, which is the town/outdoor path, so
+          // the moment a recording entered a fight every step was refused —
+          // "Blocked: north" over and over, with everything after it meaningless.
+          if (session.mode === GameMode.COMBAT) await session.combatMove(dest);
+          else await session.moveTo(dest);
           break;
+        }
         case 'handle_pause':
           await session.pause();
           break;
@@ -137,16 +181,45 @@ export async function runReplay(
           // `handle_spellcast`, whose spell picker is a dialog, and that is the
           // next piece of this work.
           const target = locationFromAction(action, 'destination');
-          if (session.missile === null) {
+          // Four modes reach `handle_target_space`, and which one the party is
+          // in decides what the square means. The order here is main.ts's,
+          // which is the C++'s: the modes never overlap.
+          if (session.spellTargeting !== null) {
+            // A FANCY spell collects squares and fires itself once it has the
+            // last one; `num_targets_left` is the recording's own count of how
+            // many are still to come, and it is checked rather than trusted —
+            // a mismatch means the port worked out a different number of
+            // targets from the caster's level, which is a real divergence.
+            const fancy = session.spellTargeting.targetsLeft > 0;
+            if (fancy) {
+              // `num_targets_left` is how many squares a multi-target spell
+              // still wanted when the click happened. **The C++ assigns it**
+              // from the recording, overwriting whatever the engine worked out;
+              // this port compares instead, because that number falls out of
+              // the caster's level and the spell's own table
+              // (`fancyTargetCount`), and disagreeing about it is exactly the
+              // kind of divergence these files exist to catch.
+              const left = Number(action.info.num_targets_left ?? '0');
+              const want = session.spellTargeting.targetsLeft;
+              if (left !== want) {
+                throw new Error(
+                  `replay: this spell still wants ${want} targets, the recording says ${left}`);
+              }
+              await placeTarget(session, target);
+            } else await doCombatCast(session, target);
+          } else if (session.townTarget !== null) {
+            await castTownSpell(session, target);
+          } else if (session.missile !== null) {
+            await session.fireMissileAt(target);
+          } else {
             result.unsupported[action.type] = (result.unsupported[action.type] ?? 0) + 1;
             if (onUnsupported === 'stop') {
-              result.error = 'handle_target_space with nothing armed: a spell, not a shot';
+              result.error = 'handle_target_space with nothing armed';
               result.errorAt = at;
               return result;
             }
             continue;
           }
-          await session.fireMissileAt(target);
           break;
         }
         case 'screen_shift':
@@ -164,9 +237,65 @@ export async function runReplay(
         case 'handle_begin_look':
         case 'handle_begin_talk':
           break;
-        case 'click_control':
-          options.onClick?.(action.info.id ?? '', Number(action.info.mods ?? '0'));
+        case 'handle_spellcast': {
+          // Three quite different things share this one action name.
+          //
+          // In a targeting mode it is a **cancel** — `handle_spellcast`'s
+          // MODE_TOWN_TARGET / MODE_SPELL_TARGET arms print "  Cancelled." and
+          // go back, with no dialog at all (boe.actions.cpp:412, :442).
+          if (session.townTarget !== null || session.spellTargeting !== null) {
+            session.univ.addStringToBuf('  Cancelled.');
+            if (session.townTarget !== null) cancelTownTargeting(session);
+            else cancelSpellTargeting(session);
+            break;
+          }
+          // Otherwise it opens `pick_spell`, and the choice arrives as the
+          // `click_control`s that follow. `spell_forced` is the "hit m again to
+          // recast" shortcut, which this port has no equivalent of (see the
+          // TODO(M6) on the transcript's right-hand half) — it is read so that
+          // a file using it fails honestly rather than silently casting the
+          // wrong thing.
+          if (action.info.spell_forced === 'true') {
+            result.unsupported[action.type] = (result.unsupported[action.type] ?? 0) + 1;
+            if (onUnsupported === 'stop') {
+              result.error = 'handle_spellcast with spell_forced: the recast shortcut is not ported';
+              result.errorAt = at;
+              return result;
+            }
+            continue;
+          }
+          const type = action.info.which_type === 'priest'
+            ? Skill.PRIEST_SPELLS : Skill.MAGE_SPELLS;
+          // `can_choose_caster` is false in combat: the active PC casts, full
+          // stop, and the caster buttons are inert (`pick_spell` is handed
+          // `univ.cur_pc` there and 6 out of combat).
+          picking = new SpellPick(session, type, !isCombat(session.mode));
           break;
+        }
+        case 'click_control': {
+          const id = action.info.id ?? '';
+          options.onClick?.(id, Number(action.info.mods ?? '0'));
+          // While the spell picker is up it is modal, so the clicks belong to
+          // it — the same way the C++'s `cDialog::run` takes them.
+          if (picking !== null) {
+            const decided = picking.click(id);
+            if (decided === 'cancel') picking = null;
+            else if (decided === 'cast') {
+              const { spell, caster, target } = picking.choice;
+              const inFight = !picking.canChooseCaster;
+              picking = null;
+              if (spell === Spell.NONE) {
+                // finish_pick_spell's `store_spell == 70` arm.
+                session.univ.addStringToBuf('Cast: No spell selected.');
+                break;
+              }
+              session.spellTarget = target;
+              if (inFight) await combatCastSpell(session, spell);
+              else castSpell(session, caster, spell);
+            }
+          }
+          break;
+        }
         // Recorded by the C++ but carrying no game state: preferences, the
         // window furniture, and the seed/scenario this port reads up front.
         case 'load_prefs':

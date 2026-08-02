@@ -171,17 +171,23 @@ describe('recording and replaying a real game', () => {
     // Record: walk out of the guest quarters, look around, wait a turn.
     const first = await newGame();
     first.recorder = new ReplayRecorder(SEED, scen.id);
+    // A real path out of the guest quarters, one open square at a time. It has
+    // to be legal *and* adjacent: a recorded `move` is always one step from
+    // where the party is (`handle_terrain_screen_actions` builds it from a
+    // direction), and the driver treats anything further as a desync.
     const walk = [
-      { x: 7, y: 9 }, { x: 8, y: 9 }, { x: 9, y: 9 }, { x: 10, y: 9 },
-      { x: 10, y: 10 }, { x: 10, y: 11 }, { x: 11, y: 11 },
+      { x: 8, y: 8 }, { x: 9, y: 8 }, { x: 9, y: 7 }, { x: 10, y: 7 },
+      { x: 10, y: 6 },
     ];
     for (const where of walk) await act(first, () => first.moveTo(where));
     await act(first, () => first.lookAt({ x: 11, y: 12 }));
     await act(first, () => first.pause());
-    for (const where of walk.slice(0, 3)) await act(first, () => first.moveTo(where));
+    // Back the way we came.
+    const back = [{ x: 9, y: 6 }, { x: 9, y: 7 }, { x: 8, y: 7 }];
+    for (const where of back) await act(first, () => first.moveTo(where));
 
     const replay = parseReplay(await parseXmlDoc(first.recorder.serialise(), 'replay.xml'));
-    expect(replay.actions).toHaveLength(walk.length + 2 + 3);
+    expect(replay.actions).toHaveLength(walk.length + 2 + back.length);
     expect(replay.seed).toBe(SEED);
 
     // Replay into a game that knows nothing but the seed — and is *built* on

@@ -910,16 +910,24 @@ export function writeCurTown(file: TagFile, univ: Universe, town: CurTown): void
     writeCreature(monstPage, town.monsters[i]!);
   }
   // One tag per row for each of the two grids, which is how `encode(vector2d)`
-  // lays a 2D array out.
+  // lays a 2D array out (tagfile.hpp:383).
+  //
+  // **A row is a `y`, and the values along it are `x`.** `vector2d::operator[]`
+  // hands back a *column* — so `terrain[x][y]`, which this port matches — but
+  // `encode` walks `values.row(row)[col]` with `row` over the height. Writing
+  // this the other way round transposes the town, which a round trip inside
+  // this port cannot see (it reads back what it wrote) and which a **foreign**
+  // save exposes at once: the party stands in the right square and every wall
+  // around it is in the wrong place. Found by the C++'s replays, 2026-08-02.
   const dim = town.record.maxDim;
   const fieldsPage = file.add();
-  for (let x = 0; x < dim; x++) {
+  for (let y = 0; y < dim; y++) {
     const row = fieldsPage.add('FIELDS');
-    for (let y = 0; y < dim; y++) row.push(packFields(town, x, y));
+    for (let x = 0; x < dim; x++) row.push(packFields(town, x, y));
   }
-  for (let x = 0; x < dim; x++) {
+  for (let y = 0; y < dim; y++) {
     const row = fieldsPage.add('TERRAIN');
-    for (let y = 0; y < dim; y++) row.push(town.record.terrain[x]![y]!);
+    for (let x = 0; x < dim; x++) row.push(town.record.terrain[x]![y]!);
   }
 }
 
@@ -933,13 +941,14 @@ export function readCurTown(file: TagFile, univ: Universe, town: CurTown): void 
       town.monstHostile = page.has('HOSTILE');
       takeLoc(page, 'AT', univ.party.townLoc);
     } else if (page.firstKey() === 'FIELDS' || page.firstKey() === 'TERRAIN') {
+      // Line `y`, position `x` — see the note in `writeCurTown`.
       const fields = page.list('FIELDS');
-      for (let x = 0; x < dim && x < fields.length; x++) {
-        for (let y = 0; y < dim; y++) unpackFields(town, x, y, fields[x]!.int(y, 0));
+      for (let y = 0; y < dim && y < fields.length; y++) {
+        for (let x = 0; x < dim; x++) unpackFields(town, x, y, fields[y]!.int(x, 0));
       }
       const terrain = page.list('TERRAIN');
-      for (let x = 0; x < dim && x < terrain.length; x++) {
-        for (let y = 0; y < dim; y++) town.record.terrain[x]![y] = terrain[x]!.int(y, 0);
+      for (let y = 0; y < dim && y < terrain.length; y++) {
+        for (let x = 0; x < dim; x++) town.record.terrain[x]![y] = terrain[y]!.int(x, 0);
       }
     } else if (page.firstKey() === 'ITEM') {
       const i = page.first('ITEM')!.int(0, -1);

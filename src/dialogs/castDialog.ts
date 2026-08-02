@@ -14,8 +14,9 @@
  */
 
 import { STATUS_ICONS, statIconRect, statusIconFor } from '../data/statusIcons';
-import { NUM_NORMAL_SPELLS, SPELLS, Spell, SpellSelect, spellFromNum, spellName } from '../data/spell';
-import { pcCanCastSpell, pcCanCastType, CastStatus } from '../game/spellCast';
+import { SPELLS, Spell, spellName } from '../data/spell';
+import { pcCanCastType, CastStatus } from '../game/spellCast';
+import { CastChoice, SPELL_SLOTS, SpellPick } from '../game/spellPick';
 import type { GameSession } from '../game/session';
 import { Colours } from '../render/colours';
 import { UiRect } from '../render/layout';
@@ -73,32 +74,14 @@ const W_REGULAR = 63;
 const SMALL = 23;
 
 /**
- * `spell_index` (boe.party.cpp:103) — which spell each of the 38 grid slots
- * shows on the *second* page. 90 means the slot is empty there, which is how
- * levels 5-7 (eight spells each) fit a grid built for ten.
+ * This dialog is the *screen*; the choosing itself is `SpellPick`, which the
+ * replay driver drives too — it answers the same controls from the ids the C++
+ * recorded, with no canvas anywhere.
  */
-const SPELL_INDEX = [
-  38, 39, 40, 41, 42, 43, 44, 45, 90, 90,
-  46, 47, 48, 49, 50, 51, 52, 53, 90, 90,
-  54, 55, 56, 57, 58, 59, 60, 61, 90, 90,
-  90, 90, 90, 90, 90, 90, 90, 90,
-];
-
-/** What the player settled on, read by the caller once the dialog closes. */
-export interface CastChoice {
-  spell: Spell;
-  caster: number;
-  /** The PC a `needsSelect` spell was aimed at; 6 for "nobody chosen". */
-  target: number;
-}
-
-export const NO_TARGET = 6;
+export { NO_TARGET, type CastChoice } from '../game/spellPick';
 
 export class CastDialog implements ModalScreen {
-  private page = 0;
-  private spell: Spell = Spell.NONE;
-  caster: number;
-  target: number = NO_TARGET;
+  private readonly pick: SpellPick;
 
   /**
    * @param canChooseCaster false in combat, where the active PC casts and the
@@ -111,26 +94,22 @@ export class CastDialog implements ModalScreen {
     private type: Skill,
     readonly canChooseCaster: boolean,
   ) {
-    this.caster = session.univ.curPc;
-    // pick_spell keeps the current caster if they can cast, and otherwise
-    // walks the party for the first who can.
-    if (canChooseCaster
-      && pcCanCastType(session, session.univ.party.pcs[this.caster]!, type) !== CastStatus.OK) {
-      const found = session.univ.party.pcs.findIndex(
-        (pc) => pcCanCastType(session, pc, type) === CastStatus.OK);
-      if (found >= 0) this.caster = found;
-    }
+    this.pick = new SpellPick(session, type, canChooseCaster);
   }
 
-  get choice(): CastChoice {
-    return { spell: this.spell, caster: this.caster, target: this.target };
-  }
+  get choice(): CastChoice { return this.pick.choice; }
+
+  private get caster(): number { return this.pick.caster; }
+
+  private get target(): number { return this.pick.target; }
+
+  private get spell(): Spell { return this.pick.spell; }
+
+  private get page(): number { return this.pick.page; }
 
   /** The spell in grid slot `i` on the current page, or NONE for an empty slot. */
   private spellAt(i: number): Spell {
-    const num = this.page === 0 ? i : (SPELL_INDEX[i] ?? 90);
-    if (num >= 90 || num >= NUM_NORMAL_SPELLS) return Spell.NONE;
-    return spellFromNum(this.type, num);
+    return this.pick.spellAt(i);
   }
 
   private ledRect(i: number): UiRect {
@@ -169,8 +148,7 @@ export class CastDialog implements ModalScreen {
 
   /** Whether this spell needs a party member picked before it can be cast. */
   private needsTarget(spell: Spell): boolean {
-    const select = SPELLS[spell]?.select ?? SpellSelect.NO;
-    return select !== SpellSelect.NO;
+    return this.pick.needsTarget(spell);
   }
 
   // ------------------------------------------------------------------ input
@@ -180,36 +158,22 @@ export class CastDialog implements ModalScreen {
     const inside = (r: UiRect): boolean =>
       x >= r.left && x < r.right && y >= r.top && y < r.bottom;
 
-    if (inside(btns.cancel)) return 'cancel';
-    if (inside(btns.cast)) return this.spell === Spell.NONE ? null : 'cast';
-    if (inside(btns.other)) {
-      this.page = this.page === 0 ? 1 : 0;
-      return null;
-    }
+    // Every arm is the same two lines: work out which of the C++'s controls
+    // was hit, and hand the id to `SpellPick`.
+    const hit = (id: string): string | null => {
+      const action = this.pick.click(id);
+      return action === 'stay' ? null : action;
+    };
+    if (inside(btns.cancel)) return hit('cancel');
+    if (inside(btns.cast)) return hit('cast');
+    if (inside(btns.other)) return hit('other');
     for (let i = 0; i < 6; i++) {
       const { caster, target } = this.rowRects(i);
-      if (inside(caster) && this.canChooseCaster) {
-        const pc = this.session.univ.party.pcs[i];
-        if (pc && pcCanCastType(this.session, pc, this.type) === CastStatus.OK) {
-          this.caster = i;
-          // Changing caster can invalidate the pick, as pick_spell_caster does.
-          if (this.spell !== Spell.NONE && !this.castable(this.spell)) {
-            this.spell = Spell.NONE;
-            this.target = NO_TARGET;
-          }
-        }
-        return null;
-      }
-      if (inside(target)) {
-        this.target = i;
-        return null;
-      }
+      if (inside(caster)) return hit(`caster${i + 1}`);
+      if (inside(target)) return hit(`target${i + 1}`);
     }
-    for (let i = 0; i < 38; i++) {
-      if (!inside(this.ledRect(i))) continue;
-      const spell = this.spellAt(i);
-      if (spell !== Spell.NONE && this.castable(spell)) this.spell = spell;
-      return null;
+    for (let i = 0; i < SPELL_SLOTS; i++) {
+      if (inside(this.ledRect(i))) return hit(`spell${i + 1}`);
     }
     return null;
   }
@@ -218,29 +182,25 @@ export class CastDialog implements ModalScreen {
     if (key === 'Escape') return 'cancel';
     if (key === 'Enter') return this.spell === Spell.NONE ? null : 'cast';
     if (key === ' ') {
-      this.page = this.page === 0 ? 1 : 0;
+      this.pick.flipPage();
       return null;
     }
     // 1-6 pick the caster; shift+1-6 pick the target, as the def-keys say.
     const digit = '123456'.indexOf(key);
     if (digit >= 0) {
-      if (this.canChooseCaster) {
-        const pc = this.session.univ.party.pcs[digit];
-        if (pc && pcCanCastType(this.session, pc, this.type) === CastStatus.OK) this.caster = digit;
-      }
+      this.pick.pickCaster(digit);
       return null;
     }
     const shifted = '!@#$%^'.indexOf(key);
     if (shifted >= 0) {
-      this.target = shifted;
+      this.pick.pickTarget(shifted);
       return null;
     }
     return null;
   }
 
   private castable(spell: Spell): boolean {
-    const pc = this.session.univ.party.pcs[this.caster];
-    return pc ? pcCanCastSpell(this.session, pc, spell) : false;
+    return this.pick.castable(spell);
   }
 
   // ------------------------------------------------------------------- draw

@@ -1596,13 +1596,16 @@ C++'s own replays run here now — three of them end to end, and 4,051 of the
 corpus's actions dispatch without a desync, up from none. See the entry at the
 bottom. What M8 still owes:
 
-- **`handle_spellcast`** — the first gap in **41** of the 97 files, and by a
-  long way the next thing to write. Its spell picker is a dialog, so the driver
-  has to answer `click_control` against the real dialogxml definitions, which
-  it currently only records.
+- **The desyncs the driver now detects.** Since 2026-08-02 a recorded `move`
+  further than one square is reported as a divergence rather than let through,
+  and roughly twenty files stop on one. Each is its own investigation — a
+  creature standing where ours isn't, a boat, a town entry, an encounter that
+  did or didn't fire. That list *is* M8's work queue now.
 - **Captured end states.** "Runs without desyncing" is a strong check but not
   the golden master: matching the C++'s *final* party, SDFs and position needs
   reference snapshots taken from a run of the desktop build.
+- The next unhandled actions, by files blocked: `arrow_button_click` (23),
+  `handle_get_items` (10), `field_focus` (7), `toggle_debug_mode` (7).
 - `pick_a_scen` — the other startup shape, 7 files, which starts a fresh party
   from the scenario picker.
 - **The dialogxml leftovers**: `display_pc`'s spell lists, and `cThreeChoice`,
@@ -2998,3 +3001,73 @@ The M6 list below is kept for the history of what it covered:
     them, plus the determinism check — the same file twice, compared on the RNG
     draw count as well as the party, since two runs can agree on every visible
     value while having diverged somewhere that hasn't surfaced yet.
+
+- **The spell picker in the driver, and the transposed town (M8, 2026-08-02).**
+  Second slice of M8. `handle_spellcast` was the first gap in **41** of the 97
+  C++ replays; clearing it exposed a much more interesting bug underneath.
+  - **`game/spellPick.ts`** is `pick_spell`'s state machine (boe.party.cpp:2133)
+    with no screen attached: which spell each of the 38 grid slots holds, who is
+    casting, who is aimed at, and what each of the dialog's controls does. It
+    was pulled out of `CastDialog`, which now hit-tests rectangles and hands the
+    resulting **C++ control name** — `spell23`, `caster2`, `target3`, `other`,
+    `cast` — to the same `click()` the replay driver feeds. That is the seam
+    where a recorded game meets this port, and having one implementation on both
+    sides of it is the whole point.
+    - `spell{i+1}` is grid **slot** `i`, and the spell in it is
+      `page === 0 ? i : spell_index[i]` (`put_spell_led_buttons`, :1881).
+    - *Gotcha, and a real divergence fixed*: **Cast always closes the dialog**,
+      even with nothing selected — `finish_pick_spell`'s `store_spell == 70` arm
+      prints "Cast: No spell selected." and toasts it. This port kept the dialog
+      open, which would have swallowed a recorded click.
+    - Only `caster1-6`, `target1-6`, the 38 LEDs, `other`, `help`, `cast` and
+      `cancel` have handlers; `pc1`..`pc6` (the name labels) are inert.
+  - `handle_spellcast` in a targeting mode is a **cancel**, not a dialog
+    (boe.actions.cpp:412) — that arm needs no clicks at all. And
+    `handle_target_space` is four different things depending on the mode:
+    combat spell, fancy multi-target, town spell, or a missile.
+    - *Worth knowing*: the C++ **assigns** `num_targets_left` from the
+      recording, overwriting whatever the engine worked out. This port compares
+      instead, since that number falls out of the caster's level and the
+      spell's own table and disagreeing about it is exactly the kind of thing
+      these files exist to catch.
+  - **A driver bug: `move` in combat.** `handle_move`'s first branch
+    (boe.actions.cpp:750) is `pc_combat_move` — **in combat a move drives the
+    acting PC, not the party.** The driver sent every recorded move to
+    `moveTo`, the town/outdoor path, so the moment a recording entered a fight
+    every step was refused.
+  - **The check that changed everything: a recorded move is always one square.**
+    `handle_terrain_screen_actions` (boe.actions.cpp:300) builds
+    `move_destination` from the party's own square plus a direction — one step
+    for a key, `get_cur_direction()` for a click — and only then calls
+    `handle_move`. So a destination further away does not mean the player
+    travelled: **it means the party is not where the recording's party was.**
+    The driver now throws on it, naming both squares.
+    This matters because `outd_move_party` and `town_move_party` both take the
+    destination at face value, so an undetected drift silently *teleports* the
+    party and the run keeps "succeeding" for hundreds more actions. Two of the
+    three files curated the day before were doing exactly that.
+  - **And the bug it found: the town grid was transposed in every save file.**
+    `encode(vector2d)` (tagfile.hpp:383) writes one line per **row** — one `y`,
+    with the values along it indexed by `x` — while `vector2d::operator[]` hands
+    back a *column*, so the array itself is `terrain[x][y]`. This port wrote and
+    read both `TERRAIN` and `FIELDS` the other way round.
+    - **A round trip cannot see this.** It reads back exactly what it wrote, so
+      the transpose cancels and `saveIo.test.ts`'s deep-equal passed all along.
+      It took a save written by the desktop build to expose it: the party lands
+      on the right square with every wall around it in the wrong place, and the
+      first step walks into one. Same axis trap as the `townmaps.dat` /
+      `dynamic_bitset` gotcha already in this log — missed here because the two
+      grids sit in a different function.
+    - The new test asserts against the **file text**, not against a reloaded
+      universe, which is the only way to pin it. Reverting the writer fails it.
+    - Note this changes the bytes this port writes. A save made by an older
+      build of *this* port will load with its town mirrored; a save made by the
+      desktop build now loads correctly, which is the trade worth having.
+  - Where it stands: the corpus went from 1,449 actions dispatched *with* the
+    strict check to 3,133 after the transpose fix, and three files run end to
+    end — `Shockwave.xml` joins them and exercises the spell picker for real
+    (`other` to reach the second page, `spell21`, `cast`). `ZKR_14-05` left the
+    curated set: it "completed" the day before only because its drift went
+    undetected.
+  - The remaining stops are no longer one wall but ~20 separate divergences,
+    each with a square and an action number attached. That is what M8 is now.
