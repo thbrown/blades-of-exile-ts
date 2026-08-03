@@ -260,3 +260,37 @@ export function removeCharge(pc: Player, slot: number): void {
   item.charges--;
   if (item.charges === 0 && !item.rechargeable) takeItem(pc, slot);
 }
+
+/**
+ * `cPlayer::has_class` (pc.cpp:851) — the first slot holding an item of this
+ * special class. `requireCharges` skips one that has run out.
+ */
+export function hasClass(
+  pc: Player, itemClass: number, requireCharges = false,
+): number {
+  return pc.items.findIndex((item) => item.variety !== ItemType.NO_ITEM
+    && item.specialClass === itemClass
+    && (!requireCharges || item.charges > 0));
+}
+
+/**
+ * `cParty::take_class` (party.cpp:691) — take **one** item of a class off the
+ * first living PC who has one, and say whether anything was taken.
+ *
+ * A stack or a rechargeable loses a charge instead of the whole item, which is
+ * how a node that buys "one of these" from a pile of five leaves four behind.
+ * Class 0 is "no class" and matches nothing.
+ */
+export function takeClass(party: Party, itemClass: number): boolean {
+  if (itemClass === 0) return false;
+  for (const pc of party.pcs) {
+    if (pc.mainStatus !== MainStatus.ALIVE) continue;
+    const slot = hasClass(pc, itemClass, true);
+    if (slot < 0) continue;
+    const item = pc.items[slot]!;
+    if (item.charges > 1 || item.rechargeable) item.charges--;
+    else takeItem(pc, slot);
+    return true;
+  }
+  return false;
+}

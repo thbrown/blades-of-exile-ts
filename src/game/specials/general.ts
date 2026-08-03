@@ -8,6 +8,7 @@ import { interestingString } from '../../data/item';
 import { BUFFER_STR, Universe } from '../../universe/universe';
 import { QuestStatus } from '../../data/quest';
 import { awardPartyXp } from '../damage';
+import { takeClass } from '../../universe/inventory';
 import { doRest } from '../rest';
 import { SpecCtx, SpecCtxType, SpecialCtx } from './context';
 import { SpecialsEngine, handleMessage, setSdf } from './vm';
@@ -365,8 +366,24 @@ export async function generalSpec(
       break;
     }
 
+    case SpecType.BUY_ITEMS_OF_TYPE: {
+      // Sell the party's whole stock of one item class, up to 144 of them —
+      // `take_class` handles the "a stack loses a charge" case, so the count is
+      // items *bought*, not slots emptied. Nothing to sell jumps to ex1b and
+      // stays quiet; a sale prints the node's message and pays ex2a apiece.
+      let sold = 0;
+      for (let i = 0; i < 144; i++) if (takeClass(univ.party, spec.ex1a)) sold++;
+      if (sold === 0) {
+        if (spec.ex1b >= 0) ctx.nextSpec = spec.ex1b;
+      } else {
+        checkMess = true;
+        // `give_gold` (boe.items.cpp:62) — no clamp here, unlike AFFECT_GOLD.
+        univ.party.gold += sold * spec.ex2a;
+      }
+      break;
+    }
+
     case SpecType.FORCED_GIVE:
-    case SpecType.BUY_ITEMS_OF_TYPE:
     case SpecType.SET_CAMP_FLAG:
       // TODO(M6): quests and campaign flags.
       reportUnsupported(univ, spec.type);

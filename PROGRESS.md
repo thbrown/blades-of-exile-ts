@@ -3624,8 +3624,18 @@ The M6 list below is kept for the history of what it covered:
     anyway, and **`TOWN_PLACE_MONST`** puts a named monster down. *Gotcha*: the
     latter's `ex2b` is **`forced`, not an attitude** — it lets the creature land
     on an occupied square.
-  - Still reporting themselves, and each now the only thing standing between one
-    file and the rest of its run: `TOWN_REUNITE_PARTY` (needs `end_split`, i.e.
-    party splitting), `DAMAGE` and `BUY_ITEMS_OF_TYPE`.
+  - **`DAMAGE`** and **`BUY_ITEMS_OF_TYPE`** landed with them.
+    - `DAMAGE` rolls `ex1a`d`ex1b` + `ex2a` of type `ex2b`, at the selected PC
+      or the whole party. *Gotcha*: **`ex2c` is passed negated** — the C++'s way
+      of asking for an asynchronous sound — and 0 or less means the default.
+    - `BUY_ITEMS_OF_TYPE` sells the party's whole stock of one item class, up to
+      144 of them, and `cParty::take_class` is the piece under it: it takes from
+      the first *living* PC who has one, and a stack or a rechargeable loses a
+      **charge** rather than the item, so the count is items bought and not
+      slots emptied. Nothing to sell jumps to `ex1b` and stays quiet; a sale
+      prints the node's message and pays `ex2a` apiece through `give_gold`,
+      which unlike `AFFECT_GOLD` does not clamp.
+  - Still reporting itself: `TOWN_REUNITE_PARTY`, which needs `end_split` —
+    party splitting, a feature this port does not have at all.
   - **Where it stands**: 7,738 actions dispatch. `VoDT_20-04-2025_15-08-43` went
     from 70 to 91.

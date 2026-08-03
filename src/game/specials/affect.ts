@@ -17,6 +17,10 @@ import { Player } from '../../universe/player';
 import { MainStatus, Skill, Status } from '../../universe/skills';
 import { Universe } from '../../universe/universe';
 import { poisonWeapon } from '../itemUse';
+import { DamageType } from '../../data/monster';
+import { Race } from '../../universe/skills';
+import { hitParty } from '../damage';
+import { damageTarget } from '../combat';
 import { SpecialCtx } from './context';
 import { SELECT_PC_CANCEL, SelectPcMode, runSelectPc } from '../selectPc';
 import { reportUnsupported } from './general';
@@ -74,6 +78,25 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       // Cancelling jumps to ex1b — note 8 ("nobody could be offered") does not,
       // because the test is `== 6` and not `>= 6`.
       if (who === SELECT_PC_CANCEL) ctx.nextSpec = spec.ex1b;
+      break;
+    }
+
+    case SpecType.DAMAGE: {
+      // ex1a d ex1b + ex2a, of damage type ex2b. **`ex2c` is a sound type and
+      // is passed negated** (boe.specials.cpp:2862), which is how the C++ asks
+      // for an asynchronous sound; 0 or less means the default.
+      const amount = univ.rng.getRan(spec.ex1a, 1, spec.ex1b) + spec.ex2a;
+      const damType = spec.ex2b as DamageType;
+      const sndType = spec.ex2c <= 0 ? 0 : -spec.ex2c;
+      if (ctx.curTarget === null || ctx.curTarget < 0 || ctx.curTarget >= 6) {
+        await hitParty(univ, amount, damType, sndType);
+      } else {
+        const pc = party.pcs[ctx.curTarget];
+        if (pc) {
+          await damageTarget(
+            univ, pc, amount, damType, 6, Race.UNKNOWN, true, ctx.session, sndType);
+        }
+      }
       break;
     }
 
