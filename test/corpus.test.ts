@@ -28,6 +28,12 @@
  * party's square and whatever the turn printed to the transcript — which is how
  * a "the party stopped one square short" report gets turned into "this square,
  * this refusal, silently".
+ *
+ * `MONST=1` adds the town's whole creature list to each traced line. That is
+ * the pair to `BOE_TRACE_MONST=1 tools/cppharness/run.sh <same file>`, which
+ * prints the same thing from the C++: a divergence in how the townspeople
+ * wander shows up here, on the first turn, hundreds of actions before one of
+ * them ends up standing where the party wanted to walk.
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -115,6 +121,15 @@ async function play(path: string): Promise<Row> {
         trace.push(`  ${String(at).padStart(5)} ${action.type.padEnd(20)} `
           + `${(action.text || action.info.id || '').padEnd(10)} -> (${l.x},${l.y})${who} `
           + `mode=${session.mode}  ${said.slice(0, 110)}`);
+        // The creature list, in `BOE_TRACE_MONST`'s format so the two traces
+        // diff. Only the living ones, and by `slot` rather than array index:
+        // this port's list is compacted and the C++'s is not, so the index
+        // spaces differ and the slot is what the two sides agree on.
+        if (process.env.MONST && univ.town) {
+          trace.push('      monst:' + univ.town.monsters
+            .filter((m) => m.isAlive)
+            .map((m) => ` ${m.slot}:(${m.curLoc.x},${m.curLoc.y})`).join(''));
+        }
         // `TAIL=n` keeps only the last n lines: over the whole corpus the full
         // trace is tens of thousands of strings, and the interesting part of a
         // desync is always the handful of actions that led into it.

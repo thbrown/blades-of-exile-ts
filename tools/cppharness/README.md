@@ -17,6 +17,9 @@ BOE_TRACE=1 ./tools/cppharness/run.sh <replay.xml>
 `BOE_TRACE=1` prints one line per replayed action in the same shape as
 `CORPUS=1 TRACE=1 ONLY=<file> npx vitest run test/corpus.test.ts`, plus a
 `[spec] town node N (Type) at (x,y)` line whenever a square fires its script.
+`BOE_TRACE_MONST=1` adds the town's creature list to each line, and pairs with
+`MONST=1` on the corpus test — that pairing is what found the townsperson-drift
+bucket, on the first turn of a recording that only failed 33 actions later.
 
 ## Setup
 

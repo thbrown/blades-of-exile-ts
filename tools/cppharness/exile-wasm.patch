@@ -211,7 +211,7 @@ index 56cde7c1..9abbdca0 100644
  		int total = EM_ASM_INT({ return Module.audioTotalCount || 0; });
  		if (loaded >= total && total > 0) {
 diff --git a/src/tools/replay.cpp b/src/tools/replay.cpp
-index 3946c875..3b69c43f 100644
+index 3946c875..51a2682e 100644
 --- a/src/tools/replay.cpp
 +++ b/src/tools/replay.cpp
 @@ -28,6 +28,15 @@
@@ -241,7 +241,7 @@ index 3946c875..3b69c43f 100644
  			} else if constexpr (std::is_integral_v<T>) {
  				if constexpr (std::is_same_v<S, std::string>) {
  					return static_cast<T>(std::stoi(arg));
-@@ -252,6 +263,42 @@ int next_action_line() {
+@@ -252,6 +263,53 @@ int next_action_line() {
  	return next_action->Row();
  }
  
@@ -278,13 +278,24 @@ index 3946c875..3b69c43f 100644
 +		std::cout << " pc" << univ.cur_pc << ":" << univ.party[univ.cur_pc].name
 +			<< "(" << univ.party[univ.cur_pc].ap << "ap)";
 +	std::cout << " mode=" << int(overall_mode) << std::endl;
++	// BOE_TRACE_MONST adds the town's whole creature list, which is what a
++	// divergence in `do_monsters`' random walk needs: the drift shows up as one
++	// townsperson a square off, several hundred actions before anything blocks.
++	if(getenv("BOE_TRACE_MONST") && univ.party.town_num < 200) {
++		std::cout << "      monst:";
++		for(size_t i = 0; i < univ.town.monst.size(); i++)
++			if(univ.town.monst[i].is_alive())
++				std::cout << " " << i << ":(" << univ.town.monst[i].cur_loc.x
++					<< "," << univ.town.monst[i].cur_loc.y << ")";
++		std::cout << std::endl;
++	}
 +}
 +#endif
 +
  Element& pop_next_action(std::string expected_action_type) {
  	if(next_action == nullptr){
  		throw std::string { "Replay error! No action left to pop" };
-@@ -264,6 +311,13 @@ Element& pop_next_action(std::string expected_action_type) {
+@@ -264,6 +322,13 @@ Element& pop_next_action(std::string expected_action_type) {
  
  	Element* to_return = next_action;
  	next_action = next_action->NextSiblingElement(false);

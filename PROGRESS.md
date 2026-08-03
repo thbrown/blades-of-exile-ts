@@ -3817,6 +3817,25 @@ The M6 list below is kept for the history of what it covered:
     stream rather than of a rule about squares. That is the same root as the
     `end_town_combat` bucket already logged above, reached from the other side —
     and it means fixing it pays for both.
+  - **And the harness names the first turn it happens on.** `BOE_TRACE_MONST=1`
+    on the C++ side and `MONST=1` on this one print the same creature list after
+    every action. After the **first** move of that recording:
+
+    ```
+    C++   … 5:(47,36) … 9:(22,9) … 23:(50,25) 24:(26,47)
+    here  … 5:(45,36) … 9:(22,8) … 23:(48,24) 24:(28,47)
+    ```
+
+    Sixteen of the twenty-four agree exactly, and four are **mirrored**: where
+    the C++ steps a creature east this port steps it west, and vice versa. They
+    keep it up — creature 24 walks 27→26→25→24 along row 47 there and
+    27→28→29→30 here — so these are not drunkard's walks that happen to differ,
+    they are straight walks going opposite ways, and creatures 0 and 3 walk the
+    *same* way on both sides. Whatever picks the direction is deterministic and
+    this port has it backwards for some creatures and right for others, which is
+    a much narrower question than "the RNG stream drifted". That is where the
+    next slice starts: `do_monsters`' town-mode branch, for a creature that has
+    not noticed the party.
   - *Method worth repeating*: the answer came from three numbers — where the
     recording went, where this port went, and **what the save actually said** —
     and the third is the one that was missing before the harness. Unpacking the
