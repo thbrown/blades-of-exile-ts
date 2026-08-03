@@ -10,6 +10,7 @@ import { Location } from '../../core/location';
 import { SpecType, SpecialNode } from '../../data/special';
 import type { GameSession } from '../session';
 import type { Skill } from '../../universe/skills';
+import type { PcChoice } from '../selectPc';
 import type { EncNoteType } from '../../universe/party';
 
 /** eSpecCtx (special.hpp:135) — what caused this chain to run. */
@@ -95,13 +96,24 @@ export interface SpecialHost {
   ): Promise<void>;
   /** get_text_response — a typed answer, for IF_TEXT_RESPONSE. */
   askText(prompt: string): Promise<string>;
-  /** select_pc, for the nodes that need a specific party member. */
   /**
-   * `select_pc(ONLY_LIVING, prompt, skill)`. `highlight` is the skill the
-   * dialog shows and marks the best value of — the disarm roll picks a PC by
-   * Disarm Traps, for instance.
+   * The select-PC dialog, given the rows `select_pc` has already worked out.
+   *
+   * **Only the dialog.** Which PCs may be picked is a game rule with eight
+   * modes behind it, so it lives in `game/selectPc.ts` and every caller goes
+   * through `runSelectPc` — that is also what keeps the "nobody can be offered"
+   * case from raising a dialog the recording never saw. `highlight` is the
+   * skill the rows show and mark the best value of.
+   *
+   * Answers with the PC index, or `select_pc`'s own 6 for cancel and 7 for
+   * "all".
    */
-  selectPc(prompt: string, highlight?: Skill): Promise<number>;
+  selectPc(options: PcChoice[], title: string, highlight?: Skill): Promise<number>;
+  /**
+   * `get_num_of_items` (boe.items.cpp:648) — "How many? (0-max)", for splitting
+   * a stack of arrows or potions when giving or dropping one.
+   */
+  getNumOfItems(max: number): Promise<number>;
   /** start_shop_mode, for ENTER_SHOP. */
   startShop(which: number, costAdj: number, name: string): boolean;
   /** start_talk_mode, for START_TALK. */

@@ -62,6 +62,10 @@ class TestHost implements SpecialHost {
     return this.pcAnswer;
   }
 
+  async getNumOfItems(max: number): Promise<number> {
+    return max;
+  }
+
   startShop(which: number): boolean {
     this.shops.push(which);
     return true;

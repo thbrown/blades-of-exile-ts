@@ -14,30 +14,60 @@ import { Item, ItemType, defaultItem } from '../data/item';
 import { Monster } from '../data/monster';
 import { returnTreasure } from '../data/treasure';
 import { Location } from '../core/location';
+import { FieldType } from '../data/fields';
+import { TerSpec } from '../data/terrain';
 import { Skill } from '../universe/skills';
 import { Universe } from '../universe/universe';
 
 /**
- * place_item — drop `item` on the floor at `where`, reusing the first empty
- * slot in the town's item list the way the C++ does.
- *
- * TODO(M6): the `contained` argument (dropping into a barrel or a crate) needs
- * `is_container`, which arrives with the pushable-container work.
+ * `is_container` (boe.locutils.cpp:220) — a crate or barrel standing on the
+ * square, or terrain that is a container in its own right (a bookshelf, a chest
+ * of drawers). `GameSession.isContainer` is the same test; it lives here as
+ * well because `place_item` needs it and takes no session.
  */
-export function placeItem(univ: Universe, item: Item, where: Location): boolean {
+export function isContainerAt(univ: Universe, where: Location): boolean {
+  const town = univ.town;
+  if (!town || where.x < 0 || where.y < 0) return false;
+  if (town.hasField(where.x, where.y, FieldType.OBJECT_CRATE)) return true;
+  if (town.hasField(where.x, where.y, FieldType.OBJECT_BARREL)) return true;
+  if (!town.isOnMap(where.x, where.y)) return false;
+  const ter = town.record.terrain[where.x]![where.y]!;
+  return univ.terrainType(ter).special === TerSpec.IS_A_CONTAINER;
+}
+
+/**
+ * place_item — put `item` down at `where`, reusing the first empty slot in the
+ * town's item list the way the C++ does.
+ *
+ * **The return value is `contained`, not "did it work".** It answers "did this
+ * go *into* something?" — a dresser, a crate, a barrel — which is what
+ * `drop_item` reads to decide between "Drop: Item put away" and "Drop: OK", and
+ * why a dropped item's `DROP_CALL_SPECIAL` doesn't fire when it was merely put
+ * away. `contained` is also what hides the item from the floor until the
+ * container is searched.
+ */
+export function placeItem(
+  univ: Universe, item: Item, where: Location, contained = false,
+): boolean {
   const town = univ.town;
   if (!town) return false;
-  const placed: Item = { ...item, itemLoc: { ...where }, contained: false, held: false };
+  const inside = contained && isContainerAt(univ, where);
+  // `held` marks an item riding *inside a pushable* container, which moves with
+  // it; terrain containers don't move, so they don't set it.
+  const held = inside
+    && (town.hasField(where.x, where.y, FieldType.OBJECT_CRATE)
+      || town.hasField(where.x, where.y, FieldType.OBJECT_BARREL));
+  const placed: Item = { ...item, itemLoc: { ...where }, contained: inside, held };
   for (let i = 0; i < town.items.length; i++) {
     if (town.items[i]!.variety === ItemType.NO_ITEM) {
       town.items[i] = placed;
       resetItemMax(univ);
-      return true;
+      return inside;
     }
   }
   town.items.push(placed);
   resetItemMax(univ);
-  return true;
+  return inside;
 }
 
 /** reset_item_max — trim empty slots off the end of the list. */

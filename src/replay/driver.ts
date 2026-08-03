@@ -28,6 +28,7 @@ import { setFeatureFlags } from '../game/featureFlags';
 import { GetItemsPick } from '../game/getItems';
 import { useItem } from '../game/itemUse';
 import { GameMode, isCombat } from '../game/modes';
+import { dropItemAt, handleDropItem, handleGiveItem } from '../game/giveDrop';
 import { GameSession } from '../game/session';
 import { SpellPick } from '../game/spellPick';
 import { combatCastSpell } from '../game/spellCombat';
@@ -41,6 +42,18 @@ import {
 } from './format';
 import { makeReplayHost } from './host';
 import { STARTUP_ACTIONS, decodeReplayFile } from './startup';
+
+/**
+ * `easter_egg_messages` (boe.actions.cpp:2588). Recorded, its comment says,
+ * "because it allows forcing the text buffer into a specific state which I'm
+ * debugging" — which is exactly what makes it worth having here.
+ */
+const EASTER_EGG_MESSAGES = [
+  'If Valorim ...',
+  'You want to save ...',
+  'Back up your save files ...',
+  'Burma Shave.',
+];
 
 export interface ReplayResult {
   /** How many actions were dispatched to a handler. */
@@ -247,7 +260,7 @@ export async function runReplay(
           // boe.newgraph.cpp:951), and the caller then runs `handle_talk_node`.
           // Ask About is `node` -1 here as it is there, and its topic arrives
           // as the `field_input` that follows.
-          session.chooseTalkNode(Number(action.info.node ?? '-1'));
+          await session.chooseTalkNode(Number(action.info.node ?? '-1'));
           break;
         case 'handle_use_space':
           await session.useSpace(locationFromAction(action));
@@ -472,8 +485,64 @@ export async function runReplay(
             session.univ.addStringToBuf("Use item: Finish what you're doing first.");
             break;
           }
-          await useItem(session, win.pcPage, numberFromAction(action));
+          // **With the host**, which it used to run without: an item that asks
+          // who to heal, or puts a book's text up, blocks in the C++ and the
+          // recording answers it. Passing nothing meant those branches did
+          // nothing at all and the run carried on with a different game.
+          await useItem(session, win.pcPage, numberFromAction(action), session.host ?? undefined);
           takeAp(session.univ, 3);
+          break;
+        case 'handle_give_item':
+          // `give_thing` puts select-pc.xml up, which the host answers from
+          // this same stream.
+          await handleGiveItem(session, win.pcPage, numberFromAction(action), session.host);
+          break;
+        case 'handle_drop_item_id':
+          // Only *arms* the drop in town or combat — `handle_drop_item_location`
+          // below is where it lands. Outdoors there is no square to pick and it
+          // happens here, behind the confirmation.
+          await handleDropItem(session, win.pcPage, numberFromAction(action), session.host);
+          break;
+        case 'handle_drop_item_location':
+          await dropItemAt(session, locationFromAction(action), session.host);
+          break;
+        case 'handle_use_space_select':
+          // The **U** button: a mode toggle that only decides how the next
+          // click on the terrain view is read (boe.actions.cpp:929). The click
+          // itself arrives as `handle_use_space`, which does the work — so this
+          // is two transcript lines and a mode.
+          if (session.mode === GameMode.TOWN) {
+            session.univ.addStringToBuf('Use: Select a space or item.');
+            session.univ.addStringToBuf('  (Hit button again to cancel.)');
+            session.mode = GameMode.USE_TOWN;
+          } else if (session.mode === GameMode.USE_TOWN) {
+            session.mode = GameMode.TOWN;
+            session.univ.addStringToBuf('  Cancelled.');
+          }
+          break;
+        case 'cancel_item_target':
+          // Leaving a shop's identify or recharge queue (boe.actions.cpp:2576).
+          // The C++ prints which one it was from `stat_screen_mode`; this port
+          // keeps that on `session.itemShop`.
+          session.endItemShop();
+          break;
+        case 'toggle_debug_mode':
+          // `univ.debug_mode` gates the debug keys. Nothing else reads it, but
+          // it is party state and a recording can turn it on mid-run.
+          session.univ.debugMode = !session.univ.debugMode;
+          session.univ.addStringToBuf(
+            session.univ.debugMode ? 'Debug mode ON.' : 'Debug mode OFF.');
+          break;
+        case 'easter_egg':
+          // Recorded, the C++'s comment says, "because it allows forcing the
+          // text buffer into a specific state which I'm debugging."
+          session.univ.addStringToBuf(
+            EASTER_EGG_MESSAGES[numberFromAction(action)] ?? '');
+          break;
+        case 'field_focus':
+          // A text field taking focus (field.cpp:59). It decides which field
+          // the `field_input` after it belongs to; every dialog this driver
+          // answers has one field, so there is nothing to choose between.
           break;
         case 'scrollbar_setPosition': {
           // `cScrollbar::setPosition` (scrollbar.cpp:52). The C++ looks the bar

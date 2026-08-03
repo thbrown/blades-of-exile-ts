@@ -57,6 +57,7 @@ import { ShopItemType } from '../data/shop';
 import { ShopState, handleSale } from './shop';
 import { SpellStore, emptySpellStore } from './spellRepeat';
 import { ItemShopMode, ItemShopState, handleItemShopAction } from './itemShop';
+import { isContainerAt } from './loot';
 import { doRest, handleRest } from './rest';
 import { makeTownHostile } from './townAttitude';
 import { OUT_HALF_DIM, OUT_MAX_DIM } from '../universe/curOut';
@@ -119,13 +120,6 @@ export function pointOnScreen(center: Location, check: Location): boolean {
   return Math.abs(center.x - check.x) <= 4 && Math.abs(center.y - check.y) <= 4;
 }
 
-/** One row of a select_pc prompt. */
-export interface PcChoice {
-  index: number;
-  label: string;
-  canPick: boolean;
-}
-
 export class GameSession {
   mode: GameMode = GameMode.OUTDOORS;
   /** The tile the view is centered on; equals the party position in town. */
@@ -149,6 +143,12 @@ export class GameSession {
    * nothing at all.
    */
   spellTarget = 6;
+
+  /**
+   * `store_drop_item` (boe.actions.cpp:93) — the pack slot armed for dropping
+   * while the game waits for the square to drop it on. -1 is nothing armed.
+   */
+  dropSlot = -1;
 
   /**
    * `store_mage`/`store_priest` and their caster and target — what the **M**
@@ -1297,19 +1297,9 @@ export class GameSession {
     return ter;
   }
 
-  /**
-   * `is_container` (boe.locutils.cpp:220) — a crate or barrel sitting on the
-   * square, or terrain that is a container in its own right (a bookshelf, a
-   * chest of drawers).
-   */
+  /** `is_container` (boe.locutils.cpp:220); the port lives in `game/loot.ts`. */
   isContainer(where: Location): boolean {
-    const town = this.univ.town;
-    if (!town || where.x < 0 || where.y < 0) return false;
-    if (town.hasField(where.x, where.y, FieldType.OBJECT_CRATE)) return true;
-    if (town.hasField(where.x, where.y, FieldType.OBJECT_BARREL)) return true;
-    if (!town.isOnMap(where.x, where.y)) return false;
-    const ter = town.record.terrain[where.x]![where.y]!;
-    return this.univ.terrainType(ter).special === TerSpec.IS_A_CONTAINER;
+    return isContainerAt(this.univ, where);
   }
 
   /**
@@ -1483,43 +1473,11 @@ export class GameSession {
     return result.message;
   }
 
-  /** Drop a carried item onto the party's space. */
-  dropItem(pcNum: number, slot: number): boolean {
-    const town = this.univ.town;
-    const pc = this.univ.party.pcs[pcNum];
-    if (!town || !pc) return false;
-    const item = takeItemFrom(pc, slot);
-    if (!item) {
-      this.univ.addStringToBuf('  Item is cursed.');
-      return false;
-    }
-    town.items.push({ ...item, itemLoc: { ...this.univ.party.townLoc }, isSpecial: 0 });
-    this.univ.addStringToBuf(`  ${pc.name} drops ${item.ident ? item.fullName : item.name}.`);
-    return true;
-  }
-
-  /** Hand a carried item to another party member. */
-  giveItemTo(fromPc: number, slot: number, toPc: number): boolean {
-    const from = this.univ.party.pcs[fromPc];
-    const to = this.univ.party.pcs[toPc];
-    if (!from || !to) return false;
-    const item = from.items[slot];
-    if (!item || item.variety === ItemType.NO_ITEM) return false;
-    // Check it will fit before taking it away, so a refusal loses nothing.
-    const check = giveItem(to, this.univ.party, item);
-    if (check.status !== GiveStatus.OK) {
-      this.univ.addStringToBuf(`  ${check.message}`);
-      return false;
-    }
-    if (!takeItemFrom(from, slot)) {
-      // The receiver already has a copy, so undo it.
-      if (check.slot >= 0) to.items[check.slot] = defaultItem();
-      this.univ.addStringToBuf('  Item is cursed.');
-      return false;
-    }
-    this.univ.addStringToBuf(check.message);
-    return true;
-  }
+  // Giving and dropping live in `game/giveDrop.ts` — they are `give_thing` and
+  // `drop_item`, and the two-part shape of a drop (arm the item, then click the
+  // square) is a mode change rather than a method on the session. What used to
+  // be here were inventions: a drop that always landed on the party's own
+  // square and a give that offered anyone alive.
 
   /** Toggle whether a carried item is equipped. */
   toggleEquip(pcNum: number, slot: number): void {
@@ -1540,7 +1498,18 @@ export class GameSession {
    */
   specials: SpecialsEngine | null = null;
 
+  /**
+   * The same host, reachable by the item actions.
+   *
+   * The C++ has no seam here at all — a dialog is a dialog, and `give_thing`
+   * puts one up exactly as a special node does. Keeping the host only inside
+   * the specials engine meant the driver ran `use_item` with no dialogs
+   * attached, so an item that asks who to heal silently healed nobody.
+   */
+  host: SpecialHost | null = null;
+
   attachSpecials(host: SpecialHost): void {
+    this.host = host;
     this.specials = new SpecialsEngine(this.univ, host, this);
   }
 
@@ -2172,46 +2141,8 @@ export class GameSession {
     return true;
   }
 
-  /**
-   * select_pc's candidate list (boe.items.cpp:878). `mode` mirrors the eSelectPC
-   * values this port needs so far; `highlight` names a skill to show beside each
-   * PC, the way the original does for "who will bash?".
-   */
-  selectPcOptions(mode: 'living' | 'lockpick' | 'train', highlight?: Skill): PcChoice[] {
-    return this.univ.party.pcs.map((pc, index) => {
-      let canPick = pc.isAlive;
-      let extra = '';
-      if (mode === 'lockpick' && canPick) {
-        const equipped = hasAbilEquip(pc, ItemAbil.LOCKPICKS);
-        const carried = pc.items.some(
-          (item) => item.variety !== ItemType.NO_ITEM && item.ability === ItemAbil.LOCKPICKS,
-        );
-        if (!carried) {
-          canPick = false;
-          extra = 'no picks';
-        } else if (!equipped) {
-          canPick = false;
-          extra = 'picks not equipped';
-        } else {
-          const picks = equipped.item;
-          extra = `${picks.ident ? picks.fullName : picks.name} x${picks.charges}`;
-        }
-      }
-      if (mode === 'train' && canPick) {
-        // ONLY_CAN_TRAIN (boe.items.cpp:941): no skill points, no training.
-        if (pc.skillPts > 0) {
-          extra = `${pc.skillPts} skill point${pc.skillPts > 1 ? 's' : ''}`;
-        } else {
-          canPick = false;
-          extra = 'no skill points';
-        }
-      }
-      let label = pc.name;
-      if (highlight !== undefined) label += ` (${pc.skills[highlight] ?? 0})`;
-      if (extra) label += `: ${extra}`;
-      return { index, label, canPick };
-    });
-  }
+  // `select_pc`'s candidate list lives in `game/selectPc.ts`, with all eight
+  // eSelectPC modes; the three-mode version that used to be here is gone.
 
   /** Try to pick a locked door's lock with a given PC. */
   /** `is_unlockable` (boe.town.cpp:1147) — a lock is something to pick or bash. */
@@ -2465,8 +2396,19 @@ export class GameSession {
   }
 
   /** Route a conversation choice; closes the conversation when it's done. */
-  chooseTalkNode(node: number): void {
+  async chooseTalkNode(node: number): Promise<void> {
     if (!this.talk) return;
+    // **"Ask About..." blocks inside `handle_talk_node`** (boe.dlgutil.cpp:919):
+    // its TALK_ASK arm calls `get_text_response` and then dispatches on what was
+    // typed. This port used to split the two, with the prompt living in
+    // `main.ts` — which meant a replay had no way to answer it, and the live UI
+    // had a rule the driver didn't (it skipped an empty answer, where the C++
+    // asks the speech list about "" and gets the dunno line).
+    if (node === TalkAction.ASK) {
+      const asked = await this.host?.askText('Ask about what?') ?? '';
+      if (this.talk.askAbout(asked) === 'done') this.endTalkMode();
+      return;
+    }
     const before = this.talk.str1;
     if (this.talk.handleNode(node) === 'done') {
       this.endTalkMode();

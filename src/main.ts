@@ -5,6 +5,10 @@
 
 import { animAt, animSchedule, combatPace, setCombatPace } from './game/anim';
 import { useItem } from './game/itemUse';
+import { dropItemAt, handleDropItem, handleGiveItem } from './game/giveDrop';
+import {
+  PcChoice, SELECT_PC_CANCEL, SelectPcMode, SelectPcOpts, runSelectPc,
+} from './game/selectPc';
 import type { SpecialHost } from './game/specials/context';
 import { SpecCtx, SpecCtxType } from './game/specials/context';
 import { Location, dist, locsEqual, shiftLoc } from './core/location';
@@ -290,16 +294,15 @@ async function main(): Promise<void> {
     Promise.resolve(window.prompt(prompt) ?? '');
 
   /**
-   * select_pc (boe.items.cpp:878): ask which party member acts. Returns the PC
-   * index, or -1 if cancelled. PCs who can't act are listed with the reason and
-   * aren't selectable.
+   * The select-PC dialog. Which PCs may be picked is worked out by
+   * `game/selectPc.ts`; this only draws the rows and hands back what was
+   * clicked, using `select_pc`'s own return codes — 6 for cancel.
    */
-  const selectPc = async (
-    mode: 'living' | 'lockpick' | 'train',
+  const askSelectPc = async (
+    options: PcChoice[],
     prompt: string,
     highlight?: Skill,
   ): Promise<number> => {
-    const options = session.selectPcOptions(mode, highlight);
     // select-pc.xml marks the best value in the highlighted skill in green.
     const best = Math.max(
       ...options.map((o, i) =>
@@ -328,7 +331,24 @@ async function main(): Promise<void> {
       buttons: [{ name: 'cancel', label: 'Cancel' }],
     });
     const index = Number(picked);
-    return Number.isInteger(index) && options[index]?.canPick ? index : -1;
+    return Number.isInteger(index) && options[index]?.canPick
+      ? index : SELECT_PC_CANCEL;
+  };
+
+  /** The whole of `select_pc`, dialog and rules, for the callers below. */
+  const selectPc = (
+    mode: SelectPcMode, prompt: string, opts: SelectPcOpts = {},
+  ): Promise<number> => runSelectPc(univ, mode, prompt, askSelectPc, opts);
+
+  /**
+   * `get_num_of_items` (boe.items.cpp:648) — how many out of a stack.
+   * TODO(M8): a real number field once dialogxml has one; the browser's prompt
+   * stands in, as it does for `askForText`.
+   */
+  const getNumOfItems = async (max: number): Promise<number> => {
+    const answer = window.prompt(`How many? (0-${max})`, String(max));
+    const n = Number(answer ?? '');
+    return Number.isFinite(n) ? Math.max(0, Math.min(max, Math.trunc(n))) : 0;
   };
 
   /** attack-friendly.xml — swinging at someone who hasn't done anything yet. */
@@ -436,11 +456,13 @@ async function main(): Promise<void> {
         ],
       });
       if (choice === 'bash') {
-        const who = await selectPc('living', 'Who will bash?', Skill.STRENGTH);
-        if (who >= 0) session.bashDoor(where, who);
+        const who = await selectPc(SelectPcMode.ONLY_LIVING, 'Who will bash?',
+          { highlight: Skill.STRENGTH });
+        if (who < 6) session.bashDoor(where, who);
       } else if (choice === 'pick') {
-        const who = await selectPc('lockpick', 'Who will pick the lock?', Skill.LOCKPICKING);
-        if (who >= 0) session.pickLock(where, who);
+        const who = await selectPc(SelectPcMode.ONLY_CAN_LOCKPICK,
+          'Who will pick the lock?', { highlight: Skill.LOCKPICKING });
+        if (who < 6) session.pickLock(where, who);
       }
       redraw();
     })();
@@ -499,7 +521,8 @@ async function main(): Promise<void> {
         () => storyDialog(ctx, store, univ, title, first, last, strType, pic, picType));
     },
     askText: (prompt) => askForText(prompt),
-    selectPc: (prompt, highlight) => selectPc('living', prompt, highlight),
+    selectPc: askSelectPc,
+    getNumOfItems,
     startShop: (which, costAdj, shopName) =>
       session.startShopMode(which, costAdj, shopName)
       || session.startShopModeAnyPc(which, costAdj, shopName),
@@ -536,8 +559,8 @@ async function main(): Promise<void> {
   session.onTrain = () => {
     if (dialogs.active) return;
     void (async () => {
-      const who = await selectPc('train', 'Train who?');
-      if (who < 0) {
+      const who = await selectPc(SelectPcMode.ONLY_CAN_TRAIN, 'Train who?');
+      if (who >= 6) {
         redraw();
         return;
       }
@@ -653,8 +676,9 @@ async function main(): Promise<void> {
       redraw();
       return;
     }
-    const who = await selectPc('living', 'Who will make a potion?', Skill.ALCHEMY);
-    if (who < 0) {
+    const who = await selectPc(SelectPcMode.ONLY_LIVING, 'Who will make a potion?',
+      { highlight: Skill.ALCHEMY });
+    if (who >= 6) {
       redraw();
       return;
     }
@@ -1076,11 +1100,11 @@ async function main(): Promise<void> {
     } else if (part === 'name') {
       session.toggleEquip(screen.itemPage, row);
     } else if (part === 'drop') {
-      if (session.inTown) session.dropItem(screen.itemPage, row);
-      else univ.addStringToBuf('  Not while outdoors.');
+      // `handle_drop_item` only *arms* the drop in town or combat — the square
+      // arrives as the next click on the terrain view.
+      await handleDropItem(session, screen.itemPage, row, specialHost);
     } else if (part === 'give') {
-      const who = await selectPc('living', 'Give the item to whom?');
-      if (who >= 0 && who !== screen.itemPage) session.giveItemTo(screen.itemPage, row, who);
+      await handleGiveItem(session, screen.itemPage, row, specialHost);
     } else {
       // `display_pc_item` — the real item-info.xml sheet, with the arrows
       // stepping through the rest of this PC's pack.
@@ -1189,12 +1213,7 @@ async function main(): Promise<void> {
   const activateTalkWord = async (node: number): Promise<void> => {
     const talk = session.talk;
     if (!talk) return;
-    if (node === TalkAction.ASK) {
-      const asked = await askForText('Ask about what?');
-      if (asked.trim().length > 0 && talk.askAbout(asked) === 'done') session.endTalkMode();
-    } else {
-      session.chooseTalkNode(node);
-    }
+    await session.chooseTalkNode(node);
     setStatus();
     redraw();
   };
@@ -1327,8 +1346,16 @@ async function main(): Promise<void> {
    * the targeting crosshair, and the modes whose clicks must be taken as given
    * instead of reduced to one step toward the target.
    */
+  /**
+   * Modes in which a click on the terrain view means *that square* rather than
+   * "step one square toward it". The C++ has no such predicate — its
+   * `handle_terrain_screen_actions` tests each mode in turn and only reaches
+   * the move branch last (boe.actions.cpp:300) — so this is the list of
+   * branches that get there first. Dropping is one of them.
+   */
   const isAiming = (): boolean => session.missile !== null
-    || session.spellTargeting !== null || session.townTarget !== null;
+    || session.spellTargeting !== null || session.townTarget !== null
+    || session.mode === GameMode.DROP_TOWN || session.mode === GameMode.DROP_COMBAT;
 
   /**
    * Put the view back where the game keeps it — on the acting PC in combat, on
@@ -1350,6 +1377,14 @@ async function main(): Promise<void> {
   const actOn = async (target: { x: number; y: number }): Promise<void> => {
     const what = pending;
     pending = null;
+    // Dropping is armed by the item panel and lands here
+    // (`handle_terrain_screen_actions`' MODE_DROP_* branch, boe.actions.cpp:352).
+    if (session.mode === GameMode.DROP_TOWN || session.mode === GameMode.DROP_COMBAT) {
+      await dropItemAt(session, target, specialHost);
+      setStatus();
+      redraw();
+      return;
+    }
     if (what === 'talk') {
       void session.talkTo(target).then(() => { setStatus(); redraw(); });
       return;
@@ -1379,9 +1414,11 @@ async function main(): Promise<void> {
       }
       void (async () => {
         const who = isBash
-          ? await selectPc('living', 'Who will bash?', Skill.STRENGTH)
-          : await selectPc('lockpick', 'Who will pick the lock?', Skill.LOCKPICKING);
-        if (who >= 0) {
+          ? await selectPc(SelectPcMode.ONLY_LIVING, 'Who will bash?',
+            { highlight: Skill.STRENGTH })
+          : await selectPc(SelectPcMode.ONLY_CAN_LOCKPICK, 'Who will pick the lock?',
+            { highlight: Skill.LOCKPICKING });
+        if (who < 6) {
           if (isBash) session.bashDoor(target, who);
           else session.pickLock(target, who);
         }

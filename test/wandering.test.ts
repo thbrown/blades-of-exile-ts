@@ -334,6 +334,7 @@ function attachStubHost(s: GameSession): void {
     story: async () => {},
     askText: async () => '',
     selectPc: async () => 0,
+    getNumOfItems: async (max: number) => max,
     startShop: () => false,
     startTalk: () => {},
     sound: () => {},

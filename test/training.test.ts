@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { SelectPcMode, selectPcOptions } from '../src/game/selectPc';
 import { GameRng } from '../src/core/rng';
 import { Scenario } from '../src/data/scenario';
 import { TalkNodeType } from '../src/data/talking';
@@ -126,7 +127,7 @@ describe('training', () => {
     const { univ, session } = newGame();
     univ.party.pcs.forEach((pc) => { pc.skillPts = 0; });
     univ.party.pcs[2]!.skillPts = 5;
-    const options = session.selectPcOptions('train');
+    const options = selectPcOptions(univ, SelectPcMode.ONLY_CAN_TRAIN);
     expect(options.filter((o) => o.canPick).map((o) => o.index)).toEqual([2]);
     expect(options[2]!.label).toContain('5 skill points');
     expect(options[0]!.label).toContain('no skill points');

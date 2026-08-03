@@ -18,6 +18,7 @@ import { MainStatus, Skill, Status } from '../../universe/skills';
 import { Universe } from '../../universe/universe';
 import { poisonWeapon } from '../itemUse';
 import { SpecialCtx } from './context';
+import { SELECT_PC_CANCEL, SelectPcMode, runSelectPc } from '../selectPc';
 import { reportUnsupported } from './general';
 import { handleMessage } from './vm';
 
@@ -45,12 +46,34 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
   switch (spec.type) {
     case SpecType.SELECT_TARGET: {
       checkMess = false;
-      // ex1a: 0 any PC, 1 a living one, 2 the whole party, 3 a dead one.
+      // ex1a picks the mode (boe.specials.cpp:2742): 0 any PC, 1 a living one,
+      // 2 the whole party, 3 a dead one, 4 one with room in their pack. The
+      // party arm asks nothing, and **`i` stays 0 there** — which is why it
+      // doesn't take the cancel branch below.
+      let who = 0;
       if (spec.ex1a === 2) ctx.curTarget = null;
       else {
-        const who = await ctx.host.selectPc('Who?');
-        ctx.curTarget = who >= 0 && who < 6 ? who : null;
+        const modes: Record<number, SelectPcMode> = {
+          0: SelectPcMode.ANY,
+          1: SelectPcMode.ONLY_LIVING,
+          3: SelectPcMode.ONLY_DEAD,
+          4: SelectPcMode.ONLY_LIVING_WITH_ITEM_SLOT,
+        };
+        const mode = modes[spec.ex1a];
+        // An ex1a the C++ has no arm for asks nobody and leaves the target as
+        // it was, `i` still 0.
+        if (mode !== undefined) {
+          who = await runSelectPc(ctx.session.univ, mode, '',
+            (options, title, highlight) => ctx.host.selectPc(options, title, highlight));
+          // *Divergence, and deliberate*: the C++ tests `i != 6` and then
+          // indexes `univ.party[i]`, so an 8 — nobody could be offered — reads
+          // one past the end of the party. This treats it as "no one chosen".
+          if (who !== SELECT_PC_CANCEL) ctx.curTarget = who < 6 ? who : null;
+        }
       }
+      // Cancelling jumps to ex1b — note 8 ("nobody could be offered") does not,
+      // because the test is `== 6` and not `>= 6`.
+      if (who === SELECT_PC_CANCEL) ctx.nextSpec = spec.ex1b;
       break;
     }
 

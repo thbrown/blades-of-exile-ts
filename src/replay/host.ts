@@ -35,6 +35,7 @@ import { GameSession } from '../game/session';
 import { doRest } from '../game/rest';
 import { Skill } from '../universe/skills';
 import { ReplaySource } from './format';
+import { PcChoice, SELECT_PC_ALL, SELECT_PC_CANCEL } from '../game/selectPc';
 
 /**
  * Take the next action, insisting it is the click that answers a dialog.
@@ -58,6 +59,14 @@ function popClick(source: ReplaySource, what: string, onAnswered?: () => void): 
   return action.info.id ?? '';
 }
 
+/**
+ * `eSpecKey` (keycodes.hpp:38), the three values the corpus actually types with.
+ * The enum is dense and unnumbered, so these are its positions.
+ */
+const KEY_LEFT = 0;
+const KEY_RIGHT = 1;
+const KEY_BSP = 8;
+
 export interface ReplayHostOptions {
   /** Raised when the scenario ends, so the caller can stop rather than run on. */
   onEndScenario?: () => void;
@@ -68,6 +77,60 @@ export interface ReplayHostOptions {
    * was the click that dismissed a message.
    */
   onAnswered?: () => void;
+}
+
+/**
+ * Replay the keystrokes typed into a dialog's text field, and hand back what it
+ * ends up holding.
+ *
+ * **A recording types one key at a time.** `record_field_input` (replay.cpp:215)
+ * writes a `field_input` per keypress — `c` for a character, or `spec` with `k`
+ * for an arrow or a backspace — so a typed answer cannot be read out of one
+ * action; it has to be *entered*, insertion point and all. `field_focus` picks
+ * which field the keys belong to; every dialog answered here has exactly one,
+ * so it only moves the caret to the end, as `cTextField::callHandler` does.
+ *
+ * Only the three special keys the corpus actually types with are modelled.
+ * Anything else — including `field_selection`, which is how a player replaces a
+ * field's default text — is refused by name rather than guessed at.
+ */
+function typeInto(
+  source: ReplaySource, what: string, initial: string, onAnswered?: () => void,
+): string {
+  let text = initial;
+  let caret = text.length;
+  while (source.hasNext('field_focus') || source.hasNext('field_input')) {
+    const action = source.pop();
+    onAnswered?.();
+    if (action.type === 'field_focus') {
+      caret = text.length;
+      continue;
+    }
+    if (action.info.spec === 'true') {
+      switch (Number(action.info.k ?? '-1')) {
+        case KEY_LEFT: caret = Math.max(0, caret - 1); break;
+        case KEY_RIGHT: caret = Math.min(text.length, caret + 1); break;
+        case KEY_BSP:
+          if (caret > 0) {
+            text = text.slice(0, caret - 1) + text.slice(caret);
+            caret--;
+          }
+          break;
+        default:
+          throw new Error(`replay: ${what} was typed with special key `
+            + `${action.info.k}, which this port does not model`);
+      }
+      continue;
+    }
+    const ch = action.info.c ?? '';
+    text = text.slice(0, caret) + ch + text.slice(caret);
+    caret += ch.length;
+  }
+  if (source.hasNext('field_selection')) {
+    throw new Error(`replay: ${what} had its text selected, which this port `
+      + 'does not model (a selection replaces what is typed over it)');
+  }
+  return text;
 }
 
 /**
@@ -108,23 +171,70 @@ export function makeReplayHost(
       return picked;
     },
 
+    /**
+     * select-pc.xml, answered by which button was clicked. Its filter
+     * (boe.items.cpp:867) reads the **last character** of the control's name
+     * and subtracts '1', so `pick3` is PC 2; `pick-all` is 7 and `cancel` is 6.
+     *
+     * Note the dialog is only up at all because `runSelectPc` found someone to
+     * offer — with nobody pickable the C++ returns 8 without showing anything,
+     * and asking here would eat the recording's next real action.
+     */
+    selectPc: async (
+      _rows: PcChoice[], title: string, _highlight?: Skill,
+    ): Promise<number> => {
+      const id = popClick(
+        source, `the select-PC dialog "${title || '(untitled)'}"`, options.onAnswered);
+      if (id === 'cancel') return SELECT_PC_CANCEL;
+      if (id === 'pick-all') return SELECT_PC_ALL;
+      const which = id.charCodeAt(id.length - 1) - '1'.charCodeAt(0);
+      if (which < 0 || which > 5) {
+        throw new Error(`replay: the select-PC dialog "${title}" was answered '${id}', `
+          + 'which names no party member');
+      }
+      return which;
+    },
+
+    /**
+     * get-num.xml — "How many? (0-max)".
+     *
+     * The field arrives **pre-filled with the maximum** (`setTextToNum(max)`,
+     * boe.items.cpp:656), so a player who wants the lot just clicks OK and the
+     * recording carries no keystrokes at all. Typing goes through the same
+     * field model as the text prompt below.
+     */
+    getNumOfItems: async (max: number): Promise<number> => {
+      const what = `the "how many?" prompt (0-${max})`;
+      const typed = typeInto(source, what, String(max), options.onAnswered);
+      const id = popClick(source, what, options.onAnswered);
+      // `cancel` leaves the dialog's result unset, which `getResult<int>` reads
+      // back as 0 — so cancelling a split gives up the whole action.
+      if (id === 'cancel') return 0;
+      const want = Number(typed);
+      return Number.isFinite(want) ? Math.max(0, Math.min(max, Math.trunc(want))) : 0;
+    },
+
     // The rest raise dialogs this port cannot yet answer from the stream, and
     // each says so by name. Throwing beats guessing: `story` pages back and
-    // forth so its click count depends on how far the player read, `askText`
-    // is answered by `field_input` rather than a click, and `selectPc` needs
-    // the PC buttons of a dialog whose ids this port has not pinned down.
+    // forth so its click count depends on how far the player read, and
+    // `askText` is answered by `field_input` rather than a click.
     story: async (title: string, _first: number, _last: number,
       _strType: SpecCtxType): Promise<void> => {
       throw new Error(`replay: the story dialog "${title}" is not answerable from a `
         + 'recording yet (its click count depends on how far the player paged)');
     },
+    /**
+     * `get_text_response` on get-response.xml — the "Ask about what?" prompt,
+     * which the talk screen's Ask About word raises.
+     *
+     * The field starts empty, and what comes back is lowercased.
+     */
     askText: async (prompt: string): Promise<string> => {
-      throw new Error(`replay: the text prompt "${prompt}" is answered by `
-        + "'field_input', which the driver does not read yet");
-    },
-    selectPc: async (prompt: string, _highlight?: Skill): Promise<number> => {
-      throw new Error(`replay: the select-PC dialog "${prompt}" is not answerable `
-        + 'from a recording yet');
+      const what = `the text prompt "${prompt}"`;
+      const typed = typeInto(source, what, '', options.onAnswered);
+      const id = popClick(source, what, options.onAnswered);
+      // Its filter sets the result to "" on Cancel (boe.items.cpp:843).
+      return id === 'cancel' ? '' : typed.toLowerCase();
     },
 
     // The rest are not dialogs at all: they change state and the recording's

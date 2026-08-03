@@ -11,6 +11,7 @@ import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { GameSession } from '../src/game/session';
+import { PcChoice } from '../src/game/selectPc';
 import { SpecCtx, SpecCtxType, SpecialHost } from '../src/game/specials/context';
 import { ONCE_DONE } from '../src/game/specials/oneshot';
 import { TrapType, runTrap } from '../src/game/trap';
@@ -52,10 +53,11 @@ class TrapHost implements SpecialHost {
   }
   async story(): Promise<void> {}
   async askText(): Promise<string> { return ''; }
-  async selectPc(prompt: string): Promise<number> {
+  async selectPc(_rows: PcChoice[], prompt: string): Promise<number> {
     this.prompts.push(prompt);
     return this.pc;
   }
+  async getNumOfItems(max: number): Promise<number> { return max; }
   startShop(): boolean { return true; }
   startTalk(): void {}
   sound(): void {}

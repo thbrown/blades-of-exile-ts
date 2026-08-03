@@ -39,6 +39,12 @@ export class Universe {
    * there is one, and names its rotating slots after it.
    */
   saveSlot: string | null = null;
+  /**
+   * `cUniverse::debug_mode` — the shift-D toggle that unlocks the debug keys.
+   * Not saved, and nothing in the rules reads it; it is here because a replay
+   * can turn it on mid-run and the transcript says so.
+   */
+  debugMode = false;
 
   constructor(
     readonly scenario: Scenario,

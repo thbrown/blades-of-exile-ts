@@ -76,7 +76,7 @@ Notes for M2 implementer:
 - Town reader reference: readTownFromXml (fileio_scen.cpp:1839), loadTownMapData; town terrain templates are variable-size (min 24); talkN.xml via readDialogueFromXml.
 - scenarioXml.ts skips deferred sections by name (quests/shops/special-items/strings) — tighten as those land.
 
-- `npm test` → 833 tests green (51 files); `npm run dev` → the game screen (arrow keys / keypad, Home/End/PgUp/PgDn for diagonals; `?scenario=stealth` to load another).
+- `npm test` → 998 tests green (62 files); `npm run dev` → the game screen (arrow keys / keypad, Home/End/PgUp/PgDn for diagonals; `?scenario=stealth` to load another).
 - `node scripts/verify-screen.mjs` (needs `npx vite --port 5199` running) drives the real UI headless and screenshots it. Playwright + chromium installed as devDependency.
 - Parsers: `src/fileio/mapParse.ts` (.map), `specialParse.ts` (.spec + opcode table from strings resource, 'nop'=NONE special case), `terrainXml.ts`, `outdoorsXml.ts`, `scenarioXml.ts` (header+game block; quests/shops/etc. deferred by name), `loadScenario.ts` (out{x}~{y} assembly), `source.ts` (Fetch/Fs sources).
 - Data: `special.ts` (SpecType enum + 15-short node), `terrain.ts`, `fields.ts` (FieldType — note SPECIAL_SPOT=9, SPECIAL_ROAD=25), `outdoors.ts`, `enumTags.ts` (estreams.cpp lookup tables), `scenario.ts`.
@@ -3417,3 +3417,81 @@ The M6 list below is kept for the history of what it covered:
     `<load_party>`, a party with no scenario, or the new-party flow). The
     milestone is now almost entirely about rules divergence, which is what M8
     was for.
+
+- **Giving and dropping, which were inventions (M8, 2026-08-02).** Ninth slice.
+  The last big handler gaps in the corpus were `handle_give_item` (4 files) and
+  `field_input` (3), and neither was driver wiring: both are game actions this
+  port had written its own version of.
+  - **`select_pc` had three modes and the C++ has eight.** `game/selectPc.ts`
+    ports the whole candidate loop (boe.items.cpp:878) with `SelectPcMode`
+    verbatim, and the old `session.selectPcOptions('living'|'lockpick'|'train')`
+    is gone. The mode that mattered is **`ONLY_CAN_GIVE_FROM_ACTIVE`**: it
+    refuses the giver themselves, refuses anyone not *adjacent* in combat
+    ("too far away"), and refuses anyone who couldn't carry the thing
+    ("item too heavy" / "no item slot") — so the refusals happen *before* the
+    dialog rather than after it.
+    - **The dialog is not part of the port.** `runSelectPc` works out the rows
+      and only then asks; `main.ts` draws them and the replay host reads the
+      click. That split is what makes the "nobody can be offered" case correct:
+      the C++ returns **8 without showing anything**, so a host that asked
+      anyway would eat the recording's next real action.
+    - The three return codes are the C++'s — 6 cancel, 7 all, 8 nobody — and
+      callers test `< 6`, not `>= 0`. Two of the eight modes print why
+      (lockpicks, skill points) and the rest leave it to the caller.
+    - *Gotcha kept*: the switch is skipped entirely for a **split** PC, so one
+      never gets a reason printed beside their name; and the `if(false)` in the
+      TOO_HEAVY arm exists only to let the NO_SPACE label land inside it.
+  - **`game/giveDrop.ts` is `give_thing` and `drop_item`.** What they replaced:
+    a give that offered anyone alive and a drop that always landed on the
+    party's own square, refused outdoors, and ignored charges, curses and
+    `DROP_CALL_SPECIAL`.
+    - **A drop is two actions.** `handle_drop_item` only *arms* it
+      (`store_drop_item`, now `session.dropSlot`) and switches to
+      `MODE_DROP_TOWN`; the square arrives as the next click and `dropItemAt`
+      finishes it. Non-adjacent is refused, blocked is refused, and in combat it
+      costs an action point. Outdoors there is no floor at all: the item is
+      destroyed, behind `drop-item-confirm.xml`.
+    - *Gotcha*: the two halves of that one action **disagree about whose item it
+      is**. The outdoor branch drops from `stat_window`, the location branch
+      from `univ.cur_pc`. Kept, with both passed in.
+    - *Gotcha*: `give_thing` prints "Can't give: …" and then carries on to the
+      `who_to < 6` test instead of returning. Harmless only because 8 fails it.
+    - `place_item`'s **return value is `contained`, not "did it work"** — it
+      answers "did this go into a dresser/crate/barrel?", which is what picks
+      between "Drop: Item put away" and "Drop: OK" and why a contained item's
+      `DROP_CALL_SPECIAL` doesn't fire. This port always returned true, so every
+      drop claimed to be put away. `is_container` moved to `game/loot.ts` as
+      `isContainerAt` so `place_item` can reach it.
+  - **"Ask About..." blocks inside `handle_talk_node`** (boe.dlgutil.cpp:919),
+    and this port had split it: the prompt lived in `main.ts` and the rules in
+    `TalkState.askAbout`, so a replay had no way to answer it and the live UI
+    had a rule the driver didn't (it skipped an empty answer where the C++ asks
+    the speech list about `""` and gets the dunno line). `chooseTalkNode` is
+    async now and calls `host.askText` itself.
+  - **A recording types one keystroke at a time.** `record_field_input`
+    (replay.cpp:215) writes a `field_input` per key — `c` for a character, or
+    `spec` with `k` for an arrow or a backspace — so a typed answer has to be
+    *entered into a field*, insertion point and all, not read out of one action.
+    `typeInto` in `replay/host.ts` does that for both `askText` and
+    `getNumOfItems`; only the three special keys the corpus uses (left, right,
+    backspace) are modelled and `field_selection` is refused by name, since a
+    selection replaces what is typed over it.
+    - get-num.xml arrives **pre-filled with the maximum**, so a player taking
+      the lot types nothing at all; cancel reads back 0 and gives up the action.
+  - **`session.host`**: the attached `SpecialHost` is reachable from the item
+    actions now, not just from the specials engine. The driver had been running
+    `use_item` with **no host**, so an item that asks who to heal silently
+    healed nobody.
+  - Also landed, small: `handle_use_space_select` (the U mode toggle),
+    `cancel_item_target`, `toggle_debug_mode` (`univ.debugMode`), `easter_egg`
+    and `field_focus` in the driver; `SELECT_TARGET`'s missing ex1a arm 4 and
+    its cancel-jumps-to-ex1b branch; and a `verify-screen.mjs` step that arms a
+    drop through the real Drop button, clicks the square east of the party and
+    asserts the item landed *there* and not underfoot.
+  - **Where it stands**: **7,271 actions dispatch** (6,302 at the start of this
+    slice), six files run end to end, and the handler gaps are down to six
+    one-offs — two debug actions, the two notes journals, `handle_drop_pc`, and
+    one `field_input` that is really a desync wearing a disguise (the recording
+    talks to a creature this port has nowhere near that square). **56 of the 87
+    files now stop on a desync.** The milestone is rules divergence and nothing
+    else.

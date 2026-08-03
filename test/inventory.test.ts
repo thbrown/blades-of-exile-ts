@@ -6,6 +6,12 @@ import { Item, ItemAbil, ItemType, defaultItem } from '../src/data/item';
 import { ItemCat, variety } from '../src/data/itemVariety';
 import { Scenario } from '../src/data/scenario';
 import { GameSession } from '../src/game/session';
+import {
+  PcChoice, SELECT_PC_CANCEL, SelectPcMode, selectPcOptions,
+} from '../src/game/selectPc';
+import { dropItemAt, giveThing, handleDropItem } from '../src/game/giveDrop';
+import { GameMode } from '../src/game/modes';
+import { SpecialHost } from '../src/game/specials/context';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
@@ -49,6 +55,37 @@ function newSession(): GameSession {
     pc.equip.fill(false);
   }
   return session;
+}
+
+/**
+ * The two dialogs `give_thing` and `drop_item` can raise, answered by script.
+ * `pick` is the select-pc.xml control that gets clicked, the way a recording
+ * names it.
+ */
+class PromptHost implements SpecialHost {
+  pick = 'cancel';
+  num = -1;
+  asked = 0;
+  async message(): Promise<void> {}
+  async choice(): Promise<number> { return 0; }
+  async story(): Promise<void> {}
+  async askText(): Promise<string> { return ''; }
+  async selectPc(rows: PcChoice[]): Promise<number> {
+    this.asked++;
+    if (this.pick === 'cancel') return SELECT_PC_CANCEL;
+    const which = this.pick.charCodeAt(this.pick.length - 1) - '1'.charCodeAt(0);
+    return rows[which]?.canPick === true ? which : SELECT_PC_CANCEL;
+  }
+  async getNumOfItems(max: number): Promise<number> {
+    return this.num < 0 ? max : this.num;
+  }
+  startShop(): boolean { return true; }
+  startTalk(): void {}
+  sound(): void {}
+  rest(): void {}
+  moveParty(): void {}
+  changeLevel(): void {}
+  endScenario(): void {}
 }
 
 function item(over: Partial<Item> = {}): Item {
@@ -283,36 +320,71 @@ describe('picking things up and putting them down', () => {
     expect(played).toEqual([41]);
   });
 
-  it('drops an item back onto the party\'s space', async () => {
+  /**
+   * A drop is two actions: `handle_drop_item` arms it, and the square it lands
+   * on arrives as the click after. The invented version this replaced always
+   * put the item on the party's own square.
+   */
+  it("drops an item on the square that was clicked, and only an adjacent one", async () => {
     const session = newSession();
+    const host = new PromptHost();
     const pc = session.univ.party.pcs[0]!;
     pc.items[0] = item({ name: 'Rock', weight: 0 });
+    const at = session.univ.party.townLoc;
     const before = session.univ.town!.items.length;
-    expect(session.dropItem(0, 0)).toBe(true);
+
+    await handleDropItem(session, 0, 0, host);
+    expect(session.mode).toBe(GameMode.DROP_TOWN);
+    expect(session.dropSlot).toBe(0);
+
+    // Two squares away is refused, and the item stays in the pack.
+    await dropItemAt(session, { x: at.x + 2, y: at.y }, host);
+    expect(pc.items[0]!.name).toBe('Rock');
+    expect(session.univ.transcript.at(-1)).toContain('must be adjacent');
+
+    await handleDropItem(session, 0, 0, host);
+    await dropItemAt(session, { x: at.x + 1, y: at.y }, host);
     expect(pc.items[0]!.variety).toBe(ItemType.NO_ITEM);
     const dropped = session.univ.town!.items;
     expect(dropped.length).toBe(before + 1);
-    expect(dropped.at(-1)!.itemLoc).toEqual(session.univ.party.townLoc);
+    expect(dropped.at(-1)!.itemLoc).toEqual({ x: at.x + 1, y: at.y });
+    expect(session.mode).toBe(GameMode.TOWN);
   });
 
-  it('hands an item to another PC, refusing when it would not fit', async () => {
+  /**
+   * `give_thing` asks `select_pc(ONLY_CAN_GIVE_FROM_ACTIVE)`, so a PC who
+   * couldn't carry the item is never offered — the refusal happens before the
+   * dialog, not after it.
+   */
+  it('hands an item to another PC, and never offers one who could not carry it', async () => {
     const session = newSession();
+    const host = new PromptHost();
     const [from, to] = [session.univ.party.pcs[0]!, session.univ.party.pcs[1]!];
     from.items[0] = item({ name: 'Rope', weight: 5 });
-    expect(session.giveItemTo(0, 0, 1)).toBe(true);
+    host.pick = 'pick2';
+    await giveThing(session, 0, 0, host);
     expect(from.items[0]!.variety).toBe(ItemType.NO_ITEM);
     expect(to.items.some((i) => i.name === 'Rope')).toBe(true);
 
-    // Now overload the receiver and try again.
-    from.items[0] = item({ name: 'Anvil', weight: freeWeight(to) + 1 });
-    expect(session.giveItemTo(0, 0, 1)).toBe(false);
+    // Now overload every possible receiver: nobody is offered, no dialog goes
+    // up at all, and the item stays put.
+    session.univ.party.pcs.forEach((other, i) => {
+      if (i > 0) other.items[0] = item({ name: 'Ballast', weight: freeWeight(other) - 1 });
+    });
+    from.items[0] = item({ name: 'Anvil', weight: 200 });
+    host.asked = 0;
+    await giveThing(session, 0, 0, host);
+    expect(host.asked).toBe(0);
     expect(from.items[0]!.name).toBe('Anvil');
+    expect(session.univ.transcript.at(-1)).toContain('no one has the carrying capacity');
   });
 
   it('only offers a lockpick prompt to whoever has picks equipped', async () => {
     const session = newSession();
     const pc = session.univ.party.pcs[2]!;
-    let options = session.selectPcOptions('lockpick', Skill.LOCKPICKING);
+    const pick = (): PcChoice[] => selectPcOptions(
+      session.univ, SelectPcMode.ONLY_CAN_LOCKPICK, { highlight: Skill.LOCKPICKING });
+    let options = pick();
     expect(options.every((o) => !o.canPick)).toBe(true);
     expect(options[2]!.label).toContain('no picks');
 
@@ -323,12 +395,12 @@ describe('picking things up and putting them down', () => {
       ability: ItemAbil.LOCKPICKS,
       charges: 4,
     });
-    options = session.selectPcOptions('lockpick', Skill.LOCKPICKING);
+    options = pick();
     expect(options[2]!.canPick).toBe(false);
     expect(options[2]!.label).toContain('picks not equipped');
 
     equipItem(pc, 0);
-    options = session.selectPcOptions('lockpick', Skill.LOCKPICKING);
+    options = pick();
     expect(options[2]!.canPick).toBe(true);
     expect(options[2]!.label).toContain('Lockpicks x4');
   });

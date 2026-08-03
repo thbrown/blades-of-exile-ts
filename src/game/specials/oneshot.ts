@@ -18,6 +18,7 @@ import { reportUnsupported } from './general';
 import { isCombat } from '../modes';
 import { Skill } from '../../universe/skills';
 import { TrapType, runTrap } from '../trap';
+import { SelectPcMode, runSelectPc } from '../selectPc';
 
 /** The sentinel meaning "this one-shot has fired". */
 export const ONCE_DONE = 250;
@@ -237,7 +238,10 @@ export async function oneshotSpec(
       }
       let who = univ.curPc;
       if (!isCombat(ctx.session.mode)) {
-        who = await ctx.host.selectPc('Trap! Who will disarm?', Skill.DISARM_TRAPS);
+        who = await runSelectPc(
+          univ, SelectPcMode.ONLY_LIVING, 'Trap! Who will disarm?',
+          (options, title, highlight) => ctx.host.selectPc(options, title, highlight),
+          { highlight: Skill.DISARM_TRAPS });
         if (who < 0 || who >= 6) {
           ctx.retA = 1;
           setSd = false;

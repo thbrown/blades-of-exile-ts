@@ -36,6 +36,7 @@ import { processForceCage } from './processFields';
 import type { GameSession } from './session';
 import type { SpecialHost } from './specials/context';
 import { SpecCtx, SpecCtxType } from './specials/context';
+import { SelectPcMode, runSelectPc } from './selectPc';
 import { combatImmedMageCast, combatImmedPriestCast } from './spellCombat';
 import { startFancySpellTargeting, startSpellTargeting } from './spellCombatTarget';
 import { doMageSpell, doPriestSpell, increaseLight } from './spellTown';
@@ -120,6 +121,19 @@ export function poisonWeapon(
   univ.addStringToBuf('  No weapon equipped.');
   return false;
 }
+
+/**
+ * The four `select_pc` modes a CAST_SPELL item may ask for
+ * (boe.specials.cpp:1124). Note ACTIVE means "only a living one", not "the
+ * active PC" — the name is about which of the four spell selectors it is.
+ */
+const SELECT_MODES: Record<SpellSelect, SelectPcMode> = {
+  [SpellSelect.NO]: SelectPcMode.ANY,
+  [SpellSelect.ACTIVE]: SelectPcMode.ONLY_LIVING,
+  [SpellSelect.ANY]: SelectPcMode.ANY,
+  [SpellSelect.DEAD]: SelectPcMode.ONLY_DEAD,
+  [SpellSelect.STONE]: SelectPcMode.ONLY_STONE,
+};
 
 /** The four select_pc flavours a CAST_SPELL item may ask for. */
 const SELECT_PROMPTS: Record<SpellSelect, string> = {
@@ -721,7 +735,9 @@ export async function useItem(
         // `store_spell_target` the town spell arms read back.
         const select = SPELLS[spell]?.select ?? SpellSelect.NO;
         if (select !== SpellSelect.NO && host) {
-          session.spellTarget = await host.selectPc(SELECT_PROMPTS[select]);
+          session.spellTarget = await runSelectPc(
+            univ, SELECT_MODES[select], SELECT_PROMPTS[select] ?? '',
+            (options, title, highlight) => host.selectPc(options, title, highlight));
         }
 
         // `true` is the C++'s `freebie`: an item never charges spell points,

@@ -32,6 +32,7 @@ class TestHost implements SpecialHost {
   async story(): Promise<void> {}
   async askText(): Promise<string> { return ''; }
   async selectPc(): Promise<number> { return 0; }
+  async getNumOfItems(max: number): Promise<number> { return max; }
   startShop(): boolean { return true; }
   startTalk(): void {}
   sound(): void {}

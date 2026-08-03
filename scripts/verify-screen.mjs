@@ -56,6 +56,24 @@ const idle = async () => {
 };
 const press = async (key) => { await idle(); await page.keyboard.press(key); };
 
+/**
+ * Click a point in *canvas* coordinates. The canvas is CSS-scaled, so the point
+ * has to go through its real bounding box first — every step that clicks a
+ * button drawn on the canvas needs this.
+ */
+const clickCanvas = async (x, y) => {
+  const at = await page.evaluate(({ x: cx, y: cy }) => {
+    const c = document.querySelector('canvas');
+    const r = c.getBoundingClientRect();
+    return {
+      x: r.left + (cx + 0.5) * (r.width / c.width),
+      y: r.top + (cy + 0.5) * (r.height / c.height),
+    };
+  }, { x, y });
+  await page.mouse.click(at.x, at.y);
+  await page.waitForTimeout(300);
+};
+
 // 1. Every panel should be painted, not left as bare background.
 const panels = await page.evaluate(async () => {
   const ctx = document.getElementById('canvas').getContext('2d');
@@ -621,6 +639,76 @@ if (itemInfo.next !== 'Crude Buckler')
 await shot('01e2a-item-info');
 await press('Escape');
 await page.waitForTimeout(200);
+
+// 2e2c. Dropping: **two clicks, not one.** `handle_drop_item` only arms the
+//       item and switches to MODE_DROP_TOWN; the square arrives as the next
+//       click on the terrain view. The version this replaced put the item on
+//       the party's own square with no square-picking at all, so this pins
+//       both halves — and that a non-adjacent square is refused.
+const dropSetup = await page.evaluate(() => {
+  const s = window.__session;
+  const pc = s.univ.party.pcs[3];
+  pc.items[0] = {
+    ...pc.items[0],
+    variety: 22, charges: 0, ability: 0, abilStrength: 0, cursed: false,
+    name: 'test rock', fullName: 'test rock', ident: true, weight: 1, desc: '',
+  };
+  pc.equip[0] = false;
+  window.__redraw();
+  return { at: { ...s.univ.party.townLoc }, floor: s.univ.town.items.length };
+});
+const dropClick = await page.evaluate(() => {
+  const sc = window.__screen;
+  for (let y = 120; y < 280; y++)
+    for (let x = 300; x < 610; x++) {
+      const h = sc.inventoryHit(x, y, false);
+      if (h && h.row === 0 && h.part === 'drop') return { x, y };
+    }
+  return null;
+});
+if (!dropClick) throw new Error('the Drop button was not drawn on an inventory row');
+await clickCanvas(dropClick.x, dropClick.y);
+const armed = await page.evaluate(() => ({
+  mode: window.__session.mode,
+  slot: window.__session.dropSlot,
+  stillHeld: window.__session.univ.party.pcs[3].items[0].name,
+}));
+if (armed.mode !== 6 /* DROP_TOWN */ || armed.slot !== 0)
+  throw new Error(`Drop did not arm: ${JSON.stringify(armed)}`);
+if (armed.stillHeld !== 'test rock') throw new Error('arming a drop moved the item');
+// Click one square east of the party — the terrain view is 9x9 with the party
+// in the middle, so that is cell (5,4).
+const dropAt = await page.evaluate(() => {
+  const sc = window.__screen;
+  for (let y = 0; y < 430; y++)
+    for (let x = 0; x < 605; x++) {
+      const c = sc.terrainCellAt(x, y);
+      if (c && c.q === 5 && c.r === 4) return { x, y };
+    }
+  return null;
+});
+if (!dropAt) throw new Error('the square east of the party is not on screen');
+await clickCanvas(dropAt.x, dropAt.y);
+const dropped = await page.evaluate(() => {
+  const s = window.__session;
+  const floor = s.univ.town.items;
+  const last = floor[floor.length - 1];
+  return {
+    mode: s.mode,
+    held: s.univ.party.pcs[3].items[0].name,
+    count: floor.length,
+    where: last ? { ...last.itemLoc } : null,
+    name: last ? last.name : null,
+    tail: s.univ.transcript.slice(-1),
+  };
+});
+console.log('DROP:', JSON.stringify({ setup: dropSetup, armed, dropped }));
+if (dropped.count !== dropSetup.floor + 1 || dropped.name !== 'test rock')
+  throw new Error(`the dropped item is not on the floor: ${JSON.stringify(dropped)}`);
+if (dropped.where.x !== dropSetup.at.x + 1 || dropped.where.y !== dropSetup.at.y)
+  throw new Error(`the item landed at ${JSON.stringify(dropped.where)}, not the square clicked`);
+if (dropped.mode !== 1) throw new Error('the drop did not return to town mode');
+await shot('01e2c-item-drop');
 
 // 2e2b. A message a special node puts up is a real cStrDlog now: the picture
 //       at the top left, and a Record button that fills the encounter notes.
