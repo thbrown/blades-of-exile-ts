@@ -1748,7 +1748,13 @@ const encounter = await page.evaluate(async () => {
   // Stand still: each attempted step is a party action, so the monsters move.
   let noticed = false;
   let hurt = 0;
-  for (let i = 0; i < 40 && hurt === 0; i++) {
+  // **Loop until it has both noticed *and* hurt us**, not until the first
+  // damage. A creature can be alerted silently — `do_monsters`' second loop
+  // alerts anything within five squares of something already angry, with no
+  // message — so stopping at first blood makes the assertion a race between
+  // "Monster saw you!" and a spear, and which one wins is a coin toss that
+  // moves with any change to the RNG stream.
+  for (let i = 0; i < 40 && !(noticed && hurt > 0); i++) {
     // The notice roll is one d100 per turn, and only while the creature is
     // still IDLE — the town is already hostile by this point, so it will come
     // over and attack either way and stop being IDLE the moment it does. Keep

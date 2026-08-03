@@ -122,6 +122,19 @@ export class Party {
    */
   mNoted = new Set<number>();
   /**
+   * `cParty::m_seen` — monster types the party has ever laid eyes on. Its only
+   * job is to fire a monster's `see_spec` once, the first time, but it is saved
+   * and restored because "once" has to survive a reload.
+   */
+  mSeen = new Set<number>();
+  /**
+   * `cParty::hostiles_present` — a countdown, set to 30 whenever a hostile
+   * creature takes a turn and walked back toward zero every turn after. It is
+   * how a *friendly* creature knows whether things are calm: `monster_placid`
+   * treats FRIENDLY as placid only while this is zero.
+   */
+  hostilesPresent = 0;
+  /**
    * Monsters the party's own items can summon that don't come from this
    * scenario (cParty::summons). A monster number >= 10000 indexes this list
    * with 10000 subtracted; it stays empty until a save file or an item fills

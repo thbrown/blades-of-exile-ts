@@ -694,3 +694,33 @@ export function rngForReplay(replay: Replay): GameRng {
   if (replay.seed !== null) rng.seedGame(replay.seed);
   return rng;
 }
+
+/**
+ * The seeding a recording that opens by **loading a save** needs instead.
+ *
+ * `rngForReplay` above is right for a recording that starts a new game: the
+ * C++ seeds before the party exists and then plays, so this port has to draw
+ * the same numbers for the same reasons from the very first one. A recording
+ * that loads a save is the opposite shape — the C++ *never starts a game*, so
+ * the thousands of draws `startNewGame` makes rolling shop stock have no
+ * counterpart on that side at all, and seeding before them puts the whole
+ * stream thousands of numbers out of step. It surfaces first as the town's
+ * wandering townspeople walking off in different directions, and eventually as
+ * one of them standing on a square the recording walked through.
+ *
+ * So: build the session however it needs to be built, then call this, then
+ * apply the save.
+ *
+ * **The one extra draw is not a fudge.** `init_boe` seeds and then does
+ * `std::cout << game_rand() << std::endl;` (boe.main.cpp:1247) — a debug print
+ * of the first number, unconditional, in the build the recordings were made
+ * with. It consumes a draw, so the stream every recorded action reads from
+ * starts one number in. `get_ran`'s call order is part of the spec and this is
+ * a call.
+ */
+export function seedLoadedReplay(rng: GameRng, replay: Replay): void {
+  if (replay.seed === null) return;
+  rng.seedGame(replay.seed);
+  rng.game.next();
+  rng.gameDraws++;
+}

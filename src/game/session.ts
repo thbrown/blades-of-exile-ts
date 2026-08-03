@@ -17,8 +17,10 @@ import { Direction, Location, dist, loc, locsEqual, minmax, shiftLoc } from '../
 import { SIGHT_BLOCKED, canSee } from '../core/sight';
 import { Item, ItemAbil, ItemType, defaultItem } from '../data/item';
 import { MonstTime } from '../data/monster';
+import { MonstAbil } from '../data/monsterAbility';
+import { SpellNote } from '../universe/living';
 import { FieldType } from '../data/fields';
-import { SECTOR_SIZE } from '../data/outdoors';
+import { AmbientSound, SECTOR_SIZE } from '../data/outdoors';
 import { StepSound, Terrain, TerObstruct, TerSpec, TrimType, blocksMove } from '../data/terrain';
 import { TalkNodeType } from '../data/talking';
 import { Lighting, Town } from '../data/town';
@@ -26,7 +28,7 @@ import { OutWandering } from '../data/outdoors';
 import { Vehicle } from '../data/vehicle';
 import { Snd, SoundPlayer } from '../platform/sound';
 import { Creature, CreatureStatus, assignCreature } from '../universe/creature';
-import { DamageType } from '../data/monster';
+import { Attitude, DamageType } from '../data/monster';
 import { animSettle } from './anim';
 import { damagePc, hitParty } from './damage';
 import {
@@ -425,6 +427,10 @@ export class GameSession {
   }
 
   private async afterPartyTurnInner(): Promise<void> {
+    // handle_monster_actions opens with draw_map and play_ambient_sound
+    // (boe.actions.cpp:1937), *before* increase_age. The sound is not the point
+    // — the draws it makes are, and they come first in the turn.
+    this.playAmbientSound();
     // increase_age's upkeep — poison biting, wounds closing, blessings running
     // out. Without this a status effect is only ever a line in the transcript.
     await increaseAgeEffects(this);
@@ -1888,7 +1894,7 @@ export class GameSession {
    * `push_thing` / `move_thing` (boe.town.cpp:1627) — walking into a crate,
    * barrel or stone block shoves it one square further along the same line.
    */
-  private pushThings(from: Location, where: Location): void {
+  pushThings(from: Location, where: Location): void {
     const town = this.univ.town;
     if (!town) return;
     const kinds: Array<[FieldType, string]> = [
@@ -3145,6 +3151,19 @@ export class GameSession {
     this.populateTown(town);
     this.placePresetItems(town);
 
+    // "No hostile monsters present" (boe.town.cpp:473).
+    this.univ.party.hostilesPresent = 0;
+
+    // **Everyone forgets where they were going** (boe.town.cpp:498). Without
+    // this, every creature keeps `cCreature`'s default target of (80,80) — off
+    // the bottom-right corner of any town — and `rand_move`'s first branch
+    // succeeds every single turn walking towards it. The townspeople then file
+    // south-east in straight lines instead of milling about, and because that
+    // branch returns before `rand_move` rolls anything, the town's whole
+    // `get_ran` stream shifts too. It was the largest single cause of replay
+    // drift: found 2026-08-03 by diffing draw streams against the C++.
+    for (const monst of town.monsters) monst.targLoc = { x: 0, y: 0 };
+
     // "check horses"/"check boats" (boe.town.cpp:503): a vehicle the party's
     // own list has lost track of (an older save missing a vehicle the
     // scenario since gained) is restored from the scenario's template.
@@ -3323,6 +3342,73 @@ export class GameSession {
   }
 
   /**
+   * check_if_monst_seen (boe.graphutil.cpp:653) — fire a monster type's
+   * `see_spec` the first time the party lays eyes on it, then give it a one in
+   * ten chance of making its noise.
+   *
+   * **This draws from the game stream**, so it is not the cosmetic function it
+   * looks like: `get_ran`'s call order is part of the spec, and a town turn
+   * makes one of these draws for *every visible creature whose type has an
+   * ambient sound*. Leaving it out shifted the whole town stream and was what
+   * sent the wandering townspeople off in different directions from the C++'s.
+   */
+  private checkIfMonstSeen(monstNum: number, at: Location): void {
+    const { party } = this.univ;
+    if (monstNum < 10000 && !party.mSeen.has(monstNum)) {
+      party.mSeen.add(monstNum);
+      // play_see_monster_str (boe.graphutil.cpp:213) — no draw, just the queue.
+      const seeSpec = this.univ.scenario.scenMonsters[monstNum]?.seeSpec ?? -1;
+      if (seeSpec > -1 && this.specials) {
+        this.specials.queueSpecial(SpecCtx.SEE_MONST, SpecCtxType.SCEN, seeSpec, at);
+      }
+    }
+    const sound = monstNum >= 10000
+      ? this.univ.party.summons[monstNum - 10000]?.ambientSound ?? -1
+      : this.univ.scenario.scenMonsters[monstNum]?.ambientSound ?? -1;
+    if (sound > 0 && this.univ.rng.getRan(1, 1, 100) < 10) this.sound?.play(sound);
+  }
+
+  /**
+   * play_ambient_sound (boe.graphutil.cpp:668), the first thing
+   * `handle_monster_actions` does after redrawing the map — so it runs *ahead
+   * of* `increase_age` and the monsters, and its draws come first in the turn.
+   *
+   * Three branches, and only two of them draw: in town it is really a
+   * "have you seen this before?" sweep over the visible creatures; outdoors it
+   * is one roll for a one-in-ten chance of a bird or a drip; anywhere else
+   * (combat, look mode) it returns having drawn nothing.
+   */
+  private playAmbientSound(): void {
+    if (this.mode === GameMode.TOWN) {
+      const town = this.univ.town;
+      if (town === null) return;
+      for (const m of town.monsters) {
+        if (this.partyCanSeeMonst(m)) this.checkIfMonstSeen(m.number, m.curLoc);
+      }
+      return;
+    }
+    // Ambient sounds are outdoors only at the moment, says the C++.
+    if (this.mode !== GameMode.OUTDOORS) return;
+    if (this.univ.rng.getRan(1, 1, 100) > 10) return;
+    const DRIP = [78, 79];
+    const BIRD = [76, 77, 91];
+    const sector = this.univ.out.sector;
+    switch (sector.ambientSound) {
+      case AmbientSound.DRIP:
+        this.sound?.play(DRIP[this.univ.rng.getRan(1, 0, 1)]!);
+        break;
+      case AmbientSound.BIRD:
+        this.sound?.play(BIRD[this.univ.rng.getRan(1, 0, 2)]!);
+        break;
+      case AmbientSound.CUSTOM:
+        this.sound?.play(sector.outSound);
+        break;
+      case AmbientSound.NONE:
+        break;
+    }
+  }
+
+  /**
    * party_can_see_monst (boe.locutils.cpp:366) — a big creature is visible if
    * any one of the squares it stands on is.
    */
@@ -3453,6 +3539,157 @@ export class GameSession {
 
   private monstCanBeThere(m: Creature): boolean {
     return this.monstCanBeAt(m, m.curLoc);
+  }
+
+  /**
+   * monst_check_one_special_terrain (boe.monster.cpp:897) — may this creature
+   * step onto this one square, and what does the square do to it on the way?
+   *
+   * `mode` is the C++'s: **1 in town, 2 in combat**. It decides two things —
+   * whether a conveyor refuses the step, and whether a marked special spot is
+   * off limits (it is, in town).
+   *
+   * **This draws, and that is the point.** `guts` — how enthusiastic the
+   * creature is about walking into something nasty — is
+   * `get_ran(1, 1, level / 2)` for anything that isn't mindless, on **every
+   * attempted step**, whether or not there is anything nasty on the square.
+   * Leaving the whole function out (it was `TODO(M5b)`) took that draw out of
+   * the stream on every monster move, which is most of the draws a town turn
+   * makes. Note the zero-width shortcut carries the weight here: a creature of
+   * level 2 or 3 gives `get_ran(1,1,1)`, which returns without touching the
+   * stream, so only level 4 and up actually draw.
+   */
+  private monstCheckOneSpecialTerrain(m: Creature, where: Location, mode: number): boolean {
+    const town = this.univ.town;
+    if (town === null) return false;
+    const fromLoc = m.curLoc;
+    const terNum = town.isOnMap(where.x, where.y)
+      ? town.record.terrain[where.x]![where.y]! : 0;
+    const ter = this.univ.terrainType(terNum);
+    const terDir = ter.flag1 as Direction;
+    let canEnter = true;
+    let doLook = false;
+
+    if (mode > 0 && ter.special === TerSpec.CONVEYOR) {
+      if ((NO_MOVE_FROM_NORTH.has(terDir) && where.y > fromLoc.y)
+        || (NO_MOVE_FROM_EAST.has(terDir) && where.x < fromLoc.x)
+        || (NO_MOVE_FROM_SOUTH.has(terDir) && where.y < fromLoc.y)
+        || (NO_MOVE_FROM_WEST.has(terDir) && where.x > fromLoc.x)) return false;
+    }
+
+    const mage = m.mon.mu > 0 || m.mon.cl > 0;
+    let guts = m.mon.mindless ? 20 : this.univ.rng.getRan(1, 1, Math.trunc(m.mon.level / 2));
+    guts += Math.trunc(m.health / 20);
+    if (mage) guts = Math.trunc(guts / 2);
+    if (m.attitude === Attitude.DOCILE) guts = Math.trunc(guts / 2);
+
+    const has = (f: FieldType): boolean => town.hasField(where.x, where.y, f);
+    if (has(FieldType.FIELD_ANTIMAGIC) && mage) return false;
+    const radiate = m.mon.abil[MonstAbil.RADIATE];
+    const haveRadiate = radiate?.active ?? false;
+    const radiateType = radiate?.radiate?.type;
+    /** The C++'s `!(have_radiate && which_radiate == X)` — its own radiation never scares it. */
+    const notItsOwn = (f: FieldType): boolean => !(haveRadiate && radiateType === f);
+
+    if (has(FieldType.WALL_FIRE) && notItsOwn(FieldType.WALL_FIRE) && guts < 3) return false;
+    if (has(FieldType.WALL_FORCE) && notItsOwn(FieldType.WALL_FORCE) && guts < 4) return false;
+    if (has(FieldType.WALL_ICE) && notItsOwn(FieldType.WALL_ICE) && guts < 5) return false;
+    if (has(FieldType.CLOUD_SLEEP) && notItsOwn(FieldType.CLOUD_SLEEP) && guts < 8) return false;
+    if (has(FieldType.WALL_BLADES) && notItsOwn(FieldType.WALL_BLADES) && guts < 8) return false;
+    if (has(FieldType.FIELD_QUICKFIRE) && guts < 8) return false;
+    if (has(FieldType.CLOUD_STINK) && notItsOwn(FieldType.CLOUD_STINK) && guts < 4) return false;
+    if (has(FieldType.FIELD_WEB) && m.mon.race !== Race.BUG
+      && notItsOwn(FieldType.FIELD_WEB) && guts < 3) return false;
+
+    /** monster_placid (boe.monster.cpp:791). */
+    const placid = m.attitude === Attitude.DOCILE
+      || (m.attitude === Attitude.FRIENDLY && this.univ.party.hostilesPresent === 0);
+
+    if (has(FieldType.BARRIER_FIRE)) {
+      if (!m.isFriendly && this.univ.rng.getRan(1, 1, 100) < m.mon.mu * 10 + m.mon.cl * 4) {
+        this.sound?.play(60);
+        m.spellNote(SpellNote.BREAKS_BARRIER);
+        town.setField(where.x, where.y, FieldType.BARRIER_FIRE, false);
+      } else {
+        if (guts < 6) return false;
+        // Note the roll happens either way — `monster_placid` is checked second.
+        if (this.univ.rng.getRan(1, 0, 10) < 8 || placid) canEnter = false;
+      }
+    }
+    if (has(FieldType.BARRIER_FORCE)) {
+      if (!m.isFriendly && this.univ.rng.getRan(1, 1, 100) < m.mon.mu * 10 + m.mon.cl * 4
+        && !town.record.strongBarriers) {
+        this.sound?.play(60);
+        m.spellNote(SpellNote.BREAKS_BARRIER);
+        town.setField(where.x, where.y, FieldType.BARRIER_FORCE, false);
+      } else canEnter = false;
+    }
+    if (has(FieldType.BARRIER_CAGE)) canEnter = false;
+    for (const thing of [FieldType.OBJECT_CRATE, FieldType.OBJECT_BARREL, FieldType.OBJECT_BLOCK]) {
+      if (!has(thing)) continue;
+      if (placid) canEnter = false;
+      else this.pushThings(fromLoc, where);
+    }
+    // Monsters don't hop into bed when things are calm.
+    if (placid && ter.special === TerSpec.BED) canEnter = false;
+    if (mode === 1 && town.hasField(where.x, where.y, FieldType.SPECIAL_SPOT)) canEnter = false;
+    if (terNum === 90) {
+      // Terrain 90 is the protected "escape hatch"; a monster that reaches it
+      // in a real fight leaves the map for good.
+      if (isCombat(this.mode) && this.whichCombatType === 0) {
+        m.active = CreatureStatus.DEAD;
+        this.univ.addStringToBuf('Monster escaped! ');
+      }
+      return false;
+    }
+
+    switch (ter.special) {
+      case TerSpec.CHANGE_WHEN_STEP_ON:
+        canEnter = false;
+        if (!placid) {
+          town.record.terrain[where.x]![where.y] = ter.flag1;
+          doLook = true;
+          if (pointOnScreen(this.center, where)) this.sound?.play(ter.flag2);
+        }
+        break;
+      case TerSpec.BLOCKED_TO_MONSTERS:
+      case TerSpec.TOWN_ENTRANCE:
+      case TerSpec.WATERFALL_CAVE:
+      case TerSpec.WATERFALL_SURFACE:
+        canEnter = false;
+        break;
+      case TerSpec.DAMAGING:
+        // **Returns early, either way** — the rest of the function, `do_look`
+        // included, is skipped for damaging ground.
+        if (m.mon.resist[ter.flag3 as DamageType] === 0) return true;
+        return m.mon.invuln;
+      default:
+        break;
+    }
+
+    if (doLook) {
+      if (this.inTown) this.updateExplored(this.univ.party.townLoc);
+      if (isCombat(this.mode)) {
+        for (const pc of this.univ.party.pcs) {
+          if (pc.isAlive) this.updateExplored(pc.combatPos);
+        }
+      }
+    }
+    return canEnter;
+  }
+
+  /**
+   * monst_check_special_terrain (boe.monster.cpp:1074) — the same question for
+   * every square a big creature would cover. `mode` is 1 in town, 2 in combat.
+   *
+   * Note it stops at the first refusal, so a two-square creature only rolls
+   * `guts` twice when the first square let it through.
+   */
+  monstCheckSpecialTerrain(m: Creature, where: Location, mode: number): boolean {
+    for (let x = where.x; x < where.x + m.xWidth; x++)
+      for (let y = where.y; y < where.y + m.yWidth; y++)
+        if (!this.monstCheckOneSpecialTerrain(m, loc(x, y), mode)) return false;
+    return true;
   }
 
   /**

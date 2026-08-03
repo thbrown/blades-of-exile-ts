@@ -143,6 +143,11 @@ export async function increaseAgeEffects(session: GameSession): Promise<void> {
   if (!outdoors && !town) return;
   const age = party.age;
 
+  // "decrease monster present counter" (boe.actions.cpp:3377), a `move_to_zero`
+  // beside the light level's. It only matters to `monster_placid`, which is why
+  // it can live here rather than anywhere more prominent.
+  if (party.hostilesPresent > 0) party.hostilesPresent--;
+
   // --- Food ------------------------------------------------------------------
   // "Food" (boe.actions.cpp:3467): every thousandth turn the party eats, one
   // ration per living PC. `take_food` empties the larder and reports the

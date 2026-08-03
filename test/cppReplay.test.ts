@@ -29,10 +29,11 @@ import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { parseXmlDoc } from '../src/fileio/xml';
-import { runReplay, rngForReplay } from '../src/replay/driver';
+import { runReplay, seedLoadedReplay } from '../src/replay/driver';
 import { parseReplay } from '../src/replay/format';
 import { replayStartup, scenarioDirOf } from '../src/replay/startup';
 import { PartyPreset } from '../src/universe/player';
+import { GameRng } from '../src/core/rng';
 import { Universe } from '../src/universe/universe';
 
 const opcodes = buildOpcodeTable(
@@ -97,9 +98,14 @@ async function play(file: string): Promise<RunOutcome> {
   if (start.kind !== 'load') throw new Error(`${file}: ${start.why}`);
 
   const scen = await loadScen(start.scenarioId);
-  const univ = new Universe(scen, rngForReplay(replay), PartyPreset.DEFAULT);
+  // **Seeded after `startNewGame`, not before** — see `seedLoadedReplay`. The
+  // C++ never starts a game for a recording that loads a save, so the draws
+  // that setup makes are this port's alone and would put the stream thousands
+  // of numbers out of step.
+  const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
   const session = new GameSession(univ);
   session.startNewGame();
+  seedLoadedReplay(univ.rng, replay);
   applySave(start.save, univ);
   session.resumeLoadedGame();
 

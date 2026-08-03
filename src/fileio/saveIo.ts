@@ -606,6 +606,8 @@ export function writeParty(file: TagFile, party: Party, scenarioId: string): voi
     if (value !== 0) page.add('STATUS', which, value);
   }
   for (const i of party.mNoted) page.add('ROSTER', i);
+  for (const i of party.mSeen) page.add('SEEN', i);
+  page.add('HOSTILES', party.hostilesPresent);
   for (let i = 0; i < party.imprisonedMonst.length; i++) {
     if (party.imprisonedMonst[i]! > 0) page.add('SOULCRYSTAL', i, party.imprisonedMonst[i]!);
   }
@@ -764,6 +766,9 @@ export function readParty(file: TagFile, party: Party): void {
 
       party.mNoted.clear();
       for (const tag of page.list('ROSTER')) party.mNoted.add(tag.int(0));
+      party.mSeen.clear();
+      for (const tag of page.list('SEEN')) party.mSeen.add(tag.int(0));
+      party.hostilesPresent = page.first('HOSTILES')?.int(0) ?? 0;
 
       party.imprisonedMonst.fill(0);
       // Note the C++ writes the slot but then stores into `n`, the loop counter.

@@ -20,6 +20,22 @@ BOE_TRACE=1 ./tools/cppharness/run.sh <replay.xml>
 `BOE_TRACE_MONST=1` adds the town's creature list to each line, and pairs with
 `MONST=1` on the corpus test — that pairing is what found the townsperson-drift
 bucket, on the first turn of a recording that only failed 33 actions later.
+`BOE_TRACE_TARG=1` adds where each creature is *heading* (`TARG=1` on this side).
+
+**`BOE_TRACE_RAN=n` is the sharpest of them**: it dumps the first *n* draws from
+the game stream, and `RAN=n` prints the identical format here. Diff the two and
+the first differing line is the rule that diverged — usually a `get_ran` one side
+makes and the other doesn't, which no amount of staring at positions would find.
+`BOE_TRACE_RAN_STACK=k` prints the C++ stack for draw *k* (`RANSTACK=k` here), so
+"they part at draw 12" becomes "`play_ambient_sound`, which you never ported".
+Only the game stream is traced: `unique_rand` is seeded from the clock and is
+deliberately outside the replay's determinism.
+
+```
+BOE_TRACE_RAN=4000 ./tools/cppharness/run.sh <replay.xml> | grep '\[ran\]' > /tmp/c
+CORPUS=1 ONLY=<name> RAN=4000 npx vitest run test/corpus.test.ts | grep '\[ran\]' > /tmp/j
+diff /tmp/c /tmp/j | head
+```
 
 ## Setup
 

@@ -15,7 +15,7 @@ import { Creature, CreatureStatus } from '../universe/creature';
 import { Living, SpellNote, livingSound } from '../universe/living';
 import { MonstMelee } from '../data/monster';
 import { Player } from '../universe/player';
-import { MainStatus, Race, Skill, Status, Trait } from '../universe/skills';
+import { MainStatus, PartyStatus, Race, Skill, Status, Trait } from '../universe/skills';
 import { Universe } from '../universe/universe';
 import { SpecCtx, SpecCtxType } from './specials/context';
 import {
@@ -25,7 +25,7 @@ import { NO_ONE, pcAttack } from './combat';
 import {
   abilityCost, monstFireMissile, monsterBasicAbil, monsterSummon, pickMonsterAbility,
 } from './monsterAbilities';
-import { GameMode } from './modes';
+import { GameMode, isCombat } from './modes';
 import { damageMonst, damagePc, hitChance } from './damage';
 import { onHitTargetSpecial } from './weaponAbilities';
 import { ItemAbil } from '../data/item';
@@ -206,18 +206,61 @@ export function monstPickTarget(session: GameSession, monst: Creature): number {
   return pcTarget !== NO_ONE ? pcTarget : pickTargetMonst(session, monst);
 }
 
-/** combat_move_monster (boe.monster.cpp:710) — one step, if the square allows it. */
-function combatMoveMonster(session: GameSession, monst: Creature, dest: Location): boolean {
-  if (!session.monstCanBeAt(monst, dest)) return false;
-  // TODO(M5b): monst_check_special_terrain and monst_inflict_fields.
+/**
+ * The move itself, once a square has been agreed on. Shared by the two callers
+ * below, which differ only in **what order they ask the two questions in**.
+ */
+function stepMonsterTo(session: GameSession, monst: Creature, dest: Location): boolean {
   monst.direction = dirToward(monst.curLoc, dest);
   monst.curLoc = { ...dest };
+  // TODO(M5b): monst_inflict_fields.
   // A footstep, same as the party's own — only when the step lands on
   // screen, and only this one didn't play at all before.
   if (pointOnScreen(session.center, dest)) {
     session.moveSound(session.univ.town?.record.terrain[dest.x]?.[dest.y] ?? 0, monst.ap);
   }
   return true;
+}
+
+/**
+ * combat_move_monster (boe.monster.cpp:710) — **can it stand there** first,
+ * then what the terrain thinks.
+ */
+function combatMoveMonster(session: GameSession, monst: Creature, dest: Location): boolean {
+  if (!session.monstCanBeAt(monst, dest)) return false;
+  if (!session.monstCheckSpecialTerrain(monst, dest, 2)) return false;
+  return stepMonsterTo(session, monst, dest);
+}
+
+/**
+ * town_move_monster (boe.monster.cpp:778) — **the other way round**: the
+ * terrain gets asked first, and only then whether anything is standing there.
+ *
+ * The order is not cosmetic. `monst_check_special_terrain` rolls the creature's
+ * `guts`, so in town that draw happens even for a step into a wall, and in
+ * combat it does not. Collapsing the two into one function put the town's
+ * `get_ran` stream out of step with the C++'s on every blocked step a
+ * townsperson tried.
+ */
+function townMoveMonster(session: GameSession, monst: Creature, dest: Location): boolean {
+  if (!session.monstCheckSpecialTerrain(monst, dest, 1)) return false;
+  if (!session.monstCanBeAt(monst, dest)) return false;
+  return stepMonsterTo(session, monst, dest);
+}
+
+/**
+ * try_move (boe.monster.cpp:691) — one step in a direction, dispatched by mode.
+ * A creature in a force cage cannot move at all, whatever it is standing next
+ * to.
+ */
+function tryMove(session: GameSession, monst: Creature, from: Location, dx: number, dy: number): boolean {
+  const dest = loc(from.x + dx, from.y + dy);
+  const town = session.univ.town;
+  const inTownOrFight = session.mode === GameMode.TOWN || isCombat(session.mode);
+  if (inTownOrFight && town?.hasField(from.x, from.y, FieldType.BARRIER_CAGE)) return false;
+  if (session.mode === GameMode.TOWN) return townMoveMonster(session, monst, dest);
+  if (isCombat(session.mode)) return combatMoveMonster(session, monst, dest);
+  return false;
 }
 
 function dirToward(from: Location, to: Location): number {
@@ -272,12 +315,12 @@ function seekParty(session: GameSession, monst: Creature, target: Location): boo
   if (from.y > target.y) tries.push([0, -1]);
 
   for (const [dx, dy] of tries) {
-    if (combatMoveMonster(session, monst, loc(from.x + dx, from.y + dy))) return true;
+    if (tryMove(session, monst, from, dx, dy)) return true;
   }
   // Boxed in: flail in a random direction.
   const m = session.univ.rng.getRan(1, 0, 2) - 1;
   const n = session.univ.rng.getRan(1, 0, 2) - 1;
-  return combatMoveMonster(session, monst, loc(from.x + m, from.y + n));
+  return tryMove(session, monst, from, m, n);
 }
 
 /**
@@ -384,7 +427,11 @@ export function doMonsters(session: GameSession): void {
     // Notice the party — and tell the player, which is the cue to fight or run.
     if (monst.active === CreatureStatus.IDLE && !monst.isFriendly
       && dist(monst.curLoc, partyLoc) <= 8) {
+      // Stealth is **46** here and 45 in the combat copy of this roll
+      // (boe.combat.cpp:2079). The two were written separately and drifted by
+      // one; both are kept as they are.
       const r1 = univ.rng.getRan(1, 1, 100)
+        + ((univ.party.partyStatus[PartyStatus.STEALTH] ?? 0) > 0 ? 46 : 0)
         + session.canSeeLight(monst.curLoc, partyLoc) * 10;
       if (r1 < 50) {
         monst.active = CreatureStatus.ALERTED;
@@ -684,10 +731,19 @@ function statusTouchMsg(stat: Status): string | null {
 function giveMonstersMoves(session: GameSession): void {
   const univ = session.univ;
   for (const monst of univ.town?.monsters ?? []) {
-    if (monst.active === CreatureStatus.IDLE && !monst.isFriendly) {
+    // **In combat only** (boe.combat.cpp:2076). This is "see if hostile monster
+    // notices party, *during combat*", and the mode test is easy to drop
+    // because everything around it runs in town as well. Dropping it costs a
+    // `get_ran(1,1,100)` per idle hostile creature on every town turn, which
+    // is a big, steady offset in the town's draw stream.
+    if (monst.active === CreatureStatus.IDLE && !monst.isFriendly
+      && session.mode === GameMode.COMBAT) {
       // A hostile monster rolls to notice the party; the further it can see,
       // the worse its chances, and stealth makes it much worse.
       let r1 = univ.rng.getRan(1, 1, 100);
+      // Stealth is a flat 45 — the C++ carries its own TODO wondering whether
+      // it ought to scale with level. Kept as it is.
+      if ((univ.party.partyStatus[PartyStatus.STEALTH] ?? 0) > 0) r1 += 45;
       r1 += session.canSeeLight(monst.curLoc, closestPcLoc(univ, monst.curLoc)) * 10;
       if (r1 < 50) monst.active = CreatureStatus.ALERTED;
       // And a fight nearby alerts it regardless.
@@ -729,6 +785,11 @@ function giveMonstersMoves(session: GameSession): void {
 
     monst.ap = 0;
     if (monst.active === CreatureStatus.ALERTED) {
+      // "First note that hostile monsters are around" (boe.combat.cpp:2115).
+      // This is what stops a FRIENDLY creature counting as placid while a
+      // fight is on, which in turn decides whether it will shove a crate or
+      // step onto a bed.
+      if (!monst.isFriendly) univ.party.hostilesPresent = 30;
       monst.ap = monst.mon.speed;
       if (session.univ.isInTown()) monst.ap = Math.max(1, Math.trunc(monst.ap / 3));
       if (univ.party.age % 2 === 0 && (monst.status[Status.HASTE_SLOW] ?? 0) < 0) monst.ap = 0;

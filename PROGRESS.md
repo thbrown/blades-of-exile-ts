@@ -3842,3 +3842,79 @@ The M6 list below is kept for the history of what it covered:
     recording's embedded `.exg` (it lands in `$TMPDIR/boe-harness/temp/temp.exg`
     after a run; `gzip -dc … | tar xO save/town.txt`) is the cheapest way to ask
     "was this thing ever there?".
+
+- **The draw streams, and the four bugs they named (M8, 2026-08-03).** The
+  harness's `BOE_TRACE_RAN` and this port's `RAN=n` print the game stream's
+  draws in the same format, so a divergence stops being "the party ended up two
+  squares away 300 actions later" and becomes "at draw 12 the C++ called
+  `get_ran(1,1,100)` and we didn't". `BOE_TRACE_RAN_STACK=k` / `RANSTACK=k`
+  then names the caller. Every bug below was found that way, in about the order
+  listed, each one exposing the next.
+  - **Seeding a save-loading recording after `startNewGame`, not before**
+    (`seedLoadedReplay`). `rngForReplay` is right for a recording that starts a
+    fresh party, because the C++ seeds and then plays. A recording that *loads a
+    save* is the opposite shape: the C++ never starts a game at all, so the
+    thousands of draws this port's `startNewGame` makes rolling shop stock have
+    no counterpart there, and seeding ahead of them puts the stream thousands of
+    numbers out of step. **The one extra draw afterwards is not a fudge**:
+    `init_boe` does `std::cout << game_rand() << std::endl` (boe.main.cpp:1247),
+    an unconditional debug print of the first number, so the stream every
+    recorded action reads from starts one number in.
+  - **`play_ambient_sound` draws** (boe.graphutil.cpp:668), and it is the *first*
+    thing `handle_monster_actions` does — ahead of `increase_age` and the
+    monsters. Outdoors it is one `get_ran(1,1,100)` per turn for a one-in-ten
+    bird or drip. **In town it is `check_if_monst_seen` over every visible
+    creature**, and that rolls `get_ran(1,1,100)` for each one whose *type* has
+    an ambient sound. A cosmetic-looking function that a town turn calls a dozen
+    times: skipping it shifted the entire town stream. It also fires a monster
+    type's `see_spec` the first time the party sees it, which needed
+    `cParty::m_seen` (saved as `SEEN`).
+  - **`start_town_mode` clears every creature's `targ_loc`** (boe.town.cpp:498),
+    and this port didn't. `cCreature`'s default target is **(80,80)** — off the
+    bottom-right corner of any town — so every townsperson had a valid target
+    from the moment the town loaded, `rand_move`'s first branch succeeded every
+    turn walking towards it, and they filed south-east in straight lines instead
+    of milling about. Because that branch returns *before* `rand_move` rolls
+    anything, it also silently removed all of those draws. This was the single
+    largest cause of drift, and it is what the mirrored walks in the entry above
+    actually were.
+  - **`monst_check_special_terrain` was `TODO(M5b)` and it draws on every step.**
+    `guts` — how keen a creature is to walk into something nasty — is
+    `get_ran(1,1,level/2)` for anything not mindless, on **every attempted
+    move**, nasty square or not. *Gotcha that does the work here*: `get_ran`
+    returns without touching the stream when `min == max`, so levels 2-3 draw
+    nothing and only level 4+ costs a number. Ported in full — conveyors,
+    the guts thresholds for each wall and cloud, the barrier-breaking rolls,
+    crates and barrels and blocks, beds, marked spots, terrain 90's escape
+    hatch, and `CHANGE_WHEN_STEP_ON` (so a monster really does open a door).
+    - **`try_move` dispatches by mode and the two orders differ**:
+      `town_move_monster` asks the *terrain* first and `combat_move_monster`
+      asks *can it stand there* first. So in town the `guts` draw happens even
+      for a step into a wall, and in combat it does not. This port had one
+      function for both.
+    - It needed `cParty::hostiles_present` (a 30-turn countdown set whenever a
+      hostile creature acts), which `monster_placid` reads to decide whether a
+      FRIENDLY creature counts as calm. Saved as `HOSTILES`.
+  - **The "does it notice you?" roll in `do_monster_turn` is combat-only**
+    (boe.combat.cpp:2076 — the condition really does say
+    `overall_mode == MODE_COMBAT`). This port ran it in town too, spending a
+    `get_ran(1,1,100)` per idle hostile creature every town turn. The *town*
+    copy of that roll lives in `do_monsters` and was already here; both were
+    missing the stealth bonus, which is **46** in the town copy and **45** in
+    the combat one. The two were written separately and drifted by one; both
+    kept.
+  - **Where it stands.** Draws matched before the first divergence, per file:
+    `ZKR-5-16-1-26` 468 (was 9), `ASR_05-05-2025_12-50-38` 225 (was 74),
+    `ASR_05-05-2025_21-13-55` 33 (was 11). **The corpus's action count went
+    *down*, 7,760 to 7,442**, and that is the honest number: several files were
+    surviving on a wrong RNG stream that happened to keep them out of trouble,
+    and now they diverge earlier on rules that were always wrong. Action count
+    is a lagging measure once the stream is genuinely aligned — *draws matched*
+    is the one to watch, and the next slice should start from
+    `ZKR_15-05-2025_18-04-58`, which still parts at draw 10 with a `guts` roll
+    the C++ makes for a creature this port doesn't move at all.
+  - `verify-screen`'s encounter probe had to stop racing: it looped until the
+    first damage and asserted "Monster saw you!" had been printed, but
+    `do_monsters` alerts anything within five squares of something already angry
+    **silently**, so which of the two happened first was a coin toss that moved
+    with the stream. It now loops until both.

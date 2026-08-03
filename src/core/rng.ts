@@ -60,6 +60,16 @@ function toInt16(n: number): number {
  * mathutil.cpp. Replays seed only the game stream; calls that must not
  * affect replay determinism use the unique stream.
  */
+/**
+ * `RAN=n` prints the first n `get_ran` calls with their arguments and result.
+ * The pair on the C++ side is `BOE_TRACE_RAN=n tools/cppharness/run.sh`, which
+ * prints the identical format — diffing the two is the only way to line the
+ * engines up when they disagree about *which* random number a rule got, and
+ * every one of the drift buckets ends up here. Read once: this is a hot path.
+ */
+const TRACE_RAN = Number(
+  (typeof process !== 'undefined' ? process.env?.RAN : undefined) ?? 0);
+
 export class GameRng {
   readonly game = new MT19937();
   readonly unique = new MT19937();
@@ -75,6 +85,8 @@ export class GameRng {
   seedGame(seed: number): void {
     this.game.seed(seed);
     this.gameDraws = 0;
+    this.traced = 0;
+    this.seeded = true;
   }
 
   /** Verbatim port of get_ran(times, min, max, use_unique_ran). */
@@ -95,6 +107,27 @@ export class GameRng {
       }
       toRet = toInt16(toRet + min + (store % (max - min + 1)));
     }
+    // **The game stream only** — `unique` is seeded off the clock and is
+    // deliberately outside the replay's determinism, so tracing it interleaves
+    // numbers with no counterpart on the other side, which reads as "the
+    // streams diverge on the first draw" when they in fact agree.
+    if (!useUnique && this.seeded && TRACE_RAN > 0 && ++this.traced <= TRACE_RAN) {
+      // eslint-disable-next-line no-console
+      console.log(`    [ran] ${this.traced} get_ran(${times},${min},${max}) = ${toRet}`);
+      if (process.env.RANSTACK && String(this.traced) === process.env.RANSTACK) console.log(new Error('here').stack);
+      if (process.env.RANSTACK) console.log(new Error('here').stack);
+    }
     return toRet;
   }
+
+  /** How many draws `RAN=n` has printed so far. */
+  private traced = 0;
+
+  /**
+   * Whether the game stream has been seeded yet. `RAN=n` stays quiet until it
+   * has: a recording that loads a save is seeded *after* `startNewGame`, whose
+   * setup draws thousands of numbers that have no counterpart in the C++, and
+   * tracing those just spends the budget before the comparable part starts.
+   */
+  private seeded = false;
 }

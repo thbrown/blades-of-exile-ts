@@ -210,8 +210,32 @@ index 56cde7c1..9abbdca0 100644
  		int loaded = EM_ASM_INT({ return Module.audioLoadCount || 0; });
  		int total = EM_ASM_INT({ return Module.audioTotalCount || 0; });
  		if (loaded >= total && total > 0) {
+diff --git a/src/mathutil.cpp b/src/mathutil.cpp
+index faaef3f2..2a648966 100644
+--- a/src/mathutil.cpp
++++ b/src/mathutil.cpp
+@@ -26,6 +26,19 @@ short get_ran (short times,short min,short max, bool use_unique_ran){
+ 			store = game_rand();
+ 		to_ret += min + (store % (max - min + 1));
+ 	}
++#ifdef BOE_NATIVE_REPLAY
++	// BOE_TRACE_RAN dumps the draw stream, which is the only way to line two
++	// engines up when they disagree about *which* random number a rule got.
++	//
++	// **The game stream only.** `unique_rand` is seeded from the clock and is
++	// deliberately outside the replay's determinism, so tracing it interleaves
++	// numbers that cannot match anything on the other side — which reads as
++	// "the streams diverge on the first draw" when they in fact agree.
++	if(!use_unique_ran) {
++		extern void trace_ran(short times, short lo, short hi, short result);
++		trace_ran(times, min, max, to_ret);
++	}
++#endif
+ 	return to_ret;
+ }
+ 
 diff --git a/src/tools/replay.cpp b/src/tools/replay.cpp
-index 3946c875..51a2682e 100644
+index 3946c875..c81756b5 100644
 --- a/src/tools/replay.cpp
 +++ b/src/tools/replay.cpp
 @@ -28,6 +28,15 @@
@@ -241,7 +265,7 @@ index 3946c875..51a2682e 100644
  			} else if constexpr (std::is_integral_v<T>) {
  				if constexpr (std::is_same_v<S, std::string>) {
  					return static_cast<T>(std::stoi(arg));
-@@ -252,6 +263,53 @@ int next_action_line() {
+@@ -252,6 +263,77 @@ int next_action_line() {
  	return next_action->Row();
  }
  
@@ -252,6 +276,7 @@ index 3946c875..51a2682e 100644
 +// exile-js's own `CORPUS=1 TRACE=1` output, so the two runs diff line for line
 +// and the first differing line names the rule that diverged. Off by default:
 +// the recordings are thousands of actions long.
++#include <execinfo.h>
 +#include "universe/universe.hpp"
 +#include "game/boe.global.hpp"
 +
@@ -262,6 +287,26 @@ index 3946c875..51a2682e 100644
 +	static int on = -1;
 +	if(on < 0) on = getenv("BOE_TRACE") != nullptr;
 +	return on;
++}
++
++void trace_ran(short times, short lo, short hi, short result) {
++	static long n = 0;
++	static bool on = getenv("BOE_TRACE_RAN") != nullptr;
++	static long limit = on ? atol(getenv("BOE_TRACE_RAN")) : 0;
++	// BOE_TRACE_RAN_STACK=k prints the stack for draw k — the pair to `RANSTACK`
++	// on the exile-js side. "The two streams part at draw k" is only half an
++	// answer; the other half is which rule made the call.
++	static long stack_at = getenv("BOE_TRACE_RAN_STACK")
++		? atol(getenv("BOE_TRACE_RAN_STACK")) : 0;
++	if(!on || ++n > limit) return;
++	std::cout << "    [ran] " << n << " get_ran(" << times << "," << lo << "," << hi
++		<< ") = " << result << std::endl;
++	if(n == stack_at) {
++		std::cout.flush();
++		void* frames[32];
++		int got = backtrace(frames, 32);
++		backtrace_symbols_fd(frames, got, 1);
++	}
 +}
 +
 +void trace_action(const std::string& type, const std::string& text) {
@@ -286,7 +331,10 @@ index 3946c875..51a2682e 100644
 +		for(size_t i = 0; i < univ.town.monst.size(); i++)
 +			if(univ.town.monst[i].is_alive())
 +				std::cout << " " << i << ":(" << univ.town.monst[i].cur_loc.x
-+					<< "," << univ.town.monst[i].cur_loc.y << ")";
++					<< "," << univ.town.monst[i].cur_loc.y << ")"
++					<< (getenv("BOE_TRACE_TARG")
++						? "->(" + std::to_string(univ.town.monst[i].targ_loc.x) + ","
++							+ std::to_string(univ.town.monst[i].targ_loc.y) + ")" : "");
 +		std::cout << std::endl;
 +	}
 +}
@@ -295,7 +343,7 @@ index 3946c875..51a2682e 100644
  Element& pop_next_action(std::string expected_action_type) {
  	if(next_action == nullptr){
  		throw std::string { "Replay error! No action left to pop" };
-@@ -264,6 +322,13 @@ Element& pop_next_action(std::string expected_action_type) {
+@@ -264,6 +346,13 @@ Element& pop_next_action(std::string expected_action_type) {
  
  	Element* to_return = next_action;
  	next_action = next_action->NextSiblingElement(false);

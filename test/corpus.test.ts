@@ -47,11 +47,12 @@ import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { parseXmlDoc } from '../src/fileio/xml';
-import { runReplay, rngForReplay } from '../src/replay/driver';
+import { runReplay, seedLoadedReplay } from '../src/replay/driver';
 import { parseReplay } from '../src/replay/format';
 import { inferMoves } from '../src/replay/inferMoves';
 import { replayStartup, scenarioDirOf } from '../src/replay/startup';
 import { PartyPreset } from '../src/universe/player';
+import { GameRng } from '../src/core/rng';
 import { Universe } from '../src/universe/universe';
 
 const ROOT = fileURLToPath(new URL('../../exile-wasm/test/replays', import.meta.url));
@@ -94,9 +95,14 @@ async function play(path: string): Promise<Row> {
   if (start.kind !== 'load') return { ...base, why: start.why };
 
   const scen = await loadScenario(new FsSource(join(SCENARIOS, start.scenarioId)), opcodes);
-  const univ = new Universe(scen, rngForReplay(replay), PartyPreset.DEFAULT);
+  // **Seeded after `startNewGame`, not before** — see `seedLoadedReplay`. The
+  // C++ never starts a game for a recording that loads a save, so the draws
+  // that setup makes are this port's alone and would put the stream thousands
+  // of numbers out of step.
+  const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
   const session = new GameSession(univ);
   session.startNewGame();
+  seedLoadedReplay(univ.rng, replay);
   applySave(start.save, univ);
   session.resumeLoadedGame();
   const startedAt = { ...univ.party.getLoc() };
@@ -120,7 +126,7 @@ async function play(path: string): Promise<Row> {
         mark = univ.transcript.length;
         trace.push(`  ${String(at).padStart(5)} ${action.type.padEnd(20)} `
           + `${(action.text || action.info.id || '').padEnd(10)} -> (${l.x},${l.y})${who} `
-          + `mode=${session.mode}  ${said.slice(0, 110)}`);
+          + `mode=${session.mode} draws=${univ.rng.gameDraws} ${said.slice(0, 110)}`);
         // The creature list, in `BOE_TRACE_MONST`'s format so the two traces
         // diff. Only the living ones, and by `slot` rather than array index:
         // this port's list is compacted and the C++'s is not, so the index
@@ -128,7 +134,8 @@ async function play(path: string): Promise<Row> {
         if (process.env.MONST && univ.town) {
           trace.push('      monst:' + univ.town.monsters
             .filter((m) => m.isAlive)
-            .map((m) => ` ${m.slot}:(${m.curLoc.x},${m.curLoc.y})`).join(''));
+            .map((m) => ` ${m.slot}:(${m.curLoc.x},${m.curLoc.y})`
+              + (process.env.TARG ? `->(${m.targLoc.x},${m.targLoc.y})` : '')).join(''));
         }
         // `TAIL=n` keeps only the last n lines: over the whole corpus the full
         // trace is tens of thousands of strings, and the interesting part of a
