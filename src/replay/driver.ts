@@ -31,7 +31,7 @@ import { GameMode, isCombat } from '../game/modes';
 import { dropItemAt, handleDropItem, handleGiveItem } from '../game/giveDrop';
 import { GameSession } from '../game/session';
 import { SpellPick } from '../game/spellPick';
-import { combatCastSpell } from '../game/spellCombat';
+import { combatCastCheck, combatCastSpell } from '../game/spellCombat';
 import { cancelSpellTargeting, doCombatCast, placeTarget } from '../game/spellCombatTarget';
 import { cancelTownTargeting, castTownSpell } from '../game/spellTarget';
 import { castSpell } from '../game/spellTown';
@@ -385,6 +385,12 @@ export async function runReplay(
             else castSpell(session, caster, spell);
             break;
           }
+          // **In combat the picker does not always open.**
+          // `combat_cast_*_spell` asks whether the active PC can cast anything
+          // of this kind *before* reaching `pick_spell` and returns with no
+          // dialog if not, which is why an Anama pressing **m** gets a refusal
+          // and nothing else.
+          if (isCombat(session.mode) && !combatCastCheck(session, type)) break;
           // `can_choose_caster` is false in combat: the active PC casts, full
           // stop, and the caster buttons are inert (`pick_spell` is handed
           // `univ.cur_pc` there and 6 out of combat).

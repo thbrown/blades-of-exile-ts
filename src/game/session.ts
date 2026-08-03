@@ -58,6 +58,7 @@ import { ShopState, handleSale } from './shop';
 import { SpellStore, emptySpellStore } from './spellRepeat';
 import { ItemShopMode, ItemShopState, handleItemShopAction } from './itemShop';
 import { isContainerAt } from './loot';
+import { NO_TARGET } from './spellPick';
 import { doRest, handleRest } from './rest';
 import { makeTownHostile } from './townAttitude';
 import { OUT_HALF_DIM, OUT_MAX_DIM } from '../universe/curOut';
@@ -159,6 +160,14 @@ export class GameSession {
    */
   mageStore: SpellStore = emptySpellStore();
   priestStore: SpellStore = emptySpellStore();
+
+  /**
+   * `store_last_cast_mage` / `store_last_cast_priest` (boe.party.cpp:100),
+   * indexed 0 mage / 1 priest — **who the spell picker opens on**, which is not
+   * the same thing as `store_mage.caster`: `finish_pick_spell` writes this one
+   * on every way out of the dialog, Cancel included. 6 is "nobody has yet".
+   */
+  lastCaster: [number, number] = [NO_TARGET, NO_TARGET];
 
   /**
    * The spell waiting for a square while the game is in SPELL_TARGET mode

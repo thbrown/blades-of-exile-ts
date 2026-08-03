@@ -12,9 +12,20 @@
  */
 
 import { NUM_NORMAL_SPELLS, SPELLS, Spell, SpellSelect, spellFromNum } from '../data/spell';
+import { MainStatus } from '../universe/skills';
+import { isCombat } from './modes';
+import { storeFor } from './spellRepeat';
 import { CastStatus, pcCanCastSpell, pcCanCastType } from './spellCast';
 import type { GameSession } from './session';
 import { Skill } from '../universe/skills';
+
+/**
+ * The spell the picker opens on when there is nothing better to open on
+ * (boe.party.cpp:62). The priest list has a separate one for combat.
+ */
+export const DEFAULT_MAGE = Spell.LIGHT;
+export const DEFAULT_PRIEST = Spell.HEAL_MINOR;
+export const DEFAULT_PRIEST_COMBAT = Spell.BLESS_MINOR;
 
 /** `store_spell_target`'s "nobody chosen". */
 export const NO_TARGET = 6;
@@ -60,15 +71,62 @@ export class SpellPick {
     readonly type: Skill,
     readonly canChooseCaster: boolean,
   ) {
-    this.caster = session.univ.curPc;
-    // pick_spell keeps the current caster if they can cast, and otherwise
-    // walks the party for the first who can.
+    const { univ } = session;
+    const isPriest = type === Skill.PRIEST_SPELLS;
+    // **`pc_casting` starts from whoever cast last**, not from the active PC:
+    // `store_last_cast_mage`/`_priest`, which `finish_pick_spell` writes on the
+    // way out — even on Cancel. 6 means nobody has yet.
+    this.caster = session.lastCaster[isPriest ? 1 : 0];
+    if (this.caster === NO_TARGET) this.caster = univ.curPc;
+    // pick_spell keeps that caster if they can cast, and otherwise walks the
+    // party for the first who can.
     if (canChooseCaster
-      && pcCanCastType(session, session.univ.party.pcs[this.caster]!, type) !== CastStatus.OK) {
-      const found = session.univ.party.pcs.findIndex(
+      && pcCanCastType(session, univ.party.pcs[this.caster]!, type) !== CastStatus.OK) {
+      const found = univ.party.pcs.findIndex(
         (pc) => pcCanCastType(session, pc, type) === CastStatus.OK);
       if (found >= 0) this.caster = found;
     }
+    if (!canChooseCaster) this.caster = univ.curPc;
+
+    // **The picker opens with a spell already selected**, which this port did
+    // not do at all — it started on NONE, so a Cast with nothing clicked said
+    // "Cast: No spell selected." where the C++ casts the default. That is the
+    // observable difference; the recording clicks a spell whose LED is off,
+    // gets "Spell not available.", clicks Cast, and the C++ casts what was
+    // already selected.
+    let want: Spell;
+    if (isCombat(session.mode)) {
+      // In combat it is *this PC's* last spell, and the priest list has its own
+      // combat default when they have none.
+      want = univ.party.pcs[this.caster]?.lastCast[type] ?? Spell.NONE;
+      if (isPriest && want === Spell.NONE) want = DEFAULT_PRIEST_COMBAT;
+    } else {
+      want = storeFor(session, type).spell;
+    }
+    if (want === Spell.NONE) want = isPriest ? DEFAULT_PRIEST : DEFAULT_MAGE;
+    // Keep it only if it is still castable — and note the fallback is **not**
+    // re-checked, so a caster who can't manage Light still opens on Light.
+    if (!this.castableBy(this.caster, want)) want = isPriest ? DEFAULT_PRIEST : DEFAULT_MAGE;
+    this.spell = want;
+
+    // The target survives too, if the spell wants one and that PC is still up.
+    const stored = session.spellTarget;
+    if (stored < NO_TARGET) {
+      const needs = (SPELLS[want]?.select ?? SpellSelect.NO) !== SpellSelect.NO;
+      const alive = univ.party.pcs[stored]?.mainStatus === MainStatus.ALIVE;
+      this.target = needs && alive ? stored : NO_TARGET;
+    }
+
+    // Levels 5-7 live on the second page, and the picker opens on whichever
+    // page the selected spell is on.
+    // `int(default_spell) % 100` — the number within its own list.
+    this.page = (want % 100) >= 38 ? 1 : 0;
+  }
+
+  /** `pc_can_cast_spell(univ.party[i], spell)` for an arbitrary caster. */
+  private castableBy(who: number, spell: Spell): boolean {
+    const pc = this.session.univ.party.pcs[who];
+    return pc ? pcCanCastSpell(this.session, pc, spell) : false;
   }
 
   get choice(): CastChoice {
@@ -85,6 +143,9 @@ export class SpellPick {
    */
   finish(): CastChoice | null {
     const { univ } = this.session;
+    // `store_last_cast_*` is written on **every** way out, refusals included,
+    // so the picker opens on the same caster next time.
+    this.session.lastCaster[this.type === Skill.PRIEST_SPELLS ? 1 : 0] = this.caster;
     if (this.spell === Spell.NONE) {
       univ.addStringToBuf('Cast: No spell selected.');
       return null;
@@ -170,7 +231,13 @@ export class SpellPick {
    * is ignored rather than refused, since the C++'s dialog swallows those too.
    */
   click(id: string): PickAction {
-    if (id === 'cancel') return 'cancel';
+    if (id === 'cancel') {
+      // Cancel writes `store_last_cast_*` too, and restores the target the
+      // dialog opened with — which the caller keeps in `session.spellTarget`
+      // and this never wrote to, so there is nothing to put back.
+      this.session.lastCaster[this.type === Skill.PRIEST_SPELLS ? 1 : 0] = this.caster;
+      return 'cancel';
+    }
     // **Cast always closes**, even with nothing chosen: `finish_pick_spell`'s
     // `store_spell == 70` arm says "Cast: No spell selected." and toasts the
     // dialog. Leaving it open instead would swallow a recorded click.

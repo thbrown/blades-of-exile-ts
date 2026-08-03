@@ -16,7 +16,8 @@ import { Player } from '../universe/player';
 import { MainStatus, Skill, Status, Trait } from '../universe/skills';
 import { Universe } from '../universe/universe';
 import { totalEncumbrance } from './combat';
-import { GameMode, isCombat } from './modes';
+import { GameMode, isCombat, isOut, isTown } from './modes';
+import { hasFeatureFlag } from './featureFlags';
 import type { GameSession } from './session';
 
 /** eCastStatus (boe.party.hpp:30) — why a PC can't cast, for the UI to print. */
@@ -77,7 +78,13 @@ export function pcCanCastSpell(
   // The special (scenario-granted) spells are cast by their own machinery, not
   // by a PC choosing them from the list.
   if (!isMage(spellNum) && !isPriest(spellNum)) return false;
-  if (pc.traits[Trait.PACIFIST] && !spell.peaceful) return false;
+  // **Behind a feature flag** (boe.party.cpp:1680). Without
+  // `pacifist-spellcast-check: V2` a pacifist is *not* refused here: the older
+  // build let them pick a combat spell and Cast it, and the refusal came later.
+  // 70 of the corpus recordings ask for V2 and the rest need the old
+  // behaviour, so hard-coding the check was wrong for the rest.
+  if (hasFeatureFlag('pacifist-spellcast-check', 'V2')
+    && pc.traits[Trait.PACIFIST] && !spell.peaceful) return false;
   if (effectiveSkill < level) return false;
   if (pc.mainStatus !== MainStatus.ALIVE) return false;
   if (pc.curSp < (spell.cost ?? 0)) return false;
@@ -90,8 +97,10 @@ export function pcCanCastSpell(
   if ((pc.status[Status.ASLEEP] ?? 0) > 0) return false;
 
   const when = spell.when ?? 0;
-  if (session.isOutdoors && !(when & SpellWhen.OUTDOORS)) return false;
-  if (session.mode === GameMode.TOWN && !(when & SpellWhen.TOWN)) return false;
+  // `is_out()` and `is_town()`, not an equality on the mode — a spell cast
+  // from a targeting or look mode is still cast in town.
+  if (isOut(session.mode) && !(when & SpellWhen.OUTDOORS)) return false;
+  if (isTown(session.mode) && !(when & SpellWhen.TOWN)) return false;
   if (isCombat(session.mode) && !(when & SpellWhen.COMBAT)) return false;
   return true;
 }
@@ -170,4 +179,33 @@ export function castableSpells(
     if (pcCanCastSpell(session, pc, spell)) out.push(spell);
   }
   return out;
+}
+
+/**
+ * `print_cast_status` (boe.party.cpp:2094) — why a PC can't cast.
+ *
+ * *Gotcha, kept*: with no name the prefix is the bare word `"Cast"` with no
+ * separator, so the line really does read "CastNo mage skill." The named form
+ * is "Cast (Bart): …". It looks like a missing `": "` and it is what the
+ * original prints.
+ */
+export function printCastStatus(
+  univ: Universe, status: CastStatus, type: Skill, pcName = '',
+): void {
+  if (status === CastStatus.OK) return;
+  const prefix = pcName === '' ? 'Cast' : `Cast (${pcName}): `;
+  const say = (line: string): void => univ.addStringToBuf(prefix + line);
+  switch (status) {
+    case CastStatus.NO_ANAMA: say("You're an Anama!"); break;
+    case CastStatus.NO_SKILL:
+      say(type === Skill.MAGE_SPELLS ? 'No mage skill.' : 'No priest skill.');
+      break;
+    case CastStatus.NO_ENCUMBERED: say('Too encumbered.'); break;
+    case CastStatus.NO_SP: say('No spell points.'); break;
+    case CastStatus.NO_ANTIMAGIC: say('Not in antimagic field.'); break;
+    case CastStatus.NO_DUMBFOUNDED: say("You're dumbfounded!"); break;
+    case CastStatus.NO_PARALYZED: say("You're paralyzed!"); break;
+    case CastStatus.NO_ASLEEP: say("You're asleep!"); break;
+    default: say("You can't!"); break;
+  }
 }

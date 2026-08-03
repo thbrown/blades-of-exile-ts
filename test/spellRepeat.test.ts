@@ -17,7 +17,7 @@ import { Scenario } from '../src/data/scenario';
 import { Spell } from '../src/data/spell';
 import { resetFeatureFlags, setFeatureFlags } from '../src/game/featureFlags';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
-import { NO_TARGET, SpellPick } from '../src/game/spellPick';
+import { DEFAULT_MAGE, NO_TARGET, SpellPick } from '../src/game/spellPick';
 import { repeatCastOk, storedSpell } from '../src/game/spellRepeat';
 import { doMageSpell } from '../src/game/spellTown';
 import { loadScenario } from '../src/fileio/loadScenario';
@@ -130,9 +130,24 @@ describe('repeating the last spell', () => {
     expect(s.univ.party.pcs[0]!.lastCast[Skill.MAGE_SPELLS]).toBeUndefined();
   });
 
+  /**
+   * `pick_spell` opens on a spell already chosen — the last one of its kind,
+   * or Light/Heal Minor when there hasn't been one — so a Cast with nothing
+   * clicked casts *that*. "No spell selected." is only reachable when the pick
+   * has actually been cleared, which is what changing caster does.
+   */
+  it('opens on a default spell rather than on nothing', () => {
+    const s = newGame();
+    const pick = new SpellPick(s, Skill.MAGE_SPELLS, true);
+    expect(pick.spell).toBe(DEFAULT_MAGE);
+    expect(pick.page).toBe(0);
+    expect(pick.finish()?.spell).toBe(DEFAULT_MAGE);
+  });
+
   it('refuses to finish with no spell selected', () => {
     const s = newGame();
     const pick = new SpellPick(s, Skill.MAGE_SPELLS, true);
+    pick.spell = Spell.NONE;
     expect(pick.finish()).toBeNull();
     expect(s.univ.transcript.at(-1)).toBe('Cast: No spell selected.');
   });

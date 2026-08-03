@@ -16,7 +16,7 @@ import { SpellPat } from './data/pattern';
 import { SPELLS, Spell, spellName } from './data/spell';
 import { CastStatus, castableSpells, pcCanCastType } from './game/spellCast';
 import { castSpell } from './game/spellTown';
-import { combatCastSpell } from './game/spellCombat';
+import { combatCastCheck, combatCastSpell } from './game/spellCombat';
 import {
   cancelSpellTargeting, castCollected, doCombatCast, placeTarget,
 } from './game/spellCombatTarget';
@@ -980,15 +980,10 @@ async function main(): Promise<void> {
     }
     const inFight = isCombat(session.mode);
     if (inFight) {
-      // combat_cast_*_spell checks the active PC up front, and an encumbered
-      // mage loses the AP for trying.
-      const status = pcCanCastType(session, univ.currentPc, type);
-      if (status !== CastStatus.OK) {
-        univ.addStringToBuf(castStatusLine(status, kind, univ.currentPc.name));
-        if (status === CastStatus.NO_ENCUMBERED) {
-          takeAp(univ, 6);
-          session.afterCombatAction();
-        }
+      // `combat_cast_*_spell` checks the active PC up front, and an encumbered
+      // mage loses the AP for trying. Shared with the replay driver, so the
+      // picker opens in exactly the same cases on both sides.
+      if (!combatCastCheck(session, type)) {
         setStatus();
         redraw();
         return;

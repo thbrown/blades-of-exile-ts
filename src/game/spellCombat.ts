@@ -25,6 +25,7 @@ import { getProtLevel } from '../universe/inventory';
 import { livingSound } from '../universe/living';
 import { MainStatus, Skill, Status, Trait } from '../universe/skills';
 import { takeAp } from './combat';
+import { CastStatus, pcCanCastType, printCastStatus } from './spellCast';
 import { hasTrappedMonst } from './soulCrystal';
 import { damageMonst, damagePc } from './damage';
 import { placeSpellPattern } from './spellPatterns';
@@ -280,6 +281,34 @@ export async function combatImmedPriestCast(
         `  Error: Priest spell ${spellName(spellNum)} not implemented for combat mode.`);
       break;
   }
+}
+
+/**
+ * The gate `combat_cast_mage_spell` / `combat_cast_priest_spell` run **before**
+ * they open the picker (boe.combat.cpp:4523, :4751): can the active PC cast
+ * anything of this kind at all?
+ *
+ * This port had no equivalent, so an Anama or a fighter with no mage skill got
+ * the spell list anyway, picked nothing castable, and cast whatever the dialog
+ * defaulted to — the failure surfaced afterwards instead of stopping the whole
+ * action. Returns false when the picker must not open.
+ *
+ * *Gotcha*: an encumbered mage **loses six action points for trying**, and is
+ * the only refusal that costs anything.
+ */
+export function combatCastCheck(session: GameSession, type: Skill): boolean {
+  const { univ } = session;
+  const pc = univ.currentPc;
+  const status = pcCanCastType(session, pc, type);
+  if (status === CastStatus.OK) return true;
+  // The C++ prints the reason with no PC name here — see `printCastStatus`'s
+  // note about the missing separator that leaves.
+  printCastStatus(univ, status, type, pc.name);
+  if (status === CastStatus.NO_ENCUMBERED) {
+    takeAp(univ, 6);
+    session.afterCombatAction();
+  }
+  return false;
 }
 
 /**

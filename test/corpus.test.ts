@@ -107,7 +107,7 @@ async function play(path: string): Promise<Row> {
         const said = univ.transcript.slice(mark).join(' | ');
         mark = univ.transcript.length;
         trace.push(`  ${String(at).padStart(5)} ${action.type.padEnd(20)} `
-          + `${(action.text || '').padEnd(10)} -> (${l.x},${l.y})${who} `
+          + `${(action.text || action.info.id || '').padEnd(10)} -> (${l.x},${l.y})${who} `
           + `mode=${session.mode}  ${said.slice(0, 110)}`);
       }
       : undefined,

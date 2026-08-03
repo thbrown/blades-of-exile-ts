@@ -3560,3 +3560,48 @@ The M6 list below is kept for the history of what it covered:
     `ASR_05-05-2025_12-20-07` went from 23 actions to 508 and
     `ZKR_11-05-2025_20-04-33` from 75 to 107. The desync count is unchanged at
     57 for the usual reason — the files reach one *later* now.
+
+- **The spell picker opens on a spell (M8, 2026-08-02).** Twelfth slice. Four
+  files stopped with "Cast: No spell selected." and the reason turned out to be
+  a whole preamble of `pick_spell` (boe.party.cpp:2133) this port did not have.
+  - **The picker is never empty.** `pick_spell` works out a `default_spell`
+    before the dialog opens and shows it selected, so **Cast with nothing
+    clicked casts that** — "Cast: No spell selected." is only reachable once the
+    pick has been actively cleared. This port opened on NONE, so a recording
+    that clicked a spell whose LED is off (getting "Spell not available.") and
+    then Cast came out with nothing where the C++ cast the default.
+    - Out of combat the default is `store_mage`/`store_priest`; **in combat it
+      is this PC's own `last_cast[type]`**, with `BLESS_MINOR` standing in for a
+      priest who has none. The fallbacks are Light and Heal Minor
+      (boe.party.cpp:62), and note the fallback is **not re-checked** — a caster
+      who can't manage Light still opens on Light.
+    - The page follows the spell: `int(default_spell) % 100 >= 38` opens on
+      levels 5-7.
+  - **`store_last_cast_mage`/`_priest` is not `store_mage_caster`.** It is a
+    separate pair of globals holding *who the picker opens on*, written by
+    `finish_pick_spell` on every way out of the dialog — **Cancel included**.
+    `session.lastCaster` now holds them.
+  - **`combat_cast_*_spell` refuses before the picker, not after**
+    (boe.combat.cpp:4523). It asks `pc_can_cast_spell(pc, type)` up front and
+    returns with no dialog at all, which is why an Anama pressing **m** in a
+    fight gets one line and nothing else. `combatCastCheck` is that gate, shared
+    by `main.ts` and the replay driver so the dialog opens in exactly the same
+    cases on both sides — the driver had no gate and was casting the default
+    spell for PCs who could not cast at all.
+    - *Gotcha*: an encumbered mage **loses six action points for trying**, the
+      only refusal here that costs anything.
+  - `print_cast_status` (boe.party.cpp:2094) landed with it. *Gotcha kept*: with
+    no PC name the prefix is the bare word `"Cast"` with no separator, so the
+    line really does read "CastNo mage skill."; the named form is
+    "Cast (Bart): …".
+  - **`pacifist-spellcast-check` is wired**, the second feature flag to pay for
+    itself. Without `V2` a pacifist is *not* refused in `pc_can_cast_spell`: the
+    older build let them pick a combat spell and Cast it and refused later. 70
+    of the corpus recordings ask for V2 and the rest need the old behaviour, so
+    hard-coding the check was wrong for a quarter of the corpus.
+  - Also: `pc_can_cast_spell`'s where-castable tests are `is_out()`/`is_town()`,
+    not an equality on the mode, so a spell cast from a targeting or look mode
+    is still cast in town.
+  - **Where it stands**: 7,718 actions dispatch. The measured gain is small
+    because these files stop on something else a few actions later, but the
+    class is gone: no file now stops on a spell picker that refused to pick.
