@@ -15,7 +15,7 @@ import { GameRng } from '../core/rng';
 import { Job, JobBank, makeJobBank } from '../data/quest';
 import { SpecCtxType } from '../game/specials/context';
 import { OutdoorCreature } from './outdoorCreature';
-import { PartyStatus, Skill, Status } from './skills';
+import { MainStatus, PartyStatus, Skill, Status, isSplitStatus } from './skills';
 
 /**
  * cTimer (special.hpp:125) as the party stores it: a countdown, the node to
@@ -68,6 +68,14 @@ export class Party {
   outLoc: Location = loc(84, 84);
   townLoc: Location = loc(0, 0);
   townNum = TOWN_NUM_OUTDOORS;
+
+  /**
+   * `left_at` / `left_in` (party.hpp:124) — where the rest of the party is
+   * standing while one member goes on alone, and which town they are in.
+   * `left_in` is -1 for "not recorded", which is what a legacy save restores.
+   */
+  leftAt: Location = loc(0, 0);
+  leftIn = -1;
 
   inBoat = -1;
   inHorse = -1;
@@ -372,6 +380,48 @@ export class Party {
   /** The sector the party is standing in, in scenario coordinates. */
   get sector(): Location {
     return loc(this.outdoorCorner.x + this.iwc.x, this.outdoorCorner.y + this.iwc.y);
+  }
+
+  /** `cParty::is_split` — is anyone waiting behind? */
+  isSplit(): boolean {
+    return this.pcs.some((pc) => isSplitStatus(pc.mainStatus));
+  }
+
+  /** `cParty::pc_present(i)` (party.cpp:1195) — is this PC here rather than left behind? */
+  pcPresent(i: number): boolean {
+    const pc = this.pcs[i];
+    return pc !== undefined && !isSplitStatus(pc.mainStatus);
+  }
+
+  /**
+   * `cParty::start_split` (party.cpp:1200) — send PC `who` on alone to (x,y)
+   * and leave everyone else where the party is standing.
+   *
+   * Refuses if the party is already split. Note it does **not** check that
+   * `who` is alive — the caller's `select_pc(ONLY_LIVING)` has done that — and
+   * that everyone's forcecage is cleared, the one left behind included.
+   */
+  startSplit(x: number, y: number, who: number): boolean {
+    if (who >= 6 || who < 0) return false;
+    if (this.isSplit()) return false;
+    this.leftAt = { ...this.townLoc };
+    this.leftIn = this.townNum;
+    this.townLoc = loc(x, y);
+    for (let i = 0; i < this.pcs.length; i++) {
+      const pc = this.pcs[i]!;
+      if (i !== who) pc.mainStatus += MainStatus.SPLIT;
+      pc.status[Status.FORCECAGE] = 0;
+    }
+    return true;
+  }
+
+  /** `cParty::end_split` — everyone is themselves again. False if nobody was split. */
+  endSplit(): boolean {
+    if (!this.isSplit()) return false;
+    for (const pc of this.pcs) {
+      if (isSplitStatus(pc.mainStatus)) pc.mainStatus -= MainStatus.SPLIT;
+    }
+    return true;
   }
 
   /** global_to_local (boe.locutils.cpp:115) — window coords to sector coords. */

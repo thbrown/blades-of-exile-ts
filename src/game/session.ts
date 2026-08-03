@@ -2100,6 +2100,26 @@ export class GameSession {
       }
     }
 
+    // **A split-off PC dying is not the end of the game** (boe.actions.cpp:1442).
+    // Whoever went on alone is the only one who could have died, so the rest of
+    // the party is still standing where they were left: the split ends and the
+    // survivors take over, from `left_at` or, if that is another town, by
+    // changing level to it.
+    if (this.univ.party.isSplit()) {
+      this.univ.party.endSplit();
+      const { party } = this.univ;
+      if (party.leftIn === -1 || party.townNum === party.leftIn) {
+        party.townLoc = { ...party.leftAt };
+      } else {
+        this.forceTownEntry(party.leftIn, party.leftAt);
+        this.startTownMode(party.leftIn, 9);
+      }
+      this.updateExplored(party.townLoc);
+      this.center = { ...party.townLoc };
+      if (isCombat(this.mode)) this.mode = GameMode.TOWN;
+      return;
+    }
+
     this.partyDead = true;
     // The latch is set now, but the *announcement* waits for the screen to
     // catch up. The C++ reaches `handle_party_death` from the main loop, by

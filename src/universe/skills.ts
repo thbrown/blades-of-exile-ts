@@ -167,6 +167,15 @@ export function statusInfo(which: Status): StatusInfo {
   return STATUS_INFO[which] ?? { isNegative: false, icon: -1, negIcon: -1 };
 }
 
+/**
+ * `eMainStatus` (damage.hpp:81).
+ *
+ * **SPLIT is an offset, not a state.** A PC left behind when the party splits
+ * has 10 *added* to whatever they already were, so the eight SPLIT_* values are
+ * the same eight statuses ten higher — `main_status += eMainStatus::SPLIT` is
+ * literally what the C++ writes. That is why `exceptSplit` subtracts and why
+ * every "is this PC here?" test is a range comparison rather than an equality.
+ */
 export enum MainStatus {
   ABSENT = 0,
   ALIVE = 1,
@@ -177,6 +186,38 @@ export enum MainStatus {
   SURFACE = 6,
   WON = 7,
   SPLIT = 10,
+  SPLIT_ABSENT = 10,
+  SPLIT_ALIVE = 11,
+  SPLIT_DEAD = 12,
+  SPLIT_DUST = 13,
+  SPLIT_STONE = 14,
+  SPLIT_FLED = 15,
+  SPLIT_SURFACE = 16,
+  SPLIT_WON = 17,
+}
+
+/** `exceptSplit` (damage.hpp:103) — what this PC would be if they were here. */
+export function exceptSplit(stat: MainStatus): MainStatus {
+  return stat >= MainStatus.SPLIT ? stat - MainStatus.SPLIT : stat;
+}
+
+/** `isSplit` (:109) — left behind by a party split. */
+export function isSplitStatus(stat: MainStatus): boolean {
+  return stat >= MainStatus.SPLIT;
+}
+
+/**
+ * `isAbsent` (:113) — not in the party in any useful sense. Note the shape:
+ * `ABSENT || status > 4`, so **fled, surfaced, won and every split status
+ * count**, while dead, dust and stone do not — a corpse is still with you.
+ */
+export function isAbsentStatus(stat: MainStatus): boolean {
+  return stat === MainStatus.ABSENT || stat > MainStatus.STONE;
+}
+
+/** `isDead` (:118) — dead, dust or stone; a body that could be brought back. */
+export function isDeadStatus(stat: MainStatus): boolean {
+  return stat > MainStatus.ALIVE && stat < MainStatus.FLED;
 }
 
 /** Text shown in the PC stats panel for non-ALIVE statuses (boe.text.cpp:145). */

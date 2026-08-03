@@ -3635,8 +3635,7 @@ The M6 list below is kept for the history of what it covered:
       slots emptied. Nothing to sell jumps to `ex1b` and stays quiet; a sale
       prints the node's message and pays `ex2a` apiece through `give_gold`,
       which unlike `AFFECT_GOLD` does not clamp.
-  - Still reporting itself: `TOWN_REUNITE_PARTY`, which needs `end_split` —
-    party splitting, a feature this port does not have at all.
+  - `TOWN_REUNITE_PARTY` needed party splitting, which landed next — see below.
   - *Gotcha found writing `activate_monsters`*: **`CurTown.monsters` is
     compacted and the C++'s `univ.town.monst` is not.** The C++ mirrors
     `creatures` one for one and can `assign(i, …)`; this port skips a preset
@@ -3646,3 +3645,48 @@ The M6 list below is kept for the history of what it covered:
     the reason the corpus grew a `TypeError` line for one file.
   - **Where it stands**: 7,738 actions dispatch. `VoDT_20-04-2025_15-08-43` went
     from 70 to 91.
+
+- **Splitting the party (M8, 2026-08-02).** Fourteenth slice. The last opcode
+  reporting itself needed a feature this port had no notion of, and **Exile 3
+  uses it**, so it is Part 2 groundwork as much as it is a replay fix: a
+  scenario can send one character somewhere the others can't follow, and the
+  rest of the party waits where it stood.
+  - **`SPLIT` is an offset, not a state.** `main_status += eMainStatus::SPLIT`
+    is literally what the C++ writes (party.cpp:1212), so the eight `SPLIT_*`
+    values are the same eight statuses ten higher and every "is this PC here?"
+    test is a range comparison. `exceptSplit`, `isSplitStatus`, `isAbsentStatus`
+    and `isDeadStatus` (damage.hpp:103-120) came with it.
+    - *Worth knowing*: `isAbsent` is `ABSENT || status > 4`, so **fled,
+      surfaced, won and every split status count as absent, while dead, dust
+      and stone do not** — a corpse is still with you.
+  - `Party.startSplit` / `endSplit` / `isSplit` / `pcPresent`, plus `left_at`
+    and `left_in`. Note `start_split` does **not** check that the chosen PC is
+    alive — its caller's `select_pc(ONLY_LIVING)` has — and that it clears
+    *everyone's* forcecage, the ones left behind included.
+  - `TOWN_SPLIT_PARTY` and `TOWN_REUNITE_PARTY`, with three quirks kept:
+    - **The reunite messages are the wrong way round.** `end_split` returns true
+      when it *did* something, so a successful reunion prints "Party already
+      together!" and a node that found nobody split prints "You are reunited."
+    - **`if(spec.ex2a);` is an empty statement** (boe.specials.cpp:4159). Its
+      own comment says ex2a should bring the others to the party rather than the
+      reverse; it does nothing whatever, and note that an unset field is **-1**,
+      which is just as truthy as 1 — so a node that never set ex2a also skips
+      the walk back.
+    - A cancelled "Which character goes?" is the *only* path that suppresses
+      TOWN_SPLIT_PARTY's own message; reaching it from a conversation, or
+      splitting successfully, both show it.
+  - **A split PC dying is not the end of the game** (boe.actions.cpp:1442).
+    Whoever went on alone is the only one who could have died, so `check_death`
+    ends the split and hands over to the survivors — from `left_at`, or by
+    changing level when they were left in another town. Without this the port
+    would have shown the party-death dialog for a scenario doing exactly what it
+    intended.
+  - Saved as `SPLIT_LEFT_IN` / `SPLIT_LEFT_AT`, and **only while actually
+    split** — which is why an ordinary save restores `left_in` as -1, and why
+    the reunite node reads -1 as "same town" and walks back rather than changing
+    level.
+  - **Where it stands**: 7,563 actions dispatch, **down** from 7,751, and the
+    drop is the honest kind: `ZKR_15-05-2025_18-38-53` fell from 646 to 458
+    because the two nodes now *do* something, so the game really splits and the
+    lone PC really can be killed by a poison tick the C++'s survives. The node
+    doing nothing was keeping the run alive on a game that had already diverged.

@@ -18,6 +18,8 @@ import { SpecCtx, SpecCtxType, SpecialCtx } from './context';
 import { alterSpace, reportUnsupported } from './general';
 import { setTownAttitude } from '../townAttitude';
 import { placeMonster } from '../monsterPlace';
+import { SELECT_PC_CANCEL, SelectPcMode, runSelectPc } from '../selectPc';
+import { isCombat } from '../modes';
 import { createWandMonst } from '../wandering';
 import { handleMessage } from './vm';
 import { XML_BUTTONS, threeChoiceButtons } from './oneshot';
@@ -286,6 +288,73 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
       }
       break;
     }
+
+    case SpecType.TOWN_SPLIT_PARTY: {
+      // Note what does *not* clear `checkMess`: reached from a conversation,
+      // and a split that actually happened, both show the node's message. Only
+      // the two refusals and a cancelled select-PC suppress it.
+      if (ctx.whichMode === SpecCtx.TALK) break;
+      if (isCombat(ctx.session.mode)) {
+        refuse('Not while in combat.');
+        break;
+      }
+      if (univ.party.isSplit()) {
+        refuse('Party is already split.');
+        break;
+      }
+      // Note the return slot is set **before** the dialog is answered, so
+      // cancelling still blocks the step that triggered this.
+      const who = await runSelectPc(
+        univ, SelectPcMode.ONLY_LIVING, 'Which character goes?',
+        (options, title, highlight) => ctx.host.selectPc(options, title, highlight));
+      if (isMoveMode(ctx.whichMode)) ctx.retA = 1;
+      if (who === SELECT_PC_CANCEL) {
+        checkMess = false;
+        break;
+      }
+      // An 8 — nobody could be offered — falls through here as a PC index and
+      // `start_split` refuses it, which is how "Party already split!" gets
+      // printed for a party with nobody alive. The C++'s test is `!= 6`.
+      univ.curPc = who;
+      ctx.nextSpec = -1;
+      if (univ.party.startSplit(spec.ex1a, spec.ex1b, who)) ctx.host.sound(spec.ex2a);
+      else univ.addStringToBuf('Party already split!');
+      ctx.session.updateExplored(univ.party.townLoc);
+      ctx.session.center = { ...univ.party.townLoc };
+      ctx.redraw = true;
+      break;
+    }
+
+    case SpecType.TOWN_REUNITE_PARTY:
+      checkMess = false;
+      if (isCombat(ctx.session.mode)) {
+        univ.addStringToBuf('Not while in combat.');
+        break;
+      }
+      if (isMoveMode(ctx.whichMode)) ctx.retA = 1;
+      ctx.nextSpec = -1;
+      // **The two messages are the wrong way round**, and it is the C++'s
+      // doing: `end_split` returns true when it *did* something, so a
+      // successful reunion says "Party already together!" and a node that
+      // found nobody split says "You are reunited." Kept.
+      if (univ.party.endSplit()) {
+        univ.addStringToBuf('Party already together!');
+        ctx.host.sound(spec.ex1a);
+      } else univ.addStringToBuf('You are reunited.');
+      // *Gotcha*: `if(spec.ex2a);` is an **empty statement** in the C++
+      // (boe.specials.cpp:4159). Its comment says ex2a should bring the others
+      // to the party rather than the reverse, and it does nothing whatever.
+      if (spec.ex2a) break;
+      if (univ.party.leftIn === -1 || univ.party.townNum === univ.party.leftIn) {
+        univ.party.townLoc = { ...univ.party.leftAt };
+        ctx.session.updateExplored(univ.party.townLoc);
+        ctx.session.center = { ...univ.party.townLoc };
+        for (const pc of univ.party.pcs) pc.status[Status.FORCECAGE] = 0;
+      } else {
+        ctx.host.changeLevel(univ.party.leftIn, univ.party.leftAt);
+      }
+      ctx.redraw = true;
+      break;
 
     case SpecType.TOWN_TIMER_START:
       // Note there's no `checkMess` here, unlike its scenario-level twin — a

@@ -593,6 +593,12 @@ export function writeParty(file: TagFile, party: Party, scenarioId: string): voi
   putLoc(page, 'SECTOR', party.outLoc);
   putLoc(page, 'LOCINSECTOR', party.locInSec);
   page.add('IN', party.inBoat, party.inHorse);
+  // **Only written while the party is actually split** (party.cpp:754), which
+  // is why a save that has never split restores `left_in` as -1.
+  if (party.isSplit()) {
+    page.add('SPLIT_LEFT_IN', party.leftIn);
+    putLoc(page, 'SPLIT_LEFT_AT', party.leftAt);
+  }
   for (const which of [
     PartyStatus.STEALTH, PartyStatus.FLIGHT, PartyStatus.DETECT_LIFE, PartyStatus.FIREWALK,
   ]) {
@@ -711,6 +717,14 @@ export function readParty(file: TagFile, party: Party): void {
       party.lightLevel = page.first('LIGHT')?.int(0) ?? 0;
       party.inBoat = page.first('IN')?.int(0) ?? -1;
       party.inHorse = page.first('IN')?.int(1) ?? -1;
+      // Absent means "never split", which the C++ restores as -1 — and
+      // TOWN_REUNITE_PARTY reads that as "same town", so the party walks back
+      // to `left_at` rather than changing level.
+      party.leftIn = page.first('SPLIT_LEFT_IN')?.int(0) ?? -1;
+      party.leftAt = {
+        x: page.first('SPLIT_LEFT_AT')?.int(0) ?? 0,
+        y: page.first('SPLIT_LEFT_AT')?.int(1) ?? 0,
+      };
       party.direction = readEnumTagOrNumber(dirTags, page.first('DIRECTION')?.str(0) ?? '', 0);
       party.totalMKilled = page.first('KILLS')?.int(0) ?? 0;
       party.totalDamDone = page.first('DAMAGE')?.int(0) ?? 0;
