@@ -507,14 +507,14 @@ async function main(): Promise<void> {
         // `cThreeChoice::init_pict` (3choice.cpp:159) — a choice dialog raised
         // by a special node carries the node's picture too.
         pic: pic >= 0 ? { type: pictTypeOf(picType), num: pic } : undefined,
-        escapeButton: buttons[0] ?? 'okay',
-        // basic_buttons attaches a letter to several of these — 'y'/'n' most
-        // of all — and the choice dialogs are meant to answer to them.
-        buttons: buttons.map((label) => ({
-          name: label, label, key: BASIC_BUTTON_KEYS[label],
-        })),
+        escapeButton: buttons[0]?.name ?? 'okay',
+        // Each button carries its control *name* as well as its label, because
+        // the name is what a replay records; the two are rarely the same
+        // string. `basic_buttons` attaches a letter to several of them —
+        // 'y'/'n' most of all — and the dialog answers to those keys.
+        buttons: buttons.map((b) => ({ name: b.name, label: b.label, key: b.key })),
       });
-      return Math.max(0, buttons.indexOf(picked));
+      return Math.max(0, buttons.findIndex((b) => b.name === picked));
     },
     story: async (title, first, last, strType, pic, picType) => {
       await dialogs.runScreenQueued(

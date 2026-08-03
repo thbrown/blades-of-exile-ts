@@ -12,7 +12,7 @@ import { SpecType } from '../../data/special';
 import { Universe } from '../../universe/universe';
 import { GiveStatus, giveItem } from '../../universe/inventory';
 import { MainStatus } from '../../universe/skills';
-import { SpecCtxType, SpecialCtx } from './context';
+import { ChoiceButton, SpecCtxType, SpecialCtx } from './context';
 import { SpecialsEngine, handleMessage } from './vm';
 import { reportUnsupported } from './general';
 import { isCombat } from '../modes';
@@ -47,6 +47,46 @@ export const BASIC_BUTTON_KEYS: Record<string, string> = {
 
 function buttonLabel(index: number): string {
   return BASIC_BUTTONS[index] ?? 'OK';
+}
+
+/**
+ * The buttons of the stock dialog *files* a special node can raise
+ * (`cChoiceDlog("basic-portal", …)` and friends).
+ *
+ * These are the only choice dialogs whose control names are not `btnN`: they
+ * come from the XML, and the C++ compares the clicked name against them
+ * directly. Order here is the order the XML draws them in, because the index
+ * this port's `choice` hands back is a position in this array.
+ */
+export const XML_BUTTONS: Record<string, ChoiceButton[]> = {
+  'basic-trap': [
+    { name: 'no', label: 'No', key: 'n' }, { name: 'yes', label: 'Yes', key: 'y' }],
+  'basic-portal': [
+    { name: 'no', label: 'No', key: 'n' }, { name: 'yes', label: 'Yes', key: 'y' }],
+  'basic-button': [
+    { name: 'no', label: 'No', key: 'n' }, { name: 'yes', label: 'Yes', key: 'y' }],
+  'basic-lever': [{ name: 'leave', label: 'Leave' }, { name: 'pull', label: 'Pull' }],
+  // The eight `stairDlogs` (boe.specials.cpp:3815) all carry the same pair.
+  stairway: [{ name: 'leave', label: 'Leave' }, { name: 'climb', label: 'Climb' }],
+};
+
+/**
+ * `cThreeChoice`'s buttons, from up to three `basic_buttons` slots.
+ *
+ * **The names go by slot, not by drawing order** — `init_buttons`
+ * (3choice.cpp:98) writes `btn` + (i + 1) for slot `i`, and skips the empty
+ * slots without renumbering — so a node whose first slot is -1 still calls its
+ * second button `btn2`. That is the id a recording clicks, which is why the
+ * empties have to be counted here rather than filtered out first.
+ */
+export function threeChoiceButtons(slots: readonly number[]): ChoiceButton[] {
+  const out: ChoiceButton[] = [];
+  slots.forEach((slot, i) => {
+    if (slot < 0) return;
+    const label = buttonLabel(slot);
+    out.push({ name: `btn${i + 1}`, label, key: BASIC_BUTTON_KEYS[label] });
+  });
+  return out;
 }
 
 /** univ.get_strs(strs[6], ...) — a message and up to five continuations. */
@@ -145,9 +185,9 @@ export async function oneshotSpec(
       if (spec.m3 > 0) buttons.push(spec.ex1a >= 0 || spec.ex2a >= 0 ? 9 : 1);
       else buttons.push(-1);
       buttons.push(spec.ex1a, spec.ex2a);
-      const labels = buttons.filter((b) => b >= 0).map(buttonLabel);
-      if (labels.length === 0) break;
-      const picked = await ctx.host.choice(strs, labels, '', spec.pic, spec.pictype);
+      const drawn = threeChoiceButtons(buttons);
+      if (drawn.length === 0) break;
+      const picked = await ctx.host.choice(strs, drawn, '', spec.pic, spec.pictype);
       // The index the host gives back counts only the buttons it drew, so map
       // it back to the node's 1-based slot numbering.
       const slot = buttons.reduce<number[]>((acc, b, i) => {
@@ -168,8 +208,9 @@ export async function oneshotSpec(
       checkMess = false;
       if (spec.m1 < 0) break;
       const strs = messageRun(univ, ctx, spec.m1);
-      // Always the same pair: Leave or Take.
-      const picked = await ctx.host.choice(strs, ['Leave', 'Take'], '', spec.pic, spec.pictype);
+      // Always the same pair of `basic_buttons` slots: 9 Leave, 19 Take.
+      const picked = await ctx.host.choice(
+        strs, threeChoiceButtons([9, 19, -1]), '', spec.pic, spec.pictype);
       if (picked === 0) {
         setSd = false;
         ctx.nextSpec = -1;
@@ -220,13 +261,13 @@ export async function oneshotSpec(
         const strs = univ.getStrs(ctx.curSpecType, spec.m1, spec.m2)
           .filter((s) => s !== '');
         refused = await ctx.host.choice(
-          strs, [buttonLabel(3), buttonLabel(2)], '', spec.pic, spec.pictype) === 0;
+          strs, threeChoiceButtons([3, 2, -1]), '', spec.pic, spec.pictype) === 0;
       } else {
         // basic-trap.xml: the stock question, with its own picture (dlog 27)
         // and Yes/No the other way round from the custom-message branch.
         refused = await ctx.host.choice(
           ["You think you've found a trap.\nDo you try to disarm it?"],
-          ['No', 'Yes'], '', 27, 0) === 0;
+          XML_BUTTONS['basic-trap']!, '', 27, 0) === 0;
       }
       if (refused) {
         // Walking away leaves the one-shot flag unset, so the trap is still

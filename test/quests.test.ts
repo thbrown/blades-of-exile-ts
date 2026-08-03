@@ -20,7 +20,7 @@ import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { parseXmlDoc } from '../src/fileio/xml';
 import { GameSession } from '../src/game/session';
 import { specialIncreaseAge } from '../src/game/specialIncreaseAge';
-import { SpecCtxType, SpecialHost } from '../src/game/specials/context';
+import { ChoiceButton, SpecCtxType, SpecialHost } from '../src/game/specials/context';
 import { PartyPreset } from '../src/universe/player';
 import { Universe } from '../src/universe/universe';
 
@@ -63,7 +63,7 @@ function aQuest(deadline: number, bank = -1): Quest {
 class TestHost implements SpecialHost {
   messages: string[] = [];
   async message(str1: string): Promise<void> { this.messages.push(str1); }
-  async choice(_s: string[], buttons: string[]): Promise<number> { return buttons.length - 1; }
+  async choice(_s: string[], buttons: ChoiceButton[]): Promise<number> { return buttons.length - 1; }
   async story(): Promise<void> {}
   async askText(): Promise<string> { return ''; }
   async selectPc(): Promise<number> { return 0; }

@@ -5,7 +5,7 @@ import { GameRng } from '../src/core/rng';
 import { Scenario } from '../src/data/scenario';
 import { SpecType, emptySpecialNode } from '../src/data/special';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
-import { SpecCtx, SpecCtxType, SpecialHost } from '../src/game/specials/context';
+import { ChoiceButton, SpecCtx, SpecCtxType, SpecialHost } from '../src/game/specials/context';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
@@ -28,7 +28,7 @@ beforeAll(async () => {
 /** A no-op specials host, just enough to let the VM run. */
 class TestHost implements SpecialHost {
   async message(): Promise<void> {}
-  async choice(_strs: string[], buttons: string[]): Promise<number> { return buttons.length - 1; }
+  async choice(_strs: string[], buttons: ChoiceButton[]): Promise<number> { return buttons.length - 1; }
   async story(): Promise<void> {}
   async askText(): Promise<string> { return ''; }
   async selectPc(): Promise<number> { return 0; }

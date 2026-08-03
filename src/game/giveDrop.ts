@@ -122,7 +122,9 @@ export async function dropItem(
     if (!host) return;
     // The one confirmation in either path, because outdoors the item is not
     // put anywhere — it stops existing.
-    const choice = await host.choice([DROP_CONFIRM], ['okay', 'cancel'], '', 0, 0);
+    // drop-item-confirm.xml. Its escape button is Cancel and its default is OK.
+    const choice = await host.choice([DROP_CONFIRM],
+      [{ name: 'okay', label: 'OK' }, { name: 'cancel', label: 'Cancel' }], '', 0, 0);
     if (choice !== 0) return;
     univ.addStringToBuf('Drop: OK');
     if (itemStore.typeFlag > 0 && itemStore.charges > 1) {

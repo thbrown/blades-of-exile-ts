@@ -68,6 +68,30 @@ export interface MessageRecord {
 }
 
 /**
+ * One button of a choice dialog.
+ *
+ * **`name` is the control's id and `label` is what it says**, and they are
+ * rarely the same string. The two kinds of choice dialog name their controls
+ * differently:
+ *
+ *   - `cChoiceDlog("basic-portal", …)` and friends load a dialog *file*, so the
+ *     names are whatever its XML calls them — `yes`/`no`, `leave`/`climb`,
+ *     `pull`/`leave`, `okay`/`cancel`.
+ *   - `cThreeChoice` builds itself from up to three `basic_buttons` slots and
+ *     names its controls **`btn1`, `btn2`, `btn3` by slot** (3choice.cpp:106) —
+ *     by slot, not by drawing order, so a node that leaves the first slot empty
+ *     still has its second button called `btn2`.
+ */
+export interface ChoiceButton {
+  /** The dialog control's id. This is what a recording clicks. */
+  name: string;
+  /** What the button says. */
+  label: string;
+  /** The key that presses it, where `basic_buttons` attaches one. */
+  key?: string;
+}
+
+/**
  * What the VM needs from the host to do anything visible. Everything here is
  * async because the C++ blocks on a dialog and we await one instead.
  */
@@ -82,9 +106,19 @@ export interface SpecialHost {
     str1: string, str2: string, title: string, pic: number, picType: number,
     record?: MessageRecord,
   ): Promise<void>;
-  /** A dialog with up to three labelled buttons; resolves to the index picked. */
+  /**
+   * A dialog with up to three buttons; resolves to the index of the one picked.
+   *
+   * Each button carries a **name as well as a label**, and the distinction is
+   * not cosmetic: the name is the dialog control's id, which is what a replay
+   * records and what the C++'s own code compares against
+   * (`cChoiceDlog(…).show() == "climb"`). Passing labels alone meant every
+   * recorded answer looked like a control this port had never drawn, and a
+   * scripted stairway, portal, lever or trap failed its whole chain — the
+   * single largest class of replay stops.
+   */
   choice(
-    strs: string[], buttons: string[], title: string, pic: number, picType: number,
+    strs: string[], buttons: ChoiceButton[], title: string, pic: number, picType: number,
   ): Promise<number>;
   /**
    * `story_dialog` (boe.items.cpp:611) — a title and a *range* of strings to

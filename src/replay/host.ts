@@ -30,7 +30,7 @@
  */
 
 import { Location } from '../core/location';
-import { MessageRecord, SpecCtxType, SpecialHost } from '../game/specials/context';
+import { ChoiceButton, MessageRecord, SpecCtxType, SpecialHost } from '../game/specials/context';
 import { GameSession } from '../game/session';
 import { doRest } from '../game/rest';
 import { Skill } from '../universe/skills';
@@ -157,16 +157,19 @@ export function makeReplayHost(
     },
 
     choice: async (
-      _strs: string[], buttons: string[], title: string,
+      _strs: string[], buttons: ChoiceButton[], title: string,
     ): Promise<number> => {
       const id = popClick(
         source, `the choice dialog "${title || '(untitled)'}"`, options.onAnswered);
-      // The dialog's controls are named for their buttons, so the recorded id
-      // is the button — which is what `choice` answers with the index of.
-      const picked = buttons.indexOf(id);
+      // **Matched on the control's name, not its label.** A recording clicks
+      // `climb` or `btn2`, never "Climb" — matching labels here failed every
+      // scripted stairway, portal, lever and trap in the corpus, and each one
+      // took its whole chain down with it.
+      const picked = buttons.findIndex((b) => b.name === id);
       if (picked < 0) {
         throw new Error(`replay: the choice dialog "${title}" was answered '${id}', `
-          + `which is not one of its buttons (${buttons.join(', ')})`);
+          + `which is not one of its buttons `
+          + `(${buttons.map((b) => `${b.name}=${b.label}`).join(', ')})`);
       }
       return picked;
     },

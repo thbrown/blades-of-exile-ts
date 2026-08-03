@@ -12,7 +12,7 @@ import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { GameSession } from '../src/game/session';
 import { PcChoice } from '../src/game/selectPc';
-import { SpecCtx, SpecCtxType, SpecialHost } from '../src/game/specials/context';
+import { ChoiceButton, SpecCtx, SpecCtxType, SpecialHost } from '../src/game/specials/context';
 import { ONCE_DONE } from '../src/game/specials/oneshot';
 import { TrapType, runTrap } from '../src/game/trap';
 import { PartyPreset } from '../src/universe/player';
@@ -41,12 +41,12 @@ beforeEach(() => {
 
 /** A host that answers the trap's two questions however the test says. */
 class TrapHost implements SpecialHost {
-  buttons: string[][] = [];
+  buttons: ChoiceButton[][] = [];
   strs: string[][] = [];
   prompts: string[] = [];
   constructor(private answer: number, private pc = 0) {}
   async message(): Promise<void> {}
-  async choice(strs: string[], buttons: string[]): Promise<number> {
+  async choice(strs: string[], buttons: ChoiceButton[]): Promise<number> {
     this.buttons.push(buttons);
     this.strs.push(strs);
     return this.answer;
@@ -135,7 +135,13 @@ describe('the ONCE_TRAP node', () => {
     const host = new TrapHost(0); // the first button, which is No
     session.attachSpecials(host);
     await session.runSpecial(SpecCtx.TOWN_LOOK, SpecCtxType.TOWN, 90, { x: 5, y: 5 });
-    expect(host.buttons[0]).toEqual(['No', 'Yes']);
+    // A trap with a message of its own is a `cThreeChoice` built from
+    // `basic_buttons` slots 3 and 2, so its controls are btn1 and btn2 — not
+    // the `no`/`yes` of basic-trap.xml, which is the branch below.
+    expect(host.buttons[0]).toEqual([
+      { name: 'btn1', label: 'No', key: 'n' },
+      { name: 'btn2', label: 'Yes', key: 'y' },
+    ]);
     // The one-shot flag stays clear, so the node runs again.
     expect(session.univ.party.getSdf(0, 7)).not.toBe(ONCE_DONE);
     expect(host.prompts).toHaveLength(0);
@@ -183,6 +189,9 @@ describe('the ONCE_TRAP node', () => {
     const host = new TrapHost(0);
     session.attachSpecials(host);
     await session.runSpecial(SpecCtx.TOWN_LOOK, SpecCtxType.TOWN, 90, { x: 5, y: 5 });
-    expect(host.buttons[0]).toEqual(['No', 'Yes']);
+    expect(host.buttons[0]).toEqual([
+      { name: 'no', label: 'No', key: 'n' },
+      { name: 'yes', label: 'Yes', key: 'y' },
+    ]);
   });
 });

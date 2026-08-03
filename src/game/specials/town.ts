@@ -18,7 +18,7 @@ import { SpecCtx, SpecCtxType, SpecialCtx } from './context';
 import { alterSpace, reportUnsupported } from './general';
 import { setTownAttitude } from '../townAttitude';
 import { handleMessage } from './vm';
-import { BASIC_BUTTONS } from './oneshot';
+import { XML_BUTTONS, threeChoiceButtons } from './oneshot';
 
 /** The three contexts that mean "the party is walking somewhere". */
 function isMoveMode(mode: SpecCtx): boolean {
@@ -180,8 +180,9 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
         break;
       }
       const strs = messageRun(univ, ctx, spec.m1);
+      // `basic_buttons` slots 9 (Leave) and 35 (Pull), boe.specials.cpp:4015.
       const picked = await ctx.host.choice(
-        strs, ['Leave', BASIC_BUTTONS[35] ?? 'Pull'], '', spec.pic, spec.pictype);
+        strs, threeChoiceButtons([9, 35, -1]), '', spec.pic, spec.pictype);
       if (picked === 0) ctx.nextSpec = -1;
       else {
         transformSpace(univ, ctx);
@@ -200,7 +201,11 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
       }
       const strs = spec.type === SpecType.TOWN_PORTAL
         ? messageRun(univ, ctx, spec.m1) : [PORTAL_PROMPT];
-      const picked = await ctx.host.choice(strs, ['Leave', 'Enter'], '', spec.pic, spec.pictype);
+      // Custom text gets `cThreeChoice` with slots 9 (Leave) and 8 (Enter);
+      // the generic portal gets basic-portal.xml, whose buttons are No/Yes.
+      const buttons = spec.type === SpecType.TOWN_PORTAL
+        ? threeChoiceButtons([9, 8, -1]) : XML_BUTTONS['basic-portal']!;
+      const picked = await ctx.host.choice(strs, buttons, '', spec.pic, spec.pictype);
       if (picked === 0) {
         ctx.nextSpec = -1;
         if (isMoveMode(ctx.whichMode)) ctx.retA = 1;
@@ -213,7 +218,8 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
     }
 
     case SpecType.TOWN_GENERIC_BUTTON: {
-      const picked = await ctx.host.choice([BUTTON_PROMPT], ['No', 'Yes'], '', spec.pic, spec.pictype);
+      const picked = await ctx.host.choice(
+        [BUTTON_PROMPT], XML_BUTTONS['basic-button']!, '', spec.pic, spec.pictype);
       if (picked === 1) ctx.nextSpec = spec.ex1b;
       break;
     }
@@ -232,8 +238,12 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
         const strs = spec.type === SpecType.TOWN_STAIR
           ? messageRun(univ, ctx, spec.m1)
           : [STAIR_PROMPTS[Math.max(0, Math.min(7, spec.ex2b))] ?? STAIR_PROMPTS[0]!];
-        const labels = spec.type === SpecType.TOWN_STAIR ? ['Take', 'Climb'] : ['Leave', 'Climb'];
-        take = (await ctx.host.choice(strs, labels, '', spec.pic, spec.pictype)) === 1;
+        // TOWN_STAIR builds `cThreeChoice` from slots 20 (Stay) and 24
+        // (Step In); the generic one loads one of the eight stairway dialogs,
+        // whose pair is Leave/Climb. Either way index 1 is "go".
+        const buttons = spec.type === SpecType.TOWN_STAIR
+          ? threeChoiceButtons([20, 24, -1]) : XML_BUTTONS['stairway']!;
+        take = (await ctx.host.choice(strs, buttons, '', spec.pic, spec.pictype)) === 1;
       }
       ctx.retA = 1;
       if (!take) {
@@ -298,7 +308,7 @@ function teleportParty(univ: Universe, ctx: SpecialCtx, where: { x: number; y: n
 /** handle_lever — the square becomes whatever it transforms into. */
 async function pullLever(univ: Universe, ctx: SpecialCtx): Promise<boolean> {
   const picked = await ctx.host.choice(
-    ['You see a lever. Do you want to pull it?'], ['No', 'Yes'], '', -1, 0);
+    ['You see a lever. Do you want to pull it?'], XML_BUTTONS['basic-lever']!, '', -1, 0);
   if (picked !== 1) return false;
   transformSpace(univ, ctx);
   return true;

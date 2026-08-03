@@ -5,7 +5,7 @@ import { GameRng } from '../src/core/rng';
 import { Scenario } from '../src/data/scenario';
 import { SpecType, SpecialNode, emptySpecialNode } from '../src/data/special';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
-import { SpecCtx, SpecCtxType, SpecialHost } from '../src/game/specials/context';
+import { ChoiceButton, SpecCtx, SpecCtxType, SpecialHost } from '../src/game/specials/context';
 import { ONCE_DONE } from '../src/game/specials/oneshot';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
@@ -30,7 +30,7 @@ beforeAll(async () => {
 /** Records everything the VM asked the host to do. */
 class TestHost implements SpecialHost {
   messages: { str1: string; str2: string; title: string }[] = [];
-  choices: { strs: string[]; buttons: string[] }[] = [];
+  choices: { strs: string[]; buttons: ChoiceButton[] }[] = [];
   sounds: number[] = [];
   moves: { x: number; y: number }[] = [];
   levels: { town: number; where: { x: number; y: number } }[] = [];
@@ -45,7 +45,7 @@ class TestHost implements SpecialHost {
     this.messages.push({ str1, str2, title });
   }
 
-  async choice(strs: string[], buttons: string[]): Promise<number> {
+  async choice(strs: string[], buttons: ChoiceButton[]): Promise<number> {
     this.choices.push({ strs, buttons });
     return this.answers.shift() ?? buttons.length - 1;
   }
@@ -389,7 +389,11 @@ describe('one-shot nodes', () => {
     host.answers = [0]; // Leave
     await run();
     expect(univ.party.getSdf(23, 0)).toBe(0);
-    expect(host.choices[0]!.buttons).toEqual(['Leave', 'Take']);
+    // The names are what a recording clicks; the labels are what it says.
+    expect(host.choices[0]!.buttons).toEqual([
+      { name: 'btn1', label: 'Leave', key: undefined },
+      { name: 'btn2', label: 'Take', key: undefined },
+    ]);
   });
 
   it('offers a dialog and branches on which button was pressed', async () => {
@@ -399,7 +403,10 @@ describe('one-shot nodes', () => {
     });
     host.answers = [1]; // the second button, which is ex1a's "Yes"
     await run();
-    expect(host.choices[0]!.buttons).toEqual(['Leave', 'Yes']);
+    expect(host.choices[0]!.buttons).toEqual([
+      { name: 'btn1', label: 'Leave', key: undefined },
+      { name: 'btn2', label: 'Yes', key: 'y' },
+    ]);
     expect(univ.party.getSdf(25, 0)).toBe(1);
   });
 });

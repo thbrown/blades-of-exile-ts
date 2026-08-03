@@ -3527,3 +3527,36 @@ The M6 list below is kept for the history of what it covered:
     item**. That makes it downstream of an RNG-stream divergence rather than a
     rule of its own, which is the shape the harder half of these are likely to
     have.
+
+- **A choice dialog's buttons have names as well as labels (M8, 2026-08-02).**
+  Eleventh slice, and the single biggest class of replay stops: **eleven files**
+  died on "SPECIAL ENCOUNTER FAILED." and every one of them was this.
+  - **What was wrong.** `SpecialHost.choice` took `buttons: string[]`, and every
+    caller passed what the button *says* — `['Leave', 'Climb']`. A recording
+    records the control's **id**, and the C++'s own code compares against it
+    (`cChoiceDlog(stairDlogs[…], {"climb","leave"}).show() == "climb"`). So the
+    replay host looked for `climb` among `Leave, Climb`, found nothing, threw,
+    and took the *whole special chain* down with it — a scripted stairway,
+    portal, lever, button or trap did nothing at all, and the party stood where
+    the recording had already walked on.
+  - `ChoiceButton` is `{ name, label, key? }` now, and the two kinds of choice
+    dialog name their controls quite differently:
+    - `cChoiceDlog("basic-portal", …)` loads a dialog *file*, so the names are
+      the XML's — `yes`/`no`, `leave`/`climb`, `pull`/`leave`, `okay`/`cancel`.
+      `XML_BUTTONS` in `specials/oneshot.ts` holds the five this port raises.
+    - `cThreeChoice` builds itself from up to three `basic_buttons` slots and
+      names its controls **`btn1`, `btn2`, `btn3` by slot** (3choice.cpp:106) —
+      *by slot, not by drawing order*, so a node that leaves the first slot
+      empty still calls its second button `btn2`. `threeChoiceButtons` counts
+      the empties rather than filtering them out first, which is the whole
+      reason it takes the raw slot array.
+  - The slots each node uses are the C++'s, and several were guessed before:
+    TOWN_LEVER is 9/35 (Leave/Pull), TOWN_PORTAL 9/8 (Leave/Enter),
+    **TOWN_STAIR is 20/24 — "Stay" and "Step In", not "Take"/"Climb"** — and
+    ONCE_GIVE_ITEM_DIALOG 9/19 (Leave/Take). A trap with its own message is
+    slots 3/2, and one without is basic-trap.xml, so the same question has
+    `btn1`/`btn2` in one branch and `no`/`yes` in the other.
+  - **Where it stands**: **7,714 actions dispatch** (7,321 before it).
+    `ASR_05-05-2025_12-20-07` went from 23 actions to 508 and
+    `ZKR_11-05-2025_20-04-33` from 75 to 107. The desync count is unchanged at
+    57 for the usual reason — the files reach one *later* now.
