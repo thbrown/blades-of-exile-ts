@@ -3797,3 +3797,29 @@ The M6 list below is kept for the history of what it covered:
   - *The patch is not committed to `../exile-wasm`* — that repo is the reference
     and stays pristine. `tools/cppharness/exile-wasm.patch` is the whole diff,
     every hunk behind `BOE_NATIVE_REPLAY`.
+
+- **The first thing the harness said: the "Blocked:" desyncs are wandering
+  townsfolk, not a blockage rule (M8, 2026-08-03).** Eleven of the 56 stops end
+  on a plain town move this port refuses with `Blocked: <dir>`, and that bucket
+  looked like the cleanest one going — no RNG, no combat, just a square this
+  port thinks is impassable and the C++ walks onto. It is not a terrain rule at
+  all.
+  - `ASR_05-05-2025_21-13-55` walks east along row 48 and stops at (24,48) in
+    stealth's town 1. The terrain there is Walkway, blockage 0. What blocks it is
+    a **creature**: slot 24, a friendly townsperson, standing on the square.
+  - The harness walks straight through, and the save says why. Creature 24 is
+    saved at **(27,47)**; after the same 33 actions this port has drifted it to
+    (24,48). It is not alone — creature 0 goes from (37,35) to (27,45), 3 from
+    (10,12) to (13,21), 23 from (49,24) to (33,27). The mobile townspeople are
+    random-walking, both engines walk them, and the walks diverge.
+  - So the bucket is **`do_monsters`'s town-mode drift consuming `get_ran`
+    differently**, and every one of those eleven files is a symptom of the RNG
+    stream rather than of a rule about squares. That is the same root as the
+    `end_town_combat` bucket already logged above, reached from the other side —
+    and it means fixing it pays for both.
+  - *Method worth repeating*: the answer came from three numbers — where the
+    recording went, where this port went, and **what the save actually said** —
+    and the third is the one that was missing before the harness. Unpacking the
+    recording's embedded `.exg` (it lands in `$TMPDIR/boe-harness/temp/temp.exg`
+    after a run; `gzip -dc … | tar xO save/town.txt`) is the cheapest way to ask
+    "was this thing ever there?".
