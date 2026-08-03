@@ -1610,7 +1610,11 @@ bottom. What M8 still owes:
   where it happened.
 - **Captured end states.** "Runs without desyncing" is a strong check but not
   the golden master: matching the C++'s *final* party, SDFs and position needs
-  reference snapshots taken from a run of the desktop build.
+  reference snapshots taken from a run of the desktop build. The build that
+  produces them exists as of 2026-08-03 — `tools/cppharness/`, see the entry at
+  the bottom — and traces its actions in this port's own format, so the *first*
+  divergence in a recording is now findable by diffing two traces. Dumping the
+  end state itself is what's left.
 - The next unhandled actions, by files blocked: `arrow_button_click` (23),
   `handle_get_items` (10), `field_focus` (7), `toggle_debug_mode` (7).
 - `pick_a_scen` — the other startup shape, 7 files, which starts a fresh party
@@ -3738,3 +3742,58 @@ The M6 list below is kept for the history of what it covered:
   - **Where it stands**: 7,760 actions dispatch, up from 7,563, and six files
     run to the end. `ASR_05-05-2025_12-20-07` gained 129 actions,
     `ASR_05-05-2025_12-50-38` 59, `VoDT_01-05-2025_17-52-13` 13.
+
+- **The C++ harness runs (M8, 2026-08-03).** Sixteenth slice, and not a rule fix
+  at all: an *oracle*. `tools/cppharness/` builds `../exile-wasm` natively and
+  replays the corpus's recordings, so a question about a rule can now be asked
+  of the C++ instead of read out of it. It had been started and never run — the
+  build script used `mapfile`, which macOS's bash 3.2 does not have — and behind
+  that were four things that each failed **silently**, which is what made it a
+  day's work rather than an hour's. See `tools/cppharness/README.md` for the
+  whole list; these are the two worth knowing about anywhere else:
+  - **`web/web_stubs.cpp` defines its own `gzopen`/`gzread`/`gzwrite`/`gzclose`**
+    (the browser has no zlib). Linked beside `-lz` they win, and every save file
+    reads back as **zero bytes long** with no error — because `gzstreambase::open`
+    sets badbit on failure and then `std::istream`'s constructor runs *after* it
+    and clears the state again, so `if(zin)` is true on a stream that will never
+    yield a byte. That is a gzstream bug the C++ has had all along; here it made
+    "load the party" fail with a message that named the wrong thing.
+  - **The wasm build's `.spec` parser knows 22 of the 228 opcodes.** `special_parse.hpp`
+    swaps boost::spirit for a hand-written parser under `__EMSCRIPTEN__`, and its
+    `parseSpecType` is a chain of 22 string comparisons ending in
+    `return eSpecType::NONE`. It doesn't fail: it loads a scenario whose scripting
+    is mostly *blank nodes*, so a scripted square shows string 0 of the town
+    where a dialog belonged. The harness builds the table from
+    `data/strings/specials-opcodes.txt` instead — which is what the desktop build
+    does anyway, since `node_properties_t::opcode()` is
+    `get_str("specials-opcodes", int(type))`. Before that fix the harness stopped
+    9 actions into a 424-action recording; after it, the recording ran to the end.
+    - *Worth remembering for Part 2*: if Exile 3 is ever taken through the web
+      build, this is the reason its scripting would look inert.
+  - Also: `ReceivedHelp` is loaded from the recording's prefs now (skipping it is
+    not cosmetic — `give_help` returns early for a topic already in that list, so
+    the harness raised hint dialogs the recording never saw); a missing dialog
+    control **throws with the dialog's name and its actual controls** instead of
+    dereferencing the null that `controls[id]` inserts; `stubs.cpp` installs a
+    crash handler, since the sandbox this runs in won't let a debugger attach and
+    a segfault is otherwise a bare exit 139; and `build.sh`'s staleness check now
+    compares against the newest header as well as the source, because two of the
+    harness's changes live in headers and a per-source mtime check silently kept
+    the old object.
+  - **`BOE_TRACE=1` prints one line per action in the same shape as this port's
+    `CORPUS=1 TRACE=1`**, plus `[spec] town node N (Type) at (x,y)` whenever a
+    square fires its script. That pairing is the point: the first line where the
+    two traces differ names the rule, rather than the desync surfacing dozens of
+    actions later at a `move`.
+  - `run.sh` runs one recording, `survey.sh` the whole corpus. `run.sh` stages a
+    `progDir` of symlinks under `$TMPDIR` rather than writing into the
+    `../exile-wasm` checkout — `progDir/data` and
+    `progDir/Blades of Exile Scenarios` are where `locate_scenario` looks, and
+    those files are byte-identical to this port's `public/scenarios`, so both
+    sides of a diff read the same content.
+  - **What it does not do yet** is dump an end state, which is what "captured end
+    states" in Next steps still wants. The trace is the step that makes the first
+    divergence findable; the golden master is the step after.
+  - *The patch is not committed to `../exile-wasm`* — that repo is the reference
+    and stays pristine. `tools/cppharness/exile-wasm.patch` is the whole diff,
+    every hunk behind `BOE_NATIVE_REPLAY`.

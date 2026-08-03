@@ -1,0 +1,532 @@
+diff --git a/src/dialogxml/dialogs/dialog.cpp b/src/dialogxml/dialogs/dialog.cpp
+index 8b72d7fb..c4a83b49 100644
+--- a/src/dialogxml/dialogs/dialog.cpp
++++ b/src/dialogxml/dialogs/dialog.cpp
+@@ -627,6 +627,21 @@ void cDialog::handle_events() {
+ 			auto info = info_from_action(next_action);
+ 			if(info["id"].empty()) continue;
+ 			eKeyMod mods = static_cast<eKeyMod>(std::stoi(info["mods"]));
++#ifdef BOE_NATIVE_REPLAY
++			// `controls[...]` on a name this dialog doesn't have inserts a null
++			// and dereferences it. In the browser that is a hard crash with no
++			// stack; the harness needs to be told *which* dialog is up and what
++			// the recording expected, because a mismatch here always means the
++			// game raised a different dialog than the recording did.
++			if(controls.count(info["id"]) == 0) {
++				replaying = false;
++				std::ostringstream stream;
++				stream << "Replay error! Dialog '" << fname << "' has no control '"
++					<< info["id"] << "' — this build raised a different dialog. It has:";
++				for(auto& p : controls) stream << " " << p.first;
++				throw stream.str();
++			}
++#endif
+ 			controls[info["id"]]->triggerClickHandler(*this, info["id"], mods);
+ 		}else if(replaying && has_next_action("field_input")){
+ 			Element& next_action = pop_next_action();
+diff --git a/src/fileio/fileio_party.cpp b/src/fileio/fileio_party.cpp
+index ccba98a4..974c82ef 100644
+--- a/src/fileio/fileio_party.cpp
++++ b/src/fileio/fileio_party.cpp
+@@ -125,7 +125,10 @@ bool load_party(fs::path file_to_load, cUniverse& univ, cCustomGraphics& graphic
+ 	}
+ 	
+ 	// Check for WASM uncompressed saves first
+-#ifdef __EMSCRIPTEN__
++	// (Skipped in the native instrumentation build: the browser hands over
++	// uncompressed bytes, but a replay's embedded save is the real gzipped
++	// .exg, so the ordinary header sniff below is the right one.)
++#if defined(__EMSCRIPTEN__) && !defined(BOE_NATIVE_REPLAY)
+ 	if(file_to_load.extension() == ".exg") {
+ 		std::cout << "[WASM] Detected .exg file, assuming new_oboe format (uncompressed)" << std::endl;
+ 		format = new_oboe;
+@@ -349,11 +352,12 @@ bool load_party_v1(fs::path file_to_load, cUniverse& real_univ, bool town_restor
+ }
+ 
+ bool load_party_v2(const fs::path& file_to_load, cUniverse& real_univ, cCustomGraphics& graphics, bool preview){
+-#ifdef __EMSCRIPTEN__
++#if defined(__EMSCRIPTEN__) && !defined(BOE_NATIVE_REPLAY)
+ 	// WASM: Use uncompressed input (all WASM saves are uncompressed)
+ 	std::ifstream zin(file_to_load.string().c_str(), std::ios::binary);
+ #else
+-	// Desktop: Use compressed input (gzip)
++	// Desktop: Use compressed input (gzip). The native instrumentation build
++	// needs this too — a replay's embedded save is a real gzipped .exg.
+ 	igzstream zin(file_to_load.string().c_str());
+ #endif
+ 
+diff --git a/src/fileio/special_parse.hpp b/src/fileio/special_parse.hpp
+index 17780bca..a349fe18 100644
+--- a/src/fileio/special_parse.hpp
++++ b/src/fileio/special_parse.hpp
+@@ -88,6 +88,7 @@ public:
+ // WASM: Simple custom parser for .spec format
+ #include <sstream>
+ #include <cctype>
++#include "fileio/resmgr/res_strings.hpp"
+ 
+ enum eParseError {
+ 	generic_error,
+@@ -160,6 +161,31 @@ public:
+ 
+ private:
+ 	eSpecType parseSpecType(const std::string& type) {
++#ifdef BOE_NATIVE_REPLAY
++		// **The whole table, read from the same string resource the desktop
++		// build's parser uses** (`node_properties_t::opcode()`, special.cpp:589,
++		// is `get_str("specials-opcodes", int(type))`, so entry *i* of the list
++		// names type *i*).
++		//
++		// The hand-written list below knows 22 of the 228 opcodes and silently
++		// answers NONE for the rest, which does not fail — it produces a
++		// scenario whose scripting is mostly blank nodes, and the game then
++		// shows string 0 of the town where a dialog belonged. Harmless in the
++		// browser build only because nobody has noticed; fatal for a harness
++		// whose whole job is to be the reference.
++		{
++			static std::map<std::string, eSpecType> byName;
++			if(byName.empty()) {
++				const StringList& names = *ResMgr::strings.get("specials-opcodes");
++				for(size_t i = 0; i < names.size(); i++)
++					if(!names[i].empty()) byName[names[i]] = eSpecType(i + 1);
++			}
++			if(getenv("BOE_TRACE")) std::cout << "    [opcodes] " << byName.size() << " names; looking up '" << type << "'" << std::endl;
++			auto found = byName.find(type);
++			if(found != byName.end()) return found->second;
++			return eSpecType::NONE;
++		}
++#endif
+ 		// Opcode mappings from rsrc/strings/specials-opcodes.txt
+ 		if(type == "set-sdf") return eSpecType::SET_SDF;
+ 		if(type == "inc-sdf") return eSpecType::INC_SDF;
+diff --git a/src/game/boe.main.cpp b/src/game/boe.main.cpp
+index b19e0983..a19325ec 100644
+--- a/src/game/boe.main.cpp
++++ b/src/game/boe.main.cpp
+@@ -527,6 +527,67 @@ static void process_args(int argc, char* argv[]) {
+ }
+ #endif // __EMSCRIPTEN__
+ 
++#ifdef BOE_NATIVE_REPLAY
++// A stand-in for process_args in the native instrumentation build. The real
++// one is behind clara.hpp from the Catch2 submodule, which isn't checked out,
++// and all this build needs is --replay.
++static void process_args(int argc, char* argv[]) {
++	for(int i = 1; i < argc; i++) {
++		std::string arg = argv[i];
++		if(arg == "--replay" && i + 1 < argc) {
++			std::string path = argv[++i];
++			if(!init_action_log("replay", path)) {
++				std::cerr << "Failed to load replay: " << path << std::endl;
++				exit(1);
++			}
++			// `src/tools/prefs.cpp` is not in the wasm source list — web_stubs
++			// implements the pref API against browser storage instead — so
++			// nothing consumes the <load_prefs> the recording opens with, and
++			// the game's own srand then finds it still at the head of the
++			// stream and refuses. Apply it here through the same `set_pref`
++			// API, mirroring `load_prefs` (prefs.cpp:208). These are not all
++			// cosmetic: `LessWanderingMonsters` is read by the wandering roll.
++			if(has_next_action("load_prefs")) {
++				Element& prefs_action = pop_next_action("load_prefs");
++				std::string text;
++				prefs_action.GetTextOrDefault(&text, "");
++				std::istringstream in(text);
++				std::string line;
++				while(std::getline(in, line)) {
++					if(line.empty() || line[0] == '#') continue;
++					size_t eq = line.find_first_of('=');
++					if(eq == std::string::npos) continue;
++					size_t key_end = line.find_last_not_of(' ', eq - 1);
++					size_t val_beg = line.find_first_not_of(' ', eq + 1);
++					if(key_end == std::string::npos || val_beg == std::string::npos) continue;
++					std::string key = line.substr(0, key_end + 1);
++					std::string val = line.substr(val_beg);
++					if(val == "true") set_pref(key, true);
++					else if(val == "false") set_pref(key, false);
++					else if(val[0] == '"' || val[0] == '\'') set_pref(key, val.substr(1, val.size() - 2));
++					else if(val[0] == '[') {
++						// `ReceivedHelp` is the only int array, and skipping it
++						// is not cosmetic: `give_help` returns early for a topic
++						// already in it, so a recording that has seen a hint
++						// clicks straight past where the dialog would be. Left
++						// out, the harness raises that dialog and then dies
++						// dereferencing a control the recording's next
++						// click_control names in some *other* dialog.
++						std::istringstream nums(val.substr(1, val.find_last_of(']') - 1));
++						int n;
++						while(nums >> n) append_iarray_pref(key, n);
++					}
++					else if(val.find_first_of('.') != std::string::npos) set_pref(key, std::stod(val));
++					else set_pref(key, std::stoi(val));
++				}
++			}
++			// A replay that opened with a saved game loads it before anything else.
++			if(has_next_action("load_party")) replay_next_action();
++		}
++	}
++}
++#endif
++
+ #ifndef __EMSCRIPTEN__
+ static void handle_scenario_args() {
+ 	bool resetting = false;
+@@ -1115,7 +1176,7 @@ static void replay_feature_flags() {
+ void init_boe(int argc, char* argv[]) {
+ 	set_up_apple_events();
+ 	init_directories(argv[0]);
+-#ifndef __EMSCRIPTEN__
++#if !defined(__EMSCRIPTEN__) || defined(BOE_NATIVE_REPLAY)
+ 	process_args(argc, argv);
+ #endif
+ #ifdef __APPLE__
+diff --git a/src/game/boe.specials.cpp b/src/game/boe.specials.cpp
+index 173702da..e282fa9f 100644
+--- a/src/game/boe.specials.cpp
++++ b/src/game/boe.specials.cpp
+@@ -251,6 +251,12 @@ bool check_special_terrain(location where_check,eSpecCtx mode,cPlayer& which_pc,
+ 				if(!univ.scenario.is_legacy && univ.party.in_boat >= 0 && univ.scenario.ter_types[ter].boat_over)
+ 					runSpecial = true;
+ 				if(runSpecial) {
++					// BOE_TRACE names the node a square fires, which is what
++					// makes a divergence in the *script* legible next to
++					// exile-js's own trace of the same recording.
++					if(getenv("BOE_TRACE")) std::cout << "    [spec] town node " << spec_num
++						<< " (" << (*univ.town->specials[spec_num].type).name() << ") at ("
++						<< where_check.x << "," << where_check.y << ")" << std::endl;
+ 					give_help(54,0);
+ 					run_special(mode, eSpecCtxType::TOWN, spec_num, where_check, &s1, &s2);
+ 					if(s1 > 0)
+diff --git a/src/game/boe.startup.cpp b/src/game/boe.startup.cpp
+index 56cde7c1..9abbdca0 100644
+--- a/src/game/boe.startup.cpp
++++ b/src/game/boe.startup.cpp
+@@ -198,7 +198,7 @@ void plop_fancy_startup(cFramerateLimiter& fps_limiter) {
+ 	// Wait for audio to finish loading before playing sound
+ 	// Audio decoding is asynchronous, so we need to wait for it
+ 	std::cout << "Waiting for audio to finish loading..." << std::endl;
+-	while(true) {
++	while(!getenv("BOE_NO_AUDIO_WAIT")) {
+ 		int loaded = EM_ASM_INT({ return Module.audioLoadCount || 0; });
+ 		int total = EM_ASM_INT({ return Module.audioTotalCount || 0; });
+ 		if (loaded >= total && total > 0) {
+diff --git a/src/tools/replay.cpp b/src/tools/replay.cpp
+index 3946c875..3b69c43f 100644
+--- a/src/tools/replay.cpp
++++ b/src/tools/replay.cpp
+@@ -28,6 +28,15 @@
+ 		}
+ 
+ 		// String erase functions
++		namespace algorithm {
++			inline std::string erase_all_copy(std::string input, const std::string& search) {
++				size_t pos = 0;
++				while((pos = input.find(search, pos)) != std::string::npos)
++					input.erase(pos, search.length());
++				return input;
++			}
++		}
++
+ 		inline void erase_all(std::string& input, const std::string& search) {
+ 			size_t pos = 0;
+ 			while ((pos = input.find(search, pos)) != std::string::npos) {
+@@ -43,7 +52,9 @@
+ 		template<typename T, typename S>
+ 		T lexical_cast(const S& arg) {
+ 			if constexpr (std::is_same_v<T, std::string>) {
+-				return std::to_string(arg);
++				// ostringstream rather than to_string: callers pass `location`
++				// and string literals as well as numbers.
++				std::ostringstream oss; oss << arg; return oss.str();
+ 			} else if constexpr (std::is_integral_v<T>) {
+ 				if constexpr (std::is_same_v<S, std::string>) {
+ 					return static_cast<T>(std::stoi(arg));
+@@ -252,6 +263,42 @@ int next_action_line() {
+ 	return next_action->Row();
+ }
+ 
++#ifdef BOE_NATIVE_REPLAY
++// ---- the native harness's action trace -------------------------------------
++//
++// `BOE_TRACE=1` prints one line per replayed action in the same shape as
++// exile-js's own `CORPUS=1 TRACE=1` output, so the two runs diff line for line
++// and the first differing line names the rule that diverged. Off by default:
++// the recordings are thousands of actions long.
++#include "universe/universe.hpp"
++#include "game/boe.global.hpp"
++
++extern cUniverse univ;
++extern eGameMode overall_mode;
++
++static bool trace_on() {
++	static int on = -1;
++	if(on < 0) on = getenv("BOE_TRACE") != nullptr;
++	return on;
++}
++
++void trace_action(const std::string& type, const std::string& text) {
++	static int n = 0;
++	n++;
++	if(!trace_on()) return;
++	bool fight = overall_mode == MODE_COMBAT;
++	location l = fight ? univ.party[univ.cur_pc].combat_pos
++		: (univ.party.town_num < 200 ? univ.party.town_loc : univ.party.out_loc);
++	std::cout << "  " << std::setw(5) << n << " " << std::left << std::setw(20) << type
++		<< std::right << " " << std::setw(10) << text.substr(0, 10)
++		<< " -> (" << l.x << "," << l.y << ")";
++	if(fight)
++		std::cout << " pc" << univ.cur_pc << ":" << univ.party[univ.cur_pc].name
++			<< "(" << univ.party[univ.cur_pc].ap << "ap)";
++	std::cout << " mode=" << int(overall_mode) << std::endl;
++}
++#endif
++
+ Element& pop_next_action(std::string expected_action_type) {
+ 	if(next_action == nullptr){
+ 		throw std::string { "Replay error! No action left to pop" };
+@@ -264,6 +311,13 @@ Element& pop_next_action(std::string expected_action_type) {
+ 
+ 	Element* to_return = next_action;
+ 	next_action = next_action->NextSiblingElement(false);
++#ifdef BOE_NATIVE_REPLAY
++	{
++		std::string txt;
++		to_return->GetTextOrDefault(&txt, "");
++		trace_action(to_return->Value(), txt);
++	}
++#endif
+ 	
+ 	if(replay_fps_limit.has_value()) {
+ 		replay_fps_limit->frame_finished();
+diff --git a/web/web_stubs.cpp b/web/web_stubs.cpp
+index 595f29c2..53d484e4 100644
+--- a/web/web_stubs.cpp
++++ b/web/web_stubs.cpp
+@@ -200,6 +200,7 @@ namespace legacy {
+ // Legacy format porting functions now provided by src/porting.cpp
+ 
+ // Replay system stubs (TODO: Implement when replay system is added)
++#ifndef BOE_NATIVE_REPLAY
+ bool replaying = false;
+ bool recording = false;
+ 
+@@ -208,15 +209,20 @@ ticpp::Element& pop_next_action(std::string expected_type) {
+ 	static ticpp::Element dummy("dummy");
+ 	return dummy;
+ }
++#endif
+ 
++#ifndef BOE_NATIVE_REPLAY
+ void decode_file(std::string data, fs::path file) {
+ 	// Stub - would decode base64 file data
+ }
++#endif
+ 
++#ifndef BOE_NATIVE_REPLAY
+ std::string encode_file(fs::path file) {
+ 	// Stub - would encode file to base64
+ 	return "";
+ }
++#endif
+ 
+ // Global variables for async file dialog communication
+ static std::string g_dialog_result = "";
+@@ -412,14 +418,18 @@ void wasm_load_from_path(const char* path_cstr) {
+ 
+ // flip_short and other endian conversion functions now provided by src/porting.cpp
+ 
++#ifndef BOE_NATIVE_REPLAY
+ void record_action(std::string action_type, std::string inner_text, bool cdata) {
+ 	// Stub - would record action to replay log
+ }
++#endif
+ 
++#ifndef BOE_NATIVE_REPLAY
+ std::string info_from_action(ticpp::Element& action) {
+ 	// Stub - would extract info string from action element
+ 	return "";
+ }
++#endif
+ 
+ // UI and dialog stubs (TODO: Implement with HTML/Canvas)
+ // Note: cursor_type and Cursor are now defined in cursors.hpp (included via res_cursor.hpp)
+@@ -932,10 +942,12 @@ void restore_cursor() {
+ // NOTE: cToolbar and UI::toolbar now provided by boe.ui.cpp
+ 
+ // Replay system function
++#ifndef BOE_NATIVE_REPLAY
+ bool has_next_action(std::string expected_type) {
+ 	// Stub - would check if there's a next action in replay log
+ 	return false;
+ }
++#endif
+ 
+ // Queue for menu bar actions dispatched from JS click handlers.
+ // Must be processed from the main C++ loop (not directly from JS) because
+@@ -1014,8 +1026,12 @@ bool pollEvent(sf::Window& window, sf::Event& event) {
+ tessel_ref_t bg[256];
+ 
+ // Replay system global variables
++#ifndef BOE_NATIVE_REPLAY
+ int replay_fps_limit = 30;
++#endif
++#ifndef BOE_NATIVE_REPLAY
+ fs::path log_file;
++#endif
+ 
+ // Tiling pattern storage
+ struct TesselData {
+@@ -1193,12 +1209,24 @@ unsigned int getMenubarHeight() { return 0; }
+ 
+ // Global variables
+ tessel_ref_t bw_pats[128];
++#ifndef BOE_NATIVE_REPLAY
+ bool record_verbose = false;
++#endif
++#ifndef BOE_NATIVE_REPLAY
+ bool replay_verbose = false;
++#endif
++#ifndef BOE_NATIVE_REPLAY
+ std::string last_action_type;
++#endif
++#ifndef BOE_NATIVE_REPLAY
+ bool replay_error = false;
++#endif
++#ifndef BOE_NATIVE_REPLAY
+ bool replay_strict = false;
++#endif
++#ifndef BOE_NATIVE_REPLAY
+ bool replay_warning = false;
++#endif
+ 
+ // Additional functions and classes
+ struct word_rect_t {};
+@@ -1206,8 +1234,12 @@ class cItem;
+ class cCreature;
+ class cScenario;
+ 
++#ifndef BOE_NATIVE_REPLAY
+ void record_click_talk_rect(word_rect_t rect, bool val) {}
++#endif
++#ifndef BOE_NATIVE_REPLAY
+ void record_action(std::string type, std::map<std::string, std::string> attrs) {}
++#endif
+ // display_pc and display_alchemy now provided by src/pcedit/pc.editors.cpp
+ // menu_activate now provided by web/boe.menus.wasm.cpp
+ 
+@@ -1317,7 +1349,9 @@ fs::path nav_get_rsrc(std::initializer_list<std::string> exts) { return ""; }
+ void nav_put_rsrc(std::initializer_list<std::string> exts, fs::path def) {}
+ 
+ // Replay and action functions
++#ifndef BOE_NATIVE_REPLAY
+ std::string next_action_type() { return ""; }
++#endif
+ // edit_stuff_done now provided by src/pcedit/pc.editors.cpp
+ 
+ // REMOVED PREFERENCE STUBS - use real implementations from prefs.cpp
+@@ -1395,13 +1429,26 @@ void init_directories(const char* exec_path) {
+ 
+ 	// Set progDir to root so progDir/data resolves to /data
+ 	progDir = "/";
++	if(const char* over = getenv("BOE_PROG_DIR")) progDir = over;
+ 
+ 	// Set up temp directories (will use browser storage later)
+ 	tempDir = "/temp";
++	if(const char* over = getenv("BOE_TEMP_DIR")) tempDir = over;
+ 	scenDir = tempDir / "Scenarios";
+ 	replayDir = tempDir / "Replays";
+ 	saveDir = tempDir / "Saves";
+ 
++	// Natively the EM_ASM below is a no-op, so make the directories for real —
++	// decode_file writes the replay's embedded save into tempDir and silently
++	// fails if it isn't there.
++	if(getenv("BOE_TEMP_DIR")) {
++		std::error_code ec;
++		fs::create_directories(scenDir, ec);
++		fs::create_directories(replayDir, ec);
++		fs::create_directories(saveDir, ec);
++		fs::create_directories(tempDir / "Temporary Files", ec);
++	}
++
+ 	// Create VFS directories so fs::create_directories() calls don't fail
+ 	EM_ASM({
+ 		try { FS.mkdir('/temp'); } catch(e) {}
+@@ -1419,10 +1466,18 @@ void init_directories(const char* exec_path) {
+ }
+ 
+ // Additional replay and logging functions
++#ifndef BOE_NATIVE_REPLAY
+ void record_action(ticpp::Element& elem) {}
++#endif
++#ifndef BOE_NATIVE_REPLAY
+ location location_from_action(ticpp::Element& elem) { return location(); }
++#endif
++#ifndef BOE_NATIVE_REPLAY
+ short short_from_action(ticpp::Element& elem) { return 0; }
++#endif
++#ifndef BOE_NATIVE_REPLAY
+ void start_log_file(std::string filename) {}
++#endif
+ 
+ // Window and cursor
+ bool check_window_moved(sf::RenderWindow& win, int& x, int& y, std::string pref) {
+@@ -1459,7 +1514,9 @@ std::string cUndoList::redoName() const { return ""; }
+ void cUndoList::add(action_ptr what) {}
+ size_t cUndoList::maxUndoSize = 50;
+ 
++#ifndef BOE_NATIVE_REPLAY
+ void record_field_input(cKey key) {}
++#endif
+ 
+ // Button widget
+ // Note: eControlType is now defined in control.hpp
+@@ -1468,7 +1525,9 @@ enum class eBtnType {};
+ // Note: cButton is now implemented in dialogxml/widgets/button.cpp
+ 
+ // Additional replay functions
++#ifndef BOE_NATIVE_REPLAY
+ word_rect_t word_rect_from_action(ticpp::Element& elem) { return word_rect_t(); }
++#endif
+ 
+ // Documentation
+ void launchDocs(std::string page) {}
+@@ -1508,14 +1567,18 @@ bool pollEvent(sf::Window* window, sf::Event& event) {
+ }
+ 
+ // Key from action
++#ifndef BOE_NATIVE_REPLAY
+ cKey key_from_action(ticpp::Element& elem) {
+ 	return cKey();
+ }
++#endif
+ 
+ // Next action line
++#ifndef BOE_NATIVE_REPLAY
+ int next_action_line() {
+ 	return 0;
+ }
++#endif
+ 
+ // Note: Cursor class is now defined in cursors.hpp (included via res_cursor.hpp)
+ // Cursor constructor implementation for web build
+@@ -1607,6 +1670,15 @@ void wasm_cast_spell(int type, int spellId) {
+ } // extern "C" for menu bar exports
+ 
+ // zlib functions (gzstream needs these)
++//
++// **Left out of the native instrumentation build.** These four have the same
++// names as the real libz entry points, so linking them beside `-lz` silently
++// wins: `gzopen` hands back a null the caller never sees (gzstreambase sets
++// badbit, and `std::istream`'s constructor runs afterwards and clears it
++// again), and `gzread` then reports every save file as zero bytes long. The
++// browser has no zlib and needs the stubs; natively the real one is right
++// there.
++#ifndef BOE_NATIVE_REPLAY
+ extern "C" {
+ 	void* gzopen(const char* path, const char* mode) {
+ 		return nullptr;
+@@ -1624,3 +1696,4 @@ extern "C" {
+ 		return 0;
+ 	}
+ }
++#endif
