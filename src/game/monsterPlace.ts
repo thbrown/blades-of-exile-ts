@@ -194,18 +194,24 @@ export function activateMonsters(univ: Universe, code: number): void {
   if (code === 0) return;
   const town = univ.town;
   if (!town) return;
-  for (let i = 0; i < town.record.creatures.length; i++) {
-    const preset = town.record.creatures[i]!;
-    if (preset.specEncCode !== code) continue;
-    const template = univ.scenario.scenMonsters[preset.number];
-    if (!template) continue;
+  // **Indexed by the creature's own `slot`, not by its place in the list.**
+  // The C++'s `univ.town.monst` mirrors `creatures` one for one, so it can
+  // assign at index i; this port's list is compacted (a preset with no monster
+  // in it is skipped), so writing at i would leave holes in the array — which
+  // is exactly what `process_fields` then walked off the end of.
+  for (let n = 0; n < town.monsters.length; n++) {
+    const existing = town.monsters[n]!;
+    if (existing.specEncCode !== code) continue;
+    const preset = town.record.creatures[existing.slot];
+    const template = preset ? univ.scenario.scenMonsters[preset.number] : undefined;
+    if (!preset || !template) continue;
     const monst = assignCreature(
-      i, preset, template, univ.party.easyMode, univ.difficultyAdjust());
+      existing.slot, preset, template, univ.party.easyMode, univ.difficultyAdjust());
     monst.specEncCode = 0;
     monst.active = CreatureStatus.ALERTED;
     monst.summonTime = 0;
     monst.target = 6;
-    town.monsters[i] = monst;
+    town.monsters[n] = monst;
     // The crate or barrel it was hiding in is gone.
     town.setField(monst.curLoc.x, monst.curLoc.y, FieldType.OBJECT_CRATE, false);
     town.setField(monst.curLoc.x, monst.curLoc.y, FieldType.OBJECT_BARREL, false);

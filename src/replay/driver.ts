@@ -670,6 +670,7 @@ export async function runReplay(
     } catch (err) {
       result.error = String(err);
       result.errorAt = at;
+      if (process.env.TRACE && err instanceof Error) console.error(err.stack);
       return result;
     }
     result.ran++;

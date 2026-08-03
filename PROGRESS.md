@@ -3637,5 +3637,12 @@ The M6 list below is kept for the history of what it covered:
       which unlike `AFFECT_GOLD` does not clamp.
   - Still reporting itself: `TOWN_REUNITE_PARTY`, which needs `end_split` —
     party splitting, a feature this port does not have at all.
+  - *Gotcha found writing `activate_monsters`*: **`CurTown.monsters` is
+    compacted and the C++'s `univ.town.monst` is not.** The C++ mirrors
+    `creatures` one for one and can `assign(i, …)`; this port skips a preset
+    with no monster in it, so the two index spaces differ and a creature carries
+    its own `slot`. Writing at the preset's index left *holes* in the array, and
+    `process_fields` walked straight off one — a crash, not a divergence, and
+    the reason the corpus grew a `TypeError` line for one file.
   - **Where it stands**: 7,738 actions dispatch. `VoDT_20-04-2025_15-08-43` went
     from 70 to 91.
