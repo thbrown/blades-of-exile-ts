@@ -19,6 +19,11 @@
  * ended up, and the inference says where the recording was, which between them
  * name the square and the rule.
  *
+ * `TAIL=n` is the same trace kept as a ring buffer and printed only for files
+ * that stopped — the whole corpus's failures with the last n actions that led
+ * into each, which is how a list of fifty desyncs gets sorted into the three or
+ * four rules actually behind them.
+ *
  * `TRACE=1` (with `ONLY=`) prints every action as it is dispatched, with the
  * party's square and whatever the turn printed to the transcript — which is how
  * a "the party stopped one square short" report gets turned into "this square,
@@ -92,10 +97,11 @@ async function play(path: string): Promise<Row> {
 
   const total = replay.actions.length - start.consumed;
   const trace: string[] = [];
+  const tail = Number(process.env.TAIL ?? 0);
   let mark = univ.transcript.length;
   const result = await runReplay(session, replay, {
     from: start.consumed,
-    onStep: process.env.TRACE
+    onStep: process.env.TRACE || tail
       ? (at, action) => {
         // In combat the square that matters is the **acting PC's**, not the
         // party's — the party's town location does not move during a fight, so
@@ -109,6 +115,10 @@ async function play(path: string): Promise<Row> {
         trace.push(`  ${String(at).padStart(5)} ${action.type.padEnd(20)} `
           + `${(action.text || action.info.id || '').padEnd(10)} -> (${l.x},${l.y})${who} `
           + `mode=${session.mode}  ${said.slice(0, 110)}`);
+        // `TAIL=n` keeps only the last n lines: over the whole corpus the full
+        // trace is tens of thousands of strings, and the interesting part of a
+        // desync is always the handful of actions that led into it.
+        if (!process.env.TRACE && trace.length > tail) trace.shift();
       }
       : undefined,
     onLoadParty: (save) => {
@@ -131,6 +141,7 @@ async function play(path: string): Promise<Row> {
   };
 
   if (process.env.TRACE) row.detail.push(...trace);
+  else if (tail && result.error !== null) row.detail.push(...trace);
   if (process.env.VERBOSE && result.error?.includes('desync')) {
     const here = univ.party.getLoc();
     row.detail.push(`this port ended at (${here.x},${here.y}) `

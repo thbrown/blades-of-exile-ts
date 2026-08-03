@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { Direction } from '../src/core/location';
 import { GameRng } from '../src/core/rng';
 import { Scenario } from '../src/data/scenario';
 import { SpecType, SpecialNode, emptySpecialNode } from '../src/data/special';
+import { TerSpec } from '../src/data/terrain';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
 import { ChoiceButton, SpecCtx, SpecCtxType, SpecialHost } from '../src/game/specials/context';
 import { ONCE_DONE } from '../src/game/specials/oneshot';
@@ -580,5 +582,62 @@ describe('every .spec node in the bundled scenario', () => {
       await session.runSpecialRaw(
         SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, node, { x: 5, y: 5 });
     }
+  });
+});
+
+describe('a scripted square that is also a door', () => {
+  /**
+   * Both halves of the ordering `check_special_terrain` imposes: the node runs
+   * *before* the terrain switch, so one step both fires the chain and opens the
+   * door; and a node that blocks stops the door opening at all.
+   *
+   * This port used to run the node from `town_move_party`, after
+   * `check_special_terrain` had already returned — which meant a closed door
+   * swallowed the step and the chain only fired on the *second* bump. The
+   * corpus caught it as a message box appearing one action late.
+   */
+  function doorWithNode(node: Partial<SpecialNode>) {
+    const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
+    const session = new GameSession(univ);
+    const host = new TestHost();
+    session.attachSpecials(host);
+    session.startTownMode(0, FORCED_ENTRY);
+    const town = univ.town!.record;
+
+    // Find a closed door, and hang a node on it.
+    let where: { x: number; y: number } | null = null;
+    for (let x = 1; x < town.maxDim - 1 && !where; x++)
+      for (let y = 1; y < town.maxDim - 1 && !where; y++)
+        if (univ.terrainType(town.terrain[x]![y]!).special === TerSpec.CHANGE_WHEN_STEP_ON)
+          where = { x, y };
+    if (!where) throw new Error('no step-on door in the start town');
+
+    town.specialLocs = [{ ...where, spec: 0 }];
+    town.specials = new Map([[0, { ...emptySpecialNode(), ...node }]]);
+    town.specStrs = ['the door speaks'];
+    univ.party.townLoc = { x: where.x, y: where.y + 1 };
+    session.center = { ...univ.party.townLoc };
+    return { univ, session, host, where, town };
+  }
+
+  it('fires the chain on the same step that opens the door', async () => {
+    const { session, host, where, town, univ } = doorWithNode(
+      { type: SpecType.DISPLAY_MSG, m1: 0 });
+    const opened = univ.terrainType(town.terrain[where.x]![where.y]!).flag1;
+
+    // The door blocked the way, so the step itself is refused — but the
+    // message has already been shown and the door is open.
+    expect(await session.move(Direction.N)).toBe(false);
+    expect(host.messages).toHaveLength(1);
+    expect(town.terrain[where.x]![where.y]).toBe(opened);
+  });
+
+  it('a node that blocks the step stops the door opening', async () => {
+    const { session, host, where, town } = doorWithNode({ type: SpecType.CANT_ENTER, ex2a: 1 });
+    const before = town.terrain[where.x]![where.y]!;
+
+    expect(await session.move(Direction.N)).toBe(false);
+    expect(town.terrain[where.x]![where.y]).toBe(before);
+    expect(host.messages).toHaveLength(0);
   });
 });

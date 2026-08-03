@@ -443,10 +443,15 @@ const doors = await page.evaluate(async () => {
   const s = window.__session;
   const scen = window.__scen;
   const t = s.univ.town.record;
+  // A **scripted** door square is no good for this probe: walking into one
+  // runs its chain (check_special_terrain does that before it swaps the
+  // terrain), and a chain that puts a message up would wait here forever —
+  // a page.evaluate can't answer its own dialog. Plain doors only.
   const find = (special) => {
     for (let x = 1; x < t.maxDim - 1; x++)
       for (let y = 1; y < t.maxDim - 1; y++)
-        if (scen.terTypes[t.terrain[x][y]].special === special) return { x, y };
+        if (scen.terTypes[t.terrain[x][y]].special === special
+          && s.specialAt({ x, y }) < 0) return { x, y };
     return null;
   };
   const out = {};

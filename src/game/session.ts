@@ -614,26 +614,12 @@ export class GameSession {
     if (!out.isOnMap(destination.x, destination.y)) return false;
 
     // check_special_terrain for OUT_MOVE runs first (boe.actions.cpp:3950) —
-    // this is what poisons you in a swamp and burns you in lava out here.
-    if (!this.checkSpecialTerrain(destination)) return false;
-
-    // A special on the destination square can block the step outright, or
-    // force it through otherwise-blocking terrain (its `b` return) — that's
-    // how a scenario walks you across water at a ford, the same trick
-    // town_move_party's CANT_ENTER handling uses for a wall. This port used
-    // to read only `blocked` here and silently drop `forced`, so a ford's
-    // special ran (and could print its message) but the water still refused
-    // the step right after.
-    const special = this.specialAt(destination);
-    let specialForced = false;
-    if (special >= 0) {
-      const { blocked, forced: nodeForced } = await this.runSpecial(
-        SpecCtx.OUT_MOVE, SpecCtxType.OUTDOOR, special,
-        // The chain sees sector coordinates, as check_special_terrain passes.
-        this.univ.party.globalToLocal(destination));
-      if (blocked) return false;
-      specialForced = nodeForced;
-    }
+    // this is what poisons you in a swamp and burns you in lava out here, and
+    // it is also where the sector's own special node fires. Its `forced` is
+    // the node's `b` return, which walks the party across water at a ford.
+    const check = await this.checkSpecialTerrain(destination);
+    if (!check.canEnter) return false;
+    const specialForced = check.forced;
 
     const offset = { x: destination.x - party.outLoc.x, y: destination.y - party.outLoc.y };
     const storeCorner = { ...party.outdoorCorner };
@@ -930,7 +916,14 @@ export class GameSession {
     // `if(univ.target_there(destination, TARG_MONST) == nullptr)`
     // (boe.actions.cpp:4152), so a creature standing on a scripted square stops
     // the script from running as well as stopping the step.
-    if (monsterThere === null && !this.checkSpecialTerrain(destination)) return false;
+    let specialForced = false;
+    if (monsterThere === null) {
+      const check = await this.checkSpecialTerrain(destination);
+      if (!check.canEnter) return false;
+      specialForced = check.forced;
+      // The chain may have taken the party somewhere else entirely.
+      if (!this.inTown || this.univ.town !== town) return true;
+    }
 
     // town_move_party's boat/horse handling (boe.actions.cpp:4159): a leave,
     // a diagonal refusal, a bridge prompt, or boarding a vehicle waiting on
@@ -943,48 +936,18 @@ export class GameSession {
     if (vehicleStep === 'blocked') return false;
     const vehicleForced = vehicleStep === 'forced';
 
-    const blockedTerrain = this.townIsBlocked(destination);
-
-    // A special attached to the square runs before the step is committed, and
-    // can block it (its `a` return) or force it through (`b`). A blocked
-    // square still runs its special when the terrain is a door or a
-    // call-special type (boe.specials.cpp:243).
-    const special = this.specialAt(destination);
-    if (special >= 0 && monsterThere === null) {
-      const terSpec = this.univ.terrainType(
-        town.record.terrain[destination.x]![destination.y]!).special;
-      // A CANT_ENTER node with ex2a set says "run me even on a blocked
-      // square" — that's how a scenario explains a wall you can't pass.
-      const node = town.record.specials.get(special);
-      const forceAllowed = node?.type === SpecType.CANT_ENTER && node.ex2a > 0;
-      const runIt = !blockedTerrain
-        || terSpec === TerSpec.CHANGE_WHEN_STEP_ON
-        || terSpec === TerSpec.CALL_SPECIAL
-        || forceAllowed;
-      if (runIt) {
-        const { blocked, forced } = await this.runSpecial(
-          SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, special, destination);
-        if (blocked) return false;
-        // The town may have changed under us, or the party teleported.
-        if (!this.inTown || this.univ.town !== town) return true;
-        if (forced) {
-          party.townLoc = destination;
-          party.age++;
-          town.makeExplored(destination.x, destination.y);
-          this.updateExplored(party.townLoc);
-          return true;
-        }
-      }
-    }
-
     // `is_blocked` (boe.locutils.cpp:261) is more than the terrain: a creature,
     // a force barrier or a force cage all stop the step the same way.
-    const blocked = blockedTerrain
+    const blocked = this.townIsBlocked(destination)
       || monsterThere !== null
       || town.hasField(destination.x, destination.y, FieldType.BARRIER_FORCE)
       || town.hasField(destination.x, destination.y, FieldType.BARRIER_CAGE);
 
-    if (blocked && !vehicleForced) {
+    // A `forced` return from the square's special — like the bridge prompt's —
+    // only bypasses the blockage test. It does **not** short-circuit the rest
+    // of the step: the horses still refuse dangerous ground, and the footstep
+    // still makes a sound.
+    if (blocked && !vehicleForced && !specialForced) {
       // `is_door` (boe.town.cpp:1564) — a door says so instead, which is the
       // hint that it is worth unlocking rather than walking round.
       const terSpec = this.univ.terrainType(
@@ -1666,18 +1629,34 @@ export class GameSession {
   }
 
   /**
-   * The subset of check_special_terrain (boe.specials.cpp:152) that movement
-   * needs and that doesn't require the specials VM. Returns false when the
-   * move is cancelled.
+   * check_special_terrain (boe.specials.cpp:152) — everything a square does to
+   * the party that walks into it. `canEnter` false cancels the move; `forced`
+   * is the special node's `b` return, which pushes the step through terrain
+   * that would otherwise block.
    *
    * It runs **outdoors as well as in town** — the C++ calls it first thing in
    * `outd_move_party` (boe.actions.cpp:3950) with `eSpecCtx::OUT_MOVE`, which
    * is what makes a swamp poison you and a lava field burn you on the world
    * map. Only the terrain source and the special's context differ.
+   *
+   * **The square's own special node is run from in here**, not by the callers.
+   * That is where the C++ runs it, and the order is load-bearing: the node goes
+   * *before* the terrain switch, so a scripted square that also carries a
+   * step-on door fires its chain on the same step that opens the door — and a
+   * node that blocks the step stops the door opening at all. This port used to
+   * run the node afterwards, from `town_move_party`, which meant the first
+   * bump into such a door opened it silently and the *second* step raised the
+   * message. In a replay that shows up as one extra dialog the recording never
+   * saw; in play it is a message arriving a turn late.
    */
-  private checkSpecialTerrain(where: Location): boolean {
+  private async checkSpecialTerrain(
+    where: Location,
+  ): Promise<{ canEnter: boolean; forced: boolean }> {
     const town = this.univ.town;
     const inCombatMove = isCombat(this.mode);
+    let canEnter = true;
+    let forced = false;
+    const stop = { canEnter: false, forced: false };
     // from_loc: the square being left, which the conveyor and the pushables
     // both need — a crate is shoved on along the line the pusher was walking.
     const fromLoc = inCombatMove ? this.univ.currentPc.combatPos : this.univ.party.townLoc;
@@ -1697,8 +1676,37 @@ export class GameSession {
         || (NO_MOVE_FROM_SOUTH.has(dir) && where.y < fromLoc.y)
         || (NO_MOVE_FROM_WEST.has(dir) && where.x > fromLoc.x)) {
         this.univ.addStringToBuf('The moving floor prevents you.');
-        return false;
+        return stop;
       }
+    }
+
+    // Outdoors the sector's own special list is consulted first of all, and
+    // the chain is handed *sector-local* coordinates.
+    if (!town) {
+      const outSpec = this.specialAt(where);
+      if (outSpec >= 0) {
+        const r = await this.runSpecial(
+          SpecCtx.OUT_MOVE, SpecCtxType.OUTDOOR, outSpec,
+          this.univ.party.globalToLocal(where));
+        if (r.blocked) canEnter = false;
+        else if (r.forced) forced = true;
+      }
+    }
+
+    // A marked encounter square can't be set off mid-fight. Note this is
+    // `cCurTown::is_spot` — the **SPECIAL_SPOT field flag**, the glyph drawn on
+    // the map — and *not* `is_special`, the scan of `special_locs` that
+    // `specialAt` uses. They are easy to confuse and mean different things: one
+    // scripted square in ten carries the marker. The `CITY` trim test beside it
+    // is the C++'s own approximation of "this is town furniture", and it
+    // carries its own TODO wondering about that; kept.
+    if (isCombat(this.mode) && town
+      && (town.hasField(where.x, where.y, FieldType.SPECIAL_SPOT)
+        || this.univ.terrainType(
+          town.isOnMap(where.x, where.y) ? town.record.terrain[where.x]![where.y]! : 0,
+        ).trimType === TrimType.CITY)) {
+      this.univ.addStringToBuf("Move: Can't trigger this special in combat.");
+      return stop;
     }
 
     // Barriers stop the party before terrain is even consulted. They live on
@@ -1706,19 +1714,58 @@ export class GameSession {
     if (town) {
       if (town.hasField(where.x, where.y, FieldType.BARRIER_FORCE)) {
         this.univ.addStringToBuf('  Magic barrier!');
-        return false;
+        canEnter = false;
       }
       if (town.hasField(where.x, where.y, FieldType.BARRIER_CAGE)) {
         this.univ.addStringToBuf('  Force cage!');
-        return false;
+        canEnter = false;
       }
-      if (!town.isOnMap(where.x, where.y)) return true;
-    } else if (!this.univ.out.isOnMap(where.x, where.y)) return true;
+    }
 
-    // Everything between the barrier tests and the terrain switch: the fields
+    // The square's own special node. A town fight only sets one off when it is
+    // a *town* fight (`which_combat_type == 1`) — an arena has no town under it
+    // to script.
+    if ((this.mode === GameMode.TOWN || (inCombatMove && this.whichCombatType === 1))
+      && canEnter && town) {
+      const special = this.specialAt(where);
+      if (special >= 0) {
+        const blockedTer = this.townIsBlocked(where);
+        const terType = this.univ.terrainType(
+          town.isOnMap(where.x, where.y) ? town.record.terrain[where.x]![where.y]! : 0);
+        // A CANT_ENTER node with ex2a set says "run me even on a blocked
+        // square" — that's how a scenario explains a wall you can't pass.
+        const node = town.record.specials.get(special);
+        const forceAllowed = node?.type === SpecType.CANT_ENTER && node.ex2a > 0;
+        const runIt = !blockedTer
+          || terType.special === TerSpec.CHANGE_WHEN_STEP_ON
+          || terType.special === TerSpec.CALL_SPECIAL
+          || forceAllowed
+          // A boat sailing over water still trips the square it sails onto.
+          // The C++ gates this on `!univ.scenario.is_legacy`; this port reads
+          // only the XML format, where that flag is always false.
+          || (this.univ.party.inBoat >= 0 && terType.boatOver);
+        if (runIt) {
+          const r = await this.runSpecial(
+            SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, special, where);
+          // The chain may have moved the party to another town, in which case
+          // there is nothing left here to check.
+          if (!this.inTown || this.univ.town !== town) return { canEnter: true, forced: false };
+          if (r.blocked) canEnter = false;
+          else if (r.forced) forced = true;
+        }
+      }
+    }
+
+    if (!canEnter) return stop;
+
+    if (town) {
+      if (!town.isOnMap(where.x, where.y)) return { canEnter: true, forced };
+    } else if (!this.univ.out.isOnMap(where.x, where.y)) return { canEnter: true, forced };
+
+    // Everything between the special node and the terrain switch: the fields
     // you walk into, the webs that catch you, and the things you shove.
     if (town) {
-      this.checkFields(where, inCombatMove);
+      await this.checkFields(where, inCombatMove);
       this.walkIntoWebs(where, inCombatMove);
       this.pushThings(fromLoc, where);
     }
@@ -1730,30 +1777,33 @@ export class GameSession {
         if (town) town.record.terrain[where.x]![where.y] = spec.flag1;
         else this.univ.out.set(where.x, where.y, spec.flag1);
         if (spec.flag2 >= 0) this.sound?.play(spec.flag2);
-        return !blocksMove(spec);
+        return { canEnter: !blocksMove(spec), forced };
       }
       case TerSpec.UNLOCKABLE:
         // A locked door: the caller has to ask the player what to do, which
         // needs a dialog, so it defers to the host via onLockedDoor.
         this.onLockedDoor?.(where, ter);
-        return false;
-      case TerSpec.CALL_SPECIAL:
+        return stop;
+      case TerSpec.CALL_SPECIAL: {
         // The terrain itself names a node; flag1 is which one. Outdoors the
         // chain is passed *sector-local* coordinates, as everywhere else.
-        void this.runSpecial(
+        const r = await this.runSpecial(
           town ? SpecCtx.TOWN_MOVE : SpecCtx.OUT_MOVE,
           town ? SpecCtxType.TOWN : SpecCtxType.OUTDOOR,
           spec.flag1,
           town ? where : this.univ.party.globalToLocal(where));
-        return true;
+        // Only `a` is read here — the C++ ignores this node's `b`.
+        if (r.blocked) return stop;
+        return { canEnter: true, forced };
+      }
       case TerSpec.DANGEROUS:
         this.dangerousTerrain(spec);
-        return true;
+        return { canEnter: true, forced };
       case TerSpec.DAMAGING:
         this.damagingTerrain(spec);
-        return true;
+        return { canEnter: true, forced };
       default:
-        return true;
+        return { canEnter: true, forced };
     }
   }
 
@@ -2972,7 +3022,7 @@ export class GameSession {
       this.univ.addStringToBuf('  (Try doing something else.)');
       return false;
     }
-    if (!monstHit && !this.checkSpecialTerrain(destination)) return false;
+    if (!monstHit && !(await this.checkSpecialTerrain(destination)).canEnter) return false;
 
     const dir = setDirection(pc.combatPos, destination);
     if (this.locOffActiveArea(destination) && this.whichCombatType === 1

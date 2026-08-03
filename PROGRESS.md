@@ -1594,15 +1594,20 @@ definitions is still the long-term M3 item.
 ## Next steps
 
 **M5, M6 and M7 are all closed**, and **M8 has started** (2026-08-02): the
-C++'s own replays run here now — three of them end to end, and 4,051 of the
+C++'s own replays run here now — six of them end to end, and 7,760 of the
 corpus's actions dispatch without a desync, up from none. See the entry at the
 bottom. What M8 still owes:
 
 - **The desyncs the driver now detects.** Since 2026-08-02 a recorded `move`
   further than one square is reported as a divergence rather than let through,
-  and roughly twenty files stop on one. Each is its own investigation — a
-  creature standing where ours isn't, a boat, a town entry, an encounter that
-  did or didn't fire. That list *is* M8's work queue now.
+  and 56 files stop on one. `TAIL=n` (2026-08-03) prints the last n actions
+  before each stop, which is what turns that list into buckets rather than 56
+  separate investigations — the first bucket it named was
+  `check_special_terrain`'s ordering, below. The biggest one left is a stop
+  right after `handle_combat_switch` ends a fight: `end_town_combat` puts the
+  party on a **randomly chosen** PC's square (`get_ran(1,0,5)`, retried past the
+  dead ones), so any earlier drift in the RNG stream surfaces there rather than
+  where it happened.
 - **Captured end states.** "Runs without desyncing" is a strong check but not
   the golden master: matching the C++'s *final* party, SDFs and position needs
   reference snapshots taken from a run of the desktop build.
@@ -3690,3 +3695,46 @@ The M6 list below is kept for the history of what it covered:
     because the two nodes now *do* something, so the game really splits and the
     lone PC really can be killed by a poison tick the C++'s survives. The node
     doing nothing was keeping the run alive on a game that had already diverged.
+
+- **`check_special_terrain` had been cut in half, and the square's own special
+  node landed on the wrong side of the cut (M8, 2026-08-03).** This is the first
+  bucket `TAIL=` named, and it moved 197 corpus actions on its own.
+  - The C++ runs the square's node from **inside** `check_special_terrain`
+    (boe.specials.cpp:236), before the terrain switch at its tail. This port ran
+    it afterwards, from `town_move_party`, guarded by a `runIt` test that was a
+    faithful copy of the C++'s — and completely unreachable for the case it was
+    written for, because `check_special_terrain` returning false had already
+    returned out of the caller.
+  - **The case that exposed it is a scripted square that is also a step-on
+    door.** `ASR_05-05-2025_12-50-38` walks into one at (12,28) in stealth's
+    town 3: the recording opens the door, reads the ONCE_DISPLAY_MSG that fired
+    with it, clicks Done, and steps through on the next action. This port opened
+    the door silently, dropped the node — so the one-shot's SDF was never
+    written — and then raised the message on the *second* step, one action too
+    late for the recording's click. The driver reported it honestly: "this port
+    raised a dialog the recording never saw".
+  - Now folded back together. `checkSpecialTerrain` is **async** and returns
+    `{ canEnter, forced }`; the outdoor node, the "can't trigger this special in
+    combat" refusal, the barriers, the town node, the fields/webs/pushables and
+    the terrain switch all run in the C++'s order. `forced` is the node's `b`
+    return, and it now only bypasses the blockage test — it used to short-circuit
+    the whole step, skipping the horse checks and the footstep sound.
+  - *Gotcha*: `cCurTown::is_spot` and `cCurTown::is_special` are **different
+    predicates** and the combat refusal wants the first. `is_spot` reads the
+    `SPECIAL_SPOT` field flag (the marker glyph); `is_special` scans
+    `special_locs`. A first draft used our `isSpecialSpot` — which despite its
+    name is the `is_special` scan — and refused every combat step onto any
+    scripted square, dropping two files from 458 and 109 actions to 13 and 9.
+  - Also ported with it: the `!is_legacy && in_boat >= 0 && boat_over` clause
+    that lets a boat trip the square it sails onto (this port reads only the XML
+    format, where `is_legacy` is always false), and `check_fields` is **awaited**
+    now rather than left floating.
+  - `verify-screen`'s door probe had to learn to skip *scripted* doors: walking
+    into one now runs its chain, and a `page.evaluate` cannot answer the message
+    box its own step raises. It hung there until the probe was narrowed.
+  - `test/specials.test.ts` covers both halves — the chain firing on the same
+    step that opens the door, and a CANT_ENTER node stopping the door opening
+    at all.
+  - **Where it stands**: 7,760 actions dispatch, up from 7,563, and six files
+    run to the end. `ASR_05-05-2025_12-20-07` gained 129 actions,
+    `ASR_05-05-2025_12-50-38` 59, `VoDT_01-05-2025_17-52-13` 13.
