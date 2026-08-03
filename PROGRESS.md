@@ -3495,3 +3495,35 @@ The M6 list below is kept for the history of what it covered:
     talks to a creature this port has nowhere near that square). **56 of the 87
     files now stop on a desync.** The milestone is rules divergence and nothing
     else.
+
+- **Two combat divergences the corpus named (M8, 2026-08-02).** Tenth slice —
+  the first two of the desyncs run down to a rule rather than to a missing
+  handler.
+  - **`out_start_loc` is (20,23), not (20,27)** (boe.combat.cpp:65). When an
+    outdoor encounter turns into an arena fight, this port dropped the party
+    four squares south of where the C++ does — close enough to the monster band
+    (`get_ran(1,14,18)`) that the first round played out quite differently.
+    Three recordings step to (20,22) as their first move in an arena, and the
+    "desync" was only ever the starting square.
+  - **Moving onto your own square in combat is a self-swap.** The C++ asks
+    `univ.target_there(destination, TARG_PC)`, which matches the acting PC as
+    readily as anyone else, so the move takes the switch-places branch: **two**
+    action points (`monst_hit->ap--` and then `take_ap(1)`) and "Move: Switch
+    places." This port excluded the mover and charged one, so a replay spinning
+    on the spot ran out of action points a turn later than the recording's did.
+    - *Worth knowing why it is reachable at all*: a keyboard move can never aim
+      at your own square, but `handle_terrain_screen_actions` builds a **mouse**
+      move as `center + get_cur_direction()` (boe.actions.cpp:301) — one step
+      from the view's centre in the direction of the *cursor*, not of the square
+      clicked — and that direction can be (0,0). The `offset == 0` test that
+      would have sent it to `handle_pause` is against the clicked cell, not the
+      cursor.
+  - `test/corpus.test.ts`'s `TRACE=1` prints the acting PC's action points now,
+    which is what made the second one visible.
+  - **Where the wall is after them**: still ~55 desyncs. The one traced
+    furthest (`VoDT_03-05-2025_15-06-59`) now stops because PC 0 starts the
+    fight with 3 action points where the recording's has more — and `set_pc_moves`
+    is verbatim, so the difference is `total_encumbrance`, which **rolls per
+    item**. That makes it downstream of an RNG-stream divergence rather than a
+    rule of its own, which is the shape the harder half of these are likely to
+    have.
