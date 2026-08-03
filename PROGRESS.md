@@ -3605,3 +3605,27 @@ The M6 list below is kept for the history of what it covered:
   - **Where it stands**: 7,718 actions dispatch. The measured gain is small
     because these files stop on something else a few actions later, but the
     class is gone: no file now stops on a spell picker that refused to pick.
+
+- **Four opcodes that were still reporting themselves (M8, 2026-08-02).**
+  Thirteenth slice — the last of the corpus's *unimplemented node* stops.
+  - **`ONCE_OUT_ENCOUNTER`** (boe.specials.cpp:2669) drops one of the sector's
+    four `special_enc` groups on the world map beside the party. It calls
+    `place_outd_wand_monst` with **`forced` true**, which is what lets it use
+    the tenth creature slot when the other nine are taken. An `ex1a` outside
+    0-3 reports itself and leaves the one-shot flag clear.
+  - **`ONCE_TOWN_ENCOUNTER`** is `activate_monsters` (boe.monster.cpp:1192): the
+    ambush that was standing in the town all along. A townperson carrying a
+    `spec_enc_code` is placed but *not alive* when the town loads; this
+    **re-assigns each one from its preset**, which resets whatever a previous
+    fight left on it, clears the code so it cannot be woken twice, and alerts it
+    — an ambush arrives already looking for you. It also clears the crate or
+    barrel it was hiding in. Code 0 wakes nobody.
+  - **`TOWN_CREATE_WANDERING`** is one forced turn of the roll the clock makes
+    anyway, and **`TOWN_PLACE_MONST`** puts a named monster down. *Gotcha*: the
+    latter's `ex2b` is **`forced`, not an attitude** — it lets the creature land
+    on an occupied square.
+  - Still reporting themselves, and each now the only thing standing between one
+    file and the rest of its run: `TOWN_REUNITE_PARTY` (needs `end_split`, i.e.
+    party splitting), `DAMAGE` and `BUY_ITEMS_OF_TYPE`.
+  - **Where it stands**: 7,738 actions dispatch. `VoDT_20-04-2025_15-08-43` went
+    from 70 to 91.

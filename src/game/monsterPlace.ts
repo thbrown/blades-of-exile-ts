@@ -5,6 +5,7 @@
  */
 
 import { Location, locsEqual } from '../core/location';
+import { Universe } from '../universe/universe';
 import { Attitude } from '../data/monster';
 import { defaultTownperson } from '../data/town';
 import { FieldType } from '../data/fields';
@@ -175,4 +176,38 @@ export function summonMonster(
   c.partySummoned = byParty;
   c.spellNote(SpellNote.SUMMONED);
   return true;
+}
+
+/**
+ * `activate_monsters` (boe.monster.cpp:1192) — wake the group of preset
+ * creatures tagged with `code`.
+ *
+ * A townperson with a `spec_enc_code` is placed but *not alive* when the town
+ * loads; this is what brings them in. It re-assigns each one from its preset,
+ * which resets the stats a previous fight may have left on it, clears the code
+ * so it can't be woken twice, and alerts it — an ambush arrives already looking
+ * for you.
+ *
+ * Note code 0 means "no group" and wakes nobody.
+ */
+export function activateMonsters(univ: Universe, code: number): void {
+  if (code === 0) return;
+  const town = univ.town;
+  if (!town) return;
+  for (let i = 0; i < town.record.creatures.length; i++) {
+    const preset = town.record.creatures[i]!;
+    if (preset.specEncCode !== code) continue;
+    const template = univ.scenario.scenMonsters[preset.number];
+    if (!template) continue;
+    const monst = assignCreature(
+      i, preset, template, univ.party.easyMode, univ.difficultyAdjust());
+    monst.specEncCode = 0;
+    monst.active = CreatureStatus.ALERTED;
+    monst.summonTime = 0;
+    monst.target = 6;
+    town.monsters[i] = monst;
+    // The crate or barrel it was hiding in is gone.
+    town.setField(monst.curLoc.x, monst.curLoc.y, FieldType.OBJECT_CRATE, false);
+    town.setField(monst.curLoc.x, monst.curLoc.y, FieldType.OBJECT_BARREL, false);
+  }
 }

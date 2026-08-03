@@ -17,6 +17,8 @@ import { Universe } from '../../universe/universe';
 import { SpecCtx, SpecCtxType, SpecialCtx } from './context';
 import { alterSpace, reportUnsupported } from './general';
 import { setTownAttitude } from '../townAttitude';
+import { placeMonster } from '../monsterPlace';
+import { createWandMonst } from '../wandering';
 import { handleMessage } from './vm';
 import { XML_BUTTONS, threeChoiceButtons } from './oneshot';
 
@@ -107,6 +109,22 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
       ctx.redraw = true;
       break;
     }
+
+    case SpecType.TOWN_CREATE_WANDERING:
+      // The same roll the clock makes every turn, forced by a node
+      // (boe.specials.cpp:3892): a wandering group appears at one of the town's
+      // wandering points, or on the world map if the party is outdoors.
+      createWandMonst(ctx.session);
+      ctx.redraw = true;
+      break;
+
+    case SpecType.TOWN_PLACE_MONST:
+      // ex2a is the monster; **ex2b is `forced`**, not an attitude — it lets
+      // the creature land on a square something is already standing on
+      // (boe.monster.cpp:1116).
+      placeMonster(ctx.session, spec.ex2a, at, spec.ex2b > 0);
+      ctx.redraw = true;
+      break;
 
     case SpecType.TOWN_DESTROY_MONST: {
       if (spec.ex1a < 0 || spec.ex1b < 0) break;

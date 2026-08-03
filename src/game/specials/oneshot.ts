@@ -18,6 +18,8 @@ import { reportUnsupported } from './general';
 import { isCombat } from '../modes';
 import { Skill } from '../../universe/skills';
 import { TrapType, runTrap } from '../trap';
+import { activateMonsters } from '../monsterPlace';
+import { placeOutdWandMonst } from '../wandering';
 import { SelectPcMode, runSelectPc } from '../selectPc';
 
 /** The sentinel meaning "this one-shot has fired". */
@@ -239,13 +241,23 @@ export async function oneshotSpec(
     }
 
     case SpecType.ONCE_TOWN_ENCOUNTER:
-      // TODO(M5): activate_monsters wakes a sleeping group.
-      reportUnsupported(univ, spec.type);
+      activateMonsters(univ, spec.ex1a);
       break;
 
     case SpecType.ONCE_OUT_ENCOUNTER:
-      // TODO(M5): place_outd_wand_monst for one of the four special encounters.
-      reportUnsupported(univ, spec.type);
+      // One of the sector's four `special_enc` groups, dropped on the world map
+      // near the party. `forced` is true here, which is what lets it use the
+      // last creature slot even when the other nine are taken.
+      if (spec.ex1a < 0 || spec.ex1a > 3) {
+        univ.addStringToBuf('Special outdoor enc. is out of range. Must be 0-3.');
+        setSd = false;
+      } else {
+        const group = univ.out.sector.specialEnc[spec.ex1a];
+        if (group) {
+          placeOutdWandMonst(
+            ctx.session, univ.party.globalToLocal(univ.party.outLoc), group, 1);
+        }
+      }
       break;
 
     case SpecType.ONCE_TRAP: {
