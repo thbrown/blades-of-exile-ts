@@ -2987,8 +2987,18 @@ export class GameSession {
     }
 
     // Another PC on the square: swap places, at a cost to both.
+    //
+    // **Including yourself.** The C++ asks `univ.target_there(destination,
+    // TARG_PC)`, which matches any living PC on the square — and clicking your
+    // own figure is a destination you are standing on, so the acting PC finds
+    // *themselves* and swaps with themselves. It costs **two** action points
+    // (one from `monst_hit->ap--`, one from `take_ap`) and says "Move: Switch
+    // places." This port excluded the mover and let a self-move take the plain
+    // move branch at one AP, which is a different number of actions per round —
+    // a replay spinning on the spot ran out of AP a turn before the recording's
+    // did.
     const other = this.univ.party.pcs.find(
-      (p) => p !== pc && p.isAlive && locsEqual(p.combatPos, destination));
+      (p) => p.isAlive && locsEqual(p.combatPos, destination));
     if (other) {
       if (other.ap === 0) {
         this.univ.addStringToBuf("Move: Can't switch places.");

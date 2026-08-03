@@ -102,7 +102,8 @@ async function play(path: string): Promise<Row> {
         // printing it makes every combat trace look frozen.
         const inFight = session.mode === GameMode.COMBAT;
         const l = inFight ? univ.currentPc.combatPos : univ.party.getLoc();
-        const who = inFight ? ` pc${univ.curPc}:${univ.currentPc.name}` : '';
+        const who = inFight
+          ? ` pc${univ.curPc}:${univ.currentPc.name}(${univ.currentPc.ap}ap)` : '';
         const said = univ.transcript.slice(mark).join(' | ');
         mark = univ.transcript.length;
         trace.push(`  ${String(at).padStart(5)} ${action.type.padEnd(20)} `

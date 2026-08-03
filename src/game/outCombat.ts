@@ -25,8 +25,17 @@ import type { GameSession } from './session';
 /** The 48×48 arena's dimension (AREA_MEDIUM). */
 export const ARENA_DIM = 48;
 
-/** Where the party lands in the arena (out_start_loc). */
-const OUT_START_LOC = loc(20, 27);
+/**
+ * Where the party lands in the arena — `out_start_loc` (boe.combat.cpp:65).
+ *
+ * This port had (20,27), four squares south of the real one, which put the
+ * party close enough to the monster band (`get_ran(1,14,18)`) that the first
+ * round played out quite differently. Found by the replay corpus: three
+ * recordings step to (20,22) as their first move in an arena and this port's
+ * PC 0 was standing at (20,27), which is only a "desync" because the starting
+ * square was wrong.
+ */
+const OUT_START_LOC = loc(20, 23);
 
 /** hor_vert_place — the six PC offsets from that square. */
 /** `ter_base` — the ground each arena kind is floored with. */
