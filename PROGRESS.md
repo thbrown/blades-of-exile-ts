@@ -3918,3 +3918,38 @@ The M6 list below is kept for the history of what it covered:
     `do_monsters` alerts anything within five squares of something already angry
     **silently**, so which of the two happened first was a coin toss that moved
     with the stream. It now loops until both.
+
+- **The creatures in a loaded save had no monster template at all (M8,
+  2026-08-15).** The next divergence the draw streams named, and the largest
+  single one yet: it moved three of the five files being watched from tens of
+  matching draws to hundreds or thousands, and took the corpus to **8,170
+  actions**, past the 7,760 it started M8's RNG work at.
+  - A creature's save page carries only its `cCreature` half — number, position,
+    health, attitude, status. Its **`cMonster` half is never written**: no level,
+    no name, no abilities, no resistances, no size. `finish_load_party`
+    (boe.fileio.cpp:73) puts them back, with a comment that says exactly what it
+    is for — *"Saved creatures may not have had their monster attributes saved.
+    Make sure that they know what they are!"* — assigning the whole base class
+    from `univ.scenario.scen_monsters[number]` so the `cCreature` fields survive.
+  - This port did not, and it is subtler than a missing template sounds: the
+    creatures still walked around and still fought, **at level 0**. The visible
+    consequence was in the RNG. `monst_check_special_terrain` rolls
+    `get_ran(1, 1, level / 2)` on every attempted step, and at level 0 that is a
+    zero-width range, which returns *without touching the stream*. So every
+    monster step cost the C++ a number and cost this port none, and the town's
+    stream slid one further out with each one.
+  - *Quirk kept*: it is a plain assignment, with none of `cPopulation::assign`'s
+    easy-mode and difficulty scaling — so a reloaded creature's maximum health is
+    the unscaled template value — and it overwrites `picture_num`, undoing
+    assign's "an invisible monster draws as nothing". A reloaded invisible
+    monster is visible again.
+  - `copyMonster` came out of `assignCreature` so both callers share it. The
+    arrays are copied rather than shared, which matters more now that a second
+    caller exists: a creature's `uAbility` table is its own, and sharing it would
+    let one charm or split edit the scenario's definition for every creature of
+    that type.
+  - **Where it stands.** Draws matched before the first divergence:
+    `ASR_05-05-2025_12-20-07` **3,173** (was 39), `ASR_05-05-2025_21-13-55`
+    **1,680** (was 33), `ZKR_15-05-2025_18-04-58` **327** (was 9);
+    `ZKR-5-16-1-26` 468 and `ASR_05-05-2025_12-50-38` 225 are unchanged and are
+    where the next slice should start.

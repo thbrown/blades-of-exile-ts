@@ -299,20 +299,14 @@ export class Creature extends Living {
  * scenario's monster definition into a live creature, scaled for the party.
  * This replaced the old `return_monster_template`.
  */
-export function assignCreature(
-  slot: number,
-  preset: Townperson,
-  template: Monster,
-  easy = false,
-  difficultyAdjust = 1,
-): Creature {
-  const c = new Creature();
-  c.slot = slot;
-  c.number = preset.number;
-  // The creature owns its stats, so the arrays are copied, not shared.
-  // The abilities are copied too: a creature's uAbility table is its own, and
-  // sharing it would let one split or charm edit the scenario's definition.
-  c.mon = {
+/**
+ * A creature's own copy of a monster definition. **The arrays are copied, not
+ * shared**: a creature's `uAbility` table is its own, and sharing it would let
+ * one split or charm edit the scenario's definition for every creature of that
+ * type.
+ */
+export function copyMonster(template: Monster): Monster {
+  return {
     ...template,
     resist: [...template.resist],
     attacks: [...template.attacks],
@@ -325,6 +319,19 @@ export function assignCreature(
       special: { ...a.special },
     })),
   };
+}
+
+export function assignCreature(
+  slot: number,
+  preset: Townperson,
+  template: Monster,
+  easy = false,
+  difficultyAdjust = 1,
+): Creature {
+  const c = new Creature();
+  c.slot = slot;
+  c.number = preset.number;
+  c.mon = copyMonster(template);
   c.attitude = preset.startAttitude;
   c.startLoc = { ...preset.startLoc };
   c.curLoc = { ...preset.startLoc };

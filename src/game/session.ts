@@ -27,7 +27,7 @@ import { Lighting, Town } from '../data/town';
 import { OutWandering } from '../data/outdoors';
 import { Vehicle } from '../data/vehicle';
 import { Snd, SoundPlayer } from '../platform/sound';
-import { Creature, CreatureStatus, assignCreature } from '../universe/creature';
+import { Creature, CreatureStatus, assignCreature, copyMonster } from '../universe/creature';
 import { Attitude, DamageType } from '../data/monster';
 import { animSettle } from './anim';
 import { damagePc, hitParty } from './damage';
@@ -275,6 +275,35 @@ export class GameSession {
    * on their feet. Only the lighting is recomputed, since it is derived.
    */
   resumeLoadedGame(): void {
+    // **"Saved creatures may not have had their monster attributes saved. Make
+    // sure that they know what they are!"** (finish_load_party,
+    // boe.fileio.cpp:73). A creature's save page carries only its `cCreature`
+    // half — its number, position, health, attitude — so straight out of a save
+    // it has no level, no name, no abilities and no resistances at all. The C++
+    // assigns the whole `cMonster` base back from the scenario's monster list,
+    // deliberately as a base-class assignment so the `cCreature` fields survive.
+    //
+    // This port was missing it entirely, which is subtler than it sounds: the
+    // creatures still walked around, but at level 0. `monst_check_special_terrain`
+    // rolls `get_ran(1, 1, level / 2)`, and at level 0 that is a zero-width
+    // range, so it drew **nothing** — a monster step that costs the C++ a
+    // number cost this port none, and the town's stream slid one further out
+    // with every step any creature took.
+    const templates = this.univ.scenario.scenMonsters;
+    for (const monst of this.univ.town?.monsters ?? []) {
+      const template = templates[monst.number];
+      if (template === undefined) continue;
+      monst.mon = copyMonster(template);
+      // The four fields this port mirrors outside `mon`. They are `cMonster`
+      // members there, so the assignment resets them too — including undoing
+      // `assign`'s "an invisible monster draws as nothing", which is why a
+      // reloaded invisible monster is visible again. Kept.
+      monst.maxHealth = template.health;
+      monst.pictureNum = template.pictureNum;
+      monst.xWidth = template.xWidth;
+      monst.yWidth = template.yWidth;
+    }
+
     this.talk = null;
     this.shop = null;
     this.itemShop = null;
