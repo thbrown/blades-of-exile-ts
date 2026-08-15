@@ -784,16 +784,6 @@ export class GameSession {
     party.outLoc = realDest;
     party.iwc = { x: realDest.x > 47 ? 1 : 0, y: realDest.y > 47 ? 1 : 0 };
     party.locInSec = party.globalToLocal(realDest);
-    // increase_age's outdoor clock (boe.actions.cpp:3362): a step outdoors is
-    // *ten* ticks on foot (five on a horse), and the count is first rounded
-    // down to a multiple of that. It is not `age++` — a great deal keys off
-    // `age % 10 == 0`, including whether the wandering groups move and whether
-    // the game rolls for a new encounter at all, so ticking by one made
-    // outdoor encounters ten times rarer than they should be and ran the
-    // whole outdoor clock (poison, healing, quest deadlines) ten times slow.
-    const step = party.inHorse < 0 ? 10 : 5;
-    party.age -= party.age % step;
-    party.age += step;
     this.univ.addStringToBuf(`Moved: ${dirStr}`);
     this.moveSound(this.univ.out.at(realDest.x, realDest.y), this.numOutMoves);
     this.numOutMoves++;
@@ -1012,7 +1002,6 @@ export class GameSession {
     }
 
     party.townLoc = destination;
-    party.age++;
     this.moveSound(town.record.terrain[destination.x]![destination.y]!, this.numTownMoves++);
     town.makeExplored(destination.x, destination.y);
     this.updateExplored(this.univ.party.townLoc);
@@ -2687,10 +2676,8 @@ export class GameSession {
 
     let interrupted = false;
     for (let i = 0; i < 80 && !this.partySeesAMonst() && !interrupted; i++) {
-      // `increase_age(false)` — this port folds the clock tick into the move
-      // functions rather than into the upkeep, so a waiting turn has to tick
-      // it here. One per turn: the long wait is a town action.
-      univ.party.age++;
+      // `increase_age(false)` — which now ticks the clock itself, as the C++
+      // does, so the long wait no longer has to do it by hand.
       await increaseAgeEffects(this);
       specialIncreaseAge(this, 1);
       await processFields(this);

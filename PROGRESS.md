@@ -3953,3 +3953,35 @@ The M6 list below is kept for the history of what it covered:
     **1,680** (was 33), `ZKR_15-05-2025_18-04-58` **327** (was 9);
     `ZKR-5-16-1-26` 468 and `ASR_05-05-2025_12-50-38` 225 are unchanged and are
     where the next slice should start.
+
+- **The clock ticked in the wrong place (M8, 2026-08-15).** `increase_age`
+  advances `party.age` at its own top (boe.actions.cpp:3362); this port advanced
+  it inside `outdMoveParty`/`townMoveParty` instead, one step too early.
+  - The C++ ticks when the move is already over, so `is_out()` reflects **where
+    the party ended up**. The turn that walks off the world map into a town is
+    the case that exposes it: the C++ charges a *town* turn (+1) because it is in
+    the town by then, and this port charged the outdoor +10. From that one step
+    the two clocks were nine apart, and stayed apart.
+  - Nine ticks is not cosmetic. Every piece of upkeep is an `age % n` test —
+    food at 1000, poison at 20 in town, disease at 25, healing at 50 — so the
+    drift lands each of them on a different turn on each side. It surfaced as
+    `handle_disease` firing there and not here, five draws the C++ made and this
+    port didn't, at draw 226 of a recording whose first 225 matched exactly.
+  - `pause()` and the long wait had both been ticking the clock by hand to make
+    up for the tick living in the move; both stop now. The C++ reaches
+    `increase_age` from `advance_time` for those the same way it does for a step.
+  - `test/increaseAge.test.ts` sets `age = 999` where it used to set 1000: the
+    upkeep now sees the clock *after* the tick, which is what `increase_age`'s
+    callers see too.
+  - **Where it stands.** Draws matched: `ASR_05-05-2025_12-20-07` **4,262**,
+    `ASR_05-05-2025_12-50-38` **3,593** (was 225), `ASR_05-05-2025_21-13-55`
+    1,680, `ZKR_15-05-2025_18-04-58` 436, `ZKR-5-16-1-26` 468. The corpus is at
+    **8,915 actions**, up from 8,170 and from the 7,760 this line of work began
+    at.
+  - *Still open, and worth knowing before the next slice*: `afterPartyTurn` is
+    only reached from a move and from `pause`. The C++ calls `advance_time` at
+    the end of **every** action that did something, so any other turn-taking
+    action — and there are many in the corpus — still doesn't run the upkeep or
+    move the monsters here at all. `ZKR-5-16-1-26` and
+    `ASR_05-05-2025_21-13-55` have not moved through the last two fixes, and
+    that is the likeliest reason.

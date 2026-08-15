@@ -235,7 +235,7 @@ index faaef3f2..2a648966 100644
  }
  
 diff --git a/src/tools/replay.cpp b/src/tools/replay.cpp
-index 3946c875..c81756b5 100644
+index 3946c875..c535e672 100644
 --- a/src/tools/replay.cpp
 +++ b/src/tools/replay.cpp
 @@ -28,6 +28,15 @@
@@ -322,7 +322,7 @@ index 3946c875..c81756b5 100644
 +	if(fight)
 +		std::cout << " pc" << univ.cur_pc << ":" << univ.party[univ.cur_pc].name
 +			<< "(" << univ.party[univ.cur_pc].ap << "ap)";
-+	std::cout << " mode=" << int(overall_mode) << std::endl;
++	std::cout << " mode=" << int(overall_mode) << " age=" << univ.party.age << std::endl;
 +	// BOE_TRACE_MONST adds the town's whole creature list, which is what a
 +	// divergence in `do_monsters`' random walk needs: the drift shows up as one
 +	// townsperson a square off, several hundred actions before anything blocks.

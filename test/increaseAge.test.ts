@@ -162,7 +162,9 @@ describe('hunger', () => {
     const party = s.univ.party;
     party.food = 100;
     party.pcs[0]!.mainStatus = MainStatus.DEAD;
-    party.age = 1000;
+    // **One short of the turn under test.** `increase_age` ticks the clock
+    // itself before any of its `age % n` checks, so the upkeep sees 1000.
+    party.age = 999;
     await increaseAgeEffects(s);
     // Five mouths left, not six — the dead don't eat.
     expect(party.food).toBe(95);
@@ -172,7 +174,7 @@ describe('hunger', () => {
   it('does nothing on a turn that is not a multiple of 1000', async () => {
     const s = inTown();
     s.univ.party.food = 100;
-    s.univ.party.age = 1001;
+    s.univ.party.age = 1001; // ticks to 1002, still not a multiple of 1000
     await increaseAgeEffects(s);
     expect(s.univ.party.food).toBe(100);
   });
@@ -181,7 +183,7 @@ describe('hunger', () => {
     const s = inTown();
     const party = s.univ.party;
     party.food = 2; // enough for two of the six
-    party.age = 1000;
+    party.age = 999; // ticks to 1000 — see above
     const before = party.pcs.map((pc) => pc.curHealth);
     await increaseAgeEffects(s);
     expect(party.food).toBe(0);

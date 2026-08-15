@@ -126,7 +126,8 @@ async function play(path: string): Promise<Row> {
         mark = univ.transcript.length;
         trace.push(`  ${String(at).padStart(5)} ${action.type.padEnd(20)} `
           + `${(action.text || action.info.id || '').padEnd(10)} -> (${l.x},${l.y})${who} `
-          + `mode=${session.mode} draws=${univ.rng.gameDraws} ${said.slice(0, 110)}`);
+          + `mode=${session.mode} age=${univ.party.age} draws=${univ.rng.gameDraws} `
+          + `${said.slice(0, 110)}`);
         // The creature list, in `BOE_TRACE_MONST`'s format so the two traces
         // diff. Only the living ones, and by `slot` rather than array index:
         // this port's list is compacted and the C++'s is not, so the index

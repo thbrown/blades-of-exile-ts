@@ -141,6 +141,25 @@ export async function increaseAgeEffects(session: GameSession): Promise<void> {
   const outdoors = session.mode === GameMode.OUTDOORS;
   const town = session.mode === GameMode.TOWN;
   if (!outdoors && !town) return;
+
+  // **The clock ticks here, not in the move** (boe.actions.cpp:3362). This port
+  // used to advance `age` inside `outdMoveParty`/`townMoveParty`, which is one
+  // step too early: the C++ ticks at the top of `increase_age`, by which time
+  // the move is over and `is_out()` already reflects where the party *ended up*.
+  // The turn that walks off the world map into a town is the case that shows
+  // it — the C++ charges a **town** turn (+1) because it is in the town by
+  // then, and this port charged the outdoor +10. Nine ticks of drift by the
+  // 226th random draw of one recording, which is enough to move every
+  // `age % n` upkeep (poison, disease, food, healing) onto the wrong turn.
+  //
+  // Outdoors a step is ten ticks on foot and five on a horse, and the count is
+  // rounded down to a multiple of that first.
+  if (outdoors) {
+    party.age -= party.age % (party.inHorse < 0 ? 10 : 5);
+    party.age += 5;
+    if (party.inHorse < 0) party.age += 5;
+  } else party.age++;
+
   const age = party.age;
 
   // "decrease monster present counter" (boe.actions.cpp:3377), a `move_to_zero`
