@@ -382,7 +382,7 @@ export async function runReplay(
             const spell = storedSpell(session, type, caster);
             if (spell === Spell.NONE) break;
             if (isCombat(session.mode)) await combatCastSpell(session, spell);
-            else castSpell(session, caster, spell);
+            else await session.castTownSpell(caster, spell);
             break;
           }
           // **In combat the picker does not always open.**
@@ -422,7 +422,7 @@ export async function runReplay(
               const { spell, caster, target } = chosen;
               session.spellTarget = target;
               if (inFight) await combatCastSpell(session, spell);
-              else castSpell(session, caster, spell);
+              else await session.castTownSpell(caster, spell);
             }
           }
           break;

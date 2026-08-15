@@ -74,6 +74,8 @@ import { SpecCtx, SpecCtxType, SpecialHost } from './specials/context';
 import { SpecialsEngine } from './specials/vm';
 import { specialIncreaseAge } from './specialIncreaseAge';
 import { alterSpace } from './specials/general';
+import { Spell } from '../data/spell';
+import { castSpell } from './spellTown';
 
 /** d_string (boe.combat.cpp:70) — the direction names the transcript prints. */
 const DIRECTION_NAMES = [
@@ -2269,6 +2271,29 @@ export class GameSession {
   /** Try to bash a locked door open with a given PC. */
   bashDoor(where: Location, pcNum: number): void {
     bashDoorAt(this.univ, where, pcNum, this.sound);
+  }
+
+  /**
+   * `handle_spellcast`'s town branch (boe.actions.cpp:401) — cast, and then
+   * decide whether it counted as a turn.
+   *
+   * **The test is whether any PC's spell points changed.** The C++ snapshots
+   * all six before `cast_spell` and sets `did_something` only if one of them
+   * differs afterwards, so a cast that was refused, cancelled or free leaves the
+   * world exactly where it was, and a real one ends the party's turn — monsters
+   * move, the clock ticks. This port ran no turn for any cast at all.
+   *
+   * *Note it is only the town branch.* Outdoors `handle_spellcast` never touches
+   * `did_something`, so a spell cast on the world map costs nothing; the clock
+   * out there moves in tens anyway.
+   */
+  async castTownSpell(pcNum: number, spell: Spell, freebie = false): Promise<void> {
+    const before = this.univ.party.pcs.map((pc) => pc.curSp);
+    castSpell(this, pcNum, spell, freebie);
+    if (this.mode !== GameMode.TOWN) return;
+    if (this.univ.party.pcs.some((pc, i) => pc.curSp !== before[i])) {
+      await this.afterPartyTurn();
+    }
   }
 
   // ------------------------------------------------------------------- talk

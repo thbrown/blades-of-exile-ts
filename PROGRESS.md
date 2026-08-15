@@ -4038,3 +4038,31 @@ The M6 list below is kept for the history of what it covered:
     action that sets `did_something` still doesn't advance time here. `age=` on
     both traces is the way to find the next one — diff them and the first
     differing turn names the action.
+
+- **A spell cast in town costs a turn, if it actually spent anything (M8,
+  2026-08-15).** The second `advance_time` gap, found the same way — `age=` in
+  both action traces, diffed, first differing turn names the action. Took
+  `ZKR_15-05-2025_18-04-58` from 554 matching draws to **1,521**.
+  - **The test is whether any PC's spell points changed.** `handle_spellcast`'s
+    town branch (boe.actions.cpp:401) snapshots all six `cur_sp` before
+    `cast_spell` and sets `did_something` only if one of them differs afterwards.
+    So a cast that was refused, cancelled or free leaves the world exactly where
+    it was, and a real one ends the party's turn. Neat, and much better than
+    trying to enumerate the ways a cast can fail.
+  - *Only the town branch.* Outdoors `handle_spellcast` never touches
+    `did_something` at all, so a spell on the world map costs nothing — the
+    clock out there moves in tens anyway. `session.castTownSpell` is the wrapper;
+    the four call sites in `main.ts` and the replay driver use it.
+  - **Where it stands.** Draws matched: `ASR_05-05-2025_12-20-07` 4,262,
+    `ZKR-5-16-1-26` 4,101, `ASR_05-05-2025_12-50-38` 3,593,
+    `ASR_05-05-2025_21-13-55` 1,680, `ZKR_15-05-2025_18-04-58` **1,521**.
+    Corpus 8,846 actions — down 146 on the last slice, the usual sign that a
+    file which had been surviving on a wrong clock now diverges earlier on
+    something else.
+  - **The recipe for the rest of this class**, since there are more:
+    `BOE_TRACE=1 run.sh <file>` and `CORPUS=1 TRACE=1 ONLY=<file>` both print
+    `age=`; join them on the action index (the C++ prints the age *before* each
+    action, this port *after*, so compare the C++'s next line), and the first
+    turn where the two disagree names the action type that advances time there
+    and not here. Then find its `did_something` in `boe.actions.cpp` — the rule
+    is usually a specific one, not "this action always counts".

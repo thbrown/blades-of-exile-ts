@@ -1006,7 +1006,7 @@ async function main(): Promise<void> {
     const { spell, caster, target } = chosen;
     session.spellTarget = target;
     if (inFight) await combatCastSpell(session, spell);
-    else castSpell(session, caster, spell);
+    else await session.castTownSpell(caster, spell);
     setStatus();
     redraw();
   };
@@ -1023,7 +1023,7 @@ async function main(): Promise<void> {
       const spell = storedSpell(session, type, caster);
       if (spell !== Spell.NONE) {
         if (isCombat(session.mode)) await combatCastSpell(session, spell);
-        else castSpell(session, caster, spell);
+        else await session.castTownSpell(caster, spell);
       }
     }
     setStatus();
