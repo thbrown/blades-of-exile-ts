@@ -2292,21 +2292,50 @@ export class GameSession {
       this.univ.addStringToBuf('  Nobody there');
       return false;
     }
+    /**
+     * **Hailing something costs a turn; holding a conversation doesn't.**
+     * `handle_talk` sets `did_something` the moment a creature is on the space
+     * and only takes it back when `start_talk_mode` actually opens the
+     * conversation (boe.actions.cpp:848). So a shout at a hostile, at a summon,
+     * at a corpse, or a HAIL special that swallows the greeting, all end the
+     * party's turn — the monsters move and the clock ticks — while a real
+     * conversation freezes the world for as long as it lasts.
+     *
+     * This port ran no turn for any of them, which is where its clock started
+     * falling behind the C++'s in a talky recording.
+     */
+    const spentTurn = async (): Promise<boolean> => {
+      await this.afterPartyTurn();
+      return false;
+    };
+
     // A creature can carry a HAIL special that runs first and, if it blocks,
     // stands in for the conversation entirely (boe.actions.cpp:830).
     if (monst.specialOnTalk >= 0) {
       const { blocked } = await this.runSpecial(
         SpecCtx.HAIL, SpecCtxType.TOWN, monst.specialOnTalk, monst.curLoc);
-      if (blocked) return false;
+      if (blocked) return spentTurn();
     }
     if (!monst.isFriendly) {
       this.univ.addStringToBuf('  Creature is hostile.');
-      return false;
+      return spentTurn();
     }
-    if (monst.personality < 0 || !monst.isAlive) {
-      this.univ.addStringToBuf('Talk: No response.');
-      return false;
+    if (monst.summonTime > 0 || monst.personality < 0) {
+      // `small_talk` is 1 for a summoned creature and `-personality` otherwise;
+      // over 1000 it indexes the scenario's own strings, which is how a
+      // scenario gives a mute townsperson one canned line. The C++ carries a
+      // TODO about wanting a set of pre-cooked responses; there isn't one.
+      const smallTalk = monst.summonTime === 0 ? -monst.personality : 1;
+      const strs = this.univ.scenario.specStrs;
+      const str = (smallTalk > 1000 && smallTalk < 1000 + strs.length)
+        ? strs[smallTalk - 1000]! : 'No response.';
+      this.univ.addStringToBuf(`Talk: ${str}`);
+      return spentTurn();
     }
+    // **A corpse says nothing at all** — not even "No response.". The C++'s
+    // last branch is `else if(is_alive())`, so a dead creature with a real
+    // personality falls out of the chain silently, having spent the turn.
+    if (!monst.isAlive) return spentTurn();
     // A creature's own face overrides its monster template's default one.
     const template = this.univ.scenario.scenMonsters[monst.number];
     const face = monst.facialPic >= 0 ? monst.facialPic : (template?.defaultFacialPic ?? -1);

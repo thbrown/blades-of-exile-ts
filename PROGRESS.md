@@ -4014,3 +4014,27 @@ The M6 list below is kept for the history of what it covered:
     `ZKR-5-16-1-26` **4,101**, `ASR_05-05-2025_12-50-38` 3,593,
     `ASR_05-05-2025_21-13-55` 1,680, `ZKR_15-05-2025_18-04-58` 436. Corpus
     **8,935 actions**.
+
+- **Hailing something costs a turn; holding a conversation doesn't (M8,
+  2026-08-15).** The first instance of the `advance_time` gap flagged above,
+  found by putting `age=` in both action traces and diffing: the C++'s clock ran
+  one ahead of this port's from a `handle_talk`.
+  - `handle_talk` sets `did_something` the moment a creature is on the space and
+    **takes it back only when `start_talk_mode` actually opens the conversation**
+    (boe.actions.cpp:848). So a shout at a hostile, at a summoned creature, at a
+    corpse, or a HAIL special that swallows the greeting all end the party's
+    turn — the monsters move, the clock ticks — while a real conversation
+    freezes the world for as long as it lasts. This port ran no turn for any of
+    them.
+  - Two message bugs came out with it. **A corpse says nothing at all**, not even
+    "No response.": the C++'s last branch is `else if(is_alive())`, so a dead
+    creature with a real personality falls out of the chain silently. And the
+    "No response." line is only the *default* — `small_talk` is 1 for a summoned
+    creature and `-personality` otherwise, and over 1000 it indexes the
+    scenario's own `spec_strs`, which is how a scenario gives a mute townsperson
+    one canned line. This port hard-coded the default and never looked.
+  - **Where it stands.** `ZKR_15-05-2025_18-04-58` 436 → 554 draws; corpus
+    **8,992 actions**. A small step, and the class is what matters: every other
+    action that sets `did_something` still doesn't advance time here. `age=` on
+    both traces is the way to find the next one — diff them and the first
+    differing turn names the action.
