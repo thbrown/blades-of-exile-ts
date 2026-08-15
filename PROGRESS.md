@@ -3985,3 +3985,32 @@ The M6 list below is kept for the history of what it covered:
     move the monsters here at all. `ZKR-5-16-1-26` and
     `ASR_05-05-2025_21-13-55` have not moved through the last two fixes, and
     that is the likeliest reason.
+
+- **Two outdoor blockage predicates, both wrong (M8, 2026-08-15).** The next
+  divergence, and it took `ZKR-5-16-1-26` from 468 matching draws to **4,101**.
+  - **`outd_is_blocked` counts the other wandering groups** (boe.locutils.cpp:399)
+    and this port's copy only looked at terrain. That is what showed up in the
+    stream: `seek_party` succeeded here where the C++'s eight directional
+    attempts all failed and it fell through to its random shove, which costs two
+    draws this port never made.
+  - **`outd_is_special` is not the special-spot marker.** It is
+    `blockage == BLOCK_MONSTERS` (boe.locutils.cpp:421) — a terrain test, nothing
+    to do with the encounter glyph its name suggests. This port was asking
+    `is_spot`. That is the *third* member of this family to be confused with
+    another (`cCurTown::is_spot` vs `is_special` is logged above); the names in
+    it are worth checking against the source every single time.
+  - `place_outd_wand_monst` uses **`is_blocked`, not `outd_is_blocked`**
+    (boe.monster.cpp:117), so the party's own square counts — and so does the
+    slot the call has *just* filled in, because `exists` is set before the loop
+    runs. A forced placement therefore always shifts at least once. That is the
+    C++'s own shape, and `test/wandering.test.ts` had asserted the opposite:
+    OUT_PLACE_ENCOUNTER passes `forced`, so its group lands *beside* the party,
+    never on it. The test now checks adjacency, which is what the end-of-turn
+    encounter check actually needs.
+  - `is_blocked`'s outdoor half gained the group loop with it. Note the party's
+    own step asks the narrower `impassable` question and may still walk into a
+    group — which is how an encounter happens at all.
+  - **Where it stands.** Draws matched: `ASR_05-05-2025_12-20-07` 4,262,
+    `ZKR-5-16-1-26` **4,101**, `ASR_05-05-2025_12-50-38` 3,593,
+    `ASR_05-05-2025_21-13-55` 1,680, `ZKR_15-05-2025_18-04-58` 436. Corpus
+    **8,935 actions**.

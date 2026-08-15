@@ -65,7 +65,14 @@ export function outdoorMoveMonster(
   const group = univ.party.outC[which];
   if (!group) return false;
   if (outdBlocked(univ, dest)) return false;
-  if (univ.out.isSpot(dest.x, dest.y)) return false;
+  // **`outd_is_special` (boe.locutils.cpp:421) is a terrain *blockage* test**,
+  // `blockage == BLOCK_MONSTERS`, and has nothing to do with the special-spot
+  // marker its name suggests — this port was asking `is_spot`, the encounter
+  // glyph, which is a different set of squares entirely. Same confusion as
+  // `cCurTown::is_spot` vs `is_special` logged above; the names in this family
+  // are worth double-checking every time.
+  if (univ.terrainType(univ.out.at(dest.x, dest.y)).blockage
+    === TerObstruct.BLOCK_MONSTERS) return false;
   if (dest.x === univ.party.outLoc.x && dest.y === univ.party.outLoc.y) return false;
   group.direction = setDirection(group.mLoc, dest);
   group.mLoc = { ...dest };
@@ -75,9 +82,20 @@ export function outdoorMoveMonster(
 function outdBlocked(univ: Universe, where: Location): boolean {
   if (!univ.out.isOnMap(where.x, where.y)) return true;
   const ter = univ.terrainType(univ.out.at(where.x, where.y));
-  return ter.blockage === TerObstruct.BLOCK_MOVE
+  if (ter.blockage === TerObstruct.BLOCK_MOVE
     || ter.blockage === TerObstruct.BLOCK_MOVE_AND_SHOOT
-    || ter.blockage === TerObstruct.BLOCK_MOVE_AND_SIGHT;
+    || ter.blockage === TerObstruct.BLOCK_MOVE_AND_SIGHT) return true;
+  // **The other groups block too** (boe.locutils.cpp:399). Without this two
+  // encounters can stand on the same square, and — the reason it showed up —
+  // `seek_party` succeeds where the C++'s eight directional attempts all fail
+  // and it falls through to its random shove, which costs two draws this port
+  // never made. Note it does *not* test the party's own square; that is
+  // `outdoor_move_monster`'s separate check.
+  for (let i = 0; i < NUM_OUT_CREATURES; i++) {
+    const other = univ.party.outC[i];
+    if (other?.exists && other.mLoc.x === where.x && other.mLoc.y === where.y) return true;
+  }
+  return false;
 }
 
 /** try_move + seek_party, cut down to the outdoor case. */
@@ -145,7 +163,12 @@ export function placeOutdWandMonst(
 
     let l = { ...slot.mLoc };
     let tries = 0;
-    while (forced && outdBlocked(univ, l) && tries < 50) {
+    // **`is_blocked`, not `outd_is_blocked`** (boe.monster.cpp:117) — so the
+    // party's own square counts here, and so does the slot that was *just*
+    // filled in above, which means a forced placement always shifts at least
+    // once. That is the C++'s own shape, not a bug: `exists` is set before the
+    // loop runs.
+    while (forced && session.isBlocked(l) && tries < 50) {
       l = {
         x: slot.mLoc.x + univ.rng.getRan(1, 0, 2) - 1,
         y: slot.mLoc.y + univ.rng.getRan(1, 0, 2) - 1,

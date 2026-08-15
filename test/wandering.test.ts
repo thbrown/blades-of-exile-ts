@@ -358,8 +358,17 @@ describe('the outdoor encounter specials', () => {
     await s.runSpecialRaw(SpecCtx.OUT_MOVE, SpecCtxType.OUTDOOR, 0, s.univ.party.locInSec);
     const slot = s.univ.party.outC.find((g) => g.exists);
     expect(slot).toBeDefined();
-    // Placed on the party's own square, so the next turn's check meets it.
-    expect(slot!.mLoc).toEqual(s.univ.party.outLoc);
+    // **Next to the party, not on it.** OUT_PLACE_ENCOUNTER passes `forced`
+    // (boe.specials.cpp:4583), and a forced placement shuffles the group until
+    // `is_blocked` is happy — which counts the party's own square *and* the
+    // slot the call has already filled in, so it always moves at least once.
+    // Landing adjacent is what matters: that is what the end-of-turn encounter
+    // check tests for.
+    const at = slot!.mLoc;
+    const party = s.univ.party.outLoc;
+    expect(Math.abs(at.x - party.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(at.y - party.y)).toBeLessThanOrEqual(1);
+    expect(at).not.toEqual(party);
   });
 
   it('OUT_PLACE_ENCOUNTER refuses an index outside 0-3', async () => {

@@ -862,7 +862,13 @@ export class GameSession {
     if (!town) {
       if (!this.univ.out.isOnMap(where.x, where.y)) return true;
       if (this.outdIsBlocked(where)) return true;
-      return locsEqual(where, this.univ.party.outLoc);
+      if (locsEqual(where, this.univ.party.outLoc)) return true;
+      // The wandering groups block each other (boe.locutils.cpp:399). Note
+      // this is `is_blocked`'s outdoor half, not `impassable`'s — the party's
+      // own step asks the narrower question and may still walk into a group,
+      // which is how an encounter happens at all.
+      return this.univ.party.outC.some(
+        (g) => g.exists && locsEqual(g.mLoc, where));
     }
     if (!town.isOnMap(where.x, where.y)) return true;
     if (this.townIsBlocked(where)) return true;
