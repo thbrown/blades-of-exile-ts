@@ -1624,7 +1624,7 @@ async function main(): Promise<void> {
         } else if (btn.btn === ToolbarButton.LOOK) {
           beginLook();
         } else if (btn.btn === ToolbarButton.CAMP) {
-          session.rest();
+          void session.rest();
         } else if (btn.btn === ToolbarButton.USE) {
           selectSpace('use');
         } else if (btn.btn === ToolbarButton.MAP) {
@@ -1841,7 +1841,7 @@ async function main(): Promise<void> {
           selectSpace('pick');
           break;
         case 'r':
-          session.rest();
+          await session.rest();
           break;
         case 'g': case 'G':
           // MODE_TOWN *or* MODE_COMBAT (boe.actions.cpp:3105).

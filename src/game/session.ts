@@ -1095,15 +1095,14 @@ export class GameSession {
    * The Rest command (handle_rest). Returns false with a reason in the
    * transcript when the party can't.
    */
-  rest(): boolean {
+  async rest(): Promise<boolean> {
     this.recorder?.record('handle_rest');
-    const where = this.inTown ? this.univ.party.townLoc : this.univ.party.outLoc;
-    const ter = this.inTown
-      ? this.univ.town?.record.terrain[where.x]?.[where.y]
-      : this.univ.out.at(where.x, where.y);
-    const special = ter === undefined ? TerSpec.NONE : this.univ.terrainType(ter).special;
-    const dangerous = special === TerSpec.DAMAGING || special === TerSpec.DANGEROUS;
-    return handleRest(this.univ, this.isOutdoors, dangerous, this.sound);
+    // The C++ only ever reaches handle_rest from MODE_OUTDOORS — both the
+    // **r** key (boe.actions.cpp:3080) and the CAMP button (:1637) test the
+    // mode first — and the command reads the *outdoor* map for its terrain, so
+    // there is nothing sensible for it to do in town.
+    if (!this.isOutdoors) return false;
+    return handleRest(this);
   }
 
   // -------------------------------------------------------------------- use

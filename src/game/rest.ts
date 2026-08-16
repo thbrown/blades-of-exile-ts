@@ -5,12 +5,17 @@
  */
 
 import { ItemAbil } from '../data/item';
+import { TerSpec } from '../data/terrain';
+import { dist } from '../core/location';
 import { tryAutoSave } from './autosave';
 import { hasAbilEquip } from '../universe/inventory';
-import { MainStatus, Status, Trait } from '../universe/skills';
+import { MainStatus, PartyStatus, Status, Trait } from '../universe/skills';
 import { Universe } from '../universe/universe';
+import { increaseAgeEffects } from './increaseAge';
+import { NO_ONE } from './combat';
 import type { GameSession } from './session';
 import { specialIncreaseAge } from './specialIncreaseAge';
+import { createWandMonst, doOutdoorMonsters } from './wandering';
 
 /**
  * do_rest — advance the clock by `length` ticks and restore the party.
@@ -69,28 +74,53 @@ export function doRest(
   if (session) specialIncreaseAge(session, length, true);
 }
 
+/** someone_poisoned (boe.actions.cpp:4267) — a *living* PC with poison in them. */
+export function someonePoisoned(univ: Universe): boolean {
+  return univ.party.pcs.some((pc) =>
+    pc.mainStatus === MainStatus.ALIVE && (pc.status[Status.POISON] ?? 0) > 0);
+}
+
+/**
+ * nearest_monster (boe.actions.cpp:4274) — how far the closest outdoor group
+ * is, or 100 when there are none. Only the ten outdoor slots count, which is
+ * why this is meaningless in town.
+ */
+export function nearestMonster(univ: Universe): number {
+  let best = 100;
+  for (const group of univ.party.outC) {
+    if (!group.exists) continue;
+    best = Math.min(best, dist(univ.party.outLoc, group.mLoc));
+  }
+  return best;
+}
+
 /**
  * handle_rest (boe.actions.cpp:556) — the outdoor Rest command, which is what
- * the CAMP toolbar button does. It refuses in a boat, when someone's poisoned,
- * on dangerous ground, or with too little food, then passes 1200 ticks and
- * restores the party.
+ * the CAMP toolbar button and **r** do. It refuses in a boat, when someone's
+ * poisoned, with too little food, with a group already close, on dangerous
+ * ground or in the air.
  *
- * TODO(M5): the original also runs 50 ticks of monster movement while you
- * sleep, can spawn a wandering monster, and aborts if one wanders close.
+ * **Fifty turns pass before the rest counts.** The loop is the whole point of
+ * the command: the clock ticks fifty times (five hundred ticks outdoors), the
+ * groups get a coin-flip's worth of movement each turn, a wandering group can
+ * turn up, and poison or an approaching monster cuts the night short — in
+ * which case *nothing* is restored, because `i` is slammed to 200 and only
+ * `i == 50` reaches `do_rest`. So a successful rest is 500 ticks of upkeep
+ * **plus** `do_rest`'s 1200, and an interrupted one is only what elapsed
+ * before the interruption.
  */
-export function handleRest(
-  univ: Universe,
-  isOutdoors: boolean,
-  dangerousHere: boolean,
-  sound?: { play(which: number): void } | null,
-): boolean {
+export async function handleRest(session: GameSession): Promise<boolean> {
+  const { univ } = session;
   const say = (line: string) => univ.addStringToBuf(line);
+  const where = univ.party.outLoc;
+  const ter = univ.out.at(where.x, where.y);
+  const special = ter === undefined ? TerSpec.NONE : univ.terrainType(ter).special;
+
   if (univ.party.inBoat >= 0) {
     say('Rest:  Not in boat.');
     return false;
   }
-  if (univ.party.pcs.some((pc) =>
-    pc.mainStatus === MainStatus.ALIVE && (pc.status[Status.POISON] ?? 0) > 0)) {
+  if (someonePoisoned(univ)) {
     say('Rest: Someone poisoned.');
     return false;
   }
@@ -98,15 +128,49 @@ export function handleRest(
     say('Rest: Not enough food.');
     return false;
   }
-  if (dangerousHere) {
+  if (nearestMonster(univ) <= 3) {
+    say('Rest: Monster too close.');
+    return false;
+  }
+  if (special === TerSpec.DAMAGING || special === TerSpec.DANGEROUS) {
     say("Rest: It's dangerous here.");
     return false;
   }
+  if (univ.party.partyStatus[PartyStatus.FLIGHT] > 0) {
+    say('Rest: Not while flying.');
+    return false;
+  }
+
   say('Resting...');
   // Sound 20, asynchronously — the negative is the C++'s "don't block" flag.
-  sound?.play(-20);
+  session.sound?.play(-20);
   univ.party.food -= 6;
-  doRest(univ, 1200, univ.rng.getRan(5, 1, 10), 50, isOutdoors);
+
+  let i = 0;
+  while (i < 50) {
+    // `increase_age(false)` — the clock, the upkeep and the timers, exactly as
+    // an ordinary turn runs them. There are no fields outdoors, which is why
+    // this doesn't call `processFields` the way the long wait does.
+    await increaseAgeEffects(session);
+    specialIncreaseAge(session, 1);
+    session.currentSwitch = NO_ONE;
+    if (univ.rng.getRan(1, 1, 2) === 2) doOutdoorMonsters(session);
+    if (univ.rng.getRan(1, 1, 70) === 10) createWandMonst(session);
+    // Poison can set in from a disease and kill someone in their sleep.
+    if (someonePoisoned(univ)) {
+      i = 200;
+      say('  Someone poisoned.');
+    }
+    if (nearestMonster(univ) <= 3) {
+      i = 200;
+      say('  Monsters nearby.');
+    }
+    i++;
+  }
+
+  session.checkGameOver();
+  if (i !== 50) return false;
+  doRest(univ, 1200, univ.rng.getRan(5, 1, 10), 50, true, session);
   say('  Rest successful.');
   tryAutoSave('RestComplete');
   return true;

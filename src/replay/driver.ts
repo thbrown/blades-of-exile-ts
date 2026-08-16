@@ -210,7 +210,7 @@ export async function runReplay(
           await session.pause();
           break;
         case 'handle_rest':
-          session.rest();
+          await session.rest();
           break;
         case 'handle_wait':
           // The long wait, which is **w** and not Space. Up to eighty turns

@@ -85,12 +85,15 @@ describe('the trigger sites', () => {
   it('fires RestComplete only when the rest actually happens', async () => {
     const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
     await session.startNewGame();
+    // Resting is an outdoor command, so this has to leave town first — and
+    // the ExitTown that leaving fires is not what this test is watching.
+    session.endTownMode({ x: 0, y: 0 });
     const seen = watch();
     session.univ.party.food = 0; // "Rest: Not enough food."
-    expect(session.rest()).toBe(false);
+    expect(await session.rest()).toBe(false);
     expect(seen).toEqual([]);
     session.univ.party.food = 100;
-    expect(session.rest()).toBe(true);
+    expect(await session.rest()).toBe(true);
     expect(seen).toEqual(['RestComplete']);
   });
 });

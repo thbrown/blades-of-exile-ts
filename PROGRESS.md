@@ -4066,3 +4066,34 @@ The M6 list below is kept for the history of what it covered:
     turn where the two disagree names the action type that advances time there
     and not here. Then find its `did_something` in `boe.actions.cpp` — the rule
     is usually a specific one, not "this action always counts".
+
+- **Resting is fifty turns long, and it can be interrupted (M8, 2026-08-15).**
+  The third `advance_time`-class gap, and the biggest: `handle_rest`
+  (boe.actions.cpp:556) was ported as its refusals plus `do_rest`, with a
+  `TODO(M5)` where its **loop** should have been. The loop is the command.
+  - Fifty iterations of `increase_age(false)`, each one a full outdoor turn:
+    the clock, the upkeep, the timers. Then per iteration `get_ran(1,1,2) == 2`
+    moves the outdoor groups and `get_ran(1,1,70) == 10` drops a wandering one
+    in. So a night's sleep costs **500 ticks before `do_rest`'s 1200**, and
+    draws around 100 numbers this port never drew.
+  - **An interrupted rest restores nothing.** Poison setting in, or a group
+    coming within 3, slams `i` to 200 — and the `do_rest` at the bottom is
+    gated on `i == 50`, so the party wakes up with exactly the time that
+    elapsed and none of the healing. Neat, and easy to miss: the C++ writes it
+    as a sentinel rather than a `break` with a flag.
+  - Two refusals were missing with it — `nearest_monster() <= 3`
+    ("Rest: Monster too close.") and `flying()` ("Rest: Not while flying.") —
+    and `handle_rest` is **outdoors only**: both its call sites (the **r** key
+    at :3080 and the CAMP button at :1637) test `MODE_OUTDOORS` first, and the
+    body reads the *outdoor* map for its dangerous-terrain check. This port let
+    it run in town, against town terrain. `session.rest()` is async now,
+    because a turn's upkeep is.
+  - **Where it stands.** `ZKR_15-05-2025_18-04-58` 1,521 → **4,852** matching
+    draws, and its `age=` now agrees with the C++ for every action to the stop.
+    Corpus 8,835 actions, down 11 — the usual sign of a file that had been
+    surviving on a wrong clock.
+  - The `age=` recipe from the last slice works, but **join the two traces on
+    the recording's own action numbers, not on position**: the C++ records some
+    actions *nested* inside another one's handling (a dialog raised mid-move),
+    and their `age` is the age from before the outer action ticked. Compare
+    against the next action *both* sides dispatched.

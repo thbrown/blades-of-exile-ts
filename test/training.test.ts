@@ -135,17 +135,26 @@ describe('training', () => {
 });
 
 describe('the Rest command', () => {
-  it('rests, costs food, and plays its sound', async () => {
+  /** handle_rest is outdoors-only, so every case has to leave town first. */
+  async function outdoorGame(): Promise<{ univ: Universe; session: GameSession }> {
     const { univ, session } = newGame();
+    session.endTownMode({ x: 0, y: 0 });
+    return { univ, session };
+  }
+
+  it('rests, costs food, and plays its sound', async () => {
+    const { univ, session } = await outdoorGame();
     const sounds: number[] = [];
     session.sound = { play: (n: number) => sounds.push(n) } as never;
     univ.party.food = 100;
     univ.party.pcs.forEach((pc) => { pc.curHealth = 1; });
     const ageBefore = univ.party.age;
 
-    expect(session.rest()).toBe(true);
+    expect(await session.rest()).toBe(true);
     expect(univ.party.food).toBe(94);
-    expect(univ.party.age).toBe(ageBefore + 1200);
+    // Fifty turns of the outdoor clock (ten ticks each) *and then* do_rest's
+    // 1200 — the loop is not free.
+    expect(univ.party.age).toBe(ageBefore + 500 + 1200);
     expect(univ.party.pcs[0]!.curHealth).toBeGreaterThan(1);
     // Sound 20, negative meaning "asynchronously".
     expect(sounds).toContain(-20);
@@ -153,18 +162,22 @@ describe('the Rest command', () => {
     expect(univ.transcript.at(-1)).toBe('  Rest successful.');
   });
 
-  it('refuses when poisoned, hungry, or in a boat', async () => {
+  it('refuses when poisoned, hungry, in a boat, or in town', async () => {
     const cases: [string, (u: Universe) => void, string][] = [
       ['poison', (u) => { u.party.pcs[0]!.status[Status.POISON] = 3; }, 'Someone poisoned'],
       ['food', (u) => { u.party.food = 5; }, 'Not enough food'],
       ['boat', (u) => { u.party.inBoat = 0; }, 'Not in boat'],
     ];
     for (const [, setup, expected] of cases) {
-      const { univ, session } = newGame();
+      const { univ, session } = await outdoorGame();
       setup(univ);
-      expect(session.rest()).toBe(false);
+      expect(await session.rest()).toBe(false);
       expect(univ.transcript.at(-1)).toContain(expected);
     }
+    // In town the command does not exist at all: the C++ tests the mode before
+    // it ever calls handle_rest, so there is no refusal message either.
+    const { session } = newGame();
+    expect(await session.rest()).toBe(false);
   });
 });
 
