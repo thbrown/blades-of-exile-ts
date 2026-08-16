@@ -53,7 +53,7 @@ import {
   takeItemFrom,
   unequipItem,
 } from '../universe/inventory';
-import { MainStatus, PartyStatus, Race, Skill, Status } from '../universe/skills';
+import { MainStatus, PartyStatus, Race, Skill, Status, Trait } from '../universe/skills';
 import { boomSpace } from './booms';
 import { ShopItemType } from '../data/shop';
 import { ShopState, handleSale } from './shop';
@@ -789,7 +789,7 @@ export class GameSession {
     this.univ.addStringToBuf(`Moved: ${dirStr}`);
     this.moveSound(this.univ.out.at(realDest.x, realDest.y), this.numOutMoves);
     this.numOutMoves++;
-    // Waterfalls (run_waterfalls) aren't ported; TODO(M6) if a scenario needs them.
+    if (party.inBoat >= 0) this.runWaterfalls(false);
     if (party.inHorse >= 0) {
       party.horses[party.inHorse]!.whichTown = TOWN_NUM_OUTDOORS;
       party.horses[party.inHorse]!.loc = party.locInSec;
@@ -1013,7 +1013,7 @@ export class GameSession {
     this.moveSound(town.record.terrain[destination.x]![destination.y]!, this.numTownMoves++);
     town.makeExplored(destination.x, destination.y);
     this.updateExplored(this.univ.party.townLoc);
-    // Waterfalls (run_waterfalls) aren't ported; TODO(M6) if a scenario needs them.
+    if (party.inBoat >= 0) this.runWaterfalls(true);
     if (party.inHorse >= 0) {
       party.horses[party.inHorse]!.loc = { ...party.townLoc };
       party.horses[party.inHorse]!.whichTown = party.townNum;
@@ -1833,6 +1833,10 @@ export class GameSession {
       case TerSpec.DAMAGING:
         this.damagingTerrain(spec);
         return { canEnter: true, forced };
+      case TerSpec.WILDERNESS_CAVE:
+      case TerSpec.WILDERNESS_SURFACE:
+        this.handleHunting();
+        return { canEnter: true, forced };
       default:
         return { canEnter: true, forced };
     }
@@ -1987,6 +1991,158 @@ export class GameSession {
     }
     if (amount < 0) return;
     await hitParty(this.univ, amount, damType);
+  }
+
+  /**
+   * find_waterfall (boe.actions.cpp:3845) — which way the water is carrying
+   * the boat, or null. A neighbouring square counts only if it is a waterfall
+   * **and its flag1 names the direction it is in**, which is how a scenario
+   * draws a river that flows one way. More than one candidate picks at random,
+   * and that `get_ran(1,1,count)` is the only draw here.
+   */
+  private findWaterfall(where: Location, town: boolean): Direction | null {
+    const terAt = (x: number, y: number): number => {
+      // coord_to_ter (boe.locutils.cpp:210) reads 0 off the map. The C++'s
+      // find_waterfall indexes the arrays raw instead, which is out of bounds
+      // at the very edge; 0 is what the rest of the file would have said.
+      if (town) {
+        const t = this.univ.town;
+        if (!t || !t.isOnMap(x, y)) return 0;
+        return t.record.terrain[x]![y]!;
+      }
+      if (!this.univ.out.isOnMap(x, y)) return 0;
+      return this.univ.out.at(x, y) ?? 0;
+    };
+    const candidates: Direction[] = [];
+    for (let dir = 0; dir < Direction.Here; dir++) {
+      const at = shiftLoc(where, dir as Direction);
+      const spec = this.univ.terrainType(terAt(at.x, at.y));
+      if (spec.special !== TerSpec.WATERFALL_CAVE && spec.special !== TerSpec.WATERFALL_SURFACE)
+        continue;
+      if (spec.flag1 !== dir) continue;
+      candidates.push(dir as Direction);
+    }
+    if (candidates.length === 0) return null;
+    return candidates[this.univ.rng.getRan(1, 1, candidates.length) - 1]!;
+  }
+
+  /**
+   * run_waterfalls (boe.actions.cpp:3875) — the current sweeps a boat two
+   * squares at a time, for as long as it keeps finding waterfalls, and costs
+   * the party supplies each time.
+   *
+   * **Its tail is why a boat follows the party at all.** The C++ never updates
+   * `boats[in_boat]` in `outd_move_party` or `town_move_party` — only horses
+   * are re-parked there — so this function, called on every move made in a
+   * boat, is the *only* thing that keeps the boat under the party. Without it
+   * the boat stays wherever it was boarded, and stepping back onto that square
+   * later is a plain blocked move instead of "Move: You board the boat." That
+   * is what this port did before, and it looked like a blockage bug.
+   */
+  private runWaterfalls(town: boolean): void {
+    const { univ } = this;
+    const { party } = univ;
+    let where = town ? party.townLoc : party.outLoc;
+    for (;;) {
+      const dir = this.findWaterfall(where, town);
+      if (dir === null) break;
+      univ.addStringToBuf('  Waterfall!');
+      const step = shiftLoc(shiftLoc({ x: 0, y: 0 }, dir), dir); // two squares
+      where = { x: where.x + step.x, y: where.y + step.y };
+      if (town) {
+        party.townLoc = { ...where };
+        this.updateExplored(party.townLoc);
+      } else {
+        party.outLoc = { ...where };
+        party.locInSec = { x: party.locInSec.x + step.x, y: party.locInSec.y + step.y };
+        this.updateExplored(party.outLoc);
+      }
+      // `wilderness_lore_present(coord_to_ter(...) > 0)` — the `> 0` is
+      // **inside** the call in the C++, so what gets passed is 0 or 1, a
+      // terrain type with no special, and the test is effectively always
+      // false. Kept: the draw it skips is part of the call order.
+      const looksLikeLore = false;
+      if (looksLikeLore && univ.rng.getRan(1, 0, 1) === 0) {
+        univ.addStringToBuf('  (No supplies lost.)');
+      } else {
+        const here = town
+          ? univ.town?.record.terrain[where.x]?.[where.y] ?? 0
+          : univ.out.at(where.x, where.y) ?? 0;
+        const spec = univ.terrainType(here);
+        let lost = Math.trunc((party.food * spec.flag2) / 100);
+        if (lost >= spec.flag3) {
+          lost = spec.flag3;
+          univ.addStringToBuf('  (Many supplies lost.)');
+        } else univ.addStringToBuf(`  (${lost} supplies lost.)`);
+        party.food -= lost;
+      }
+      this.sound?.play(28);
+    }
+    // The boat comes along, waterfall or no waterfall.
+    const boat = party.boats[party.inBoat];
+    if (!boat) return;
+    if (town) {
+      boat.loc = { ...party.townLoc };
+      boat.whichTown = party.townNum;
+    } else {
+      boat.whichTown = TOWN_NUM_OUTDOORS;
+      boat.loc = party.globalToLocal(party.outLoc);
+      boat.sector = {
+        x: party.outdoorCorner.x + party.iwc.x,
+        y: party.outdoorCorner.y + party.iwc.y,
+      };
+    }
+  }
+
+  /**
+   * handle_hunting (boe.actions.cpp:3593) — the WILDERNESS_CAVE and
+   * WILDERNESS_SURFACE branch of check_special_terrain (boe.specials.cpp:504).
+   * A woodsman in the wilds, or a cave lore PC underground, forages for food.
+   *
+   * **It reads the square the party is standing on, not the one it is walking
+   * into.** check_special_terrain runs before the move, so `out_loc` is still
+   * the old square — which usually isn't wilderness at all, and the function
+   * falls straight out. Kept as written: it's a get_ran call order as much as
+   * a rule, and the C++'s own `trait` sentinel (PACIFIST meaning "neither")
+   * makes the intent clear enough that this isn't an accident of reading.
+   *
+   * `wilderness_lore_present` (boe.party.cpp:2841) is checked first and counts
+   * *living* PCs with the trait, then each PC rolls for themselves — so a
+   * party with one woodsman and one cave-lorist gets one roll each on the
+   * square that suits them.
+   */
+  private handleHunting(): void {
+    const { univ } = this;
+    if (!this.isOutdoors) return;
+    if (this.flying) return;
+    const at = univ.party.outLoc;
+    if (univ.out.isRoad(at.x, at.y)) return;
+    const ter = univ.out.at(at.x, at.y);
+    if (ter === undefined) return;
+    const spec = univ.terrainType(ter);
+    const alive = univ.party.pcs.filter((pc) => pc.mainStatus === MainStatus.ALIVE);
+    // wilderness_lore_present: the *waterfall* variants count here too, even
+    // though they can't be what called this.
+    let trait: Trait | null = null;
+    if (spec.special === TerSpec.WILDERNESS_CAVE || spec.special === TerSpec.WATERFALL_CAVE) {
+      trait = Trait.CAVE_LORE;
+    } else if (spec.special === TerSpec.WILDERNESS_SURFACE
+      || spec.special === TerSpec.WATERFALL_SURFACE) {
+      trait = Trait.WOODSMAN;
+    }
+    if (trait === null || !alive.some((pc) => pc.traits[trait])) return;
+    // The second switch drops the waterfall pair, so a waterfall square that
+    // got this far still leaves with nothing.
+    if (spec.special !== TerSpec.WILDERNESS_CAVE && spec.special !== TerSpec.WILDERNESS_SURFACE)
+      return;
+    for (const pc of univ.party.pcs) {
+      if (!pc.isAlive || !pc.traits[trait]) continue;
+      if (univ.rng.getRan(1, 0, 12) !== 5) continue;
+      univ.party.food += univ.rng.getRan(spec.flag1, 1, 6);
+      // No space before "hunts" in the C++ either — it concatenates the name
+      // straight onto the word.
+      univ.addStringToBuf(`${pc.name}hunts.`);
+    }
   }
 
   /**

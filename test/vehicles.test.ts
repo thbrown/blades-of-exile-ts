@@ -113,6 +113,47 @@ describe('boats and horses', () => {
     expect(univ.party.horses[0]!.property).toBe(true);
   });
 
+  it('the boat follows the party outdoors, so stepping back onto it re-boards', async () => {
+    // **run_waterfalls' tail is the only thing that moves a boat** — neither
+    // outd_move_party nor town_move_party re-parks one, so without it the boat
+    // stays where it was boarded and the square it is really on reads as
+    // ordinary blocked water.
+    const session = newSession();
+    const { univ } = session;
+    const water = scen.terTypes.findIndex((t) => t.boatOver);
+    expect(water).toBeGreaterThanOrEqual(0);
+    const start = { ...univ.party.outLoc };
+    const east = { x: start.x + 1, y: start.y };
+    univ.out.set(start.x, start.y, water);
+    univ.out.set(east.x, east.y, water);
+    const boat = univ.party.boats[0]!;
+    boat.exists = true;
+    boat.whichTown = 200;
+    boat.loc = univ.party.globalToLocal(start);
+    boat.sector = {
+      x: univ.party.outdoorCorner.x + univ.party.iwc.x,
+      y: univ.party.outdoorCorner.y + univ.party.iwc.y,
+    };
+    univ.party.inBoat = 0;
+
+    expect(await session.moveTo(east)).toBe(true);
+    expect(univ.party.outLoc).toEqual(east);
+    expect(boat.loc).toEqual(univ.party.globalToLocal(east));
+
+    // Stepping onto dry land leaves the boat where it floats — the tail is
+    // gated on still being in it.
+    const dry = { x: east.x + 1, y: east.y };
+    expect(await session.moveTo(dry)).toBe(true);
+    expect(univ.party.inBoat).toBe(-1);
+    expect(boat.loc).toEqual(univ.party.globalToLocal(east));
+
+    // ...and stepping back on boards it again, which is what a stale boat
+    // position turns into "Blocked: west".
+    expect(await session.moveTo(east)).toBe(true);
+    expect(univ.party.inBoat).toBe(0);
+    expect(univ.transcript.at(-1)).toBe('Move: You board the boat.');
+  });
+
   it('a mounted party moves ten ticks per step outdoors, five on a horse', async () => {
     const session = newSession();
     const before = session.univ.party.age;

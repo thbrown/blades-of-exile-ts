@@ -4097,3 +4097,35 @@ The M6 list below is kept for the history of what it covered:
     actions *nested* inside another one's handling (a dialog raised mid-move),
     and their `age` is the age from before the outer action ticked. Compare
     against the next action *both* sides dispatched.
+
+- **The boat follows the party because of a function called `run_waterfalls`
+  (M8, 2026-08-15).** Two ports in one slice, both found by the draw stream on
+  `ZKR_15-05-2025_18-04-58` — which is a sailing recording, so it walked into
+  both.
+  - **`handle_hunting` (boe.actions.cpp:3593) was never ported.** It is the
+    WILDERNESS_CAVE/WILDERNESS_SURFACE branch of `check_special_terrain`
+    (boe.specials.cpp:504): a woodsman or a cave-lorist forages, one
+    `get_ran(1,0,12) == 5` per qualifying PC and `get_ran(flag1,1,6)` rations
+    when it comes up. **It reads the square the party is standing on, not the
+    one it is walking into** — `check_special_terrain` runs before the move —
+    so the square that triggers it is usually not the square that feeds you.
+    Kept verbatim; `RANSTACK` named it in one shot.
+  - **`run_waterfalls` (boe.actions.cpp:3875) is the only thing that ever moves
+    a boat.** `outd_move_party` and `town_move_party` re-park *horses* after a
+    move and say nothing about boats; the boat is re-parked in the tail of
+    `run_waterfalls`, which those two call on every move made in a boat. The
+    while loop finds no waterfall and falls straight through — the tail is the
+    point. Without it the boat stays where it was boarded, so stepping back
+    onto the square it is *actually* on is a plain `Blocked:` instead of
+    "Move: You board the boat.", which is exactly what this file was doing 400
+    actions in. A `TODO(M6)` that turned out not to be optional at all.
+  - `find_waterfall` picks among adjacent waterfall squares whose `flag1` names
+    the direction they lie in, `get_ran(1,1,count)` when there's more than one.
+    Its supply-loss branch has a real C++ bug preserved in place:
+    `wilderness_lore_present(coord_to_ter(x,y) > 0)` puts the `> 0` **inside**
+    the call, so what's tested is terrain type 0 or 1 and the "(No supplies
+    lost.)" arm is unreachable.
+  - **Where it stands.** `ZKR_15-05-2025_18-04-58` 4,852 → **5,145** matching
+    draws; corpus **9,346 actions**, up 511 on the slice and past the old high.
+    The next divergence in that file is an outdoor group taking `seek_party`'s
+    random fallback here and a clean step in the C++.

@@ -369,6 +369,37 @@ describe('outdoor terrain specials', () => {
     }
   });
 
+  it('a woodsman hunts on the square the party is leaving, not the one it enters', async () => {
+    // handle_hunting reads `out_loc`, and check_special_terrain runs *before*
+    // the move — so the wilderness square that fires it is not the square the
+    // food comes from. Faithful to boe.actions.cpp:3593.
+    const s = outdoors();
+    const idx = scen.terTypes.findIndex((t) => t.special === TerSpec.WILDERNESS_SURFACE);
+    expect(idx).toBeGreaterThanOrEqual(0);
+    const saved = scen.terTypes[idx]!;
+    scen.terTypes[idx] = { ...saved, flag1: 5, blockage: 0 };
+    try {
+      const from = s.univ.party.outLoc;
+      const to = { x: from.x + 1, y: from.y };
+      s.univ.out.set(from.x, from.y, idx);
+      s.univ.out.set(to.x, to.y, idx);
+      s.univ.party.pcs[0]!.traits[Trait.WOODSMAN] = true;
+      s.univ.party.food = 100;
+      // get_ran(1,0,12) has to come up 5, so drive it until it does.
+      let hunted = false;
+      for (let i = 0; i < 200 && !hunted; i++) {
+        s.univ.party.outLoc = { ...from };
+        // eslint-disable-next-line no-await-in-loop
+        await s.moveTo(to);
+        hunted = s.univ.transcript.some((line) => line.endsWith('hunts.'));
+      }
+      expect(hunted).toBe(true);
+      expect(s.univ.party.food).toBeGreaterThan(100);
+    } finally {
+      scen.terTypes[idx] = saved;
+    }
+  });
+
   /**
    * A river ford: the special node on the far bank of a blocking (deep
    * water) square returns `b` (forced) to walk the party through anyway —
