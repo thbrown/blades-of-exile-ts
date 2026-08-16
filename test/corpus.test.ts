@@ -137,7 +137,19 @@ async function play(path: string): Promise<Row> {
             .filter((m) => m.isAlive)
             .map((m) => ` ${m.slot}:(${m.curLoc.x},${m.curLoc.y})`
               + (process.env.TARG ? `->(${m.targLoc.x},${m.targLoc.y})` : '')).join(''));
-        } else if (process.env.WINDOW) {
+        }
+        if (process.env.ITEMS) {
+          // The pair to `BOE_TRACE_ITEMS=1` on the harness: a stack that split
+          // differently or a pack that compacted differently is invisible
+          // until one side raises a dialog the other doesn't.
+          for (let p = 0; p < 6; p++) {
+            const pc = univ.party.pcs[p];
+            trace.push(`      items pc${p}:` + (pc?.items ?? [])
+              .map((it, k) => (it.variety === 0 ? '' : ` ${k}:${it.variety}/${it.charges}/${it.typeFlag}`))
+              .join(''));
+          }
+        }
+        if (process.env.WINDOW) {
           trace.push(`      corner=(${univ.party.outdoorCorner.x},${univ.party.outdoorCorner.y})`
             + ` iwc=(${univ.party.iwc.x},${univ.party.iwc.y})`);
         } else if (process.env.MONST) {

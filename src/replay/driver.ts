@@ -265,9 +265,18 @@ export async function runReplay(
         case 'handle_use_space':
           await session.useSpace(locationFromAction(action));
           break;
-        case 'handle_switch_pc':
-          session.univ.curPc = numberFromAction(action);
+        case 'handle_switch_pc': {
+          // **It moves the item pane too** (boe.actions.cpp:1043): the same
+          // branch that sets `cur_pc` calls `set_stat_window_for_pc`, and
+          // `give_thing`/`drop_item`/`use_item` are all handed `stat_window`,
+          // not `cur_pc`. Assigning only `cur_pc` here left the pane on PC 0,
+          // so a give three hundred actions later split the wrong PC's stack
+          // and raised a "how many?" the recording never answered.
+          const which = numberFromAction(action);
+          session.switchPc(which);
+          if (session.univ.curPc === which) win.setStatWindowForPc(session.univ, which);
           break;
+        }
         case 'handle_parry':
           session.parry();
           break;
@@ -546,9 +555,14 @@ export async function runReplay(
             EASTER_EGG_MESSAGES[numberFromAction(action)] ?? '');
           break;
         case 'field_focus':
-          // A text field taking focus (field.cpp:59). It decides which field
-          // the `field_input` after it belongs to; every dialog this driver
-          // answers has one field, so there is nothing to choose between.
+        case 'field_input':
+          // A text field taking focus (field.cpp:59), and a keystroke into it.
+          // Focus decides which field the input belongs to; every dialog this
+          // driver answers has one field, so there is nothing to choose
+          // between — and those dialogs consume their own `field_input`s while
+          // answering. One that reaches *here* belongs to a window the driver
+          // never opened: in practice the save-game picker at the end of a
+          // session, where the name typed changes no game state.
           break;
         case 'scrollbar_setPosition': {
           // `cScrollbar::setPosition` (scrollbar.cpp:52). The C++ looks the bar

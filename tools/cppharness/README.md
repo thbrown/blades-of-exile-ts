@@ -28,6 +28,9 @@ outdoor corner and `i_w_c`, since two windows that agree on every coordinate can
 still be stitched from different sectors. `BOE_TRACE_OUTMOVE=1` prints every
 square an outdoor group tries to step onto with the terrain it found there —
 that pair ("we say 8, it says 93") is how a map divergence gets named.
+`BOE_TRACE_ITEMS=1` (`ITEMS=1` here) prints all six packs as
+`index:variety/charges/type_flag`, which is what an item divergence looks like
+before it turns into a dialog one side raises and the other doesn't.
 
 **`BOE_TRACE_RAN=n` is the sharpest of them**: it dumps the first *n* draws from
 the game stream, and `RAN=n` prints the identical format here. Diff the two and

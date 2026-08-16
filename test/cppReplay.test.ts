@@ -55,6 +55,13 @@ const FILES = [
   // scripting: it only completes because the driver answers the specials'
   // dialogs from the recording now.
   'ZKR_14-05-2025_13-29-14.xml',
+  // **1,033 actions**, and the longest run here by a wide margin: a whole
+  // session of Za-Khazi — sailing, resting, conversations, shops, giving items
+  // around the party — ending with the save dialog the player typed a name
+  // into. It reaches the end only with the outdoor window rebuilt on load, the
+  // boat moved by `run_waterfalls`, resting's fifty turns and
+  // `handle_switch_pc` moving the item pane.
+  'ZKR_15-05-2025_18-04-58.xml',
 ];
 
 /**

@@ -254,7 +254,7 @@ index faaef3f2..2a648966 100644
  }
  
 diff --git a/src/tools/replay.cpp b/src/tools/replay.cpp
-index 3946c875..06b28150 100644
+index 3946c875..02def642 100644
 --- a/src/tools/replay.cpp
 +++ b/src/tools/replay.cpp
 @@ -28,6 +28,15 @@
@@ -284,7 +284,7 @@ index 3946c875..06b28150 100644
  			} else if constexpr (std::is_integral_v<T>) {
  				if constexpr (std::is_same_v<S, std::string>) {
  					return static_cast<T>(std::stoi(arg));
-@@ -252,6 +263,92 @@ int next_action_line() {
+@@ -252,6 +263,107 @@ int next_action_line() {
  	return next_action->Row();
  }
  
@@ -360,6 +360,21 @@ index 3946c875..06b28150 100644
 +							+ std::to_string(univ.town.monst[i].targ_loc.y) + ")" : "");
 +		std::cout << std::endl;
 +	}
++	// BOE_TRACE_ITEMS prints every PC's pack. An item divergence — a stack
++	// that split differently, a pack that compacted differently — otherwise
++	// only shows up as a dialog one side raises and the other doesn't.
++	if(getenv("BOE_TRACE_ITEMS")) {
++		for(short p = 0; p < 6; p++) {
++			std::cout << "      items pc" << p << ":";
++			for(size_t k = 0; k < univ.party[p].items.size(); k++) {
++				cItem& it = univ.party[p].items[k];
++				if(it.variety == eItemType::NO_ITEM) continue;
++				std::cout << " " << k << ":" << int(it.variety) << "/" << it.charges
++					<< "/" << int(it.type_flag);
++			}
++			std::cout << std::endl;
++		}
++	}
 +	// Outdoors the same switch lists the ten encounter groups instead: that is
 +	// what a `seek_party` divergence needs, and it is invisible in the town
 +	// list because there isn't one.
@@ -377,7 +392,7 @@ index 3946c875..06b28150 100644
  Element& pop_next_action(std::string expected_action_type) {
  	if(next_action == nullptr){
  		throw std::string { "Replay error! No action left to pop" };
-@@ -264,6 +361,13 @@ Element& pop_next_action(std::string expected_action_type) {
+@@ -264,6 +376,13 @@ Element& pop_next_action(std::string expected_action_type) {
  
  	Element* to_return = next_action;
  	next_action = next_action->NextSiblingElement(false);

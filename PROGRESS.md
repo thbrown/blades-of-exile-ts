@@ -4159,3 +4159,28 @@ The M6 list below is kept for the history of what it covered:
   - **Where it stands.** `ZKR_15-05-2025_18-04-58` 5,145 → **6,037** matching
     draws and 437 → **761** actions. Corpus 9,346 — flat, because other files
     now diverge earlier; draws are the honest measure.
+
+- **A whole session of Za-Khazi now replays, all 1,033 actions (M8,
+  2026-08-16).** Two more fixes on the same file, both found with a new trace.
+  - **`handle_switch_pc` moves the item pane, not just the active PC**
+    (boe.actions.cpp:1043): the branch that sets `cur_pc` also calls
+    `set_stat_window_for_pc`, and `give_thing`, `drop_item` and `use_item` are
+    all handed **`stat_window`** rather than `cur_pc`. The replay driver
+    assigned `cur_pc` alone, so the pane sat on PC 0 — and three hundred
+    actions later a give split the wrong PC's stack of six and raised a "how
+    many?" the recording had never answered. The dialog was the *symptom*; the
+    pane was the bug.
+  - `field_input` reaching the driver's top level is the **save-game picker at
+    the end of a session** — the player typing a filename. Treated like
+    `field_focus`: the dialogs that matter consume their own keystrokes while
+    answering, so one that gets this far belongs to a window the driver never
+    opened, and the name changes no game state.
+  - **`BOE_TRACE_ITEMS=1`/`ITEMS=1`** print all six packs as
+    `index:variety/charges/type_flag`. The two lists were identical except for
+    one PC's ordering, which is what named this: same items, different slots,
+    because the pane was reading a different PC.
+  - **Where it stands.** `ZKR_15-05-2025_18-04-58` runs **1,033 of 1,033**
+    actions and is now in `test/cppReplay.test.ts` — by a wide margin the
+    longest guarded run, and the first that covers sailing, resting, shops and
+    conversations in one session. Corpus **9,663 actions**, 7 of 87 files
+    complete.
