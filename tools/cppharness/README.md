@@ -21,6 +21,13 @@ BOE_TRACE=1 ./tools/cppharness/run.sh <replay.xml>
 `MONST=1` on the corpus test — that pairing is what found the townsperson-drift
 bucket, on the first turn of a recording that only failed 33 actions later.
 `BOE_TRACE_TARG=1` adds where each creature is *heading* (`TARG=1` on this side).
+Outdoors the same switch lists the **ten encounter groups** instead of a town's
+creatures, which is what a `seek_party` divergence needs; `MONST=1` prints the
+same `outmonst:` line here. `BOE_TRACE_WINDOW=1` (`WINDOW=1` here) adds the
+outdoor corner and `i_w_c`, since two windows that agree on every coordinate can
+still be stitched from different sectors. `BOE_TRACE_OUTMOVE=1` prints every
+square an outdoor group tries to step onto with the terrain it found there —
+that pair ("we say 8, it says 93") is how a map divergence gets named.
 
 **`BOE_TRACE_RAN=n` is the sharpest of them**: it dumps the first *n* draws from
 the game stream, and `RAN=n` prints the identical format here. Diff the two and

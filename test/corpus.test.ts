@@ -137,6 +137,16 @@ async function play(path: string): Promise<Row> {
             .filter((m) => m.isAlive)
             .map((m) => ` ${m.slot}:(${m.curLoc.x},${m.curLoc.y})`
               + (process.env.TARG ? `->(${m.targLoc.x},${m.targLoc.y})` : '')).join(''));
+        } else if (process.env.WINDOW) {
+          trace.push(`      corner=(${univ.party.outdoorCorner.x},${univ.party.outdoorCorner.y})`
+            + ` iwc=(${univ.party.iwc.x},${univ.party.iwc.y})`);
+        } else if (process.env.MONST) {
+          // Outdoors the same line lists the ten encounter slots. A group one
+          // square off is what turns `seek_party` into its random fallback,
+          // which costs two draws and parts the streams.
+          trace.push('      outmonst:' + univ.party.outC
+            .map((g, i) => (g.exists ? ` ${i}:(${g.mLoc.x},${g.mLoc.y})` : ''))
+            .join(''));
         }
         // `TAIL=n` keeps only the last n lines: over the whole corpus the full
         // trace is tens of thousands of strings, and the interesting part of a

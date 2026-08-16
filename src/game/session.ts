@@ -335,6 +335,26 @@ export class GameSession {
       this.center = { ...this.univ.party.outLoc };
       this.updateExplored(this.univ.party.outLoc);
     }
+
+    // **finish_load_party rebuilds the outdoor window** (boe.fileio.cpp:96),
+    // and it matters: `save/out.txt` holds a 96×96 snapshot of `cCurOut` that
+    // the save writes but the load throws away, stitching the four sectors
+    // back together from the scenario instead. A save whose window had drifted
+    // out of step with its sectors — which is what one recording's did, by a
+    // handful of squares — otherwise walks its monsters over the wrong
+    // terrain forever. `build` ends with `add_outdoor_maps`, so the explored
+    // flags the save just restored are merged rather than lost.
+    this.univ.out.build();
+    // build_outdoors' own tail (boe.fileio.cpp:274): a group whose square is
+    // off the rebuilt window is forgotten.
+    for (const group of this.univ.party.outC) {
+      if (!group.exists) continue;
+      if (group.mLoc.x < 0 || group.mLoc.y < 0 || group.mLoc.x > 95 || group.mLoc.y > 95)
+        group.exists = false;
+    }
+    // TODO(M8): erase_out_specials (boe.town.cpp:1277) runs next — it clears
+    // the map spot of any outdoor special whose SDF is complete, and swaps a
+    // town entrance the party can't find yet for its flag1 terrain.
   }
 
   private get preModes(): PreModes {

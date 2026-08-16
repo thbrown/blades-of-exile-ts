@@ -369,6 +369,20 @@ describe('outdoor terrain specials', () => {
     }
   });
 
+  it('loading a game rebuilds the outdoor window from the scenario', async () => {
+    // save/out.txt holds a snapshot of the 96x96 window, and finish_load_party
+    // (boe.fileio.cpp:96) throws it away and re-stitches the four sectors. A
+    // save whose snapshot had drifted otherwise keeps the wrong terrain — and
+    // the party never notices, because only the monsters walk on most of it.
+    const s = outdoors();
+    const at = { x: s.univ.party.outLoc.x + 2, y: s.univ.party.outLoc.y };
+    const real = s.univ.out.at(at.x, at.y);
+    s.univ.out.set(at.x, at.y, real === 0 ? 1 : 0);
+    expect(s.univ.out.at(at.x, at.y)).not.toBe(real);
+    s.resumeLoadedGame();
+    expect(s.univ.out.at(at.x, at.y)).toBe(real);
+  });
+
   it('a woodsman hunts on the square the party is leaving, not the one it enters', async () => {
     // handle_hunting reads `out_loc`, and check_special_terrain runs *before*
     // the move — so the wilderness square that fires it is not the square the

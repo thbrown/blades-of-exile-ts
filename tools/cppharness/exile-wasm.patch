@@ -180,6 +180,25 @@ index b19e0983..a19325ec 100644
  	process_args(argc, argv);
  #endif
  #ifdef __APPLE__
+diff --git a/src/game/boe.monster.cpp b/src/game/boe.monster.cpp
+index 937c63d0..771d4d8c 100644
+--- a/src/game/boe.monster.cpp
++++ b/src/game/boe.monster.cpp
+@@ -765,7 +765,13 @@ location random_shift(location start) {
+ }
+ 
+ bool outdoor_move_monster(short num,location dest) {
+-	
++#ifdef BOE_NATIVE_REPLAY
++	if(getenv("BOE_TRACE_OUTMOVE"))
++		std::cout << "      [outmove] " << num << " -> (" << dest.x << "," << dest.y << ") ter="
++			<< int(univ.out[dest.x][dest.y]) << " blockage="
++			<< int(univ.scenario.ter_types[univ.out[dest.x][dest.y]].blockage)
++			<< " blocked=" << outd_is_blocked(dest) << std::endl;
++#endif
+ 	if(!outd_is_blocked(dest) && !outd_is_special(dest) && (dest != univ.party.out_loc)) {
+ 		univ.party.out_c[num].direction =
+ 		set_direction(univ.party.out_c[num].m_loc, dest);
 diff --git a/src/game/boe.specials.cpp b/src/game/boe.specials.cpp
 index 173702da..e282fa9f 100644
 --- a/src/game/boe.specials.cpp
@@ -235,7 +254,7 @@ index faaef3f2..2a648966 100644
  }
  
 diff --git a/src/tools/replay.cpp b/src/tools/replay.cpp
-index 3946c875..c535e672 100644
+index 3946c875..06b28150 100644
 --- a/src/tools/replay.cpp
 +++ b/src/tools/replay.cpp
 @@ -28,6 +28,15 @@
@@ -265,7 +284,7 @@ index 3946c875..c535e672 100644
  			} else if constexpr (std::is_integral_v<T>) {
  				if constexpr (std::is_same_v<S, std::string>) {
  					return static_cast<T>(std::stoi(arg));
-@@ -252,6 +263,77 @@ int next_action_line() {
+@@ -252,6 +263,92 @@ int next_action_line() {
  	return next_action->Row();
  }
  
@@ -322,7 +341,11 @@ index 3946c875..c535e672 100644
 +	if(fight)
 +		std::cout << " pc" << univ.cur_pc << ":" << univ.party[univ.cur_pc].name
 +			<< "(" << univ.party[univ.cur_pc].ap << "ap)";
-+	std::cout << " mode=" << int(overall_mode) << " age=" << univ.party.age << std::endl;
++	std::cout << " mode=" << int(overall_mode) << " age=" << univ.party.age;
++	if(getenv("BOE_TRACE_WINDOW"))
++		std::cout << " corner=(" << univ.party.outdoor_corner.x << "," << univ.party.outdoor_corner.y
++			<< ") iwc=(" << univ.party.i_w_c.x << "," << univ.party.i_w_c.y << ")";
++	std::cout << std::endl;
 +	// BOE_TRACE_MONST adds the town's whole creature list, which is what a
 +	// divergence in `do_monsters`' random walk needs: the drift shows up as one
 +	// townsperson a square off, several hundred actions before anything blocks.
@@ -337,13 +360,24 @@ index 3946c875..c535e672 100644
 +							+ std::to_string(univ.town.monst[i].targ_loc.y) + ")" : "");
 +		std::cout << std::endl;
 +	}
++	// Outdoors the same switch lists the ten encounter groups instead: that is
++	// what a `seek_party` divergence needs, and it is invisible in the town
++	// list because there isn't one.
++	if(getenv("BOE_TRACE_MONST") && univ.party.town_num >= 200) {
++		std::cout << "      outmonst:";
++		for(short i = 0; i < 10; i++)
++			if(univ.party.out_c[i].exists)
++				std::cout << " " << i << ":(" << univ.party.out_c[i].m_loc.x
++					<< "," << univ.party.out_c[i].m_loc.y << ")";
++		std::cout << std::endl;
++	}
 +}
 +#endif
 +
  Element& pop_next_action(std::string expected_action_type) {
  	if(next_action == nullptr){
  		throw std::string { "Replay error! No action left to pop" };
-@@ -264,6 +346,13 @@ Element& pop_next_action(std::string expected_action_type) {
+@@ -264,6 +361,13 @@ Element& pop_next_action(std::string expected_action_type) {
  
  	Element* to_return = next_action;
  	next_action = next_action->NextSiblingElement(false);

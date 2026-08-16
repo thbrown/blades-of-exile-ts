@@ -4129,3 +4129,33 @@ The M6 list below is kept for the history of what it covered:
     draws; corpus **9,346 actions**, up 511 on the slice and past the old high.
     The next divergence in that file is an outdoor group taking `seek_party`'s
     random fallback here and a clean step in the C++.
+
+- **A loaded game rebuilds the outdoor window, and this port kept the save's
+  copy (M8, 2026-08-16).** The next divergence in `ZKR_15-05-2025_18-04-58` was
+  a wandering group taking `seek_party`'s two-draw random fallback here and a
+  clean diagonal step in the C++. The square it stepped onto was **Cave Wall
+  here and Mushrooms there** — the two sides were walking different maps.
+  - `save/out.txt` is a 96×96 snapshot of `cCurOut`, written by every save.
+    **`finish_load_party` (boe.fileio.cpp:96) throws it away**: it calls
+    `build_outdoors`, which re-stitches the four sectors out of the scenario,
+    then `add_outdoor_maps` to merge the explored flags back. This port loaded
+    the snapshot and kept it, so a save whose window had drifted out of step
+    with its sectors — this one's had, by a handful of squares — carried the
+    wrong terrain for the rest of the game. Nothing the party walked on showed
+    it; only the monsters ever stood there.
+  - `build_outdoors`'s tail also forgets any group whose square is off the
+    rebuilt window. Ported with it.
+  - `erase_out_specials` (boe.town.cpp:1277) runs next in the C++ and is still
+    missing — it clears the map spot of a completed outdoor special and swaps a
+    town entrance the party can't find yet for its `flag1` terrain. Marked
+    `TODO(M8)` in place.
+  - **Tooling.** `BOE_TRACE_MONST` now lists the ten outdoor groups when the
+    party is outdoors (`MONST=1` prints the same `outmonst:` line here),
+    `BOE_TRACE_WINDOW`/`WINDOW=1` print the outdoor corner and `i_w_c`, and
+    `BOE_TRACE_OUTMOVE=1` prints each square a group tries with the terrain it
+    found. The last one is what turned "the group moved differently" into "the
+    maps disagree at (17,59)". **Join the traces on the next action both sides
+    dispatched**, not on position — same caveat as `age=`.
+  - **Where it stands.** `ZKR_15-05-2025_18-04-58` 5,145 → **6,037** matching
+    draws and 437 → **761** actions. Corpus 9,346 — flat, because other files
+    now diverge earlier; draws are the honest measure.
