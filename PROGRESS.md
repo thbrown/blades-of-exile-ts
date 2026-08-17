@@ -4310,10 +4310,27 @@ The M6 list below is kept for the history of what it covered:
     side never makes.
   - Both engines gate the monster phase the same way (`did_something` in
     `handle_monster_actions`, `if (moved) await this.afterPartyTurn()` at
-    `session.ts:454`), so the gate is not the bug. The question is why
-    `outd_move_party` returns false there and `outdMoveParty` returns true.
-    Note the C++ pops a `click_control` immediately before, i.e. that move
-    raised a dialog — the port raises it later, at its own action 12.
+    `session.ts:454`), so the gate is not the bug. It is one square's outdoor
+    special, and `outd_move_party`'s line 3950:
+    `keep_going = check_special_terrain(destination, OUT_MOVE, …)` — a special
+    that returns false **refuses the step**.
+  - The recording reads `move(20,22)`, `move(20,21)`, `click_control`,
+    `move(20,21)`, `move(21,22)`. So in the C++ the step onto (20,21) is
+    blocked **both** times, and raises its message only on the first — a
+    one-shot. Here the chain **throws**, which is what
+    "SPECIAL ENCOUNTER FAILED." in the transcript means (`vm.ts:193` catches it
+    and logs the stack, so it is in the trace): `popClick` reports *"expected
+    the click that dismissed it, but the recording's next action is 'move' —
+    this port raised a dialog the recording never saw"*, for `startSpec: 10`,
+    `whichMode: 13` at (20,21), from `checkOutdoorEncounter` (`session.ts:559`).
+    The chain then dies, so nothing refuses the move, the party steps on, and a
+    special encounter spends ~3,500 draws the C++ never makes.
+  - **So the question is narrow**: at that node this port asks for one more
+    dialog dismissal than the recording provides — i.e. it raises a second
+    message where the C++ raises one and stops — and it does not block the step.
+    Start at `general.ts:397`'s `handleMessage` and the node-10 chain, and note
+    that a `SPECIAL ENCOUNTER FAILED.` in any run is always a port bug worth
+    chasing, never scenery.
   - **The caveat this leaves on the queue:** the frame names where *this port*
     was standing at the first differing draw. When the divergence is that one
     side takes a branch the other doesn't, that frame is the first innocent
