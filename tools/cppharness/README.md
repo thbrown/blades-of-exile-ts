@@ -68,8 +68,19 @@ port which function made the draw, and keys on that instead — the same corpus
 collapses onto named rules (`doMonsters`, `monstCheckOneSpecialTerrain`,
 `pickTargetPc`), which is an order of work rather than a list.
 
-Even then the bucket is a **ranking device, not a proof**: same function is not
-the same bug. Open the top bucket's files singly before treating them as one fix.
+Even then the bucket is a **ranking device, not a proof**, in two ways. Same
+function is not the same bug — open a bucket's files singly before treating them
+as one fix. And the frame names where *this port* was standing at the first
+differing draw, which when one side takes a branch the other doesn't is the first
+innocent bystander rather than the culprit: the `playAmbientSound` bucket turned
+out to be a move the C++ refuses and this port allows, one action earlier. Read a
+bucket as "start here", never as "the bug is in this function".
+
+The two engines also print their action line at **opposite ends** of the action —
+the C++ in `pop_next_action` before running it, this port in `onStep` after — so
+a draw sits after its action's line on one side and before it on the other. The
+script corrects for this; if you are reading raw traces by hand, that is why the
+`draws=N` field on this port's lines counts draws printed *above* the line.
 
 Two things it knows that a hand-run `diff` does not. A recording whose actions
 all dispatch can still have parted from the C++ hundreds of draws earlier —

@@ -1606,7 +1606,9 @@ bottom. What M8 still owes:
   entry at the bottom; the head of it is **`doMonsters` (7 files)**,
   **`monstCheckOneSpecialTerrain` (7)**, **`pickTargetPc` (5)** and
   **`doOutdoorMonsters` (5)** — monster movement is over half the corpus.
-  **`playAmbientSound` (3)** is the cheapest first pull.
+  **`playAmbientSound` (3)** looked like the cheapest first pull and turned out
+  not to be about ambient sound at all — see the 2026-08-17 entry, which leaves
+  it part-investigated with the next question named.
   The old stop-reason bucketing (`TAIL=n`, the 56 files stopping on an over-long
   `move`) is superseded — a stop is a symptom that surfaces dozens of actions
   after the rule went wrong, and the first diverging draw is the rule itself.
@@ -4277,3 +4279,44 @@ The M6 list below is kept for the history of what it covered:
     for `close`**, which is the part that actually makes it survivable. It also
     writes a `[CRASH] killed after Ns` marker into the trace, so a truncated
     stream is never mistaken for a divergence.
+
+- **The two traces print their action line at opposite ends of the action (M8,
+  2026-08-17).** Found while working the first bucket, and it is the reason
+  PROGRESS has been saying "join the traces on the next action both sides
+  dispatched, not on position" since 2026-08-16 — that instruction was a
+  workaround for this, not a fact about replays.
+  - The C++ prints in `pop_next_action`, **before** running the action, so a
+    draw appears *after* the line of the action that made it. This port's
+    `onStep` fires after `await session.settled()`, **after** running it, so a
+    draw appears *before* that line. `diverge.mjs` attributed each draw to the
+    last line it had seen, which blamed the previous action on this side only.
+  - Each of this port's trace lines carries `draws=N`, which is what settled the
+    direction: action 7's line reports the count *including* the draws printed
+    above it. Fixed in the parser rather than by moving `onStep`, because the
+    C++'s line has no transcript text and this one does — printing it before the
+    action would attach the *previous* action's output to it.
+  - The queue is unaffected: `--stacks` keys on the frame this port was in, not
+    on the action name, and the table below re-generated identically.
+
+- **The first bucket was not what its name said, and that is a lesson about the
+  buckets (M8, 2026-08-17).** `playAmbientSound` (3 files) looked like the
+  cheapest pull. It isn't about ambient sound at all.
+  - In `VoDT_06-04-2025_11-39-05` the streams part at draw 10, where this port
+    calls `play_ambient_sound`'s `get_ran(1,1,100)` and the C++ makes another
+    `handle_hunting` draw instead. But the *cause* is one action earlier: the
+    move to (20,21) is **refused by the C++** — its position and `age` are
+    unchanged across the action — and **allowed here**, which prints
+    "Moved: north", fires a special encounter, and spends ~3,500 draws the other
+    side never makes.
+  - Both engines gate the monster phase the same way (`did_something` in
+    `handle_monster_actions`, `if (moved) await this.afterPartyTurn()` at
+    `session.ts:454`), so the gate is not the bug. The question is why
+    `outd_move_party` returns false there and `outdMoveParty` returns true.
+    Note the C++ pops a `click_control` immediately before, i.e. that move
+    raised a dialog — the port raises it later, at its own action 12.
+  - **The caveat this leaves on the queue:** the frame names where *this port*
+    was standing at the first differing draw. When the divergence is that one
+    side takes a branch the other doesn't, that frame is the first innocent
+    bystander, not the culprit. It is still the right thing to rank by — it is
+    stable and mechanical — but read the bucket as "start here", never as "the
+    bug is in this function".

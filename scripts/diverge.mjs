@@ -158,8 +158,9 @@ const ACTION = /^ {2}\s*(\d+) ([a-z_]+)/;
  * fell under. **This is the whole point of the file**: the two engines emit
  * actions and draws down one stream, so position carries the join.
  */
-function parseTrace(path) {
+function parseTrace(path, side) {
   const draws = [];
+  const pending = [];
   let action = null;
   let actions = 0;
   let text;
@@ -173,16 +174,35 @@ function parseTrace(path) {
     if (a) {
       action = { at: Number(a[1]), type: a[2] };
       actions = Math.max(actions, action.at);
+      // **The two engines print their action line at opposite ends of the
+      // action.** The C++ prints in `pop_next_action`, *before* running it, so
+      // a draw appears after the line of the action that made it. This port's
+      // `onStep` fires after `await session.settled()`, *after* running it, so
+      // a draw appears *before* that line. Attributing by "the last line seen"
+      // would therefore blame the previous action on this side only — and since
+      // the bucket signature reads the action name, the queue would be labelled
+      // with the wrong rule wherever the C++ side is missing.
+      //
+      // Each JS line carries `draws=N`, which is what proved the direction:
+      // action 7's line reports the count *including* the draws printed above
+      // it. So on this side the draws waiting are claimed by the line that
+      // closes them.
+      if (side === 'js') {
+        for (const d of pending) d.action = action;
+        pending.length = 0;
+      }
       continue;
     }
     const d = DRAW.exec(line);
     if (d) {
-      draws.push({
+      const draw = {
         n: Number(d[1]),
         args: `${d[2]},${d[3]},${d[4]}`,
         value: Number(d[5]),
-        action,
-      });
+        action: side === 'js' ? null : action,
+      };
+      draws.push(draw);
+      if (side === 'js') pending.push(draw);
     }
   }
   return { draws, actions, action };
@@ -355,8 +375,8 @@ function frameOf(frames) {
 
 async function one(path, { verbose, stacks }) {
   const { cpp, js, rel } = await traces(path);
-  const a = parseTrace(cpp);
-  const b = parseTrace(js);
+  const a = parseTrace(cpp, 'cpp');
+  const b = parseTrace(js, 'js');
   // A side that never drew anything hasn't disagreed about anything: comparing
   // its empty stream would report a divergence at draw 0 and bury the real queue
   // under files that never ran.
