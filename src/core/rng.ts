@@ -114,8 +114,10 @@ export class GameRng {
     if (!useUnique && this.seeded && TRACE_RAN > 0 && ++this.traced <= TRACE_RAN) {
       // eslint-disable-next-line no-console
       console.log(`    [ran] ${this.traced} get_ran(${times},${min},${max}) = ${toRet}`);
+      // Only the draw asked for. The C++'s pair (`trace_ran`, guarded by
+      // `n == stack_at`) prints one stack, not one per draw — a stray second
+      // print here used to bury it under every other draw's.
       if (process.env.RANSTACK && String(this.traced) === process.env.RANSTACK) console.log(new Error('here').stack);
-      if (process.env.RANSTACK) console.log(new Error('here').stack);
     }
     return toRet;
   }

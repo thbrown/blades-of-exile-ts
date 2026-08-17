@@ -27,7 +27,15 @@
  * `TRACE=1` (with `ONLY=`) prints every action as it is dispatched, with the
  * party's square and whatever the turn printed to the transcript — which is how
  * a "the party stopped one square short" report gets turned into "this square,
- * this refusal, silently".
+ * this refusal, silently". It prints **as it goes**, so that with `RAN=n` the
+ * draws land between the actions that made them; `scripts/diverge.mjs` reads
+ * exactly that interleaving to say which action a divergence happened under.
+ *
+ * The report's third number is **draws reached**. Actions dispatched is the
+ * headline but a treacherous meter: a fix that carries one file further often
+ * moves another's divergence earlier, and the total sits still while real ground
+ * is taken. Draws only go up. Note "reached" is not "matched" — matching is
+ * against the other engine, which is `scripts/diverge.mjs`.
  *
  * `MONST=1` adds the town's whole creature list to each traced line. That is
  * the pair to `BOE_TRACE_MONST=1 tools/cppharness/run.sh <same file>`, which
@@ -82,13 +90,22 @@ interface Row {
   kind: 'ok' | 'stop' | 'skip';
   ran: number;
   total: number;
+  /**
+   * Draws taken from the game stream before the file stopped. **The honest
+   * measure** of a slice: actions dispatched goes flat, or even down, when a
+   * fix lets one file further in and moves another's divergence earlier, but
+   * every draw that now matches the C++ is ground genuinely taken. Note this
+   * is draws *reached*, not draws *matched* — matching needs the other engine,
+   * which is `scripts/diverge.mjs`'s job.
+   */
+  draws: number;
   why: string;
   detail: string[];
 }
 
 async function play(path: string): Promise<Row> {
   const name = path.slice(ROOT.length + 1);
-  const base: Row = { name, kind: 'skip', ran: 0, total: 0, why: '', detail: [] };
+  const base: Row = { name, kind: 'skip', ran: 0, total: 0, draws: 0, why: '', detail: [] };
 
   const replay = parseReplay(await parseXmlDoc(readFileSync(path, 'utf8'), name));
   const start = replayStartup(replay);
@@ -110,6 +127,21 @@ async function play(path: string): Promise<Row> {
   const total = replay.actions.length - start.consumed;
   const trace: string[] = [];
   const tail = Number(process.env.TAIL ?? 0);
+  /**
+   * `TRACE=1` prints as it goes; `TAIL=n` keeps a ring buffer printed only for
+   * files that stopped.
+   *
+   * The difference matters more than it looks: `GameRng` writes its `RAN=n`
+   * `[ran]` lines to the console the moment each draw happens, so an action
+   * line that is *buffered* can never sit between the draws it made. The C++
+   * harness streams both kinds down one stdout, and `scripts/diverge.mjs`
+   * joins a diverging draw to the action it fell under by exactly that
+   * interleaving — buffering here would leave the two sides unjoinable.
+   */
+  const emit = process.env.TRACE
+    // eslint-disable-next-line no-console
+    ? (line: string) => console.log(line)
+    : (line: string) => { trace.push(line); };
   let mark = univ.transcript.length;
   const result = await runReplay(session, replay, {
     from: start.consumed,
@@ -124,7 +156,7 @@ async function play(path: string): Promise<Row> {
           ? ` pc${univ.curPc}:${univ.currentPc.name}(${univ.currentPc.ap}ap)` : '';
         const said = univ.transcript.slice(mark).join(' | ');
         mark = univ.transcript.length;
-        trace.push(`  ${String(at).padStart(5)} ${action.type.padEnd(20)} `
+        emit(`  ${String(at).padStart(5)} ${action.type.padEnd(20)} `
           + `${(action.text || action.info.id || '').padEnd(10)} -> (${l.x},${l.y})${who} `
           + `mode=${session.mode} age=${univ.party.age} draws=${univ.rng.gameDraws} `
           + `${said.slice(0, 110)}`);
@@ -133,7 +165,7 @@ async function play(path: string): Promise<Row> {
         // this port's list is compacted and the C++'s is not, so the index
         // spaces differ and the slot is what the two sides agree on.
         if (process.env.MONST && univ.town) {
-          trace.push('      monst:' + univ.town.monsters
+          emit('      monst:' + univ.town.monsters
             .filter((m) => m.isAlive)
             .map((m) => ` ${m.slot}:(${m.curLoc.x},${m.curLoc.y})`
               + (process.env.TARG ? `->(${m.targLoc.x},${m.targLoc.y})` : '')).join(''));
@@ -144,19 +176,19 @@ async function play(path: string): Promise<Row> {
           // until one side raises a dialog the other doesn't.
           for (let p = 0; p < 6; p++) {
             const pc = univ.party.pcs[p];
-            trace.push(`      items pc${p}:` + (pc?.items ?? [])
+            emit(`      items pc${p}:` + (pc?.items ?? [])
               .map((it, k) => (it.variety === 0 ? '' : ` ${k}:${it.variety}/${it.charges}/${it.typeFlag}`))
               .join(''));
           }
         }
         if (process.env.WINDOW) {
-          trace.push(`      corner=(${univ.party.outdoorCorner.x},${univ.party.outdoorCorner.y})`
+          emit(`      corner=(${univ.party.outdoorCorner.x},${univ.party.outdoorCorner.y})`
             + ` iwc=(${univ.party.iwc.x},${univ.party.iwc.y})`);
         } else if (process.env.MONST) {
           // Outdoors the same line lists the ten encounter slots. A group one
           // square off is what turns `seek_party` into its random fallback,
           // which costs two draws and parts the streams.
-          trace.push('      outmonst:' + univ.party.outC
+          emit('      outmonst:' + univ.party.outC
             .map((g, i) => (g.exists ? ` ${i}:(${g.mLoc.x},${g.mLoc.y})` : ''))
             .join(''));
         }
@@ -181,12 +213,14 @@ async function play(path: string): Promise<Row> {
     kind: result.error === null ? 'ok' : 'stop',
     ran: done,
     total,
+    draws: univ.rng.gameDraws,
     why: result.error ?? '',
     detail: [],
   };
 
-  if (process.env.TRACE) row.detail.push(...trace);
-  else if (tail && result.error !== null) row.detail.push(...trace);
+  // Nothing to flush under `TRACE` — `emit` has already printed it, in step with
+  // the `[ran]` lines. `TAIL=n` is the buffered path, and only for a stop.
+  if (tail && result.error !== null) row.detail.push(...trace);
   if (process.env.VERBOSE && result.error?.includes('desync')) {
     const here = univ.party.getLoc();
     row.detail.push(`this port ended at (${here.x},${here.y}) `
@@ -217,7 +251,7 @@ describe.skipIf(!enabled)("the whole C++ replay corpus", () => {
       } catch (err) {
         rows.push({
           name: path.slice(ROOT.length + 1), kind: 'stop',
-          ran: 0, total: 0, why: `threw: ${String(err)}`, detail: [],
+          ran: 0, total: 0, draws: 0, why: `threw: ${String(err)}`, detail: [],
         });
       }
     }
@@ -226,15 +260,19 @@ describe.skipIf(!enabled)("the whole C++ replay corpus", () => {
     for (const r of rows) {
       const tag = r.kind === 'ok' ? 'OK  ' : r.kind === 'skip' ? 'SKIP' : 'STOP';
       const count = r.kind === 'skip' ? '' : `${r.ran}/${r.total}`;
-      lines.push(`${tag} ${count.padStart(12)}  ${r.name}  ${r.why}`);
+      const draws = r.kind === 'skip' ? '' : `${r.draws}d`;
+      lines.push(`${tag} ${count.padStart(12)} ${draws.padStart(9)}  ${r.name}  ${r.why}`);
       for (const d of r.detail) lines.push(`         ${d}`);
     }
 
-    // The two numbers that measure the milestone.
+    // The numbers that measure the milestone. Draws is the one that only ever
+    // goes up — see `Row.draws`.
     const ok = rows.filter((r) => r.kind === 'ok').length;
     const dispatched = rows.reduce((n, r) => n + r.ran, 0);
+    const drawn = rows.reduce((n, r) => n + r.draws, 0);
     lines.push('');
-    lines.push(`${ok} of ${rows.length} ran to the end; ${dispatched} actions dispatched`);
+    lines.push(`${ok} of ${rows.length} ran to the end; ${dispatched} actions dispatched; `
+      + `${drawn} draws reached`);
 
     // Why the rest stopped, most common first — the queue of work.
     const reasons = new Map<string, number>();

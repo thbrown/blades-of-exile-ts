@@ -41,11 +41,60 @@ makes and the other doesn't, which no amount of staring at positions would find.
 Only the game stream is traced: `unique_rand` is seeded from the clock and is
 deliberately outside the replay's determinism.
 
+**`scripts/diverge.mjs` does all of that for you**, and is what to reach for
+first:
+
+```
+node scripts/diverge.mjs ZKR_15-05-2025_18-04-58   # one file, with the stack
+node scripts/diverge.mjs --all --stacks            # every file, ranked by rule
+node scripts/diverge.mjs --all                     # faster, ranked by draw args
+node scripts/diverge.mjs --all --refresh           # ignore the trace cache
+```
+
+It runs both sides, caches their traces under `tools/cppharness/traces/`, finds
+the first draw they disagree on, and — because both engines stream their action
+lines and their draw lines down one stdout — prints **the action each side was
+replaying when it happened**, then re-runs this port with `RANSTACK` to name the
+function. `--all` groups the whole corpus by that signature and sorts by how many
+recordings each one accounts for, which is the queue: fix the rule that unblocks
+fourteen files before the one that unblocks one.
+
+**Use `--stacks`.** Without it the bucket key is the action plus the draw's
+arguments, and that over-splits badly: `rand_move`'s range depends on the monster
+and the town, so one rule scatters across `get_ran(1,1,70)`, `get_ran(1,0,24)`,
+`get_ran(1,1,100)` … and the corpus comes back as twenty-nine buckets, most of
+them one file. `--stacks` spends one extra run per diverging file to ask this
+port which function made the draw, and keys on that instead — the same corpus
+collapses onto named rules (`doMonsters`, `monstCheckOneSpecialTerrain`,
+`pickTargetPc`), which is an order of work rather than a list.
+
+Even then the bucket is a **ranking device, not a proof**: same function is not
+the same bug. Open the top bucket's files singly before treating them as one fix.
+
+Two things it knows that a hand-run `diff` does not. A recording whose actions
+all dispatch can still have parted from the C++ hundreds of draws earlier —
+`ZKR_15-05-2025_18-04-58` runs all 1,033 of its actions and diverges at draw
+6,080 — so *finishing is not passing*, and draws are the honest measure. And a
+recording the **harness** cannot finish is a harness gap rather than a port bug
+(`survey.sh` says the same); those are reported in a separate table, but their
+draws are still compared up to the point the harness died, since a divergence
+inside that prefix is real either way.
+
+The manual form still works, and is the fallback when the script's parsing
+loses:
+
 ```
 BOE_TRACE_RAN=4000 ./tools/cppharness/run.sh <replay.xml> | grep '\[ran\]' > /tmp/c
 CORPUS=1 ONLY=<name> RAN=4000 npx vitest run test/corpus.test.ts | grep '\[ran\]' > /tmp/j
 diff /tmp/c /tmp/j | head
 ```
+
+Two traps if you run the port's side by hand. Pass the test file **before** any
+flags — vitest treats `--disable-console-intercept` as taking a value and will
+swallow a positional that follows it, running the whole suite so that every other
+test's draws land in the trace. And leave console interception on only for short
+runs: it prefixes every line with a banner, which is affordable for a few
+thousand draws and not for a hundred thousand.
 
 ## Setup
 

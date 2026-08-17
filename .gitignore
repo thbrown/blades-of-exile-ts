@@ -7,3 +7,6 @@ e3data/
 
 # The native C++ harness build (tools/cppharness/README.md)
 tools/cppharness/build/
+# Cached traces from both engines (scripts/diverge.mjs) — regenerable, and a
+# corpus run of them is hundreds of megabytes
+tools/cppharness/traces/

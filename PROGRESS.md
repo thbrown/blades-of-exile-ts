@@ -1598,23 +1598,30 @@ C++'s own replays run here now — six of them end to end, and 7,760 of the
 corpus's actions dispatch without a desync, up from none. See the entry at the
 bottom. What M8 still owes:
 
-- **The desyncs the driver now detects.** Since 2026-08-02 a recorded `move`
-  further than one square is reported as a divergence rather than let through,
-  and 56 files stop on one. `TAIL=n` (2026-08-03) prints the last n actions
-  before each stop, which is what turns that list into buckets rather than 56
-  separate investigations — the first bucket it named was
-  `check_special_terrain`'s ordering, below. The biggest one left is a stop
-  right after `handle_combat_switch` ends a fight: `end_town_combat` puts the
-  party on a **randomly chosen** PC's square (`get_ran(1,0,5)`, retried past the
-  dead ones), so any earlier drift in the RNG stream surfaces there rather than
-  where it happened.
-- **Captured end states.** "Runs without desyncing" is a strong check but not
-  the golden master: matching the C++'s *final* party, SDFs and position needs
-  reference snapshots taken from a run of the desktop build. The build that
-  produces them exists as of 2026-08-03 — `tools/cppharness/`, see the entry at
-  the bottom — and traces its actions in this port's own format, so the *first*
-  divergence in a recording is now findable by diffing two traces. Dumping the
-  end state itself is what's left.
+- **Work the ranked buckets.** The one-file-at-a-time rhythm is over:
+  `node scripts/diverge.mjs --all --stacks` compares this port's draw stream
+  against the C++'s for all 87 recordings and groups them by the *function* they
+  first part in, so the next fix is chosen by how many files it unblocks. Take
+  the top bucket, fix it, re-run, repeat. The full table is in the 2026-08-16
+  entry at the bottom; the head of it is **`doMonsters` (7 files)**,
+  **`monstCheckOneSpecialTerrain` (7)**, **`pickTargetPc` (5)** and
+  **`doOutdoorMonsters` (5)** — monster movement is over half the corpus.
+  **`playAmbientSound` (3)** is the cheapest first pull.
+  The old stop-reason bucketing (`TAIL=n`, the 56 files stopping on an over-long
+  `move`) is superseded — a stop is a symptom that surfaces dozens of actions
+  after the rule went wrong, and the first diverging draw is the rule itself.
+- **Finishing is not passing.** Only **3 of 87** recordings agree with the C++
+  the whole way. `ZKR_15-05-2025_18-04-58` dispatches all 1,033 of its actions
+  and still parts at draw 6,080, in `doMonsters`. Every file in
+  `test/cppReplay.test.ts` needs re-checking against draws, not actions.
+- **The harness owes 28 files**, separately from the rules: dialog controls it
+  has no stub for, four recordings it hangs on outright, dialog actions replayed
+  out of order, and three scenarios whose feature flags it refuses.
+- **Captured end states.** Still the missing golden master: matching the C++'s
+  *final* party, SDFs and position needs snapshots dumped from the desktop
+  build, and `tools/cppharness/` does not dump one yet
+  (`tools/cppharness/README.md`). The divergence bisector makes the *first*
+  divergence findable; the end state is what proves there are no others.
 - The next unhandled actions, by files blocked: `arrow_button_click` (23),
   `handle_get_items` (10), `field_focus` (7), `toggle_debug_mode` (7).
 - `pick_a_scen` — the other startup shape, 7 files, which starts a fresh party
@@ -4184,3 +4191,89 @@ The M6 list below is kept for the history of what it covered:
     longest guarded run, and the first that covers sailing, resting, shops and
     conversations in one session. Corpus **9,663 actions**, 7 of 87 files
     complete.
+
+- **The divergence bisector: the grind becomes a ranked queue (M8,
+  2026-08-16).** Not a rule fix — an instrument, like the harness slice before
+  it. Everything needed to pick the *right* rule already existed and was simply
+  not joined up: `tools/cppharness/` replays a recording in the C++ and prints
+  its game-stream draws, `RAN=n` prints this port's in the same format, and the
+  README's recipe was to dump both to `/tmp` and `diff` them by eye. That
+  answers for one file, and it leaves out the half of the answer that matters —
+  *which rule* was running when the streams parted.
+  - **`scripts/diverge.mjs`** runs both engines, caches their traces under
+    `tools/cppharness/traces/`, finds the first draw they disagree on, prints
+    the action each side was replaying when it happened, and re-runs this port
+    with `RANSTACK` to name the function. `--all --stacks` does the whole corpus
+    and groups it by that function, sorted by how many recordings each accounts
+    for.
+  - **The join needed one fix on each side.** The C++ streams its action lines
+    and its `[ran]` lines down one stdout, so position carries the join;
+    `corpus.test.ts` buffered its action lines into an array printed at the end,
+    so no draw could ever be attributed to an action. It now emits as it goes
+    under `TRACE`, keeping the ring buffer only for `TAIL=n`. And `rng.ts` had a
+    stray second `console.log` that printed a stack for **every** traced draw
+    whenever `RANSTACK` was set, burying the one asked for — the C++'s pair
+    guards on `n == stack_at` and prints one.
+  - **Finishing is not passing.** The first thing the tool said:
+    `ZKR_15-05-2025_18-04-58`, the longest guarded run, dispatches all 1,033 of
+    its actions *and parts from the C++ at draw 6,080* (6,676 draws there,
+    6,250 here), inside `doMonsters`. Verified by hand against the README's
+    manual `diff`, which names the same draw. Every entry in
+    `test/cppReplay.test.ts` is suspect in the same way: an action count is a
+    coarse check and draws are the fine one. **Only 3 of the 87 recordings agree
+    all the way.**
+  - **`draws reached` is the corpus test's third number now.** Actions
+    dispatched is treacherous as a progress meter — a fix that carries one file
+    further routinely moves another's divergence earlier, so the total sits
+    still while real ground is taken. Draws only go up. ("Reached", not
+    "matched": matching needs the other engine.)
+  - **Bucket by the rule, not by the draw's arguments.** `rand_move`'s range
+    depends on the monster and the town, so keying on `get_ran(1,1,70)` scatters
+    one rule across a dozen buckets — the first run came back as 29 buckets,
+    most of them a single file. `--stacks` spends one extra run per diverging
+    file asking which function made the draw. **The queue, 2026-08-16:**
+
+    | files | parts in |
+    |---|---|
+    | 7 | `doMonsters` (game/monsterTurn.ts) |
+    | 7 | `GameSession.monstCheckOneSpecialTerrain` (game/session.ts) |
+    | 5 | `pickTargetPc` (game/monsterTurn.ts) |
+    | 5 | `doOutdoorMonsters` (game/wandering.ts) |
+    | 4 | `processFields` (game/processFields.ts) |
+    | 3 | `GameSession.playAmbientSound` (game/session.ts) |
+    | 2 | `randMove` (game/monsterTurn.ts) |
+    | 2 | `handleDisease` (game/increaseAge.ts) |
+    | 2 | `selectActivePc` (game/monsterTurn.ts) |
+    | 1 each | `seekParty` (both copies), `spreadQuickfire`, `getSummonMonster`, `totalEncumbrance`, `placeGrid`, `doShockwave`, `afterPartyTurnInner` |
+
+    Monster movement is over half the corpus's divergence between the first
+    four rows. `playAmbientSound` is the cheap one and worth doing first for
+    the same reason the README's own example used it: it is a draw this port
+    makes in the wrong place, not a rule it gets wrong.
+  - **Same function is not the same bug**, so the ranking is a work order and
+    not a diagnosis: two ASR recordings shared `move @ get_ran(1,1,15)` and
+    turned out to be `randMove` directly in one and `seekParty` beneath it in
+    the other. Open a bucket's files singly before treating them as one fix.
+  - **A harness gap is not a port bug**, and the report keeps them apart —
+    `survey.sh` has always said as much. 28 files are blocked that way: the
+    harness fatals on a dialog control it has no stub for (11), hangs outright
+    (4 — see below), replays a dialog action out of order (4), or refuses the
+    scenario's feature flags (3). Their draws are still compared up to the point
+    it died, since a divergence inside that prefix is real either way.
+  - *Gotchas, both of which cost time.* Pass vitest the test file **before** any
+    flags: it treats `--disable-console-intercept` as taking a value and
+    swallows a positional after it, silently running the whole suite so that
+    every other test's `[ran]` lines land in the trace as if this recording had
+    drawn them. And that flag matters — console interception adds a banner per
+    line, which is free for a few thousand draws and not for a hundred thousand.
+  - **Four recordings hang the harness outright**, `long/VoDT_03-05-2025_17-10-03`
+    and three of the `short/` ones. Two `boe-native` processes had been stuck on
+    the first for **thirteen days**. The mechanism is worth knowing, because it
+    stalled the corpus run twice before it was understood: `run.sh` is a
+    wrapper, so killing it on a timeout leaves `boe-native` alive holding the
+    stdout pipe — `close` never fires and the *runner* hangs too, on a file it
+    has already given up on. The tool now spawns detached, kills the whole
+    process group, and **resolves its own promise on timeout rather than waiting
+    for `close`**, which is the part that actually makes it survivable. It also
+    writes a `[CRASH] killed after Ns` marker into the trace, so a truncated
+    stream is never mistaken for a divergence.
