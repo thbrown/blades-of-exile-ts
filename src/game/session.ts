@@ -625,13 +625,30 @@ export class GameSession {
     }
   }
 
+  /**
+   * `outd_is_blocked` (boe.locutils.cpp:392) — terrain **and** the ten
+   * encounter groups.
+   *
+   * The groups were the missing half. They had been ported into `isBlocked`
+   * instead, under a comment claiming the party's own step asked a narrower
+   * question and could walk into a group, "which is how an encounter happens at
+   * all". That was wrong twice over: the loop is inside `outd_is_blocked`
+   * itself, which is exactly what `outd_move_party` (boe.actions.cpp:4087)
+   * asks, and an encounter is met by `check_outdoor_encounter` finding a group
+   * *adjacent* to the party, never by stepping onto one.
+   *
+   * It matters because a special can put a group down under the party's feet:
+   * `OUT_PLACE_ENCOUNTER` runs from `check_special_terrain`, which
+   * `outd_move_party` calls **before** this — so the square the party is
+   * walking onto can acquire a group mid-step, and the step is then refused.
+   */
   private outdIsBlocked(where: Location): boolean {
-    const ter = this.univ.terrainType(this.univ.out.at(where.x, where.y));
-    return (
-      ter.blockage === TerObstruct.BLOCK_MOVE ||
-      ter.blockage === TerObstruct.BLOCK_MOVE_AND_SHOOT ||
-      ter.blockage === TerObstruct.BLOCK_MOVE_AND_SIGHT
-    );
+    // The C++ guards the whole body on the mode and answers "not blocked"
+    // anywhere else.
+    if (this.mode !== GameMode.OUTDOORS) return false;
+    if (!this.univ.out.isOnMap(where.x, where.y)) return true;
+    if (blocksMove(this.univ.terrainType(this.univ.out.at(where.x, where.y)))) return true;
+    return this.univ.party.outC.some((g) => g.exists && locsEqual(g.mLoc, where));
   }
 
   /** town_boat_there / town_horse_there (boe.text.cpp:852/869). */

@@ -1602,13 +1602,15 @@ bottom. What M8 still owes:
   `node scripts/diverge.mjs --all --stacks` compares this port's draw stream
   against the C++'s for all 87 recordings and groups them by the *function* they
   first part in, so the next fix is chosen by how many files it unblocks. Take
-  the top bucket, fix it, re-run, repeat. The full table is in the 2026-08-16
-  entry at the bottom; the head of it is **`doMonsters` (7 files)**,
-  **`monstCheckOneSpecialTerrain` (7)**, **`pickTargetPc` (5)** and
-  **`doOutdoorMonsters` (5)** — monster movement is over half the corpus.
-  **`playAmbientSound` (3)** looked like the cheapest first pull and turned out
-  not to be about ambient sound at all — see the 2026-08-17 entry, which leaves
-  it part-investigated with the next question named.
+  the top bucket, fix it, re-run, repeat. The current table is in the
+  2026-08-20 entry at the bottom; the head of it is **`pickTargetPc`
+  (8 files)**, **`doMonsters` (7)**, **`monstCheckOneSpecialTerrain` (6)** and
+  **`doOutdoorMonsters` (5)** — monster movement is most of the corpus.
+  The first bucket worked this way (`playAmbientSound`) turned out not to be
+  about ambient sound at all: it was `outd_is_blocked` missing the encounter
+  groups, and fixing it moved the corpus from 59,366 to **70,009 matching
+  draws**. Read the two entries together before starting the next one — they
+  are a worked example of the buckets pointing near, not at, the bug.
   The old stop-reason bucketing (`TAIL=n`, the 56 files stopping on an over-long
   `move`) is superseded — a stop is a symptom that surfaces dozens of actions
   after the rule went wrong, and the first diverging draw is the rule itself.
@@ -4337,3 +4339,61 @@ The M6 list below is kept for the history of what it covered:
     bystander, not the culprit. It is still the right thing to rank by — it is
     stable and mechanical — but read the bucket as "start here", never as "the
     bug is in this function".
+
+- **`outd_is_blocked` was missing the encounter groups, and a special can put
+  one under your feet (M8, 2026-08-20).** The end of the `playAmbientSound`
+  investigation above, and the answer was three functions away from where the
+  bucket pointed.
+  - **The rule.** `outd_is_blocked` (boe.locutils.cpp:392) blocks on three
+    things: off the map, `impassable` terrain, and **any of the ten encounter
+    groups standing on the square**. This port had only the terrain test. The
+    group loop had been ported into `isBlocked` instead, under a comment
+    asserting that the party's own step asks a narrower question and may walk
+    into a group, "which is how an encounter happens at all". Both halves of
+    that were wrong: the loop is inside `outd_is_blocked`, which is exactly what
+    `outd_move_party` (boe.actions.cpp:4087) calls, and an encounter is met by
+    `check_outdoor_encounter` finding a group **adjacent** to the party, never
+    by stepping onto one.
+  - **Why it bites.** `outd_move_party` calls `check_special_terrain` *first*
+    (line 3950) and tests blockage *after* (4087). So a special can place a
+    group on the very square being walked onto, and the step is then refused —
+    which is what VoDT's (20,21) does: node 12 `once-dlog` (the recording clicks
+    `btn2`) chains to node 13 `make-out-monst`, `OUT_PLACE_ENCOUNTER` drops a
+    forced group there, and the move is blocked. Twice, since the group is still
+    standing there on the next attempt.
+  - **What the bug looked like from the outside**, and why it took a while: the
+    party walked onto the square instead, immediately *met* the group it had
+    just created, and ran its `spec_on_meet` — a message node whose dialog the
+    recording had no click left for, because the recording's one click belonged
+    to the `once-dlog`. The specials VM caught the throw and printed
+    `SPECIAL ENCOUNTER FAILED.`, so the first *visible* symptom was ~3,500
+    stray draws inside an encounter that should never have happened, and the
+    first *differing* draw was an innocent `play_ambient_sound` on the move the
+    C++ never made. **A `SPECIAL ENCOUNTER FAILED.` in any run is a port bug**,
+    never scenery — `vm.ts:193` logs the real stack beside it.
+  - Ruled out along the way, so nobody repeats it: the monster-phase gate (both
+    sides gate on `did_something` / `if (moved)`), the terrain itself (plain
+    passable Hills, blockage 0, on both squares), and `ret_a` from either
+    opcode in the chain (neither `ONCE_DIALOG` nor `OUT_PLACE_ENCOUNTER` sets
+    it — the block is pure `outd_is_blocked`).
+  - `erase_out_specials` is still missing at this call site too
+    (boe.specials.cpp:215, beside the one already marked at `session.ts:355`).
+  - **Where it stands.** Corpus **59,366 → 70,009 matching draws (+10,643, up
+    18%)** from three lines, and `SPECIAL ENCOUNTER FAILED.` no longer appears
+    in `VoDT_06-04-2025_11-39-05` at all. 1,015 tests still green, including the
+    six guarded replays. The `playAmbientSound` bucket went 3 files → 1.
+    Note what the bucket counts did meanwhile: `pickTargetPc` **5 → 8** files,
+    because files that used to part earlier now run deeper and part there
+    instead. That is the predicted behaviour and exactly why draws, not bucket
+    sizes, are the meter.
+
+    **The queue, 2026-08-20:**
+
+    | files | parts in |
+    |---|---|
+    | 8 | `pickTargetPc` (game/monsterTurn.ts) |
+    | 7 | `doMonsters` (game/monsterTurn.ts) |
+    | 6 | `GameSession.monstCheckOneSpecialTerrain` (game/session.ts) |
+    | 5 | `doOutdoorMonsters` (game/wandering.ts) |
+    | 4 | `processFields` (game/processFields.ts) |
+    | 2 each | `randMove`, `handleDisease`, `selectActivePc` |
