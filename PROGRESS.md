@@ -4586,3 +4586,27 @@ The M6 list below is kept for the history of what it covered:
     uses an item by slot, which is rare. It is the *kind* of bug worth the
     entry — five packs agreeing exactly and the sixth agreeing on contents but
     not on order is invisible to every other instrument here.
+
+- **A "fix" of the C++'s bug that cost eleven thousand draws (M8,
+  2026-08-20).** The `doOutdoorMonsters` bucket — five files — was not about
+  `do_monsters` at all. Both sides rolled the same `get_ran(1,1,70) == 10` and
+  entered `create_wand_monst` with identical draws; the difference came *after*
+  the draws. The C++ placed nothing and this port placed a third outdoor
+  encounter group, and one extra group means the outdoor loop draws one extra
+  `get_ran(1,1,6)` **every turn** for the rest of the recording.
+  - The C++ passes `univ.out->wandering_locs[r2]` straight to `is_blocked`
+    (boe.monster.cpp:55). Those spots are **sector-local** (0-47) and
+    `is_blocked` indexes the 96×96 window, so it asks about a square in the
+    window's *top-left sector* rather than the one the group is headed for. It
+    then compares that local point against `out_loc`, which is a window
+    coordinate. Both are wrong, and both are the shipped behaviour.
+  - This port had quietly corrected it, translating with `localToGlobal` before
+    the check and calling `outdBlocked` rather than `is_blocked`. That is
+    exactly the class of change CLAUDE.md forbids: it refuses placements the
+    C++ allows and allows ones it refuses. Reverted to the C++'s shape, with
+    the quirk written down beside it.
+  - **Where it stands.** Corpus 73,769 → **85,022** matching draws, the largest
+    single jump since the harness was built, and `doOutdoorMonsters` left the
+    queue entirely. Worth reading beside the `sortItems` entry above it: a whole
+    missing function bought 118 draws and one wrongly-translated coordinate
+    bought 11,253. Bucket *size* ranks the work; it does not predict the payoff.

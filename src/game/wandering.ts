@@ -211,7 +211,16 @@ export function createWandMonst(session: GameSession): void {
     }
     const spot = spots[r2];
     if (!spot || spot.x < 0) return;
-    if (!outdBlocked(univ, univ.party.localToGlobal(spot))) {
+    // **`is_blocked(univ.out->wandering_locs[r2])`, on the raw *local* spot**
+    // (boe.monster.cpp:55). `wandering_locs` are sector-local (0-47) and
+    // `is_blocked` indexes the 96×96 window, so the C++ asks about a square in
+    // the window's top-left sector rather than the one the group is going to.
+    // It also compares that local point against `out_loc`, which is a window
+    // coordinate. Both are wrong and both are kept: translating the point
+    // first, as this port did, refuses placements the C++ allows and allows
+    // ones it refuses — an extra encounter group, and a `do_monsters` loop one
+    // iteration longer than the C++'s for the rest of the recording.
+    if (!session.isBlocked(spot)) {
       placeOutdWandMonst(session, spot, group, 0);
     }
     return;
