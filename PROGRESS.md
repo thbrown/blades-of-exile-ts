@@ -1604,15 +1604,16 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue as of 2026-08-20 is **`selectActivePc` (9 files)**, **`doMonsters` (5)**,
-  **`doOutdoorMonsters` (5)**, **`processFields` (4)** and **`seekParty` (3)** —
-  monster movement is nearly all of what is left. Corpus **73,070** matching
-  draws, **4 of 87** files agreeing all the way.
+  queue after the `selectActivePc` bucket was worked is **`doMonsters` (5)**,
+  **`doOutdoorMonsters` (5)**, **`processFields` (4)**, **`seekParty` (3)**,
+  **`totalEncumbrance` (3)** and **`monstPickTarget` (4)** — monster movement is
+  nearly all of what is left. Corpus **73,651** matching draws, **4 of 87** files
+  agreeing all the way.
 
-  `selectActivePc` jumping to the top is the expected shape, not a regression:
-  `do_monsters` only reaches it now that the town target block is ported, so
-  nine files got far enough to part *inside* it. Bucket sizes churn; draws are
-  the meter.
+  Bucket sizes churn, and churn is the point: `selectActivePc` went 9 files → 2
+  in one slice, and the files it held reappeared in `monstPickTarget`,
+  `totalEncumbrance` and `pickMonsterAbility`. A file moving to a *later*
+  divergence in a *different* function is a fix working. Draws are the meter.
   The first bucket worked this way (`playAmbientSound`) turned out not to be
   about ambient sound at all: it was `outd_is_blocked` missing the encounter
   groups, and fixing it moved the corpus from 59,366 to **70,009 matching
@@ -4502,3 +4503,43 @@ The M6 list below is kept for the history of what it covered:
   ~30 minutes. Also gave `stackAt` a per-replay scratch file, since
   `--all --stacks` and a single-file run are exactly the two things anyone runs
   at once.
+
+- **The `selectActivePc` bucket was `do_monster_turn` re-picking a target it
+  already had (M8, 2026-08-20).** Nine files parted inside `select_active_pc`,
+  and none of them were about `select_active_pc`. Both the ranged-ability
+  block and the melee block re-rolled it to decide who to shoot or swing at.
+  The C++ does neither: it reads `iLiving& who = univ.get_target(target)`
+  (boe.combat.cpp:2379 and :2409) — the index `do_monsters` chose once for the
+  whole turn. Two bugs in one: a draw the C++ never spends, and the blow
+  landing on a PC the monster was not targeting. The port already had
+  `resolveTarget`, which is `get_target` under another name; both sites use it
+  now, and the melee gate is the C++'s two `dynamic_cast`s (a PC is only swung
+  at by a hostile creature, another creature only by a non-docile one).
+  - **The special attacks had no visibility gate at all.** boe.combat.cpp:2258
+    wraps the breath, the spells, the missile abilities *and* the SPECIAL node
+    in one `monst_can_see(i,targ_space) && can_see_monst(targ_space,i)`. This
+    port had neither half, so a monster reached for its bow through a wall —
+    a turn early, every time, which is what the corner cases in this bucket
+    actually were. It is now one `canSpecAttack` computed once per action point
+    and shared by all four blocks, which is the C++'s shape.
+  - **`canSeeMonst` is a second function, not an argument to `monstCanSee`.**
+    `can_see_light` walks the line from its *first* argument, so it is not
+    symmetric: a creature that can see a square is not guaranteed to be visible
+    from it. The C++ keeps `monst_can_see` and `can_see_monst` separate for
+    that reason (boe.locutils.cpp:353 and :379) and so does this.
+  - **Where it stands.** Corpus 73,070 → **73,651** matching draws; still 4 of
+    87 all the way. The `selectActivePc` bucket went from 9 files to 2, and the
+    files it held redistributed into `monstPickTarget` (1 → 4),
+    `totalEncumbrance` (1 → 3) and `pickMonsterAbility` (1 → 2) — moving a file
+    to a *later* divergence in a *different* function is what a real fix looks
+    like here. +581 draws is a small number for four rules, and that is the
+    honest shape of the tail: the corpus is now stopped by many small rules
+    rather than a few large ones.
+  - **(Found, not fixed) `current_monst_tactic`** (boe.combat.cpp:2225) is not
+    ported. A caster within 5 squares of the closest PC and not adjacent, or an
+    archer within 6 and not adjacent, sets tactic 1 and takes the **flee**
+    branch instead of attacking — a monster keeping its distance to keep
+    shooting. That branch draws `get_ran(1,1,6)`, so it is in the stream, and
+    it gates on `ap > 1` and `futzing == 0`; `futzing` (the "monster's just
+    pissing around, give up" counter at :2541) is not ported either. Do the two
+    together — half of this is worse than neither.

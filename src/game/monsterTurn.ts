@@ -74,6 +74,22 @@ export function monstCanSee(session: GameSession, monst: Creature, where: Locati
 }
 
 /**
+ * can_see_monst (boe.locutils.cpp:379) — the mirror of `monstCanSee`: line of
+ * sight *from* a square *to* any of the creature's squares. Kept separate
+ * rather than folded into one helper because `can_see_light` is not
+ * symmetric — it walks the line from its first argument, and a monster that
+ * can see a square is not guaranteed to be visible from it.
+ */
+export function canSeeMonst(session: GameSession, from: Location, monst: Creature): boolean {
+  for (let i = 0; i < monst.xWidth; i++)
+    for (let j = 0; j < monst.yWidth; j++) {
+      const to = loc(monst.curLoc.x + i, monst.curLoc.y + j);
+      if (session.canSeeLight(from, to) < 5) return true;
+    }
+  return false;
+}
+
+/**
  * `switch_target_to_adjacent` (boe.monster.cpp) — something already in reach
  * beats something further off, whatever the picker chose. Makes no draws.
  *
@@ -1007,6 +1023,15 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
           }
         }
 
+        // One gate over every special attack (boe.combat.cpp:2258) — the
+        // spells, the missile abilities and the SPECIAL node all sit inside
+        // it. Both directions of sight are required, and this is what makes a
+        // monster hold its fire until it has a clear line: without it an
+        // archer shot round a corner a turn early, which is a divergence you
+        // see in the draw stream long before you see it on screen.
+        const canSpecAttack = target !== NO_ONE && monst.attitude !== Attitude.DOCILE
+          && monstCanSee(session, monst, targSpace) && canSeeMonst(session, targSpace, monst);
+
         // Spells come before the missile abilities, as they do in the C++
         // (boe.combat.cpp:2272). A caster mostly won't bother when the party is
         // already on top of it — unless it is a high-level one, or a scenario
@@ -1015,7 +1040,7 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
         // Divergence worth knowing: the C++ tries *breath* before spells, but
         // this port folds breath into `pickMonsterAbility` below, so a monster
         // that both breathes and casts will reach for a spell first.
-        if (!actedYet && target !== NO_ONE && monst.attitude !== Attitude.DOCILE
+        if (!actedYet && canSpecAttack
           && !monst.isFriendly && dist(monst.curLoc, targSpace) <= 10) {
           const adjacent = monstAdjacent(monst, targSpace);
           const mu = monst.mon.mu;
@@ -1042,11 +1067,12 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
 
         // Ranged abilities come before melee — the missile or breath is what an
         // archer or a drake reaches for when the party isn't yet on top of it.
-        if (!actedYet && target !== NO_ONE && monst.attitude !== Attitude.DOCILE
-          && !monst.isFriendly) {
-          const who: Living | null = target < NO_ONE
-            ? univ.party.pcs[inCombat ? target : selectActivePc(univ)]!
-            : null;
+        if (!actedYet && canSpecAttack && !monst.isFriendly) {
+          // `univ.get_target(target)` (boe.combat.cpp:2379) — the target the
+          // monster already has, *not* a fresh one. In town that index was
+          // chosen once by `do_monsters`, and re-rolling `select_active_pc`
+          // here spent a draw the C++ never spends and shot at the wrong PC.
+          const who: Living | null = resolveTarget(session, target);
           if (who && who.isAlive) {
             const picked = pickMonsterAbility(
               session, monst, targSpace, monstAdjacent(monst, targSpace));
@@ -1074,7 +1100,7 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
         // through the reserved pointers — 21/22 the square, 20 the target
         // (a PC is passed as 11 + index, ready for a SELECT_TARGET node).
         const specAbil = monst.mon.abil[MonstAbil.SPECIAL];
-        if (specAbil?.active && !specialCalled && session.partyCanSeeMonst(monst)
+        if (canSpecAttack && specAbil?.active && !specialCalled && session.partyCanSeeMonst(monst)
           && univ.rng.getRan(1, 1, 1000) <= specAbil.special.extra3) {
           specialCalled = true;
           univ.party.forcePtr(21, targSpace.x);
@@ -1091,14 +1117,16 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
         // creature only needs `attitude !== DOCILE`, already true here — this
         // is what lets a charmed monster actually fight its former allies.
         if (!actedYet && target !== NO_ONE && monst.attitude !== Attitude.DOCILE) {
-          let who: Living | null;
-          if (target >= 100) {
-            who = univ.town?.monsters[target - 100] ?? null;
-          } else {
-            // In town, whoever the blow lands on is picked at random.
-            const victim = inCombat ? target : selectActivePc(univ);
-            who = monst.isFriendly ? null : univ.party.pcs[victim]!;
-          }
+          // `iLiving& who = univ.get_target(target)` (boe.combat.cpp:2409) —
+          // again the target it already has. Town mode does *not* re-roll a
+          // victim here: `do_monsters` picked the PC index once for the whole
+          // turn, and drawing again both cost a draw the C++ never makes and
+          // let the blow land on someone the monster wasn't targeting.
+          let who: Living | null = resolveTarget(session, target);
+          // The C++'s two `dynamic_cast`s: a PC is only swung at by a hostile
+          // creature, another creature only by a non-docile one (already true
+          // in this branch).
+          if (who instanceof Player && monst.isFriendly) who = null;
           if (who && who.isAlive && monstAdjacent(monst, targSpace)) {
             await monsterAttack(session, monst, who);
             monst.ap = Math.max(0, monst.ap - 4);
