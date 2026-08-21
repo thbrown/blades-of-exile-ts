@@ -478,7 +478,13 @@ export class GameSession {
    *
    * TODO(M7): increase_age's autosave, which eating triggers.
    */
-  private async afterPartyTurn(): Promise<void> {
+  /**
+   * `advance_time`'s `did_something` path. Public because the C++ sets that
+   * flag from a dozen `handle_*` functions and only spends it once, at the end
+   * of `handle_action` — there is no single place here that corresponds, so the
+   * callers say so themselves.
+   */
+  async afterPartyTurn(): Promise<void> {
     try {
       await this.afterPartyTurnInner();
     } finally {

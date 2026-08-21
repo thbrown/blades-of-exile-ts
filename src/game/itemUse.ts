@@ -28,6 +28,7 @@ import {
 } from '../universe/skills';
 import { SpellNote } from '../universe/living';
 import { Universe } from '../universe/universe';
+import { takeAp } from './combat';
 import { damagePc, hitParty } from './damage';
 import { awardPartyXp, awardXp } from './damage';
 import { GameMode } from './modes';
@@ -806,6 +807,16 @@ export async function useItem(
   }
 
   if (takeCharge && item.charges > 0) removeCharge(pc, slot);
+
+  // `handle_use_item`'s tail (boe.actions.cpp:1109) — the AP always, the turn
+  // **only if the item didn't arm a targeting mode**. A wand that asks for a
+  // square hasn't been used yet, so the monsters don't move until the square is
+  // picked. Lives here rather than at the call sites so the game and the replay
+  // driver can't disagree about it.
+  takeAp(univ, 3);
+  if (session.mode !== GameMode.TOWN_TARGET && session.mode !== GameMode.SPELL_TARGET) {
+    await session.afterPartyTurn();
+  }
 }
 
 /** PIC_ITEM — the picture-type constant a book's dialog uses. */
