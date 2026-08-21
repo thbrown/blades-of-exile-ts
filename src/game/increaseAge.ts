@@ -18,13 +18,16 @@
 
 import { DamageType } from '../data/monster';
 import { tryAutoSave } from './autosave';
-import { ItemAbil } from '../data/item';
-import { hasAbilEquip } from '../universe/inventory';
+import { ItemAbil, abilGroup, abilHarms } from '../data/item';
+import { Lighting } from '../data/town';
+import { getProtLevel, hasAbilEquip } from '../universe/inventory';
 import { Player } from '../universe/player';
-import { MainStatus, PartyStatus, Race, Status, Trait } from '../universe/skills';
+import { MainStatus, PartyStatus, Race, Status, Trait, statusInfo } from '../universe/skills';
 import { Party } from '../universe/party';
 import { damagePc, hitParty } from './damage';
+import { hasAbil } from './alchemy';
 import { drainPc } from './itemUse';
+import { increaseLight } from './spellTown';
 import { GameMode } from './modes';
 import type { GameSession } from './session';
 
@@ -54,6 +57,16 @@ export function takeFood(party: Party, amount: number): number {
   }
   party.food -= amount;
   return 0;
+}
+
+/**
+ * `cParty::has_abil` (party.cpp:651) — does any *living* PC carry an item with
+ * this ability and a charge left? Note it asks about the pack, not about what
+ * is equipped, which is `has_abil_equip`.
+ */
+function partyHasAbil(party: Party, abil: ItemAbil): boolean {
+  return party.pcs.some((pc) =>
+    pc.mainStatus === MainStatus.ALIVE && hasAbil(pc, abil) !== null);
 }
 
 function livePcs(session: GameSession): Player[] {
@@ -162,10 +175,116 @@ export async function increaseAgeEffects(session: GameSession): Promise<void> {
 
   const age = party.age;
 
+  // The party's own lantern burns down a notch, every turn.
+  if (party.lightLevel > 0) party.lightLevel--;
+
   // "decrease monster present counter" (boe.actions.cpp:3377), a `move_to_zero`
   // beside the light level's. It only matters to `monster_placid`, which is why
   // it can live here rather than anywhere more prominent.
   if (party.hostilesPresent > 0) party.hostilesPresent--;
+
+  // --- The party's own spell effects wearing off ----------------------------
+  // increase_age's first block (boe.actions.cpp:3379): each is a countdown, and
+  // each says so on the turn it runs out. FLIGHT's "you plummet to your deaths"
+  // is not ported — flight over impassable ground needs the terrain check the
+  // C++ does against the *outdoor* map. TODO(M6).
+  //
+  // **This sits here, not at the end of the function, because the block below
+  // it draws.** It used to be last, with a note saying the reordering was safe
+  // because none of it touches the RNG; that stopped being true the moment the
+  // radiance roll underneath it was ported.
+  if (party.partyStatus[PartyStatus.STEALTH] === 1) {
+    univ.addStringToBuf('Your footsteps grow louder.');
+  }
+  partyMoveToZero(party, PartyStatus.STEALTH);
+  if (party.partyStatus[PartyStatus.DETECT_LIFE] === 1) {
+    univ.addStringToBuf('You stop detecting monsters.');
+  }
+  partyMoveToZero(party, PartyStatus.DETECT_LIFE);
+  if (party.partyStatus[PartyStatus.FIREWALK] === 1) {
+    univ.addStringToBuf('Your feet stop glowing.');
+  }
+  partyMoveToZero(party, PartyStatus.FIREWALK);
+  if (party.partyStatus[PartyStatus.FLIGHT] === 2) {
+    univ.addStringToBuf('You are starting to descend.');
+  }
+  if (party.partyStatus[PartyStatus.FLIGHT] === 1) {
+    univ.addStringToBuf('  You land safely.');
+  }
+  partyMoveToZero(party, PartyStatus.FLIGHT);
+
+  // --- Dark towns: the light drains, and something in the pack may glow -----
+  const lighting = univ.townRecord?.lightingType ?? Lighting.LIGHT_NORMAL;
+  if (!outdoors && lighting >= Lighting.LIGHT_DRAINS) {
+    increaseLight(session, -9);
+    if (lighting === Lighting.LIGHT_NONE) {
+      if (party.lightLevel > 0) univ.addStringToBuf('Your light is drained.');
+      party.lightLevel = 0;
+    }
+  }
+  // A RADIANT item lights itself now and again — **and this draws**, which is
+  // why the block above it can't be moved past it (boe.actions.cpp:3417).
+  if (town && lighting !== Lighting.LIGHT_NORMAL) {
+    let radiance = 0;
+    for (const pc of party.pcs) radiance += getProtLevel(pc, ItemAbil.RADIANT);
+    if (radiance > 0 && party.lightLevel < radiance && univ.rng.getRan(1, 1, 10) < radiance) {
+      univ.addStringToBuf('One of your items is glowing softly!');
+      party.lightLevel += radiance * 3;
+    }
+  }
+
+  // --- The items that do something on their own ------------------------------
+  // "Specials countdowns" (boe.actions.cpp:3425). Every five hundredth turn an
+  // OCCASIONAL_STATUS item may fire — one `get_ran(1,0,5)` per candidate item,
+  // so the *number* of them in the party's packs is part of the draw stream.
+  // The C++'s own TODO wonders whether this should call a special node.
+  if (age % 500 === 0 && partyHasAbil(party, ItemAbil.OCCASIONAL_STATUS)) {
+    for (const pc of party.pcs) {
+      for (const item of pc.items) {
+        if (item.ability !== ItemAbil.OCCASIONAL_STATUS) continue;
+        if ((item.abilData as number) > 15) continue;
+        if (!abilGroup(item)) continue;
+        if (univ.rng.getRan(1, 0, 5) !== 3) continue;
+        let howMuch = item.abilStrength;
+        if (abilHarms(item)) howMuch *= -1;
+        const which = item.abilData as Status;
+        if (statusInfo(which).isNegative) howMuch *= -1;
+        party.applyStatusAll(which, howMuch);
+      }
+    }
+  }
+
+  // "Plants and magic shops" — the random shops restock, which rolls a fresh
+  // item for every slot of every random-stock store. That is a *lot* of draws
+  // in one turn, and it lands squarely in the middle of this function.
+  if (age % 4000 === 0) univ.refreshStoreItems();
+
+  // --- The protections wearing off ------------------------------------------
+  // "Protection, etc." (boe.actions.cpp:3451). Every one of these is decayed
+  // **every turn**, in town and outdoors alike; this port decayed them only
+  // during a combat round (`combat_run_monst`), which is why Resist Magic cast
+  // in a fight was still up long after it, out on the road.
+  //
+  // The `if` is the C++'s, brace-for-brace: it guards only the *first*
+  // `move_to_zero`, so on the turn any one of these six is about to expire,
+  // INVULNERABLE is decayed twice. Kept, quirk and all.
+  for (const pc of party.pcs) {
+    const s = (which: Status): number => pc.status[which] ?? 0;
+    if (s(Status.INVULNERABLE) === 1 || Math.abs(s(Status.MAGIC_RESISTANCE)) === 1
+      || s(Status.INVISIBLE) === 1 || s(Status.MARTYRS_SHIELD) === 1
+      || Math.abs(s(Status.ASLEEP)) === 1 || s(Status.PARALYZED) === 1) {
+      moveToZero(pc, Status.INVULNERABLE);
+    }
+    moveToZero(pc, Status.INVULNERABLE);
+    moveToZero(pc, Status.MAGIC_RESISTANCE);
+    moveToZero(pc, Status.INVISIBLE);
+    moveToZero(pc, Status.MARTYRS_SHIELD);
+    moveToZero(pc, Status.ASLEEP);
+    moveToZero(pc, Status.PARALYZED);
+    if (age % 40 === 0 && s(Status.POISONED_WEAPON) > 0) {
+      moveToZero(pc, Status.POISONED_WEAPON);
+    }
+  }
 
   // --- Food ------------------------------------------------------------------
   // "Food" (boe.actions.cpp:3467): every thousandth turn the party eats, one
@@ -173,12 +292,6 @@ export async function increaseAgeEffects(session: GameSession): Promise<void> {
   // shortfall; anyone it couldn't feed starves the *whole party* for
   // `get_ran(3,1,6)`, which is the C++'s own broad brush — the damage isn't
   // per hungry PC.
-  //
-  // The C++ runs this **before** poison, disease and acid, and this port keeps
-  // that order because all four consume the RNG. (The blocks that don't —
-  // the party's spell effects and the protections — sit at the end of this
-  // function rather than the start, which is a reordering that predates this
-  // and can't move the sequence.)
   if (age % 1000 === 0) {
     const mouths = party.pcs.filter((pc) => pc.mainStatus === MainStatus.ALIVE).length;
     const shortfall = takeFood(party, mouths);
@@ -238,58 +351,6 @@ export async function increaseAgeEffects(session: GameSession): Promise<void> {
       && pc.curHealth < pc.maxHealth) pc.heal(2);
     if (pc.traits[Trait.CHRONIC_DISEASE] && univ.rng.getRan(1, 0, 110) === 1) {
       pc.disease(4, univ.rng);
-    }
-  }
-
-  // --- The party's own spell effects wearing off ----------------------------
-  // increase_age's first block (boe.actions.cpp:3374): each is a countdown,
-  // and each says so on the turn it runs out. FLIGHT's "you plummet to your
-  // deaths" is not ported — flight over impassable ground needs the terrain
-  // check the C++ does against the *outdoor* map. TODO(M6).
-  if (party.partyStatus[PartyStatus.STEALTH] === 1) {
-    univ.addStringToBuf('Your footsteps grow louder.');
-  }
-  partyMoveToZero(party, PartyStatus.STEALTH);
-  if (party.partyStatus[PartyStatus.DETECT_LIFE] === 1) {
-    univ.addStringToBuf('You stop detecting monsters.');
-  }
-  partyMoveToZero(party, PartyStatus.DETECT_LIFE);
-  if (party.partyStatus[PartyStatus.FIREWALK] === 1) {
-    univ.addStringToBuf('Your feet stop glowing.');
-  }
-  partyMoveToZero(party, PartyStatus.FIREWALK);
-  if (party.partyStatus[PartyStatus.FLIGHT] === 2) {
-    univ.addStringToBuf('You are starting to descend.');
-  }
-  if (party.partyStatus[PartyStatus.FLIGHT] === 1) {
-    univ.addStringToBuf('  You land safely.');
-  }
-  partyMoveToZero(party, PartyStatus.FLIGHT);
-
-  // --- The protections wearing off ------------------------------------------
-  // "Protection, etc." (boe.actions.cpp:3451). Every one of these is decayed
-  // **every turn**, in town and outdoors alike; this port decayed them only
-  // during a combat round (`combat_run_monst`), which is why Resist Magic cast
-  // in a fight was still up long after it, out on the road.
-  //
-  // The `if` is the C++'s, brace-for-brace: it guards only the *first*
-  // `move_to_zero`, so on the turn any one of these six is about to expire,
-  // INVULNERABLE is decayed twice. Kept, quirk and all.
-  for (const pc of party.pcs) {
-    const s = (which: Status): number => pc.status[which] ?? 0;
-    if (s(Status.INVULNERABLE) === 1 || Math.abs(s(Status.MAGIC_RESISTANCE)) === 1
-      || s(Status.INVISIBLE) === 1 || s(Status.MARTYRS_SHIELD) === 1
-      || Math.abs(s(Status.ASLEEP)) === 1 || s(Status.PARALYZED) === 1) {
-      moveToZero(pc, Status.INVULNERABLE);
-    }
-    moveToZero(pc, Status.INVULNERABLE);
-    moveToZero(pc, Status.MAGIC_RESISTANCE);
-    moveToZero(pc, Status.INVISIBLE);
-    moveToZero(pc, Status.MARTYRS_SHIELD);
-    moveToZero(pc, Status.ASLEEP);
-    moveToZero(pc, Status.PARALYZED);
-    if (age % 40 === 0 && s(Status.POISONED_WEAPON) > 0) {
-      moveToZero(pc, Status.POISONED_WEAPON);
     }
   }
 

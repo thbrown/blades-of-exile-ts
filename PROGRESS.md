@@ -4915,3 +4915,35 @@ The M6 list below is kept for the history of what it covered:
     all the way. `DRAW_PIN` for `ZKR_15-05-2025_18-04-58` moves 6,480 → 6,562
     with its *matching* count unmoved at 6,223 — a deliberate update, and the
     reason that test pins rather than floors.
+
+- **`increase_age`'s middle third was missing, and the order it runs in is the
+  spec (M8, 2026-08-21).** The `handleDisease` bucket (3 files) was, again, not
+  about disease. `ASR_05-05-2025_13-30-11` parted at draw 1,765 with this port
+  rolling disease's `get_ran(1,1,10)` and the C++ rolling `get_ran(1,0,41)` —
+  `BOE_TRACE_RAN_STACK` named it in one run: `return_treasure ←
+  get_random_store_item ← refresh_store_items ← increase_age`.
+  - **Three blocks of `increase_age` had never been ported**, all of them
+    upstream of the poison/disease/acid clocks:
+    - the **radiance roll** (boe.actions.cpp:3417) — in a dark town, a RADIANT
+      item lights itself on `get_ran(1,1,10) < radiance`;
+    - **OCCASIONAL_STATUS items** (:3425) — every 500th turn, one
+      `get_ran(1,0,5)` *per candidate item in the party's packs*, so how much
+      loot the party is carrying is part of the draw stream;
+    - **`refresh_store_items`** on the 4,000-turn clock (:3444), which rolls a
+      fresh item for every slot of every random-stock shop — hundreds of draws
+      in a single turn.
+  - **The reordering that was safe until it wasn't.** This port had
+    `increase_age`'s first block (the party's spell effects) and its
+    "Protection, etc." block at the *end* of the function, with a comment
+    saying that was harmless because neither touches the RNG. True at the time,
+    and false the moment the radiance roll — which sits between them — was
+    ported. The function now runs in the C++'s order, top to bottom, and the
+    comment says why it has to.
+  - Also ported with them: the party lantern burning down a notch a turn, and
+    the light drain in a `LIGHT_DRAINS`/`LIGHT_NONE` town, which had only ever
+    existed on the combat path (`combat_run_monst`).
+  - **Where it stands.** Corpus 103,066 → **124,431** matching draws.
+    `handleDisease` left the queue entirely and `ASR_05-05-2025_13-30-11` went
+    1,764 → 5,061, which is every draw the harness lives long enough to make —
+    it now dies on a `preferences` dialog control instead, so "blocked outside
+    the rules" went 31 → 33. Still 6 of 87 all the way.
