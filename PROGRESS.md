@@ -1602,10 +1602,12 @@ bottom. What M8 still owes:
   `node scripts/diverge.mjs --all --stacks` compares this port's draw stream
   against the C++'s for all 87 recordings and groups them by the *function* they
   first part in, so the next fix is chosen by how many files it unblocks. Take
-  the top bucket, fix it, re-run, repeat. The current table is in the
-  2026-08-20 entry at the bottom; the head of it is **`pickTargetPc`
-  (8 files)**, **`doMonsters` (7)**, **`monstCheckOneSpecialTerrain` (6)** and
-  **`doOutdoorMonsters` (5)** — monster movement is most of the corpus.
+  the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
+  and takes about four minutes, so measure after every fix. The head of the
+  queue as of 2026-08-20 is **`doMonsters` (7 files)**,
+  **`monstCheckOneSpecialTerrain` (7)**, **`doOutdoorMonsters` (5)**,
+  **`seekParty` (4)** and **`processFields` (4)** — monster movement is most of
+  what is left. Corpus **70,353** matching draws.
   The first bucket worked this way (`playAmbientSound`) turned out not to be
   about ambient sound at all: it was `outd_is_blocked` missing the encounter
   groups, and fixing it moved the corpus from 59,366 to **70,009 matching
@@ -4397,3 +4399,56 @@ The M6 list below is kept for the history of what it covered:
     | 5 | `doOutdoorMonsters` (game/wandering.ts) |
     | 4 | `processFields` (game/processFields.ts) |
     | 2 each | `randMove`, `handleDisease`, `selectActivePc` |
+
+- **Monster target selection, ported properly (M8, 2026-08-20).** The
+  `pickTargetPc` bucket, 8 files. `monst_pick_target` (boe.monster.cpp:353) had
+  been ported as roughly "keep your target, else pick a PC, else pick a
+  creature", and the docstring said plainly which parts were missing. All of
+  them made draws.
+  - **The two combat priorities.** A hostile creature in combat first tries the
+    last PC to cast (`get_ran(1,1,5) < 5`), then the last to shoot
+    (`get_ran(1,1,5) < 3`), then its stored target. Neither global existed here:
+    `spell_caster` is set in `do_combat_cast` (boe.combat.cpp:893) and
+    `missile_firer` on the first line of `fire_missile` (1532), and they now
+    live on `GameSession`. **Only `start_outdoor_combat` clears them**
+    (boe.combat.cpp:183) — `start_town_combat` resets every monster's target and
+    leaves these two alone, so a town fight inherits the previous fight's
+    caster. Kept.
+  - **The roll is spent before the check.** `(get_ran(1,1,5) < 5) &&
+    monst_can_see(…) && alive` evaluates left to right, so the draw happens even
+    when the PC is invisible or dead. Writing it the tidy way round moves a
+    number in the stream.
+  - **Both pickers always run.** The C++ calls `monst_pick_target_pc` *and*
+    `monst_pick_target_monst` and then compares them; this port returned early
+    on a PC target, eating the second one's draws. The comparison itself has a
+    tie-break roll (`get_ran(1,0,6) < 3` in combat) that was missing entirely,
+    and `monst_pick_target_monst` has another (`get_ran(1,0,7) < 4`) for equal
+    distances.
+  - **`monst_pick_target_pc` returns 0 in town before either roll**
+    (boe.monster.cpp:451) — two draws per town monster per turn that this port
+    was spending. In town the comparison then weighs the creature against the
+    party's square and returns **PC 0**, not the picked one.
+  - *A bug kept*: `monst_pick_target_monst` guards on
+    `monst_can_see(i, univ.town.monst[i].cur_loc)` — whether creature *i* can see
+    **its own square**, always true. Clearly meant to be "can the hunter see
+    it", but it ships that way, so hostiles pick targets through walls. This
+    port had quietly implemented the *intended* check, which changed both the
+    choice and, through the tie-break roll, the sequence.
+  - **Where it stands.** Corpus 70,009 → **70,353** matching draws, and the
+    `pickTargetPc` bucket is **gone** — all 8 files now part somewhere else.
+    A small number for a lot of reading, which is the shape of this work now:
+    the cheap structural wins are spent and what is left is per-rule. 1,015
+    tests green.
+    `ZKR_15-05-2025_14-17-51` went 4,439 → 4,475 draws and then turned *into* a
+    harness gap — matching further let the C++ reach its own out-of-range bug.
+
+- **Measuring after every fix, in four minutes instead of thirty (M8,
+  2026-08-20).** `--refresh` re-ran **both** engines, and the C++ half is the
+  slow one: it never changes while TypeScript is being edited, and four
+  recordings hang it for the full timeout each. Now `--refresh` re-runs this
+  port only, `--refresh-cpp` does the oracle as well, and a cached trace ending
+  in the hang marker is never retried (the harness is deterministic; it will
+  hang again). Verified equivalent: same 70,353 either way, **3m47s** against
+  ~30 minutes. Also gave `stackAt` a per-replay scratch file, since
+  `--all --stacks` and a single-file run are exactly the two things anyone runs
+  at once.

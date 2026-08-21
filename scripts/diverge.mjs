@@ -4,7 +4,8 @@
 //   node scripts/diverge.mjs ZKR_15-05-2025_18-04-58   # one file, with the stack
 //   node scripts/diverge.mjs --all                     # every file, ranked buckets
 //   node scripts/diverge.mjs --all --stacks            # bucket by rule, not by draw args
-//   node scripts/diverge.mjs --all --refresh           # ignore the trace cache
+//   node scripts/diverge.mjs --all --refresh           # re-run this port (after a code change)
+//   node scripts/diverge.mjs --all --refresh-cpp       # re-run the oracle too (rarely needed)
 //
 // ## Why
 //
@@ -60,7 +61,15 @@ const BUDGET = Number(opt('ran', 200000));
 // hangs outright on `long/VoDT_03-05-2025_17-10-03.xml`, which is its own bug
 // and not something a corpus run should stall on for a quarter of an hour.
 const TIMEOUT = Number(opt('timeout', 300)) * 1000;
-const REFRESH = flag('refresh');
+// **`--refresh` re-runs this port only.** That is the whole point of splitting
+// them: the C++ side is an oracle built from a source tree that does not change
+// while you are editing TypeScript, so re-running it is pure waiting — and it is
+// the slow half, because four recordings hang the harness for the full timeout
+// each. Refreshing just this side turns a ~30-minute re-measure into a ~4-minute
+// one, which is the difference between measuring after every fix and not
+// bothering. `--refresh-cpp` when the harness or its patch changes.
+const REFRESH = flag('refresh') || flag('refresh-cpp');
+const REFRESH_CPP = flag('refresh-cpp');
 const ALL = flag('all');
 const target = args.find((a) => !a.startsWith('--'));
 
@@ -252,7 +261,11 @@ async function traces(path) {
   const cpp = join(dir, 'cpp.txt');
   const js = join(dir, 'js.txt');
 
-  if (REFRESH || !existsSync(cpp)) {
+  // A cached trace that ends in the hang marker will hang again — the harness is
+  // deterministic. Re-running it costs the full timeout and learns nothing, so
+  // only `--refresh-cpp` retries those.
+  const hungBefore = existsSync(cpp) && sideFailure(cpp, 'cpp')?.includes('hung');
+  if ((REFRESH_CPP || !existsSync(cpp)) && !(hungBefore && !REFRESH_CPP)) {
     await run('bash', [HARNESS, path],
       { BOE_TRACE: '1', BOE_TRACE_RAN: String(BUDGET) }, cpp);
   }
@@ -349,7 +362,10 @@ const isRule = (cmp) => cmp.kind === 'differ' || (cmp.kind === 'short' && !cmp.w
 
 /** Re-run this port asking for the stack at draw `n`, and pull out its own frames. */
 async function stackAt(rel, n) {
-  const out = join(CACHE, '_stack.txt');
+  // Per-replay, not one shared file: `--all --stacks` and a single-file run
+  // are the two things anyone does at once, and a shared scratch file would
+  // have them reading each other's stacks.
+  const out = join(CACHE, rel.replace(/[/\\]/g, '_').replace(/\.xml$/, ''), 'stack.txt');
   await run('npx', ['vitest', 'run', 'test/corpus.test.ts'],
     { CORPUS: '1', RAN: String(n), RANSTACK: String(n), ONLY: rel }, out);
   const lines = readFileSync(out, 'utf8').split('\n');

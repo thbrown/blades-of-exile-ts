@@ -134,6 +134,18 @@ export class GameSession {
    * back to the same PC (store_current_pc in boe.combat.cpp).
    */
   storeCurrentPc = 0;
+  /**
+   * `spell_caster` / `missile_firer` (boe.combat.cpp globals) — the last PC to
+   * cast and the last to shoot. Monsters prefer them as targets, which is what
+   * makes casting from the back rank draw fire.
+   *
+   * **Only `start_outdoor_combat` clears them** (boe.combat.cpp:183);
+   * `start_town_combat` resets every monster's target and leaves these two
+   * alone, so a town fight inherits whoever cast in the *previous* fight. That
+   * asymmetry is the C++'s, kept deliberately.
+   */
+  spellCaster = NO_ONE;
+  missileFirer = NO_ONE;
   /** which_combat_type: 1 for a fight in a town, 0 for an outdoor arena. */
   whichCombatType = 0;
   /**

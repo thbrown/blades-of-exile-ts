@@ -255,6 +255,10 @@ export async function fireMissile(
   session: GameSession, loaded: LoadedMissile, target: Location,
 ): Promise<void> {
   const univ = session.univ;
+  // `missile_firer = univ.cur_pc` — the first line of fire_missile
+  // (boe.combat.cpp:1532), with the C++'s own comment: "This may be used by
+  // monsters to help pick a target."
+  session.missileFirer = univ.curPc;
   const firer = univ.currentPc;
   const missile = firer.items[loaded.missileSlot]!;
   const ammo = firer.items[loaded.ammoSlot]!;

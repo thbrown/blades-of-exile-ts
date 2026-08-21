@@ -315,6 +315,11 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
   // Casting drops Sanctuary, whatever the spell.
   caster.status[Status.INVISIBLE] = 0;
 
+  // boe.combat.cpp:893, in this position: monsters prefer the last PC to cast,
+  // so this is what makes casting draw fire. A special's own targeting arrives
+  // here with no spell and doesn't count.
+  if (spell !== Spell.NONE) session.spellCaster = univ.curPc;
+
   const rng = univ.rng;
   const min = Math.min;
   const who = univ.curPc;

@@ -122,16 +122,25 @@ function pickTargetMonst(session: GameSession, monst: Creature): number {
   const town = session.univ.town;
   if (!town) return NO_ONE;
   let best = NO_ONE;
-  let bestDist = Infinity;
+  // `min_dist` starts at 1000, not infinity, and that is load-bearing: a
+  // creature further off than 1000 would tie rather than lose.
+  let bestDist = 1000;
   for (let i = 0; i < town.monsters.length; i++) {
     const other = town.monsters[i]!;
     if (other === monst || !other.isAlive || monst.isFriendlyTo(other)) continue;
-    if (!monstCanSee(session, monst, other.curLoc)) continue;
     const d = dist(monst.curLoc, other.curLoc);
-    if (d < bestDist) {
-      best = 100 + i;
-      bestDist = d;
-    }
+    // The tie-break roll, and it must stay inside the `&&` chain: the C++ only
+    // reaches `get_ran(1,0,7)` when the distance *equals* the best so far, so
+    // hoisting it would spend a draw on every candidate.
+    if (!(d < bestDist || (d === bestDist && session.univ.rng.getRan(1, 0, 7) < 4))) continue;
+    // **The C++ asks `monst_can_see(i, univ.town.monst[i].cur_loc)`** — whether
+    // creature *i* can see *its own square*, which is always true. Plainly a
+    // slip for "can `monst` see it", but it is the shipped behaviour: hostiles
+    // pick a target through walls here. Kept, and deliberately not "fixed" —
+    // adding the real check would change both the choice and, through the roll
+    // above, the draw sequence.
+    best = 100 + i;
+    bestDist = d;
   }
   return best;
 }
@@ -144,6 +153,13 @@ function pickTargetMonst(session: GameSession, monst: Creature): number {
 function pickTargetPc(session: GameSession, monst: Creature): number {
   const univ = session.univ;
   if (monst.isFriendly) return NO_ONE;
+  // `if(is_town()) return 0;` (boe.monster.cpp:451) — **before either roll**.
+  // Outside combat the party has no combat positions to pick between, so the
+  // C++ hands back PC 0 and draws nothing. Missing it cost two `get_ran(1,0,5)`
+  // draws on every town monster's turn: not a wrong target, since the loops
+  // below almost always fall through to the same answer, but two numbers taken
+  // out of a stream whose *call order* is the spec.
+  if (session.inTown) return 0;
   let tries = 0;
   let r1 = univ.rng.getRan(1, 0, 5);
   const unusable = (i: number): boolean => {
@@ -180,8 +196,12 @@ function pickTargetPc(session: GameSession, monst: Creature): number {
  * ally, a summoned guardian) when no PC is reachable, which is
  * `monst_pick_target_monst`'s other half.
  *
- * The ranged-ability/spell-caster priority `monst_pick_target` itself also
- * has isn't ported — those still only ever fire at a PC target (see the
+ * In combat a hostile creature checks three things first, in order: the last
+ * PC to cast, the last to shoot, then whoever it was already after. Otherwise
+ * it picks a PC *and* a creature and takes whichever is closer, with a roll to
+ * break a tie.
+ *
+ * Ranged abilities still only ever fire at a PC target (see the
  * `target < NO_ONE` guards in `doMonsterTurn`); only melee and movement reach
  * a monster target so far.
  */
@@ -194,16 +214,65 @@ export function monstPickTarget(session: GameSession, monst: Creature): number {
     const other = univ.town?.monsters[monst.target - 100];
     if (!other || !other.isAlive || monst.isFriendlyTo(other)) monst.target = NO_ONE;
   }
-  if (monst.target < NO_ONE) {
-    const pc = univ.party.pcs[monst.target]!;
-    if (monstCanSee(session, monst, pc.combatPos)) return monst.target;
-  } else if (monst.target >= 100) {
-    const other = univ.town?.monsters[monst.target - 100];
-    if (other && monstCanSee(session, monst, other.curLoc)) return monst.target;
+  // boe.monster.cpp:373 — in combat a hostile creature has two priorities
+  // before it goes looking: whoever cast last, then whoever shot last.
+  //
+  // **The roll happens whether or not the PC can be seen.** The C++ writes
+  // `(get_ran(1,1,5) < 5) && monst_can_see(…) && alive`, and `&&` evaluates
+  // left to right, so the draw is spent up front and only then thrown away.
+  // Ordering the checks the tidy way round would take a number out of the
+  // stream at a different moment, which is a divergence like any other.
+  if (isCombat(session.mode) && !monst.isFriendly) {
+    if (session.spellCaster < NO_ONE) {
+      const pc = univ.party.pcs[session.spellCaster];
+      if (univ.rng.getRan(1, 1, 5) < 5 && pc && pc.isAlive
+        && monstCanSee(session, monst, pc.combatPos)) return session.spellCaster;
+    }
+    if (session.missileFirer < NO_ONE) {
+      const pc = univ.party.pcs[session.missileFirer];
+      if (univ.rng.getRan(1, 1, 5) < 3 && pc && pc.isAlive
+        && monstCanSee(session, monst, pc.combatPos)) return session.missileFirer;
+    }
+    // Third: keep whoever it was already after. Note this sits **inside** the
+    // combat block in the C++ (boe.monster.cpp:385) and only covers a PC
+    // target — the matching "keep a stored *monster* target" branch is
+    // commented out there (boe.monster.cpp:391-395), so a monster target is
+    // re-picked from scratch every turn.
+    if (monst.target < NO_ONE) {
+      const pc = univ.party.pcs[monst.target];
+      if (pc && pc.isAlive && monstCanSee(session, monst, pc.combatPos)) return monst.target;
+    }
   }
-  if (monst.isFriendly) return pickTargetMonst(session, monst);
-  const pcTarget = pickTargetPc(session, monst);
-  return pcTarget !== NO_ONE ? pcTarget : pickTargetMonst(session, monst);
+
+  // **Both pickers always run**, and both can draw — `pickTargetMonst`'s
+  // tie-break especially. Returning early on a PC target, as this used to, ate
+  // those draws.
+  const targPc = pickTargetPc(session, monst);
+  const targM = pickTargetMonst(session, monst);
+
+  if (targPc !== NO_ONE && targM === NO_ONE) return targPc;
+  if (targPc === NO_ONE && targM !== NO_ONE) return targM;
+  if (targPc === NO_ONE && targM === NO_ONE) return NO_ONE;
+
+  // Both are live options, so compare them. (The C++'s `targ_m == 6` test here
+  // is dead code — the three lines above have already returned for it.)
+  const other = univ.town?.monsters[targM - 100];
+  if (!other) return targPc;
+  if (session.inTown) {
+    if (monst.isFriendly) return targM;
+    // In town the party is one square, not six, so the creature weighs the
+    // other monster against the party's own position — and prefers **PC 0**,
+    // not `targPc`, which is what `monst_pick_target_pc` handed back anyway.
+    return dist(monst.curLoc, other.curLoc) < dist(monst.curLoc, univ.party.townLoc)
+      ? targM : 0;
+  }
+  const pc = univ.party.pcs[targPc];
+  if (!pc) return targM;
+  const dm = dist(monst.curLoc, other.curLoc);
+  const dp = dist(monst.curLoc, pc.combatPos);
+  // A tie is broken by a roll, and only a tie — the draw is inside the `&&`.
+  if (dm === dp && univ.rng.getRan(1, 0, 6) < 3) return targM;
+  return dm < dp ? targM : targPc;
 }
 
 /**

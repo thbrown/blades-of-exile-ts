@@ -331,6 +331,10 @@ export function startOutdoorCombat(
   }
 
   session.combatActivePc = NO_ONE;
+  // boe.combat.cpp:183, and only here — `start_town_combat` deliberately
+  // doesn't, so a town fight inherits the last caster from the fight before it.
+  session.spellCaster = NO_ONE;
+  session.missileFirer = NO_ONE;
   session.storeCurrentPc = univ.curPc;
   univ.curPc = 0;
   setPcMoves(univ);
