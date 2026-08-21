@@ -15,7 +15,12 @@ export async function outdoorSpec(univ: Universe, ctx: SpecialCtx): Promise<void
   let checkMess = false;
   ctx.nextSpec = spec.jumpto;
 
-  if (univ.isInTown()) return;
+  // `if(!is_out()) return;` (boe.specials.cpp:4569) — the **mode**, not
+  // `party.town_num`. They differ in an outdoor arena fight, where the mode is
+  // COMBAT and the town number is 200: `is_out()` is false there, so an
+  // outdoor node run mid-encounter is refused, and `isInTown()` would have let
+  // it through.
+  if (!ctx.session.isOutdoors) return;
 
   switch (spec.type) {
     case SpecType.OUT_MOVE_PARTY:

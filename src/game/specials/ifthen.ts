@@ -10,6 +10,7 @@
 import { FieldType } from '../../data/fields';
 import { ItemType } from '../../data/item';
 import { SpecType } from '../../data/special';
+import { isCombat } from '../modes';
 import { NUM_INVEN_SLOTS } from '../../universe/player';
 import { MainStatus, Skill, Status } from '../../universe/skills';
 import { takeItem } from '../../universe/inventory';
@@ -101,7 +102,13 @@ export async function ifThenSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       break;
 
     case SpecType.IF_TOWN_NUM:
-      if (univ.isInTown() && party.townNum === spec.ex1a) ctx.nextSpec = spec.ex1b;
+      // `((is_town()) || (is_combat())) && town_num == ex1a`
+      // (boe.specials.cpp:3375) — both **modes**, so a node asking "which town
+      // is this?" still answers during a fight in it. `isInTown()`
+      // (`party.town_num < 200`) is close but not the same: it is also true
+      // while the game is in a town-flavoured *dialog* mode the C++ excludes.
+      if ((ctx.session.inTown || isCombat(ctx.session.mode))
+        && party.townNum === spec.ex1a) ctx.nextSpec = spec.ex1b;
       break;
 
     case SpecType.IF_RANDOM:

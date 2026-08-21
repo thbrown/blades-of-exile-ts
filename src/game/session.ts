@@ -2293,8 +2293,10 @@ export class GameSession {
           break;
         case Status.ACID: pc.acid(strength); break;
         case Status.FORCECAGE:
-          // A cage can't hold you in the open.
-          if (this.univ.isInTown())
+          // A cage can't hold you in the open — `if(is_out()) break;`
+          // (boe.specials.cpp:455), which is the **mode**, so an outdoor arena
+          // fight (mode COMBAT, town 200) still cages.
+          if (!this.isOutdoors)
             pc.sleep(Status.FORCECAGE, strength, Math.trunc(strength / 2), this.univ.rng);
           break;
         case Status.INVULNERABLE:

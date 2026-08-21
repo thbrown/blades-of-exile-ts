@@ -227,8 +227,11 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
             if (give) pc.applyStatus(Status.ACID, -amount); else pc.acid(amount);
             break;
           case Status.FORCECAGE:
-            // is_out(): a forcecage only exists indoors.
-            if (univ.isInTown()) {
+            // `if(is_out()) break;` (boe.specials.cpp:880) — the **mode**, not
+            // `party.town_num`. In an outdoor arena fight the mode is COMBAT
+            // and the town number is 200, so the C++ still cages you and
+            // `isInTown()` would not have.
+            if (!ctx.session.isOutdoors) {
               if (give) pc.applyStatus(Status.FORCECAGE, -amount);
               else pc.sleep(Status.FORCECAGE, amount, 10, univ.rng);
             }

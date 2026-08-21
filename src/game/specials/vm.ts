@@ -304,7 +304,9 @@ export async function handleMessage(
   // Every message a special node puts up carries a `cStringRecorder`, which is
   // what makes the Record button appear on it. The note remembers where the
   // party was standing, and which of the three lists it belongs to.
-  const where = univ.isInTown() ? univ.town?.record.name ?? '' : univ.out.sector.name;
+  // `is_out() ? univ.out->name : univ.town->name` (boe.specials.cpp:4660) —
+  // the mode again, not the town number.
+  const where = ctx.session.isOutdoors ? univ.out.sector.name : univ.town?.record.name ?? '';
   const record = {
     type: NOTE_TYPE[ctx.curSpecType],
     strs: [str1, str2].filter((s) => s.length > 0),

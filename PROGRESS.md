@@ -5219,3 +5219,20 @@ The M6 list below is kept for the history of what it covered:
     visible in three files' traces for a while without being recognised.
   - **Where it stands.** Corpus 173,094 → **176,528** matching draws;
     `seekParty` left the queue entirely and `doMonsters` (5) heads it again.
+
+- **The `is_town()`/`is_out()` audit (M8, 2026-08-21).** After the monster-AP
+  fix, every remaining `univ.isInTown()` was checked against the C++ line it
+  ports. Four were asking the wrong question:
+  - `outdoor_spec`'s gate (boe.specials.cpp:4569) is `if(!is_out()) return;`;
+  - the two FORCECAGE arms (:455 and :880) are `if(is_out()) break;`;
+  - `IF_TOWN_NUM` (:3375) is `((is_town()) || (is_combat())) && town_num == n`;
+  - the string-note placename (:4660) is `is_out() ? out->name : town->name`.
+  All four now use the mode. They differ from `party.town_num` in exactly one
+  place, and it is a real one: an **outdoor arena fight**, where the mode is
+  COMBAT and the town number is 200 — `is_out()` is false there, so a cage
+  holds and an outdoor node is refused, and `isInTown()` had it backwards both
+  times.
+  - No corpus movement (176,528 either way): no recording fights an outdoor
+    encounter with a forcecage in it. Kept because the next one might, and
+    because the audit is the point — `is_out`, `is_town` and `is_combat` are
+    ranges over `overall_mode`, and `party.town_num` is a different fact.
