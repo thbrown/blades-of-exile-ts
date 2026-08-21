@@ -127,10 +127,15 @@ export function doOutdoorMonsters(session: GameSession): void {
   // silently compares the C++'s outdoor turns against nothing at all, and a
   // stretch of walking outdoors looks like a divergence. Filter both sides on
   // `mode=` when you only want one of the two.
+  // **`party=` is the *town* location on both sides, even outdoors**, because
+  // that is what the harness's line prints and a trace is only useful if the
+  // two are diffable. Outdoors it is a stale leftover from the last town — the
+  // C++ never clears it — so read the `mode=` column before drawing any
+  // conclusion from the coordinates.
   if (TRACE_MMOVE) {
     // eslint-disable-next-line no-console
-    console.log(`      [domonst] mode=${session.mode} party=(${univ.party.outLoc.x},`
-      + `${univ.party.outLoc.y}) age=${univ.party.age}`);
+    console.log(`      [domonst] mode=${session.mode} party=(${univ.party.townLoc.x},`
+      + `${univ.party.townLoc.y}) age=${univ.party.age}`);
   }
   for (let i = 0; i < NUM_OUT_CREATURES; i++) {
     const group = univ.party.outC[i];
