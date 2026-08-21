@@ -4654,3 +4654,42 @@ The M6 list below is kept for the history of what it covered:
     load now, behind `typeof process !== 'undefined'`, the way `rng.ts` reads
     `RAN`. Worth remembering before adding a debug switch to any file under
     `src/game/`.
+
+- **`do_monster_turn`'s end-of-action-point tail, all of it (M8, 2026-08-20).**
+  Five rules, ported together because they are one block of the C++ and half of
+  them is worse than none:
+  - **`futzing`** (boe.combat.cpp:60, :2541) — how many action points a creature
+    has spent achieving nothing. A global there, reset at the top of *each
+    monster's* turn, incremented by `seek_party`'s random shove
+    (boe.monster.cpp:657) and by each wasted point; at two, the rest of the
+    allowance is thrown away. This port had an invented
+    `if (!actedYet) monst.ap = 0;` in its place, which gave up after **one**
+    wasted point — so a creature that shoved once and then found a way through
+    never got to take it.
+  - **The leave-melee free swing** (:2481). `pc_adj[]` is filled in once per
+    monster, and any PC who was in melee with it then and is not now gets a
+    swing as it goes. Cleared once used, so stepping out and back in doesn't
+    hand out a second. This is **not** `checkParryOpportunity`, which is the
+    stand-ready swing and fires on a parry; the port had that one and not this.
+  - **The two AP-drain branches** — immobile-in-combat (:2470) and the town
+    `else` (:2475) — both of which the invented line above had collapsed.
+  - **A docile creature wanders** rather than closing (`rand_move`, :2464), and
+    wandering counts as futzing whether or not it got anywhere.
+  - **`move_target >= 100` is gated on that creature being alive** (:2452).
+    This port called `seek_party` unconditionally, so a creature chasing a
+    corpse kept walking.
+  - **Where it stands.** Corpus 85,022 → **85,939** matching draws; the
+    `seekParty` bucket went 4 files → 3.
+  - **What did *not* move, and this is the honest part.** The file the bucket
+    was opened on, `VoDT_06-04-2025_11-54-17`, is unchanged at 6,653 — it gained
+    actions (42 → 44) and not one draw. `MMOVE` had narrowed it to a single
+    action point: monster 3, **hostile**, `target = 4`, `targSpace = (20,24)`,
+    `ap = 1`. This port calls `seek_party`; the C++ emits no `[mmove]` at all
+    and goes straight to a `pc_attack`. Under the C++'s own source that
+    combination *should* reach `seek_party`, so something upstream differs —
+    the live hypothesis is that **PC 4 is dead there and alive here**, which
+    would be a party-state divergence rather than a movement one. Not proven.
+    None of the five rules above was chosen to fit it; they are all straight
+    from the C++ and stand on their own. Whoever picks this up: add a PC
+    main_status line to the harness trace, which is the cheap next instrument
+    and does not exist yet.

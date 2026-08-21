@@ -49,6 +49,21 @@ import type { GameSession } from './session';
 const TRACE_MMOVE = Boolean(
   typeof process !== 'undefined' ? process.env?.MMOVE : undefined);
 
+/**
+ * `futzing` (boe.combat.cpp:60) — how many action points a creature has spent
+ * achieving nothing. A global in the C++, reset at the top of *each monster's*
+ * turn in `do_monster_turn` and read at the bottom of each action point: two
+ * wasted points and the rest are thrown away. Without it a boxed-in creature
+ * spends its whole allowance shoving itself against the same wall, which is
+ * both slower and a different game.
+ *
+ * Module-level here for the same reason it is global there: `seek_party`
+ * increments it from two call chains away. `do_monsters` runs before
+ * `do_monster_turn` and its increments are wiped by that reset, exactly as in
+ * the C++.
+ */
+let futzing = 0;
+
 /** move_to_zero — one step toward zero from either side. */
 function moveToZero(value: number): number {
   if (value > 0) return value - 1;
@@ -451,7 +466,9 @@ function seekParty(session: GameSession, monst: Creature, target: Location): boo
   for (const [dx, dy] of tries) {
     if (tryMove(session, monst, from, dx, dy)) return true;
   }
-  // Boxed in: flail in a random direction.
+  // Boxed in: flail in a random direction — and that counts as futzing
+  // (boe.monster.cpp:657), which is what eventually ends the creature's turn.
+  futzing++;
   const m = session.univ.rng.getRan(1, 0, 2) - 1;
   const n = session.univ.rng.getRan(1, 0, 2) - 1;
   return tryMove(session, monst, from, m, n);
@@ -1001,6 +1018,13 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
       // "don't use multiple times per round" — reset per monster, not per
       // action, so a monster with action points left can't call it twice.
       let specialCalled = false;
+      // `futzing = 0; // assume monster is fresh` (boe.combat.cpp:2157).
+      futzing = 0;
+      // `pc_adj[]` — who was in melee with this creature when its turn began.
+      // Filled in once per monster, not per action point, because the whole
+      // question it answers is "did it leave?".
+      const pcAdj = univ.party.pcs.map(
+        (pc) => pc.isAlive && monstAdjacent(monst, pc.combatPos));
       while (monst.ap > 0 && monst.isAlive && guard-- > 0) {
         // In combat a monster picks a PC; in town the target is the party as a
         // whole, standing on one square, and do_monsters has already chosen it.
@@ -1166,27 +1190,68 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
 
         // Otherwise close the distance — but only in combat; town-mode movement
         // is do_monsters' job and has already happened.
-        if (!actedYet && monst.mobile && inCombat) {
-          if (target >= 100) {
-            // A creature target: `seek_party` runs unconditionally in the C++
-            // (there's no is_friendly gate on this branch), whichever side
-            // `monst` is fighting for. The opportunity-attack check right after
-            // it does still require `monst` to be hostile, since a charmed
-            // creature wandering next to a parrying PC shouldn't provoke one.
-            seekParty(session, monst, targSpace);
-            if (!monst.isFriendly) await checkParryOpportunity(session, monst);
-          } else {
-            const moveTarget = target !== NO_ONE ? target : closestPc(univ, monst.curLoc);
-            if (!monst.isFriendly && moveTarget < NO_ONE) {
+        if (inCombat) {
+          if (!actedYet && monst.mobile) {
+            // `move_target` is the *stored* target, not the one picked above —
+            // they are the same value here, but the C++ reads the field.
+            const moveTarget = monst.target !== NO_ONE
+              ? monst.target : closestPc(univ, monst.curLoc);
+            // A creature target: still gated on it being alive
+            // (boe.combat.cpp:2452), which is not the same as `target >= 100`.
+            if (moveTarget >= 100) {
+              const other = univ.town?.monsters[moveTarget - 100];
+              if (other?.isAlive) {
+                // `seek_party` runs whichever side `monst` is fighting for —
+                // there is no is_friendly gate on this branch. The parry check
+                // after it does still require `monst` to be hostile, since a
+                // charmed creature walking past a stand-ready PC shouldn't
+                // give away a free swing.
+                seekParty(session, monst, other.getLoc());
+                if (!monst.isFriendly) await checkParryOpportunity(session, monst);
+              }
+            } else if (!monst.isFriendly && moveTarget < NO_ONE) {
               const pc = univ.party.pcs[moveTarget]!;
               if (pc.isAlive) {
                 seekParty(session, monst, pc.combatPos);
                 await checkParryOpportunity(session, monst);
               }
             }
+            // A docile creature wanders instead of closing, and wandering is
+            // futzing whether or not it got anywhere (boe.combat.cpp:2464).
+            if (monst.attitude === Attitude.DOCILE) {
+              actedYet = randMove(session, monst);
+              futzing++;
+            }
+            monst.ap = Math.max(0, monst.ap - 1);
           }
+          // An immobile creature still burns the point (boe.combat.cpp:2470).
+          if (!actedYet && !monst.mobile) {
+            monst.ap = Math.max(0, monst.ap - 1);
+            futzing++;
+          }
+        } else if (!actedYet) {
+          // Town: `do_monsters` already did the walking, so a creature that
+          // found nothing to do here simply loses the point.
           monst.ap = Math.max(0, monst.ap - 1);
-          actedYet = true;
+          futzing++;
+        }
+
+        // "pcs attack any fleeing monsters" (boe.combat.cpp:2481) — a PC who
+        // was in melee with this creature when its turn began, and isn't now,
+        // gets a free swing at it. Distinct from `checkParryOpportunity`, which
+        // is the stand-ready swing and fires on a *parry* rather than on the
+        // creature leaving. `pcAdj[k]` is cleared once used, so a creature that
+        // steps in and out again doesn't hand out a second one.
+        if (inCombat) {
+          for (let k = 0; k < univ.party.pcs.length; k++) {
+            const pc = univ.party.pcs[k]!;
+            if (!pc.isAlive || !pcAdj[k] || monst.isFriendly || !monst.isAlive) continue;
+            if (monstAdjacent(monst, pc.combatPos)) continue;
+            if ((pc.status[Status.INVISIBLE] ?? 0) !== 0) continue;
+            if (pc.traits[Trait.PACIFIST]) continue;
+            pcAdj[k] = false;
+            await pcAttack(univ, k, monst, session);
+          }
         }
 
         // Summoning rides along with the action rather than costing one, and it
@@ -1207,7 +1272,13 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
           monsterSummon(session, monst);
         }
 
-        if (!actedYet) monst.ap = 0;
+        // `if(futzing > 1) // If monster's just pissing around, give up`
+        // (boe.combat.cpp:2541). This is the C++'s own termination condition,
+        // and it replaces a `if (!actedYet) monst.ap = 0;` invented here when
+        // nothing else stopped the loop: that gave up after *one* wasted point
+        // rather than two, so a creature that shoved once and then found a way
+        // through never got to take it.
+        if (futzing > 1) monst.ap = 0;
       }
       monst.ap = 0;
     }
