@@ -71,6 +71,57 @@ export function firstFreeSlot(pc: Player): number {
   return pc.items.findIndex((item) => item.variety === ItemType.NO_ITEM);
 }
 
+/**
+ * cPlayer::sort_items' priority table (pc.cpp:419) — what a pack is ordered
+ * by. Wands and scrolls float to the top, worn gear sinks, and the empty
+ * slots (priority 20, along with gold, food, quests and special items, none of
+ * which ever occupy one) end up at the bottom.
+ */
+const SORT_PRIORITY: Record<ItemType, number> = {
+  [ItemType.NO_ITEM]: 20, [ItemType.ONE_HANDED]: 8, [ItemType.TWO_HANDED]: 8,
+  [ItemType.GOLD]: 20, [ItemType.BOW]: 9, [ItemType.ARROW]: 9,
+  [ItemType.THROWN_MISSILE]: 3, [ItemType.POTION]: 2, [ItemType.SCROLL]: 1,
+  [ItemType.WAND]: 0, [ItemType.TOOL]: 7, [ItemType.FOOD]: 20,
+  [ItemType.SHIELD]: 10, [ItemType.ARMOR]: 10, [ItemType.HELM]: 10,
+  [ItemType.GLOVES]: 10, [ItemType.SHIELD_2]: 10, [ItemType.BOOTS]: 10,
+  [ItemType.RING]: 5, [ItemType.NECKLACE]: 6, [ItemType.WEAPON_POISON]: 4,
+  [ItemType.NON_USE_OBJECT]: 11, [ItemType.PANTS]: 12, [ItemType.CROSSBOW]: 9,
+  [ItemType.BOLTS]: 9, [ItemType.MISSILE_NO_AMMO]: 9, [ItemType.QUEST]: 20,
+  [ItemType.SPECIAL]: 20,
+};
+
+/**
+ * cPlayer::sort_items (pc.cpp:417) — the pack sorts itself every time it
+ * gains an item, and the order is *observable*: `handle_use_item` records the
+ * slot number, so a replay that used slot 3 uses whatever this leaves there.
+ * A pack that agrees on contents and not on order is a different game.
+ *
+ * The bubble sort is kept verbatim, including the `i < 23` bound: it compares
+ * slot 23 against slot 24 and stops, so a 24-slot pack is fully covered but
+ * only just. It swaps on strictly-less, which makes it stable — items of equal
+ * priority keep the order they were picked up in.
+ *
+ * The C++ also fixes up `weap_poisoned.slot` as it swaps. This port stores the
+ * poisoned weapon as the item itself rather than an index (see `poisonWeapon`),
+ * so there is nothing to renumber.
+ */
+export function sortItems(pc: Player): void {
+  const priority = (item: Item): number => SORT_PRIORITY[item.variety] ?? 20;
+  for (let noSwaps = false; !noSwaps;) {
+    noSwaps = true;
+    for (let i = 0; i < NUM_INVEN_SLOTS - 1; i++) {
+      if (priority(pc.items[i + 1]!) >= priority(pc.items[i]!)) continue;
+      noSwaps = false;
+      const item = pc.items[i]!;
+      pc.items[i] = pc.items[i + 1]!;
+      pc.items[i + 1] = item;
+      const equipped = pc.equip[i]!;
+      pc.equip[i] = pc.equip[i + 1]!;
+      pc.equip[i + 1] = equipped;
+    }
+  }
+}
+
 export interface GiveResult {
   status: GiveStatus;
   /** The slot the item landed in, or -1 for party-level items and failures. */
@@ -122,7 +173,14 @@ export function giveItem(
   if (slot < 0) return { status: GiveStatus.NO_SPACE, slot: -1, message: 'No room for item.' };
 
   // Taking an item clears the flags that only apply while it's on the floor.
-  if (!checkOnly) pc.items[slot] = { ...item, property: false, contained: false, held: false };
+  if (!checkOnly) {
+    pc.items[slot] = { ...item, property: false, contained: false, held: false };
+    // `combine_things(); sort_items();` is give_item's last act (pc.cpp:579).
+    // Only the sort is ported — combine_things is still the TODO(M6) above —
+    // and leaving it out is what put one PC's pack in a different order from
+    // the C++'s for the rest of a recording.
+    sortItems(pc);
+  }
   const name = item.ident ? item.fullName : item.name;
   return { status: GiveStatus.OK, slot, message: `  ${pc.name} gets ${name}.` };
 }

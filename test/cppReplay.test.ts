@@ -55,7 +55,24 @@ const FILES = [
   // scripting: it only completes because the driver answers the specials'
   // dialogs from the recording now.
   'ZKR_14-05-2025_13-29-14.xml',
+  // A whole session of Za-Khazi — sailing, resting, conversations, shops,
+  // giving items around the party. Back here from `PARTIAL` now that
+  // `sortItems` puts each pack in the order the C++ keeps it in: the recording
+  // uses items *by slot number*, so an unsorted pack used the wrong one.
+  'ZKR_15-05-2025_18-04-58.xml',
 ];
+
+/**
+ * How much RNG a finished file must have drawn, for the ones where that number
+ * is the point. Dispatching every action was never the same as agreeing with
+ * the C++ — `ZKR_15-05-2025_18-04-58` once ran all of its actions while its
+ * stream had parted 4,000 draws earlier. It still parts, later each time, and
+ * this floor is what stops that from sliding back. `scripts/diverge.mjs` says
+ * where the remaining gap is; when it reports none, the floor stops moving.
+ */
+const DRAW_FLOOR: Record<string, number> = {
+  'ZKR_15-05-2025_18-04-58.xml': 6527,
+};
 
 /**
  * Files that do **not** run to the end, guarded on how far they get instead.
@@ -72,10 +89,10 @@ const FILES = [
  * is what says where the remaining gap is.
  */
 const PARTIAL: Record<string, { actions: number; draws: number }> = {
-  // A whole session of Za-Khazi — sailing, resting, conversations, shops,
-  // giving items around the party. Parts from the C++ inside `do_monsters`,
-  // where a creature this port still has as IDLE has noticed the party there.
-  'ZKR_15-05-2025_18-04-58.xml': { actions: 905, draws: 6151 },
+  // Empty at the moment: the file that lived here now dispatches every action
+  // and has moved up to FILES with a DRAW_FLOOR. The machinery stays because
+  // the next fix will put a different recording here — a file usually arrives
+  // by matching *further* and finishing *less*.
 };
 
 /**
@@ -171,6 +188,8 @@ describe("the C++ build's own replays", () => {
       // The dialogs pull from the same stream, so a finished file is the two
       // counts together — see `ReplayResult.answered`.
       expect(out.ran + out.answered).toBe(out.total);
+      const floor = DRAW_FLOOR[file];
+      if (floor !== undefined) expect(out.end.draws).toBeGreaterThanOrEqual(floor);
     }, 120000);
   }
 

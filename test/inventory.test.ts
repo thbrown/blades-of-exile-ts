@@ -24,6 +24,7 @@ import {
   hasAbilEquip,
   itemWeight,
   maxWeight,
+  sortItems,
   unequipItem,
 } from '../src/universe/inventory';
 import { PartyPreset } from '../src/universe/player';
@@ -434,5 +435,43 @@ describe('picking things up and putting them down', () => {
     }
     expect(town.terrain[where.x]![where.y]).toBe(opened);
     expect(session.univ.transcript.some((l) => l.includes('Door unlocked'))).toBe(true);
+  });
+
+  it('sorts the pack when it gains an item, keeping equal kinds in order', () => {
+    const session = newSession();
+    const pc = session.univ.party.pcs[0]!;
+    const make = (v: ItemType, name: string): Item => {
+      const item = defaultItem();
+      item.variety = v;
+      item.name = name;
+      item.fullName = name;
+      item.weight = 1;
+      return item;
+    };
+    // Written straight into the slots, so nothing has sorted them yet.
+    pc.items[0] = make(ItemType.ARMOR, 'mail');
+    pc.items[1] = make(ItemType.NON_USE_OBJECT, 'rock a');
+    pc.items[2] = make(ItemType.NON_USE_OBJECT, 'rock b');
+    pc.items[3] = make(ItemType.RING, 'ring');
+    pc.equip[0] = true;
+
+    const given = giveItem(pc, session.univ.party, make(ItemType.WAND, 'wand'));
+    expect(given.status).toBe(GiveStatus.OK);
+    // Priorities: wand 0, ring 5, armor 10, non-use object 11 — and the two
+    // rocks keep the order they went in, because the sort only swaps on
+    // strictly-less.
+    expect(pc.items.slice(0, 5).map((i) => i.name))
+      .toEqual(['wand', 'ring', 'mail', 'rock a', 'rock b']);
+    // `equip` rides along with the item it belongs to.
+    expect(pc.equip[2]).toBe(true);
+    expect(pc.equip[0]).toBe(false);
+  });
+
+  it('sortItems leaves an already-sorted pack alone', () => {
+    const session = newSession();
+    const pc = session.univ.party.pcs[0]!;
+    const before = pc.items.map((i) => i.variety);
+    sortItems(pc);
+    expect(pc.items.map((i) => i.variety)).toEqual(before);
   });
 });

@@ -254,7 +254,7 @@ index faaef3f2..2a648966 100644
  }
  
 diff --git a/src/tools/replay.cpp b/src/tools/replay.cpp
-index 3946c875..f1ad321d 100644
+index 3946c875..0b14d1ab 100644
 --- a/src/tools/replay.cpp
 +++ b/src/tools/replay.cpp
 @@ -28,6 +28,15 @@
@@ -284,7 +284,7 @@ index 3946c875..f1ad321d 100644
  			} else if constexpr (std::is_integral_v<T>) {
  				if constexpr (std::is_same_v<S, std::string>) {
  					return static_cast<T>(std::stoi(arg));
-@@ -252,6 +263,111 @@ int next_action_line() {
+@@ -252,6 +263,121 @@ int next_action_line() {
  	return next_action->Row();
  }
  
@@ -301,6 +301,8 @@ index 3946c875..f1ad321d 100644
 +
 +extern cUniverse univ;
 +extern eGameMode overall_mode;
++// boe.locutils.cpp — declared here rather than pulling the whole header in.
++short light_radius();
 +
 +static bool trace_on() {
 +	static int on = -1;
@@ -342,6 +344,14 @@ index 3946c875..f1ad321d 100644
 +		std::cout << " pc" << univ.cur_pc << ":" << univ.party[univ.cur_pc].name
 +			<< "(" << univ.party[univ.cur_pc].ap << "ap)";
 +	std::cout << " mode=" << int(overall_mode) << " age=" << univ.party.age;
++	// BOE_TRACE_LIGHT: the party's light and whether its own square counts as
++	// lit. `pt_in_light` gates `can_see_light`, which gates every notice roll
++	// in a dark town — so a divergence here reads as a creature that saw the
++	// party on one side and not on the other, with every position agreeing.
++	if(getenv("BOE_TRACE_LIGHT") && univ.party.town_num < 200)
++		std::cout << " light=" << univ.party.light_level << " rad=" << light_radius()
++			<< " lit=" << int(bool(univ.town->lighting[l.x][l.y]))
++			<< " ltype=" << int(univ.town->lighting_type);
 +	if(getenv("BOE_TRACE_WINDOW"))
 +		std::cout << " corner=(" << univ.party.outdoor_corner.x << "," << univ.party.outdoor_corner.y
 +			<< ") iwc=(" << univ.party.i_w_c.x << "," << univ.party.i_w_c.y << ")";
@@ -396,7 +406,7 @@ index 3946c875..f1ad321d 100644
  Element& pop_next_action(std::string expected_action_type) {
  	if(next_action == nullptr){
  		throw std::string { "Replay error! No action left to pop" };
-@@ -264,6 +380,13 @@ Element& pop_next_action(std::string expected_action_type) {
+@@ -264,6 +390,13 @@ Element& pop_next_action(std::string expected_action_type) {
  
  	Element* to_return = next_action;
  	next_action = next_action->NextSiblingElement(false);

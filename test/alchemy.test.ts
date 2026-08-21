@@ -187,8 +187,13 @@ describe('do_alchemy', () => {
     pc.items[1] = ingredient(ItemAbil.WORMGRASS, 2);
     makePotion(s, 0, Alchemy.SPEED_WEAK);
     expect(s.univ.transcript.at(-1)).toBe('Alchemy: Successful.');
-    expect(pc.items[0]!.charges).toBe(1);
-    expect(pc.items[1]!.charges).toBe(1);
+    // Looked up by ability rather than by slot: `give_item` sorts the pack
+    // (`sortItems`), and the new potion outranks a NON_USE_OBJECT ingredient,
+    // so it takes slot 0 and both plants shift down one.
+    const left = (abil: ItemAbil): number =>
+      pc.items.find((i) => i.ability === abil)!.charges;
+    expect(left(ItemAbil.COMFREY)).toBe(1);
+    expect(left(ItemAbil.WORMGRASS)).toBe(1);
   });
 
   it('refuses without the second ingredient, and spends nothing', () => {

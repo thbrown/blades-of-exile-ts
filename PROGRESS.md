@@ -1604,11 +1604,10 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue after the `selectActivePc` bucket was worked is **`doMonsters` (5)**,
-  **`doOutdoorMonsters` (5)**, **`processFields` (4)**, **`seekParty` (3)**,
-  **`totalEncumbrance` (3)** and **`monstPickTarget` (4)** — monster movement is
-  nearly all of what is left. Corpus **73,651** matching draws, **4 of 87** files
-  agreeing all the way.
+  queue as of 2026-08-20 is **`doOutdoorMonsters` (5)**, **`doMonsters` (4)**,
+  **`processFields` (4)**, **`seekParty` (3)**, **`totalEncumbrance` (3)** and
+  **`monstPickTarget` (3)** — monster movement is nearly all of what is left.
+  Corpus **73,769** matching draws, **4 of 87** files agreeing all the way.
 
   Bucket sizes churn, and churn is the point: `selectActivePc` went 9 files → 2
   in one slice, and the files it held reappeared in `monstPickTarget`,
@@ -4543,3 +4542,47 @@ The M6 list below is kept for the history of what it covered:
     it gates on `ap > 1` and `futzing == 0`; `futzing` (the "monster's just
     pissing around, give up" counter at :2541) is not ported either. Do the two
     together — half of this is worse than neither.
+
+- **A pack in the wrong order, and a recording that uses items by slot (M8,
+  2026-08-20).** `ZKR_15-05-2025_18-04-58` parted at draw 6,107, in
+  `do_monsters`: a creature the C++ had as ALERTED and this port had as IDLE,
+  with every creature's *square* agreeing. Four steps to the actual cause, and
+  each one is a technique worth keeping.
+  - `MONST=1` / `BOE_TRACE_MONST=1` said the two sides disagreed only about
+    monster 9's `active` flag, right after a `handle_use_item`.
+  - Instrumenting the notice roll here showed `r1 = 22 + 60`: the port's
+    `can_see_light` returned 6 (not in light), the C++'s returned 0. Same
+    terrain, same obscurity — so it was `pt_in_light`, not line of sight.
+  - A new `BOE_TRACE_LIGHT=1` on the harness printed the C++'s side:
+    `light=0` before that action and `light=249` after. The C++ had **used a
+    light source**; the port had said "Use: Can't use this item."
+  - `BOE_TRACE_ITEMS=1` / `ITEMS=1` finished it. Five of the six packs matched
+    exactly. PC 5's held the same eight items in a different **order**, and
+    `handle_use_item` records a *slot number* — so the recording asked for slot
+    3, the C++ used a wand of light (`50 * str` = 250) and this port used a
+    Glowing Nettle, which is a reagent and cannot be used at all.
+  - **The rule: `cPlayer::sort_items` (pc.cpp:417) was never ported.** A pack
+    sorts itself every time it gains an item, by a priority table that floats
+    wands and scrolls to the top and sinks worn gear. Ported verbatim, bubble
+    sort and all: it swaps on strictly-less, which makes it stable, so items of
+    equal priority keep the order they were picked up in. `equip` rides along
+    with each swap. The C++ also renumbers `weap_poisoned.slot`; this port
+    stores the poisoned weapon as the item itself, so there is nothing to fix
+    up. `give_item` calls `combine_things(); sort_items();` — only the sort is
+    ported, `combine_things` is still the TODO(M6) beside it.
+  - **`ZKR_15-05-2025_18-04-58` now dispatches all 1,039 of its actions** and
+    has moved from `PARTIAL` up into `FILES`. It still parts, at 6,223 rather
+    than 6,107, so it took a `DRAW_FLOOR` entry with it: finishing is not
+    passing, and the floor is what stops the draw count sliding back while the
+    action count looks fine. `PARTIAL` is empty for the moment, and the
+    machinery stays — the next fix will put a different recording in it.
+  - *A unit test that was asserting the unsorted pack*: `alchemy.test.ts`
+    checked its two ingredients by slot index. A finished potion outranks a
+    NON_USE_OBJECT, so it now takes slot 0 and both plants shift down; the test
+    looks them up by ability instead.
+  - **Where it stands.** Corpus 73,651 → **73,769** matching draws, still 4 of
+    87 all the way. A hundred draws is a small number for a whole missing
+    function, and that is honest: the pack order only matters where a recording
+    uses an item by slot, which is rare. It is the *kind* of bug worth the
+    entry — five packs agreeing exactly and the sixth agreeing on contents but
+    not on order is invisible to every other instrument here.
