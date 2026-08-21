@@ -1604,10 +1604,11 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue as of 2026-08-20 is **`doOutdoorMonsters` (5)**, **`doMonsters` (4)**,
-  **`processFields` (4)**, **`seekParty` (3)**, **`totalEncumbrance` (3)** and
-  **`monstPickTarget` (3)** — monster movement is nearly all of what is left.
-  Corpus **73,769** matching draws, **4 of 87** files agreeing all the way.
+  queue as of 2026-08-20 is **`seekParty` (4)**, **`doMonsters` (4)**,
+  **`processFields` (4)**, **`pickMonsterAbility` (3)**, **`handleDisease` (3)**,
+  **`totalEncumbrance` (3)** and **`monstPickTarget` (3)** — monster movement is
+  still most of what is left. Corpus **85,022** matching draws, **4 of 87** files
+  agreeing all the way.
 
   Bucket sizes churn, and churn is the point: `selectActivePc` went 9 files → 2
   in one slice, and the files it held reappeared in `monstPickTarget`,
