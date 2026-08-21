@@ -40,6 +40,15 @@ import { placeSpellPattern } from './spellPatterns';
 import { pointOnScreen } from './session';
 import type { GameSession } from './session';
 
+/**
+ * `MMOVE=1` — every step a creature *tries* and whether it took it, the pair to
+ * the harness's `BOE_TRACE_MMOVE=1`. Read once at module load, and guarded on
+ * `process` existing at all: this file runs in the browser too, where there is
+ * no `process` and the check would throw on the first monster that moved.
+ */
+const TRACE_MMOVE = Boolean(
+  typeof process !== 'undefined' ? process.env?.MMOVE : undefined);
+
 /** move_to_zero — one step toward zero from either side. */
 function moveToZero(value: number): number {
   if (value > 0) return value - 1;
@@ -374,9 +383,18 @@ function tryMove(session: GameSession, monst: Creature, from: Location, dx: numb
   const town = session.univ.town;
   const inTownOrFight = session.mode === GameMode.TOWN || isCombat(session.mode);
   if (inTownOrFight && town?.hasField(from.x, from.y, FieldType.BARRIER_CAGE)) return false;
-  if (session.mode === GameMode.TOWN) return townMoveMonster(session, monst, dest);
-  if (isCombat(session.mode)) return combatMoveMonster(session, monst, dest);
-  return false;
+  let ok = false;
+  if (session.mode === GameMode.TOWN) ok = townMoveMonster(session, monst, dest);
+  else if (isCombat(session.mode)) ok = combatMoveMonster(session, monst, dest);
+  // The pair to `BOE_TRACE_MMOVE=1` on the harness. Movement makes no draws,
+  // so two runs can drift a creature square by square with their `[ran]`
+  // streams still matching exactly, and the draw that finally disagrees is
+  // hundreds of moves downstream of the rule that caused it.
+  if (TRACE_MMOVE) {
+    console.log(`      [mmove] ${monst.slot} (${from.x},${from.y}) -> (${dest.x},${dest.y}) `
+      + `${ok ? 'ok' : 'no'} ap=${monst.ap}`);
+  }
+  return ok;
 }
 
 function dirToward(from: Location, to: Location): number {

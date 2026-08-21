@@ -4611,3 +4611,46 @@ The M6 list below is kept for the history of what it covered:
     queue entirely. Worth reading beside the `sortItems` entry above it: a whole
     missing function bought 118 draws and one wrongly-translated coordinate
     bought 11,253. Bucket *size* ranks the work; it does not predict the payoff.
+
+- **`BOE_TRACE_MMOVE` / `MMOVE=1` — seeing drift that makes no draws (M8,
+  2026-08-20).** The `seekParty` bucket exposed the limit of every instrument
+  built so far. `VoDT_06-04-2025_11-54-17` parts at draw 6,654, and both sides
+  agree on **every creature's square** at the start of that turn and on all
+  6,653 draws before it. The reason is simple and nasty: **movement makes no
+  `get_ran` calls.** Two runs can walk a creature down different paths, square
+  by square, with their draw streams matching exactly — and the draw that
+  finally disagrees is hundreds of moves downstream of the rule that caused it.
+  The `monst:` list only samples positions once per action, by which time the
+  turn is over and the drift has already resolved.
+  - So `try_move` now prints `i (from) -> (to) ok|no ap=n` on both sides, in all
+    three modes. It works: the two traces are byte-identical through monster 3's
+    third step and then part on a single action point, which is as tight as this
+    project has ever localised a movement bug.
+  - **What it says about this file**, for whoever picks it up: with `ap=1` left,
+    the C++'s monster 3 at (20,21) calls `seek_party` **not at all** — no
+    `[mmove]` line — and the next thing that happens is a **PC attack** (eight
+    `total_encumbrance` draws, then to-hit and damage). This port instead tries
+    (20,21) → (20,22), finds it blocked, and spends the random-shove pair. The
+    C++'s attack is `pc_attack` firing on a monster that has *left melee*: the
+    `pc_adj[]` array is filled in at the top of each monster's turn and the
+    check at boe.combat.cpp:2481 hits any PC who was adjacent then and isn't
+    now. **That rule is not ported at all** — `grep pcAdj src/` is empty. This
+    port has `checkParryOpportunity`, which is the *other* free swing (parry >
+    99, inside the move branch); the leave-melee one is separate and missing.
+    Whether it is the whole cause is not yet established, and saying so is the
+    point: the instrument localises, it does not diagnose.
+  - **(Found, not fixed) `futzing`** — see the `current_monst_tactic` note
+    above; `seek_party`'s random-shove branch is a third increment site
+    (boe.monster.cpp:657), alongside the two in `do_monster_turn`.
+  - **Gotcha that cost a wrong turn: `rng.gameDraws` is not the `[ran]` index.**
+    The trace counter starts when tracing does; on this file the two differ by
+    36. A `console.log` that prints `gameDraws` will not line up with the
+    numbers `diverge.mjs` reports — print nothing, and use the interleaved
+    `[ran]` lines to place yourself instead.
+  - **Also caught, by `verify-screen` and nothing else:** the first cut read
+    `process.env.MMOVE` directly in `tryMove`. `monsterTurn.ts` ships to the
+    **browser**, where `process` does not exist, so every monster that moved
+    threw `ReferenceError`. Vitest never sees it. It is read once at module
+    load now, behind `typeof process !== 'undefined'`, the way `rng.ts` reads
+    `RAN`. Worth remembering before adding a debug switch to any file under
+    `src/game/`.

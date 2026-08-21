@@ -33,6 +33,14 @@ that pair ("we say 8, it says 93") is how a map divergence gets named.
 before it turns into a dialog one side raises and the other doesn't. It found
 the pack-order bug: the two sides agreed on every item a PC carried and not on
 which slot each sat in, which matters because a recording uses items *by slot*.
+**`BOE_TRACE_MMOVE=1` (`MMOVE=1` here) prints every step a creature tries** —
+`i (from) -> (to) ok|no ap=n`, from `try_move`, in all three modes. This is the
+answer to the hardest shape of divergence here: **movement makes no `get_ran`
+calls**, so two runs can walk a creature square by square down different paths
+with their `[ran]` streams still matching exactly, and the draw that finally
+disagrees is hundreds of moves downstream of the rule that caused it. Nothing
+else shows that happening; the `monst:` list only samples it once per action,
+by which time the turn is over.
 `BOE_TRACE_LIGHT=1` adds `light=<level> rad=<radius> lit=<0|1> ltype=<n>` — the
 party's light and whether its own square counts as lit. `pt_in_light` gates
 `can_see_light`, which gates every notice roll in a dark town, so a divergence

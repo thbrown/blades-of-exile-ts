@@ -181,10 +181,43 @@ index b19e0983..a19325ec 100644
  #endif
  #ifdef __APPLE__
 diff --git a/src/game/boe.monster.cpp b/src/game/boe.monster.cpp
-index 937c63d0..771d4d8c 100644
+index 937c63d0..034d555c 100644
 --- a/src/game/boe.monster.cpp
 +++ b/src/game/boe.monster.cpp
-@@ -765,7 +765,13 @@ location random_shift(location start) {
+@@ -698,13 +698,26 @@ bool try_move(short i,location start,short x,short y) {
+ 	if((overall_mode == MODE_TOWN || overall_mode == MODE_COMBAT) && univ.town.is_force_cage(start.x,start.y))
+ 		return false;
+ 	
++	bool ok = false;
+ 	if(overall_mode == MODE_TOWN)
+-		return town_move_monster(i,dest);
+-	if(overall_mode == MODE_OUTDOORS)
+-		return outdoor_move_monster(i,dest);
+-	if(overall_mode == MODE_COMBAT)
+-		return combat_move_monster((short) i,dest);
+-	return 0;
++		ok = town_move_monster(i,dest);
++	else if(overall_mode == MODE_OUTDOORS)
++		ok = outdoor_move_monster(i,dest);
++	else if(overall_mode == MODE_COMBAT)
++		ok = combat_move_monster((short) i,dest);
++	// BOE_TRACE_MMOVE: every step a creature *tries*, and whether it took it.
++	// Movement makes no `get_ran` calls, so two runs can drift a creature
++	// square by square with their draw streams still matching exactly — the
++	// draw that finally disagrees is then hundreds of moves downstream of the
++	// rule that caused it. This is the only way to see that happen.
++	// `i` indexes univ.town.monst in town and combat but univ.party.out_c
++	// outdoors, so the action points are only printable in the first two.
++	if(getenv("BOE_TRACE_MMOVE"))
++		std::cout << "      [mmove] " << i << " (" << start.x << "," << start.y << ") -> ("
++			<< dest.x << "," << dest.y << ") " << (ok ? "ok" : "no")
++			<< (overall_mode == MODE_OUTDOORS ? std::string()
++				: " ap=" + std::to_string(univ.town.monst[i].ap)) << std::endl;
++	return ok;
+ }
+ 
+ bool combat_move_monster(short which,location destination) {
+@@ -765,7 +778,13 @@ location random_shift(location start) {
  }
  
  bool outdoor_move_monster(short num,location dest) {
@@ -254,7 +287,7 @@ index faaef3f2..2a648966 100644
  }
  
 diff --git a/src/tools/replay.cpp b/src/tools/replay.cpp
-index 3946c875..0b14d1ab 100644
+index 3946c875..eb6712d6 100644
 --- a/src/tools/replay.cpp
 +++ b/src/tools/replay.cpp
 @@ -28,6 +28,15 @@
@@ -284,7 +317,7 @@ index 3946c875..0b14d1ab 100644
  			} else if constexpr (std::is_integral_v<T>) {
  				if constexpr (std::is_same_v<S, std::string>) {
  					return static_cast<T>(std::stoi(arg));
-@@ -252,6 +263,121 @@ int next_action_line() {
+@@ -252,6 +263,124 @@ int next_action_line() {
  	return next_action->Row();
  }
  
@@ -359,7 +392,10 @@ index 3946c875..0b14d1ab 100644
 +	// BOE_TRACE_MONST adds the town's whole creature list, which is what a
 +	// divergence in `do_monsters`' random walk needs: the drift shows up as one
 +	// townsperson a square off, several hundred actions before anything blocks.
-+	if(getenv("BOE_TRACE_MONST") && univ.party.town_num < 200) {
++	// Printed for town_num >= 200 as well, which is the outdoor combat arena:
++	// its creatures live in univ.town.monst like any others, and a fight in it
++	// is exactly where a do_monster_turn divergence needs to be read.
++	if(getenv("BOE_TRACE_MONST")) {
 +		std::cout << "      monst:";
 +		for(size_t i = 0; i < univ.town.monst.size(); i++)
 +			if(univ.town.monst[i].is_alive())
@@ -406,7 +442,7 @@ index 3946c875..0b14d1ab 100644
  Element& pop_next_action(std::string expected_action_type) {
  	if(next_action == nullptr){
  		throw std::string { "Replay error! No action left to pop" };
-@@ -264,6 +390,13 @@ Element& pop_next_action(std::string expected_action_type) {
+@@ -264,6 +393,13 @@ Element& pop_next_action(std::string expected_action_type) {
  
  	Element* to_return = next_action;
  	next_action = next_action->NextSiblingElement(false);
