@@ -1604,10 +1604,15 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue as of 2026-08-20 is **`doMonsters` (7 files)**,
-  **`monstCheckOneSpecialTerrain` (7)**, **`doOutdoorMonsters` (5)**,
-  **`seekParty` (4)** and **`processFields` (4)** — monster movement is most of
-  what is left. Corpus **70,353** matching draws.
+  queue as of 2026-08-20 is **`selectActivePc` (9 files)**, **`doMonsters` (5)**,
+  **`doOutdoorMonsters` (5)**, **`processFields` (4)** and **`seekParty` (3)** —
+  monster movement is nearly all of what is left. Corpus **73,070** matching
+  draws, **4 of 87** files agreeing all the way.
+
+  `selectActivePc` jumping to the top is the expected shape, not a regression:
+  `do_monsters` only reaches it now that the town target block is ported, so
+  nine files got far enough to part *inside* it. Bucket sizes churn; draws are
+  the meter.
   The first bucket worked this way (`playAmbientSound`) turned out not to be
   about ambient sound at all: it was `outd_is_blocked` missing the encounter
   groups, and fixing it moved the corpus from 59,366 to **70,009 matching
@@ -4441,6 +4446,51 @@ The M6 list below is kept for the history of what it covered:
     tests green.
     `ZKR_15-05-2025_14-17-51` went 4,439 → 4,475 draws and then turned *into* a
     harness gap — matching further let the C++ reach its own out-of-range bug.
+
+- **Three things that cost a turn, and the `do_monsters` bucket (M8,
+  2026-08-20).** All three are the same shape: the C++ sets `did_something` and
+  this port didn't, so its clock ran slow and the monsters moved on the wrong
+  actions. Found by comparing `age` between the two traces at the same recorded
+  action — the C++ prints age *before* an action and this port *after*, so the
+  comparable pair is "this port's previous line" against "the C++'s current one".
+  - **`handle_give_item` spends a turn** (boe.actions.cpp:1125). Proven straight
+    off the traces: the C++'s age ticks by one after every give and this port's
+    did not.
+  - **`handle_use_item` too, but only when the item didn't arm a targeting
+    mode** (boe.actions.cpp:1109) — a wand that asks for a square hasn't been
+    used yet, so nothing moves until the square is picked. The AP charge moved
+    into `useItem` beside it: the driver was charging 3 and `main.ts` was
+    charging nothing, under a comment claiming it cost the turn.
+  - **`do_monsters`' town branch picks targets properly** (boe.monster.cpp:203).
+    It had been shortened to "target the party, if it's within eight", which
+    reaches the same answer and skips both `monst_pick_target`'s draws and
+    `select_active_pc`'s — the run of `get_ran(1,0,5)` that named the bucket.
+    Brought `switch_target_to_adjacent` with it (town and friendly paths; the
+    combat tail is marked `TODO(M8)` since nothing reaches it yet).
+  - **The `active` flag is in both traces now** (`a<n>` after each creature's
+    square, `BOE_TRACE_MONST` ↔ `MONST`). Positions can agree exactly while the
+    two sides disagree about whether a creature has *noticed* the party, and
+    that decides whether `do_monsters` picks a target at all — so it decides
+    whether it draws. Invisible until printed; needs a harness rebuild, and
+    `exile-wasm.patch` is regenerated.
+  - **Where it stands.** Corpus 70,353 → **73,070** matching draws, and **4 of
+    87** files now agree with the C++ all the way, up from 3 —
+    `ZKR_14-05-2025_13-29-14` and `ZKR_15-05-2025_17-39-09` joined the list.
+  - **`ZKR_15-05-2025_18-04-58` matches further and finishes less**, which is
+    the whole doctrine in one file: it used to dispatch all 1,033 of its actions
+    while its stream had parted at draw 6,080, and now parts at 6,151 while
+    stopping at 905. `test/cppReplay.test.ts` grew a `PARTIAL` list for exactly
+    this — a floor on **both** actions and draws, either of which may only go
+    up, plus an assertion that it is still partial so it gets promoted rather
+    than left with a floor that can never fail.
+  - Its remaining gap: a creature the C++ has as ALERTED and this port has as
+    IDLE, so the C++ picks a target for it and draws where this port doesn't.
+    Both sides agree on every creature's *square*. Start with the `a<n>` flags
+    either side of that action.
+  - *A unit test that was asserting the bug*: `itemUse.test.ts` expected a
+    stealth potion to leave 20, which was only true because using it cost
+    nothing. It is 19 — the turn ticks before control returns and
+    `increase_age` decays every party status by one, the same as the C++.
 
 - **Measuring after every fix, in four minutes instead of thirty (M8,
   2026-08-20).** `--refresh` re-ran **both** engines, and the C++ half is the

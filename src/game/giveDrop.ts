@@ -225,4 +225,9 @@ export async function handleGiveItem(
   }
   await giveThing(session, statWindow, itemNum, host);
   takeAp(session.univ, 1);
+  // `did_something = true` (boe.actions.cpp:1125): handing something over costs
+  // a turn, so the clock ticks and the monsters get their go. Missing it left
+  // this port's clock a tick behind on every give, and the drift only surfaced
+  // hundreds of actions later as a monster noticing the party on the wrong one.
+  await session.afterPartyTurn();
 }

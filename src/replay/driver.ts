@@ -504,8 +504,9 @@ export async function runReplay(
           // who to heal, or puts a book's text up, blocks in the C++ and the
           // recording answers it. Passing nothing meant those branches did
           // nothing at all and the run carried on with a different game.
+          // The AP and the turn are inside `useItem` now, next to the rule that
+          // decides whether the turn is spent at all.
           await useItem(session, win.pcPage, numberFromAction(action), session.host ?? undefined);
-          takeAp(session.univ, 3);
           break;
         case 'handle_give_item':
           // `give_thing` puts select-pc.xml up, which the host answers from

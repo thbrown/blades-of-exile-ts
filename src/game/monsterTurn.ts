@@ -73,6 +73,37 @@ export function monstCanSee(session: GameSession, monst: Creature, where: Locati
   return false;
 }
 
+/**
+ * `switch_target_to_adjacent` (boe.monster.cpp) — something already in reach
+ * beats something further off, whatever the picker chose. Makes no draws.
+ *
+ * TODO(M8): the combat tail (switching a hostile onto an adjacent PC or
+ * creature) isn't ported — `do_monsters`' town branch is the only caller so
+ * far, and it returns before reaching it.
+ */
+function switchTargetToAdjacent(
+  session: GameSession, monst: Creature, origTarget: number,
+): number {
+  const town = session.univ.town;
+  if (!town) return origTarget;
+  if (monst.isFriendly) {
+    if (origTarget >= 100) {
+      const cur = town.monsters[origTarget - 100];
+      if (cur && cur.isAlive && monstAdjacent(monst, cur.curLoc)) return origTarget;
+    }
+    for (let i = 0; i < town.monsters.length; i++) {
+      const other = town.monsters[i]!;
+      if (other.isAlive && !other.isFriendly && monstAdjacent(monst, other.curLoc)) return 100 + i;
+    }
+    return origTarget;
+  }
+  // A hostile one in town only ever switches onto the party itself.
+  if (session.inTown) {
+    return monstAdjacent(monst, session.univ.party.townLoc) ? 0 : origTarget;
+  }
+  return origTarget;
+}
+
 /** closest_pc — the index of the nearest living PC, or 6 for none. */
 export function closestPc(univ: Universe, where: Location): number {
   let best = NO_ONE;
@@ -461,10 +492,21 @@ export function doMonsters(session: GameSession): void {
       continue;
     }
 
-    // Pick a target: in town it's the party as a whole, and only when close.
-    let target = NO_ONE;
-    if (monst.active !== CreatureStatus.IDLE && !monst.isFriendly) {
-      if (dist(monst.curLoc, partyLoc) <= 8) target = 0;
+    // boe.monster.cpp:203. This used to be shortened to "the party, if it's
+    // within eight", which reached the same answer and skipped both of the
+    // draws on the way there — `monst_pick_target`'s and `select_active_pc`'s.
+    let target: number;
+    if (monst.active === CreatureStatus.IDLE) target = NO_ONE;
+    else {
+      target = monstPickTarget(session, monst);
+      target = switchTargetToAdjacent(session, monst, target);
+      if (target === 0) {
+        // Target 0 means "the party". Out of range it gives up; in range it
+        // picks *which* PC, and that reroll until it finds a living one is the
+        // run of `get_ran(1,0,5)` draws that named this bucket.
+        target = dist(monst.curLoc, partyLoc) > 8 ? NO_ONE : selectActivePc(univ);
+      }
+      if (monst.isFriendly && target < NO_ONE) target = NO_ONE;
     }
     monst.target = target;
 

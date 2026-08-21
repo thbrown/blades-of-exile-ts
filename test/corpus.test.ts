@@ -168,6 +168,11 @@ async function play(path: string): Promise<Row> {
           emit('      monst:' + univ.town.monsters
             .filter((m) => m.isAlive)
             .map((m) => ` ${m.slot}:(${m.curLoc.x},${m.curLoc.y})`
+              // `a<active>` — the pair to `BOE_TRACE_MONST`'s. Two runs can
+              // agree on every creature's square and still disagree about
+              // whether it has noticed the party, which decides whether
+              // `do_monsters` picks a target and therefore whether it draws.
+              + `a${m.active}`
               + (process.env.TARG ? `->(${m.targLoc.x},${m.targLoc.y})` : '')).join(''));
         }
         if (process.env.ITEMS) {

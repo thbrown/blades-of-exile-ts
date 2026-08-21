@@ -254,7 +254,7 @@ index faaef3f2..2a648966 100644
  }
  
 diff --git a/src/tools/replay.cpp b/src/tools/replay.cpp
-index 3946c875..02def642 100644
+index 3946c875..f1ad321d 100644
 --- a/src/tools/replay.cpp
 +++ b/src/tools/replay.cpp
 @@ -28,6 +28,15 @@
@@ -284,7 +284,7 @@ index 3946c875..02def642 100644
  			} else if constexpr (std::is_integral_v<T>) {
  				if constexpr (std::is_same_v<S, std::string>) {
  					return static_cast<T>(std::stoi(arg));
-@@ -252,6 +263,107 @@ int next_action_line() {
+@@ -252,6 +263,111 @@ int next_action_line() {
  	return next_action->Row();
  }
  
@@ -355,6 +355,10 @@ index 3946c875..02def642 100644
 +			if(univ.town.monst[i].is_alive())
 +				std::cout << " " << i << ":(" << univ.town.monst[i].cur_loc.x
 +					<< "," << univ.town.monst[i].cur_loc.y << ")"
++					// The active flag decides whether do_monsters picks a target
++					// at all, so two runs can agree on every position and still
++					// diverge here. Invisible until printed.
++					<< "a" << int(univ.town.monst[i].active)
 +					<< (getenv("BOE_TRACE_TARG")
 +						? "->(" + std::to_string(univ.town.monst[i].targ_loc.x) + ","
 +							+ std::to_string(univ.town.monst[i].targ_loc.y) + ")" : "");
@@ -392,7 +396,7 @@ index 3946c875..02def642 100644
  Element& pop_next_action(std::string expected_action_type) {
  	if(next_action == nullptr){
  		throw std::string { "Replay error! No action left to pop" };
-@@ -264,6 +376,13 @@ Element& pop_next_action(std::string expected_action_type) {
+@@ -264,6 +380,13 @@ Element& pop_next_action(std::string expected_action_type) {
  
  	Element* to_return = next_action;
  	next_action = next_action->NextSiblingElement(false);
