@@ -1604,12 +1604,23 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue as of 2026-08-21 is **`doMonsters` (4)**, **`pickMonsterAbility` (3)**,
-  **`handleDisease` (3)**, **`totalEncumbrance` (3)** and a three-file bucket of
-  recordings where **the C++ draws on a `move` and this port does not** —
-  monster behaviour is still most of what is left. `processFields` has gone 4
-  files → 1 and `monstPickTarget` has left the queue. Corpus **103,066**
-  matching draws, **6 of 87** files agreeing all the way.
+  queue at the end of 2026-08-21 is **`doMonsters` (5)**, a three-file bucket
+  where **the C++ draws on after a `handle_target_space` and this port stops**,
+  **`monstCheckOneSpecialTerrain` (2)**, **`seekParty` (2)** and
+  **`pickTargetMonst` (2)**. Corpus **183,412** matching draws, **8 of 87**
+  files agreeing all the way, 36 blocked outside the rules.
+
+  **What the whole tail has in common, and read this before opening any of
+  them.** Every remaining bucket bottoms out in the same place: two runs agree
+  on every draw and every square, and disagree about *which turn it is*, or
+  about which creature is standing where after a hundred moves that cost no
+  draws. The draw stream cannot see any of that. The instruments that can are
+  `[domonst]` (party square **and age** at the top of `do_monsters`),
+  `[notice]` (every candidate for the notice roll), `[advtime]` (whether an
+  action charged a turn at all) and `[outmove]` (the outdoor destination after
+  the window shift, with its terrain) — all on both sides, all under
+  `MMOVE`/`BOE_TRACE_MMOVE`. Four of 2026-08-21's fixes were found by diffing
+  one of those four and nothing else.
 
   Bucket sizes churn, and churn is the point: `selectActivePc` went 9 files → 2
   in one slice, and the files it held reappeared in `monstPickTarget`,
