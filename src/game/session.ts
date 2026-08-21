@@ -145,9 +145,17 @@ export class GameSession {
    * `start_town_combat` resets every monster's target and leaves these two
    * alone, so a town fight inherits whoever cast in the *previous* fight. That
    * asymmetry is the C++'s, kept deliberately.
+   *
+   * **They start at 0, not at 6.** `short spell_caster, ...` (boe.combat.cpp:57)
+   * is a file-scope global, so it is zero-initialised — PC 0, not "nobody" —
+   * and `monst_pick_target` therefore rolls its two `get_ran(1,1,5)` from the
+   * very first fight of a new game, before anyone has cast or fired anything.
+   * Starting them at 6 here, which reads far more sensibly, skipped those two
+   * draws in every fight until someone cast a spell: five recordings in the
+   * corpus parted on exactly that.
    */
-  spellCaster = NO_ONE;
-  missileFirer = NO_ONE;
+  spellCaster = 0;
+  missileFirer = 0;
   /** which_combat_type: 1 for a fight in a town, 0 for an outdoor arena. */
   whichCombatType = 0;
   /**

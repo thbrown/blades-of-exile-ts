@@ -5024,3 +5024,28 @@ The M6 list below is kept for the history of what it covered:
     **7 of 87** files agree all the way — the first movement in that number
     since the back-shots fix. `totalEncumbrance` left the queue; `doMonsters`
     is now 6 files and `pickTargetPc` 5, which is where the next session starts.
+
+- **Two globals that start at PC 0, not at "nobody" (M8, 2026-08-21).** The
+  `pickTargetPc` bucket was five files with one signature: the C++ makes one or
+  two `get_ran(1,1,5)` that this port skips, then both sides agree again on the
+  `(1,0,5)` run underneath. Those two draws are `monst_pick_target`'s "target
+  the last PC who cast" and "target the last PC who fired"
+  (boe.monster.cpp:376/:381), each guarded by `spell_caster < 6` /
+  `missile_firer < 6`.
+  - `short spell_caster, ...` (boe.combat.cpp:57) and `short missile_firer,...`
+    (boe.main.cpp:214) are **file-scope globals, so they are zero-initialised**:
+    both hold **0** — PC 0 — from the moment the program starts, not 6. A
+    monster therefore rolls both of those draws in the very first fight of a
+    new game, before anyone has cast or fired anything, and will happily decide
+    to chase PC 0 on the strength of a spell nobody cast.
+  - This port initialised them to `NO_ONE`, which reads far more sensibly and
+    is wrong. Two characters of change; **five files**.
+  - Worth generalising: a C++ global with no initialiser is 0, and 0 is a
+    *valid PC index*. Any port of one of these that reaches for a "nobody"
+    sentinel is inventing a state the original never has. `combat_active_pc` is
+    the counter-example — the C++ assigns it 6 explicitly, and it means nobody.
+  - **Where it stands.** Corpus 138,412 → **141,179** matching draws, still 7 of
+    87 all the way, and `pickTargetPc` is gone from the queue. `DRAW_PIN`
+    6,765 → 6,602 — **down**, which is the point of pinning rather than
+    flooring: this port was making draws it should never have made, and its
+    matching count held at 6,223.
