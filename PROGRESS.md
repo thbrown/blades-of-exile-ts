@@ -4730,3 +4730,26 @@ The M6 list below is kept for the history of what it covered:
     about the RNG ("makes no draws") is a claim, and claims about the draw
     stream are cheap to check and expensive to get wrong. Check before writing
     one.
+
+- **Next up, already localised: which PC action ends the round (M8,
+  2026-08-20).** The `monstPickTarget` bucket's top file,
+  `VoDT_06-04-2025_11-39-05`, parts at draw 6,277, and the bucket name is
+  (again) the innocent bystander. The two sides agree on **every action**, with
+  the usual +2 index offset, and on all 6,276 draws before it:
+  - C++ action 111 is `move (15,23)`, Michael stepping north-west with 4 ap.
+    Executing it produces **a monster attack** — draws 6,277-6,282, a Giant
+    Lizard's three blows.
+  - This port's action 109 is the same move, and produces **no draws at all**.
+    It runs that monster turn later, at the `handle_pause` two actions on.
+  - Both sides then refuse Michael's next four recorded attacks with
+    `Attack: You're a pacifist!` and draw nothing for them — that part agrees
+    exactly, and the pacifist check itself is a faithful port
+    (boe.combat.cpp:365). It is *not* the bug, despite being the loudest thing
+    in the trace.
+  - So the question is `combat_next_step`: **which PC action hands the turn to
+    the monsters**. Michael still has 3 ap after the move, so it is not simply
+    "the acting PC ran out". This is turn-order rather than monster behaviour,
+    which is why it has not surfaced in any of the movement fixes above.
+  - Start with `[mbranch]`/`[mmove]` off and the action lines on: the shape to
+    look for is a monster turn attributed to a different action, not a
+    different monster decision.
