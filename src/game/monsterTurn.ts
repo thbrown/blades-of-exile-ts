@@ -1198,14 +1198,23 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
         // Divergence worth knowing: the C++ tries *breath* before spells, but
         // this port folds breath into `pickMonsterAbility` below, so a monster
         // that both breathes and casts will reach for a spell first.
-        if (!actedYet && canSpecAttack
-          && !monst.isFriendly && dist(monst.curLoc, targSpace) <= 10) {
+        if (canSpecAttack && !monst.isFriendly) {
           const adjacent = monstAdjacent(monst, targSpace);
+          const inRange = dist(monst.curLoc, targSpace) <= 10;
           const mu = monst.mon.mu;
           const cl = monst.mon.cl;
-          if (mu > 0 && univ.rng.getRan(1, 1, 10) < (cl > 0 ? 6 : 9)) {
-            if (!adjacent || univ.rng.getRan(1, 0, 2) < 2
-              || monst.number >= 160 || monst.getLevel() > 9) {
+          // **The roll comes before `!acted_yet`, and `&&` is left to right.**
+          // The C++ writes `if((mu > 0) && (get_ran(...) < n) && !acted_yet)`
+          // (boe.combat.cpp:2272/:2285), so a caster that has *already acted*
+          // still spends the draw deciding whether it would have cast. This
+          // port asked `!actedYet` first and skipped it, which is one missing
+          // `get_ran(1,1,10)` or `get_ran(1,1,8)` per caster per turn.
+          //
+          // The range test moved too: it belongs to the *inner* condition,
+          // beside the adjacency coin, not to the block as a whole.
+          if (mu > 0 && univ.rng.getRan(1, 1, 10) < (cl > 0 ? 6 : 9) && !actedYet) {
+            if ((!adjacent || univ.rng.getRan(1, 0, 2) < 2
+              || monst.number >= 160 || monst.getLevel() > 9) && inRange) {
               await monstCastMage(session, monst, target);
               // The C++ discards the return and counts the turn as spent either
               // way, so a monster that couldn't afford the spell still loses its
@@ -1214,8 +1223,8 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
               actedYet = true;
             }
           }
-          if (!actedYet && cl > 0 && univ.rng.getRan(1, 1, 8) < 7) {
-            if (!adjacent || univ.rng.getRan(1, 0, 2) < 2 || monst.getLevel() > 9) {
+          if (cl > 0 && univ.rng.getRan(1, 1, 8) < 7 && !actedYet) {
+            if ((!adjacent || univ.rng.getRan(1, 0, 2) < 2 || monst.getLevel() > 9) && inRange) {
               await monstCastPriest(session, monst, target);
               monst.ap = Math.max(0, monst.ap - 4);
               actedYet = true;

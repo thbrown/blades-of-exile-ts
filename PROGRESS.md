@@ -5183,3 +5183,25 @@ The M6 list below is kept for the history of what it covered:
     **when a chain of C++ code leaves a variable alone, leaving it alone is the
     port.** Inventing a value for the "obvious" case — `canEnter: true` here,
     `NO_ONE` for `spell_caster` earlier — is where this port keeps diverging.
+
+- **`&&` is left to right, and the C++ puts the roll first (M8, 2026-08-21).**
+  The `monstPickTarget` bucket's head, `ASR_10-05-2025_17-55-45`, parted on a
+  `get_ran(1,1,8)` the C++ made and this port did not: the **priest-spell
+  chance** in `do_monster_turn` (boe.combat.cpp:2285), written as
+  `if((cur_monst->cl > 0) && (get_ran(1,1,8) < 7) && !acted_yet)`.
+  - The `!acted_yet` is the *last* term, so a creature that has already acted
+    this point **still spends the draw** deciding whether it would have cast.
+    This port had hoisted `!actedYet` to the front of the block, where it reads
+    better and skips the roll. Same for the mage line above it
+    (`get_ran(1,1,10)`). The breath line two lines earlier really does test
+    `!acted_yet` before its roll — the three are not consistent with each
+    other, and each has to be copied as written.
+  - The `dist(...) <= 10` moved too: it belongs to the *inner* condition,
+    beside the adjacency coin, not to the block as a whole.
+  - **Where it stands.** Corpus 172,211 → **173,094** matching draws. Small,
+    and the file itself moved only four draws before parting again on the
+    familiar drift — but the rule is now right, and this is the third place
+    where the C++'s evaluation order was the whole bug (`monst_pick_target`'s
+    two `(1,1,5)` rolls were the first, `switch_target_to_adjacent` the second).
+  - The bucket names churned again, which is normal: `seekParty` (5) and
+    `doMonsters` (4) now head the queue.
