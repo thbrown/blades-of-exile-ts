@@ -4801,3 +4801,38 @@ The M6 list below is kept for the history of what it covered:
   that test has no oracle to compute them. It pins the number instead, so any
   change is deliberate: when it fails, read `diverge.mjs`'s matching count and
   update the pin only if that held or rose.
+
+- **Next two buckets, both localised, neither fixed (M8, 2026-08-20).** Ran out
+  of session before these; both are pinned down far enough to start cold.
+
+  **`processFields` (4 files, all `ASR_10-05-*`, so probably one rule).**
+  `ASR_10-05-2025_08-35-52` parts at draw 62. A targeted quickfire spell
+  (`click_control spell21`, then `target5`) is cast, and the next thing either
+  side does is `process_fields`' quickfire damage pass — one `get_ran(2,1,8)`
+  per burning square. **The C++ makes 8 of them. This port makes 31.** The
+  values agree one-for-one where they overlap, so it is purely a count: this
+  port lights far more squares than the C++ does.
+  - `spreadQuickfire` is *not* the culprit — it is a faithful line-for-line port
+    of boe.combat.cpp:5113, and neither side draws its `get_ran(1,1,8)` on this
+    pass (`quickfire_present` is still false when the spread runs, so the spell
+    places the fire after it). The suspect is the **pattern the spell lays
+    down**, i.e. `placeSpellPattern` / `placeGrid` in `spellPatterns.ts` —
+    which was its own one-file bucket earlier in the day
+    (`VoDT_05-04-2025_14-32-10`, `parts in placeGrid`). Those two are very
+    likely the same bug; work them together.
+  - The knock-on is large and explains the file's shape: 37,305 draws here
+    against the C++'s 5,453. Every later turn re-damages every burning square,
+    so an over-large fire costs draws forever.
+
+  **`doMonsters` (4 files).** `VoDT_20-04-2025_21-09-37` parts at draw 4,086,
+  and the bucket name is misleading again — this one is not a monster rule at
+  all. `MONST=1` on both sides shows the two runs are **in different towns**:
+  the C++ has 58 creatures at one set of positions, this port has 17 and is
+  walking into "Holding Cells". Their draw streams still agree to 4,085,
+  because getting to the wrong town costs no draws. The action indices have
+  also drifted apart (C++ 168 against this port's 161, where the constant
+  offset is 2), so the two are consuming the recording at different rates.
+  - Do **not** open this one on the draw stream. It needs the action lists
+    compared directly — which action this port consumed that the C++ did not,
+    or vice versa — and that is a different instrument again: nothing here
+    diffs the two action sequences, only the draws they produce.
