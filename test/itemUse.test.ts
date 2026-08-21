@@ -246,7 +246,11 @@ describe('the effects', () => {
       magicUseType: ItemUse.HELP_ONE,
     });
     await useItem(s, WHO, 0);
-    expect(s.univ.party.partyStatus[PartyStatus.STEALTH]).toBe(20);
+    // 4 × 5 = 20, **less the one the turn takes back**: `handle_use_item` sets
+    // `did_something`, so the clock ticks before control returns and
+    // `increase_age` decays every party status by one. The C++ behaves the same
+    // way — drinking a stealth potion costs you the first turn of it.
+    expect(s.univ.party.partyStatus[PartyStatus.STEALTH]).toBe(19);
   });
 
   it('never takes more party status off than is there', async () => {

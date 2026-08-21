@@ -55,14 +55,28 @@ const FILES = [
   // scripting: it only completes because the driver answers the specials'
   // dialogs from the recording now.
   'ZKR_14-05-2025_13-29-14.xml',
-  // **1,033 actions**, and the longest run here by a wide margin: a whole
-  // session of Za-Khazi — sailing, resting, conversations, shops, giving items
-  // around the party — ending with the save dialog the player typed a name
-  // into. It reaches the end only with the outdoor window rebuilt on load, the
-  // boat moved by `run_waterfalls`, resting's fifty turns and
-  // `handle_switch_pc` moving the item pane.
-  'ZKR_15-05-2025_18-04-58.xml',
 ];
+
+/**
+ * Files that do **not** run to the end, guarded on how far they get instead.
+ *
+ * This is not a weaker gate, it is a gate on the right axis. Dispatching every
+ * action was never the same as agreeing with the C++:
+ * `ZKR_15-05-2025_18-04-58` used to run all 1,033 of its actions while its RNG
+ * stream had parted from the C++'s at draw 6,080 — it finished by being wrong
+ * in a way that happened not to stop it. Making `handle_give_item` and
+ * `handle_use_item` spend a turn, and `do_monsters` pick targets properly, took
+ * it *further* into the C++'s stream and *less* far through its own action list.
+ *
+ * So the floor is on both numbers, and both may only go up. `scripts/diverge.mjs`
+ * is what says where the remaining gap is.
+ */
+const PARTIAL: Record<string, { actions: number; draws: number }> = {
+  // A whole session of Za-Khazi — sailing, resting, conversations, shops,
+  // giving items around the party. Parts from the C++ inside `do_monsters`,
+  // where a creature this port still has as IDLE has noticed the party there.
+  'ZKR_15-05-2025_18-04-58.xml': { actions: 905, draws: 6151 },
+};
 
 /**
  * A scenario is loaded fresh per run and never shared. A `Universe` does not
@@ -157,6 +171,20 @@ describe("the C++ build's own replays", () => {
       // The dialogs pull from the same stream, so a finished file is the two
       // counts together — see `ReplayResult.answered`.
       expect(out.ran + out.answered).toBe(out.total);
+    }, 120000);
+  }
+
+  for (const [file, floor] of Object.entries(PARTIAL)) {
+    it(`${file} gets at least as far as it did`, async () => {
+      const out = await play(file);
+      expect(out.unsupported).toEqual({});
+      // Never fewer actions and never fewer draws than the last time. Draws are
+      // the one that matters — see the note on PARTIAL.
+      expect(out.ran + out.answered).toBeGreaterThanOrEqual(floor.actions);
+      expect(out.end.draws).toBeGreaterThanOrEqual(floor.draws);
+      // And it must still be a *partial* run: if it starts finishing, move it
+      // up into FILES rather than leaving a floor here that can never fail.
+      expect(out.ran + out.answered).toBeLessThan(out.total);
     }, 120000);
   }
 
