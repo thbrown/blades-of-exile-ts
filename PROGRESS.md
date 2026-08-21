@@ -4753,3 +4753,50 @@ The M6 list below is kept for the history of what it covered:
   - Start with `[mbranch]`/`[mmove]` off and the action lines on: the shape to
     look for is a monster turn attributed to a different action, not a
     different monster decision.
+
+- **"Monsters get back-shots" — the mirror of the rule ported an hour earlier
+  (M8, 2026-08-20).** `pc_combat_move` (boe.combat.cpp:300): a PC stepping out
+  of a hostile creature's reach gives it a free swing, and *every* adjacent one
+  takes it. Adjacent to where the PC **is** and not to where they are **going**,
+  so sidestepping along a flank is free and backing out is not; asleep and
+  paralysed creatures don't get one, friendly ones never do. If the swing kills
+  the mover the move is abandoned (`if(s1 != univ.cur_pc) return true;`, and the
+  `main_status` check after the loop).
+  - This is the exact mirror of the `pc_adj` rule in the entry above: that is a
+    PC's free swing when a **monster** leaves melee, this is a monster's when a
+    **PC** does. Neither half was ported. Worth remembering as a shape — when
+    the C++ has a rule for one side of an interaction, look for the other.
+  - **How it was found, including the wrong turns.** The previous entry left
+    this file localised and mis-diagnosed as a `combat_next_step` turn-order
+    problem: "which PC action hands the turn to the monsters". That was wrong.
+    It was never turn order — the draws belong to the *move itself*.
+    `BOE_TRACE_RAN_STACK` on the C++ named it in one run:
+    `monster_attack ← pc_combat_move ← handle_move`. The lesson is the cheap
+    one: **ask the oracle for a stack before theorising about the port.** The
+    loud `Attack: You're a pacifist!` lines in the trace were identical on both
+    sides and cost an hour of attention for nothing.
+  - **Where it stands.** `VoDT_06-04-2025_11-39-05` went from 6,277 matching
+    draws to **all 10,650** the harness produces, and moved into the
+    harness-gap table (the C++ build dies on a `load_party` dialog after that);
+    "blocked outside the rules" 30 → 31 for that reason, which is progress.
+    Corpus 88,399 → **92,773** matching draws.
+
+- **(Found, not fixed) The two runners disagree about the same recording.**
+  `test/cppReplay.test.ts` says `ZKR_15-05-2025_18-04-58` draws 6,480; running
+  the same file through `test/corpus.test.ts` (which is what `diverge.mjs`
+  drives) says 6,433. Same file, same commit, 47 draws apart. One of the two
+  drivers is not reproducing the recording faithfully — they have separate
+  setup paths (`play()` here, the corpus runner there). Until it is chased
+  down, **`diverge.mjs`'s number is the one PROGRESS quotes**, because it is the
+  one compared against the C++; `DRAW_PIN` pins what its own runner does.
+
+- **`DRAW_PIN` was `DRAW_FLOOR`, and the floor was on the wrong axis.** It was
+  `toBeGreaterThanOrEqual`, on the theory that more draws is more progress.
+  That is false, and this session proved it: half of M8's fixes **remove**
+  draws this port should never have made. `ZKR_15-05-2025_18-04-58` went 6,527
+  → 6,480 total while its *matching* draws held at 6,223, and the floor failed
+  on a good change. A floor also passes a bad change that happens to add draws.
+  Total draws is not the axis progress lives on — **matching** draws is, and
+  that test has no oracle to compute them. It pins the number instead, so any
+  change is deliberate: when it fails, read `diverge.mjs`'s matching count and
+  update the pin only if that held or rose.

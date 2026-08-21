@@ -63,15 +63,31 @@ const FILES = [
 ];
 
 /**
- * How much RNG a finished file must have drawn, for the ones where that number
- * is the point. Dispatching every action was never the same as agreeing with
- * the C++ — `ZKR_15-05-2025_18-04-58` once ran all of its actions while its
- * stream had parted 4,000 draws earlier. It still parts, later each time, and
- * this floor is what stops that from sliding back. `scripts/diverge.mjs` says
- * where the remaining gap is; when it reports none, the floor stops moving.
+ * Exactly how much RNG a finished file draws. Dispatching every action was
+ * never the same as agreeing with the C++ — `ZKR_15-05-2025_18-04-58` once ran
+ * all of its actions while its stream had parted 4,000 draws earlier.
+ *
+ * **A pin, not a floor, and that distinction was learned the hard way.** This
+ * started as `toBeGreaterThanOrEqual`, on the theory that more draws is more
+ * progress. It isn't: half of M8's fixes *remove* draws this port should never
+ * have made, so a floor fails on a good change and passes on a bad one that
+ * happens to add draws. Total draws is simply not the axis progress lives on —
+ * **matching** draws is, and this test has no oracle to compute those.
+ *
+ * So it pins the number and makes any change deliberate. When it fails, run
+ * `node scripts/diverge.mjs <file>` and read the *matching* count: if that went
+ * up or held, update the pin and say so in the commit; if it went down, the
+ * change is a regression whatever this number did.
  */
-const DRAW_FLOOR: Record<string, number> = {
-  'ZKR_15-05-2025_18-04-58.xml': 6527,
+const DRAW_PIN: Record<string, number> = {
+  // Matching draws as of 2026-08-20: 6,223 of the C++'s 6,676. See PROGRESS.md.
+  //
+  // **This number is not the one `diverge.mjs` prints** (6,433 for the same
+  // file on the same commit). The two runners disagree, which means one of
+  // them is not reproducing the recording faithfully — `corpus.test.ts` has
+  // its own driver setup and this file has `play()`. Tracked as a found-not-
+  // fixed in PROGRESS.md; pin what *this* runner does until it is chased down.
+  'ZKR_15-05-2025_18-04-58.xml': 6480,
 };
 
 /**
@@ -90,7 +106,7 @@ const DRAW_FLOOR: Record<string, number> = {
  */
 const PARTIAL: Record<string, { actions: number; draws: number }> = {
   // Empty at the moment: the file that lived here now dispatches every action
-  // and has moved up to FILES with a DRAW_FLOOR. The machinery stays because
+  // and has moved up to FILES with a DRAW_PIN. The machinery stays because
   // the next fix will put a different recording here — a file usually arrives
   // by matching *further* and finishing *less*.
 };
@@ -188,8 +204,8 @@ describe("the C++ build's own replays", () => {
       // The dialogs pull from the same stream, so a finished file is the two
       // counts together — see `ReplayResult.answered`.
       expect(out.ran + out.answered).toBe(out.total);
-      const floor = DRAW_FLOOR[file];
-      if (floor !== undefined) expect(out.end.draws).toBeGreaterThanOrEqual(floor);
+      const pin = DRAW_PIN[file];
+      if (pin !== undefined) expect(out.end.draws).toBe(pin);
     }, 120000);
   }
 

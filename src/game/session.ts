@@ -34,7 +34,9 @@ import { damagePc, hitParty } from './damage';
 import {
   NO_ONE, endTownCombat, pcAttack, pickNextPc, setPcMoves, startTownCombat, takeAp,
 } from './combat';
-import { combatRunMonst, doMonsterTurn, doMonsters } from './monsterTurn';
+import {
+  combatRunMonst, doMonsterTurn, doMonsters, monstAdjacent, monsterAttack,
+} from './monsterTurn';
 import {
   adjacentEncounter, countWalls, createWandMonst, doOutdoorMonsters, outEncLevTot,
 } from './wandering';
@@ -3392,6 +3394,32 @@ export class GameSession {
       this.univ.addStringToBuf(`Blocked: ${DIRECTION_NAMES[dir] ?? ''}`);
       return false;
     }
+
+    // "monsters get back-shots" (boe.combat.cpp:300) — stepping out of a
+    // hostile creature's reach gives it a free swing, and every adjacent one
+    // takes it. The mirror of the `pc_adj` rule in `do_monster_turn`: that is
+    // the PC's free swing when a *monster* leaves melee, this is the monster's
+    // when a *PC* does. Neither was ported.
+    //
+    // Adjacent to where the PC **is** and not to where they are **going**, so
+    // sidestepping along a creature's flank is free and backing out is not.
+    // Asleep and paralysed creatures don't get one; friendly ones never do.
+    for (const monst of town.monsters) {
+      if (!monst.isAlive) continue;
+      if (!monstAdjacent(monst, pc.combatPos)) continue;
+      if (monstAdjacent(monst, destination)) continue;
+      if (monst.isFriendly) continue;
+      if ((monst.status[Status.ASLEEP] ?? 0) > 0) continue;
+      if ((monst.status[Status.PARALYZED] ?? 0) > 0) continue;
+      const was = this.univ.curPc;
+      await monsterAttack(this, monst, pc);
+      // `if(s1 != univ.cur_pc) return true;` — the swing killed them and the
+      // turn has already moved on, so the move itself is abandoned.
+      if (was !== this.univ.curPc) return true;
+    }
+
+    // "move if still alive" — a back-shot can finish the mover outright.
+    if (!pc.isAlive) return false;
 
     pc.combatPos = { ...destination };
     pc.direction = dir;
