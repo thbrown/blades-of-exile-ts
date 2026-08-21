@@ -5090,3 +5090,33 @@ The M6 list below is kept for the history of what it covered:
     because `location targ_space` is left default-constructed and every reader
     of it is gated on `target != 6`. This port computes a real square there.
     Harmless, but it makes the two traces look more different than they are.
+
+- **`is_special(location)` is not about specials (M8, 2026-08-21).** The
+  `handle_target_space` bucket's head file, `VoDT_06-04-2025_08-31-07`, matched
+  **all 9,710 draws** the harness produced and then stopped: "the recording
+  stepped to (39,15), but the party is at (41,15)". `BOE_TRACE_PCS` / `PCS=1`
+  put the two parties side by side at the moment the fight started:
+  - C++: `(39,15) (40,15) (42,14) (42,16) (42,15) (43,15)`
+  - here: `(39,15) (41,15) (40,15) (41,14) (41,16) (42,14)`
+  - The C++ refuses the whole `x=41` column and this port fills it, so every
+    PC after the first is on the wrong square — and then a *combat* move two
+    squares from where the recording expects looks like a desync.
+  - **The rule.** `place_party` (boe.town.cpp:792) tests
+    `!is_blocked(loc) && !is_special(loc) && ...`, and the free
+    `is_special(location)` (boe.locutils.cpp:412) is **`blockage ==
+    BLOCK_MONSTERS`** — a counter, a rail, a bar. Nothing to do with special
+    nodes. The name is a leftover from when that blockage was called "special",
+    and this port had translated it as `specialAt(where) < 0`, which asks a
+    completely different question about a completely different list. The x=41
+    column is a shop counter.
+  - The same mistranslation was in the **leave-the-boat** branch of
+    `town_move_party` (boe.actions.cpp:4162), the other of the two callers.
+    Both now go through `session.blocksMonsters`, whose comment says what the
+    C++'s name does not.
+  - **Where it stands.** Corpus 142,856 → **144,899** matching draws;
+    `VoDT_06-04-2025_08-31-07` went 9,710 → 11,753 and 144 → 212 actions. The
+    `handle_target_space` bucket went 3 files → 2.
+  - Worth keeping as a shape: **a name in the C++ is evidence, not a
+    definition.** `is_special`, `monst_near`'s `vdist`, `spell_caster`'s zero
+    initialisation — three bugs this session where the port implemented what
+    the name said rather than what the body did.

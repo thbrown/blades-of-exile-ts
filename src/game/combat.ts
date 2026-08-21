@@ -183,14 +183,18 @@ export function placeParty(session: GameSession, direction: Direction): void {
 
     // `is_blocked` is the broad test — terrain, creatures, the party, barriers
     // and (in combat) marked specials and portals — which is what keeps a PC
-    // from being placed inside a wall or on top of a monster. `is_special` is a
-    // boolean test in the C++ and `specialAt` returns -1 for none, which is
-    // truthy, so it has to be compared rather than negated.
+    // from being placed inside a wall or on top of a monster.
+    //
+    // **`is_special` here is `blocksMonsters`, not a special node.** The free
+    // `is_special(location)` (boe.locutils.cpp:412) tests one thing:
+    // `blockage == BLOCK_MONSTERS`, the counters and rails. This port had it as
+    // "a special node sits here", which both let PCs be dealt onto the shop
+    // counter and refused perfectly good ground next to a scripted square.
     // `can_see_light(..., combat_obscurity) < 1` is the test that keeps the
     // party on *this* side of a wall: the spot has to be in an unobstructed
     // straight line from where the party stands. Without it the placement
     // table happily reaches through a wall and drops PCs in the next room.
-    const usable = !session.isBlocked(where) && session.specialAt(where) < 0
+    const usable = !session.isBlocked(where) && !session.blocksMonsters(where)
       && session.sightObscurity(where.x, where.y) === 0
       && session.canSeeLight(univ.party.townLoc, where, session.combatObscurity) < 1
       && !session.locOffActiveArea(where);

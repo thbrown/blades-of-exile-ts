@@ -1111,7 +1111,7 @@ export class GameSession {
       const terType = this.univ.terrainType(ter);
       const diagonal = destination.x !== party.townLoc.x && destination.y !== party.townLoc.y;
       if (
-        !this.townIsBlocked(destination) && this.specialAt(destination) < 0
+        !this.townIsBlocked(destination) && !this.blocksMonsters(destination)
         && (!terType.boatOver || diagonal)
       ) {
         this.univ.addStringToBuf('You leave the boat.');
@@ -1714,6 +1714,28 @@ export class GameSession {
         this.turnsQueued--;
         if (this.turnsQueued === 0) this.onRedraw?.();
       });
+  }
+
+  /**
+   * **`is_special(location)` (boe.locutils.cpp:412), which is not about
+   * specials at all.** It asks one thing: is this square's terrain
+   * `BLOCK_MONSTERS` — a counter, a rail, a bar? The name is a leftover from
+   * the days when that blockage was called "special", and it is a trap: two
+   * places in this port had translated it as "does a special node sit here?",
+   * which is `specialAt`, a completely different question about a completely
+   * different list.
+   *
+   * The two callers are `place_party` (boe.town.cpp:792), where it keeps PCs
+   * from being dealt onto the shop counter at the start of a fight, and the
+   * leave-the-boat branch of `town_move_party` (boe.actions.cpp:4162).
+   */
+  blocksMonsters(where: Location): boolean {
+    const town = this.univ.town;
+    const ter = town
+      ? town.record.terrain[where.x]?.[where.y]
+      : this.univ.out.at(where.x, where.y);
+    if (ter === undefined) return false;
+    return this.univ.terrainType(ter).blockage === TerObstruct.BLOCK_MONSTERS;
   }
 
   /**
