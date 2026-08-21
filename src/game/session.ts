@@ -188,6 +188,16 @@ export class GameSession {
   lastCaster: [number, number] = [NO_TARGET, NO_TARGET];
 
   /**
+   * `pc_casting` (boe.main.cpp:203) — **whoever the last spell picker settled
+   * on**, and a third thing again from the two above: `lastCaster` is where the
+   * dialog *opens*, `mageStore.caster` is who cast what is stored, and this is
+   * the live cursor the dialog leaves behind. `repeat_cast_ok` reads it to
+   * decide whether the shortcut may fire, so it has to survive the dialog.
+   * The C++ leaves the global uninitialised; 0 is what it holds in practice.
+   */
+  pcCasting = 0;
+
+  /**
    * The spell waiting for a square while the game is in SPELL_TARGET mode
    * (`start_spell_targeting`); null the rest of the time.
    */
@@ -3445,7 +3455,7 @@ export class GameSession {
     this.sound?.play(
       record.lightingType === Lighting.LIGHT_NORMAL ? Snd.ENTER_TOWN : Snd.ENTER_DUNGEON,
     );
-    const town = new CurTown(record);
+    const town = new CurTown(record, this.univ);
     this.univ.town = town;
 
     // Doors the party unlocked on a previous visit stay unlocked.

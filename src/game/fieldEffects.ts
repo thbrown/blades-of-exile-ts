@@ -100,7 +100,7 @@ export function dispelFields(session: GameSession, where: Location, mode: number
   const town = univ.town;
   if (!town) return;
   const { x, y } = where;
-  const set = (which: FieldType, on: boolean): void => town.setField(x, y, which, on);
+  const set = (which: FieldType, on: boolean): void => { town.setField(x, y, which, on); };
 
   if (mode === 2) {
     set(FieldType.BARRIER_FIRE, false);

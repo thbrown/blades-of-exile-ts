@@ -87,6 +87,10 @@ export class SpellPick {
       if (found >= 0) this.caster = found;
     }
     if (!canChooseCaster) this.caster = univ.curPc;
+    // Every one of those assignments is to the `pc_casting` global in the C++
+    // (boe.party.cpp:2139-2169), and it outlives the dialog — `repeat_cast_ok`
+    // reads it later to decide who the shortcut would cast as.
+    session.pcCasting = this.caster;
 
     // **The picker opens with a spell already selected**, which this port did
     // not do at all — it started on NONE, so a Cast with nothing clicked said
@@ -195,6 +199,7 @@ export class SpellPick {
     const pc = this.session.univ.party.pcs[i];
     if (!pc || pcCanCastType(this.session, pc, this.type) !== CastStatus.OK) return;
     this.caster = i;
+    this.session.pcCasting = i; // `pick_spell_caster`'s own write (:1955)
     if (this.spell !== Spell.NONE && !this.castable(this.spell)) {
       this.spell = Spell.NONE;
       this.target = NO_TARGET;

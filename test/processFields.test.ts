@@ -152,9 +152,12 @@ describe('monst_inflict_fields', () => {
     const monst = aLiveMonster(s);
     if (monst.mon.race === Race.BUG) monst.mon.race = Race.HUMANOID;
     const { x, y } = monst.curLoc;
-    // Quickfire is tested first and breaks, so the web below it never catches.
-    s.univ.town!.setField(x, y, FieldType.FIELD_QUICKFIRE, true);
+    // A stinking cloud is tested before the web and breaks, so the web under
+    // it never catches. (Quickfire would read better, but `set_web` refuses a
+    // square that is already burning — the two can't coexist. Stink and web
+    // can: neither placement rule mentions the other.)
     s.univ.town!.setField(x, y, FieldType.FIELD_WEB, true);
+    s.univ.town!.setField(x, y, FieldType.CLOUD_STINK, true);
     await monstInflictFields(s, monst);
     expect(monst.status[Status.WEBS] ?? 0).toBe(0);
     expect(s.univ.town!.hasField(x, y, FieldType.FIELD_WEB)).toBe(true);

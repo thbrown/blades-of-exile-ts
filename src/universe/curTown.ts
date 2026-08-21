@@ -5,10 +5,23 @@
  */
 
 import { Location } from '../core/location';
+import { GameRng } from '../core/rng';
 import { FieldType } from '../data/fields';
 import { Item } from '../data/item';
+import { Terrain, TerObstruct } from '../data/terrain';
 import { Town } from '../data/town';
 import { Creature } from './creature';
+
+/**
+ * What the placement rules need from the wider world: the terrain table (a
+ * field can't go on a wall) and the RNG (an antimagic field rolls against a
+ * barrier being raised on top of it). The C++'s `cCurTown` reaches the `univ`
+ * global for both; this is the same reach, narrowed to what it uses.
+ */
+export interface FieldHost {
+  terrainType(index: number): Terrain;
+  rng: GameRng;
+}
 
 export class CurTown {
   monsters: Creature[] = [];
@@ -45,7 +58,7 @@ export class CurTown {
    */
   quickfirePresent = false;
 
-  constructor(readonly record: Town) {
+  constructor(readonly record: Town, private readonly host: FieldHost) {
     const grid = (): Uint8Array[] =>
       Array.from({ length: record.maxDim }, () => new Uint8Array(record.maxDim));
     this.explored = grid();
@@ -54,31 +67,302 @@ export class CurTown {
     this.specialSpots = grid();
     this.fields = Array.from({ length: record.maxDim }, () =>
       Array.from({ length: record.maxDim }, () => new Set<FieldType>()));
+    // `place_preset_fields` (universe.cpp:119) runs every preset through the
+    // same placement rules as a spell does, so a quickfire preset onto a wall
+    // is refused here exactly as it would be mid-game. The rest of that switch
+    // — the fields that can't be preset — is the `default` below.
     for (const field of record.presetFields) {
-      const { x, y } = field.loc;
-      if (!this.isOnMap(x, y)) continue;
-      if (field.type === FieldType.SPECIAL_ROAD) this.roads[x]![y] = 1;
-      else if (field.type === FieldType.SPECIAL_SPOT) this.specialSpots[x]![y] = 1;
-      else {
-        this.fields[x]![y]!.add(field.type);
-        // The C++ latches this over the whole map after town setup
-        // (boe.town.cpp:367); preset fields don't go through setField.
-        if (field.type === FieldType.FIELD_QUICKFIRE) this.quickfirePresent = true;
+      switch (field.type) {
+        case FieldType.OBJECT_BLOCK: case FieldType.SPECIAL_SPOT: case FieldType.SPECIAL_ROAD:
+        case FieldType.FIELD_WEB: case FieldType.OBJECT_CRATE: case FieldType.OBJECT_BARREL:
+        case FieldType.BARRIER_FIRE: case FieldType.BARRIER_FORCE: case FieldType.BARRIER_CAGE:
+        case FieldType.FIELD_QUICKFIRE:
+        case FieldType.SFX_SMALL_BLOOD: case FieldType.SFX_MEDIUM_BLOOD:
+        case FieldType.SFX_LARGE_BLOOD: case FieldType.SFX_SMALL_SLIME:
+        case FieldType.SFX_LARGE_SLIME: case FieldType.SFX_ASH:
+        case FieldType.SFX_BONES: case FieldType.SFX_RUBBLE:
+          this.setField(field.loc.x, field.loc.y, field.type, true);
+          break;
+        default:
+          break;
       }
     }
   }
 
   /** Whether a space carries a given field (cCurTown::is_web and friends). */
   hasField(x: number, y: number, which: FieldType): boolean {
-    return this.isOnMap(x, y) && this.fields[x]![y]!.has(which);
+    if (!this.isOnMap(x, y)) return false;
+    // The three that live in their own grids here, because the C++ packs them
+    // into the same bitfield as the rest.
+    if (which === FieldType.SPECIAL_EXPLORED) return this.explored[x]![y]! !== 0;
+    if (which === FieldType.SPECIAL_SPOT) return this.specialSpots[x]![y]! !== 0;
+    if (which === FieldType.SPECIAL_ROAD) return this.roads[x]![y]! !== 0;
+    return this.fields[x]![y]!.has(which);
   }
 
-  setField(x: number, y: number, which: FieldType, on = true): void {
-    if (!this.isOnMap(x, y)) return;
-    if (on) {
-      this.fields[x]![y]!.add(which);
-      if (which === FieldType.FIELD_QUICKFIRE) this.quickfirePresent = true;
-    } else this.fields[x]![y]!.delete(which);
+  /** The raw bit-set/bit-clear the C++'s simple setters do (`fields[x][y] |= …`). */
+  private put(x: number, y: number, which: FieldType, on: boolean): boolean {
+    if (which === FieldType.SPECIAL_EXPLORED) this.explored[x]![y] = on ? 1 : 0;
+    else if (which === FieldType.SPECIAL_SPOT) this.specialSpots[x]![y] = on ? 1 : 0;
+    else if (which === FieldType.SPECIAL_ROAD) this.roads[x]![y] = on ? 1 : 0;
+    else if (on) this.fields[x]![y]!.add(which);
+    else this.fields[x]![y]!.delete(which);
+    return true;
+  }
+
+  /**
+   * `cCurTown::is_impassable` (universe.cpp:807) — and the C++'s own TODO
+   * beside it says this is wrong, since two other blockages also stop
+   * movement. Kept as it ships: only BLOCK_MOVE_AND_SIGHT counts.
+   */
+  isImpassable(x: number, y: number): boolean {
+    if (!this.isOnMap(x, y)) return false;
+    const ter = this.host.terrainType(this.record.terrain[x]![y]!);
+    return ter.blockage === TerObstruct.BLOCK_MOVE_AND_SIGHT;
+  }
+
+  /** `free_for_sfx` (:650) — a decal needs completely clear ground. */
+  private freeForSfx(x: number, y: number): boolean {
+    if (!this.isOnMap(x, y)) return false;
+    return this.host.terrainType(this.record.terrain[x]![y]!).blockage === TerObstruct.CLEAR;
+  }
+
+  /**
+   * The whole `cCurTown::set_*` family (universe.cpp:385-806) behind one
+   * dispatch. Placing a field is **not** a bare bit-set: each type refuses
+   * some squares outright, two of them roll against an antimagic field already
+   * there (so this draws), and most cancel the fields they can't share a
+   * square with. Clearing is always unconditional.
+   *
+   * Returns whether the field ended up on the square, which the C++'s `bool`
+   * return means too — several callers print "Failed." on a false.
+   */
+  setField(x: number, y: number, which: FieldType, on = true): boolean {
+    if (!this.isOnMap(x, y)) return false;
+    if (!on) return this.put(x, y, which, false);
+
+    const is = (f: FieldType): boolean => this.hasField(x, y, f);
+    const clear = (f: FieldType): void => { this.put(x, y, f, false); };
+
+    switch (which) {
+      // --- The plain ones: explored, spot, road, block, force cage ----------
+      // (`set_force_cage` carries the C++'s TODO wondering whether it should
+      // check for anything at all; it doesn't.)
+      case FieldType.SPECIAL_EXPLORED: case FieldType.SPECIAL_SPOT:
+      case FieldType.SPECIAL_ROAD: case FieldType.OBJECT_BLOCK:
+      case FieldType.BARRIER_CAGE:
+        break;
+
+      case FieldType.WALL_FORCE:
+        if (this.isImpassable(x, y)) return false;
+        if (is(FieldType.FIELD_ANTIMAGIC) || is(FieldType.WALL_BLADES)
+          || is(FieldType.FIELD_QUICKFIRE)) return false;
+        if (is(FieldType.OBJECT_CRATE) || is(FieldType.OBJECT_BARREL)
+          || is(FieldType.BARRIER_FIRE) || is(FieldType.BARRIER_FORCE)) return false;
+        clear(FieldType.FIELD_WEB);
+        clear(FieldType.WALL_FIRE);
+        break;
+
+      case FieldType.WALL_FIRE:
+        if (this.isImpassable(x, y)) return false;
+        if (is(FieldType.FIELD_ANTIMAGIC) || is(FieldType.WALL_BLADES)
+          || is(FieldType.FIELD_QUICKFIRE) || is(FieldType.WALL_ICE)) return false;
+        if (is(FieldType.OBJECT_CRATE) || is(FieldType.OBJECT_BARREL)
+          || is(FieldType.BARRIER_FIRE) || is(FieldType.BARRIER_FORCE)) return false;
+        if (is(FieldType.FIELD_WEB) || is(FieldType.CLOUD_STINK)
+          || is(FieldType.CLOUD_SLEEP)) return false;
+        clear(FieldType.FIELD_WEB);
+        break;
+
+      case FieldType.FIELD_ANTIMAGIC:
+        if (this.isImpassable(x, y)) return false;
+        if (is(FieldType.FIELD_QUICKFIRE) || is(FieldType.WALL_FORCE)
+          || is(FieldType.WALL_FIRE)) return false;
+        clear(FieldType.WALL_FORCE);
+        clear(FieldType.WALL_FIRE);
+        clear(FieldType.CLOUD_STINK);
+        clear(FieldType.WALL_ICE);
+        clear(FieldType.WALL_BLADES);
+        clear(FieldType.CLOUD_SLEEP);
+        break;
+
+      case FieldType.CLOUD_STINK:
+        if (this.isImpassable(x, y)) return false;
+        if (is(FieldType.WALL_FORCE) || is(FieldType.WALL_FIRE)
+          || is(FieldType.WALL_ICE) || is(FieldType.WALL_BLADES)) return false;
+        if (is(FieldType.FIELD_ANTIMAGIC) || is(FieldType.CLOUD_SLEEP)
+          || is(FieldType.FIELD_QUICKFIRE)) return false;
+        if (is(FieldType.BARRIER_FIRE) || is(FieldType.BARRIER_FORCE)) return false;
+        break;
+
+      case FieldType.WALL_ICE:
+        if (this.isImpassable(x, y)) return false;
+        if (is(FieldType.WALL_FORCE) || is(FieldType.WALL_BLADES)
+          || is(FieldType.FIELD_ANTIMAGIC)) return false;
+        if (is(FieldType.FIELD_WEB) || is(FieldType.OBJECT_CRATE)
+          || is(FieldType.OBJECT_BARREL)) return false;
+        if (is(FieldType.BARRIER_FIRE) || is(FieldType.BARRIER_FORCE)
+          || is(FieldType.FIELD_QUICKFIRE)) return false;
+        clear(FieldType.WALL_FIRE);
+        clear(FieldType.CLOUD_STINK);
+        break;
+
+      case FieldType.WALL_BLADES:
+        if (this.isImpassable(x, y)) return false;
+        if (is(FieldType.BARRIER_FIRE) || is(FieldType.BARRIER_FORCE)
+          || is(FieldType.FIELD_QUICKFIRE) || is(FieldType.FIELD_ANTIMAGIC)) return false;
+        clear(FieldType.WALL_FORCE);
+        clear(FieldType.WALL_FIRE);
+        break;
+
+      case FieldType.CLOUD_SLEEP:
+        if (this.isImpassable(x, y)) return false;
+        if (is(FieldType.BARRIER_FIRE) || is(FieldType.BARRIER_FORCE)
+          || is(FieldType.FIELD_QUICKFIRE) || is(FieldType.FIELD_ANTIMAGIC)) return false;
+        clear(FieldType.WALL_FORCE);
+        clear(FieldType.WALL_FIRE);
+        break;
+
+      case FieldType.FIELD_WEB:
+        if (this.isImpassable(x, y)) return false;
+        if (is(FieldType.BARRIER_FIRE) || is(FieldType.BARRIER_FORCE)
+          || is(FieldType.FIELD_QUICKFIRE)) return false;
+        if (is(FieldType.WALL_FORCE) || is(FieldType.WALL_FIRE)
+          || is(FieldType.FIELD_ANTIMAGIC)) return false;
+        if (is(FieldType.WALL_ICE) || is(FieldType.WALL_BLADES)
+          || is(FieldType.CLOUD_SLEEP)) return false;
+        break;
+
+      // The two objects sit on any terrain at all — no impassable check.
+      case FieldType.OBJECT_CRATE:
+        if (is(FieldType.BARRIER_FIRE) || is(FieldType.BARRIER_FORCE)
+          || is(FieldType.FIELD_QUICKFIRE) || is(FieldType.OBJECT_BARREL)) return false;
+        break;
+
+      case FieldType.OBJECT_BARREL:
+        if (is(FieldType.BARRIER_FIRE) || is(FieldType.BARRIER_FORCE)
+          || is(FieldType.FIELD_QUICKFIRE) || is(FieldType.OBJECT_CRATE)) return false;
+        break;
+
+      case FieldType.BARRIER_FIRE:
+        if (is(FieldType.OBJECT_BARREL) || is(FieldType.BARRIER_FORCE)
+          || is(FieldType.FIELD_QUICKFIRE) || is(FieldType.OBJECT_CRATE)) return false;
+        // A barrier raised over antimagic usually fizzles — and this draws.
+        if (is(FieldType.FIELD_ANTIMAGIC) && this.host.rng.getRan(1, 0, 3) < 3) return false;
+        clear(FieldType.FIELD_WEB);
+        clear(FieldType.WALL_FORCE);
+        clear(FieldType.WALL_FIRE);
+        clear(FieldType.FIELD_ANTIMAGIC);
+        clear(FieldType.CLOUD_STINK);
+        clear(FieldType.WALL_ICE);
+        clear(FieldType.WALL_BLADES);
+        clear(FieldType.CLOUD_SLEEP);
+        break;
+
+      case FieldType.BARRIER_FORCE:
+        if (is(FieldType.BARRIER_FIRE) || is(FieldType.OBJECT_BARREL)
+          || is(FieldType.FIELD_QUICKFIRE) || is(FieldType.OBJECT_CRATE)) return false;
+        if (is(FieldType.FIELD_ANTIMAGIC) && this.host.rng.getRan(1, 0, 2) < 2) return false;
+        clear(FieldType.FIELD_WEB);
+        clear(FieldType.WALL_FORCE);
+        clear(FieldType.WALL_FIRE);
+        clear(FieldType.FIELD_ANTIMAGIC);
+        clear(FieldType.CLOUD_STINK);
+        clear(FieldType.WALL_ICE);
+        clear(FieldType.WALL_BLADES);
+        clear(FieldType.CLOUD_SLEEP);
+        break;
+
+      case FieldType.FIELD_QUICKFIRE: {
+        const ter = this.host.terrainType(this.record.terrain[x]![y]!);
+        if (ter.blockage === TerObstruct.BLOCK_SIGHT) return false;
+        // The C++'s own TODO here: it is odd that BLOCK_MOVE_AND_SHOOT isn't
+        // on this list. Kept as it ships — quickfire spreads into those.
+        if (ter.blockage === TerObstruct.BLOCK_MOVE_AND_SIGHT) return false;
+        if (is(FieldType.FIELD_ANTIMAGIC) && this.host.rng.getRan(1, 0, 1) === 0) return false;
+        if (is(FieldType.BARRIER_FORCE) || is(FieldType.BARRIER_FIRE)) return false;
+        this.quickfirePresent = true;
+        clear(FieldType.WALL_FORCE);
+        clear(FieldType.WALL_FIRE);
+        clear(FieldType.FIELD_ANTIMAGIC);
+        clear(FieldType.CLOUD_STINK);
+        clear(FieldType.WALL_ICE);
+        clear(FieldType.WALL_BLADES);
+        clear(FieldType.CLOUD_SLEEP);
+        clear(FieldType.FIELD_WEB);
+        clear(FieldType.OBJECT_CRATE);
+        clear(FieldType.OBJECT_BARREL);
+        clear(FieldType.BARRIER_FORCE);
+        clear(FieldType.BARRIER_FIRE);
+        break;
+      }
+
+      // --- The decals: clear ground, and only one of them at a time ---------
+      case FieldType.SFX_SMALL_BLOOD:
+        if (!this.freeForSfx(x, y)) return false;
+        if (is(FieldType.SFX_MEDIUM_BLOOD) || is(FieldType.SFX_LARGE_BLOOD)) return false;
+        for (const f of [FieldType.SFX_SMALL_SLIME, FieldType.SFX_LARGE_SLIME,
+          FieldType.SFX_ASH, FieldType.SFX_BONES, FieldType.SFX_RUBBLE]) clear(f);
+        break;
+
+      case FieldType.SFX_MEDIUM_BLOOD:
+        if (!this.freeForSfx(x, y)) return false;
+        if (is(FieldType.SFX_LARGE_BLOOD)) return false;
+        for (const f of [FieldType.SFX_SMALL_BLOOD, FieldType.SFX_SMALL_SLIME,
+          FieldType.SFX_LARGE_SLIME, FieldType.SFX_ASH, FieldType.SFX_BONES,
+          FieldType.SFX_RUBBLE]) clear(f);
+        break;
+
+      case FieldType.SFX_LARGE_BLOOD:
+        if (!this.freeForSfx(x, y)) return false;
+        for (const f of [FieldType.SFX_SMALL_BLOOD, FieldType.SFX_MEDIUM_BLOOD,
+          FieldType.SFX_SMALL_SLIME, FieldType.SFX_LARGE_SLIME, FieldType.SFX_ASH,
+          FieldType.SFX_BONES, FieldType.SFX_RUBBLE]) clear(f);
+        break;
+
+      case FieldType.SFX_SMALL_SLIME:
+        if (!this.freeForSfx(x, y)) return false;
+        if (is(FieldType.SFX_LARGE_SLIME)) return false;
+        for (const f of [FieldType.SFX_SMALL_BLOOD, FieldType.SFX_MEDIUM_BLOOD,
+          FieldType.SFX_LARGE_BLOOD, FieldType.SFX_ASH, FieldType.SFX_BONES,
+          FieldType.SFX_RUBBLE]) clear(f);
+        break;
+
+      case FieldType.SFX_LARGE_SLIME:
+        if (!this.freeForSfx(x, y)) return false;
+        for (const f of [FieldType.SFX_SMALL_BLOOD, FieldType.SFX_MEDIUM_BLOOD,
+          FieldType.SFX_LARGE_BLOOD, FieldType.SFX_SMALL_SLIME, FieldType.SFX_ASH,
+          FieldType.SFX_BONES, FieldType.SFX_RUBBLE]) clear(f);
+        break;
+
+      case FieldType.SFX_ASH:
+        if (!this.freeForSfx(x, y)) return false;
+        for (const f of [FieldType.SFX_SMALL_BLOOD, FieldType.SFX_MEDIUM_BLOOD,
+          FieldType.SFX_LARGE_BLOOD, FieldType.SFX_SMALL_SLIME, FieldType.SFX_LARGE_SLIME,
+          FieldType.SFX_BONES, FieldType.SFX_RUBBLE]) clear(f);
+        break;
+
+      case FieldType.SFX_BONES:
+        if (!this.freeForSfx(x, y)) return false;
+        for (const f of [FieldType.SFX_SMALL_BLOOD, FieldType.SFX_MEDIUM_BLOOD,
+          FieldType.SFX_LARGE_BLOOD, FieldType.SFX_SMALL_SLIME, FieldType.SFX_LARGE_SLIME,
+          FieldType.SFX_ASH, FieldType.SFX_RUBBLE]) clear(f);
+        break;
+
+      case FieldType.SFX_RUBBLE:
+        if (!this.freeForSfx(x, y)) return false;
+        for (const f of [FieldType.SFX_SMALL_BLOOD, FieldType.SFX_MEDIUM_BLOOD,
+          FieldType.SFX_LARGE_BLOOD, FieldType.SFX_SMALL_SLIME, FieldType.SFX_LARGE_SLIME,
+          FieldType.SFX_ASH, FieldType.SFX_BONES]) clear(f);
+        break;
+
+      // FIELD_DISPEL and FIELD_SMASH are pattern codes, not things that sit on
+      // a square — the C++ has no setter for either.
+      default:
+        return false;
+    }
+
+    return this.put(x, y, which, true);
   }
 
   // The real `dispel_fields` is `game/fieldEffects.ts` — it rolls a save per

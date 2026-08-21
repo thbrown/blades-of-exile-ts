@@ -39,7 +39,7 @@ import { specItemUseable } from './data/quest';
 import { trappedMonsters } from './game/soulCrystal';
 import { castTownSpell, startTownTargeting } from './game/spellTarget';
 import { CastDialog } from './dialogs/castDialog';
-import { repeatCastOk, storedSpell } from './game/spellRepeat';
+import { forcedCast } from './game/spellRepeat';
 import { GetItemsDialog } from './dialogs/getItemsDialog';
 import { placeSpellPattern } from './game/spellPatterns';
 import { GameMode, isCombat, isOut, isScrollable } from './game/modes';
@@ -1018,9 +1018,9 @@ async function main(): Promise<void> {
    */
   const recastFlow = async (type: Skill): Promise<void> => {
     if (dialogs.active) return;
-    const caster = repeatCastOk(session, type);
-    if (caster !== null) {
-      const spell = storedSpell(session, type, caster);
+    const forced = forcedCast(session, type);
+    if (forced !== null) {
+      const { caster, spell } = forced;
       if (spell !== Spell.NONE) {
         if (isCombat(session.mode)) await combatCastSpell(session, spell);
         else await session.castTownSpell(caster, spell);

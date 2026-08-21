@@ -1274,7 +1274,7 @@ export function applySave(data: Uint8Array, univ: Universe): void {
     const which = townFile.at(0)?.first('TOWN')?.int(0) ?? TOWN_NUM_OUTDOORS;
     const record = scenario.towns[which];
     if (record === undefined) throw new Error(`save names town ${which}, which isn't in the scenario`);
-    univ.town = new CurTown(record);
+    univ.town = new CurTown(record, univ);
     univ.town.monsters = [];
     univ.town.items = [];
     readCurTown(townFile, univ, univ.town);

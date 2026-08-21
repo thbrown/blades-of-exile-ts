@@ -267,7 +267,7 @@ export function startOutdoorCombat(
   const terType = univ.out.at(where.x, where.y);
   createOutCombatTerrain(
     univ, arenaTown, terType, numWalls, univ.out.isRoad(where.x, where.y));
-  const town = new CurTown(arenaTown);
+  const town = new CurTown(arenaTown, univ);
   univ.town = town;
   session.arena = arenaTown;
 

@@ -35,7 +35,7 @@ import { combatCastCheck, combatCastSpell } from '../game/spellCombat';
 import { cancelSpellTargeting, doCombatCast, placeTarget } from '../game/spellCombatTarget';
 import { cancelTownTargeting, castTownSpell } from '../game/spellTarget';
 import { castSpell } from '../game/spellTown';
-import { repeatCastOk, storedSpell } from '../game/spellRepeat';
+import { forcedCast } from '../game/spellRepeat';
 import { Skill } from '../universe/skills';
 import {
   Replay, ReplayAction, ReplaySource, locationFromAction, numberFromAction,
@@ -386,9 +386,9 @@ export async function runReplay(
           // makes `repeat_cast_ok` run first; `handle_menu_spell` sets
           // `spell_forced` alone, which is why the check hangs off the second.
           if (action.info.spell_forced === 'true') {
-            const caster = repeatCastOk(session, type);
-            if (caster === null) break;
-            const spell = storedSpell(session, type, caster);
+            const forced = forcedCast(session, type);
+            if (forced === null) break;
+            const { caster, spell } = forced;
             if (spell === Spell.NONE) break;
             if (isCombat(session.mode)) await combatCastSpell(session, spell);
             else await session.castTownSpell(caster, spell);

@@ -1604,11 +1604,12 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue as of 2026-08-20 is **`doMonsters` (4)**, **`processFields` (4)**,
-  **`handleDisease` (3)**, **`totalEncumbrance` (3)** and **`monstPickTarget`
-  (3)** — monster behaviour is still most of what is left, and `processFields`
-  is the first non-monster bucket to reach the top. Corpus **92,773** matching
-  draws, **6 of 87** files agreeing all the way.
+  queue as of 2026-08-21 is **`doMonsters` (4)**, **`pickMonsterAbility` (3)**,
+  **`handleDisease` (3)**, **`totalEncumbrance` (3)** and a three-file bucket of
+  recordings where **the C++ draws on a `move` and this port does not** —
+  monster behaviour is still most of what is left. `processFields` has gone 4
+  files → 1 and `monstPickTarget` has left the queue. Corpus **103,066**
+  matching draws, **6 of 87** files agreeing all the way.
 
   Bucket sizes churn, and churn is the point: `selectActivePc` went 9 files → 2
   in one slice, and the files it held reappeared in `monstPickTarget`,
@@ -4836,3 +4837,81 @@ The M6 list below is kept for the history of what it covered:
     compared directly — which action this port consumed that the C++ did not,
     or vice versa — and that is a different instrument again: nothing here
     diffs the two action sequences, only the draws they produce.
+
+- **Putting a field on a square is not a bit-set: the whole `cCurTown::set_*`
+  family, ported (M8, 2026-08-21).** The `processFields` bucket's head file,
+  `ASR_10-05-2025_08-35-52`, parted at draw 62 with the C++ rolling **8**
+  `get_ran(2,1,8)` for burning squares and this port rolling **31**. The
+  previous entry guessed at `placeSpellPattern`. It was not that either.
+  - **`cCurTown::setField` was a bare `Set.add`**, and the C++'s twenty-odd
+    `set_*` methods (universe.cpp:385-806) are not. Each type refuses some
+    squares outright (`set_quickfire` won't burn on `BLOCK_SIGHT` or
+    `BLOCK_MOVE_AND_SIGHT` terrain; every wall and cloud refuses
+    `is_impassable`; a decal needs completely clear ground), most cancel the
+    fields they can't share a square with, and **two of them draw**:
+    `set_fire_barr` and `set_force_barr` roll `get_ran(1,0,3)`/`(1,0,2)`
+    against an antimagic field already there, and `set_quickfire` rolls
+    `get_ran(1,0,1)`. All of it is ported now, behind the same `setField`
+    dispatch, which returns the C++'s `bool` — several callers print "Failed."
+    on a false.
+  - Quickfire was the visible half: with no terrain check it crept through the
+    walls of the town and every later turn re-damaged every burning square, so
+    one bad placement cost draws forever (37,305 here against the C++'s 5,453).
+  - Two of the C++'s own oddities are kept and commented: `is_impassable` only
+    counts `BLOCK_MOVE_AND_SIGHT` (its own TODO says that is wrong), and
+    `set_quickfire` omits `BLOCK_MOVE_AND_SHOOT` from its refusals (also its
+    own TODO). `set_force_cage` checks nothing at all.
+  - `place_preset_fields` (universe.cpp:119) runs presets through the same
+    setters, so `CurTown`'s constructor does too — a quickfire preset on a wall
+    is refused at town setup exactly as it would be mid-game.
+  - *Two tests were asserting the old permissiveness*: `saveIo` round-tripped a
+    wall of fire onto a wall, and `processFields` proved `monst_inflict_fields`
+    breaks out early by stacking a web under quickfire — a pair that cannot
+    coexist. Stink and web can (neither placement rule mentions the other), and
+    stink is tested first, so it proves the same thing.
+
+- **`pc_casting`, the third of the three "who cast that" globals (M8,
+  2026-08-21).** With the fire contained, the same file parted at draw 65: the
+  C++ repeat-casts Heal twice (`spell_forced`, boe.actions.cpp:3057) and this
+  port answered `Repeat cast: Can't cast.` and drew nothing.
+  - `repeat_cast_ok` (boe.party.cpp:521) asks about **`pc_casting`** out of
+    combat, and this port asked about `univ.cur_pc`. They are different things:
+    out of combat the party moves as one and `cur_pc` is whoever the interface
+    last touched, while `pc_casting` is the PC the last spell picker settled
+    on. The PC it asked about didn't know the spell.
+  - That makes **three** globals with similar names and different jobs, which
+    is why this hid: `store_last_cast_*` (`session.lastCaster`) is where the
+    picker *opens*, `store_*_caster` (`session.mageStore.caster`) is who cast
+    what is stored, and `pc_casting` (`session.pcCasting`, new) is the live
+    cursor the dialog leaves behind. `pick_spell` writes the third at
+    boe.party.cpp:2139-2169, `pick_spell_caster` at :1955, `handle_menu_spell`
+    at boe.actions.cpp:2019.
+  - And **who is checked is not who casts**: after the check passes,
+    `cast_spell` runs the spell as `store_*_caster` (:508), not as the PC
+    `repeat_cast_ok` asked about. `forcedCast` in `spellRepeat.ts` is now the
+    whole `spell_forced` branch — the check, then the caster, then the spell —
+    for both the replay driver and the **M**/**P** keys, which had each grown
+    their own copy of it.
+
+- **Every creature in every town fight had one action point (M8,
+  2026-08-21).** Same file, draw 326: the C++'s monster 13 walks four squares
+  and this port's walks one. `[mbranch]` said it in one line — `ap=4` there,
+  `ap=1` here, same monster, same square, same target.
+  - `do_monster_turn` gives a creature `ap = speed`, and then
+    `if(is_town()) ap = max(1, ap/3)` (boe.combat.cpp:2120). **`is_town()` is a
+    question about the *mode*, not about which map the party is on**: during a
+    town fight the mode is COMBAT, so the third never applies and a creature
+    gets its full speed — a town turn being worth three combat ones is the
+    whole point of the division. This port asked `univ.isInTown()`
+    (`party.town_num < 200`), which is true throughout a town fight, so every
+    creature crawled at one point a round.
+  - Worth remembering as a shape, because `is_out()`/`is_town()`/`is_combat()`
+    read like map questions and are not: they are ranges over `overall_mode`.
+    Grep for other `isInTown()` calls standing where the C++ wrote `is_town()`.
+  - **Where it stands.** Corpus 92,773 → **103,066** matching draws across the
+    three fixes above, the second-largest jump of the project; `processFields`
+    went 4 files → 1, `monstPickTarget` left the queue entirely, and
+    `ASR_10-05-2025_08-35-52` went from 61 matching draws to 325. Still 6 of 87
+    all the way. `DRAW_PIN` for `ZKR_15-05-2025_18-04-58` moves 6,480 → 6,562
+    with its *matching* count unmoved at 6,223 — a deliberate update, and the
+    reason that test pins rather than floors.

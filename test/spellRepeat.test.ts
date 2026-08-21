@@ -93,15 +93,17 @@ describe('repeating the last spell', () => {
   });
 
   /**
-   * The `store-spell-caster` flag. Without it the shortcut casts from whoever
-   * the game *currently* thinks is casting, which is the behaviour every
-   * recording made before the fix depends on; with it, from whoever cast it.
+   * The `store-spell-caster` flag. Without it the shortcut asks about
+   * `pc_casting` — the PC the last spell picker settled on, *not* the active
+   * PC — which is the behaviour every recording made before the fix depends
+   * on; with it, about whoever cast the stored spell.
    */
   it('picks the caster according to the store-spell-caster flag', () => {
     const s = newGame();
     s.univ.curPc = 3;
     doMageSpell(s, 3, Spell.LIGHT);
-    s.univ.curPc = 1;
+    s.univ.curPc = 5;
+    s.pcCasting = 1;
 
     setFeatureFlags({});
     expect(repeatCastOk(s, Skill.MAGE_SPELLS)).toBe(1);

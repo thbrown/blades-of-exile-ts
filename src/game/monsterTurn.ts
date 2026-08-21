@@ -25,7 +25,7 @@ import { NO_ONE, pcAttack, totalEncumbrance } from './combat';
 import {
   abilityCost, monstFireMissile, monsterBasicAbil, monsterSummon, pickMonsterAbility,
 } from './monsterAbilities';
-import { GameMode, isCombat } from './modes';
+import { GameMode, isCombat, isTown } from './modes';
 import { damageMonst, damagePc, hitChance } from './damage';
 import { onHitTargetSpecial } from './weaponAbilities';
 import { ItemAbil } from '../data/item';
@@ -1003,7 +1003,13 @@ function giveMonstersMoves(session: GameSession): void {
       // step onto a bed.
       if (!monst.isFriendly) univ.party.hostilesPresent = 30;
       monst.ap = monst.mon.speed;
-      if (session.univ.isInTown()) monst.ap = Math.max(1, Math.trunc(monst.ap / 3));
+      // **`is_town()` is a *mode* question, not "which map is this?"** During a
+      // town fight the mode is COMBAT, so this third never applies and a
+      // creature gets its full speed — a town turn is worth three combat ones,
+      // which is exactly what the division is for. Asking
+      // `univ.isInTown()` (party.town_num) instead gave every creature in every
+      // town fight one action point, and they crawled.
+      if (isTown(session.mode)) monst.ap = Math.max(1, Math.trunc(monst.ap / 3));
       if (univ.party.age % 2 === 0 && (monst.status[Status.HASTE_SLOW] ?? 0) < 0) monst.ap = 0;
       if (monst.ap > 0) {
         const webs = monst.status[Status.WEBS] ?? 0;

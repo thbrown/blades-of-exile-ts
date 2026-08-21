@@ -68,9 +68,14 @@ export function repeatCastOk(session: GameSession, type: Skill): number | null {
     // The fix: recast from whoever cast it, not from whoever the game happens
     // to think is casting now.
     whoWouldCast = storeFor(session, type).caster;
-    if (whoWouldCast === NO_TARGET) whoWouldCast = univ.curPc;
+    if (whoWouldCast === NO_TARGET) whoWouldCast = session.pcCasting;
   } else {
-    whoWouldCast = univ.curPc;
+    // **`pc_casting`, not the active PC.** Out of combat the party moves as
+    // one and `univ.cur_pc` is whoever the interface last touched; the spell
+    // was cast by whoever the picker settled on, and that is who the shortcut
+    // asks about. Using `cur_pc` here refused a legitimate recast — the PC it
+    // asked about didn't know the spell.
+    whoWouldCast = session.pcCasting;
   }
 
   const caster = univ.party.pcs[whoWouldCast];
@@ -131,4 +136,26 @@ export function storedSpell(session: GameSession, type: Skill, caster: number): 
     return session.univ.party.pcs[caster]?.lastCast[type] ?? Spell.NONE;
   }
   return storeFor(session, type).spell;
+}
+
+/**
+ * The whole `spell_forced` branch: `cast_spell` (boe.party.cpp:502) out of
+ * combat, `combat_cast_mage_spell`/`_priest_spell` (boe.combat.cpp:4539/:4758)
+ * in it. Returns who casts and what, or null when the check refused.
+ *
+ * **Who casts is not who was checked.** `repeat_cast_ok` asks about
+ * `pc_casting`, and then the cast itself runs as `store_*_caster` — the PC who
+ * cast the stored spell. The two are usually the same PC and occasionally
+ * aren't, and the C++ lets them differ.
+ */
+export function forcedCast(
+  session: GameSession, type: Skill,
+): { caster: number; spell: Spell } | null {
+  if (repeatCastOk(session, type) === null) return null;
+  if (isCombat(session.mode)) {
+    const caster = session.univ.curPc;
+    return { caster, spell: storedSpell(session, type, caster) };
+  }
+  session.pcCasting = storeFor(session, type).caster;
+  return { caster: session.pcCasting, spell: storeFor(session, type).spell };
 }

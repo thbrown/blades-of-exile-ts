@@ -222,7 +222,10 @@ describe('.exg round trip', () => {
     rat.status[Status.POISON] = 2;
     town.monstHostile = true;
     town.items.push({ ...presetItem(ItemPreset.KNIFE), itemLoc: { x: 8, y: 8 } });
-    town.setField(5, 6, FieldType.WALL_FIRE);
+    // On the square the party is standing on, because `setField` enforces the
+    // C++'s placement rules now — a wall of fire won't go on a wall.
+    const wall = univ.party.townLoc;
+    town.setField(wall.x, wall.y, FieldType.WALL_FIRE);
     town.makeExplored(4, 4);
     town.record.terrain[3]![3] = 17;
 
@@ -238,7 +241,7 @@ describe('.exg round trip', () => {
       .toBe(town.monsters.filter((m) => m.isAlive).length);
     expect(backRat.status[Status.POISON]).toBe(2);
     expect(back.town!.items.some((i) => i.itemLoc.x === 8 && i.itemLoc.y === 8)).toBe(true);
-    expect(back.town!.hasField(5, 6, FieldType.WALL_FIRE)).toBe(true);
+    expect(back.town!.hasField(wall.x, wall.y, FieldType.WALL_FIRE)).toBe(true);
     expect(back.town!.isExplored(4, 4)).toBe(true);
     expect(back.town!.record.terrain[3]![3]).toBe(17);
   });
