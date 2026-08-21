@@ -46,6 +46,18 @@ sides — `[mmove]` says a creature stepped somewhere the other side didn't, and
 `[mbranch]` says *why* it was going there, which is the half that names the
 rule. That pair is what found `switch_target_to_adjacent`: identical draws,
 identical positions, `target=2` on one side and `target=4` on the other.
+**`BOE_TRACE_MMOVE` also prints `[domonst]` and `[notice]`**, both of which
+answer the shape above from the other end. `[domonst] mode= party= age=` goes at
+the top of `do_monsters`, and it is the one line that pins *when* a turn's
+upkeep ran and *where the party was standing* while it ran — two runs can hold
+the same party path and still feed `do_monsters` different squares if one of
+them charged a turn the other didn't. `[notice] <slot> at (x,y) party=(x,y) d=
+att=` prints every candidate for the "Monster saw you!" roll, which turns "this
+port makes one extra `get_ran(1,1,100)`" into "creature 13, eight squares away,
+that the other side never even considered". Together they found
+`handle_get_items`: the two sides agreed on every draw and every square, and
+disagreed by one on the *age* at which they were standing there.
+
 `BOE_TRACE_PCS=1` (`PCS=1` here) prints each PC's `main_status`, health and
 combat position. Whether a PC is alive gates more monster behaviour than you
 would guess — `do_monster_turn` will not walk toward a dead one, `closest_pc`

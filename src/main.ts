@@ -940,10 +940,17 @@ async function main(): Promise<void> {
     // which sweep it was: a hostile creature in sight narrows it to adjacent.
     await dialogs.runScreen(new GetItemsDialog(ctx, store, session, reachable,
       massGet ? 'Getting all nearby items:' : 'Getting all adjacent items:'));
+    // **Rummaging costs a turn.** `handle_get_items` sets `did_something` when
+    // `get_item` returns non-zero, and `get_item` returns 1 as soon as there is
+    // anything in reach at all — not when something is actually taken
+    // (boe.items.cpp:277). So the moment the screen has a row on it, the clock
+    // ticks and the monsters get a move once the screen closes. Both the AP and
+    // the turn are spent *after* the dialog, because in the C++ the dialog runs
+    // inline inside `handle_get_items` and `advance_time` follows it.
     if (inFight) {
       takeAp(univ, 4);
       session.afterCombatAction();
-    }
+    } else await session.afterPartyTurn();
     setStatus();
     redraw();
   };

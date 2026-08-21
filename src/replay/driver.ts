@@ -162,6 +162,8 @@ export async function runReplay(
    * none of — so it keeps its own, which is all the item actions need.
    */
   const win = new ItemWindow();
+  /** Whether the open get-items screen owes a turn when it closes. */
+  let gettingCostsTurn = false;
   /**
    * The get-items screen, while one is open — `show_get_items`'s own loop,
    * which unlike the spell picker stays up across many clicks.
@@ -426,7 +428,13 @@ export async function runReplay(
           // the six PC buttons, the eight lettered rows and the arrows all
           // answer here until `done` closes it.
           if (getting !== null) {
-            if (getting.click(id) === 'done') getting = null;
+            if (getting.click(id) === 'done') {
+              getting = null;
+              if (gettingCostsTurn) {
+                gettingCostsTurn = false;
+                await session.afterPartyTurn();
+              }
+            }
             break;
           }
           if (picking !== null) {
@@ -649,6 +657,13 @@ export async function runReplay(
           // on it, so with an empty square the `click_control`s that would have
           // answered it are simply not in the recording either.
           getting = items.length > 0 ? new GetItemsPick(session, items) : null;
+          // **Rummaging costs a turn**, and it is spent when the screen closes:
+          // `get_item` runs the dialog inline and `handle_get_items` sets
+          // `did_something` from its return, which is 1 as soon as there was
+          // anything in reach — not when something was actually taken
+          // (boe.items.cpp:277). With no screen there is nothing to close, so
+          // the turn is charged here instead.
+          if (getting !== null) gettingCostsTurn = !inFight;
           if (inFight) {
             takeAp(session.univ, 4);
             session.afterCombatAction();

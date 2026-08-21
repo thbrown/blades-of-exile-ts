@@ -5120,3 +5120,37 @@ The M6 list below is kept for the history of what it covered:
     definition.** `is_special`, `monst_near`'s `vdist`, `spell_caster`'s zero
     initialisation — three bugs this session where the port implemented what
     the name said rather than what the body did.
+
+- **Rummaging costs a turn (M8, 2026-08-21).** The head of the `doMonsters`
+  bucket, `ASR_10-05-2025_08-18-51`, parted on one extra `get_ran(1,1,100)` —
+  this port rolled a "Monster saw you!" check the C++ never made. Two new trace
+  lines settled it, and both are worth keeping:
+  - **`[notice]`** (both sides, under `MMOVE`/`BOE_TRACE_MMOVE`) prints every
+    candidate for that roll — slot, square, party square, distance, attitude.
+    It said: creature 13, at (23,29), party at (16,34), **d=8**, hostile. The
+    C++ agreed about the creature and disagreed about the party: its
+    `do_monsters` ran with the party still at **(15,34)**, which is d=9 and out
+    of range.
+  - **`[domonst]`** prints `mode`, party square and **age** at the top of
+    `do_monsters`. That is what named the bug: at the *same age*, the two runs
+    had the party on different squares. The party *paths* were identical; the
+    C++ had simply spent one more turn standing still.
+  - **The rule.** `handle_get_items` (boe.actions.cpp:1389) sets
+    `did_something` from `get_item`'s return, and `get_item` returns 1 as soon
+    as there is **anything in reach** — not when something is taken
+    (boe.items.cpp:277). So opening the get-items screen on a square with loot
+    on it costs a turn: the clock ticks and the monsters move while you rummage.
+    This port charged nothing in town.
+  - Both the turn and the combat AP are spent **after** the screen closes,
+    because in the C++ `get_item` runs the dialog inline and `advance_time`
+    follows it. The driver holds a `gettingCostsTurn` flag across the
+    `click_control`s that answer the screen; `main.ts` awaits the dialog and
+    then charges.
+  - **Where it stands.** Corpus 144,899 → **158,953** matching draws, the
+    biggest jump since the field-placement fix, and `doMonsters` went 7 files →
+    5. Still 7 of 87 all the way; "blocked outside the rules" 34 → 35.
+  - The trace pair is the lesson: **the draw stream cannot see a turn that
+    makes no draws.** Both sides walked the same squares in the same order and
+    drew the same numbers; the only visible difference was the *age* at which
+    they did it, and nothing printed the age next to the party's square until
+    `[domonst]` did.

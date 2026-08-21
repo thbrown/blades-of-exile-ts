@@ -587,6 +587,7 @@ export function doMonsters(session: GameSession): void {
   const town = univ.town;
   if (!town) return;
   const partyLoc = univ.party.townLoc;
+  if (TRACE_MMOVE) console.log(`      [domonst] mode=${session.mode} party=(${partyLoc.x},${partyLoc.y}) age=${univ.party.age}`);
 
   for (const monst of town.monsters) {
     if (!monst.isAlive) continue;
@@ -657,6 +658,7 @@ export function doMonsters(session: GameSession): void {
       // Stealth is **46** here and 45 in the combat copy of this roll
       // (boe.combat.cpp:2079). The two were written separately and drifted by
       // one; both are kept as they are.
+      if (TRACE_MMOVE) console.log(`      [notice] ${monst.slot} at (${monst.curLoc.x},${monst.curLoc.y}) party=(${partyLoc.x},${partyLoc.y}) d=${dist(monst.curLoc, partyLoc)} att=${monst.attitude}`);
       const r1 = univ.rng.getRan(1, 1, 100)
         + ((univ.party.partyStatus[PartyStatus.STEALTH] ?? 0) > 0 ? 46 : 0)
         + session.canSeeLight(monst.curLoc, partyLoc) * 10;

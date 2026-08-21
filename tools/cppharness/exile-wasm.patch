@@ -197,10 +197,34 @@ index b19e0983..a19325ec 100644
  #endif
  #ifdef __APPLE__
 diff --git a/src/game/boe.monster.cpp b/src/game/boe.monster.cpp
-index 937c63d0..034d555c 100644
+index 937c63d0..0c0aa384 100644
 --- a/src/game/boe.monster.cpp
 +++ b/src/game/boe.monster.cpp
-@@ -698,13 +698,26 @@ bool try_move(short i,location start,short x,short y) {
+@@ -194,6 +194,10 @@ void do_monsters() {
+ 	short r1,target;
+ 	location l1,l2;
+ 	bool acted_yet = false;
++	if(getenv("BOE_TRACE_MMOVE"))
++		std::cout << "      [domonst] mode=" << int(overall_mode) << " party=("
++			<< univ.party.town_loc.x << "," << univ.party.town_loc.y << ") age="
++			<< univ.party.age << std::endl;
+ 	
+ 	if(overall_mode == MODE_TOWN)
+ 		for(short i = 0; i < univ.town.monst.size(); i++)
+@@ -254,6 +258,12 @@ void do_monsters() {
+ 				// Make hostile monsters active
+ 				if(univ.town.monst[i].active == eCreatureStatus::IDLE && !univ.town.monst[i].is_friendly()
+ 					&& (dist(univ.town.monst[i].cur_loc,univ.party.town_loc) <= 8)) {
++					if(getenv("BOE_TRACE_MMOVE"))
++						std::cout << "      [notice] " << i << " at (" << univ.town.monst[i].cur_loc.x
++							<< "," << univ.town.monst[i].cur_loc.y << ") party=(" << univ.party.town_loc.x
++							<< "," << univ.party.town_loc.y << ") d="
++							<< dist(univ.town.monst[i].cur_loc,univ.party.town_loc)
++							<< " att=" << int(univ.town.monst[i].attitude) << std::endl;
+ 					r1 = get_ran(1,1,100);
+ 					r1 += (univ.party.status[ePartyStatus::STEALTH] > 0) ? 46 : 0;
+ 					r1 += can_see_light(univ.town.monst[i].cur_loc,univ.party.town_loc,sight_obscurity) * 10;
+@@ -698,13 +708,26 @@ bool try_move(short i,location start,short x,short y) {
  	if((overall_mode == MODE_TOWN || overall_mode == MODE_COMBAT) && univ.town.is_force_cage(start.x,start.y))
  		return false;
  	
@@ -233,7 +257,7 @@ index 937c63d0..034d555c 100644
  }
  
  bool combat_move_monster(short which,location destination) {
-@@ -765,7 +778,13 @@ location random_shift(location start) {
+@@ -765,7 +788,13 @@ location random_shift(location start) {
  }
  
  bool outdoor_move_monster(short num,location dest) {
