@@ -1875,11 +1875,19 @@ export class GameSession {
         if (runIt) {
           const r = await this.runSpecial(
             SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, special, where);
-          // The chain may have moved the party to another town, in which case
-          // there is nothing left here to check.
-          if (!this.inTown || this.univ.town !== town) return { canEnter: true, forced: false };
           if (r.blocked) canEnter = false;
           else if (r.forced) forced = true;
+          // The chain may have moved the party to another town, in which case
+          // there is nothing left on *this* town's list to look at — the C++'s
+          // loop condition is `town_num == univ.party.town_num`
+          // (boe.specials.cpp:238). **What it does not do is forget what the
+          // node just said.** This port used to return `canEnter: true` here,
+          // which turned a door-to-another-town node — the node blocks the
+          // step, having already moved you — into a move that *succeeded*, and
+          // a successful move charges a turn. So every transition between two
+          // towns cost a turn here and none in the C++, and every `age % n`
+          // upkeep after it was one turn out.
+          if (!this.inTown || this.univ.town !== town) return { canEnter, forced };
         }
       }
     }

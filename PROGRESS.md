@@ -5154,3 +5154,32 @@ The M6 list below is kept for the history of what it covered:
     drew the same numbers; the only visible difference was the *age* at which
     they did it, and nothing printed the age next to the party's square until
     `[domonst]` did.
+
+- **Walking from one town into another cost a turn here and none in the C++
+  (M8, 2026-08-21).** `VoDT_20-04-2025_21-09-37`, the head of `doMonsters`,
+  parted at draw 4,086 — and `[domonst]` (the new trace line above) said why in
+  one line: at age 45642 the C++ had the party at (16,3) and this port had it at
+  **(14,43)**, a square in a different town. One age apart, for the rest of the
+  recording.
+  - The C++'s two town transitions — out of one town at (15,1) and into
+    Administration at (14,42) — both ran with **`did_something = 0`**, which a
+    third temporary trace (`[advtime]`) showed directly. No turn, no clock, no
+    monsters.
+  - **Why.** `check_special_terrain`'s town-special loop is bounded by
+    `town_num == univ.party.town_num` (boe.specials.cpp:238) — it stops looking
+    at *this* town's list once the party is somewhere else — but `can_enter`
+    keeps whatever the node set, and a door-to-another-town node blocks the
+    step it has already carried out. `town_move_party` then returns false and
+    `handle_move` never sets `did_something`.
+  - This port returned `{ canEnter: true }` on that path — an invention, and a
+    plausible-looking one: "the party is elsewhere, so there is nothing left to
+    check here". It turned a blocked step into a successful one, and a
+    successful step charges a turn.
+  - **Where it stands.** Corpus 158,953 → **172,211** matching draws and
+    **8 of 87** files agree all the way, up from 7. The file itself went 4,085 →
+    9,555 matching draws and 201 → 430 actions. `doMonsters` is down to 4 files
+    and no longer heads the queue; `monstPickTarget` (4) is level with it.
+  - Third in a row of the same shape, and worth stating as a rule of thumb:
+    **when a chain of C++ code leaves a variable alone, leaving it alone is the
+    port.** Inventing a value for the "obvious" case — `canEnter: true` here,
+    `NO_ONE` for `spell_caster` earlier — is where this port keeps diverging.
