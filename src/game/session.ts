@@ -766,14 +766,23 @@ export class GameSession {
     const ter = out.at(realDest.x, realDest.y);
     const terType = this.univ.terrainType(ter);
     const diagonal = realDest.x !== party.outLoc.x && realDest.y !== party.outLoc.y;
+    /**
+     * **Nothing.** The C++ shifts the window before it decides whether the step
+     * is legal, and when it refuses the step it *leaves the window shifted*
+     * (boe.actions.cpp:3972 has no undo path). The party's `out_loc` has
+     * already been renumbered by 48 at that point, so bumping into a mountain
+     * near the seam still slides the whole 96×96 view a sector over — and the
+     * recordings prove it: one walks east to (91,10), is refused by the
+     * terrain, and the very next recorded move is `(42,9)`, which only makes
+     * sense in the *new* window.
+     *
+     * This port used to put the window back, which reads like the obviously
+     * right thing and is not what the game does. Kept as a named no-op rather
+     * than deleted at the call sites, so the six places that "undo" still say
+     * where the C++ chose not to.
+     */
     const undoWindowShift = (): void => {
-      if (storeCorner.x !== party.outdoorCorner.x || storeCorner.y !== party.outdoorCorner.y) {
-        out.shift(
-          (storeCorner.x - party.outdoorCorner.x) as -1 | 0 | 1,
-          (storeCorner.y - party.outdoorCorner.y) as -1 | 0 | 1,
-        );
-        party.iwc = storeIwc;
-      }
+      void storeCorner; void storeIwc;
     };
     if (party.inBoat >= 0) {
       if (

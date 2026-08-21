@@ -5236,3 +5236,29 @@ The M6 list below is kept for the history of what it covered:
     encounter with a forcecage in it. Kept because the next one might, and
     because the audit is the point — `is_out`, `is_town` and `is_combat` are
     ranges over `overall_mode`, and `party.town_num` is a different fact.
+
+- **Bumping into a mountain slides the window anyway (M8, 2026-08-21).**
+  `VoDT_09-04-2025_08-49-56` stopped after 32 actions with the loudest desync
+  in the corpus: "the recording stepped to (42,9), but the party is at (90,10)
+  — **48 squares** away". Forty-eight is one sector, which says window rather
+  than movement.
+  - The recording walks east to (91,10) and the next recorded move is (42,9).
+    A new `[outmove]` line on the C++ side (destination, real destination,
+    corner, terrain, blocked, forced) reads:
+    `dest=(91,10) real=(43,10) corner=(2,1) ter=30 blocked=1 forced=0`.
+  - **The C++ was blocked too.** It shifted the window right *before* testing
+    the terrain — `shift_universe_right()` sits above the blockage test
+    (boe.actions.cpp:3974) — and when the step is refused it **does not put the
+    window back**. `out_loc` has already been renumbered by 48, so the party
+    ends up standing still in a view that has slid a whole sector. That is why
+    `(42,9)` is the next move: it is one step north of (42,10), which is where
+    (90,10) *became*.
+  - This port had an `undoWindowShift` that reverted the corner, the `i_w_c`
+    and `out_loc` on every refusal. It reads like the obviously right thing and
+    it is not what the game does. It is now a named no-op, so the six call
+    sites still mark where the C++ chose not to undo.
+  - The file went **210 → 7,580 matching draws** and 32 → 245 of 253 actions.
+  - Same lesson as the `canEnter: true` entry above, from the other direction:
+    the C++ leaves state half-changed on a failure path, and tidying it up is a
+    divergence. *Read to the end of the function before deciding what a
+    failure path restores.*
