@@ -1115,14 +1115,43 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
 
         let actedYet = false;
 
-        // Flee when its nerve is gone — but the unliving and the mindless never do.
+        // **`current_monst_tactic` (boe.combat.cpp:2223)** — "the monster, if
+        // evil, looks at the situation and maybe picks a tactic", and the only
+        // tactic there is means *back away*. Two creatures do it: a caster
+        // with the party close but not yet on top of it, and **an archer with
+        // its target inside six squares and not adjacent** — which is what
+        // makes bowmen kite instead of walking into melee.
+        //
+        // It was unported, and it is not cosmetic: it feeds the flee test
+        // below, so a monster that should have backed off both *drew* one
+        // fewer `get_ran(1,1,6)` and walked the wrong way. Note the gates —
+        // more than one action point left, and `futzing == 0`, so a creature
+        // that has already wasted a point stops being clever.
+        let tactic = 0;
+        if (target !== NO_ONE && monst.ap > 1 && futzing === 0) {
+          const nearest = closestPcLoc(univ, monst.curLoc);
+          const mu = monst.mon.mu ?? 0;
+          const cl = monst.mon.cl ?? 0;
+          if ((mu > 0 || cl > 0) && dist(monst.curLoc, nearest) < 5
+            && !monstAdjacent(monst, nearest)) tactic = 1;
+          if ((monst.mon.abil[MonstAbil.MISSILE]?.active ?? false)
+            && dist(monst.curLoc, targSpace) < 6
+            && !monstAdjacent(monst, targSpace)) tactic = 1;
+        }
+
+        // Flee when its nerve is gone — but the unliving and the mindless never
+        // do — *or* when the tactic above says to. Note the outer test is on
+        // `monst.target`, and the inner one on that same index being a living
+        // PC: the C++ mixes the stored target and the local `target` here, and
+        // they are not always the same number.
         const canFlee = !monst.mon.mindless && monst.mon.race !== Race.UNDEAD
           && monst.mon.race !== Race.SKELETAL;
-        if (target !== NO_ONE && monst.morale <= 0 && canFlee) {
+        if (monst.target !== NO_ONE && ((monst.morale <= 0 && canFlee) || tactic === 1)) {
           if (monst.morale < 0) monst.morale++;
           if (monst.health > 50) monst.morale++;
           if (univ.rng.getRan(1, 1, 6) === 3) monst.morale++;
-          if (monst.mobile) {
+          const targ = monst.target;
+          if (targ < NO_ONE && (univ.party.pcs[targ]?.isAlive ?? false) && monst.mobile) {
             actedYet = fleeParty(session, monst, targSpace);
             if (actedYet) monst.ap = Math.max(0, monst.ap - 1);
           }
@@ -1180,12 +1209,18 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
           const who: Living | null = resolveTarget(session, target);
           if (who && who.isAlive) {
             const picked = pickMonsterAbility(
-              session, monst, targSpace, monstAdjacent(monst, targSpace));
+              session, monst, targSpace, monstAdjacent(monst, targSpace), target);
             if (picked) {
               univ.addStringToBuf(`${monst.mon.name}:`);
+              // DRAIN_SP picks its own victim (boe.combat.cpp:2355) — whoever
+              // still has spell points, which is often not the PC the monster
+              // was walking toward.
+              const at = picked.retarget
+                ? resolveTarget(session, picked.retarget.target) ?? who
+                : who;
               // Everything picked here goes through monst_fire_missile, which
               // sorts out the four kinds of ranged attack itself.
-              await monstFireMissile(session, monst, picked.key, picked.abil, who);
+              await monstFireMissile(session, monst, picked.key, picked.abil, at);
               // A touch costs -1 and never gets here; anything else costs its own
               // price, and 0 would spin the loop, so it still gives up a point.
               const cost = abilityCost(picked);

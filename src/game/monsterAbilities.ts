@@ -9,6 +9,7 @@
  */
 
 import { Location, dist } from '../core/location';
+import { NO_ONE } from './combat';
 import { DamageType } from '../data/monster';
 import { FieldType } from '../data/fields';
 import {
@@ -34,6 +35,34 @@ import type { GameSession } from './session';
 export interface PickedAbility {
   key: MonstAbil;
   abil: Ability;
+  /**
+   * DRAIN_SP, and only DRAIN_SP, chooses its own victim: the search below runs
+   * *before* the odds roll, and whoever it turns up replaces the monster's
+   * target for this attack (boe.combat.cpp:2355).
+   */
+  retarget?: { target: number; targSpace: Location };
+}
+
+/** `can_drain_pc` (boe.combat.cpp:2032) — worth draining, and in reach. */
+function canDrainPc(session: GameSession, from: Location, pc: Player, range: number): boolean {
+  return pc.mainStatus === MainStatus.ALIVE && pc.curSp > 4
+    && session.canSeeLight(from, pc.combatPos) < 5
+    && dist(from, pc.combatPos) <= range;
+}
+
+/** `can_drain_monst` (:2038) — the same question about a creature. */
+function canDrainMonst(
+  session: GameSession, from: Location, monst: Creature, range: number,
+): boolean {
+  return monst.isAlive && monst.mp > 4
+    && session.canSeeLight(from, monst.curLoc) < 5
+    && dist(from, monst.curLoc) <= range;
+}
+
+/** `list_enemy_monsters` (:2045) — every other creature this one is against. */
+function listEnemyMonsters(session: GameSession, monst: Creature): Creature[] {
+  return (session.univ.town?.monsters ?? []).filter(
+    (other) => other !== monst && !other.isFriendlyTo(monst));
 }
 
 /**
@@ -45,17 +74,36 @@ export interface PickedAbility {
  * SUMMON and SPECIAL aren't here because the C++ handles them outside this
  * loop — see `monsterSummon` below.
  *
- * TODO(M5b): DRAIN_SP's search for someone worth draining, which can retarget
- * the whole attack.
+ * `target` is who the monster is already after, which only DRAIN_SP looks at.
  */
 export function pickMonsterAbility(
   session: GameSession,
   monst: Creature,
   targSpace: { x: number; y: number },
   adjacent: boolean,
+  target = NO_ONE,
 ): PickedAbility | null {
   const rng = session.univ.rng;
   const range = dist(monst.curLoc, targSpace);
+  /** Set by the DRAIN_SP arm on its way into the shared one below. */
+  let drain: { target: number; targSpace: Location } | undefined;
+
+  /**
+   * The arm every ranged general ability shares (boe.combat.cpp:2343): refuse
+   * a touch, refuse an out-of-range target, refuse to spit at someone already
+   * adjacent, then roll the odds.
+   */
+  const generalArm = (key: MonstAbil, abil: Ability): PickedAbility | null => {
+    // A touch rides along with the melee attack; this loop wants reach.
+    if (abil.gen.type === MonstGen.TOUCH) return null;
+    // **DRAIN_SP is exempt from the range check**, because its own search has
+    // already picked someone inside `gen.range`.
+    if (key !== MonstAbil.DRAIN_SP && dist(monst.curLoc, targSpace) > abil.gen.range) return null;
+    // Spitting, like a thrown missile, is saved for a target further off.
+    if (abil.gen.type === MonstGen.SPIT && adjacent) return null;
+    if (rng.getRan(1, 1, 1000) >= abil.gen.odds) return null;
+    return { key, abil };
+  };
 
   for (let key = MonstAbil.MISSILE; key <= MonstAbil.SUMMON; key++) {
     const abil = monst.mon.abil[key];
@@ -70,6 +118,51 @@ export function pickMonsterAbility(
         if (rng.getRan(1, 1, 1000) >= abil.missile.odds) break;
         return { key, abil };
 
+      // **DRAIN_SP reaches the shared arm below, but only if there is anyone
+      // worth draining** (boe.combat.cpp:2317) — and the search costs no
+      // draws, so a monster whose victims are all out of spell points makes
+      // *no odds roll at all*. This port used to lump DRAIN_SP in with the
+      // rest and roll unconditionally, which is one extra `get_ran(1,1,1000)`
+      // per turn for the rest of a recording.
+      //
+      // (The C++ does this with a `BOOST_FALLTHROUGH` into the next case;
+      // `generalArm` is the same body, called twice, because a fallthrough
+      // carrying state is worse to read than a named function.)
+      case MonstAbil.DRAIN_SP: {
+        const from = monst.curLoc;
+        const reach = abil.gen.range;
+        const pcs = session.univ.party.pcs;
+        const already = pcs[target];
+        if (already && canDrainPc(session, from, already, reach)) {
+          // **The one place this port can't be faithful.** `drain_target` is
+          // declared uninitialised (boe.combat.cpp:2300) and the fallthrough
+          // assigns `target = drain_target` *unconditionally*, so when the
+          // monster's existing target is drainable the C++ reads whatever was
+          // on the stack. That is undefined behaviour rather than shipped
+          // behaviour; keeping the target it already has is the evident
+          // intent, and the search makes no draws either way, so the RNG
+          // stream is the same whichever reading is taken.
+          drain = undefined;
+        } else {
+          // The first *other* PC with spell points, then the first enemy
+          // creature — index order, first hit wins, no roll anywhere.
+          const found = pcs.findIndex(
+            (pc, j) => j !== target && canDrainPc(session, from, pc, reach));
+          if (found >= 0) {
+            drain = { target: found, targSpace: pcs[found]!.combatPos };
+          } else {
+            const monsters = session.univ.town?.monsters ?? [];
+            const enemy = listEnemyMonsters(session, monst)
+              .find((other) => canDrainMonst(session, from, other, reach));
+            if (!enemy) break; // nobody to drain: no roll
+            drain = { target: 100 + monsters.indexOf(enemy), targSpace: enemy.curLoc };
+          }
+        }
+        const got = generalArm(key, abil);
+        if (got) return drain ? { ...got, retarget: drain } : got;
+        break;
+      }
+
       case MonstAbil.DAMAGE:
       case MonstAbil.DAMAGE2:
       case MonstAbil.STATUS:
@@ -77,18 +170,14 @@ export function pickMonsterAbility(
       case MonstAbil.STUN:
       case MonstAbil.FIELD:
       case MonstAbil.PETRIFY:
-      case MonstAbil.DRAIN_SP:
       case MonstAbil.DRAIN_XP:
       case MonstAbil.KILL:
       case MonstAbil.STEAL_FOOD:
-      case MonstAbil.STEAL_GOLD:
-        // A touch rides along with the melee attack; this loop wants reach.
-        if (abil.gen.type === MonstGen.TOUCH) break;
-        if (range > abil.gen.range) break;
-        // Spitting, like a thrown missile, is saved for a target further off.
-        if (abil.gen.type === MonstGen.SPIT && adjacent) break;
-        if (rng.getRan(1, 1, 1000) >= abil.gen.odds) break;
-        return { key, abil };
+      case MonstAbil.STEAL_GOLD: {
+        const got = generalArm(key, abil);
+        if (got) return got;
+        break;
+      }
 
       case MonstAbil.MISSILE_WEB:
       case MonstAbil.RAY_HEAT:

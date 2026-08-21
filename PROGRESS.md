@@ -4947,3 +4947,48 @@ The M6 list below is kept for the history of what it covered:
     1,764 → 5,061, which is every draw the harness lives long enough to make —
     it now dies on a `preferences` dialog control instead, so "blocked outside
     the rules" went 31 → 33. Still 6 of 87 all the way.
+
+- **Two rules a monster uses before it swings: DRAIN_SP's victim search, and
+  the tactic that makes archers kite (M8, 2026-08-21).** The
+  `pickMonsterAbility` bucket (4 files) held two unrelated bugs, and the second
+  one only surfaced after the first was fixed.
+  - **DRAIN_SP looks for someone worth draining *before* it rolls its odds**
+    (boe.combat.cpp:2317). The search is `can_drain_pc` on the target it
+    already has, then every other PC, then every enemy creature — all of it
+    free of draws — and if nobody has more than 4 spell points the ability is
+    skipped **with no odds roll at all**. This port lumped DRAIN_SP in with the
+    other general abilities and rolled unconditionally, which is one extra
+    `get_ran(1,1,1000)` every turn a drainer is on screen. Whoever the search
+    turns up also *replaces the target for that attack*, which was the
+    `TODO(M5b)` sitting on the function.
+    - The one place this port knowingly can't be faithful: `drain_target` is
+      declared uninitialised (:2300) and assigned to `target` unconditionally
+      on the way out, so when the monster's existing target is drainable the
+      C++ reads whatever was on the stack. That is UB rather than behaviour;
+      this port keeps the target it has, and the search makes no draws either
+      way, so the stream is unaffected whichever reading is right.
+  - **`current_monst_tactic` (:2223) was never ported at all.** "The monster,
+    if evil, looks at the situation and maybe picks a tactic", and the only
+    tactic is *back away*: a caster with the party inside five squares and not
+    adjacent, or **an archer whose target is inside six and not adjacent**.
+    It feeds the flee test, so an archer that should have kited instead walked
+    into melee *and* drew one fewer `get_ran(1,1,6)` — the morale roll inside
+    the flee branch. Gated on having more than one action point left and on
+    `futzing == 0`, so a creature that has already wasted a point stops being
+    clever.
+    - Ported with it: the flee branch's real guards. The outer test is on
+      `monst.target` and the inner one requires that same index to be a living
+      PC — the C++ mixes the stored target and the local `target` here and this
+      port had collapsed them into one.
+  - **How it was found**, and it is a good shape to remember: the two sides made
+    *the same number of draws* and disagreed on the arguments — `get_ran(1,1,6)`
+    there against `get_ran(1,1,1000)` here, one number pulled from the same
+    position in the stream and interpreted two ways. `[mmove]` then showed the
+    creature walking **toward** the party here and **away** there, which is
+    what named the tactic.
+  - **Where it stands.** Corpus 124,431 → **125,045** matching draws and the
+    `pickMonsterAbility` bucket is gone. A small number for two real rules, and
+    that is the honest shape of it: `ZKR_14-05-2025_11-28-09` moved 3,792 →
+    3,827 and stopped again on a *movement* divergence, which is where four of
+    the remaining buckets live. `DRAW_PIN` 6,562 → 6,765 with matching draws
+    unmoved at 6,223.
