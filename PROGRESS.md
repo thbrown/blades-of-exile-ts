@@ -4693,3 +4693,41 @@ The M6 list below is kept for the history of what it covered:
     from the C++ and stand on their own. Whoever picks this up: add a PC
     main_status line to the harness trace, which is the cheap next instrument
     and does not exist yet.
+
+- **`switch_target_to_adjacent` was never called in combat, and it draws (M8,
+  2026-08-20).** The `seekParty` bucket's own file,
+  `VoDT_06-04-2025_11-54-17`, **now agrees with the C++ on all 7,358 draws**.
+  Two hypotheses died first, and both were worth the cost:
+  - *PC 4 is dead there and alive here* — disproved outright by a new
+    `BOE_TRACE_PCS` / `PCS=1` pair. All six PCs identical: same `main_status`,
+    same health, same combat position.
+  - *`spell_caster` has drifted* — ruled out; `monst_pick_target` returned 4 on
+    both sides, from the same two draws.
+  - **What actually found it** was mirroring the port's `[mbranch]` probe into
+    the C++ under the same `BOE_TRACE_MMOVE` switch. One run:
+    `[mbranch] 3 acted=1 mob=1 friendly=0 target=2 targ_space=(21,22) ap=0`.
+    Target **2**, not 4, and it *attacked* rather than walking.
+  - **The rule.** `do_monster_turn` runs
+    `target = monst_pick_target(i); target = switch_target_to_adjacent(i,target);`
+    (boe.combat.cpp:2173). This port never called the second one in combat at
+    all, and the `TODO(M8)` on it claimed it "makes no draws". **That was
+    wrong, and the wrongness is why this hid for so long.** The combat tail
+    calls **`total_encumbrance` on every adjacent PC** looking for an
+    unarmoured one, which rolls once per equipped item — those were the eight
+    `(1,0,70)/(1,0,130)` draws that read like a `pc_attack` for an hour — then
+    a coin flip per adjacent friendly creature, then `get_ran(1,1,num_adj)` to
+    choose among adjacent PCs. `monst_pick_target` names the last PC to cast;
+    *this* is what makes a creature hit the one standing in front of it
+    instead of walking off toward a caster four squares away.
+  - **Where it stands.** Corpus 85,939 → **88,399** matching draws, and **6 of
+    87** files agree all the way, up from 4 — the first movement in that number
+    all session. `seekParty` has left the queue entirely.
+  - `VoDT_20-04-2025_15-08-43` moved into the harness-gap table, which is
+    *progress, not a regression*: it went 4,262 → 4,319 matching draws and now
+    agrees the whole way up to the point the **harness** dies on a dialog
+    control it can't replay. "Blocked outside the rules" went 29 → 30 for that
+    reason.
+  - **Lesson for the next comment like it:** a `TODO` that asserts something
+    about the RNG ("makes no draws") is a claim, and claims about the draw
+    stream are cheap to check and expensive to get wrong. Check before writing
+    one.

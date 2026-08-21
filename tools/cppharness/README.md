@@ -40,7 +40,19 @@ calls**, so two runs can walk a creature square by square down different paths
 with their `[ran]` streams still matching exactly, and the draw that finally
 disagrees is hundreds of moves downstream of the rule that caused it. Nothing
 else shows that happening; the `monst:` list only samples it once per action,
-by which time the turn is over.
+by which time the turn is over. It also prints `[mbranch] i acted= mob=
+friendly= target= targ_space= ap=` at the top of the move branch, on both
+sides — `[mmove]` says a creature stepped somewhere the other side didn't, and
+`[mbranch]` says *why* it was going there, which is the half that names the
+rule. That pair is what found `switch_target_to_adjacent`: identical draws,
+identical positions, `target=2` on one side and `target=4` on the other.
+`BOE_TRACE_PCS=1` (`PCS=1` here) prints each PC's `main_status`, health and
+combat position. Whether a PC is alive gates more monster behaviour than you
+would guess — `do_monster_turn` will not walk toward a dead one, `closest_pc`
+skips them — so a party-state divergence reads as a creature that moved on one
+side and not the other, with nothing about movement actually wrong. Reach for
+it to *rule that out* before chasing the movement code, which is exactly the
+detour it was written to end.
 `BOE_TRACE_LIGHT=1` adds `light=<level> rad=<radius> lit=<0|1> ltype=<n>` — the
 party's light and whether its own square counts as lit. `pt_in_light` gates
 `can_see_light`, which gates every notice roll in a dark town, so a divergence

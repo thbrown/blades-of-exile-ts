@@ -99,6 +99,22 @@ index 17780bca..a349fe18 100644
  		// Opcode mappings from rsrc/strings/specials-opcodes.txt
  		if(type == "set-sdf") return eSpecType::SET_SDF;
  		if(type == "inc-sdf") return eSpecType::INC_SDF;
+diff --git a/src/game/boe.combat.cpp b/src/game/boe.combat.cpp
+index 1a26a2a7..1c161346 100644
+--- a/src/game/boe.combat.cpp
++++ b/src/game/boe.combat.cpp
+@@ -2432,6 +2432,11 @@ void do_monster_turn() {
+ 				flushingInput = true;
+ 			}
+ 			
++			if(getenv("BOE_TRACE_MMOVE"))
++				std::cout << "      [mbranch] " << i << " acted=" << int(acted_yet)
++					<< " mob=" << int(cur_monst->mobility) << " friendly=" << int(cur_monst->is_friendly())
++					<< " target=" << univ.town.monst[i].target << " targ_space=("
++					<< targ_space.x << "," << targ_space.y << ") ap=" << cur_monst->ap << std::endl;
+ 			if(overall_mode == MODE_COMBAT) {
+ 				if(!acted_yet && (cur_monst->mobility == 1)) {  // move monst
+ 					move_target = (univ.town.monst[i].target != 6) ? univ.town.monst[i].target : closest_pc(cur_monst->cur_loc);
 diff --git a/src/game/boe.main.cpp b/src/game/boe.main.cpp
 index b19e0983..a19325ec 100644
 --- a/src/game/boe.main.cpp
@@ -287,7 +303,7 @@ index faaef3f2..2a648966 100644
  }
  
 diff --git a/src/tools/replay.cpp b/src/tools/replay.cpp
-index 3946c875..eb6712d6 100644
+index 3946c875..970f368d 100644
 --- a/src/tools/replay.cpp
 +++ b/src/tools/replay.cpp
 @@ -28,6 +28,15 @@
@@ -317,7 +333,7 @@ index 3946c875..eb6712d6 100644
  			} else if constexpr (std::is_integral_v<T>) {
  				if constexpr (std::is_same_v<S, std::string>) {
  					return static_cast<T>(std::stoi(arg));
-@@ -252,6 +263,124 @@ int next_action_line() {
+@@ -252,6 +263,137 @@ int next_action_line() {
  	return next_action->Row();
  }
  
@@ -410,6 +426,19 @@ index 3946c875..eb6712d6 100644
 +							+ std::to_string(univ.town.monst[i].targ_loc.y) + ")" : "");
 +		std::cout << std::endl;
 +	}
++	// BOE_TRACE_PCS: each PC's main_status, health and combat position. Whether
++	// a PC is alive gates a surprising amount of monster behaviour —
++	// `do_monster_turn` will not walk toward a dead one, `closest_pc` skips
++	// them — so a party-state divergence reads as a creature that moved on one
++	// side and not the other, with nothing about movement actually wrong.
++	if(getenv("BOE_TRACE_PCS")) {
++		std::cout << "      pcs:";
++		for(short p = 0; p < 6; p++)
++			std::cout << " " << p << ":s" << int(univ.party[p].main_status)
++				<< "/h" << univ.party[p].cur_health
++				<< "/(" << univ.party[p].combat_pos.x << "," << univ.party[p].combat_pos.y << ")";
++		std::cout << std::endl;
++	}
 +	// BOE_TRACE_ITEMS prints every PC's pack. An item divergence — a stack
 +	// that split differently, a pack that compacted differently — otherwise
 +	// only shows up as a dialog one side raises and the other doesn't.
@@ -442,7 +471,7 @@ index 3946c875..eb6712d6 100644
  Element& pop_next_action(std::string expected_action_type) {
  	if(next_action == nullptr){
  		throw std::string { "Replay error! No action left to pop" };
-@@ -264,6 +393,13 @@ Element& pop_next_action(std::string expected_action_type) {
+@@ -264,6 +406,13 @@ Element& pop_next_action(std::string expected_action_type) {
  
  	Element* to_return = next_action;
  	next_action = next_action->NextSiblingElement(false);

@@ -175,6 +175,16 @@ async function play(path: string): Promise<Row> {
               + `a${m.active}`
               + (process.env.TARG ? `->(${m.targLoc.x},${m.targLoc.y})` : '')).join(''));
         }
+        if (process.env.PCS) {
+          // The pair to `BOE_TRACE_PCS=1`. Whether a PC is alive gates a
+          // surprising amount of monster behaviour — `do_monster_turn` won't
+          // walk toward a dead one — so a party-state divergence reads as a
+          // creature that moved on one side and not the other, with nothing
+          // about movement actually wrong.
+          emit('      pcs:' + univ.party.pcs
+            .map((pc, p) => ` ${p}:s${pc.mainStatus}/h${pc.curHealth}`
+              + `/(${pc.combatPos.x},${pc.combatPos.y})`).join(''));
+        }
         if (process.env.ITEMS) {
           // The pair to `BOE_TRACE_ITEMS=1` on the harness: a stack that split
           // differently or a pack that compacted differently is invisible

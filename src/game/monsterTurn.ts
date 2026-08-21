@@ -21,7 +21,7 @@ import { SpecCtx, SpecCtxType } from './specials/context';
 import {
   MonstAbil, MonstAbilCat, MonstGen, abilityCategory,
 } from '../data/monsterAbility';
-import { NO_ONE, pcAttack } from './combat';
+import { NO_ONE, pcAttack, totalEncumbrance } from './combat';
 import {
   abilityCost, monstFireMissile, monsterBasicAbil, monsterSummon, pickMonsterAbility,
 } from './monsterAbilities';
@@ -114,12 +114,14 @@ export function canSeeMonst(session: GameSession, from: Location, monst: Creatur
 }
 
 /**
- * `switch_target_to_adjacent` (boe.monster.cpp) — something already in reach
- * beats something further off, whatever the picker chose. Makes no draws.
+ * `switch_target_to_adjacent` (boe.monster.cpp:513) — something already in
+ * reach beats something further off, whatever the picker chose.
  *
- * TODO(M8): the combat tail (switching a hostile onto an adjacent PC or
- * creature) isn't ported — `do_monsters`' town branch is the only caller so
- * far, and it returns before reaching it.
+ * **It draws**, which the note that used to sit here got wrong: the combat
+ * tail computes `total_encumbrance` for every adjacent PC looking for an
+ * unarmoured one, and that rolls once per equipped item. Then a roll per
+ * adjacent friendly creature, then one to choose between adjacent PCs. Only
+ * the friendly and town branches above are draw-free.
  */
 function switchTargetToAdjacent(
   session: GameSession, monst: Creature, origTarget: number,
@@ -141,7 +143,55 @@ function switchTargetToAdjacent(
   if (session.inTown) {
     return monstAdjacent(monst, session.univ.party.townLoc) ? 0 : origTarget;
   }
-  return origTarget;
+
+  const univ = session.univ;
+  const pcs = univ.party.pcs;
+  // Already in reach? Then nothing to switch.
+  if (isCombat(session.mode) && origTarget < NO_ONE) {
+    const pc = pcs[origTarget];
+    if (pc?.isAlive && monstAdjacent(monst, pc.combatPos)) return origTarget;
+  }
+  if (origTarget >= 100) {
+    const other = town.monsters[origTarget - 100];
+    if (other?.isAlive && monstAdjacent(monst, other.curLoc)) return origTarget;
+  }
+
+  // "Anyone unarmored? Heh heh heh..." — and this is where the draws are.
+  // `total_encumbrance` rolls once per equipped item, so an adjacent PC in
+  // heavy armour costs a handful of numbers to reject.
+  if (isCombat(session.mode)) {
+    for (let i = 0; i < pcs.length; i++) {
+      const pc = pcs[i]!;
+      if (pc.isAlive && monstAdjacent(monst, pc.combatPos)
+        && totalEncumbrance(univ, pc) < 2) return i;
+    }
+  }
+
+  // An adjacent charmed creature is a tempting target, on a coin flip each.
+  for (let i = 0; i < town.monsters.length; i++) {
+    const other = town.monsters[i]!;
+    if (other.isAlive && other.isFriendly && monstAdjacent(monst, other.curLoc)
+      && univ.rng.getRan(1, 0, 2) < 2) return i + 100;
+  }
+
+  // Otherwise pick at random between whoever is in reach. The C++ counts them,
+  // rolls 1..count, then walks the party decrementing on each adjacent PC —
+  // ported as the same walk rather than an index into a filtered list, because
+  // its loop has no bound and stepping off the end is observable if the count
+  // and the walk ever disagree.
+  let numAdj = 0;
+  for (const pc of pcs) if (pc.isAlive && monstAdjacent(monst, pc.combatPos)) numAdj++;
+  if (numAdj === 0) return origTarget;
+  numAdj = univ.rng.getRan(1, 1, numAdj);
+  let i = 0;
+  while (i < pcs.length) {
+    const pc = pcs[i]!;
+    const here = pc.isAlive && monstAdjacent(monst, pc.combatPos);
+    if (numAdj <= 1 && here) break;
+    if (here) numAdj--;
+    i++;
+  }
+  return i;
 }
 
 /** closest_pc — the index of the nearest living PC, or 6 for none. */
@@ -1029,7 +1079,14 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
         // In combat a monster picks a PC; in town the target is the party as a
         // whole, standing on one square, and do_monsters has already chosen it.
         const inCombat = session.mode === GameMode.COMBAT;
-        const target = inCombat ? monstPickTarget(session, monst) : monst.target;
+        // `target = monst_pick_target(i); target = switch_target_to_adjacent(i,target);`
+        // (boe.combat.cpp:2173). The second call was missing here entirely, so
+        // a creature standing in a scrum kept walking toward whoever the picker
+        // named — usually the last PC to cast, several squares away — instead of
+        // hitting the one it was already next to.
+        const target = inCombat
+          ? switchTargetToAdjacent(session, monst, monstPickTarget(session, monst))
+          : monst.target;
         monst.target = target;
         const targSpace = !inCombat
           ? univ.party.townLoc
@@ -1190,6 +1247,16 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
 
         // Otherwise close the distance — but only in combat; town-mode movement
         // is do_monsters' job and has already happened.
+        // Printed alongside `[mmove]`, and the pair to the harness's line in the
+        // same place: the state the move branch is about to decide on. `[mmove]`
+        // says a creature stepped somewhere the other side didn't; this says
+        // *why* it was going there, which is the half that names the rule.
+        if (TRACE_MMOVE) {
+          console.log(`      [mbranch] ${monst.slot} acted=${actedYet ? 1 : 0}`
+            + ` mob=${monst.mobile ? 1 : 0} friendly=${monst.isFriendly ? 1 : 0}`
+            + ` target=${monst.target} targ_space=(${targSpace.x},${targSpace.y})`
+            + ` ap=${monst.ap}`);
+        }
         if (inCombat) {
           if (!actedYet && monst.mobile) {
             // `move_target` is the *stored* target, not the one picked above —
