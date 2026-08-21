@@ -5049,3 +5049,44 @@ The M6 list below is kept for the history of what it covered:
     6,765 → 6,602 — **down**, which is the point of pinning rather than
     flooring: this port was making draws it should never have made, and its
     matching count held at 6,223.
+
+- **`monst_near` measures with `vdist`, and the town copy measures with `dist`
+  (M8, 2026-08-21).** The combat notice block (boe.combat.cpp:2083) wakes an
+  idle creature when a fight is going on nearby, and it asks
+  `monst_near(j, loc, 5, 1)` — which is **`vdist`**, the Chebyshev max of the
+  two axes (location.cpp:39). The *town* copy of the same idea
+  (boe.monster.cpp:268) uses `dist`, the truncated hypotenuse. This port had
+  written both as `dist`.
+  - They are not interchangeable, and the gap is largest exactly where
+    creatures stand: five squares diagonally is `vdist` 5 and `dist` 7, so the
+    combat rule wakes a ring of creatures the town rule leaves asleep.
+  - The cost compounds: an idle creature re-rolls its `get_ran(1,1,100)` notice
+    check **every turn**, so one creature left asleep is a spare draw a turn
+    for the rest of the recording.
+  - **Where it stands.** Corpus 141,179 → **142,856** matching draws. The
+    `doMonsters` bucket did not shrink: its head file
+    (`ASR_10-05-2025_08-18-51`) is a *town*-mode notice roll and this fix is
+    combat-only. What that file actually needs is written up below.
+
+- **(Found, not fixed) The remaining buckets are one problem: drift that makes
+  no draws.** Four of the top five buckets now bottom out in the same place,
+  and it is worth stating plainly so the next session doesn't re-derive it:
+  - `ASR_10-05-2025_08-18-51` (head of `doMonsters`, 7 files) parts on one
+    extra `get_ran(1,1,100)` — this port's creature 13 is still IDLE where the
+    C++'s is ALERTED. `MONST=1` on both sides shows the same 28 creatures with
+    the same slots, and five of them (19, 20, 33, 34, 37) standing on
+    *different squares*. Nothing about that drift consumed a draw, so the two
+    streams agreed for 1,414 draws while the towns quietly diverged.
+  - `VoDT_06-04-2025_08-31-07` (head of `handle_target_space`, 3 files) is the
+    same thing seen from the other end: **all 9,710 draws match**, and then the
+    driver stops because "the recording stepped to (39,15), but the party is at
+    (41,15)". Two squares, no draws, hundreds of actions of agreement.
+  - `MMOVE=1` on both sides is the instrument, and it works — the diff on the
+    file above is clean for 98 lines and then the C++'s creature 13 takes a
+    four-point turn this port never gives it. That is where to start: not with
+    the draw stream, which has nothing to say about any of this.
+  - One difference the diff turned up and this port should *not* chase:
+    `[mbranch]`'s `targ_space` is `(0,0)` in the C++ whenever `target == 6`,
+    because `location targ_space` is left default-constructed and every reader
+    of it is gated on `target != 6`. This port computes a real square there.
+    Harmless, but it makes the two traces look more different than they are.

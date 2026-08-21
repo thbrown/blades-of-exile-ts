@@ -9,7 +9,7 @@
  * effects are all here, and the remaining gaps are marked where they belong.
  */
 
-import { Location, dist, loc, locsEqual } from '../core/location';
+import { Location, dist, loc, locsEqual, vdist } from '../core/location';
 import { Attack, Attitude, DamageType } from '../data/monster';
 import { Creature, CreatureStatus } from '../universe/creature';
 import { Living, SpellNote, livingSound } from '../universe/living';
@@ -973,10 +973,17 @@ function giveMonstersMoves(session: GameSession): void {
       if ((univ.party.partyStatus[PartyStatus.STEALTH] ?? 0) > 0) r1 += 45;
       r1 += session.canSeeLight(monst.curLoc, closestPcLoc(univ, monst.curLoc)) * 10;
       if (r1 < 50) monst.active = CreatureStatus.ALERTED;
-      // And a fight nearby alerts it regardless.
+      // And a fight nearby alerts it regardless — `monst_near(j, loc, 5, 1)`
+      // (boe.combat.cpp:3946), which is **`vdist`**, the Chebyshev distance,
+      // not the `dist` hypotenuse the town copy of this loop uses. The two are
+      // not interchangeable: five squares diagonally is `vdist` 5 and `dist` 7,
+      // so this alerts a ring of creatures the town rule would leave asleep.
+      // Getting it wrong left creatures idle here that the C++ had woken, and
+      // an idle creature re-rolls its notice check every turn — a spare
+      // `get_ran(1,1,100)` a turn, forever.
       for (const other of univ.town?.monsters ?? []) {
-        if (other !== monst && other.isAlive && other.active === CreatureStatus.ALERTED
-          && dist(other.curLoc, monst.curLoc) <= 5) {
+        if (other.isAlive && other.active === CreatureStatus.ALERTED
+          && vdist(other.curLoc, monst.curLoc) <= 5) {
           monst.active = CreatureStatus.ALERTED;
         }
       }
