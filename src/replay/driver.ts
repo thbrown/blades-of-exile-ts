@@ -244,7 +244,18 @@ export async function runReplay(
           if (session.mode === GameMode.TOWN) {
             session.startCombat(session.univ.party.direction);
           } else if (session.mode === GameMode.COMBAT) {
-            session.endCombat();
+            // **Ending a town fight costs a turn.** `handle_combat_switch`
+            // sets `did_something = true` on that branch (boe.actions.cpp:1362)
+            // and `advance_time` then runs a whole town turn — increase_age,
+            // do_monsters, do_monster_turn — because the mode is TOWN again by
+            // the time it looks. Without it this port's upkeep ran one action
+            // late for the rest of the recording: the next `move` spent the
+            // draws the C++ spent here.
+            //
+            // Only the town branch. The outdoor one (:1339) never sets the
+            // flag, so leaving an outdoor fight is free.
+            const wasTown = session.whichCombatType !== 0;
+            if (session.endCombat() && wasTown) await session.afterPartyTurn();
           }
           break;
         case 'handle_look':

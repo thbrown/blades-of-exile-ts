@@ -6,7 +6,8 @@
 
 import { Location, locsEqual } from '../core/location';
 import { Universe } from '../universe/universe';
-import { Attitude } from '../data/monster';
+import { Attitude, DamageType } from '../data/monster';
+import { MonstAbil } from '../data/monsterAbility';
 import { defaultTownperson } from '../data/town';
 import { FieldType } from '../data/fields';
 import { Creature, CreatureStatus, assignCreature } from '../universe/creature';
@@ -216,4 +217,71 @@ export function activateMonsters(univ: Universe, code: number): void {
     town.setField(monst.curLoc.x, monst.curLoc.y, FieldType.OBJECT_CRATE, false);
     town.setField(monst.curLoc.x, monst.curLoc.y, FieldType.OBJECT_BARREL, false);
   }
+}
+
+/**
+ * `monst_hate_spot` (boe.monster.cpp:290) — is this creature standing in
+ * something it wants out of, and if so, where should it go?
+ *
+ * The list is the fields that hurt, each with its own exemption: a creature
+ * that *radiates* a field is immune to it, and one with the matching
+ * resistance shrugs it off. Note how the exemptions read — `resist[FIRE] == 0`
+ * means "hates it only if it has no fire resistance at all", so the arms are
+ * inverted from what the comments suggest. Kept as written.
+ *
+ * **It calls `find_clear_spot`, so it draws** — up to 150 times — which is why
+ * leaving it out was not a cosmetic gap: a creature standing in a wall of fire
+ * consumed nothing here and a whole run of `get_ran(1,-2,2)` there.
+ *
+ * Returns the square to head for, or null for "nothing wrong here".
+ */
+export function monstHateSpot(session: GameSession, monst: Creature): Location | null {
+  const town = session.univ.town;
+  if (!town) return null;
+  const at = monst.curLoc;
+  const has = (f: FieldType): boolean => town.hasField(at.x, at.y, f);
+  const radiate = monst.mon.abil[MonstAbil.RADIATE];
+  const haveRadiate = radiate?.active ?? false;
+  const whichRadiate = radiate?.radiate?.type;
+  const radiates = (f: FieldType): boolean => haveRadiate && whichRadiate === f;
+  const resist = (kind: DamageType): number => monst.mon.resist[kind] ?? 100;
+
+  let hate = false;
+  if (has(FieldType.BARRIER_FIRE) || has(FieldType.BARRIER_FORCE)) hate = true;
+  else if (has(FieldType.FIELD_QUICKFIRE)) hate = true;
+  else if (has(FieldType.WALL_BLADES)) {
+    hate = true;
+    if (radiates(FieldType.WALL_BLADES)) hate = false;
+    else if (monst.mon.invuln) hate = false;
+  } else if (has(FieldType.WALL_ICE)) {
+    hate = true;
+    if (radiates(FieldType.WALL_ICE)) hate = false;
+    else if (resist(DamageType.COLD) === 0) hate = false;
+  } else if (has(FieldType.WALL_FIRE)) {
+    hate = true;
+    if (radiates(FieldType.WALL_FIRE)) hate = false;
+    else if (resist(DamageType.FIRE) === 0) hate = false;
+  } else if (has(FieldType.WALL_FORCE)) {
+    // The C++'s note beside this one: creatures used to walk into shock walls
+    // merely for being magic-resistant, and no longer do.
+    hate = true;
+    if (radiates(FieldType.WALL_FORCE)) hate = false;
+    else if (resist(DamageType.MAGIC) === 0) hate = false;
+  } else if (has(FieldType.CLOUD_STINK)) {
+    hate = true;
+    if (radiates(FieldType.CLOUD_STINK)) hate = false;
+    else if (resist(DamageType.MAGIC) <= 50) hate = false;
+  } else if (has(FieldType.CLOUD_SLEEP)) {
+    hate = true;
+    if (radiates(FieldType.CLOUD_SLEEP)) hate = false;
+    else if (resist(DamageType.MAGIC) <= 50) hate = false;
+  } else if (has(FieldType.FIELD_ANTIMAGIC)) {
+    // Only a caster minds an antimagic field, and this arm has no radiate or
+    // resistance escape at all.
+    if ((monst.mon.mu ?? 0) > 0 || (monst.mon.cl ?? 0) > 0) hate = true;
+  }
+
+  if (!hate) return null;
+  const prospect = findClearSpot(session, at, 1);
+  return prospect.x > 0 ? prospect : null;
 }

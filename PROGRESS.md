@@ -4992,3 +4992,35 @@ The M6 list below is kept for the history of what it covered:
     3,827 and stopped again on a *movement* divergence, which is where four of
     the remaining buckets live. `DRAW_PIN` 6,562 → 6,765 with matching draws
     unmoved at 6,223.
+
+- **Ending a fight costs a turn, and creatures step out of fires (M8,
+  2026-08-21).** The `totalEncumbrance` bucket (3 files) opened on
+  `RangedFlickerRegression`, and the encumbrance rolls were — as usual — the
+  innocent bystander: they are what `start_town_combat` draws, and the question
+  was *why this port was starting a fight where the C++ was taking a step*.
+  - **`handle_combat_switch`'s end branch sets `did_something`**
+    (boe.actions.cpp:1362), so `advance_time` runs a whole town turn behind it
+    — increase_age, do_monsters, do_monster_turn — because the mode is TOWN
+    again by the time it looks. This port's `endCombat` charged nothing, so
+    every upkeep after it ran one action late: the *next* move spent the draws
+    the C++ spent on the switch, and the mismatch cascaded. Only the town
+    branch; the outdoor one (:1339) never sets the flag, so leaving an outdoor
+    fight is free. Both the replay driver and the **f**/**e** keys and the END
+    button go through the same `endCombatFlow` now.
+  - **`monst_hate_spot` (boe.monster.cpp:290) had never been ported**, and it
+    is called from *both* monster loops: `do_monsters` (:244) and
+    `do_monster_turn` (:2443). A creature standing in a barrier, quickfire, a
+    wall or a cloud it does not resist heads for clear ground before doing
+    anything else. It calls `find_clear_spot`, so **it draws** — up to 150
+    `get_ran(1,-2,2)` — which is why its absence was not cosmetic. The
+    exemptions read backwards from their comments (`resist[FIRE] == 0` means
+    "hates it only with *no* fire resistance"); kept as written.
+    - The docile-wander that follows it sits inside the *else*, so a creature
+      that just stepped out of a fire doesn't also wander.
+  - Ported alongside: `do_monsters` walks toward **the creature it is after**
+    when its target is another monster (:236). This port sent it to the party
+    either way, so a charmed creature chasing a rat set off across town.
+  - **Where it stands.** Corpus 125,045 → **138,412** matching draws, and
+    **7 of 87** files agree all the way — the first movement in that number
+    since the back-shots fix. `totalEncumbrance` left the queue; `doMonsters`
+    is now 6 files and `pickTargetPc` 5, which is where the next session starts.

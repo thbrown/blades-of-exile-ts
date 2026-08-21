@@ -907,6 +907,19 @@ async function main(): Promise<void> {
    * The Get action (get_item, boe.items.cpp:258): list what's in reach and let
    * the player take one at a time.
    */
+  /**
+   * `handle_combat_switch`'s end branch (boe.actions.cpp:1338). Leaving a
+   * **town** fight sets `did_something`, so `advance_time` runs a whole town
+   * turn behind it — the clock, the upkeep and the monsters. Leaving an
+   * outdoor fight does not (:1339 never sets the flag).
+   */
+  const endCombatFlow = async (): Promise<void> => {
+    const wasTown = session.whichCombatType !== 0;
+    if (session.endCombat() && wasTown) await session.afterPartyTurn();
+    setStatus();
+    redraw();
+  };
+
   const getItems = async (): Promise<void> => {
     if (dialogs.active) return;
     // `handle_get_items` (boe.actions.cpp:1389) reaches from the party's
@@ -1637,7 +1650,7 @@ async function main(): Promise<void> {
           else univ.addStringToBuf("Can't fight out here yet.");
         } else if (btn.btn === ToolbarButton.END) {
           // End combat and regroup.
-          session.endCombat();
+          void endCombatFlow();
         } else if (btn.btn === ToolbarButton.WAIT) {
           // handle_stand_ready — give up the turn *on guard*, not just idle.
           if (session.mode === GameMode.COMBAT) void session.pause();
@@ -1801,12 +1814,12 @@ async function main(): Promise<void> {
       switch (key) {
         case 'f': case 'F':
           // Toggle combat, both ways — the same key in the original.
-          if (inCombat) session.endCombat();
+          if (inCombat) await endCombatFlow();
           else if (session.inTown) session.startCombat(univ.party.direction);
           else univ.addStringToBuf("Combat: can't fight out here yet.");
           break;
         case 'e': case 'E':
-          if (inCombat) session.endCombat();
+          if (inCombat) await endCombatFlow();
           break;
         case ' ':
           // Space is `handle_pause` (boe.actions.cpp:3003): one turn — stand

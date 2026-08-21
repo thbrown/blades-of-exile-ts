@@ -22,6 +22,7 @@ import {
   MonstAbil, MonstAbilCat, MonstGen, abilityCategory,
 } from '../data/monsterAbility';
 import { NO_ONE, pcAttack, totalEncumbrance } from './combat';
+import { monstHateSpot } from './monsterPlace';
 import {
   abilityCost, monstFireMissile, monsterBasicAbil, monsterSummon, pickMonsterAbility,
 } from './monsterAbilities';
@@ -626,12 +627,26 @@ export function doMonsters(session: GameSession): void {
         && monst.mobile && target !== NO_ONE) {
         const canFlee = !monst.mon.mindless && monst.mon.race !== Race.UNDEAD
           && monst.mon.race !== Race.SKELETAL;
+        // Where it is heading: the party, or the creature it is after
+        // (boe.monster.cpp:236). This port used to walk to the party either
+        // way, so a charmed creature chasing a rat set off across the town.
+        const l2 = monst.target <= NO_ONE
+          ? partyLoc
+          : (univ.town?.monsters[monst.target - 100]?.getLoc() ?? partyLoc);
         if (monst.morale < 0 && canFlee) {
-          fleeParty(session, monst, partyLoc);
+          fleeParty(session, monst, l2);
           if (univ.rng.getRan(1, 0, 10) < 6) monst.morale++;
-        } else if (monst.mon.mu === 0 || session.canSeeLight(monst.curLoc, partyLoc) > 3) {
-          // A spellcaster keeps its distance unless it can't see you anyway.
-          seekParty(session, monst, partyLoc);
+        } else {
+          // "Maybe move out of dangerous space" here too (:244) — and this one
+          // draws, which is what makes it visible in the stream.
+          const hated = monstHateSpot(session, monst);
+          if (hated) seekParty(session, monst, hated);
+          else if (monst.mon.mu === 0 || session.canSeeLight(monst.curLoc, l2) > 3) {
+            // A spellcaster keeps its distance unless it can't see you anyway.
+            // (The C++'s condition is `mu == 0 && mu == 0` — a typo for `cl`,
+            // presumably, and kept as it ships.)
+            seekParty(session, monst, l2);
+          }
         }
       }
     }
@@ -1304,9 +1319,17 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
             // they are the same value here, but the C++ reads the field.
             const moveTarget = monst.target !== NO_ONE
               ? monst.target : closestPc(univ, monst.curLoc);
-            // A creature target: still gated on it being alive
-            // (boe.combat.cpp:2452), which is not the same as `target >= 100`.
-            if (moveTarget >= 100) {
+            // **"First, maybe move out of dangerous space"** (:2443) — a
+            // creature standing in a wall of fire heads for clear ground
+            // instead of doing anything else this point. `monst_hate_spot`
+            // draws (it calls `find_clear_spot`, up to 150 times), so leaving
+            // it out was never cosmetic. Note the action point below is spent
+            // either way, and the free swings after it still happen.
+            const hated = monstHateSpot(session, monst);
+            if (hated) {
+              seekParty(session, monst, hated);
+            } else if (moveTarget >= 100) {
+              // A creature target: still gated on it being alive
               const other = univ.town?.monsters[moveTarget - 100];
               if (other?.isAlive) {
                 // `seek_party` runs whichever side `monst` is fighting for —
@@ -1326,7 +1349,9 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
             }
             // A docile creature wanders instead of closing, and wandering is
             // futzing whether or not it got anywhere (boe.combat.cpp:2464).
-            if (monst.attitude === Attitude.DOCILE) {
+            // Inside the "spot is OK, so go nuts" branch: a creature that just
+            // stepped out of a fire doesn't also wander.
+            if (!hated && monst.attitude === Attitude.DOCILE) {
               actedYet = randMove(session, monst);
               futzing++;
             }
