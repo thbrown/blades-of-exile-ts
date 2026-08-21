@@ -677,11 +677,39 @@ export function doMonsters(session: GameSession): void {
   }
 }
 
-/** flee_party — the mirror image of seekParty, moving away instead. */
+/**
+ * `flee_party` (boe.monster.cpp:674) — the eight directions of `seek_party`,
+ * each reversed, and **a different fallback**.
+ *
+ * This port used to reflect the target through the creature's own square and
+ * hand that to `seek_party`. It reaches roughly the same first step and then
+ * diverges twice: the order the eight directions are tried in is not the same
+ * once the mirrored point is far off the map, and — this is the one that shows
+ * up in the draw stream — a creature that is **boxed in** does not shove
+ * randomly here. It calls `rand_move`, which rolls `get_ran(1,0,24)` pairs
+ * looking for somewhere to drift, where the shove is two `get_ran(1,0,2)`.
+ * Cornered creatures are exactly the ones that flee, so this fired often.
+ */
 function fleeParty(session: GameSession, monst: Creature, target: Location): boolean {
-  const from = monst.curLoc;
-  const away = loc(from.x + (from.x - target.x), from.y + (from.y - target.y));
-  return seekParty(session, monst, away);
+  const l1 = monst.curLoc;
+  const l2 = target;
+  let acted = false;
+  const step = (dx: number, dy: number): void => {
+    if (!acted) acted = tryMove(session, monst, l1, dx, dy);
+  };
+  if (l1.x > l2.x && l1.y > l2.y) step(1, 1);
+  if (l1.x < l2.x && l1.y < l2.y) step(-1, -1);
+  if (l1.x > l2.x && l1.y < l2.y) step(1, -1);
+  if (l1.x < l2.x && l1.y > l2.y) step(-1, 1);
+  if (l1.x > l2.x) step(1, 0);
+  if (l1.x < l2.x) step(-1, 0);
+  if (l1.y < l2.y) step(0, -1);
+  if (l1.y > l2.y) step(0, 1);
+  if (!acted) {
+    futzing++;
+    acted = randMove(session, monst);
+  }
+  return acted;
 }
 
 /**

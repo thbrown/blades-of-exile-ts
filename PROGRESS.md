@@ -5205,3 +5205,17 @@ The M6 list below is kept for the history of what it covered:
     two `(1,1,5)` rolls were the first, `switch_target_to_adjacent` the second).
   - The bucket names churned again, which is normal: `seekParty` (5) and
     `doMonsters` (4) now head the queue.
+
+- **`flee_party` was an invention, and cornered creatures are the ones that use
+  it (M8, 2026-08-21).** The `seekParty` bucket (5 files) came down to a
+  fallback. This port's `fleeParty` reflected the target through the creature's
+  own square and handed the mirrored point to `seek_party`; the C++
+  (boe.monster.cpp:674) writes out the same eight direction tests *reversed*,
+  and ends with **`rand_move`** rather than `seek_party`'s random shove.
+  - The two fallbacks draw differently — `rand_move` rolls `get_ran(1,0,24)`
+    pairs hunting for somewhere to drift, the shove is two `get_ran(1,0,2)` —
+    and a creature that is boxed in is exactly the creature that is fleeing, so
+    it fired constantly. `(1,0,24)` runs where this port had `(1,0,2)` had been
+    visible in three files' traces for a while without being recognised.
+  - **Where it stands.** Corpus 173,094 → **176,528** matching draws;
+    `seekParty` left the queue entirely and `doMonsters` (5) heads it again.
