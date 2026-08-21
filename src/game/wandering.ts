@@ -18,6 +18,7 @@ import { TerObstruct } from '../data/terrain';
 import { OutdoorCreature } from '../universe/outdoorCreature';
 import { Universe } from '../universe/universe';
 import { placeMonster } from './monsterPlace';
+import { TRACE_MMOVE } from './monsterTurn';
 import { GameMode } from './modes';
 import type { GameSession } from './session';
 
@@ -121,6 +122,16 @@ function seekParty(session: GameSession, which: number, from: Location, to: Loca
  */
 export function doOutdoorMonsters(session: GameSession): void {
   const univ = session.univ;
+  // The outdoor half of `do_monsters`, so it carries the same `[domonst]` line
+  // as the town half (`monsterTurn.ts`) — otherwise a diff of the two traces
+  // silently compares the C++'s outdoor turns against nothing at all, and a
+  // stretch of walking outdoors looks like a divergence. Filter both sides on
+  // `mode=` when you only want one of the two.
+  if (TRACE_MMOVE) {
+    // eslint-disable-next-line no-console
+    console.log(`      [domonst] mode=${session.mode} party=(${univ.party.outLoc.x},`
+      + `${univ.party.outLoc.y}) age=${univ.party.age}`);
+  }
   for (let i = 0; i < NUM_OUT_CREATURES; i++) {
     const group = univ.party.outC[i];
     if (!group?.exists) continue;

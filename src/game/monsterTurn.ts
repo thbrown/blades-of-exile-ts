@@ -47,7 +47,7 @@ import type { GameSession } from './session';
  * `process` existing at all: this file runs in the browser too, where there is
  * no `process` and the check would throw on the first monster that moved.
  */
-const TRACE_MMOVE = Boolean(
+export const TRACE_MMOVE = Boolean(
   typeof process !== 'undefined' ? process.env?.MMOVE : undefined);
 
 /**

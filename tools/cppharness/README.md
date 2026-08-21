@@ -67,6 +67,12 @@ whether an action charged a turn at all (that is what named
 in `outd_move_party`, which prints the destination *after* the window shift
 along with the terrain found there (that is what named the window-shift undo).
 
+The `[domonst]` diff is the one to reach for first, and it has one trap: both
+sides print it for the **outdoor** half of `do_monsters` as well as the town
+half, so a stretch of walking outdoors fills one side's list with entries the
+other keeps somewhere else. `grep '\[domonst\] mode=1'` on both before
+diffing, or diff the whole thing and read the mode column.
+
 `BOE_TRACE_PCS=1` (`PCS=1` here) prints each PC's `main_status`, health and
 combat position. Whether a PC is alive gates more monster behaviour than you
 would guess — `do_monster_turn` will not walk toward a dead one, `closest_pc`
