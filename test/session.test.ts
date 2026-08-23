@@ -860,6 +860,45 @@ describe('town memory', () => {
     expect(party.atWhichSaveSlot).toBe(1);
   });
 
+  it('thrashes a town the party has cleaned out, and says so', async () => {
+    const s = newSession();
+    s.startNewGame();
+    const record = s.univ.town!.record;
+    const before = { max: record.maxNumMonst, killed: record.monstersKilled };
+    try {
+      // is_cleaned_out: killed >= max_num_monst. Both live on the record, so
+      // they survive leaving and coming back — that is the whole point.
+      record.maxNumMonst = 1;
+      record.monstersKilled = 5;
+      s.startTownMode(scen.startTown, FORCED_ENTRY);
+      expect(s.univ.town!.monsters.some((m) => m.isAlive)).toBe(false);
+      expect(s.univ.transcript.join(' ')).toContain('Area has been cleaned out.');
+    } finally {
+      record.maxNumMonst = before.max;
+      record.monstersKilled = before.killed;
+    }
+  });
+
+  it('an abandoned town loses its residents and keeps its monsters', async () => {
+    const s = newSession();
+    s.startNewGame();
+    const record = s.univ.town!.record;
+    const before = { time: record.townChopTime, key: record.townChopKey };
+    // Give the town some hostiles to keep, so the asymmetry is visible.
+    try {
+      record.townChopTime = 1;
+      record.townChopKey = 0;
+      s.startTownMode(scen.startTown, FORCED_ENTRY);
+      const town = s.univ.town!;
+      expect(s.univ.transcript.join(' ')).toContain('Area has been abandoned.');
+      // Every survivor is hostile; nothing friendly is left standing.
+      expect(town.monsters.filter((m) => m.isAlive).every((m) => !m.isFriendly)).toBe(true);
+    } finally {
+      record.townChopTime = before.time;
+      record.townChopKey = before.key;
+    }
+  });
+
   it('files the town under the population\'s name, not the party\'s', async () => {
     // cCurTown::readFrom doesn't restore `which_town`, so a town resumed from
     // a save is filed under 200 and rebuilt from presets next time.

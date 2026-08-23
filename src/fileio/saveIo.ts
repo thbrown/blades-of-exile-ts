@@ -1164,6 +1164,11 @@ export function writeScenarioState(file: TagFile, scen: Scenario): void {
     }
     for (const door of town.doorUnlocked) page.add('DOORUNLOCKED', i, door.x, door.y);
     page.add(town.canFind ? 'TOWNVISIBLE' : 'TOWNHIDDEN', i);
+    // `cTown::m_killed` — how many of this town's creatures the party has
+    // killed, which is the only input `is_cleaned_out` has. Without it a
+    // reloaded game forgets that a town was emptied, and walks back into one
+    // the C++ would have thrashed on entry.
+    if (town.monstersKilled > 0) page.add('TOWNSLAUGHTER', i, town.monstersKilled);
   }
 }
 
@@ -1190,6 +1195,13 @@ export function readScenarioState(file: TagFile, scen: Scenario): void {
   for (const tag of page.list('TOWNHIDDEN')) {
     const town = scen.towns[tag.int(0, -1)];
     if (town !== undefined) town.canFind = false;
+  }
+  // Only non-zero counts are written, so every town has to be cleared first —
+  // the C++ does the same (`else towns[i]->m_killed = 0`, scenario.cpp:609).
+  for (const town of scen.towns) town.monstersKilled = 0;
+  for (const tag of page.list('TOWNSLAUGHTER')) {
+    const town = scen.towns[tag.int(0, -1)];
+    if (town !== undefined) town.monstersKilled = tag.int(1, 0);
   }
 }
 

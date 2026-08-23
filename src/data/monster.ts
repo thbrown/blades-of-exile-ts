@@ -13,6 +13,20 @@ export enum Attitude {
   HOSTILE_B = 3,
 }
 
+/**
+ * eMonstTime (monster.hpp:36). **The numbers are the file format's** — index n
+ * here is `monst_times[n]` in estreams.cpp:409, which is what a town's
+ * `<creature type="...">` is read through.
+ *
+ * The names of 3, 4 and 5 are *not* the C++ header's. It declares them
+ * `SOMETIMES_C, SOMETIMES_A, SOMETIMES_B` in that order, so its `SOMETIMES_C`
+ * is the tag `travel-a` — its enumerator names and its own tag table were
+ * written out of step with each other. Nothing reads the name: the three are
+ * always handled as one group, and the day test compares the raw number
+ * (`(calc_day() % 3) + 3 != int(time_flag)`, boe.town.cpp:274). Aligned with
+ * the tags here rather than with the header, because the tags are the part
+ * that has to round-trip. Don't "fix" this to match the header.
+ */
 export enum MonstTime {
   ALWAYS = 0,
   APPEAR_ON_DAY = 1,

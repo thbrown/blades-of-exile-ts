@@ -1604,11 +1604,13 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue at the end of 2026-08-22 is **`doMonsters` (4)**, a three-file bucket
-  where **the C++ draws on after a `handle_target_space` and this port stops**,
-  then `monstCheckOneSpecialTerrain`, `seekParty` and `pickTargetMonst` at two
-  files each. Corpus **184,802** matching draws, **8 of 87** files agreeing all
-  the way, 35 blocked outside the rules.
+  queue at the end of 2026-08-22 is the three-file bucket where **the C++ draws
+  on after a `handle_target_space` and this port stops** — all three are
+  `VoDT_09-04-*` — then `monstCheckOneSpecialTerrain`, `seekParty`,
+  `pickTargetMonst`, `placeGrid` and two `the C++ draws on` buckets at two
+  files each. **`doMonsters` has left the queue entirely**, from five files at
+  the start of the day. Corpus **185,069** matching draws, **9 of 87** files
+  agreeing all the way, 36 blocked outside the rules.
 
   **A fifth instrument landed 2026-08-22: `SPEC=1`**, one line per opcode a
   chain runs, the pair to the C++ harness's `[spec]` under `BOE_TRACE`. Reach
@@ -5371,3 +5373,59 @@ The M6 list below is kept for the history of what it covered:
     above moved the corpus by **nothing** — no bundled scenario's recordings
     reach them. Kept anyway: they are the same function's rules, and the next
     recording that walks into a chopped town would find them missing.
+
+- **A town the party emptied stays empty, and nothing here knew it (M8,
+  2026-08-22).** With the four-town memory in, the `doMonsters` bucket's new
+  head — `VoDT_04-05-memory-dump` — still parted on one extra
+  `get_ran(1,1,100)`. `[domonst]` agreed on the party's square *and* its age,
+  and `[notice]` named the culprit: creature 4, seven squares away, hostile,
+  idle. `BOE_TRACE_MONST` then said the thing worth saying in one line: at that
+  moment the C++'s town had **no living creatures at all** and this port's had
+  **thirty-six**.
+  - The party takes a Generic Stairway into town 14, which the C++ restores
+    from a save slot (`monsters_loaded=1`) — and the slot is empty because the
+    party had cleared the place out. This port restored the same slot and got
+    thirty-six, because it had built them from presets.
+  - **`town_toast`** (boe.town.cpp:325-353) is the missing pass, and its two
+    arms are deliberately asymmetrical:
+    - *cleaned out* — `m_killed >= max_num_monst` — kills **everything** the
+      chop rules didn't already spare, friendly townsfolk included, and prints
+      "Area has been cleaned out.";
+    - *chopped* — `town_chop_time` has come — first adds every living
+      **hostile** to the spared set, so what "Area has been abandoned." clears
+      out is the residents. The monsters stay.
+    Both then run the "flush excess doomguards and viscous goos" loop, which
+    kills any splitter sitting in a slot its preset doesn't account for.
+  - `handle_town_specials` picks `spec_on_entry_if_dead` over `spec_on_entry`
+    when it fires, which is how a scenario says "the place is a ruin now".
+    This port had never read that field.
+  - **The input it all hangs on was not being loaded.** `is_cleaned_out` reads
+    `cTown::m_killed`, which the save writes as `TOWNSLAUGHTER n k`
+    (scenario.cpp:580) and this port ignored. It is now read and written — and
+    the reader clears every town first, because only non-zero counts are
+    written and a stale count would leave a town emptied that isn't.
+    `m_killed` had already moved from `CurTown` to the `Town` record with the
+    previous entry, which is what made this possible: it has to outlive a
+    visit.
+  - **Where it stands.** Corpus 184,802 → **185,069** matching draws, and
+    **9 of 87** files agree the whole way, up from 8:
+    `VoDT_01-05-2025_17-52-13` went 219 → 333 draws and now agrees to its end,
+    and the head file went 527 → 680. **`doMonsters` left the bucket queue
+    altogether** — it headed it with five files this morning.
+  - Worth keeping as a shape: three entries in a row where **the bug was a fact
+    the port never loaded**, not a rule it got wrong — the four-town memory,
+    `which_town`'s label, and now the kill count. When two runs disagree about
+    what is *in* a town rather than about what it does, look at the save file
+    before looking at the rules.
+
+- **`eMonstTime`'s names are out of step with its own tags, in the C++ (M8,
+  2026-08-22).** Noticed while porting the time-flag arms above, and left
+  alone deliberately. The header declares `SOMETIMES_C, SOMETIMES_A,
+  SOMETIMES_B` in that order (monster.hpp:39), so value 3 is named
+  `SOMETIMES_C` — but `monst_times[3]` is the tag `travel-a`
+  (estreams.cpp:409). This port numbers them by the tag, which is the half that
+  has to round-trip through a scenario file, and nothing reads the name: the
+  three are always handled as one group and the day test compares the raw
+  number. There is a comment on the enum saying so, because the "obvious" fix
+  is to align with the header and that would silently move every travelling
+  creature to a different day.

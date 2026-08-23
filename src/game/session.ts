@@ -3540,12 +3540,14 @@ export class GameSession {
     // is a divergence the draw stream only shows several hundred actions
     // later, when a creature that should not exist rolls its notice check.
     const saveSlot = this.univ.party.creatureSave.findIndex((p) => p.whichTown === townNum);
+    let noThrash: Set<Creature>;
     if (saveSlot >= 0) {
-      this.restoreTownPopulation(town, this.univ.party.creatureSave[saveSlot]!);
+      noThrash = this.restoreTownPopulation(town, this.univ.party.creatureSave[saveSlot]!);
       town.updateFields(this.univ.party.setup[saveSlot]!);
     } else {
-      this.populateTown(town);
+      noThrash = this.populateTown(town);
     }
+    const townToast = this.thrashTown(town, noThrash);
     this.clearDoorFields(town);
     this.placePresetItems(town);
     this.sweepTown(town);
@@ -3580,10 +3582,13 @@ export class GameSession {
       }
     }
 
-    // handle_town_specials: the town's entry node fires once we're inside.
-    if (record.specOnEntry >= 0)
+    // handle_town_specials (boe.town.cpp:659): the town's entry node fires once
+    // we're inside — and a town the party has emptied fires a *different* one,
+    // which is how a scenario says "the place is a ruin now".
+    const entryNode = townToast ? record.specOnEntryIfDead : record.specOnEntry;
+    if (entryNode >= 0)
       void this.runSpecial(
-        SpecCtx.ENTER_TOWN, SpecCtxType.TOWN, record.specOnEntry, this.univ.party.townLoc);
+        SpecCtx.ENTER_TOWN, SpecCtxType.TOWN, entryNode, this.univ.party.townLoc);
 
     // A staircase or an OUT_FORCE_TOWN node can pin the arrival square.
     const forced = this.forcedTownLoc;
@@ -3855,7 +3860,7 @@ export class GameSession {
    * status and no target, and anything that wandered outside the town's
    * playable rectangle, or was a summons, is written off.
    */
-  private restoreTownPopulation(town: CurTown, pop: Population): void {
+  private restoreTownPopulation(town: CurTown, pop: Population): Set<Creature> {
     const { party } = this.univ;
     // `univ.town.monst = pop` copies the whole population, hostility included:
     // a town that had turned on the party is still hostile when it returns.
@@ -3882,6 +3887,7 @@ export class GameSession {
     // A second pass, because travelling NPCs may have arrived (or left) while
     // the party was away. Same switch as `populateTown`'s, but this one is
     // deciding whether a *remembered* creature is still here.
+    const noThrash = new Set<Creature>();
     for (const monst of town.monsters) {
       switch (monst.timeFlag) {
         case MonstTime.ALWAYS:
@@ -3928,15 +3934,67 @@ export class GameSession {
           const record = town.record;
           const chopped = record.townChopTime > 0
             && party.dayReached(record.townChopTime, record.townChopKey);
-          if (chopped || isCleanedOut(record)) monst.timeFlag = MonstTime.ALWAYS;
-          else monst.active = CreatureStatus.DEAD;
+          if (chopped || isCleanedOut(record)) {
+            noThrash.add(monst);
+            monst.timeFlag = MonstTime.ALWAYS;
+          } else monst.active = CreatureStatus.DEAD;
           break;
         }
       }
     }
-    // TODO(M8): the C++ follows this with `town_toast` — a chopped or
-    // cleaned-out town kills off everything the chop rules didn't spare, and
-    // announces it. Neither this branch nor `populateTown` does that yet.
+    return noThrash;
+  }
+
+  /**
+   * "Thrash town?" (boe.town.cpp:325-353) — a town the party has emptied, or
+   * that the scenario has had chopped down, loses whatever is still standing
+   * in it. Returns whether it happened, because the entry special the town
+   * fires depends on it.
+   *
+   * The two arms are not symmetrical, and the difference is deliberate:
+   * - **Cleaned out** — the party has killed `max_num_monst` of the town's
+   *   creatures — kills *everything* the chop rules didn't already spare,
+   *   friendly townsfolk included.
+   * - **Chopped** — the scenario's `town_chop_time` has come — first adds
+   *   every living **hostile** to the spared set, so what the announcement
+   *   actually clears out is the residents. The monsters stay.
+   *
+   * The last loop is the C++'s "flush excess doomguards and viscous goos": a
+   * creature that splits itself leaves copies in slots past the town's own
+   * preset list, and those copies must not survive into a new visit.
+   */
+  private thrashTown(town: CurTown, noThrash: Set<Creature>): boolean {
+    const { party } = this.univ;
+    const record = town.record;
+    let townToast = false;
+
+    if (isCleanedOut(record)) {
+      townToast = true;
+      this.univ.addStringToBuf('Area has been cleaned out.');
+    }
+    if (record.townChopTime > 0 && party.dayReached(record.townChopTime, record.townChopKey)) {
+      this.univ.addStringToBuf('Area has been abandoned.');
+      for (const monst of town.monsters)
+        if (monst.isAlive && !monst.isFriendly) noThrash.add(monst);
+      townToast = true;
+    }
+    if (townToast) {
+      for (const monst of town.monsters)
+        if (!noThrash.has(monst)) monst.active = CreatureStatus.DEAD;
+    }
+
+    for (const monst of town.monsters) {
+      if (!monst.mon.abil[MonstAbil.SPLITS]!.active) continue;
+      // The C++ indexes `town.monst[i]` against `town->creatures[i]` with the
+      // same `i`, because its population is a sparse array whose index *is*
+      // the preset slot. This port's list is compacted and carries the slot on
+      // the creature, so ask the creature. A copy placed at runtime past the
+      // end of the preset list has no preset to match and goes.
+      const preset = record.creatures[monst.slot];
+      if (preset === undefined || monst.number !== preset.number)
+        monst.active = CreatureStatus.DEAD;
+    }
+    return townToast;
   }
 
   /**
@@ -3993,9 +4051,10 @@ export class GameSession {
   }
 
   /** The creature-loading half of start_town_mode (boe.town.cpp:250-310). */
-  private populateTown(town: CurTown): void {
+  private populateTown(town: CurTown): Set<Creature> {
     const { party, scenario } = this.univ;
     const day = party.calcDay();
+    const noThrash = new Set<Creature>();
     town.monsters = [];
     for (let i = 0; i < town.record.creatures.length; i++) {
       const preset = town.record.creatures[i]!;
@@ -4049,7 +4108,8 @@ export class GameSession {
           const record = town.record;
           const chopped = record.townChopTime > 0
             && party.dayReached(record.townChopTime, record.townChopKey);
-          if (!chopped && !isCleanedOut(record)) monst.active = CreatureStatus.DEAD;
+          if (chopped || isCleanedOut(record)) noThrash.add(monst);
+          else monst.active = CreatureStatus.DEAD;
           break;
         }
       }
@@ -4062,6 +4122,7 @@ export class GameSession {
 
       town.monsters.push(monst);
     }
+    return noThrash;
   }
 
   /**

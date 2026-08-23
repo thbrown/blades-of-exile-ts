@@ -325,6 +325,30 @@ describe('.exg round trip', () => {
     expect(back.party.creatureSave[0]!.monsters[1]!.mon.name.length).toBeGreaterThan(0);
   });
 
+  it('carries each town\'s kill count, which is what empties a cleaned-out town', () => {
+    // The Town records are the shared scenario's, so a round trip reads back
+    // onto the same objects: scribble over them between save and load, and
+    // what survives is what the file really carried.
+    const record = univ.town!.record;
+    try {
+      record.monstersKilled = 17;
+      const bytes = saveGame(univ);
+      record.monstersKilled = 3;
+      loadSave(bytes, scen, new GameRng());
+      expect(record.monstersKilled).toBe(17);
+
+      // Zero is not written at all, so the reader has to clear before it
+      // reads — otherwise a town emptied in the old game stays emptied.
+      record.monstersKilled = 0;
+      const none = saveGame(univ);
+      record.monstersKilled = 42;
+      loadSave(none, scen, new GameRng());
+      expect(record.monstersKilled).toBe(0);
+    } finally {
+      record.monstersKilled = 0;
+    }
+  });
+
   it('survives a second round trip byte for byte', () => {
     univ.party.gold = 999;
     const once = serialiseSave(univ).text('save/party.txt');
