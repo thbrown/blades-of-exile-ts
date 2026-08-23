@@ -162,6 +162,10 @@ export async function runReplay(
    * none of — so it keeps its own, which is all the item actions need.
    */
   const win = new ItemWindow();
+  // The rules move the pane too — `combat_next_step` and `start_town_combat`
+  // both call `set_stat_window_for_pc`, so the driver has to be reachable from
+  // in there or a recording equips out of whichever pack was last on screen.
+  session.onStatWindowForPc = (pc) => { win.setStatWindowForPc(session.univ, pc); };
   /** Whether the open get-items screen owes a turn when it closes. */
   let gettingCostsTurn = false;
   /**

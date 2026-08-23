@@ -561,6 +561,10 @@ async function main(): Promise<void> {
     },
   };
   session.attachSpecials(specialHost);
+  // `set_stat_window_for_pc` from inside the rules: `combat_next_step` moves
+  // the item pane to whoever is up (boe.combat.cpp:1823), and so does
+  // `start_town_combat`.
+  session.onStatWindowForPc = (pc) => { screen.itemWindow.setStatWindowForPc(univ, pc); };
 
   /**
    * Training (spend_xp in mode 1, pc.editors.cpp:644): pick who trains, then

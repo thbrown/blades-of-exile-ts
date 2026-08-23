@@ -238,6 +238,9 @@ export function startTownCombat(session: GameSession, direction: Direction): voi
   univ.curPc = 0;
   setPcMoves(univ);
   pickNextPc(univ);
+  // start_town_combat's tail (boe.combat.cpp:201) — the item pane starts on
+  // whoever the turn order picked, not on whoever it happened to be showing.
+  session.onStatWindowForPc?.(univ.curPc);
 }
 
 /**

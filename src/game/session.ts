@@ -2351,6 +2351,14 @@ export class GameSession {
   onConfirmAttackFriendly: (() => Promise<boolean>) | null = null;
 
   /**
+   * `set_stat_window_for_pc` (boe.text.cpp:558) — move the item pane to a PC.
+   * A hook rather than a direct call because the pane is the host's: `main.ts`
+   * owns a real one and the replay driver owns its own. The *rules* decide
+   * when it moves, though, which is why the call sites live in here.
+   */
+  onStatWindowForPc: ((pc: number) => void) | null = null;
+
+  /**
    * Set by the host: `boat-bridge.xml`'s "go under, or land?" prompt when a
    * boat reaches a bridge. `true` means "go under" (the move is forced
    * through); `false` (including no handler) means "leave the boat".
@@ -3341,7 +3349,8 @@ export class GameSession {
         if (!this.univ.party.isAlive()) break;
       } while (pickNextPc(this.univ, this.combatActivePc));
       pickNextPc(this.univ, this.combatActivePc);
-      this.finishCombatStep(storePc);
+      // The monsters ran, which is `to_return` in the C++.
+      this.finishCombatStep(storePc, true);
     });
   }
 
@@ -3351,13 +3360,21 @@ export class GameSession {
    * and how much the new PC can do with it — printed only when the party is
    * *not* pinned to one PC, and only when the turn actually changed hands.
    */
-  private finishCombatStep(storePc: number): void {
+  private finishCombatStep(storePc: number, ranMonsters = false): void {
     this.center = { ...this.univ.currentPc.combatPos };
     if (this.combatActivePc === NO_ONE && this.univ.curPc !== storePc) {
       const pc = this.univ.currentPc;
       this.univ.addStringToBuf(
         `Active: ${pc.name} (#${this.univ.curPc + 1}, ${pc.ap} ap.)`);
     }
+    // **The item pane follows whoever is up** (combat_next_step's last branch,
+    // boe.combat.cpp:1823) — on a *wider* condition than the `Active:` line
+    // above it, since a round of monsters counts even when the turn didn't
+    // change hands. This is not cosmetic: `handle_equip_item` and its
+    // siblings are handed `stat_window`, not `cur_pc` (boe.actions.cpp:1090),
+    // so a pane left on the wrong PC equips out of the wrong pack — silently,
+    // because the slot the recording names is empty there.
+    if (this.univ.curPc !== storePc || ranMonsters) this.onStatWindowForPc?.(this.univ.curPc);
     this.onRedraw?.();
     this.checkGameOver();
   }

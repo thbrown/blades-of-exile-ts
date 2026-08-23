@@ -1604,13 +1604,12 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue at the end of 2026-08-22 is the three-file bucket where **the C++ draws
-  on after a `handle_target_space` and this port stops** — all three are
-  `VoDT_09-04-*` — then `monstCheckOneSpecialTerrain`, `seekParty`,
-  `pickTargetMonst`, `placeGrid` and two `the C++ draws on` buckets at two
-  files each. **`doMonsters` has left the queue entirely**, from five files at
-  the start of the day. Corpus **185,069** matching draws, **9 of 87** files
-  agreeing all the way, 36 blocked outside the rules.
+  queue at the end of 2026-08-22 has **no bucket bigger than two files** —
+  `monstCheckOneSpecialTerrain`, `seekParty`, `pickTargetMonst`, the two
+  remaining `VoDT_09-04-*` files, `placeGrid` and a couple of `the C++ draws
+  on` buckets all sit at two. **`doMonsters` has left the queue entirely**,
+  from five files that morning. Corpus **190,362** matching draws, **10 of 87**
+  files agreeing all the way, 37 blocked outside the rules.
 
   **A fifth instrument landed 2026-08-22: `SPEC=1`**, one line per opcode a
   chain runs, the pair to the C++ harness's `[spec]` under `BOE_TRACE`. Reach
@@ -5429,3 +5428,46 @@ The M6 list below is kept for the history of what it covered:
   number. There is a comment on the enum saying so, because the "obvious" fix
   is to align with the header and that would silently move every travelling
   creature to a different day.
+
+- **The item pane follows the combat turn, and equipping reads the pane
+  (M8, 2026-08-22).** The `handle_target_space` bucket's three files all had
+  the same shape as each other and a different one from the rest of the queue:
+  every draw agreed and the port simply **stopped**. `VoDT_09-04-2025_08-49-56`
+  matched all 7,580 draws it made and then desynced on a square.
+  - The trace said what happened in one line: `handle_missile` printed
+    **"Fire: Equip some arrows."** where the C++ fired and rolled to-hit and
+    damage. Three `handle_equip_item` actions before it, the port printed a
+    message for the first and **nothing at all** for the other two.
+  - The silence was the clue. `toggleEquip` prints on every path except one —
+    an empty slot — so two of the three equips had been aimed at a slot that
+    did not exist. A one-line instrument confirmed it: the item pane was on
+    **PC 0** while the active PC was **PC 2**. PC 0 carries five items, so slot
+    4 existed (one message) and slots 6 and 7 did not (two silences). The bow
+    and the arrows were never equipped.
+  - **The rule** is the last branch of `combat_next_step`
+    (boe.combat.cpp:1823): `if((cur_pc != store_pc) || to_return)
+    set_stat_window_for_pc(cur_pc)`. Two things about it:
+    - it is a **wider** condition than the `Active:` line three lines above,
+      because `to_return` — the monsters ran — counts even when the turn did
+      not change hands;
+    - it is **not cosmetic**. `handle_equip_item`, `handle_use_item`,
+      `handle_give_item` and `handle_drop_item` are all handed `stat_window`,
+      not `cur_pc` (boe.actions.cpp:1078-1110). A pane left on the wrong PC
+      acts on the wrong pack, and does it silently when the slot is empty
+      there. `handle_switch_pc` had already been fixed for exactly this reason
+      (see the driver's comment); what was missing was the *automatic* move
+      when the turn passes.
+  - Ported as `GameSession.onStatWindowForPc`, a host hook: the pane belongs to
+    whoever is drawing (`main.ts` has a real one, the replay driver keeps its
+    own), but the **rules** decide when it moves, so the call sites are in
+    `finishCombatStep` and `startTownCombat` (boe.combat.cpp:201) rather than
+    in either host.
+  - **Where it stands.** Corpus 185,069 → **190,362** matching draws, the
+    biggest single jump since the field-placement fix, and **10 of 87** files
+    agree the whole way. `VoDT_09-04-2025_08-49-56` reports *No divergence: all
+    7,593 draws agree* and dispatches 251 of its 253 actions. Nothing went
+    backwards. The bucket is down to two files.
+  - The shape is worth remembering, because it is the opposite of the last
+    three: **a file whose draws all agree and which stops anyway is not a rules
+    bug at all** — it is the port refusing an action the C++ carried out. Read
+    the transcript at the stop, not the draw stream before it.
