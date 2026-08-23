@@ -74,6 +74,7 @@ class TestHost implements SpecialHost {
   rest(): void {}
   moveParty(): void {}
   changeLevel(): void {}
+  forceTown(): void {}
   endScenario(): void {}
 }
 

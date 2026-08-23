@@ -612,6 +612,15 @@ export function writeParty(file: TagFile, party: Party, scenarioId: string): voi
     if (party.imprisonedMonst[i]! > 0) page.add('SOULCRYSTAL', i, party.imprisonedMonst[i]!);
   }
   page.add('DIRECTION', writeEnumTag(dirTags, party.direction, '?'));
+  page.add('WHICHSLOT', party.atWhichSaveSlot);
+  // One line per remembered town, written for empty slots too — the town
+  // number *is* the slot's contents as far as this line goes, and 200 means
+  // empty. The creatures themselves go on their own pages further down.
+  for (let i = 0; i < party.creatureSave.length; i++) {
+    const pop = party.creatureSave[i]!;
+    if (pop.hostile) page.add('TOWNSAVE', i, pop.whichTown, 'HOSTILE');
+    else page.add('TOWNSAVE', i, pop.whichTown);
+  }
   for (let i = 0; i < party.alchemy.length; i++) if (party.alchemy[i]) page.add('ALCHEMY', i);
   for (const [when, what] of party.keyTimes) page.add('EVENT', when, what);
   for (const i of party.specItems) page.add('ITEM', i);
@@ -678,6 +687,20 @@ export function writeParty(file: TagFile, party: Party, scenarioId: string): voi
     if (!timerIsValid(timer)) continue;
     const timerPage = file.add();
     timerPage.add('TIMER', i, timer.time, timer.nodeType, timer.node);
+  }
+  // The four remembered towns' creatures, one page each, and only the living
+  // ones — which is the whole point of the mechanism: a slot's gaps are its
+  // dead. **`cParty::setup` is deliberately not written**: the C++ saves the
+  // creatures of its four remembered towns and not their fields, so a web the
+  // party left in a town it isn't standing in does not survive a save.
+  for (let i = 0; i < party.creatureSave.length; i++) {
+    const pop = party.creatureSave[i]!;
+    for (let j = 0; j < pop.monsters.length; j++) {
+      if (!pop.monsters[j]!.isAlive) continue;
+      const creaturePage = file.add();
+      creaturePage.add('CREATURE', i, j);
+      writeCreature(creaturePage, pop.monsters[j]!);
+    }
   }
   for (let i = 0; i < party.summons.length; i++) {
     const monstPage = file.add();
@@ -779,6 +802,14 @@ export function readParty(file: TagFile, party: Party): void {
         n++;
       }
 
+      party.atWhichSaveSlot = page.first('WHICHSLOT')?.int(0) ?? 0;
+      for (const tag of page.list('TOWNSAVE')) {
+        const i = tag.int(0, -1);
+        if (i < 0 || i >= party.creatureSave.length) continue;
+        party.creatureSave[i]!.whichTown = tag.int(1, TOWN_NUM_OUTDOORS);
+        party.creatureSave[i]!.hostile = tag.str(2) === 'HOSTILE';
+      }
+
       party.alchemy.fill(false);
       for (const tag of page.list('ALCHEMY')) {
         const i = tag.int(0, -1);
@@ -853,6 +884,25 @@ export function readParty(file: TagFile, party: Party): void {
         party.partyEventTimers.push({ time: 0, nodeType: 0, node: -1 });
       }
       party.partyEventTimers[i] = { time: tag.int(1), nodeType: tag.int(2), node: tag.int(3, -1) };
+    } else if (page.firstKey() === 'CREATURE') {
+      // A remembered town's creature: slot, then index within that town's
+      // list. Only the living were written, so the gaps have to be filled with
+      // dead ones — a default `cCreature` is DEAD in the C++ where this port's
+      // is IDLE, and a blank live creature would stand invisibly in the town.
+      const tag = page.first('CREATURE')!;
+      const slot = tag.int(0, -1);
+      const which = tag.int(1, -1);
+      if (slot < 0 || slot >= party.creatureSave.length || which < 0) continue;
+      const list = party.creatureSave[slot]!.monsters;
+      while (list.length <= which) {
+        const gap = new Creature();
+        gap.active = CreatureStatus.DEAD;
+        list.push(gap);
+      }
+      const c = list[which]!;
+      readCreature(page, c);
+      c.slot = which;
+      c.active = CreatureStatus.IDLE;
     } else if (page.firstKey() === 'SUMMON') {
       monstI = page.first('SUMMON')!.int(0, 0);
       while (party.summons.length <= monstI) party.summons.push(defaultMonster());

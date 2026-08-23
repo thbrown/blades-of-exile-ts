@@ -89,6 +89,10 @@ class TestHost implements SpecialHost {
     this.levels.push({ town, where: { ...where } });
   }
 
+  forceTown(town: number, _entryDir: number, where: { x: number; y: number }): void {
+    this.levels.push({ town, where: { ...where } });
+  }
+
   endScenario(): void {
     this.ended = true;
   }

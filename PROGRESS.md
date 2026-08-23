@@ -1604,11 +1604,17 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue at the end of 2026-08-21 is **`doMonsters` (5)**, a three-file bucket
+  queue at the end of 2026-08-22 is **`doMonsters` (4)**, a three-file bucket
   where **the C++ draws on after a `handle_target_space` and this port stops**,
-  **`monstCheckOneSpecialTerrain` (2)**, **`seekParty` (2)** and
-  **`pickTargetMonst` (2)**. Corpus **183,412** matching draws, **8 of 87**
-  files agreeing all the way, 36 blocked outside the rules.
+  then `monstCheckOneSpecialTerrain`, `seekParty` and `pickTargetMonst` at two
+  files each. Corpus **184,802** matching draws, **8 of 87** files agreeing all
+  the way, 35 blocked outside the rules.
+
+  **A fifth instrument landed 2026-08-22: `SPEC=1`**, one line per opcode a
+  chain runs, the pair to the C++ harness's `[spec]` under `BOE_TRACE`. Reach
+  for it when two runs change level, enter a town or fire a script at the same
+  moment and disagree about the *consequences* — the draws and the squares can
+  match while the opcode taking the party there is a different one.
 
   **What the whole tail has in common, and read this before opening any of
   them.** Every remaining bucket bottoms out in the same place: two runs agree
@@ -5273,3 +5279,95 @@ The M6 list below is kept for the history of what it covered:
     the C++ leaves state half-changed on a failure path, and tidying it up is a
     divergence. *Read to the end of the function before deciding what a
     failure path restores.*
+
+- **Towns remember their dead, and this port kept resurrecting them (M8,
+  2026-08-22).** The head of the `doMonsters` bucket,
+  `VoDT_06-04-2025_16-59-02`, parted at draw 7,218 on one extra
+  `get_ran(1,1,100)`: a third creature rolled the "Monster saw you!" check that
+  the C++ never considered. `[notice]` named it — creature 6 at (37,27), eight
+  squares away — and `BOE_TRACE_MONST` said why: the C++ had killed creatures
+  1 to 6 in a fight and this port had them alive, standing on their **preset
+  start squares**. Three actions earlier the party had stepped out of Vale
+  Infestation and straight back in.
+  - **`cParty::creature_save` is a four-slot cache of whole towns**
+    (party.hpp:109). `end_town_mode` copies the live population into the slot
+    that town already holds, or into `at_which_save_slot` and advances the ring
+    (boe.town.cpp:551); `start_town_mode` copies it back out if it finds one
+    (:160). The restore is not a rewind — every creature goes back to its start
+    square at full health with no status and no target, and anything off the
+    active area or on a summon timer is written off — so the **only** thing
+    that really survives is who is dead and what they were. That is exactly the
+    fact the notice roll needed.
+  - `cParty::setup` is its pair: the fields of those same four towns, as the
+    high byte of the C++'s per-square bitfield, which is OBJECT_BLOCK through
+    FIELD_QUICKFIRE (fields.hpp:22-30). Webs and barriers the party left behind
+    are still there; crates, barrels and blocks are masked out on the way back
+    in, because those return to their preset squares.
+  - Ported as `Party.creatureSave` / `Party.setup` / `Party.atWhichSaveSlot`,
+    `CurTown.saveSetup` / `updateFields`, and `GameSession`'s
+    `restoreTownPopulation` / `saveTownPopulation` / `storeTownOnLeaving`.
+    `cTown::m_killed` moved off `CurTown` onto the `Town` record while it was
+    open, because `is_cleaned_out` asks a question that has to outlive a visit.
+  - **Four slots means four**: the fifth town the party visits evicts the
+    first, and that town's dead do get up again. It is the original's rule, not
+    a shortcut here — `debug_towns_forget` empties all four on purpose.
+  - Also added, all of it start_town_mode work the restore branch made
+    unavoidable:
+    - the tail of the field setup (boe.town.cpp:355), which sweeps webs,
+      crates, barrels, barriers and quickfire off door squares and latches
+      `quickfire_present` — it has to run after `update_fields`, since that is
+      what can put a web back on a door;
+    - the three sweeps at :318 and :435 — misplaced large monsters, anything
+      off the active area (creatures *and* items), and creatures retired by an
+      SDF — which used to sit inside `populateTown`, where a restored town
+      never saw them;
+    - the time-flag arms `populateTown` had stubbed with a `TODO(M4)` that
+      killed every event-driven and post-chop creature outright. `key_times`
+      and the chop data have been there since M6; the switch is now the C++'s,
+      including its own TODO about `APPEAR_WHEN_EVENT` having two ways to be
+      absent, and the force-cage latch that follows it.
+    - `day_reached`'s event key. This port had a local two-argument helper that
+      dropped `time_code` and easy mode's ten free days; `Party.dayReached` was
+      already the real thing, and both paths use it now.
+  - The file went 7,218 → **8,092** matching draws and 676 → 837 actions.
+
+- **`OUT_FORCE_TOWN` is not `change_level`, and the difference is a whole
+  town's memory (M8, 2026-08-22).** The change above cost
+  `VoDT_20-04-2025_21-09-37` 5,350 draws before it gained any, and bisecting it
+  came down to `change_level` saving the town it leaves. Two separate bugs were
+  hiding under that:
+  - `change_level` really does call `end_town_mode(switching_level = true)`
+    (boe.specials.cpp:1414), so a staircase files the level away exactly as
+    walking out of the gate does; this port's host never did. **But
+    `OUT_FORCE_TOWN` (:4609) is `force_town_enter` + `start_town_mode` and
+    nothing else** — no `end_town_mode`, so the town it leaves is *not*
+    remembered — and this port had implemented it by calling `change_level`.
+    It now has its own `forceTown` host call, which also carries the real entry
+    direction rather than `change_level`'s hardcoded 9.
+  - **`cPopulation::which_town` is not `party.town_num`.** `start_town_mode`
+    sets it (boe.town.cpp:156) and **`cCurTown::readFrom` does not**
+    (universe.cpp:885) — so a game resumed from a save carries the default 200
+    until the party enters a town the ordinary way, and the first
+    `end_town_mode` files the town it was standing in under "no town". Walking
+    back in rebuilds it from presets. `CurTown.monstWhichTown` now carries that
+    label, and `saveTownPopulation` reads it rather than the party's. Copied
+    deliberately; it is the same shape as `is_special` and `spell_caster`
+    before it — **the field a value is stored in is part of the rule.**
+  - The save format gained `WHICHSLOT`, `TOWNSAVE` and the party file's
+    two-argument `CREATURE` pages, which is what let the recordings' own
+    `load_party` restore the four towns their C++ run had. Note `cParty::setup`
+    is deliberately **not** written: the C++ saves the creatures of its four
+    remembered towns and not their fields.
+  - `resumeLoadedGame` now re-attaches monster templates to the remembered
+    towns' creatures as well as the live one's, which the C++ does in the same
+    loop (boe.fileio.cpp:77).
+  - New instrument: **`SPEC=1`** prints one line per opcode a chain runs, the
+    pair to the C++ harness's `[spec]` under `BOE_TRACE`. It is what settled
+    this one — both sides changed level at the same moment, by different
+    routes, and only the opcode names said so.
+  - Corpus 183,412 → **184,802** matching draws, still 8 of 87 all the way,
+    "blocked outside the rules" 36 → 35, and the `doMonsters` bucket 5 files →
+    4. The `start_town_mode` sweeps and time-flag arms listed in the entry
+    above moved the corpus by **nothing** — no bundled scenario's recordings
+    reach them. Kept anyway: they are the same function's rules, and the next
+    recording that walks into a chopped town would find them missing.

@@ -101,6 +101,13 @@ export class Town {
   townChopTime = -1;
   townChopKey = -1;
   maxNumMonst = 30000;
+  /**
+   * `cTown::m_killed` — how many of this town's creatures the party has
+   * killed. It lives on the *record* rather than on the live town because it
+   * has to survive leaving and coming back: that is what `is_cleaned_out`
+   * asks about. Reset only when a scenario is entered.
+   */
+  monstersKilled = 0;
   wandering: number[][] = [
     [0, 0, 0, 0],
     [0, 0, 0, 0],

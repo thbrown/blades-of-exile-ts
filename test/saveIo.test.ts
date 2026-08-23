@@ -13,6 +13,7 @@ import {
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { GameSession } from '../src/game/session';
+import { CreatureStatus } from '../src/universe/creature';
 import { EncNoteType, TOWN_NUM_OUTDOORS } from '../src/universe/party';
 import { PartyPreset } from '../src/universe/player';
 import { MainStatus, Status } from '../src/universe/skills';
@@ -295,6 +296,33 @@ describe('.exg round trip', () => {
     const back = loadSave(ball.serialise(), scen, new GameRng());
     expect(back.party.townNum).toBe(TOWN_NUM_OUTDOORS);
     expect(back.town).toBeNull();
+  });
+
+  it('carries the four remembered towns, their slot ring and their dead', async () => {
+    // A session of its own: `end_town_mode` only files a town away while the
+    // mode really is TOWN, and `univ` above outlived the session that made it.
+    const session = await newGame();
+    const univ = session.univ;
+    const town = univ.town!;
+    town.monsters[0]!.active = CreatureStatus.DEAD;
+    const aliveBefore = town.monsters.filter((m) => m.isAlive).length;
+    session.endTownMode(univ.party.townLoc);
+    expect(univ.party.creatureSave[0]!.whichTown).toBe(scen.startTown);
+    expect(univ.party.atWhichSaveSlot).toBe(1);
+
+    const back = roundTrip(univ);
+    expect(back.party.atWhichSaveSlot).toBe(1);
+    expect(back.party.creatureSave.map((p) => p.whichTown))
+      .toEqual(univ.party.creatureSave.map((p) => p.whichTown));
+    // Only the living are written; slot 0's creature 0 stays dead, and the
+    // rest are all still there.
+    const restored = back.party.creatureSave[0]!.monsters;
+    expect(restored[0]!.isAlive).toBe(false);
+    expect(restored.filter((m) => m.isAlive).length).toBe(aliveBefore);
+    // A saved creature's page carries no monster stats, so `resumeLoadedGame`
+    // has to put them back for the remembered towns as well as the live one.
+    new GameSession(back).resumeLoadedGame();
+    expect(back.party.creatureSave[0]!.monsters[1]!.mon.name.length).toBeGreaterThan(0);
   });
 
   it('survives a second round trip byte for byte', () => {

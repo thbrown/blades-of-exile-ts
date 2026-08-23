@@ -47,6 +47,22 @@ export interface EncNote {
   where: string;
 }
 
+/**
+ * `cPopulation` (universe/population.hpp) — one town's creature list, kept by
+ * the party after it leaves so that the town's dead stay dead. `whichTown` is
+ * 200 for an empty slot, which is the same "not a town" sentinel as
+ * `TOWN_NUM_OUTDOORS` below.
+ */
+export interface Population {
+  whichTown: number;
+  hostile: boolean;
+  monsters: import('./creature').Creature[];
+}
+
+export function emptyPopulation(): Population {
+  return { whichTown: 200, hostile: false, monsters: [] };
+}
+
 export const SDF_ROWS = 350;
 export const SDF_COLUMNS = 50;
 export const MAX_GOLD = 30000;
@@ -157,6 +173,28 @@ export class Party {
   magicStoreItems = new Map<number, Map<number, import('../data/item').Item>>();
   /** How much of a limited-stock entry is left: storeLimitedStock[shop][slot]. */
   storeLimitedStock = new Map<number, Map<number, number>>();
+
+  /**
+   * `cParty::creature_save` — the last four towns' creature lists, so that a
+   * town the party walks back into remembers who it killed. Four slots, used
+   * round-robin: the fifth town visited evicts the first, and its dead come
+   * back to life. That is the original's behaviour, not a limitation of this
+   * port; `debug_towns_forget` empties all four deliberately.
+   */
+  creatureSave: Population[] = [
+    emptyPopulation(), emptyPopulation(), emptyPopulation(), emptyPopulation(),
+  ];
+  /** Which of the four slots the next *new* town takes (cParty::at_which_save_slot). */
+  atWhichSaveSlot = 0;
+  /**
+   * `cParty::setup` — the paired half of `creatureSave`: the fields of those
+   * same four towns, as the high byte of the C++'s per-square bitfield
+   * (OBJECT_BLOCK..FIELD_QUICKFIRE, fields.hpp:22-30). Webs and barriers the
+   * party left behind are still there when it comes back; crates and barrels
+   * are *not* restored from here, because they go back to their preset squares.
+   * Indexed [slot][x][y]; an empty slot is an empty array.
+   */
+  setup: Uint8Array[][] = [[], [], [], []];
 
   /** Stuff Done Flags — the scenario-visible persistent state array. */
   stuffDone: Uint8Array[] = Array.from({ length: SDF_ROWS }, () => new Uint8Array(SDF_COLUMNS));

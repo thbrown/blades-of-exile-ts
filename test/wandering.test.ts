@@ -341,6 +341,7 @@ function attachStubHost(s: GameSession): void {
     rest: () => {},
     moveParty: () => {},
     changeLevel: () => {},
+    forceTown: () => {},
     endScenario: () => {},
   });
 }

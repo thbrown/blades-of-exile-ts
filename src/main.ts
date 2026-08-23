@@ -536,9 +536,23 @@ async function main(): Promise<void> {
       session.center = { ...where };
       session.updateExplored(where);
     },
+    forceTown: (town, entryDir, where) => {
+      // OUT_FORCE_TOWN (boe.specials.cpp:4609): `force_town_enter` and
+      // `start_town_mode`, and nothing else. No `end_town_mode`, so the town
+      // being left is not remembered — and the entry direction is a real
+      // entrance, not `change_level`'s "9 means forced position".
+      if (entryDir === 9) session.forceTownEntry(town, where);
+      session.startTownMode(town, entryDir);
+      session.center = { ...univ.party.townLoc };
+    },
     changeLevel: (town, where) => {
       // change_level (boe.specials.cpp:1395): leave, then re-enter elsewhere.
+      // The "leave" is a real `end_town_mode(switching_level = true)`, so the
+      // level being left goes into the party's four-town memory just as it
+      // would if the party had walked out of the gate — take the stairs down
+      // and back up and the floor above is as you left it.
       if (where.x >= 0 && where.y >= 0) session.forceTownEntry(town, where);
+      session.storeTownOnLeaving();
       session.startTownMode(town, 9);
       session.center = { ...univ.party.townLoc };
     },

@@ -321,6 +321,29 @@ export function copyMonster(template: Monster): Monster {
   };
 }
 
+/**
+ * A deep copy of a live creature, for the party's four-town memory.
+ *
+ * The C++ gets this for free: `creature_save[i] = univ.town.monst` copies a
+ * `cPopulation` **by value**, so what the party remembers is a snapshot and
+ * the town it goes on playing in is a separate object. Sharing the array here
+ * instead would mean a mid-visit save wrote the town's *current* positions
+ * into the slot that is supposed to hold the state it was left in.
+ *
+ * `Object.assign` over a fresh `Creature` copies every field by name, so a
+ * field added later comes along without this needing to know about it; only
+ * the ones that hold objects are then replaced with their own copies.
+ */
+export function cloneCreature(c: Creature): Creature {
+  const copy = Object.assign(new Creature(), c);
+  copy.mon = copyMonster(c.mon);
+  copy.status = [...c.status];
+  copy.startLoc = { ...c.startLoc };
+  copy.curLoc = { ...c.curLoc };
+  copy.targLoc = { ...c.targLoc };
+  return copy;
+}
+
 export function assignCreature(
   slot: number,
   preset: Townperson,

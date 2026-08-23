@@ -1,7 +1,7 @@
 /**
- * Runtime state for the town the party is currently in — the M2 slice of
- * cCurTown (universe/universe.hpp). Fields (webs, barriers, quickfire),
- * dropped items, and the population save-slot rotation land later.
+ * Runtime state for the town the party is currently in — cCurTown
+ * (universe/universe.hpp). Fields, dropped items and the save-slot half of the
+ * party's four-town memory (`saveSetup`/`updateFields`) all live here.
  */
 
 import { Location } from '../core/location';
@@ -23,17 +23,37 @@ export interface FieldHost {
   rng: GameRng;
 }
 
+/**
+ * The span of field types the party's four-town memory keeps, named by the
+ * C++'s own "Begin/End fields saved in town setup" comments (fields.hpp:22-30):
+ * OBJECT_BLOCK through FIELD_QUICKFIRE, which is exactly one byte's worth.
+ */
+const SETUP_FIRST_FIELD = FieldType.OBJECT_BLOCK;
+const SETUP_LAST_FIELD = FieldType.FIELD_QUICKFIRE;
+
 export class CurTown {
   monsters: Creature[] = [];
   items: Item[] = [];
-  /** How many of this town's monsters the party has killed (cTown::m_killed). */
-  monstersKilled = 0;
   /**
    * `cPopulation::hostile` — the whole town has turned on the party. Set by
    * `setTownAttitude` and cleared on town entry (boe.town.cpp:158). `do_monsters`
    * reads it to stop even docile townsfolk from wandering idly.
    */
   monstHostile = false;
+  /**
+   * `cPopulation::which_town` on the *live* town — which town this creature
+   * list belongs to, as far as the party's four-town memory is concerned.
+   *
+   * It is not the same fact as `party.townNum`, and the difference is a real
+   * quirk rather than a tidy-up opportunity: `start_town_mode` sets it
+   * (boe.town.cpp:156), but `cCurTown::readFrom` (universe.cpp:885) does
+   * **not** — so a game resumed from a save carries the default 200 here until
+   * the party enters some town the ordinary way. `end_town_mode` copies the
+   * whole population into a save slot, label included, so the town the party
+   * was standing in when it loaded is filed under "no town" and rebuilt from
+   * presets the next time it is walked into. Copied deliberately.
+   */
+  monstWhichTown = 200;
   /** Explored flags for the current town, [x][y]. */
   explored: Uint8Array[];
   /** Permanently lit tiles (braziers, bonfires…), cTown::lighting. */
@@ -98,6 +118,51 @@ export class CurTown {
     if (which === FieldType.SPECIAL_SPOT) return this.specialSpots[x]![y]! !== 0;
     if (which === FieldType.SPECIAL_ROAD) return this.roads[x]![y]! !== 0;
     return this.fields[x]![y]!.has(which);
+  }
+
+  /**
+   * `cCurTown::save_setup` / `update_fields` (universe.cpp:187-204) — the
+   * eight field types the party's four-town memory keeps, packed one bit each
+   * exactly as the C++ packs them: it stores `fields[i][j] >> 8`, which is
+   * bits 8..15 of its bitfield, i.e. OBJECT_BLOCK through FIELD_QUICKFIRE
+   * (fields.hpp:22-30). Bit n here is field type 8+n, so a saved byte from
+   * either engine means the same thing.
+   */
+  saveSetup(): Uint8Array[] {
+    const dim = this.record.maxDim;
+    const out: Uint8Array[] = [];
+    for (let i = 0; i < dim; i++) {
+      const col = new Uint8Array(dim);
+      for (let j = 0; j < dim; j++) {
+        let bits = 0;
+        for (let f = SETUP_FIRST_FIELD; f <= SETUP_LAST_FIELD; f++)
+          if (this.hasField(i, j, f)) bits |= 1 << (f - SETUP_FIRST_FIELD);
+        col[j] = bits;
+      }
+      out.push(col);
+    }
+    return out;
+  }
+
+  /**
+   * The restoring half. Note it **or**s onto whatever the presets already put
+   * down rather than replacing it, and that crates, barrels and blocks are
+   * masked out first — those go back to their preset squares, so a barrel the
+   * party shoved into a corner is in its original place again on re-entry.
+   */
+  updateFields(setup: Uint8Array[]): void {
+    const dim = this.record.maxDim;
+    const mask = ~((1 << (FieldType.OBJECT_CRATE - SETUP_FIRST_FIELD))
+      | (1 << (FieldType.OBJECT_BARREL - SETUP_FIRST_FIELD))
+      | (1 << (FieldType.OBJECT_BLOCK - SETUP_FIRST_FIELD)));
+    for (let i = 0; i < dim && i < setup.length; i++) {
+      const col = setup[i]!;
+      for (let j = 0; j < dim && j < col.length; j++) {
+        const bits = col[j]! & mask;
+        for (let f = SETUP_FIRST_FIELD; f <= SETUP_LAST_FIELD; f++)
+          if (bits & (1 << (f - SETUP_FIRST_FIELD))) this.put(i, j, f, true);
+      }
+    }
   }
 
   /** The raw bit-set/bit-clear the C++'s simple setters do (`fields[x][y] |= …`). */

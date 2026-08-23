@@ -36,6 +36,9 @@ import { outdoorSpec } from './outdoor';
 import { affectSpec } from './affect';
 import type { GameSession } from '../session';
 
+/** `SPEC=1` prints one line per opcode a chain runs; see the use below. */
+const SPEC_TRACE = Boolean(typeof process !== 'undefined' ? process.env?.SPEC : undefined);
+
 /** What a chain hands back to whatever triggered it. */
 export interface SpecialResult {
   a: number;
@@ -168,6 +171,16 @@ export class SpecialsEngine {
         ctx.curSpec = this.resolvePointers(this.getNode(curSpec, ctx.curSpecType));
 
         if (ctx.curSpec.type === SpecType.INVALID) break;
+        // The pair to the C++ harness's own `[spec] town node N (Type) at
+        // (x,y)` line, which it prints under `BOE_TRACE`. Two chains that make
+        // the same draws can still run different *opcodes* — that is how the
+        // `OUT_FORCE_TOWN`/`change_level` mix-up was found: both sides changed
+        // level at the same moment, by different routes, and only the opcode
+        // names said so.
+        if (SPEC_TRACE) {
+          console.log(`      [spec] ${ctx.curSpecType} node ${curSpec}`
+            + ` type ${SpecType[ctx.curSpec.type]} at (${specLoc.x},${specLoc.y})`);
+        }
 
         switch (categoryOf(ctx.curSpec.type)) {
           case SpecCat.GENERAL: await generalSpec(this.univ, ctx, this); break;

@@ -20,6 +20,7 @@ import { OUT_HALF_DIM } from '../src/universe/curOut';
 import { TOWN_NUM_OUTDOORS } from '../src/universe/party';
 import { PartyPreset } from '../src/universe/player';
 import { MainStatus, Race, Skill, Status, Trait } from '../src/universe/skills';
+import { CreatureStatus } from '../src/universe/creature';
 import { Universe } from '../src/universe/universe';
 
 const opcodes = buildOpcodeTable(
@@ -437,6 +438,7 @@ describe('outdoor terrain specials', () => {
       rest() {},
       moveParty() {},
       changeLevel() {},
+      forceTown() {},
       endScenario() {},
     };
     s.attachSpecials(host);
@@ -616,6 +618,7 @@ describe('the end of the scenario', () => {
     rest() {},
     moveParty() {},
     changeLevel() {},
+    forceTown() {},
     endScenario() {},
   };
 
@@ -770,5 +773,103 @@ describe('the long wait', () => {
     s.univ.party.pcs[0]!.status[Status.WEBS] = 5;
     await s.wait();
     expect(s.univ.party.pcs[0]!.status[Status.WEBS]).toBe(0);
+  });
+});
+
+/**
+ * The party's four-town memory (`cParty::creature_save`, boe.town.cpp:160/551).
+ * Walking back into a town it has been in lately restores what it left rather
+ * than rebuilding the town from presets — which is what stops the dead getting
+ * back up.
+ */
+describe('town memory', () => {
+  function leave(s: GameSession): void {
+    s.endTownMode(s.univ.party.townLoc);
+  }
+
+  it('keeps the dead dead when the party comes back', async () => {
+    const s = newSession();
+    s.startNewGame();
+    const town = s.univ.town!;
+    const victim = town.monsters.findIndex((m) => m.isAlive);
+    expect(victim).toBeGreaterThanOrEqual(0);
+    const aliveBefore = town.monsters.filter((m) => m.isAlive).length;
+    town.monsters[victim]!.active = CreatureStatus.DEAD;
+
+    leave(s);
+    s.startTownMode(scen.startTown, FORCED_ENTRY);
+    const after = s.univ.town!;
+    expect(after.monsters[victim]!.isAlive).toBe(false);
+    expect(after.monsters.filter((m) => m.isAlive).length).toBe(aliveBefore - 1);
+  });
+
+  it('puts the survivors back on their start squares, idle and whole', async () => {
+    const s = newSession();
+    s.startNewGame();
+    const town = s.univ.town!;
+    const i = town.monsters.findIndex((m) => m.isAlive);
+    const walker = town.monsters[i]!;
+    const home = { ...walker.startLoc };
+    walker.curLoc = { x: home.x + 1, y: home.y };
+    walker.active = CreatureStatus.ALERTED;
+    walker.health = 1;
+    walker.target = 2;
+
+    leave(s);
+    s.startTownMode(scen.startTown, FORCED_ENTRY);
+    const back = s.univ.town!.monsters[i]!;
+    expect(back.curLoc).toEqual(home);
+    expect(back.active).toBe(CreatureStatus.IDLE);
+    expect(back.health).toBe(back.maxHealth);
+    expect(back.target).toBe(6);
+  });
+
+  it('remembers a web but puts a shoved barrel back', async () => {
+    const s = newSession();
+    s.startNewGame();
+    const town = s.univ.town!;
+    const { x, y } = s.univ.party.townLoc;
+    town.setField(x, y, FieldType.FIELD_WEB, true);
+    town.setField(x, y, FieldType.OBJECT_BARREL, true);
+
+    leave(s);
+    s.startTownMode(scen.startTown, FORCED_ENTRY);
+    const back = s.univ.town!;
+    expect(back.hasField(x, y, FieldType.FIELD_WEB)).toBe(true);
+    // update_fields masks the pushables out: they go back to their presets.
+    expect(back.hasField(x, y, FieldType.OBJECT_BARREL)).toBe(false);
+  });
+
+  it('remembers only four towns, oldest evicted first', async () => {
+    const s = newSession();
+    s.startNewGame();
+    const { party } = s.univ;
+    // Five towns, each entered and left in turn. Entering counts for nothing;
+    // it is `end_town_mode` that writes a slot.
+    const towns = scen.towns.map((_, i) => i).slice(0, 5);
+    expect(towns.length).toBe(5);
+    for (const t of towns) {
+      s.startTownMode(t, FORCED_ENTRY);
+      leave(s);
+    }
+    // `end_town_mode` also stores each town's map onto the shared scenario
+    // record; put those back so the next test doesn't start in a lit town.
+    for (const t of towns) for (const row of scen.towns[t]!.maps) row.fill(0);
+    expect(party.creatureSave.map((p) => p.whichTown).sort((a, b) => a - b))
+      .toEqual(towns.slice(1).sort((a, b) => a - b));
+    expect(party.atWhichSaveSlot).toBe(1);
+  });
+
+  it('files the town under the population\'s name, not the party\'s', async () => {
+    // cCurTown::readFrom doesn't restore `which_town`, so a town resumed from
+    // a save is filed under 200 and rebuilt from presets next time.
+    const s = newSession();
+    s.startNewGame();
+    s.univ.town!.monstWhichTown = 200;
+    s.univ.town!.monsters[0]!.active = CreatureStatus.DEAD;
+    leave(s);
+    expect(s.univ.party.creatureSave.map((p) => p.whichTown)).toContain(200);
+    s.startTownMode(scen.startTown, FORCED_ENTRY);
+    expect(s.univ.town!.monsters[0]!.isAlive).toBe(true);
   });
 });

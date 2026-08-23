@@ -50,8 +50,7 @@ export async function outdoorSpec(univ: Universe, ctx: SpecialCtx): Promise<void
       else if (spec.ex1b === 4) entry = 0;
       else if (spec.ex1b < 4) entry = 3;
       else entry = 1;
-      ctx.host.changeLevel(townNum, entry === 9 ? where : { x: -1, y: -1 });
-      ctx.nextSpec = -1;
+      ctx.host.forceTown(townNum, entry, where);
       break;
     }
 

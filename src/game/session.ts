@@ -27,7 +27,9 @@ import { Lighting, Town } from '../data/town';
 import { OutWandering } from '../data/outdoors';
 import { Vehicle } from '../data/vehicle';
 import { Snd, SoundPlayer } from '../platform/sound';
-import { Creature, CreatureStatus, assignCreature, copyMonster } from '../universe/creature';
+import {
+  Creature, CreatureStatus, assignCreature, cloneCreature, copyMonster,
+} from '../universe/creature';
 import { Attitude, DamageType } from '../data/monster';
 import { animSettle } from './anim';
 import { damagePc, hitParty } from './damage';
@@ -66,7 +68,7 @@ import { NO_TARGET } from './spellPick';
 import { doRest, handleRest } from './rest';
 import { makeTownHostile } from './townAttitude';
 import { OUT_HALF_DIM, OUT_MAX_DIM } from '../universe/curOut';
-import { TOWN_NUM_OUTDOORS } from '../universe/party';
+import { Population, TOWN_NUM_OUTDOORS } from '../universe/party';
 import { Universe } from '../universe/universe';
 import { GameMode, PreModes, isCombat, isOut, isTown } from './modes';
 import { bashDoor as bashDoorAt, pickLock as pickLockAt } from './doors';
@@ -323,10 +325,13 @@ export class GameSession {
     // range, so it drew **nothing** — a monster step that costs the C++ a
     // number cost this port none, and the town's stream slid one further out
     // with every step any creature took.
+    // The C++ does this for the party's four *remembered* towns as well as for
+    // the one it is standing in, and in that order — those creatures come out
+    // of the same kind of page and are just as bare.
     const templates = this.univ.scenario.scenMonsters;
-    for (const monst of this.univ.town?.monsters ?? []) {
+    const restock = (monst: Creature): void => {
       const template = templates[monst.number];
-      if (template === undefined) continue;
+      if (template === undefined) return;
       monst.mon = copyMonster(template);
       // The four fields this port mirrors outside `mon`. They are `cMonster`
       // members there, so the assignment resets them too — including undoing
@@ -336,7 +341,9 @@ export class GameSession {
       monst.pictureNum = template.pictureNum;
       monst.xWidth = template.xWidth;
       monst.yWidth = template.yWidth;
-    }
+    };
+    for (const pop of this.univ.party.creatureSave) for (const monst of pop.monsters) restock(monst);
+    for (const monst of this.univ.town?.monsters ?? []) restock(monst);
 
     this.talk = null;
     this.shop = null;
@@ -3521,8 +3528,27 @@ export class GameSession {
         if (record.maps[x]![y]!) town.makeExplored(x, y);
 
     this.setUpLights(town);
-    this.populateTown(town);
+    // boe.town.cpp:156 — the live population knows which town it belongs to,
+    // and `end_town_mode` files it away under that name. A restore below
+    // overwrites both, since the C++ assigns the whole saved population.
+    town.monstWhichTown = townNum;
+    town.monstHostile = false;
+    // **A town the party has been in lately is restored, not rebuilt**
+    // (boe.town.cpp:156-247). Four slots' worth of memory: whoever the party
+    // killed here stays dead, and the webs and barriers it left behind are
+    // still standing. Without this every re-entry resurrects the town, which
+    // is a divergence the draw stream only shows several hundred actions
+    // later, when a creature that should not exist rolls its notice check.
+    const saveSlot = this.univ.party.creatureSave.findIndex((p) => p.whichTown === townNum);
+    if (saveSlot >= 0) {
+      this.restoreTownPopulation(town, this.univ.party.creatureSave[saveSlot]!);
+      town.updateFields(this.univ.party.setup[saveSlot]!);
+    } else {
+      this.populateTown(town);
+    }
+    this.clearDoorFields(town);
     this.placePresetItems(town);
+    this.sweepTown(town);
 
     // "No hostile monsters present" (boe.town.cpp:473).
     this.univ.party.hostilesPresent = 0;
@@ -3818,6 +3844,154 @@ export class GameSession {
     return dist(from, to) <= this.lightRadius();
   }
 
+  /**
+   * The *restoring* half of start_town_mode's creature setup
+   * (boe.town.cpp:160-247) — the branch taken when this town is one of the
+   * four the party still remembers.
+   *
+   * What survives is who is dead and what they are; what does not is where
+   * they were standing, what they were doing and what was wrong with them.
+   * Every creature goes back to its start square at full health with no
+   * status and no target, and anything that wandered outside the town's
+   * playable rectangle, or was a summons, is written off.
+   */
+  private restoreTownPopulation(town: CurTown, pop: Population): void {
+    const { party } = this.univ;
+    // `univ.town.monst = pop` copies the whole population, hostility included:
+    // a town that had turned on the party is still hostile when it returns.
+    town.monsters = pop.monsters.map(cloneCreature);
+    town.monstHostile = pop.hostile;
+    town.monstWhichTown = pop.whichTown;
+
+    for (const monst of town.monsters) {
+      if (this.locOffActiveArea(monst.curLoc)) monst.active = CreatureStatus.DEAD;
+      if (monst.active === CreatureStatus.ALERTED) monst.active = CreatureStatus.IDLE;
+      monst.curLoc = { ...monst.startLoc };
+      monst.health = monst.maxHealth;
+      monst.mp = monst.maxMp;
+      monst.morale = monst.mMorale;
+      monst.status.fill(0);
+      if (monst.summonTime > 0) monst.active = CreatureStatus.DEAD;
+      monst.target = 6;
+      // The C++ clamps again after restoring, which is redundant now that the
+      // two lines above assign the maxima — kept because it is what ships.
+      if (monst.mp > monst.maxMp) monst.mp = monst.maxMp;
+      if (monst.health > monst.maxHealth) monst.health = monst.maxHealth;
+    }
+
+    // A second pass, because travelling NPCs may have arrived (or left) while
+    // the party was away. Same switch as `populateTown`'s, but this one is
+    // deciding whether a *remembered* creature is still here.
+    for (const monst of town.monsters) {
+      switch (monst.timeFlag) {
+        case MonstTime.ALWAYS:
+          break;
+        case MonstTime.SOMETIMES_A:
+        case MonstTime.SOMETIMES_B:
+        case MonstTime.SOMETIMES_C:
+          if ((party.calcDay() % 3) + 3 !== Number(monst.timeFlag)) {
+            monst.active = CreatureStatus.DEAD;
+          } else {
+            monst.active = CreatureStatus.IDLE;
+            monst.specEncCode = 0;
+            monst.curLoc = { ...monst.startLoc };
+            monst.health = monst.maxHealth;
+          }
+          break;
+        case MonstTime.APPEAR_ON_DAY:
+          if (party.dayReached(monst.monsterTime, monst.timeCode)) {
+            monst.active = CreatureStatus.IDLE;
+            monst.timeFlag = MonstTime.ALWAYS;
+          }
+          break;
+        case MonstTime.DISAPPEAR_ON_DAY:
+          if (party.dayReached(monst.monsterTime, monst.timeCode)) {
+            monst.active = CreatureStatus.DEAD;
+            monst.timeFlag = MonstTime.ALWAYS;
+          }
+          break;
+        case MonstTime.APPEAR_WHEN_EVENT:
+        case MonstTime.DISAPPEAR_WHEN_EVENT: {
+          // Note the C++ compares against `key_times` directly rather than
+          // going through `day_reached`, so easy mode's ten free days don't
+          // apply on this path.
+          const when = party.keyTimes.get(monst.timeCode);
+          if (when === undefined) break; // the event hasn't happened yet
+          if (party.calcDay() >= when) {
+            monst.active = monst.timeFlag === MonstTime.APPEAR_WHEN_EVENT
+              ? CreatureStatus.IDLE : CreatureStatus.DEAD;
+            monst.timeFlag = MonstTime.ALWAYS;
+          }
+          break;
+        }
+        case MonstTime.APPEAR_AFTER_CHOP: {
+          const record = town.record;
+          const chopped = record.townChopTime > 0
+            && party.dayReached(record.townChopTime, record.townChopKey);
+          if (chopped || isCleanedOut(record)) monst.timeFlag = MonstTime.ALWAYS;
+          else monst.active = CreatureStatus.DEAD;
+          break;
+        }
+      }
+    }
+    // TODO(M8): the C++ follows this with `town_toast` — a chopped or
+    // cleaned-out town kills off everything the chop rules didn't spare, and
+    // announces it. Neither this branch nor `populateTown` does that yet.
+  }
+
+  /**
+   * The tail of start_town_mode's field setup (boe.town.cpp:355-369): a door
+   * can't have a web, a crate, a barrel, a barrier or quickfire on it, so
+   * whatever the presets or the party's own memory put there is swept off —
+   * and while the loop is running it latches whether any quickfire survived.
+   */
+  private clearDoorFields(town: CurTown): void {
+    const dim = town.record.maxDim;
+    for (let x = 0; x < dim; x++)
+      for (let y = 0; y < dim; y++) {
+        const spec = this.univ.terrainType(town.record.terrain[x]![y]!).special;
+        if (spec === TerSpec.UNLOCKABLE || spec === TerSpec.CHANGE_WHEN_STEP_ON) {
+          town.setField(x, y, FieldType.FIELD_WEB, false);
+          town.setField(x, y, FieldType.OBJECT_CRATE, false);
+          town.setField(x, y, FieldType.OBJECT_BARREL, false);
+          town.setField(x, y, FieldType.BARRIER_FIRE, false);
+          town.setField(x, y, FieldType.BARRIER_FORCE, false);
+          town.setField(x, y, FieldType.FIELD_QUICKFIRE, false);
+        }
+        if (town.hasField(x, y, FieldType.FIELD_QUICKFIRE)) town.quickfirePresent = true;
+      }
+  }
+
+  /**
+   * The saving half of end_town_mode (boe.town.cpp:551-564). The town the
+   * party is leaving goes into the slot it already occupies, or, failing
+   * that, into the next slot round the ring — evicting whichever town has
+   * been remembered longest.
+   */
+  private saveTownPopulation(): void {
+    const { party } = this.univ;
+    const town = this.univ.town;
+    if (!town) return;
+    // **The label comes from the population, not from the party.** They agree
+    // whenever the party walked in; they do not after a save is loaded, and
+    // the C++ files the town under whatever the population says. See
+    // `CurTown.monstWhichTown`.
+    const population: Population = {
+      whichTown: town.monstWhichTown,
+      hostile: town.monstHostile,
+      monsters: town.monsters.map(cloneCreature),
+    };
+    const existing = party.creatureSave.findIndex((p) => p.whichTown === party.townNum);
+    if (existing >= 0) {
+      party.creatureSave[existing] = population;
+      party.setup[existing] = town.saveSetup();
+      return;
+    }
+    party.creatureSave[party.atWhichSaveSlot] = population;
+    party.setup[party.atWhichSaveSlot] = town.saveSetup();
+    party.atWhichSaveSlot = party.atWhichSaveSlot === 3 ? 0 : party.atWhichSaveSlot + 1;
+  }
+
   /** The creature-loading half of start_town_mode (boe.town.cpp:250-310). */
   private populateTown(town: CurTown): void {
     const { party, scenario } = this.univ;
@@ -3834,14 +4008,19 @@ export class GameSession {
       // A creature gated behind an unset special encounter starts inactive.
       if (monst.specEncCode > 0) monst.active = CreatureStatus.DEAD;
 
+      // The C++'s own order, and it uses the full `day_reached` — so the
+      // creature's `time_code` names an *event* the day is measured against,
+      // and easy mode's ten free days apply here too.
       switch (monst.timeFlag) {
         case MonstTime.ALWAYS:
           break;
         case MonstTime.APPEAR_ON_DAY:
-          if (!dayReached(day, monst.monsterTime)) monst.active = CreatureStatus.DEAD;
+          if (!party.dayReached(monst.monsterTime, monst.timeCode))
+            monst.active = CreatureStatus.DEAD;
           break;
         case MonstTime.DISAPPEAR_ON_DAY:
-          if (dayReached(day, monst.monsterTime)) monst.active = CreatureStatus.DEAD;
+          if (party.dayReached(monst.monsterTime, monst.timeCode))
+            monst.active = CreatureStatus.DEAD;
           break;
         case MonstTime.SOMETIMES_A:
         case MonstTime.SOMETIMES_B:
@@ -3849,23 +4028,68 @@ export class GameSession {
           monst.active =
             (day % 3) + 3 !== Number(monst.timeFlag) ? CreatureStatus.DEAD : CreatureStatus.IDLE;
           break;
-        default:
-          // TODO(M4): event-driven and post-chop arrivals need key_times and
-          // the town's cleaned-out state, which arrive with the specials VM.
-          monst.active = CreatureStatus.DEAD;
+        case MonstTime.APPEAR_WHEN_EVENT: {
+          // Two ways to be absent, and the C++'s own TODO wonders whether the
+          // second should really kill it: the event hasn't happened, or the
+          // clock has been wound back behind it. Note this arm compares
+          // `key_times` directly rather than going through `day_reached`.
+          const when = party.keyTimes.get(monst.timeCode);
+          if (when === undefined || party.calcDay() < when) monst.active = CreatureStatus.DEAD;
           break;
+        }
+        case MonstTime.DISAPPEAR_WHEN_EVENT: {
+          const when = party.keyTimes.get(monst.timeCode);
+          if (when !== undefined && party.calcDay() >= when) monst.active = CreatureStatus.DEAD;
+          break;
+        }
+        case MonstTime.APPEAR_AFTER_CHOP: {
+          // The C++ collects these into `no_thrash` instead of sparing them
+          // outright, because the town-toast pass below it is what would
+          // otherwise kill them. Without that pass the two are the same thing.
+          const record = town.record;
+          const chopped = record.townChopTime > 0
+            && party.dayReached(record.townChopTime, record.townChopKey);
+          if (!chopped && !isCleanedOut(record)) monst.active = CreatureStatus.DEAD;
+          break;
+        }
       }
 
-      // A set SDF suppresses the creature entirely.
-      if (party.sdLegit(monst.spec1, monst.spec2) && party.getSdf(monst.spec1, monst.spec2) > 0)
-        monst.active = CreatureStatus.DEAD;
+      // A creature that starts inside a force cage is held there
+      // (boe.town.cpp:305). The fields are already down by now: `CurTown`'s
+      // constructor lays the presets out before any of this runs.
+      if (monst.isAlive && town.hasField(monst.curLoc.x, monst.curLoc.y, FieldType.BARRIER_CAGE))
+        monst.status[Status.FORCECAGE] = 1000;
 
       town.monsters.push(monst);
     }
+  }
 
-    // Large monsters placed somewhere they can't fit get dropped.
+  /**
+   * The three sweeps start_town_mode runs over the town once it is populated,
+   * **whichever way it was populated** (boe.town.cpp:318 and :435). They used
+   * to live inside `populateTown`, where a restored town never saw them.
+   *
+   * Note the last one is not the same test as the creature's own
+   * `spec_enc_code`: this is the SDF pair the scenario can set to retire a
+   * character permanently, and it is checked on every entry.
+   */
+  private sweepTown(town: CurTown): void {
+    const { party } = this.univ;
+    // Large monsters placed somewhere they can't fit get dropped. Only large
+    // ones — some small creatures are put where they can't be on purpose.
     for (const m of town.monsters)
       if (m.isAlive && (m.xWidth > 1 || m.yWidth > 1) && !this.monstCanBeThere(m))
+        m.active = CreatureStatus.DEAD;
+
+    for (const m of town.monsters)
+      if (this.locOffActiveArea(m.curLoc)) m.active = CreatureStatus.DEAD;
+    // Blanked in place rather than removed: the C++ sets `variety =
+    // NO_ITEM` and keeps the slot, and a save file indexes items by slot.
+    for (const item of town.items)
+      if (this.locOffActiveArea(item.itemLoc)) item.variety = ItemType.NO_ITEM;
+
+    for (const m of town.monsters)
+      if (party.sdLegit(m.spec1, m.spec2) && party.getSdf(m.spec1, m.spec2) > 0)
         m.active = CreatureStatus.DEAD;
   }
 
@@ -4090,6 +4314,35 @@ export class GameSession {
   }
 
   /**
+   * Everything end_town_mode does *before* it decides where the party comes
+   * out (boe.town.cpp:551-592) — the half that runs whether it is walking off
+   * the edge of the map or taking a staircase to another level, which is why
+   * `change_level` goes through `end_town_mode` too (boe.specials.cpp:1414).
+   *
+   * The whole of it sits inside the C++'s `if(overall_mode == MODE_TOWN)`, so
+   * a town left mid-fight is not remembered at all: its dead come back, and
+   * its map goes unrecorded.
+   */
+  storeTownOnLeaving(): void {
+    const town = this.univ.town;
+    if (!town || this.mode !== GameMode.TOWN) return;
+    const { party } = this.univ;
+
+    this.saveTownPopulation();
+
+    // Persist what the party mapped, so re-entering keeps it.
+    for (let x = 0; x < town.record.maxDim; x++)
+      for (let y = 0; y < town.record.maxDim; y++)
+        if (town.isExplored(x, y)) town.record.maps[x]![y] = 1;
+
+    // A party timer started by a TOWN_TIMER_START node dies with the town
+    // (boe.town.cpp:590) — its node number indexes a list that's about to go
+    // away. Scenario-level ones survive.
+    party.partyEventTimers = party.partyEventTimers.filter(
+      (t) => t.nodeType !== SpecCtxType.TOWN);
+  }
+
+  /**
    * end_town_mode (boe.town.cpp:536). Which boundary the party crossed picks
    * the outdoor exit; a town with no explicit exit for that side just steps
    * the party one tile further out.
@@ -4099,6 +4352,8 @@ export class GameSession {
     const town = this.univ.town!;
     const rect = town.record.inTownRect;
     let toReturn = { ...party.outLoc };
+
+    this.storeTownOnLeaving();
 
     // exits[] is indexed N, W, S, E (from the "nwse" dirs string).
     const applyExit = (idx: number, fallback: Location, nudge: Location): void => {
@@ -4118,17 +4373,6 @@ export class GameSession {
       applyExit(0, loc(toReturn.x, toReturn.y - 1), loc(0, 1));
     else if (destination.y >= rect.bottom)
       applyExit(2, loc(toReturn.x, toReturn.y + 1), loc(0, -1));
-
-    // Persist what the party mapped, so re-entering keeps it.
-    for (let x = 0; x < town.record.maxDim; x++)
-      for (let y = 0; y < town.record.maxDim; y++)
-        if (town.isExplored(x, y)) town.record.maps[x]![y] = 1;
-
-    // A party timer started by a TOWN_TIMER_START node dies with the town
-    // (boe.town.cpp:590) — its node number indexes a list that's about to go
-    // away. Scenario-level ones survive.
-    party.partyEventTimers = party.partyEventTimers.filter(
-      (t) => t.nodeType !== SpecCtxType.TOWN);
 
     this.mode = GameMode.OUTDOORS;
     this.univ.addStringToBuf(`You leave ${town.record.name}.`);
@@ -4190,9 +4434,14 @@ export class GameSession {
   }
 }
 
-/** day_reached (boe.specials.cpp) without the event-key half. */
-function dayReached(currentDay: number, day: number): boolean {
-  return day >= 0 && currentDay >= day;
+/**
+ * cTown::is_cleaned_out (town.cpp:191) — the party has killed as many of this
+ * town's creatures as the scenario said it takes to empty it. A negative
+ * `maxNumMonst` means the town can never be cleaned out.
+ */
+function isCleanedOut(record: Town): boolean {
+  if (record.maxNumMonst < 0) return false;
+  return record.monstersKilled >= record.maxNumMonst;
 }
 
 function clampToWindow(where: Location): Location {

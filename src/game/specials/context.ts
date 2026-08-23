@@ -160,6 +160,15 @@ export interface SpecialHost {
   moveParty(where: Location): void;
   /** Change level, for TOWN_STAIR and friends. */
   changeLevel(town: number, where: Location): void;
+  /**
+   * `OUT_FORCE_TOWN`'s own transition (boe.specials.cpp:4609), which is **not**
+   * `change_level`: it is a bare `force_town_enter` + `start_town_mode` with no
+   * `end_town_mode` in front of it. The town being left is therefore *not*
+   * written into the party's four-town memory, so walking back into it later
+   * finds it rebuilt from presets with its dead on their feet again.
+   * `entryDir` is 9 for a forced square and a compass entrance otherwise.
+   */
+  forceTown(town: number, entryDir: number, where: Location): void;
   /** The scenario is over. */
   endScenario(): void;
 }

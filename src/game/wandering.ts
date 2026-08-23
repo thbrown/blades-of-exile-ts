@@ -250,7 +250,7 @@ export function createWandMonst(session: GameSession): void {
   const group = groups[r1];
   if (!group || group.every((m) => m === 0)) return;
   if (town.monsters.filter((c) => c.isAlive).length > 50) return;
-  if (record.maxNumMonst <= town.monstersKilled) return;
+  if (record.maxNumMonst <= record.monstersKilled) return;
 
   const spots = record.wanderingLocs;
   let r2 = univ.rng.getRan(1, 0, groups.length - 1);

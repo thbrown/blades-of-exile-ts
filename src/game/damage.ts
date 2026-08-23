@@ -542,7 +542,7 @@ export function killMonst(
       : (type === MainStatus.ABSENT || type === MainStatus.STONE)
         ? null : goreField(monst.mon.race, false);
     if (field !== null) town.setField(monst.curLoc.x, monst.curLoc.y, field);
-    if (monst.summonTime === 0) town.monstersKilled++;
+    if (monst.summonTime === 0) town.record.monstersKilled++;
   }
 
   monst.spec1 = 0;

@@ -333,14 +333,14 @@ describe('damageMonst', () => {
     monst.spec2 = 4;
     monst.health = 1;
     const town = univ.town!;
-    const killedBefore = town.monstersKilled;
+    const killedBefore = town.record.monstersKilled;
     const xpBefore = univ.party.pcs[0]!.experience;
 
     await damageMonst(univ, monst, 0, 50, DamageType.UNBLOCKABLE);
     expect(monst.active).toBe(CreatureStatus.DEAD);
     expect(univ.party.getSdf(3, 4)).toBe(1);
     expect(monst.spec1).toBe(0); // so a summoned one can't come back
-    expect(town.monstersKilled).toBe(killedBefore + 1);
+    expect(town.record.monstersKilled).toBe(killedBefore + 1);
     expect(town.hasField(monst.curLoc.x, monst.curLoc.y, FieldType.SFX_BONES)).toBe(true);
     expect(univ.party.pcs[0]!.experience).toBeGreaterThan(xpBefore);
     expect(univ.party.totalMKilled).toBe(1);
