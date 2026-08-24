@@ -1604,12 +1604,13 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue on 2026-08-23 is `doMonsters` at three files, then eight buckets of
-  two: `doMonsterTurn`, `monstCheckOneSpecialTerrain`, `pickTargetMonst`,
-  `doOutdoorMonsters`, `placeGrid` and three `the C++ draws on` ones.
-  (`seekParty` left it with the special-spot fix below.) Corpus **193,875**
-  matching draws, **10 of 87** files agreeing all the way, 38 blocked outside
-  the rules — one more than the day before because a file the port now carries
+  queue at the end of 2026-08-23 has **no bucket bigger than two files** —
+  `pickTargetMonst`, `doOutdoorMonsters`, `doMonsters`, `placeGrid` and three
+  `the C++ draws on` ones all sit at two, and everything else is a single file.
+  Four buckets emptied that day: `seekParty`, `monstCheckOneSpecialTerrain`,
+  `doMonsterTurn` and `doMonsters`' short file. Corpus **195,508** matching
+  draws, **11 of 87** files agreeing all the way, 39 blocked outside the rules
+  — two more than the day before, and both because a file the port now carries
   further reaches an action the *harness* refuses, which is its gap, not ours.
 
   **A fifth instrument landed 2026-08-22: `SPEC=1`**, one line per opcode a
@@ -5598,3 +5599,28 @@ The M6 list below is kept for the history of what it covered:
     was the standing example of "finishing is not passing"; its pin in
     `cppReplay.test.ts` moved 6,602 → 6,724 with the matching count going
     6,223 → 6,674, which is the only reason to move a pin.
+
+- **A charmed spellcaster casts, and a friendly archer shoots (M8,
+  2026-08-23).** `ZKR_14-05-2025_11-28-09`, the `monstCheckOneSpecialTerrain`
+  bucket's other file, parted at draw 3,828: the C++ rolled the mage-spell coin
+  `get_ran(1,1,10)` and this port went straight to moving. `[mbranch]` named
+  the creature in one field — `friendly=1`, `target=104`, i.e. a charmed
+  creature fighting another creature.
+  - The C++'s special-attack gate (boe.combat.cpp:2258) is
+    `target != 6 && attitude != DOCILE && monst_can_see && can_see_monst` and
+    **nothing about being friendly**; the blocks inside it — breath, mage,
+    priest, the missile abilities, the SPECIAL node — add no such test either.
+    The only `is_friendly()` in the whole turn is on the *melee* attack at the
+    end, which is what stops a charmed creature swinging at a PC.
+  - This port had `&& !monst.isFriendly` on the spell block and the missile
+    block. Since `isFriendly` is DOCILE **or** FRIENDLY and the gate already
+    excludes DOCILE, what those two words actually did was silence every
+    *charmed* caster and archer in the game: a creature the party had charmed
+    into fighting for it would walk up and hit things with its fists.
+  - **Where it stands.** Corpus 195,482 → **195,508** matching draws — a small
+    number, because only two recordings in the corpus charm a caster at all —
+    and both of the `monstCheckOneSpecialTerrain` bucket's files moved on, so
+    that bucket and `doMonsterTurn` are both gone. The file now parts at 3,854
+    in `placeTreasure`, inside `killMonst`: the port kills the creature and
+    rolls its loot where the C++ makes a run of six `get_ran(1,1,100)`s first.
+    That is the next thing to read in it.

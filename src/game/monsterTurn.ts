@@ -1252,7 +1252,13 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
         // Divergence worth knowing: the C++ tries *breath* before spells, but
         // this port folds breath into `pickMonsterAbility` below, so a monster
         // that both breathes and casts will reach for a spell first.
-        if (canSpecAttack && !monst.isFriendly) {
+        // **No `is_friendly` test here, and that is the C++'s** — the gate at
+        // :2258 is target/attitude/sight only, so a *charmed* caster (FRIENDLY,
+        // not DOCILE) casts at whatever it is fighting for the party. This port
+        // had `&& !monst.isFriendly` on this block and the missile one below;
+        // it silenced every charmed spellcaster and every friendly archer, and
+        // cost the draws their decisions make.
+        if (canSpecAttack) {
           const adjacent = monstAdjacent(monst, targSpace);
           const inRange = dist(monst.curLoc, targSpace) <= 10;
           const mu = monst.mon.mu;
@@ -1288,7 +1294,7 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
 
         // Ranged abilities come before melee — the missile or breath is what an
         // archer or a drake reaches for when the party isn't yet on top of it.
-        if (!actedYet && canSpecAttack && !monst.isFriendly) {
+        if (!actedYet && canSpecAttack) {
           // `univ.get_target(target)` (boe.combat.cpp:2379) — the target the
           // monster already has, *not* a fresh one. In town that index was
           // chosen once by `do_monsters`, and re-rolling `select_active_pc`
