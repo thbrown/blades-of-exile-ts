@@ -5526,3 +5526,38 @@ The M6 list below is kept for the history of what it covered:
     near-twin.** `is_spot`/`is_special`, `is_special`/`spell_caster`,
     `which_town`/`town_num` — the field a value is stored in keeps turning out
     to be part of the rule.
+
+- **`cPopulation::assign` writes *into* the slot, and a recycled corpse's
+  wander target is part of the arrival (M8, 2026-08-23).** The `doMonsters`
+  bucket's short file, `RangedFlickerRegression`, parted at draw 345: the C++
+  rolled `get_ran(1,0,24)` six times picking a new wander target where this
+  port made no draw at all. `MONST=1 TARG=1` on both sides put it in one field
+  — creature 17's `targ_loc` was **(0,0)** in the C++ and **(80,80)** here —
+  and `rand_move` reads those two completely differently: (0,0) means "I have
+  nowhere to go", which costs six draws to fix, and (80,80) is a real square
+  off the bottom-right corner that `seek_party` walks toward for free.
+  - Creature 17 had just been **recycled**: it died in the fight, and
+    `place_monster` (boe.monster.cpp:1145) drops a new wandering monster into
+    the first dead slot. `cPopulation::assign` (population.cpp:51) then
+    **mutates the creature already in that slot** — `static_cast<cTownperson&>
+    (dudes[n]) = other`, `static_cast<cMonster&>(dudes[n]) = base`, then a list
+    of explicit fields — and of `cCreature`'s own members it never touches
+    **`targ_loc` or `party_summoned`**. So the arrival inherits them from the
+    corpse: (0,0), the value `start_town_mode` wrote on the way in.
+  - This port's `assignCreature` built a **fresh** `Creature` and dropped it
+    into the slot, so both fields came back as the constructor's defaults —
+    (80,80) for the target, which is `cCreature()`'s own default and only ever
+    correct for a slot that has never been used. It now takes an optional
+    `into` and carries exactly those two fields across; `placeMonster` and
+    `activateMonsters` pass the sitting creature. `setUpMonst` (the outdoor
+    arena) deliberately does not: `set_up_monst` appends at `size()`, so the
+    C++ gets a default-constructed element there too, and `populateTown`
+    likewise, because `start_town_mode` clears the population first and then
+    zeroes every target anyway.
+  - **Where it stands.** Corpus 193,875 → **194,493** matching draws and **11
+    of 87** files agree the whole way, up from 10: `RangedFlickerRegression`
+    now reports *No divergence: all 962 draws agree*.
+  - The shape: **a C++ assignment that looks like construction may be a partial
+    overwrite**, and the fields it leaves alone are inherited state. Worth
+    checking the other `assign`-shaped ports for the same thing — the giveaway
+    is a function that takes an index rather than returning a value.

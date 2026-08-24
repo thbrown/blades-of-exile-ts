@@ -344,14 +344,37 @@ export function cloneCreature(c: Creature): Creature {
   return copy;
 }
 
+/**
+ * cPopulation::assign (population.cpp:51) — build a live creature out of a
+ * town's preset (`cTownperson`) and the scenario's monster (`cMonster`).
+ *
+ * **`into` is not an optimisation.** The C++ writes into the slot that is
+ * already there — `dudes[n]` — and it does not touch every field: of
+ * `cCreature`'s own, `targ_loc` and `party_summoned` are left exactly as the
+ * previous occupant left them. That matters because `place_monster`
+ * (boe.monster.cpp:1145) hands it a **recycled slot**: a wandering monster
+ * dropped into a dead townsperson's place inherits the townsperson's last
+ * wander target, which by then is usually (0,0) — the value `start_town_mode`
+ * writes — rather than a fresh creature's (80,80). And (0,0) is the value
+ * `rand_move` reads as "I have nowhere to go", so it picks a new target and
+ * makes six draws doing it, where an inherited (80,80) sends it walking
+ * off the bottom-right corner for free. Callers with a genuinely empty slot
+ * leave `into` out and get the constructor's defaults, which is what the C++'s
+ * freshly resized vector gives them.
+ */
 export function assignCreature(
   slot: number,
   preset: Townperson,
   template: Monster,
   easy = false,
   difficultyAdjust = 1,
+  into?: Creature,
 ): Creature {
   const c = new Creature();
+  if (into) {
+    c.targLoc = { ...into.targLoc };
+    c.partySummoned = into.partySummoned;
+  }
   c.slot = slot;
   c.number = preset.number;
   c.mon = copyMonster(template);

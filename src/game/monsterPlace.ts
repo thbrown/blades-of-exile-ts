@@ -86,8 +86,14 @@ export function placeMonster(
   const preset = defaultTownperson();
   preset.number = which;
   preset.startLoc = { ...where };
+  // The slot `i` is the first dead one, and `cPopulation::assign` writes
+  // **into** it: the arrival inherits whatever that corpse's `targ_loc` and
+  // `party_summoned` were. See assignCreature's comment — a wandering monster
+  // landing in a townsperson's slot starts with the townsperson's (0,0)
+  // wander target, and `rand_move` reads that as "pick somewhere new".
   const c: Creature = assignCreature(
-    i, preset, template, univ.party.easyMode, univ.difficultyAdjust());
+    i, preset, template, univ.party.easyMode, univ.difficultyAdjust(),
+    town.monsters[i]);
   // "One effect is resetting max health to ignore difficulty_adjust()".
   c.maxHealth = template.health;
   c.health = c.maxHealth;
@@ -206,8 +212,11 @@ export function activateMonsters(univ: Universe, code: number): void {
     const preset = town.record.creatures[existing.slot];
     const template = preset ? univ.scenario.scenMonsters[preset.number] : undefined;
     if (!preset || !template) continue;
+    // Same `assign`-into-the-slot rule as `placeMonster`: the creature waking
+    // up is the one already standing there, and its wander target survives.
     const monst = assignCreature(
-      existing.slot, preset, template, univ.party.easyMode, univ.difficultyAdjust());
+      existing.slot, preset, template, univ.party.easyMode, univ.difficultyAdjust(),
+      existing);
     monst.specEncCode = 0;
     monst.active = CreatureStatus.ALERTED;
     monst.summonTime = 0;
