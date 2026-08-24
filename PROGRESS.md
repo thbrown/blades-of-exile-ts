@@ -1604,12 +1604,13 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue at the end of 2026-08-22 has **no bucket bigger than two files** —
-  `monstCheckOneSpecialTerrain`, `seekParty`, `pickTargetMonst`, the two
-  remaining `VoDT_09-04-*` files, `placeGrid` and a couple of `the C++ draws
-  on` buckets all sit at two. **`doMonsters` has left the queue entirely**,
-  from five files that morning. Corpus **190,362** matching draws, **10 of 87**
-  files agreeing all the way, 37 blocked outside the rules.
+  queue on 2026-08-23 is `doMonsters` at three files, then eight buckets of
+  two: `doMonsterTurn`, `monstCheckOneSpecialTerrain`, `pickTargetMonst`,
+  `doOutdoorMonsters`, `placeGrid` and three `the C++ draws on` ones.
+  (`seekParty` left it with the special-spot fix below.) Corpus **193,875**
+  matching draws, **10 of 87** files agreeing all the way, 38 blocked outside
+  the rules — one more than the day before because a file the port now carries
+  further reaches an action the *harness* refuses, which is its gap, not ours.
 
   **A fifth instrument landed 2026-08-22: `SPEC=1`**, one line per opcode a
   chain runs, the pair to the C++ harness's `[spec]` under `BOE_TRACE`. Reach
@@ -5471,3 +5472,57 @@ The M6 list below is kept for the history of what it covered:
     three: **a file whose draws all agree and which stops anyway is not a rules
     bug at all** — it is the port refusing an action the C++ carried out. Read
     the transcript at the stop, not the draw stream before it.
+
+- **`is_spot` is not `is_special`, and nothing was erasing the completed ones
+  (M8, 2026-08-23).** The `monstCheckOneSpecialTerrain` bucket's head,
+  `VoDT_20-04-2025_21-09-37`, parted at draw 9,556: the C++ futzed
+  (`get_ran(1,0,2)` twice) where this port rolled another creature's `guts`.
+  `[mmove]` put the cause 3,335 moves earlier and one square wide — creature 33
+  stepped (20,40) → (19,40) in the C++ and was **refused here**, with no draw
+  either side of it, because in combat `monst_can_be_there` asks first and
+  blockage costs nothing. A one-line "why was it blocked" instrument named the
+  square's special-encounter marker.
+  - The C++ keeps **two different questions** about a scripted square:
+    `cCurTown::is_special` (universe.cpp:301) scans `special_locs` — does a node
+    live here — and `cCurTown::is_spot` (:291) reads the **SPECIAL_SPOT field
+    flag** — is the marker still on. They start out agreeing and come apart the
+    moment a one-shot fires, because **`erase_town_specials`
+    (boe.town.cpp:1230) clears the flag and leaves the list alone.** This port
+    had one method, `CurTown.isSpecialSpot`, implementing `is_special`, and
+    `isBlocked` was calling it where the C++ calls `is_spot` — so every square
+    that had *ever* carried a script stayed off limits to combatants for the
+    rest of the game.
+  - `erase_completed_specials` is the pass, and it is not the one-shot's own
+    doing: it sweeps the *whole area's* `special_locs` looking for nodes whose
+    SDF pair reads `SDF_COMPLETE` (250, the value `ONCE_DONE` already had a name
+    for here) and clears those squares' markers. It runs at the tail of **every
+    special chain** (boe.specials.cpp:2172) and once when a town is entered
+    (:450, right after the creature sweeps). Ported as
+    `GameSession.eraseCompletedSpecials` / `eraseTownSpecials` /
+    `eraseOutSpecials`, called from `startTownMode` and from the `finally` of
+    the VM's `run`. The arena bails out (`which_combat_type == 0`), and the
+    "Area corrupt. Problem fixed." repair of an off-map special is kept, debug
+    print and all.
+  - **What the flag actually gates**, since "just a map glyph" was the reason
+    to leave this out: the marker sprite, the "Special Encounter" line when you
+    look, one step of sight obscurity, `monst_check_one_special_terrain`'s
+    town-mode refusal — and the combat blockage above, which is the one a
+    replay can see.
+  - Two smaller divergences fell out of reading the pair side by side:
+    `sight_obscurity`'s `is_special` bump is inside `if(is_town())` while the
+    field tests below it are inside `if(is_town() || is_combat())`, so a
+    scripted square stops obscuring sight once a fight starts on it; this port
+    applied it in both. And `erase_out_specials` carries **`erase_hidden_towns`**
+    (:1256), which is the consumer `SET_TOWN_VISIBILITY` never had: a town
+    flagged unfindable has its entrance square redrawn as the terrain's `flag1`
+    and a findable one gets it back, and it only happens when a chain ends.
+  - **Where it stands.** Corpus 190,362 → **193,875** matching draws, still 10
+    of 87 all the way, and the head file moved from
+    `monstCheckOneSpecialTerrain` to a later part in `doMonsterTurn`.
+    `seekParty` left the bucket queue. Nothing went backwards; 1,026 tests and
+    `verify-screen` are green.
+  - The shape, for next time: **when two runs disagree about whether a square
+    is blocked and neither draws, the answer is in a flag, and the flag has a
+    near-twin.** `is_spot`/`is_special`, `is_special`/`spell_caster`,
+    `which_town`/`town_num` — the field a value is stored in keeps turning out
+    to be part of the rule.

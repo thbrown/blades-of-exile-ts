@@ -20,7 +20,7 @@ import { MonstTime } from '../data/monster';
 import { MonstAbil } from '../data/monsterAbility';
 import { SpellNote } from '../universe/living';
 import { FieldType } from '../data/fields';
-import { AmbientSound, SECTOR_SIZE } from '../data/outdoors';
+import { AmbientSound, SECTOR_SIZE, SpecLoc } from '../data/outdoors';
 import { StepSound, Terrain, TerObstruct, TerSpec, TrimType, blocksMove } from '../data/terrain';
 import { TalkNodeType } from '../data/talking';
 import { Lighting, Town } from '../data/town';
@@ -73,11 +73,12 @@ import { Universe } from '../universe/universe';
 import { GameMode, PreModes, isCombat, isOut, isTown } from './modes';
 import { bashDoor as bashDoorAt, pickLock as pickLockAt } from './doors';
 import { TalkAction, TalkState } from './talk';
-import { SpecType } from '../data/special';
+import { SpecType, SpecialNode } from '../data/special';
 import { SpecCtx, SpecCtxType, SpecialHost } from './specials/context';
 import { SpecialsEngine } from './specials/vm';
 import { specialIncreaseAge } from './specialIncreaseAge';
 import { alterSpace } from './specials/general';
+import { ONCE_DONE } from './specials/oneshot';
 import { Spell } from '../data/spell';
 import { castSpell } from './spellTown';
 
@@ -968,8 +969,14 @@ export class GameSession {
 
     const inCombat = isCombat(this.mode);
     if (inCombat) {
-      // Keep combatants off marked specials and off portals.
-      if (town.isSpecialSpot(where.x, where.y)) return true;
+      // Keep combatants off marked specials and off portals. This is
+      // `cCurTown::is_spot` — the **SPECIAL_SPOT field flag** — and not
+      // `is_special`, the scan of `special_locs` that `specialAt` uses. The
+      // difference is `erase_town_specials`: a completed one-shot keeps its
+      // entry in `special_locs` for ever but loses the flag, and after that a
+      // creature may walk over the square again. `checkSpecialTerrain` reads
+      // the same flag for the same reason.
+      if (town.hasField(where.x, where.y, FieldType.SPECIAL_SPOT)) return true;
       if (this.univ.terrainType(town.record.terrain[where.x]![where.y]!).trimType
         === TrimType.CITY) return true;
     }
@@ -3568,6 +3575,9 @@ export class GameSession {
     this.clearDoorFields(town);
     this.placePresetItems(town);
     this.sweepTown(town);
+    // boe.town.cpp:450, right after the sweeps: the markers of everything this
+    // party has already finished here are gone before the town is drawn once.
+    this.eraseTownSpecials();
 
     // "No hostile monsters present" (boe.town.cpp:473).
     this.univ.party.hostilesPresent = 0;
@@ -3680,7 +3690,11 @@ export class GameSession {
     let store = this.getBlockage(this.coordToTer(x, y));
     const town = this.univ.town;
     if (!town) return store;
-    if (town.isSpecialSpot(x, y)) store++;
+    // `is_special` — the special_locs scan, not the field flag — and **town
+    // mode only**: the C++ puts this one bump inside `if(is_town())` and the
+    // field tests below inside `if(is_town() || is_combat())`, so a scripted
+    // square stops obscuring sight the moment a fight starts on it.
+    if (this.inTown && town.isSpecialSpot(x, y)) store++;
     // A web is half-transparent; a barrier blocks sight outright; a crate,
     // barrel or block is one step of cover.
     if (town.hasField(x, y, FieldType.FIELD_WEB)) store += 2;
@@ -4169,6 +4183,106 @@ export class GameSession {
     for (const m of town.monsters)
       if (party.sdLegit(m.spec1, m.spec2) && party.getSdf(m.spec1, m.spec2) > 0)
         m.active = CreatureStatus.DEAD;
+  }
+
+  /**
+   * erase_completed_specials (boe.town.cpp:1277) — every scripted square whose
+   * SDF pair has been set to `SDF_COMPLETE` (250, the value a one-shot node
+   * writes when it fires) loses its **special-spot marker**.
+   *
+   * Note what it does *not* do: the square keeps its entry in `special_locs`,
+   * so `is_special` still finds the node and walking onto it still runs the
+   * chain — which is the point, since the chain's own one-shot test is what
+   * makes it a no-op. What goes away is the flag `is_spot` reads: the glyph on
+   * the map, the "Special Encounter" line when you look, the extra square of
+   * sight obscurity, and — the reason a replay notices — the **combat
+   * blockage**, since `is_blocked` refuses to let anything stand on a marked
+   * square during a fight.
+   */
+  private eraseCompletedSpecials(
+    locs: SpecLoc[],
+    specials: Map<number, SpecialNode>,
+    isOnMap: (where: Location) => boolean,
+    clearSpot: (where: Location) => void,
+  ): void {
+    const { party } = this.univ;
+    for (let i = 0; i < locs.length; i++) {
+      const at = locs[i]!;
+      // The C++'s bounds test is `spec >= specials.size()`, over a vector with
+      // gaps filled by default-constructed nodes; here the parsed nodes are a
+      // sparse Map, so a node that isn't there is treated as out of range.
+      const node = at.spec < 0 ? undefined : specials.get(at.spec);
+      if (!node) continue;
+      if (!party.sdLegit(node.sd1, node.sd2)) continue;
+      if (party.getSdf(node.sd1, node.sd2) !== ONCE_DONE) continue;
+      if (!isOnMap(at)) {
+        // Kept, debug print and all: a scenario with a special pinned off the
+        // edge of its own map gets repaired in place, once, out loud. (The
+        // C++'s `beep()` is the system alert, which this port has no
+        // equivalent of anywhere; the two messages are the whole of it here.)
+        this.univ.addStringToBuf('Area corrupt. Problem fixed.');
+        this.univ.addStringToBuf(`debug: ${at.x} ${at.y} ${i}`);
+        at.spec = -1;
+      }
+      clearSpot(at);
+    }
+  }
+
+  /**
+   * erase_town_specials (boe.town.cpp:1230). Called from the tail of every
+   * special chain and once more when a town is entered.
+   *
+   * The arena bails out: `which_combat_type == 0` is a fight with no town
+   * under it, and its `univ.town` is scratch scenery whose markers nobody
+   * should be editing.
+   */
+  eraseTownSpecials(): void {
+    if (isCombat(this.mode) && this.whichCombatType === 0) return;
+    if (!this.inTown && !isCombat(this.mode)) return;
+    const town = this.univ.town;
+    if (!town) return;
+    this.eraseCompletedSpecials(
+      town.record.specialLocs, town.record.specials,
+      (where) => town.isOnMap(where.x, where.y),
+      (where) => town.setField(where.x, where.y, FieldType.SPECIAL_SPOT, false));
+  }
+
+  /**
+   * erase_out_specials (boe.town.cpp:1240) — the same pass over each of the
+   * four sectors under the outdoor window, plus `erase_hidden_towns`, which is
+   * what `SET_TOWN_VISIBILITY` has been waiting for: a town flagged unfindable
+   * has its entrance square redrawn as the terrain's `flag1` (the plain ground
+   * it is pretending to be), and one made findable again gets its entrance
+   * back. The C++ does this here and nowhere else, so a scenario that hides a
+   * town only sees it disappear once the chain that hid it finishes.
+   */
+  eraseOutSpecials(): void {
+    const { party, scenario, out } = this.univ;
+    for (let i = 0; i < 2; i++)
+      for (let j = 0; j < 2; j++) {
+        const sx = party.outdoorCorner.x + i;
+        const sy = party.outdoorCorner.y + j;
+        // quadrant_legal (boe.town.cpp:1615).
+        if (sx < 0 || sy < 0 || sx >= scenario.outWidth || sy >= scenario.outHeight) continue;
+        const sector = scenario.outdoors[sx]![sy]!;
+
+        // erase_hidden_towns (boe.town.cpp:1256).
+        for (const city of sector.cityLocs) {
+          if (city.spec < 0 || city.spec >= scenario.towns.length) continue;
+          if (city.x < 0 || city.y < 0 || city.x >= SECTOR_SIZE || city.y >= SECTOR_SIZE) continue;
+          const area = sector.terrain[city.x]![city.y]!;
+          if (this.univ.terrainType(area).special !== TerSpec.TOWN_ENTRANCE) continue;
+          const canFind = scenario.towns[city.spec]!.canFind;
+          out.set(SECTOR_SIZE * i + city.x, SECTOR_SIZE * j + city.y,
+            canFind ? area : this.univ.terrainType(area).flag1);
+        }
+
+        this.eraseCompletedSpecials(
+          sector.specialLocs, sector.specials,
+          (where) => where.x >= 0 && where.y >= 0
+            && where.x < SECTOR_SIZE && where.y < SECTOR_SIZE,
+          (where) => { sector.specialSpot[where.x]![where.y] = false; });
+      }
   }
 
   /**

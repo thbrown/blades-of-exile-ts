@@ -206,6 +206,12 @@ export class SpecialsEngine {
       this.univ.addStringToBuf('SPECIAL ENCOUNTER FAILED.');
       console.error('special chain failed', { startSpec, whichMode, whichType, specLoc }, err);
     } finally {
+      // boe.specials.cpp:2172, the last thing a chain does: a one-shot that
+      // just completed loses its square's special-spot marker. In the `finally`
+      // rather than after the loop so a handler that threw still leaves the
+      // markers consistent with the SDFs it managed to set.
+      if (this.session.isOutdoors) this.session.eraseOutSpecials();
+      else this.session.eraseTownSpecials();
       this.inProgress = false;
     }
 
