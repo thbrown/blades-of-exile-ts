@@ -80,16 +80,18 @@ const FILES = [
  * change is a regression whatever this number did.
  */
 const DRAW_PIN: Record<string, number> = {
-  // Matching draws as of 2026-08-21: 6,223 of the C++'s 6,676. Four fixes have
-  // moved the total here (6,480 -> 6,562 -> 6,765 -> 6,602) without moving where the two
-  // streams part, which is what this pin is for. See PROGRESS.md.
+  // Matching draws as of 2026-08-23: **6,674 of the C++'s 6,676**, i.e. every
+  // draw this port makes agrees and the C++ then makes two more before its
+  // harness dies on a dialog control. It was 6,223 of 6,676 on 2026-08-21;
+  // `targ_space` in town (see PROGRESS.md) is what closed the gap. Five fixes
+  // have moved the total here (6,480 -> 6,562 -> 6,765 -> 6,602 -> 6,724).
   //
-  // **This number is not the one `diverge.mjs` prints** (6,433 for the same
+  // **This number is not the one `diverge.mjs` prints** (6,674 for the same
   // file on the same commit). The two runners disagree, which means one of
   // them is not reproducing the recording faithfully — `corpus.test.ts` has
   // its own driver setup and this file has `play()`. Tracked as a found-not-
   // fixed in PROGRESS.md; pin what *this* runner does until it is chased down.
-  'ZKR_15-05-2025_18-04-58.xml': 6602,
+  'ZKR_15-05-2025_18-04-58.xml': 6724,
 };
 
 /**

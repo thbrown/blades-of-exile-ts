@@ -228,11 +228,6 @@ function resolveTarget(session: GameSession, target: number): Living | null {
   return null;
 }
 
-/** Where a target index is standing, or the monster's own square for none. */
-function targetLoc(session: GameSession, monst: Creature, target: number): Location {
-  return resolveTarget(session, target)?.getLoc() ?? monst.curLoc;
-}
-
 /**
  * `monst_pick_target_monst` — the other half of target selection: a friendly
  * (charmed) creature fights hostiles instead of the party, and a hostile one
@@ -1115,6 +1110,17 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
     // inside the loop makes that ordering observable, where before it wasn't.
     const numMonst = town.monsters.length;
 
+    // **Declared outside the loop because the C++ declares it outside the
+    // loop** (`location targ_space,move_targ,l;`, boe.combat.cpp:2060). Both
+    // branches below leave it *untouched* when the target is 6 (no one), so a
+    // creature with nothing to chase inherits whatever square the last
+    // creature to have a target was aiming at — and (0,0) at the top of the
+    // call, which is `location`'s default constructor (location.cpp:46). Only
+    // the tactic test and the flee call read it in that state, so this is a
+    // small quirk with a real effect on the draw stream; a per-creature
+    // `targSpace` would be tidier and wrong.
+    let targSpace: Location = loc(0, 0);
+
     for (let i = 0; i < numMonst; i++) {
       const monst = town.monsters[i]!;
       if (!univ.party.pcs.some((pc) => pc.isAlive)) return;
@@ -1142,13 +1148,33 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
         // a creature standing in a scrum kept walking toward whoever the picker
         // named — usually the last PC to cast, several squares away — instead of
         // hitting the one it was already next to.
-        const target = inCombat
+        let target = inCombat
           ? switchTargetToAdjacent(session, monst, monstPickTarget(session, monst))
           : monst.target;
-        monst.target = target;
-        const targSpace = !inCombat
-          ? univ.party.townLoc
-          : targetLoc(session, monst, target);
+        // **A creature target is chased to where *it* is standing, in town as
+        // well as in combat** (boe.combat.cpp:2175-2186). This port used the
+        // party's square for the whole town branch, so a charmed creature — or
+        // a hostile one that went after a friendly monster — walked toward the
+        // party while the C++ walked toward its quarry. Both branches leave
+        // `targSpace` alone for target 6; see its declaration.
+        const targetPc = target >= 0 ? univ.party.pcs[target] : undefined;
+        if (target < NO_ONE) {
+          // The C++ reads `univ.party[target]` here without checking the sign,
+          // and only clamps a negative target to 6 on the line *after*. Nothing
+          // reachable produces one, and a negative index would throw here where
+          // the C++ quietly reads past the array, so this leaves `targSpace`
+          // alone instead — the same thing the clamp below then implies.
+          if (targetPc) targSpace = inCombat ? targetPc.combatPos : univ.party.townLoc;
+        } else if (target !== NO_ONE) {
+          const other = town.monsters[target - 100];
+          if (other) targSpace = other.curLoc;
+        }
+        // `if((target < 0) || ((target > 5) && (target < 100))) target = 6;`
+        // (boe.combat.cpp:2191) — a target index that is neither a PC nor a
+        // creature becomes "no one", and it is the *stored* field that is
+        // clamped, in both modes.
+        monst.target = (target < 0 || (target > 5 && target < 100)) ? NO_ONE : target;
+        target = monst.target;
 
         // "Draw w. monster in center, if can see" — the view follows whichever
         // monster is about to act, so you see where the spear comes from rather

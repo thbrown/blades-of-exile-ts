@@ -5561,3 +5561,40 @@ The M6 list below is kept for the history of what it covered:
     overwrite**, and the fields it leaves alone are inherited state. Worth
     checking the other `assign`-shaped ports for the same thing — the giveaway
     is a function that takes an index rather than returning a value.
+
+- **In town, a creature chasing another creature walks toward *it*, and
+  `targ_space` outlives the creature that set it (M8, 2026-08-23).** The
+  `doMonsterTurn` bucket: `VoDT_20-04-2025_21-09-37` parted at draw 11,963,
+  where this port rolled the mage-spell coin (`get_ran(1,1,10)`) and the C++
+  did not. `[mbranch]` gave it away in one field — the same creature, the same
+  target (158, i.e. creature 58), and `targ_space=(26,48)` in the C++ against
+  `(10,42)`, the party's square, here. The distance test in front of the spell
+  decision is measured from that square, so the wrong one let a caster reach
+  for a spell it was out of range for.
+  - `do_monster_turn`'s two branches (boe.combat.cpp:2175-2186) are the same
+    shape: `target < 6` → the party's square (in town) or that PC's combat
+    position (in combat); `target != 6` → **`univ.town.monst[target - 100].
+    cur_loc`**. This port had hard-coded the party's square for the whole town
+    branch, on the assumption that a town-mode creature is only ever after the
+    party. It isn't: `monst_pick_target` hands a charmed creature a hostile to
+    fight, and a hostile one that can't reach a PC goes after a friendly
+    creature.
+  - **`targ_space` is declared outside the monster loop** (:2060) and neither
+    branch assigns it when the target is 6, so a creature with nothing to chase
+    reads whatever square the last creature *with* a target was aiming at —
+    and `location()`'s (0,0) at the top of the call. Ported as written: a `let`
+    above the loop with a comment saying why it is not per-creature. The tactic
+    test and the flee call are what read it in that state.
+  - The clamp that follows (`target < 0 || (target > 5 && target < 100)` → 6,
+    :2191) was missing too. It is applied to the **stored** field and then read
+    back into the local, in both modes; this port assigned the raw value. Also
+    note the C++ indexes `univ.party[target]` *before* clamping, so a negative
+    target reads past the array — this port leaves `targSpace` alone in that
+    case rather than throwing, which is what the clamp implies anyway.
+  - **Where it stands.** Corpus 194,493 → **195,482** matching draws, the
+    `doMonsterTurn` bucket is gone, and **`ZKR_15-05-2025_18-04-58` now agrees
+    on all 6,674 draws it makes** — the C++ draws two more and then its harness
+    dies on a dialog control. That file had parted at draw 6,080 for weeks and
+    was the standing example of "finishing is not passing"; its pin in
+    `cppReplay.test.ts` moved 6,602 → 6,724 with the matching count going
+    6,223 → 6,674, which is the only reason to move a pin.
