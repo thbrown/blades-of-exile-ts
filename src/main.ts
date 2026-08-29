@@ -458,7 +458,7 @@ async function main(): Promise<void> {
       if (choice === 'bash') {
         const who = await selectPc(SelectPcMode.ONLY_LIVING, 'Who will bash?',
           { highlight: Skill.STRENGTH });
-        if (who < 6) session.bashDoor(where, who);
+        if (who < 6) await session.bashDoor(where, who);
       } else if (choice === 'pick') {
         const who = await selectPc(SelectPcMode.ONLY_CAN_LOCKPICK,
           'Who will pick the lock?', { highlight: Skill.LOCKPICKING });
@@ -1452,7 +1452,7 @@ async function main(): Promise<void> {
           : await selectPc(SelectPcMode.ONLY_CAN_LOCKPICK, 'Who will pick the lock?',
             { highlight: Skill.LOCKPICKING });
         if (who < 6) {
-          if (isBash) session.bashDoor(target, who);
+          if (isBash) await session.bashDoor(target, who);
           else session.pickLock(target, who);
         }
         setStatus();

@@ -142,10 +142,12 @@ describe('locked doors', () => {
     if (spec.flag3 === 1) spec.flag3 = 0;
     const pc = session.univ.party.pcs[0]!;
     const before = pc.curHealth;
-    session.bashDoor(where, 0);
+    // Awaited: the damage goes through the real `damagePc` now, which is async
+    // because a death can fire a script.
+    await session.bashDoor(where, 0);
     expect(pc.curHealth).toBeLessThan(before);
     expect(before - pc.curHealth).toBeLessThanOrEqual(4);
-    expect(session.univ.transcript.at(-1)).toContain("Didn't work");
+    expect(session.univ.transcript.join(' | ')).toContain("Didn't work");
   });
 
   it('picking a lock needs lockpicks equipped', async () => {

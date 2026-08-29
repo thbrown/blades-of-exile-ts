@@ -194,7 +194,7 @@ export async function runReplay(
         const who = await runSelectPc(session.univ, SelectPcMode.ONLY_LIVING,
           'Who will bash?', (rows, title, hl) => host.selectPc(rows, title, hl),
           { highlight: Skill.STRENGTH });
-        if (who < 6) session.bashDoor(where, who);
+        if (who < 6) await session.bashDoor(where, who);
       } else if (choice === 'pick') {
         const who = await runSelectPc(session.univ, SelectPcMode.ONLY_CAN_LOCKPICK,
           'Who will pick the lock?', (rows, title, hl) => host.selectPc(rows, title, hl),

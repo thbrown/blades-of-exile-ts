@@ -5851,3 +5851,25 @@ The M6 list below is kept for the history of what it covered:
     stops is usually missing a *hook*, not a rule.** Three of M8's last four
     buckets were that: an unhandled action, an unset callback, a feature that
     was never built.
+
+- **A failed bash goes through the real `damage_pc` (M8, 2026-08-23).** The
+  `increaseAgeEffects` bucket, `ASR_05-05-2025_12-20-07`: the C++ made three
+  draws bashing a door — `get_ran(1,1,100)` for the attempt, `get_ran(1,1,4)`
+  for the damage, and then a **third** `get_ran(1,1,100)` — where this port
+  made two.
+  - The third is the party's **luck** roll, inside `damage_pc`
+    (boe.party.cpp:2573). It is outside the armour block, so it happens for
+    `SPECIAL` damage too — for every kind but `MARKED`. `bash_door` calls
+    `damage_pc(pc, get_ran(1,1,4), SPECIAL, UNKNOWN)`; this port had
+    `pc.curHealth -= hurt` with a `TODO(M5)` on it, and M5 closed in July.
+  - So it was not only skipping the death check, the status effects and the
+    animation the TODO named: it was **one draw short every time a bash
+    failed**. `bashDoor` and `GameSession.bashDoor` are async now, which the
+    three call sites await.
+  - **Where it stands.** Corpus 274,404 → **285,845** matching draws and
+    **15 of 87** files agree the whole way.
+  - Worth a general note: `grep -rn "TODO(M[0-5])" src/` is now a list of
+    *stale* promises — every milestone up to M7 is closed, so anything still
+    marked for one of them is a shortcut nobody came back to. This is the
+    second such shortcut M8 has found by way of the draw stream rather than by
+    reading the list.

@@ -12,9 +12,11 @@ import { ItemAbil, defaultItem } from '../data/item';
 import { TerSpec } from '../data/terrain';
 import { Snd, SoundPlayer } from '../platform/sound';
 import { hasAbilEquip } from '../universe/inventory';
-import { Skill, Trait } from '../universe/skills';
+import { Race, Skill, Trait } from '../universe/skills';
 import { Player } from '../universe/player';
 import { Universe } from '../universe/universe';
+import { DamageType } from '../data/monster';
+import { damagePc } from './damage';
 
 export type DoorResult = 'opened' | 'failed' | 'no-picks' | 'wrong-terrain';
 
@@ -66,12 +68,12 @@ export function pickLock(
 }
 
 /** bash_door (boe.town.cpp:1204). */
-export function bashDoor(
+export async function bashDoor(
   univ: Universe,
   where: Location,
   pcNum: number,
   sound?: SoundPlayer | null,
-): DoorResult {
+): Promise<DoorResult> {
   const town = univ.town;
   if (!town) return 'wrong-terrain';
   const pc = univ.party.pcs[pcNum];
@@ -89,10 +91,13 @@ export function bashDoor(
   const unlockAdjust = spec.flag2;
   if (unlockAdjust >= 5 || r1 > unlockAdjust * 15 + 40 || spec.flag3 !== 1) {
     univ.addStringToBuf("  Didn't work.");
-    // A failed bash hurts: 1d4, unblockable.
-    const hurt = univ.rng.getRan(1, 1, 4);
-    pc.curHealth = Math.max(0, pc.curHealth - hurt);
-    // TODO(M5): damage_pc also handles death, statuses and the damage animation.
+    // A failed bash hurts: 1d4, unblockable — and it goes through the **real**
+    // `damage_pc` (boe.town.cpp:1218), which this used to short-circuit into a
+    // subtraction with a `TODO(M5)` on it. M5 has been closed since July, and
+    // the shortcut was not just missing the death and the animation: even for
+    // `SPECIAL` damage `damage_pc` rolls the party's luck, so the bash was one
+    // `get_ran(1,1,100)` short every time it failed.
+    await damagePc(univ, pc, univ.rng.getRan(1, 1, 4), DamageType.SPECIAL, Race.UNKNOWN);
     return 'failed';
   }
   univ.addStringToBuf('  Lock breaks.');

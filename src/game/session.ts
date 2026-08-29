@@ -2581,8 +2581,8 @@ export class GameSession {
   }
 
   /** Try to bash a locked door open with a given PC. */
-  bashDoor(where: Location, pcNum: number): void {
-    bashDoorAt(this.univ, where, pcNum, this.sound);
+  async bashDoor(where: Location, pcNum: number): Promise<void> {
+    await bashDoorAt(this.univ, where, pcNum, this.sound);
   }
 
   /**
