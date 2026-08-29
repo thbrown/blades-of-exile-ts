@@ -6068,16 +6068,16 @@ The M6 list below is kept for the history of what it covered:
     That is the largest single jump M8 has had, past the wall-spell volley fix.
   - The shape to take away: **a divergence in the draw stream can be forty
     turns downstream of a rule that makes no draws at all.** Both sides agreed
-    on every number for 301 draws and disagreed about one creature\'s hit
+    on every number for 301 draws and disagreed about one creature's hit
     points the whole time. When the first differing draw is a *conditional*
-    roll — one side asks and the other doesn\'t — the question to ask is not
+    roll — one side asks and the other doesn't — the question to ask is not
     "is the condition ported right" but "do both sides agree on what it is
     reading". Here they did not, and the answer was in a loop nobody had
     written.
 
-- **`damage_pc`\'s return value is not the health it took off (M8,
+- **`damage_pc`'s return value is not the health it took off (M8,
   2026-08-24).** The `monsterTouches` bucket, two files. `ZKR-5-16-12-30`
-  parted at draw 4,447 spending a `get_ran(1,1,1000)` — a touch ability\'s odds
+  parted at draw 4,447 spending a `get_ran(1,1,1000)` — a touch ability's odds
   roll — that the C++ never made.
   - Found with a **new instrument, `TOUCH=1` / `BOE_TRACE_TOUCH=1`**, one line
     per ability the `for(auto& abil : attacker->abil)` tail of `monster_attack`
@@ -6097,15 +6097,15 @@ The M6 list below is kept for the history of what it covered:
     the PC is **already at zero** — leave the health alone and call `kill_pc`.
     So the blow that finishes off a downed PC comes back positive with nothing
     taken off, and the C++ refuses to trust it.
-  - `damaged` gates the martyr\'s shield, the poisoned blade and the whole
+  - `damaged` gates the martyr's shield, the poisoned blade and the whole
     touch-ability loop, so this port was handing out paralysing and poisonous
     touches on the one blow in a fight where the two engines differ.
   - **Where it stands.** Corpus 347,554 → **352,150** matching draws and
     **17 of 87** files agree the whole way.
-  - The shape: **a function\'s return value and its effect are two different
+  - The shape: **a function's return value and its effect are two different
     facts, and the C++ knows it.** Wherever it re-derives something it was just
     handed, that is a signal, not noise — the same pattern as
-    `find_clear_spot`\'s sixth test back in August.
+    `find_clear_spot`'s sixth test back in August.
 
 - **OPEN LEAD: drawing the status bar rolls the dice (M8, 2026-08-24).** Not
   fixed — written down because the evidence was expensive and the fix is not a
@@ -6113,7 +6113,7 @@ The M6 list below is kept for the history of what it covered:
   is the same root as the `totalEncumbrance` bucket noted on 2026-08-23.
   - `VoDT_05-04-2025_14-32-10` parts at draw 24. The C++ spends **three**
     `get_ran(1,0,70)` after the cast button is clicked and **two** more inside
-    `handle_target_space`, all before the spell\'s first blast roll; this port
+    `handle_target_space`, all before the spell's first blast roll; this port
     spends none. A new harness switch, **`BOE_TRACE_ENC=1`**, prints one line
     per `cPlayer::total_encumbrance` call and named them all as Feodoric, the
     caster.
@@ -6134,50 +6134,52 @@ The M6 list below is kept for the history of what it covered:
     cosmetic gap. It is not cosmetic. This is the **fourth** stale `TODO(M0-M7)`
     M8 has found by way of the draw stream, and the second in one day.
   - **Why it is not a quick fix.** The number of draws is the number of
-    `draw_terrain(0)` calls, so porting it faithfully means matching the C++\'s
+    `draw_terrain(0)` calls, so porting it faithfully means matching the C++'s
     *redraw count*, not just its rules — the one kind of fidelity a rewrite gets
     for free nowhere. Before writing code, count the `draw_terrain(0)` calls in
     `combat_cast_mage_spell` → `start_spell_targeting` → `do_combat_cast` and
     check them against the 3-then-2 split above; that split is the spec.
   - General note, and it is the sharpest one of the day: **in this codebase the
     draw stream can be moved by the drawing code.** `playAmbientSound` was the
-    first instance (it was really `outd_is_blocked`), `add_explosion`\'s offset
+    first instance (it was really `outd_is_blocked`), `add_explosion`'s offset
     roll is another, and this is the clearest: a function whose entire job is to
     choose a string spends RNG doing it. When a bucket bottoms out in "nobody
     should be drawing here", check what the C++ *paints* at that moment.
 
-- **OPEN LEAD: a PC heals here that the C++ leaves alone (M8, 2026-08-24).**
-  The `increaseAgeEffects` bucket, two files. Narrowed but not fixed; the
-  reproduction is exact, so this is a short job for whoever picks it up.
-  - `ASR_05-05-2025_12-50-38` parts at draw 7,688: a special node does
-    `get_ran(3,1,12)` damage and then `hit_party` rolls **six**
-    `get_ran(1,1,100)` luck saves in the C++ against **two** here.
-  - That is the symptom, not the bug. `PCS=1` / `BOE_TRACE_PCS=1` — with
-    **`/m<max health>` newly added to both sides** — puts the real divergence
-    **five thousand draws earlier**, at action 183, with every draw still
-    matching:
-
-    ```
-    age 1775   C 1:s1/h69/m72     J 1:s1/h69/m72
-    age 1776   C 1:s1/h69/m72     J 1:s1/h71/m72     <- +2 here, nothing there
-    age 1777   C 1:s1/h69/m72     J 1:s1/h72/m72     <- +1 here, nothing there
-    ```
-
-    So PC 1 (\'Slish\') heals +2 on one turn and +1 on the next in this port and
-    not at all in the C++, at the same age, from the same health, with the same
-    maximum, and without either side spending a draw on it.
-  - What has been ruled out: max health (identical, 72), `main_status`
-    (identical), and the RNG (the streams agree for another 5,000 draws). Age
-    1776 is `age % 4 == 0`, which is the **REGENERATE** block
-    (boe.actions.cpp:3568) — but 1777 is not, so the +1 comes from somewhere
-    else again, and the two heals are probably two different bugs.
-  - Where to look: every call to `pc.heal` reachable from `increase_age`, and
-    the possibility that one of them is running on a turn the C++ skips.
-    `livePcs(session)` vs the C++\'s `main_status == ALIVE` gate is worth a
-    glance while you are there.
-  - **Why the luck rolls follow from it:** `hit_party` calls `damage_pc` per
-    living PC and `damage_pc` returns at its first line for a PC that is not
-    ALIVE, before any draw. Six rolls against two means four PCs are in a
-    different state by then — the health drift above, compounded over 5,000
-    draws, is the likeliest cause, so **fix the heal first and re-measure
-    before touching `hitParty`**.
+- **OPEN LEAD: `hit_party` rolls six luck saves there and two here (M8,
+  2026-08-24).** The `increaseAgeEffects` bucket, two files. Narrowed, not
+  fixed.
+  - `ASR_05-05-2025_12-50-38` parts at draw 7,688. A town special does
+    `get_ran(3,1,12)` damage to the party and the C++ then rolls **six**
+    `get_ran(1,1,100)` where this port rolls **two**; after that both go on to
+    the same `get_ran(1,0,10)`/`get_ran(1,0,110)` recuperation pairs, so the
+    run of luck saves is the whole of it.
+  - `hit_party` (boe.party.cpp:2489) calls `damage_pc` once per PC with
+    `main_status == ALIVE`, and `damage_pc` spends the party's luck roll for
+    every damage type but `MARKED`. Six against two means either four PCs are
+    in a different state, or this port took a different path into the damage —
+    **the `MARKED` path is the one to check first**: a blow delivered inside a
+    volley marks its damage and returns before the luck roll, and
+    `handleMarkedDamage` then applies it as `MARKED`, which never rolls. Six
+    unmarked saves against two says the C++ was *not* in a volley here and this
+    port thought it was. **But weigh this against the transcript**, which cuts
+    the other way: this port's own turn prints *"Something shocks you! | Big
+    takes 21. | Slish takes 21. | Adrianna takes 22. | Feodoric takes 22."* —
+    four PCs down the unmarked path, which should be four luck rolls, not two.
+    So either the count or the path is wrong, and the first thing to do is put
+    a print in `hitParty` and count the calls rather than reason about them.
+  - **A trap that cost an hour, recorded so it doesn't cost another.** The
+    `PCS=1` / `BOE_TRACE_PCS=1` lists appear to diverge on PC 1's health about
+    five thousand draws earlier. **They do not.** The harness prints its state
+    line *before* each action and `test/corpus.test.ts` prints it *after*, so
+    at the moment any value changes the two lists are one step out of phase and
+    `diff` reports it as a difference. Reading the C++'s own trace directly
+    (`BOE_TRACE_HEAL=1`, added for this) showed it healing the same PC by the
+    same +2 then +1 on the same two turns. **Diff those two traces only after
+    correcting the phase, or read one side's absolute values instead of
+    diffing.** The same warning applies to `monst:` and every other state line.
+  - Useful things that did come out of it, both now on both sides:
+    `PCS=1`/`BOE_TRACE_PCS=1` gained **`/m<max health>`** (almost every heal in
+    `increase_age` is gated on `cur < max`, not on `cur`), and
+    `BOE_TRACE_HEAL=1` prints each PC's recuperation/chronic-disease traits and
+    health at the point the roll is made.
