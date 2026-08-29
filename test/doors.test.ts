@@ -97,7 +97,7 @@ describe('locked doors', () => {
     const where = findTerrain(session, TerSpec.UNLOCKABLE);
     expect(where).not.toBeNull();
     const asked: { x: number; y: number }[] = [];
-    session.onLockedDoor = (at) => asked.push(at);
+    session.onLockedDoor = (at) => { asked.push(at); };
 
     session.univ.party.townLoc = { x: where!.x, y: where!.y + 1 };
     session.center = { ...session.univ.party.townLoc };

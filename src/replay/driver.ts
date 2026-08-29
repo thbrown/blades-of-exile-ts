@@ -37,6 +37,7 @@ import { cancelTownTargeting, castTownSpell } from '../game/spellTarget';
 import { castSpell } from '../game/spellTown';
 import { forcedCast } from '../game/spellRepeat';
 import { Skill } from '../universe/skills';
+import { SelectPcMode, runSelectPc } from '../game/selectPc';
 import {
   Replay, ReplayAction, ReplaySource, locationFromAction, numberFromAction,
 } from './format';
@@ -166,6 +167,42 @@ export async function runReplay(
   // both call `set_stat_window_for_pc`, so the driver has to be reachable from
   // in there or a recording equips out of whichever pack was last on screen.
   session.onStatWindowForPc = (pc) => { win.setStatWindowForPc(session.univ, pc); };
+  /**
+   * **The locked-door prompt, which the driver had no answer for at all.**
+   * Walking into a locked door defers to `onLockedDoor`, and only `main.ts`
+   * ever set it — so in a replay the door said nothing, the bash never
+   * happened, and the recording's two clicks (`bash`, then `pick1` from the
+   * select-PC dialog) fell on the floor. The next move stepped into a door
+   * that was still shut and the run desynced two squares later, which reads
+   * as a movement bug and is not one.
+   *
+   * The button names are the C++'s controls, not their labels — the same rule
+   * the choice host follows.
+   */
+  if (options.keepSpecials !== true) {
+    const host = session.host;
+    session.onLockedDoor = async (where): Promise<void> => {
+      if (!host) return;
+      const picked = await host.choice(
+        ['This door is locked.', 'What do you do?'],
+        [{ name: 'leave', label: 'Leave' },
+          { name: 'bash', label: 'Bash Door' },
+          { name: 'pick', label: 'Pick Lock' }],
+        '', 0, 0);
+      const choice = ['leave', 'bash', 'pick'][picked] ?? 'leave';
+      if (choice === 'bash') {
+        const who = await runSelectPc(session.univ, SelectPcMode.ONLY_LIVING,
+          'Who will bash?', (rows, title, hl) => host.selectPc(rows, title, hl),
+          { highlight: Skill.STRENGTH });
+        if (who < 6) session.bashDoor(where, who);
+      } else if (choice === 'pick') {
+        const who = await runSelectPc(session.univ, SelectPcMode.ONLY_CAN_LOCKPICK,
+          'Who will pick the lock?', (rows, title, hl) => host.selectPc(rows, title, hl),
+          { highlight: Skill.LOCKPICKING });
+        if (who < 6) session.pickLock(where, who);
+      }
+    };
+  }
   /** Whether the open get-items screen owes a turn when it closes. */
   let gettingCostsTurn = false;
   /**

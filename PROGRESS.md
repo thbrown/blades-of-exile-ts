@@ -5826,3 +5826,28 @@ The M6 list below is kept for the history of what it covered:
     fresh run of `get_ran(1,0,195)` draws. Hoisted into `doCombatCast` and
     passed down; only the duration is still rolled per square.
   - Corpus 254,499 → **259,411** matching draws.
+
+- **The replay driver could not open a locked door (M8, 2026-08-23).** The
+  `click_control @ the C++ draws on` bucket. `ASR_05-05-2025_12-50-38` stopped
+  with "the recording stepped to (10,6), but the party is at (10,4)" — a
+  movement desync, two squares, with every draw agreeing up to it.
+  - The recording's shape says what happened: move into (10,5), `click_control
+    bash`, `click_control pick1`, move into (10,5) **again**. That is the
+    locked-door prompt and its select-PC follow-up. In this port the first move
+    printed *nothing at all* and made no draws, which is what a hook with no
+    handler looks like: `checkSpecialTerrain`'s `UNLOCKABLE` arm calls
+    `session.onLockedDoor`, and **only `main.ts` ever set it**. In a replay the
+    door said nothing, the bash never happened, the two clicks fell on the
+    floor, and the next move walked into a door that was still shut.
+  - The driver now installs its own, built out of the host's `choice` and
+    `selectPc` — the same stream the rest of the dialogs come off — and
+    `onLockedDoor` is **awaited** at the call site, because the C++'s pair of
+    dialogs is modal and the bash has to finish before the next action is read.
+    `main.ts`'s handler returns void and is unaffected.
+  - **Where it stands.** Corpus 259,411 → **274,404** matching draws and
+    **14 of 87** files agree the whole way, up from 12. Locked doors are
+    everywhere in these scenarios, so one missing hook was holding up a lot.
+  - The shape: **"the C++ draws on" means the port stopped, and a port that
+    stops is usually missing a *hook*, not a rule.** Three of M8's last four
+    buckets were that: an unhandled action, an unset callback, a feature that
+    was never built.

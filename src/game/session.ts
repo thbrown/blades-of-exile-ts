@@ -1954,7 +1954,7 @@ export class GameSession {
       case TerSpec.UNLOCKABLE:
         // A locked door: the caller has to ask the player what to do, which
         // needs a dialog, so it defers to the host via onLockedDoor.
-        this.onLockedDoor?.(where, ter);
+        await this.onLockedDoor?.(where, ter);
         return stop;
       case TerSpec.CALL_SPECIAL: {
         // The terrain itself names a node; flag1 is which one. Outdoors the
@@ -2350,8 +2350,14 @@ export class GameSession {
   /**
    * Set by the host: called when the party walks into a locked door, so the UI
    * can raise the pick/bash prompt. Without a handler the door simply blocks.
+   *
+   * **Awaited.** The C++'s pair of dialogs here is modal (`cChoiceDlog` then
+   * `select_pc`), and the bash or the pick happens before anything else does;
+   * a host that answers from a recording has to be able to finish before the
+   * next action is read. `main.ts` returns void — it launches the prompt and
+   * lets the player take as long as they like — and awaiting that is a no-op.
    */
-  onLockedDoor: ((where: Location, terrain: number) => void) | null = null;
+  onLockedDoor: ((where: Location, terrain: number) => void | Promise<void>) | null = null;
 
   /** Set by the host: called when a TRAINING node needs its dialog. */
   onTrain: (() => void) | null = null;
