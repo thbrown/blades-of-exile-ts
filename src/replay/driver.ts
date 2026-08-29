@@ -210,6 +210,13 @@ export async function runReplay(
    * which unlike the spell picker stays up across many clicks.
    */
   let getting: GetItemsPick | null = null;
+  /**
+   * Whether a plain `cChoiceDlog` raised by `show_dialog_action` is up. It has
+   * no state and no effect on the game — the help screens, the welcome box —
+   * but it *is* modal, so the `click_control` that dismisses it belongs to it
+   * and must not be read as a click on the game.
+   */
+  let helpDialog = false;
 
   while (!source.exhausted) {
     const at = source.position;
@@ -490,8 +497,21 @@ export async function runReplay(
           picking = new SpellPick(session, type, !isCombat(session.mode));
           break;
         }
+        case 'show_dialog_action':
+          // `show_dialog_action` (boe.actions.cpp:287) is the whole of it:
+          // `cChoiceDlog(xml_file).show()`. The named dialogs are the help
+          // screens and the welcome box — no state, no draws, one button — so
+          // there is nothing to model except the **modality**: the
+          // `click_control` that follows dismisses this and is not a click on
+          // the game behind it.
+          helpDialog = true;
+          break;
         case 'click_control': {
           const id = action.info.id ?? '';
+          if (helpDialog) {
+            helpDialog = false;
+            break;
+          }
           options.onClick?.(id, Number(action.info.mods ?? '0'));
           // While the spell picker is up it is modal, so the clicks belong to
           // it — the same way the C++'s `cDialog::run` takes them.

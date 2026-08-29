@@ -6237,3 +6237,22 @@ The M6 list below is kept for the history of what it covered:
     cheaper than any of the draw-stream instruments, and it should be the first
     thing tried whenever a state divergence is suspected rather than a rules
     one.
+
+- **`show_dialog_action`: the driver had no handler for a help screen (M8,
+  2026-08-24).** The `handle_combat_switch @ the C++ draws on` bucket — which,
+  as usual for that bucket name, was not about `handle_combat_switch` at all.
+  The transcript at the stop said `no handler for 'show_dialog_action'`.
+  - `show_dialog_action` (boe.actions.cpp:287) is two lines: record the name,
+    then `cChoiceDlog(xml_file).show()`. The names in the corpus are the help
+    screens and the welcome box — no state, no draws, one button. **The only
+    thing to model is the modality**: the `click_control` that follows
+    dismisses the dialog and must not be read as a click on the game behind it.
+  - Four recordings reach it; the other three are blocked on harness gaps
+    first. Corpus 362,620 → **364,581** matching draws.
+  - Worth noting how cheap this was next to the two buckets either side of it:
+    one `tail` of the trace file named it exactly. The list of unhandled
+    actions is worth re-reading now and then —
+    `grep -h "no handler for" tools/cppharness/traces/*/js.txt | sort | uniq -c`
+    is the whole inventory, and it is currently down to `talk_notes`,
+    `adventure_notes`, `handle_drop_pc`, `debug_launch_scen` and
+    `debug_give_item`, at two files each.
