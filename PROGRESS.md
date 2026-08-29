@@ -6360,3 +6360,33 @@ The M6 list below is kept for the history of what it covered:
     are bigger. **The harness's remaining debt is no longer the cheap seam it
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
+
+- **OPEN LEAD: a monster's summon places seven creatures there and none here
+  (M8, 2026-08-24).** The top bucket, `doMonsters`, two files. Pinpointed to
+  one action; not fixed.
+  - `VoDT_02-05-2025_13-06-09` parts at draw 4,030 with the C++ spending
+    `select_active_pc`'s `get_ran(1,0,5)` where this port spends the drift coin
+    flip — the familiar "a creature is ALERTED with a target there and idle
+    here" shape. The cause is **twenty actions earlier** and is not about
+    `do_monsters` at all.
+  - Found by uniq-ing both `MONST=1` / `BOE_TRACE_MONST=1` streams and diffing
+    those (**uniq first** — it collapses the before/after phase problem
+    recorded above, and makes the two streams comparable even when the two
+    sides have dispatched different numbers of actions). They agree for 89
+    distinct creature states and then the C++ produces one this port never
+    does: **seven creatures appear at once** — slots 31, 40, 43, 44, 49, 51 and
+    52, all `a2h10`, clustered at (20-22, 39-41).
+  - The action is a **Spirit casting Weak Summoning** in combat. Both sides
+    print the cast; only the C++ places anything.
+  - `monsterSummon` (`monsterAbilities.ts:520`) is a faithful port of
+    boe.combat.cpp:2503 as far as reading goes — the three `eMonstSummon` arms,
+    `get_ran(1, min, max)` for the count, and the `while(--r1 && !failed)` loop
+    with its inverted `failed` flag are all there. So **suspect
+    `summonMonster`'s placement, not the count**: if the first call returns
+    false the C++ prints no note and places nothing, which is what this port
+    looks like from outside. Put a print on its return value and on the square
+    it chose; `find_clear_spot` feeds it, and that function has already been
+    wrong once this month (its sixth test, 2026-08-23).
+  - Also worth checking whether "Weak Summoning" here is `MonstAbil.SUMMON` at
+    all or a *spell* reached through `pickMonsterAbility` — the transcript line
+    is the ability announcement, which both paths print.
