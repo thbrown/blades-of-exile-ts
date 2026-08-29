@@ -99,6 +99,34 @@ index 17780bca..a349fe18 100644
  		// Opcode mappings from rsrc/strings/specials-opcodes.txt
  		if(type == "set-sdf") return eSpecType::SET_SDF;
  		if(type == "inc-sdf") return eSpecType::INC_SDF;
+diff --git a/src/game/boe.actions.cpp b/src/game/boe.actions.cpp
+index fc7b63f1..3556758d 100644
+--- a/src/game/boe.actions.cpp
++++ b/src/game/boe.actions.cpp
+@@ -1907,6 +1907,10 @@ void advance_time(bool did_something, bool need_redraw, bool need_reprint) {
+ 
+  	// MARK: At this point, see if any specials have been queued up, and deal with them
+ 	// Note: We just check once here instead of looping because run_special also pulls from the queue.
++	if(getenv("BOE_TRACE_MMOVE"))
++		std::cout << "      [advtime] did=" << int(did_something) << " mode=" << int(overall_mode)
++			<< " party=(" << univ.party.town_loc.x << "," << univ.party.town_loc.y
++			<< ") age=" << univ.party.age << std::endl;
+ 	if(!special_queue.empty()) {
+ 		pending_special_type pending = special_queue.front();
+ 		special_queue.pop();
+@@ -4009,6 +4013,12 @@ bool outd_move_party(location destination,bool forced) {
+ //					party.out_c[i].exists = false;
+ 		
+ 		ter = univ.out[real_dest.x][real_dest.y];
++		if(getenv("BOE_TRACE_MMOVE"))
++			std::cout << "      [outmove] dest=(" << destination.x << "," << destination.y
++				<< ") real=(" << real_dest.x << "," << real_dest.y << ") corner=("
++				<< univ.party.outdoor_corner.x << "," << univ.party.outdoor_corner.y
++				<< ") ter=" << int(univ.out[real_dest.x][real_dest.y])
++				<< " blocked=" << int(outd_is_blocked(real_dest)) << " forced=" << int(forced) << std::endl;
+ 		if(univ.party.in_boat >= 0) {
+ 			if(!outd_is_blocked(real_dest) //&& !outd_is_special(real_dest)
+ 				// not in towns
 diff --git a/src/game/boe.combat.cpp b/src/game/boe.combat.cpp
 index 1a26a2a7..1c161346 100644
 --- a/src/game/boe.combat.cpp
@@ -197,7 +225,7 @@ index b19e0983..a19325ec 100644
  #endif
  #ifdef __APPLE__
 diff --git a/src/game/boe.monster.cpp b/src/game/boe.monster.cpp
-index 937c63d0..0c0aa384 100644
+index 937c63d0..aac7728a 100644
 --- a/src/game/boe.monster.cpp
 +++ b/src/game/boe.monster.cpp
 @@ -194,6 +194,10 @@ void do_monsters() {
@@ -224,7 +252,30 @@ index 937c63d0..0c0aa384 100644
  					r1 = get_ran(1,1,100);
  					r1 += (univ.party.status[ePartyStatus::STEALTH] > 0) ? 46 : 0;
  					r1 += can_see_light(univ.town.monst[i].cur_loc,univ.party.town_loc,sight_obscurity) * 10;
-@@ -698,13 +708,26 @@ bool try_move(short i,location start,short x,short y) {
+@@ -354,6 +364,7 @@ bool monst_hate_spot(short which_m,location *good_loc) {
+ short monst_pick_target(short which_m) {
+ 	cCreature *cur_monst;
+ 	short targ_pc,targ_m;
++	if(getenv("BOE_TRACE_PICKT")) std::cout << "      [pickt] pick for " << which_m << std::endl;
+ 	
+ 	cur_monst = &univ.town.monst[which_m];
+ 	
+@@ -429,8 +440,14 @@ short monst_pick_target(short which_m) {
+ 
+ short monst_pick_target_monst(cCreature *which_m) {
+ 	short min_dist = 1000,cur_targ = 6;
++	if(getenv("BOE_TRACE_PICKT")) std::cout << "      [pickt] enter" << std::endl;
+ 	
+ 	for(short i = 0; i < univ.town.monst.size(); i++) {
++		if(getenv("BOE_TRACE_PICKT")) std::cout << "      [pickt] cand " << i
++			<< " alive=" << int(univ.town.monst[i].is_alive())
++			<< " frnd=" << int(which_m->is_friendly(univ.town.monst[i]))
++			<< " d=" << dist(which_m->cur_loc,univ.town.monst[i].cur_loc)
++			<< " best=" << min_dist << std::endl;
+ 		if(univ.town.monst[i].is_alive() && !which_m->is_friendly(univ.town.monst[i]) && // allve + they hate each other
+ 			((dist(which_m->cur_loc,univ.town.monst[i].cur_loc) < min_dist) ||
+ 			 ((dist(which_m->cur_loc,univ.town.monst[i].cur_loc) == min_dist) && (get_ran(1,0,7) < 4))) &&
+@@ -698,13 +715,26 @@ bool try_move(short i,location start,short x,short y) {
  	if((overall_mode == MODE_TOWN || overall_mode == MODE_COMBAT) && univ.town.is_force_cage(start.x,start.y))
  		return false;
  	
@@ -257,7 +308,7 @@ index 937c63d0..0c0aa384 100644
  }
  
  bool combat_move_monster(short which,location destination) {
-@@ -765,7 +788,13 @@ location random_shift(location start) {
+@@ -765,7 +795,13 @@ location random_shift(location start) {
  }
  
  bool outdoor_move_monster(short num,location dest) {

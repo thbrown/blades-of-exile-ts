@@ -5624,3 +5624,46 @@ The M6 list below is kept for the history of what it covered:
     in `placeTreasure`, inside `killMonst`: the port kills the creature and
     rolls its loot where the C++ makes a run of six `get_ran(1,1,100)`s first.
     That is the next thing to read in it.
+
+- **"Can creature *i* see its own square?" is a lighting test, not a no-op
+  (M8, 2026-08-23).** The `pickTargetMonst` bucket. `VoDT_03-05-2025_15-06-59`
+  parted at draw 9,415: a creature the party had just summoned made **six**
+  `get_ran(1,0,7)` draws picking a target where the C++ made **none**, with
+  both sides agreeing on every creature's square and attitude.
+  - The tie-break in `monst_pick_target_monst` (boe.monster.cpp:440) only fires
+    when a candidate's distance *equals* the best so far, and a rejected
+    candidate never lowers the best — so **the number of draws that loop makes
+    is a function of which candidates it rejects**, and rejections are
+    invisible in every trace this harness had. A new one, **`BOE_TRACE_PICKT`**
+    (documented in `tools/cppharness/README.md`), prints one line per candidate
+    with `alive`, `frnd`, the distance and the running best. The C++'s list
+    read `best=1000` through six candidates at distance 11 — it was accepting
+    none of them.
+  - The last operand of that condition is `monst_can_see(i, univ.town.monst[i]
+    .cur_loc)`: creature *i* asked whether it can see **its own square**. This
+    port had left it out with a comment calling it a slip that is always true.
+    It is a slip — it was surely meant to be "can `monst` see it" — but it is
+    **not** always true: `can_see_light` fails an **unlit** square before it
+    walks the line at all, so what the expression really asks is *"is this
+    creature standing in the light?"*. In a dark dungeon that rejects almost
+    everybody, and the four creatures the party's lantern reaches are the only
+    candidates there are.
+  - **Where it stands.** Corpus 195,508 → **201,123** matching draws, the
+    biggest single jump since the item-pane fix, and the `pickTargetMonst`
+    bucket is gone. `VoDT_03-05-2025_15-06-59` went from parting at 9,415 to
+    agreeing on all 13,328 draws it makes.
+  - Also landed with it, and worth its own note: **`populateTown` now leaves
+    the empty preset slots in the list.** The C++ clears the population and
+    calls `assign(i, …)` per preset, so an empty preset becomes a
+    default-constructed (DEAD) creature and **index == slot**; this port
+    skipped them and pushed, compacting the list. A creature target is
+    `100 + index`, `place_monster` takes the first dead index, and the
+    tie-break above counts candidates in index order — and the save format
+    already wrote and read the C++'s shape, so a reloaded town and a freshly
+    entered one disagreed with each other as well. It moved no draws in this
+    corpus (the bundled towns pack their presets densely) and is kept for the
+    same reason as the other "no measurable change" fixes: the next recording
+    that enters a town with a hole in its creature list would find it missing.
+  - The shape: **a comment that says "this is always true, kept as the C++ has
+    it" is a claim, and this one was wrong.** The cheap way to check is to
+    print what the C++ actually does rather than to re-read what it says.

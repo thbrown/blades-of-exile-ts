@@ -250,12 +250,21 @@ function pickTargetMonst(session: GameSession, monst: Creature): number {
     // reaches `get_ran(1,0,7)` when the distance *equals* the best so far, so
     // hoisting it would spend a draw on every candidate.
     if (!(d < bestDist || (d === bestDist && session.univ.rng.getRan(1, 0, 7) < 4))) continue;
-    // **The C++ asks `monst_can_see(i, univ.town.monst[i].cur_loc)`** — whether
-    // creature *i* can see *its own square*, which is always true. Plainly a
-    // slip for "can `monst` see it", but it is the shipped behaviour: hostiles
-    // pick a target through walls here. Kept, and deliberately not "fixed" —
-    // adding the real check would change both the choice and, through the roll
-    // above, the draw sequence.
+    // **`monst_can_see(i, univ.town.monst[i].cur_loc)` — creature *i* asking
+    // whether it can see its own square — is not the no-op it looks like.**
+    // It reads as a slip for "can `monst` see it", and this port left it out
+    // on the grounds that a square is always visible from itself. It isn't:
+    // `can_see_light` fails a square that is **unlit** before it ever walks
+    // the line (boe.locutils.cpp, and `canSeeLight` here), so what this
+    // actually asks is *"is this creature standing in the light?"* — a
+    // creature in the dark is not a target, wherever the looker is.
+    //
+    // Leaving it out let every hostile in the town be a candidate, which is
+    // wrong twice over: the choice, and the **draw count**, since the
+    // tie-break above only fires when a candidate ties the running best and
+    // rejected candidates never lower it. One recording made six `get_ran(1,0,7)`
+    // draws here where the C++ made none.
+    if (!monstCanSee(session, other, other.curLoc)) continue;
     best = 100 + i;
     bestDist = d;
   }

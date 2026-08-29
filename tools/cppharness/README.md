@@ -87,6 +87,17 @@ there reads as a creature that saw the party on one side and not the other with
 every position agreeing. There is no `LIGHT=1` on this side yet; print it from a
 scratch `console.log` when you need the pair.
 
+`BOE_TRACE_PICKT=1` prints one line per candidate `monst_pick_target_monst`
+weighs — `alive`, whether the two are friendly, the distance, and the best so
+far — plus a line per call. It exists because that loop's tie-break draw fires
+only when a candidate *equals* the running best, so its **draw count is a
+function of which candidates are rejected**, and the rejections are invisible
+in every other trace. Comparing the two candidate lists side by side is what
+showed that `monst_can_see(i, monst[i].cur_loc)` — a creature asked whether it
+can see its own square — is really a *lighting* test, and that this port had
+dropped it as a no-op. There is no pair for it on this side; add a scratch
+`console.log` in `pickTargetMonst` when you need one.
+
 **`BOE_TRACE_RAN=n` is the sharpest of them**: it dumps the first *n* draws from
 the game stream, and `RAN=n` prints the identical format here. Diff the two and
 the first differing line is the rule that diverged — usually a `get_ran` one side

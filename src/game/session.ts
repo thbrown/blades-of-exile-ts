@@ -4092,6 +4092,27 @@ export class GameSession {
       if (preset.number <= 0) continue;
       const template = scenario.scenMonsters[preset.number];
       if (!template) continue;
+      // **The list is indexed by preset slot, gaps and all.** The C++ clears
+      // the population and then calls `assign(i, …)` for each preset with a
+      // monster in it (boe.town.cpp:254); `assign` resizes to `i + 1`, so the
+      // empty presets before it become default-constructed creatures — which
+      // are `DEAD` (creature.hpp:24) and stay out of the way.
+      //
+      // This port used to skip them and `push`, which compacted the list, and
+      // that is not a detail: a creature target is encoded as `100 + index`,
+      // `place_monster` takes the first dead *index*, and — the one that
+      // showed up in the draw stream — `monst_pick_target_monst` rolls its
+      // tie-break only when a candidate *equals* the best distance so far, so
+      // **the number of draws it makes depends on the iteration order**. The
+      // save format already wrote and read the C++'s shape (saveIo's `CREATURE
+      // n` pages fill the gaps), so a reloaded game and a freshly entered one
+      // disagreed with each other as well as with the C++.
+      while (town.monsters.length < i) {
+        const gap = new Creature();
+        gap.slot = town.monsters.length;
+        gap.active = CreatureStatus.DEAD;
+        town.monsters.push(gap);
+      }
       const monst = assignCreature(
         i, preset, template, this.univ.party.easyMode, this.univ.difficultyAdjust());
 
