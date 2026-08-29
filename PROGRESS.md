@@ -6256,3 +6256,27 @@ The M6 list below is kept for the history of what it covered:
     is the whole inventory, and it is currently down to `talk_notes`,
     `adventure_notes`, `handle_drop_pc`, `debug_launch_scen` and
     `debug_give_item`, at two files each.
+
+- **Bash and Pick had no driver handlers (M8, 2026-08-24).** Straight after the
+  help dialog above, the same file stopped on `no handler for
+  'handle_pick_select'`. Four actions were missing and all four are now in.
+  - `handle_bash_pick_select` (boe.actions.cpp:959) is the BASH and PICK
+    buttons: the same mode toggle as `handle_use_space_select`, which the
+    driver already had. **Its cancel arm tests both modes rather than the one
+    that matches the button** — pressing PICK while Bash is armed cancels the
+    bash instead of swapping to a pick. Kept.
+  - `handle_bash_pick` (:976) is the click that follows: two refusals ("Must be
+    adjacent.", "Wrong terrain type.") *before* the select-PC dialog, so a
+    click on the wrong square costs nothing and asks nobody, then `select_pc`
+    with 8 = "nobody can" (which has already printed its own refusal) and 6 =
+    cancelled. **The mode returns to TOWN on every path**, refusals included,
+    because the C++ sets it after the branch rather than inside it.
+  - The select-PC plumbing was already there — `onLockedDoor` uses the same
+    `runSelectPc` against the recording's own dialog stream — so this was
+    wiring, not new rules.
+  - **Where it stands.** Corpus 364,581 → **369,458** matching draws and
+    **19 of 87** files agree the whole way, up from 18.
+  - Two driver gaps in a row, both found by `tail`ing one trace file, together
+    worth 6,800 draws and two files. When a bucket is named "the C++ draws on",
+    read the stop line before anything else — it is still the cheapest
+    instrument in the box.

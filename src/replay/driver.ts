@@ -646,6 +646,66 @@ export async function runReplay(
             session.univ.addStringToBuf('  Cancelled.');
           }
           break;
+        case 'handle_bash_select':
+        case 'handle_pick_select': {
+          // `handle_bash_pick_select` (boe.actions.cpp:959) — the BASH and PICK
+          // buttons, the same mode toggle as `handle_use_space_select` above
+          // and with the same two transcript lines. **The cancel arm tests
+          // both modes, not the one that matches the button**: pressing PICK
+          // while Bash is armed cancels the bash rather than swapping to a
+          // pick, which is the C++'s `overall_mode == MODE_BASH_TOWN ||
+          // overall_mode == MODE_PICK_TOWN` and is kept.
+          const bash = action.type === 'handle_bash_select';
+          if (session.mode === GameMode.BASH_TOWN || session.mode === GameMode.PICK_TOWN) {
+            session.univ.addStringToBuf('  Cancelled.');
+            session.mode = GameMode.TOWN;
+          } else {
+            session.mode = bash ? GameMode.BASH_TOWN : GameMode.PICK_TOWN;
+            session.univ.addStringToBuf(
+              bash ? 'Bash Door: Select a space.' : 'Pick Lock: Select a space.');
+          }
+          break;
+        }
+        case 'handle_bash':
+        case 'handle_pick': {
+          // `handle_bash_pick` (boe.actions.cpp:976) — the click that follows.
+          // Its two refusals come before the select-PC dialog, so a click on
+          // the wrong square costs nothing and asks nobody; **the mode goes
+          // back to TOWN either way**, including after a refusal, which is why
+          // it is set outside the branch here as it is there.
+          const bash = action.type === 'handle_bash';
+          const where = locationFromAction(action);
+          const from = session.univ.party.getLoc();
+          // `adjacent` (boe.locutils.cpp:82) is Chebyshev and counts the
+          // square you are standing on, which is what lets you bash a door you
+          // have already walked into.
+          const near = Math.max(Math.abs(from.x - where.x), Math.abs(from.y - where.y)) <= 1;
+          const dlg = session.host;
+          if (!near) {
+            session.univ.addStringToBuf('  Must be adjacent.');
+          } else if (!session.isUnlockable(where)) {
+            session.univ.addStringToBuf('  Wrong terrain type.');
+          } else {
+            const who = await runSelectPc(
+              session.univ,
+              bash ? SelectPcMode.ONLY_LIVING : SelectPcMode.ONLY_CAN_LOCKPICK,
+              bash ? 'Who will bash?' : 'Who will pick the lock?',
+              (rows, title, hl) => dlg!.selectPc(rows, title, hl),
+              { highlight: bash ? Skill.STRENGTH : Skill.LOCKPICKING });
+            // 8 is select_pc's "nobody can", and it has already said so.
+            if (who === 8) break;
+            if (who === 6) {
+              session.univ.addStringToBuf('  Cancelled.');
+              session.mode = GameMode.TOWN;
+              break;
+            }
+            if (bash) await session.bashDoor(where, who);
+            else session.pickLock(where, who);
+          }
+          session.mode = GameMode.TOWN;
+          await session.afterPartyTurn();
+          break;
+        }
         case 'cancel_item_target':
           // Leaving a shop's identify or recharge queue (boe.actions.cpp:2576).
           // The C++ prints which one it was from `stat_screen_mode`; this port
