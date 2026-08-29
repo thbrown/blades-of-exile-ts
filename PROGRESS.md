@@ -6066,3 +6066,35 @@ The M6 list below is kept for the history of what it covered:
     "is the condition ported right" but "do both sides agree on what it is
     reading". Here they did not, and the answer was in a loop nobody had
     written.
+
+- **`damage_pc`\'s return value is not the health it took off (M8,
+  2026-08-24).** The `monsterTouches` bucket, two files. `ZKR-5-16-12-30`
+  parted at draw 4,447 spending a `get_ran(1,1,1000)` — a touch ability\'s odds
+  roll — that the C++ never made.
+  - Found with a **new instrument, `TOUCH=1` / `BOE_TRACE_TOUCH=1`**, one line
+    per ability the `for(auto& abil : attacker->abil)` tail of `monster_attack`
+    reaches, printed *before* the odds roll. It showed the same Dark Wyrm
+    entering that loop **twice** here and **once** there, with identical
+    abilities and identical odds — which ruled out the data and the loop and
+    left only "the C++ never got to the loop the second time".
+  - The gate is `if(damaged)`, and `damaged` is not what it looks like:
+
+    ```cpp
+    damaged = damage_pc(*pc_target,r2,dam_type,attacker->m_type,sound_type);
+    if(store_hp - target->get_health() <= 0) damaged = 0;
+    ```
+
+    `damage_pc` returns the damage it *decided* on, and its last act is a
+    three-way branch (boe.party.cpp:2673): subtract it, clamp to zero, or — if
+    the PC is **already at zero** — leave the health alone and call `kill_pc`.
+    So the blow that finishes off a downed PC comes back positive with nothing
+    taken off, and the C++ refuses to trust it.
+  - `damaged` gates the martyr\'s shield, the poisoned blade and the whole
+    touch-ability loop, so this port was handing out paralysing and poisonous
+    touches on the one blow in a fight where the two engines differ.
+  - **Where it stands.** Corpus 347,554 → **352,150** matching draws and
+    **17 of 87** files agree the whole way.
+  - The shape: **a function\'s return value and its effect are two different
+    facts, and the C++ knows it.** Wherever it re-derives something it was just
+    handed, that is a signal, not noise — the same pattern as
+    `find_clear_spot`\'s sixth test back in August.

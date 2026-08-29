@@ -863,6 +863,20 @@ export async function monsterAttack(
         { doPrint: false, soundType, session });
     } else if (pcTarget) {
       damaged = await damagePc(univ, pcTarget, r2, damType, monst.mon.race, { soundType });
+      // **`damage_pc`'s return is not the health it took off** (boe.combat.cpp:
+      // 2731). It reports the damage it *decided* on, and the last thing it
+      // does with that number is a three-way branch: subtract it, clamp to
+      // zero, or — when the PC is **already at zero** — leave the health alone
+      // and call `kill_pc`. So a blow that finishes off an unconscious PC comes
+      // back positive with the health unmoved, and the C++ zeroes `damaged`
+      // here rather than trust it.
+      //
+      // That matters because `damaged` gates the martyr's shield, the poisoned
+      // blade and the whole **touch-ability loop** below. This port trusted the
+      // return, so a Dark Wyrm that killed a downed PC still got to roll its
+      // paralysing and poisonous touches — one `get_ran(1,1,1000)` the C++
+      // never spends, on the one blow in a fight where the two differ.
+      if (storeHp - target.getHealth() <= 0) damaged = 0;
     }
     if (damaged <= 0) continue;
 
