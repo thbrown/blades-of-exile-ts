@@ -92,6 +92,29 @@ function patternFor(spell: Spell): SpellPat {
   }
 }
 
+/**
+ * The arms of `do_combat_cast`'s switch that come **before** its `default:`
+ * (boe.combat.cpp:952-1010), which is where `start_missile_anim()` is called.
+ * These lay a field, a barrier or a special down and animate nothing, so no
+ * volley is opened for them and the explosions they would have queued are
+ * dropped — rolls and all.
+ */
+const NO_VOLLEY = new Set<Spell>([
+  Spell.NONE,
+  Spell.GOO, Spell.WEB, Spell.GOO_BOMB,
+  Spell.CLOUD_FLAME, Spell.CONFLAGRATION,
+  Spell.CLOUD_STINK, Spell.FOUL_VAPOR,
+  Spell.WALL_FORCE, Spell.SHOCKSTORM, Spell.FORCEFIELD,
+  Spell.WALL_ICE, Spell.WALL_ICE_BALL,
+  Spell.ANTIMAGIC,
+  Spell.CLOUD_SLEEP, Spell.CLOUD_SLEEP_LARGE,
+  Spell.QUICKFIRE,
+  Spell.SPRAY_FIELDS,
+  Spell.WALL_BLADES,
+  Spell.DISPEL_FIELD, Spell.DISPEL_SPHERE, Spell.DISPEL_SQUARE,
+  Spell.BARRIER_FIRE, Spell.BARRIER_FORCE,
+]);
+
 /** `start_spell_targeting` — go into targeting with `spell` in the air. */
 export function startSpellTargeting(
   session: GameSession, spell: Spell, freebie = false, itemSpellLevel = 1,
@@ -372,8 +395,18 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
   const shared = { sound: 0 };
   // Open the volley: from here until `runBoomAnim` the hit sprites are
   // collected rather than shown, so they can't beat the projectile onto the
-  // screen. `start_missile_anim` does this in the C++.
-  startBoomAnim();
+  // screen.
+  //
+  // **Only for the spells the C++ opens it for.** `start_missile_anim()` sits
+  // in the `default:` arm of `do_combat_cast`'s switch — "spells which involve
+  // animations" (boe.combat.cpp:1011) — and every arm *above* it, the ones
+  // that only lay a field down, never calls it. With `boom_anim_active` false,
+  // `add_explosion` returns at its second line and **makes no roll**, so
+  // opening the volley for a Wall of Ice cost one `get_ran(1,0,2)` per square
+  // the wall damaged. Note the list is of arms, not of a property: Quickfire
+  // and the barriers are in it too.
+  const animated = !NO_VOLLEY.has(spell);
+  if (animated) startBoomAnim();
 
   try {
   for (let i = 0; i < targets.length; i++) {
@@ -457,7 +490,7 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
     // `finally` because a handler that throws must not leave the volley open —
     // every later boom in the session would be swallowed, and the damage with
     // it.
-    runBoomAnim(univ.rng);
+    if (animated) runBoomAnim(univ.rng);
     // `do_explosion_anim` blocks for the whole explosion before
     // `handle_marked_damage` runs (boe.combat.cpp:1435/1439). Without this
     // wait the cast returned while its blast was still on screen: the damage

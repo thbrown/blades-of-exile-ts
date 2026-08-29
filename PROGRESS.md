@@ -5783,3 +5783,29 @@ The M6 list below is kept for the history of what it covered:
     the bucket went from 195 actions to **336 of 338**, making exactly as many
     draws in total as the C++ (15,324). It parts later, in `boomSpace`, which
     is now a two-file bucket of its own.
+
+- **A spell that only lays a field down opens no volley (M8, 2026-08-23).**
+  The `boomSpace` bucket. `ZKR_11-05-2025_20-04-33` parted at draw 3,849: a
+  Wall of Ice was damaging square after square, and this port spent a
+  `get_ran(1,0,2)` on each one where the C++ spent none.
+  - `start_missile_anim()` is called from **one place** in `do_combat_cast`:
+    the `default:` arm of its spell switch, commented "spells which involve
+    animations" (boe.combat.cpp:1011). Every arm above it — the field spells,
+    Quickfire, Spray Fields, the dispels, both barriers, and `eSpell::NONE`
+    (a special node's own targeting) — runs with `boom_anim_active` still
+    **false**, and `add_explosion` returns at its second line without rolling
+    its offset. This port opened the volley for every targeted spell.
+  - Ported as a `NO_VOLLEY` set of exactly those arms, tested before
+    `startBoomAnim`. It is a list of *switch arms*, not of a property — which
+    is why Quickfire and the barriers are in it and Divine Thud is not.
+  - **Where it stands.** Corpus 229,249 → **254,499** matching draws, +25,250,
+    and **12 of 87** files agree all the way, up from 11. That is the largest
+    jump M8 has had; wall and cloud spells are cast constantly in the ZKR and
+    ASR recordings and every square one of them touched was a draw out of
+    step.
+  - Read this one with the `find_clear_spot` entry above it: both are loops
+    whose *draw count* depends on a condition the port got wrong, and in both
+    the wrong answer was invisible in the game state — the wall still went
+    down, the creature still found a square. **A rule that only decides how
+    many times something is tried is exactly as load-bearing as one that
+    decides an outcome**, and the draw stream is the only thing that sees it.
