@@ -1604,11 +1604,13 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue at the end of 2026-08-24 has **no bucket bigger than two files**:
-  `doMonsters` and `placeGrid` at two each, then some thirty single files.
-  Corpus **381,127** matching draws, **19 of 87** files agreeing all the way,
-  40 blocked outside the rules. **Those numbers were 285,845 / 15 / 41 the
-  morning before and 190,362 / 10 / 37 the day before that** — the entries at
+  queue on 2026-08-29 has **no bucket bigger than two files**:
+  `placeGrid` and `move @ the C++ draws on` at two each, then some thirty
+  single files.
+  Corpus **406,460** matching draws, **19 of 87** files agreeing all the way,
+  40 blocked outside the rules. **Those numbers were 381,127 / 19 / 40 at the
+  end of 2026-08-24, 285,845 / 15 / 41 the morning before that and
+  190,362 / 10 / 37 the day before that** — the entries at
   the bottom of this file are what working the queue looks like.
 
   Three things 2026-08-24 is worth remembering for:
@@ -6361,9 +6363,56 @@ The M6 list below is kept for the history of what it covered:
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
 
-- **OPEN LEAD: a monster's summon places seven creatures there and none here
-  (M8, 2026-08-24).** The top bucket, `doMonsters`, two files. Pinpointed to
-  one action; not fixed.
+- **CLOSED, and it was never the summon: `handle_use_space` (M8,
+  2026-08-29).** The lead below is superseded — read it for the method, not for
+  the conclusion. Re-running it first thing showed the summon **working**: both
+  sides now place all seven creatures, in the same slots (31, 40, 43, 44, 49,
+  51, 52) on the same squares. The `summonN` thunk fix at the bottom of that
+  entry had already closed it; the entry was written before the re-run.
+  - The file still parted at draw 4,030, in the same shape, so the `[domonst]`
+    line was the next thing to diff — and it said the whole story in one
+    column: `party=(16,42)` there against `party=(18,42)` here, at the same
+    `age`. Creature 36 at (8,45) is exactly 8 squares from (16,42) and 10 from
+    (18,42), and `do_monsters` gives up on the party past 8 — so the C++ spent
+    `select_active_pc`'s `get_ran(1,0,5)` and this port spent the drift coin.
+    **The monster AI was right on both sides.** The party was in the wrong
+    place.
+  - `handle_use_space` (boe.actions.cpp:946) is four lines and this port had
+    none of them — the driver called `use_space` directly. All three of the
+    lines that matter were missing:
+    - **the mode goes back to `MODE_TOWN` on every path**, refusal included.
+      Leaving `MODE_USE_TOWN` armed made the *next* `handle_use_space_select`
+      read as a **cancel** rather than an arm, and from there the two runs
+      disagreed about which button every subsequent click was pressing;
+    - **`did_something` is `use_space`'s return value**, and `handle_action`
+      spends it on `handle_monster_actions` (:1921) — so a use that did
+      something costs a turn. Without it this port's clock ran a tick behind
+      from the first cleared web onward, and the party fell two squares behind
+      the C++'s;
+    - the adjacency refusal lives **here**, not in `use_space`, and says
+      "Must be adjacent." This port had invented "That is too far away." inside
+      `use_space` — a string the C++ never prints anywhere.
+  - One more found by reading `use_space` beside the port while fixing it:
+    **a successful push does not end the function.** Crate, barrel and block
+    are three consecutive `if`s (:1231–:1268), not an `else if` chain and not
+    an early return, so a square with both a crate and a barrel pushes both —
+    and either way it falls through to the terrain checks and prints
+    "Nothing to use." after "You push the crate.", returning **false**. So
+    pushing something costs no turn. It reads like an oversight; it ships that
+    way and `did_something` depends on it. This port returned `true` and
+    stopped.
+  - **Where it stands.** Corpus 381,127 → **406,460** matching draws, 19 of 87
+    files agreeing all the way. This one file went 4,030 → 6,226 and now stops
+    on a harness gap instead.
+  - The general lesson, and it is the third time this month: **`[domonst]`'s
+    `party=` column before anything else.** Two sides can agree on every draw,
+    every creature and every square and still be standing two squares apart,
+    and every rule that measures a distance then diverges at once — in the
+    monster AI, which is innocent. The bucket named `doMonsters` both times.
+
+- **SUPERSEDED LEAD (see above): a monster's summon places seven creatures
+  there and none here (M8, 2026-08-24).** The top bucket, `doMonsters`, two
+  files. Pinpointed to one action; not fixed.
   - `VoDT_02-05-2025_13-06-09` parts at draw 4,030 with the C++ spending
     `select_active_pc`'s `get_ran(1,0,5)` where this port spends the drift coin
     flip — the familiar "a creature is ALERTED with a target there and idle

@@ -1529,11 +1529,11 @@ async function main(): Promise<void> {
     // In combat the arrow keys and clicks drive the current PC, not the party.
     // The move is async because attacking a friendly raises a prompt first.
     if (session.mode === GameMode.COMBAT) {
-      if (what === 'use') void session.useSpace(target).then(done, done);
+      if (what === 'use') void session.handleUseSpace(target).then(done, done);
       else void session.combatMove(target).then(done, done);
       return;
     }
-    if (what === 'use') void session.useSpace(target).then(done, done);
+    if (what === 'use') void session.handleUseSpace(target).then(done, done);
     else void session.moveTo(target).then(done, done);
   };
 

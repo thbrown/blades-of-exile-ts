@@ -1220,17 +1220,48 @@ export class GameSession {
   // -------------------------------------------------------------------- use
 
   /**
-   * use_space (boe.specials.cpp:1211) — the Use action on an adjacent square.
+   * handle_use_space (boe.actions.cpp:946) — the click that follows the **U**
+   * button. Three lines in the C++ and every one of them matters:
+   *
+   * - the adjacency refusal is **here**, not in `use_space`, and it says
+   *   "Must be adjacent." (this port used to say "That is too far away."
+   *   from inside `use_space`, which is a message the C++ never prints);
+   * - **the mode goes back to TOWN on every path**, refusal included, because
+   *   the C++ sets it after the branch rather than inside it. Leaving
+   *   `MODE_USE_TOWN` armed made the *next* `handle_use_space_select` read as
+   *   a cancel, and the game and the recording then disagreed about which
+   *   button was pressed for the rest of the run;
+   * - `did_something` is `use_space`'s return, and `handle_action` spends it on
+   *   `handle_monster_actions` (boe.actions.cpp:1921) — so a use that did
+   *   something **costs a turn**. Without that this port's clock ran a tick
+   *   behind the C++'s from the first cleared web onwards, which is invisible
+   *   in the draw stream until a creature eight squares away notices the party
+   *   on one side and not the other.
+   */
+  async handleUseSpace(where: Location): Promise<boolean> {
+    this.recorder?.recordLoc('handle_use_space', where);
+    // `adjacent` (boe.locutils.cpp:82) is Chebyshev and counts the square you
+    // are standing on, and it is measured from the **party**, in every mode.
+    const from = this.univ.party.townLoc;
+    let did = false;
+    if (Math.max(Math.abs(from.x - where.x), Math.abs(from.y - where.y)) > 1) {
+      this.univ.addStringToBuf('  Must be adjacent.');
+    } else {
+      did = await this.useSpace(where);
+    }
+    this.mode = GameMode.TOWN;
+    if (did) await this.afterPartyTurn();
+    return did;
+  }
+
+  /**
+   * use_space (boe.specials.cpp:1217) — the Use action on an adjacent square.
    * A "change when used" terrain flips to its counterpart; a "call special when
-   * used" one runs a chain. Returns false when there's nothing to use.
+   * used" one runs a chain. Returns false when there's nothing to use, which is
+   * what decides whether the turn is charged.
    */
   async useSpace(where: Location): Promise<boolean> {
-    this.recorder?.recordLoc('handle_use_space', where);
     const from = this.inTown ? this.univ.party.townLoc : this.univ.party.outLoc;
-    if (dist(from, where) > 1) {
-      this.univ.addStringToBuf('  That is too far away.');
-      return false;
-    }
     const ter = this.inTown
       ? this.univ.town?.record.terrain[where.x]?.[where.y]
       : this.univ.out.at(where.x, where.y);
@@ -1247,6 +1278,15 @@ export class GameSession {
         town.setField(where.x, where.y, FieldType.FIELD_WEB, false);
         return true;
       }
+      // **A successful push does not end `use_space`** (boe.specials.cpp:1231
+      // to :1268). The three tests are consecutive `if`s, not an `else if`
+      // chain and not an early return: a square carrying both a crate and a
+      // barrel pushes both, and either way the function falls through to the
+      // terrain checks below. So pushing something and finding nothing else on
+      // the square prints "Nothing to use." after "You push the crate." and
+      // returns **false** — which means a push costs no turn. It reads like an
+      // oversight; it is what ships, and `did_something` depends on it.
+      // Only the *refused* push returns early.
       const pushables: [FieldType, string][] = [
         [FieldType.OBJECT_CRATE, 'crate'],
         [FieldType.OBJECT_BARREL, 'barrel'],
@@ -1269,7 +1309,6 @@ export class GameSession {
             if (item.variety !== ItemType.NO_ITEM && item.contained && item.held
               && item.itemLoc.x === where.x && item.itemLoc.y === where.y)
               item.itemLoc = { ...to };
-        return true;
       }
     }
 

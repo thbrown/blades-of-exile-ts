@@ -353,7 +353,7 @@ export async function runReplay(
           await session.chooseTalkNode(Number(action.info.node ?? '-1'));
           break;
         case 'handle_use_space':
-          await session.useSpace(locationFromAction(action));
+          await session.handleUseSpace(locationFromAction(action));
           break;
         case 'handle_switch_pc': {
           // **It moves the item pane too** (boe.actions.cpp:1043): the same
