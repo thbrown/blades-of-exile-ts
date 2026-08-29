@@ -173,6 +173,10 @@ async function play(path: string): Promise<Row> {
               // whether it has noticed the party, which decides whether
               // `do_monsters` picks a target and therefore whether it draws.
               + `a${m.active}`
+              // Health, because "it split on one side and died on the other" is
+              // a health divergence wearing a rules divergence's clothes, and
+              // nothing else in this trace can see it.
+              + `h${m.health}`
               + (process.env.TARG ? `->(${m.targLoc.x},${m.targLoc.y})` : '')).join(''));
         }
         // The pair to `BOE_TRACE_LIGHT=1` on the harness, in the same order and

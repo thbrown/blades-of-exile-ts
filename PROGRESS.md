@@ -6028,3 +6028,41 @@ The M6 list below is kept for the history of what it covered:
     two days. `grep -rn "TODO(M[0-7])" src/` is a list of promises whose
     milestone has closed; the draw stream keeps finding them faster than
     reading it does, but it is worth reading anyway.
+
+- **The monsters' end-of-turn upkeep was never ported (M8, 2026-08-24).** The
+  `damageMonst` bucket. `VoDT-5-11` parted at draw 302: a Gremlin took an
+  11-point swing, and this port then rolled `get_ran(1,1,1000)` to **split**
+  where the C++ rolled nothing, because the C++'s Gremlin was dead.
+  - The split roll was a red herring. `MONST=1` / `BOE_TRACE_MONST=1` — with a
+    new **`h<health>`** column added to both — showed the two Gremlins parting
+    company **forty turns earlier**, at 20 hit points here against 19 there,
+    and drifting one point further apart every fourth turn while it stood
+    still and nobody touched it.
+  - `do_monster_turn` has **two** loops over `num_monst`. The first is the one
+    everybody ports: the creatures act. The second, "monster time stuff"
+    (boe.combat.cpp:2553), is their upkeep — acid, poison and disease biting,
+    every timed status ticking toward zero, spell points coming back — and
+    this port had none of it. So a slept creature never woke on its own, a
+    poisoned one never died of it, and, the line that named the bucket:
+
+    ```
+    if(univ.party.age % 4 == 0) { ... if(cur_monst->health > cur_monst->m_health) cur_monst->health--; }
+    ```
+
+    **Bonus hit points wear off.** A creature placed with more health than its
+    definition allows — a guard tripled by `make_town_hostile`, anything a
+    special pumped up — sheds one point every fourth turn until it is back to
+    `m_health`. Four lines, no draws, and it decides who survives a swing.
+  - Ported in full, including the `return` (not `break`) when the party dies
+    mid-loop, which skips the centre restore and the parry reset below it, and
+    including the disease block's **two** draws per even turn.
+  - **Where it stands.** Corpus 304,795 → **347,554** matching draws, +42,759.
+    That is the largest single jump M8 has had, past the wall-spell volley fix.
+  - The shape to take away: **a divergence in the draw stream can be forty
+    turns downstream of a rule that makes no draws at all.** Both sides agreed
+    on every number for 301 draws and disagreed about one creature\'s hit
+    points the whole time. When the first differing draw is a *conditional*
+    roll — one side asks and the other doesn\'t — the question to ask is not
+    "is the condition ported right" but "do both sides agree on what it is
+    reading". Here they did not, and the answer was in a loop nobody had
+    written.

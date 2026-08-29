@@ -17,9 +17,13 @@ BOE_TRACE=1 ./tools/cppharness/run.sh <replay.xml>
 `BOE_TRACE=1` prints one line per replayed action in the same shape as
 `CORPUS=1 TRACE=1 ONLY=<file> npx vitest run test/corpus.test.ts`, plus a
 `[spec] town node N (Type) at (x,y)` line whenever a square fires its script.
-`BOE_TRACE_MONST=1` adds the town's creature list to each line, and pairs with
-`MONST=1` on the corpus test — that pairing is what found the townsperson-drift
-bucket, on the first turn of a recording that only failed 33 actions later.
+`BOE_TRACE_MONST=1` adds the town's creature list to each line — position,
+`a<active>` and **`h<health>`** — and pairs with `MONST=1` on the corpus test.
+That pairing is what found the townsperson-drift bucket, on the first turn of a
+recording that only failed 33 actions later. The health column is there because
+"it split on one side and died on the other" is a health divergence wearing a
+rules divergence's clothes: it names a creature whose hit points drifted apart
+*turns* earlier, in code that made no draws at all.
 `BOE_TRACE_TARG=1` adds where each creature is *heading* (`TARG=1` on this side).
 Outdoors the same switch lists the **ten encounter groups** instead of a town's
 creatures, which is what a `seek_party` divergence needs; `MONST=1` prints the

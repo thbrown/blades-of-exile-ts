@@ -1525,6 +1525,96 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
       }
       monst.ap = 0;
     }
+
+    // --- "Begin monster time stuff loop" (boe.combat.cpp:2553) --------------
+    //
+    // **A second pass over the same `numMonst` creatures**, after every one of
+    // them has acted: acid and poison bite, disease rolls its mischief, and
+    // every timed status ticks toward zero. This port had none of it, which
+    // meant a webbed or slept creature never came round on its own, a poisoned
+    // one never died of it — and, the reason it finally surfaced, **bonus hit
+    // points never wore off**.
+    //
+    // That last one is four lines and no draws, which is exactly why it hid
+    // for so long: a creature placed with more health than its definition
+    // allows (a guard powered up by `make_town_hostile`, say) sheds one point
+    // every fourth turn until it is back to `m_health`. This port left it at
+    // full, so a Gremlin the C++ killed with an 11-point swing survived here —
+    // and *then* rolled `get_ran(1,1,1000)` to split, which is the draw the
+    // divergence actually showed. The health was 1 out, forty turns earlier,
+    // and nothing in the draw stream could see it.
+    let printedAcid = false;
+    let printedPoison = false;
+    let printedDisease = false;
+    for (let i = 0; i < numMonst; i++) {
+      // **An early `return`, not a `break`** (boe.combat.cpp:2556): a party
+      // that dies to the acid ticking here skips the centre restore and the
+      // parry reset below, exactly as the C++ does.
+      if (!univ.party.pcs.some((pc) => pc.isAlive)) return;
+      const monst = town.monsters[i];
+      if (!monst?.isAlive) continue;
+
+      if ((monst.status[Status.ACID] ?? 0) > 0) {
+        if (!printedAcid) {
+          univ.addStringToBuf('Acid:');
+          printedAcid = true;
+        }
+        const r1 = univ.rng.getRan(monst.status[Status.ACID] ?? 0, 1, 6);
+        await damageMonst(univ, monst, 6, r1, DamageType.ACID, { session });
+        monst.status[Status.ACID] = (monst.status[Status.ACID] ?? 0) - 1;
+      }
+
+      // The wake-up note fires at **1**, before the decrement takes it to 0.
+      if ((monst.status[Status.ASLEEP] ?? 0) === 1) monst.spellNote(SpellNote.AWAKE);
+      for (const which of [
+        Status.ASLEEP, Status.PARALYZED, Status.INVISIBLE,
+        Status.INVULNERABLE, Status.MAGIC_RESISTANCE, Status.MARTYRS_SHIELD,
+      ]) {
+        monst.status[which] = moveToZero(monst.status[which] ?? 0);
+      }
+
+      if (univ.party.age % 2 === 0) {
+        for (const which of [Status.BLESS_CURSE, Status.HASTE_SLOW, Status.WEBS]) {
+          monst.status[which] = moveToZero(monst.status[which] ?? 0);
+        }
+        if ((monst.status[Status.POISON] ?? 0) > 0) {
+          if (!printedPoison) {
+            univ.addStringToBuf('Poisoned monsters:');
+            printedPoison = true;
+          }
+          const r1 = univ.rng.getRan(monst.status[Status.POISON] ?? 0, 1, 6);
+          await damageMonst(univ, monst, 6, r1, DamageType.POISON, { session });
+          monst.status[Status.POISON] = (monst.status[Status.POISON] ?? 0) - 1;
+        }
+        if ((monst.status[Status.DISEASE] ?? 0) > 0) {
+          if (!printedDisease) {
+            univ.addStringToBuf('Diseased monsters:');
+            printedDisease = true;
+          }
+          // Two draws every time, and the second one only *sometimes* shortens
+          // the disease — so a diseased creature is a steady pair of draws per
+          // even turn for as long as it lasts.
+          switch (univ.rng.getRan(1, 1, 5)) {
+            case 1: case 2: monst.poison(2); break;
+            case 3: monst.slow(2); break;
+            case 4: monst.curse(2); break;
+            default: monst.scare(10); break;
+          }
+          if (univ.rng.getRan(1, 1, 6) < 4) {
+            monst.status[Status.DISEASE] = (monst.status[Status.DISEASE] ?? 0) - 1;
+          }
+        }
+      }
+
+      if (univ.party.age % 4 === 0) {
+        monst.restoreSp(2);
+        monst.status[Status.DUMB] = moveToZero(monst.status[Status.DUMB] ?? 0);
+        // "Bonus HP and SP wear off" — one point a turn, and only downwards.
+        if (monst.mp > monst.maxMp) monst.mp--;
+        if (monst.health > monst.maxHealth) monst.health--;
+      }
+    }
+
     // "If in town, need to restore center" (boe.combat.cpp:2620). The camera
     // never followed a monster here — that is combat-only — but a missile it
     // throws now moves the view, so the town half of the turn has somewhere to
