@@ -99,8 +99,11 @@ grid, and the town's lighting type. That pairing named `set_up_lights`' missing
 line-of-sight test — `lit=1` here against `lit=0` there, on a square eight
 squares from any lamp and behind a wall.
 
-`BOE_TRACE_PCS=1` (`PCS=1` here) prints each PC's `main_status`, health and
-combat position. Whether a PC is alive gates more monster behaviour than you
+`BOE_TRACE_PCS=1` (`PCS=1` here) prints each PC's `main_status`, health,
+**max** health and combat position. The maximum is there because almost every
+heal in `increase_age` is gated on `cur_health < max_health` rather than on the
+current value alone, so "one side healed and the other didn't" is as often a
+disagreement about the ceiling as about the roll. Whether a PC is alive gates more monster behaviour than you
 would guess — `do_monster_turn` will not walk toward a dead one, `closest_pc`
 skips them — so a party-state divergence reads as a creature that moved on one
 side and not the other, with nothing about movement actually wrong. Reach for

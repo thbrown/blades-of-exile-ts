@@ -198,6 +198,11 @@ async function play(path: string): Promise<Row> {
           // about movement actually wrong.
           emit('      pcs:' + univ.party.pcs
             .map((pc, p) => ` ${p}:s${pc.mainStatus}/h${pc.curHealth}`
+              // Max health too: a PC sitting *at* its maximum and one three
+              // points below it heal differently, and every heal in
+              // `increase_age` is gated on that comparison rather than on the
+              // current value alone.
+              + `/m${pc.maxHealth}`
               + `/(${pc.combatPos.x},${pc.combatPos.y})`).join(''));
         }
         if (process.env.ITEMS) {

@@ -391,7 +391,7 @@ index faaef3f2..2a648966 100644
  }
  
 diff --git a/src/tools/replay.cpp b/src/tools/replay.cpp
-index 3946c875..6bca72a4 100644
+index 3946c875..d43a2100 100644
 --- a/src/tools/replay.cpp
 +++ b/src/tools/replay.cpp
 @@ -28,6 +28,15 @@
@@ -421,7 +421,7 @@ index 3946c875..6bca72a4 100644
  			} else if constexpr (std::is_integral_v<T>) {
  				if constexpr (std::is_same_v<S, std::string>) {
  					return static_cast<T>(std::stoi(arg));
-@@ -252,6 +263,147 @@ int next_action_line() {
+@@ -252,6 +263,152 @@ int next_action_line() {
  	return next_action->Row();
  }
  
@@ -534,6 +534,11 @@ index 3946c875..6bca72a4 100644
 +		for(short p = 0; p < 6; p++)
 +			std::cout << " " << p << ":s" << int(univ.party[p].main_status)
 +				<< "/h" << univ.party[p].cur_health
++				// Max health too: a PC sitting *at* its maximum and one three
++				// points below it heal differently, and every heal in
++				// `increase_age` is gated on that comparison rather than on the
++				// current value alone.
++				<< "/m" << univ.party[p].max_health
 +				<< "/(" << univ.party[p].combat_pos.x << "," << univ.party[p].combat_pos.y << ")";
 +		std::cout << std::endl;
 +	}
@@ -569,7 +574,7 @@ index 3946c875..6bca72a4 100644
  Element& pop_next_action(std::string expected_action_type) {
  	if(next_action == nullptr){
  		throw std::string { "Replay error! No action left to pop" };
-@@ -264,6 +416,13 @@ Element& pop_next_action(std::string expected_action_type) {
+@@ -264,6 +421,13 @@ Element& pop_next_action(std::string expected_action_type) {
  
  	Element* to_return = next_action;
  	next_action = next_action->NextSiblingElement(false);

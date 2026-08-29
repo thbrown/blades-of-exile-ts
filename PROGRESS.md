@@ -6145,3 +6145,39 @@ The M6 list below is kept for the history of what it covered:
     roll is another, and this is the clearest: a function whose entire job is to
     choose a string spends RNG doing it. When a bucket bottoms out in "nobody
     should be drawing here", check what the C++ *paints* at that moment.
+
+- **OPEN LEAD: a PC heals here that the C++ leaves alone (M8, 2026-08-24).**
+  The `increaseAgeEffects` bucket, two files. Narrowed but not fixed; the
+  reproduction is exact, so this is a short job for whoever picks it up.
+  - `ASR_05-05-2025_12-50-38` parts at draw 7,688: a special node does
+    `get_ran(3,1,12)` damage and then `hit_party` rolls **six**
+    `get_ran(1,1,100)` luck saves in the C++ against **two** here.
+  - That is the symptom, not the bug. `PCS=1` / `BOE_TRACE_PCS=1` — with
+    **`/m<max health>` newly added to both sides** — puts the real divergence
+    **five thousand draws earlier**, at action 183, with every draw still
+    matching:
+
+    ```
+    age 1775   C 1:s1/h69/m72     J 1:s1/h69/m72
+    age 1776   C 1:s1/h69/m72     J 1:s1/h71/m72     <- +2 here, nothing there
+    age 1777   C 1:s1/h69/m72     J 1:s1/h72/m72     <- +1 here, nothing there
+    ```
+
+    So PC 1 (\'Slish\') heals +2 on one turn and +1 on the next in this port and
+    not at all in the C++, at the same age, from the same health, with the same
+    maximum, and without either side spending a draw on it.
+  - What has been ruled out: max health (identical, 72), `main_status`
+    (identical), and the RNG (the streams agree for another 5,000 draws). Age
+    1776 is `age % 4 == 0`, which is the **REGENERATE** block
+    (boe.actions.cpp:3568) — but 1777 is not, so the +1 comes from somewhere
+    else again, and the two heals are probably two different bugs.
+  - Where to look: every call to `pc.heal` reachable from `increase_age`, and
+    the possibility that one of them is running on a turn the C++ skips.
+    `livePcs(session)` vs the C++\'s `main_status == ALIVE` gate is worth a
+    glance while you are there.
+  - **Why the luck rolls follow from it:** `hit_party` calls `damage_pc` per
+    living PC and `damage_pc` returns at its first line for a PC that is not
+    ALIVE, before any draw. Six rolls against two means four PCs are in a
+    different state by then — the health drift above, compounded over 5,000
+    draws, is the likeliest cause, so **fix the heal first and re-measure
+    before touching `hitParty`**.
