@@ -1604,13 +1604,21 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue at the end of 2026-08-23 has **no bucket bigger than two files**:
-  `handle_target_space @ the C++ draws on`, `doMonsters`, `move @ the C++
-  draws on` and `selectActivePc` at two each, then a dozen single files.
-  Corpus **285,845** matching draws, **15 of 87** files agreeing all the way,
-  41 blocked outside the rules. **Those three numbers were 190,362 / 10 / 37
-  that morning** — the eleven entries at the bottom of this file are what one
-  day of working the queue looks like.
+  queue at the end of 2026-08-24 still has **no bucket bigger than two files**:
+  `doMonsters`, `increaseAgeEffects` and `placeGrid` at two each, then some
+  thirty single files. Corpus **352,150** matching draws, **17 of 87** files
+  agreeing all the way, 42 blocked outside the rules. **Those numbers were
+  285,845 / 15 / 41 the day before and 190,362 / 10 / 37 the day before that**
+  — the entries at the bottom of this file are what working the queue looks
+  like, and the two biggest wins of 2026-08-24 (`set_up_lights` and
+  `do_monster_turn`'s second loop, +50k draws between them) were both **code
+  that was never written**, found from a draw that was merely downstream of it.
+
+  **A caution about the "agree all the way" column.** `diverge.mjs` calls a
+  file a match when the two draw *lists* are identical, which a pair that both
+  stop early also satisfies — so a file that now runs further and finds a real
+  divergence *leaves* that column. It went 17 → 16 → 17 across 2026-08-24 while
+  matched draws rose by 55,000. **Draws matched is the meter.**
 
   Two things learned about the queue itself, both worth acting on:
 
