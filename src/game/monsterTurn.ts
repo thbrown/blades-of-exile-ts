@@ -34,7 +34,7 @@ import { FieldType } from '../data/fields';
 import { hasAbilEquip } from '../universe/inventory';
 import { animSettle, bookActionPause, focusOn } from './anim';
 import { doPoison, handleAcid, handleDisease } from './increaseAge';
-import { processFields } from './processFields';
+import { monstInflictFields, processFields } from './processFields';
 import { specialIncreaseAge } from './specialIncreaseAge';
 import { monstCastMage, monstCastPriest } from './monsterSpells';
 import { placeSpellPattern } from './spellPatterns';
@@ -403,15 +403,28 @@ export function monstPickTarget(session: GameSession, monst: Creature): number {
 
 /**
  * The move itself, once a square has been agreed on. Shared by the two callers
- * below, which differ only in **what order they ask the two questions in**.
+ * below, which differ only in **what order they ask the two questions in** —
+ * and in the footstep, which is `combat_move_monster`'s alone.
+ *
+ * **`monst_inflict_fields` is the reason this chain is async.** A creature that
+ * steps into a wall of fire is burned by it there and then (boe.monster.cpp:748
+ * and :821), and the damage rolls its dice before it checks whether the
+ * creature is immune — so leaving it out, as the `TODO(M5b)` here used to, took
+ * a `get_ran` out of the stream on every step into a field. Damage can kill,
+ * killing can fire a script, and a script can raise a dialog, so the whole
+ * movement chain from `doMonsters` down had to become async to await it. Every
+ * call site is awaited in place, which is what keeps the draw order the C++'s.
  */
-function stepMonsterTo(session: GameSession, monst: Creature, dest: Location): boolean {
+async function stepMonsterTo(
+  session: GameSession, monst: Creature, dest: Location, sound: boolean,
+): Promise<boolean> {
   monst.direction = dirToward(monst.curLoc, dest);
   monst.curLoc = { ...dest };
-  // TODO(M5b): monst_inflict_fields.
-  // A footstep, same as the party's own — only when the step lands on
-  // screen, and only this one didn't play at all before.
-  if (pointOnScreen(session.center, dest)) {
+  await monstInflictFields(session, monst);
+  // A footstep, same as the party's own — only when the step lands on screen.
+  // Note `town_move_monster` (:814) does **not** make one; only the combat half
+  // does, which is why this is a parameter rather than something read here.
+  if (sound && pointOnScreen(session.center, dest)) {
     session.moveSound(session.univ.town?.record.terrain[dest.x]?.[dest.y] ?? 0, monst.ap);
   }
   return true;
@@ -421,10 +434,12 @@ function stepMonsterTo(session: GameSession, monst: Creature, dest: Location): b
  * combat_move_monster (boe.monster.cpp:710) — **can it stand there** first,
  * then what the terrain thinks.
  */
-function combatMoveMonster(session: GameSession, monst: Creature, dest: Location): boolean {
+async function combatMoveMonster(
+  session: GameSession, monst: Creature, dest: Location,
+): Promise<boolean> {
   if (!session.monstCanBeAt(monst, dest)) return false;
   if (!session.monstCheckSpecialTerrain(monst, dest, 2)) return false;
-  return stepMonsterTo(session, monst, dest);
+  return await stepMonsterTo(session, monst, dest, true);
 }
 
 /**
@@ -437,10 +452,12 @@ function combatMoveMonster(session: GameSession, monst: Creature, dest: Location
  * `get_ran` stream out of step with the C++'s on every blocked step a
  * townsperson tried.
  */
-function townMoveMonster(session: GameSession, monst: Creature, dest: Location): boolean {
+async function townMoveMonster(
+  session: GameSession, monst: Creature, dest: Location,
+): Promise<boolean> {
   if (!session.monstCheckSpecialTerrain(monst, dest, 1)) return false;
   if (!session.monstCanBeAt(monst, dest)) return false;
-  return stepMonsterTo(session, monst, dest);
+  return await stepMonsterTo(session, monst, dest, false);
 }
 
 /**
@@ -448,14 +465,16 @@ function townMoveMonster(session: GameSession, monst: Creature, dest: Location):
  * A creature in a force cage cannot move at all, whatever it is standing next
  * to.
  */
-function tryMove(session: GameSession, monst: Creature, from: Location, dx: number, dy: number): boolean {
+async function tryMove(
+  session: GameSession, monst: Creature, from: Location, dx: number, dy: number,
+): Promise<boolean> {
   const dest = loc(from.x + dx, from.y + dy);
   const town = session.univ.town;
   const inTownOrFight = session.mode === GameMode.TOWN || isCombat(session.mode);
   if (inTownOrFight && town?.hasField(from.x, from.y, FieldType.BARRIER_CAGE)) return false;
   let ok = false;
-  if (session.mode === GameMode.TOWN) ok = townMoveMonster(session, monst, dest);
-  else if (isCombat(session.mode)) ok = combatMoveMonster(session, monst, dest);
+  if (session.mode === GameMode.TOWN) ok = await townMoveMonster(session, monst, dest);
+  else if (isCombat(session.mode)) ok = await combatMoveMonster(session, monst, dest);
   // The pair to `BOE_TRACE_MMOVE=1` on the harness. Movement makes no draws,
   // so two runs can drift a creature square by square with their `[ran]`
   // streams still matching exactly, and the draw that finally disagrees is
@@ -506,7 +525,9 @@ async function checkParryOpportunity(session: GameSession, monst: Creature): Pro
  * deliberately not pathfinding, which is why monsters get stuck on corners in
  * the original too.
  */
-function seekParty(session: GameSession, monst: Creature, target: Location): boolean {
+async function seekParty(
+  session: GameSession, monst: Creature, target: Location,
+): Promise<boolean> {
   const from = monst.curLoc;
   const tries: [number, number][] = [];
   if (from.x > target.x && from.y > target.y) tries.push([-1, -1]);
@@ -519,14 +540,14 @@ function seekParty(session: GameSession, monst: Creature, target: Location): boo
   if (from.y > target.y) tries.push([0, -1]);
 
   for (const [dx, dy] of tries) {
-    if (tryMove(session, monst, from, dx, dy)) return true;
+    if (await tryMove(session, monst, from, dx, dy)) return true;
   }
   // Boxed in: flail in a random direction — and that counts as futzing
   // (boe.monster.cpp:657), which is what eventually ends the creature's turn.
   futzing++;
   const m = session.univ.rng.getRan(1, 0, 2) - 1;
   const n = session.univ.rng.getRan(1, 0, 2) - 1;
-  return tryMove(session, monst, from, m, n);
+  return await tryMove(session, monst, from, m, n);
 }
 
 /**
@@ -534,12 +555,12 @@ function seekParty(session: GameSession, monst: Creature, target: Location): boo
  * is drifting toward and picks a new one when it arrives or gets stuck; the
  * town's own wandering_locs are among the candidates.
  */
-function randMove(session: GameSession, monst: Creature): boolean {
+async function randMove(session: GameSession, monst: Creature): Promise<boolean> {
   const univ = session.univ;
   if (locsEqual(monst.targLoc, monst.curLoc)) monst.targLoc = loc(0, monst.targLoc.y);
 
   let actedYet = false;
-  if (monst.targLoc.x > 0) actedYet = seekParty(session, monst, monst.targLoc);
+  if (monst.targLoc.x > 0) actedYet = await seekParty(session, monst, monst.targLoc);
   if (actedYet) return true;
 
   monst.targLoc = loc(0, monst.targLoc.y);
@@ -568,7 +589,7 @@ function randMove(session: GameSession, monst: Creature): boolean {
       if (!session.locOffActiveArea(spot)) monst.targLoc = spot;
     }
   }
-  if (monst.targLoc.x > 0) actedYet = seekParty(session, monst, monst.targLoc);
+  if (monst.targLoc.x > 0) actedYet = await seekParty(session, monst, monst.targLoc);
   return actedYet;
 }
 
@@ -586,7 +607,7 @@ function selectActivePc(univ: Universe): number {
  * squares away, say so, and walk over. It runs after **every** party action,
  * not only in combat.
  */
-export function doMonsters(session: GameSession): void {
+export async function doMonsters(session: GameSession): Promise<void> {
   const univ = session.univ;
   const town = univ.town;
   if (!town) return;
@@ -622,8 +643,8 @@ export function doMonsters(session: GameSession): void {
       // Once the town has turned hostile nobody drifts idly any more.
       if ((monst.attitude === Attitude.DOCILE || target === NO_ONE) && !town.monstHostile
         && monst.mobile) {
-        if (monst.isFriendly || univ.rng.getRan(1, 0, 1) === 0) randMove(session, monst);
-        else seekParty(session, monst, partyLoc);
+        if (monst.isFriendly || univ.rng.getRan(1, 0, 1) === 0) await randMove(session, monst);
+        else await seekParty(session, monst, partyLoc);
       }
       // The C++ doesn't gate this second block on the first having done
       // nothing, and the only way to reach it having already drifted is a
@@ -639,18 +660,18 @@ export function doMonsters(session: GameSession): void {
           ? partyLoc
           : (univ.town?.monsters[monst.target - 100]?.getLoc() ?? partyLoc);
         if (monst.morale < 0 && canFlee) {
-          fleeParty(session, monst, l2);
+          await fleeParty(session, monst, l2);
           if (univ.rng.getRan(1, 0, 10) < 6) monst.morale++;
         } else {
           // "Maybe move out of dangerous space" here too (:244) — and this one
           // draws, which is what makes it visible in the stream.
           const hated = monstHateSpot(session, monst);
-          if (hated) seekParty(session, monst, hated);
+          if (hated) await seekParty(session, monst, hated);
           else if (monst.mon.mu === 0 || session.canSeeLight(monst.curLoc, l2) > 3) {
             // A spellcaster keeps its distance unless it can't see you anyway.
             // (The C++'s condition is `mu == 0 && mu == 0` — a typo for `cl`,
             // presumably, and kept as it ships.)
-            seekParty(session, monst, l2);
+            await seekParty(session, monst, l2);
           }
         }
       }
@@ -694,24 +715,26 @@ export function doMonsters(session: GameSession): void {
  * looking for somewhere to drift, where the shove is two `get_ran(1,0,2)`.
  * Cornered creatures are exactly the ones that flee, so this fired often.
  */
-function fleeParty(session: GameSession, monst: Creature, target: Location): boolean {
+async function fleeParty(
+  session: GameSession, monst: Creature, target: Location,
+): Promise<boolean> {
   const l1 = monst.curLoc;
   const l2 = target;
   let acted = false;
-  const step = (dx: number, dy: number): void => {
-    if (!acted) acted = tryMove(session, monst, l1, dx, dy);
+  const step = async (dx: number, dy: number): Promise<void> => {
+    if (!acted) acted = await tryMove(session, monst, l1, dx, dy);
   };
-  if (l1.x > l2.x && l1.y > l2.y) step(1, 1);
-  if (l1.x < l2.x && l1.y < l2.y) step(-1, -1);
-  if (l1.x > l2.x && l1.y < l2.y) step(1, -1);
-  if (l1.x < l2.x && l1.y > l2.y) step(-1, 1);
-  if (l1.x > l2.x) step(1, 0);
-  if (l1.x < l2.x) step(-1, 0);
-  if (l1.y < l2.y) step(0, -1);
-  if (l1.y > l2.y) step(0, 1);
+  if (l1.x > l2.x && l1.y > l2.y) await step(1, 1);
+  if (l1.x < l2.x && l1.y < l2.y) await step(-1, -1);
+  if (l1.x > l2.x && l1.y < l2.y) await step(1, -1);
+  if (l1.x < l2.x && l1.y > l2.y) await step(-1, 1);
+  if (l1.x > l2.x) await step(1, 0);
+  if (l1.x < l2.x) await step(-1, 0);
+  if (l1.y < l2.y) await step(0, -1);
+  if (l1.y > l2.y) await step(0, 1);
   if (!acted) {
     futzing++;
-    acted = randMove(session, monst);
+    acted = await randMove(session, monst);
   }
   return acted;
 }
@@ -1239,7 +1262,7 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
           if (univ.rng.getRan(1, 1, 6) === 3) monst.morale++;
           const targ = monst.target;
           if (targ < NO_ONE && (univ.party.pcs[targ]?.isAlive ?? false) && monst.mobile) {
-            actedYet = fleeParty(session, monst, targSpace);
+            actedYet = await fleeParty(session, monst, targSpace);
             if (actedYet) monst.ap = Math.max(0, monst.ap - 1);
           }
         }
@@ -1414,7 +1437,7 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
             // either way, and the free swings after it still happen.
             const hated = monstHateSpot(session, monst);
             if (hated) {
-              seekParty(session, monst, hated);
+              await seekParty(session, monst, hated);
             } else if (moveTarget >= 100) {
               // A creature target: still gated on it being alive
               const other = univ.town?.monsters[moveTarget - 100];
@@ -1424,13 +1447,13 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
                 // after it does still require `monst` to be hostile, since a
                 // charmed creature walking past a stand-ready PC shouldn't
                 // give away a free swing.
-                seekParty(session, monst, other.getLoc());
+                await seekParty(session, monst, other.getLoc());
                 if (!monst.isFriendly) await checkParryOpportunity(session, monst);
               }
             } else if (!monst.isFriendly && moveTarget < NO_ONE) {
               const pc = univ.party.pcs[moveTarget]!;
               if (pc.isAlive) {
-                seekParty(session, monst, pc.combatPos);
+                await seekParty(session, monst, pc.combatPos);
                 await checkParryOpportunity(session, monst);
               }
             }
@@ -1439,7 +1462,7 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
             // Inside the "spot is OK, so go nuts" branch: a creature that just
             // stepped out of a fire doesn't also wander.
             if (!hated && monst.attitude === Attitude.DOCILE) {
-              actedYet = randMove(session, monst);
+              actedYet = await randMove(session, monst);
               futzing++;
             }
             monst.ap = Math.max(0, monst.ap - 1);

@@ -1604,14 +1604,17 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue at the end of 2026-08-23 has **no bucket bigger than two files** —
-  `pickTargetMonst`, `doOutdoorMonsters`, `doMonsters`, `placeGrid` and three
-  `the C++ draws on` ones all sit at two, and everything else is a single file.
-  Four buckets emptied that day: `seekParty`, `monstCheckOneSpecialTerrain`,
-  `doMonsterTurn` and `doMonsters`' short file. Corpus **195,508** matching
-  draws, **11 of 87** files agreeing all the way, 39 blocked outside the rules
-  — two more than the day before, and both because a file the port now carries
-  further reaches an action the *harness* refuses, which is its gap, not ours.
+  queue at the end of 2026-08-23 has **no bucket bigger than two files, and
+  only one of the four biggest is a rules bucket** — `doOutdoorMonsters`, plus
+  three `the C++ draws on` ones (`handle_target_space`, `click_control`,
+  `move`), which are the port *stopping*, not disagreeing. Six buckets emptied
+  that day: `seekParty`, `monstCheckOneSpecialTerrain`, `doMonsterTurn`,
+  `pickTargetMonst` and both of `doMonsters`'. Corpus **202,325** matching
+  draws, **11 of 87** files agreeing all the way, 40 blocked outside the rules
+  — three more than the day before, every one of them a file the port now
+  carries further, into an action the *harness* refuses. That last number
+  going **up** is progress, and it is worth saying so: the harness's 28-file
+  debt is now the biggest single thing between this corpus and a clean run.
 
   **A fifth instrument landed 2026-08-22: `SPEC=1`**, one line per opcode a
   chain runs, the pair to the C++ harness's `[spec]` under `BOE_TRACE`. Reach
@@ -5667,3 +5670,33 @@ The M6 list below is kept for the history of what it covered:
   - The shape: **a comment that says "this is always true, kept as the C++ has
     it" is a claim, and this one was wrong.** The cheap way to check is to
     print what the C++ actually does rather than to re-read what it says.
+
+- **A monster that walks into a wall of fire is burned by it, and that is why
+  movement is async now (M8, 2026-08-23).** The `doMonsters` bucket.
+  `ASR_05-05-2025_20-16-18` parted at draw 501, where the C++ rolled
+  `get_ran(3,1,6)` immediately before `[mmove] 6 (5,37) -> (4,36) ok` and this
+  port went straight on to the next creature's notice roll.
+  - `monst_inflict_fields` (boe.monster.cpp:838) is called from **both**
+    `combat_move_monster` (:748) and `town_move_monster` (:821), right after
+    the creature's `cur_loc` is written — a step into quickfire, a wall of
+    blades, force, ice, fire, a stink cloud or a web pays for it on arrival.
+    This port had the function (it was written for `process_fields`) and a
+    `TODO(M5b)` where the two move sites should have called it.
+  - **It draws even when it does nothing.** The dice come before the immunity
+    test in every arm (`r1 = get_ran(3,1,6); if(have_radiate && …) damage`), so
+    the missing call was a missing `get_ran` on every step into a field, not
+    just missing damage.
+  - Making the call meant `stepMonsterTo` had to be `async`, and with it
+    `combatMoveMonster` / `townMoveMonster` / `tryMove` / `seekParty` /
+    `randMove` / `fleeParty` / `doMonsters` — damage can kill, a kill can fire
+    a script, and a script can raise a dialog. **Every call site is awaited in
+    place**, which is what keeps the draw order the C++'s; the gotcha logged on
+    2026-07-27 (an extra `await` layer inside `doMonsterTurn` changing the
+    stream) was about a wrapper that awaited a *helper*, not about awaiting the
+    thing that draws.
+  - Found alongside it: **`town_move_monster` plays no footstep** — only the
+    combat half does (:750). `stepMonsterTo` took a `sound` parameter rather
+    than reading the mode, since that is what the two call sites differ by.
+  - **Where it stands.** Corpus 201,123 → **202,325** matching draws and the
+    `doMonsters` bucket is empty: `ASR_05-05-2025_20-16-18` now agrees on all
+    1,702 draws the C++ makes before its own harness stops.

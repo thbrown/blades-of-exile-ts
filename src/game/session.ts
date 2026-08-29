@@ -554,7 +554,7 @@ export class GameSession {
     // are unaffected: their input is routed ahead of the `busy` gate.
     this.queueTurn(async () => { await this.specials?.drainQueue(); });
     if (this.mode === GameMode.TOWN) {
-      doMonsters(this);
+      await doMonsters(this);
       // The monsters' turn waits on the animation timeline now, so the rest of
       // the tail has to be queued behind it rather than run underneath it —
       // the wandering-group roll happens *after* they act, and `get_ran`'s
@@ -3034,7 +3034,7 @@ export class GameSession {
       await increaseAgeEffects(this);
       specialIncreaseAge(this, 1);
       await processFields(this);
-      doMonsters(this);
+      await doMonsters(this);
       await doMonsterTurn(this);
       // **A different roll from the one an ordinary town turn makes.** The
       // turn-by-turn one (boe.actions.cpp:1989) is
