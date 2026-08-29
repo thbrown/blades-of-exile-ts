@@ -24,6 +24,8 @@ import { GameRng } from '../core/rng';
 import { Spell } from '../data/spell';
 import { ItemWinMode, ItemWindow } from '../game/itemWindow';
 import { takeAp } from '../game/combat';
+import { killPc } from '../game/damage';
+import { MainStatus } from '../universe/skills';
 import { setFeatureFlags } from '../game/featureFlags';
 import { GetItemsPick } from '../game/getItems';
 import { useItem } from '../game/itemUse';
@@ -757,6 +759,37 @@ export async function runReplay(
           }
           session.mode = GameMode.TOWN;
           await session.afterPartyTurn();
+          break;
+        }
+        case 'handle_drop_pc': {
+          // `handle_drop_pc` (boe.actions.cpp:3646) — the Delete PC button. Two
+          // refusals, then `select_pc(ANY)` and a **yes/no confirmation**, and
+          // only then `kill_pc(..., ABSENT)`. `ANY` is the point: this is the
+          // one selector that offers dead, stoned and dust PCs, since deleting
+          // one is exactly what you would want to do with them.
+          if (!session.primeTime) {
+            session.univ.addStringToBuf('Delete PC: Finish what you are doing first.');
+            break;
+          }
+          if (isCombat(session.mode)) {
+            session.univ.addStringToBuf('Delete PC: Not in combat.');
+            break;
+          }
+          const dlg = session.host;
+          if (!dlg) break;
+          const choice = await runSelectPc(session.univ, SelectPcMode.ANY,
+            'Delete who?', (rows, title, hl) => dlg.selectPc(rows, title, hl));
+          if (choice >= 6) break;
+          // `delete-pc-confirm`, whose buttons are named `yes` and `no` — the
+          // control names, not their labels, as everywhere else here.
+          const picked = await dlg.choice(
+            ['Delete this character?'],
+            [{ name: 'yes', label: 'Yes' }, { name: 'no', label: 'No' }], '', 0, 0);
+          const pc = session.univ.party.pcs[choice];
+          if (picked === 0 && pc) {
+            session.univ.addStringToBuf('Delete PC: OK.');
+            killPc(session.univ, pc, MainStatus.ABSENT);
+          } else session.univ.addStringToBuf('Delete PC: Cancelled.');
           break;
         }
         case 'cancel_item_target':

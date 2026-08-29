@@ -6344,3 +6344,19 @@ The M6 list below is kept for the history of what it covered:
     mismatch throws rather than diverging quietly — that stays right for
     *actions*, which the C++ genuinely dispatches on. It was wrong for a
     recorded *value* the C++ takes at face value.
+
+- **`handle_drop_pc` (M8, 2026-08-24).** The Delete PC button
+  (boe.actions.cpp:3646): two refusals, `select_pc(ANY)` — the one selector
+  that offers dead, stoned and dust PCs, since deleting one is exactly what you
+  would want to do with them — then a yes/no `delete-pc-confirm` and
+  `kill_pc(..., ABSENT)`.
+  - **No change to the corpus numbers**, and that is the honest report: both
+    files that reach it stop one action later on **`handle_new_pc`**, which is
+    the character-creation flow. So this is a blocker removed rather than
+    ground taken, and the next one behind it is a large piece of work.
+  - The unhandled-action list is now `handle_new_pc`, `debug_launch_scen` and
+    `debug_give_item`, two files each. `debug_give_item` needs
+    `get_num_response`'s list dialog answered from the recording; the other two
+    are bigger. **The harness's remaining debt is no longer the cheap seam it
+    was this morning** — the next slice is better spent on the movement
+    desyncs, which are rules.
