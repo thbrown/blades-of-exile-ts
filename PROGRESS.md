@@ -6206,3 +6206,34 @@ The M6 list below is kept for the history of what it covered:
     `increase_age` is gated on `cur < max`, not on `cur`), and
     `BOE_TRACE_HEAL=1` prints each PC's recuperation and chronic-disease traits
     with its health at the point the roll is made.
+
+- **A dead PC can be made active inside a healing shop (M8, 2026-08-24).** The
+  residual "six luck saves there, five here" from the entry above, and it was
+  not about `hit_party` at all.
+  - `BOE_TRACE_PCS=1` read **at the diverging action** rather than diffed
+    (see the phase trap above) showed PC 2 as `s1` in the C++ and `s2` here.
+    Counting the whole run settled it: the C++ has that PC dead for 211 lines
+    and **alive for the 850 after**, and this port never revives them.
+  - The revival is at `end_shop_mode`, and the transcript one action earlier
+    says what went wrong: `handle_switch_pc 2` printing **"Set active: PC must
+    be here & active."** The recording walks into a temple, selects the dead
+    PC, and buys Raise Dead. This port refused the selection, so the sale went
+    through on whoever was already active — *"You pay the healer."* — and the
+    body stayed a body for the rest of the game.
+  - `handle_switch_pc` (boe.actions.cpp:1031) has the exception:
+    `pc.main_status != ALIVE && (overall_mode != MODE_SHOPPING ||
+    active_shop.getType() != eShopType::ALLOW_DEAD)`. That shop type exists for
+    exactly this, and without it **the one service a corpse needs is the one
+    service it can never be sold**. `MODE_ITEM_TARGET` was missing from the
+    same function's first condition too, and is in now.
+  - **Where it stands.** Corpus 352,153 → **362,620** matching draws and
+    **18 of 87** files agree the whole way, up from 17.
+  - Two general notes. First, `damage_pc` returns at its first line for a PC
+    who is not ALIVE, before any draw — so **a party-composition divergence
+    reads as a missing draw in the damage code**, thousands of draws from the
+    refusal that caused it. Second: the refusal was *printed in this port's own
+    transcript*, in plain English, two hundred actions before anything failed.
+    `CORPUS=1 TRACE=1 ONLY=<file>` and a read of what the port **said** is
+    cheaper than any of the draw-stream instruments, and it should be the first
+    thing tried whenever a state divergence is suspected rather than a rules
+    one.

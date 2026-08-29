@@ -60,7 +60,7 @@ import {
 import { MainStatus, PartyStatus, Race, Skill, Status, Trait } from '../universe/skills';
 import { boomSpace } from './booms';
 import { ShopItemType } from '../data/shop';
-import { ShopState, handleSale } from './shop';
+import { ShopState, handleSale, shopAllowsDead } from './shop';
 import { SpellStore, emptySpellStore } from './spellRepeat';
 import { ItemShopMode, ItemShopState, handleItemShopAction } from './itemShop';
 import { isContainerAt } from './loot';
@@ -3219,13 +3219,14 @@ export class GameSession {
    * stats list makes that PC the active one.
    *
    * In combat this costs nothing but needs the PC to have action points left;
-   * out of combat they only have to be alive and present.
+   * out of combat they only have to be alive and present — **except in a
+   * healing shop**, see below.
    */
   switchPc(which: number): void {
     const pc = this.univ.party.pcs[which];
     if (!pc) return;
     if (!this.primeTime && this.mode !== GameMode.SHOPPING
-      && this.mode !== GameMode.TALKING) {
+      && this.mode !== GameMode.TALKING && this.mode !== GameMode.ITEM_TARGET) {
       this.univ.addStringToBuf('Set active: Finish what you are doing first.');
       return;
     }
@@ -3236,7 +3237,18 @@ export class GameSession {
       } else this.univ.addStringToBuf('Set active: PC has no APs.');
       return;
     }
-    if (pc.mainStatus !== MainStatus.ALIVE) {
+    // **A dead PC can be made active inside a healing shop** — that is what
+    // `eShopType::ALLOW_DEAD` is for (boe.actions.cpp:1031), and without it the
+    // one service a corpse needs is the one service it can never be sold. This
+    // port refused every time, so a recording that walked into a temple,
+    // selected the dead PC and bought Raise Dead instead healed whoever
+    // happened to be active, and carried a body for the rest of the game — a
+    // divergence that shows up thousands of draws later as `hit_party` rolling
+    // one luck save fewer than the C++, because `damage_pc` returns at its
+    // first line for a PC who is not ALIVE.
+    const allowDead = this.mode === GameMode.SHOPPING
+      && this.shop !== null && shopAllowsDead(this.shop.shop);
+    if (pc.mainStatus !== MainStatus.ALIVE && !allowDead) {
       this.univ.addStringToBuf('Set active: PC must be here & active.');
       return;
     }
