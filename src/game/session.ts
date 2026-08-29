@@ -1973,7 +1973,21 @@ export class GameSession {
         this.dangerousTerrain(spec);
         return { canEnter: true, forced };
       case TerSpec.DAMAGING:
-        this.damagingTerrain(spec);
+        // **Awaited.** `damagingTerrain` is async because `hitParty` waits on
+        // each PC's blast animation, and this call site used to drop the
+        // promise on the floor. The damage still happened and every draw was
+        // still made — but the rest of the move ran *underneath* it, so the
+        // turn's upkeep landed in the middle of the party's luck saves and the
+        // draw stream came out interleaved:
+        //
+        //   C++   3d12, luck ×6,                    recuperation ×2
+        //   here  3d12, luck ×2, recuperation ×2, luck ×3
+        //
+        // Nothing about the rules was wrong, and nothing in the game state
+        // showed it. `get_ran`'s *call order* is part of the spec (PLAN.md §6),
+        // and an unawaited promise is the one way this port can break it while
+        // getting every individual answer right.
+        await this.damagingTerrain(spec);
         return { canEnter: true, forced };
       case TerSpec.WILDERNESS_CAVE:
       case TerSpec.WILDERNESS_SURFACE:

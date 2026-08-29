@@ -233,11 +233,6 @@ export class Player extends Living {
 
   /** cPlayer::heal (pc.cpp:128) — never past max, never below zero. */
   heal(amount: number): void {
-    if (process.env.DBGHEAL && amount !== 0) {
-      // eslint-disable-next-line no-console
-      console.log(`      [heal] ${this.name} +${amount} from ${this.curHealth}\n`
-        + new Error().stack?.split('\n').slice(1, 5).join('\n'));
-    }
     if (!this.isAlive) return;
     if (this.curHealth >= this.maxHealth) return;
     this.curHealth = Math.max(0, Math.min(this.maxHealth, this.curHealth + amount));

@@ -6146,40 +6146,56 @@ The M6 list below is kept for the history of what it covered:
     choose a string spends RNG doing it. When a bucket bottoms out in "nobody
     should be drawing here", check what the C++ *paints* at that moment.
 
-- **OPEN LEAD: `hit_party` rolls six luck saves there and two here (M8,
-  2026-08-24).** The `increaseAgeEffects` bucket, two files. Narrowed, not
-  fixed.
-  - `ASR_05-05-2025_12-50-38` parts at draw 7,688. A town special does
-    `get_ran(3,1,12)` damage to the party and the C++ then rolls **six**
-    `get_ran(1,1,100)` where this port rolls **two**; after that both go on to
-    the same `get_ran(1,0,10)`/`get_ran(1,0,110)` recuperation pairs, so the
-    run of luck saves is the whole of it.
-  - `hit_party` (boe.party.cpp:2489) calls `damage_pc` once per PC with
-    `main_status == ALIVE`, and `damage_pc` spends the party's luck roll for
-    every damage type but `MARKED`. Six against two means either four PCs are
-    in a different state, or this port took a different path into the damage —
-    **the `MARKED` path is the one to check first**: a blow delivered inside a
-    volley marks its damage and returns before the luck roll, and
-    `handleMarkedDamage` then applies it as `MARKED`, which never rolls. Six
-    unmarked saves against two says the C++ was *not* in a volley here and this
-    port thought it was. **But weigh this against the transcript**, which cuts
-    the other way: this port's own turn prints *"Something shocks you! | Big
-    takes 21. | Slish takes 21. | Adrianna takes 22. | Feodoric takes 22."* —
-    four PCs down the unmarked path, which should be four luck rolls, not two.
-    So either the count or the path is wrong, and the first thing to do is put
-    a print in `hitParty` and count the calls rather than reason about them.
+- **An unawaited promise put the turn's upkeep inside the party's luck saves
+  (M8, 2026-08-24).** The `increaseAgeEffects` bucket. `ASR_05-05-2025_12-50-38`
+  parted at draw 7,688: a shock-damage square did `get_ran(3,1,12)` to the
+  party and the C++ then rolled six `get_ran(1,1,100)` luck saves in a row
+  where this port rolled two, went off and did something else, and came back
+  for three more.
+
+  ```
+  C++   3d12, luck x6,                     recuperation x2
+  here  3d12, luck x2, recuperation x2, luck x3
+  ```
+
+  - **Every draw was there and every answer was right.** They were in the wrong
+    order. `checkSpecialTerrain`'s `DAMAGING` arm called
+    `this.damagingTerrain(spec)` **without awaiting it** — a floating promise
+    inside an `async` function. `damagingTerrain` is async because `hitParty`
+    waits on each PC's blast animation, so the move went on without it and
+    `afterPartyTurn`'s upkeep ran underneath, interleaving the two.
+  - `get_ran`'s call *order* is part of the spec (PLAN.md §6), and **an
+    unawaited promise is the one way this port can break that while getting
+    every individual answer right** — which is also why nothing in the game
+    state showed it and no test caught it. Worth a grep of the other call
+    sites; `handleHunting` next door is sync and fine, and the rest of
+    `checkSpecialTerrain` already awaits.
+  - **Where it stands.** Corpus 352,150 → **352,153** matching draws — three,
+    because the file promptly parts again at 7,691. The number is not the
+    point: an interleaving fault corrupts the *order* of everything downstream
+    of it, so it had to go before anything after it could be read.
+  - **Still open on this file: six luck saves there against five here.** Five
+    is what this port's `hitParty` should make (`PCS=1` says one of the six PCs
+    is `s2`, not ALIVE, and `damage_pc` returns at its first line for those,
+    before any draw). So the C++ is making one more `get_ran(1,1,100)` than
+    five living PCs account for, with nothing of another kind between them.
+    Candidates: an armour-defence roll inside `damage_pc` for one PC (also a
+    `get_ran(1,1,100)`) if this damage type reaches the armour block on that
+    side and not here; or the sixth PC being ALIVE there at that instant.
+    Check the second first — read the C++'s `PCS=1` line **at that action**
+    rather than diffing the lists, for the reason below.
   - **A trap that cost an hour, recorded so it doesn't cost another.** The
-    `PCS=1` / `BOE_TRACE_PCS=1` lists appear to diverge on PC 1's health about
-    five thousand draws earlier. **They do not.** The harness prints its state
+    `PCS=1` / `BOE_TRACE_PCS=1` lists appear to diverge on a PC's health
+    thousands of draws earlier. **They do not.** The harness prints its state
     line *before* each action and `test/corpus.test.ts` prints it *after*, so
     at the moment any value changes the two lists are one step out of phase and
     `diff` reports it as a difference. Reading the C++'s own trace directly
     (`BOE_TRACE_HEAL=1`, added for this) showed it healing the same PC by the
-    same +2 then +1 on the same two turns. **Diff those two traces only after
-    correcting the phase, or read one side's absolute values instead of
-    diffing.** The same warning applies to `monst:` and every other state line.
-  - Useful things that did come out of it, both now on both sides:
+    same +2 then +1 on the same two turns. **Correct the phase before diffing
+    any state line, or read one side's absolute values instead.** The same
+    applies to `monst:` and `pcs:` alike.
+  - Two instruments came out of it, both on both sides:
     `PCS=1`/`BOE_TRACE_PCS=1` gained **`/m<max health>`** (almost every heal in
     `increase_age` is gated on `cur < max`, not on `cur`), and
-    `BOE_TRACE_HEAL=1` prints each PC's recuperation/chronic-disease traits and
-    health at the point the roll is made.
+    `BOE_TRACE_HEAL=1` prints each PC's recuperation and chronic-disease traits
+    with its health at the point the roll is made.
