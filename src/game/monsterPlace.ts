@@ -24,8 +24,6 @@ import type { GameSession } from './session';
  *
  * Returns `{x: 0, y: 0}` when nothing was found — the C++ leaves `store_loc`
  * default-constructed and its callers test `x > 0`.
- *
- * TODO(M6): `is_summon_safe`, the anti-summoning squares a town can mark.
  */
 export function findClearSpot(
   session: GameSession, fromWhere: Location, mode: number,
@@ -47,6 +45,14 @@ export function findClearSpot(
     if (session.inTown
       && loc.x === session.univ.party.townLoc.x
       && loc.y === session.univ.party.townLoc.y) continue;
+    // The sixth test, and it was missing: nothing is dropped onto a square
+    // carrying a wall, a cloud, a crate, a barrel, a block, quickfire or a
+    // special-encounter marker (`is_summon_safe`, universe.cpp:239). Leaving
+    // it out let this loop accept a square the C++ rejects, and since it is a
+    // *retry* loop that ends the moment one is accepted, the two runs then
+    // disagree about how many `get_ran(1,-2,2)` pairs it spent — up to 75 of
+    // them.
+    if (session.univ.town?.isSummonSafe(loc.x, loc.y)) continue;
     const adjacent = Math.abs(loc.x - fromWhere.x) <= 1 && Math.abs(loc.y - fromWhere.y) <= 1;
     if (mode === 0 || adjacent) return loc;
     storeLoc = loc;

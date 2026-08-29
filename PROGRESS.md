@@ -5759,3 +5759,27 @@ The M6 list below is kept for the history of what it covered:
     rules divergence at all — it is this port refusing an action, and the fix
     is in the driver or in a missing feature, not in the rules. Two of the
     three remaining head buckets are that shape.
+
+- **`find_clear_spot`'s sixth test was missing, and it is a retry loop (M8,
+  2026-08-23).** With the wall rotation in, `VoDT_09-04-2025_11-39-31` parted
+  at draw 7,055 on a run of `get_ran(1,-2,2)` — the C++ spending pair after
+  pair where this port spent one.
+  - `find_clear_spot` (boe.monster.cpp:763) draws **two numbers per try** and
+    stops at the first square that passes six tests. This port had five of
+    them. The sixth is `!univ.town.is_summon_safe(loc)`, and in a retry loop a
+    missing rejection is not "slightly wrong": the port accepted a square the
+    C++ refused and stopped drawing there, so every later draw in the turn was
+    shifted.
+  - `is_summon_safe` (universe.cpp:239) is a bit mask, and the mask is worth
+    reading twice: `SPECIAL_SPOT | OBJECT_CRATE | OBJECT_BARREL | OBJECT_BLOCK
+    | FIELD_QUICKFIRE | **254**`. The 254 is bits 1–7 of the low byte — every
+    field from `WALL_FORCE` to `CLOUD_SLEEP`, written as a range instead of by
+    name, with bit 0 (`SPECIAL_EXPLORED`) masked off because being explored is
+    not a hazard. `FIELD_WEB` and the two barriers are *not* in it; the
+    barriers because `is_blocked` has already refused them, the web for no
+    reason anyone recorded. Ported as `CurTown.isSummonSafe` with the list
+    spelled out.
+  - **Where it stands.** Corpus 229,127 → **229,249**, and the file that named
+    the bucket went from 195 actions to **336 of 338**, making exactly as many
+    draws in total as the C++ (15,324). It parts later, in `boomSpace`, which
+    is now a two-file bucket of its own.

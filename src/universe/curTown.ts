@@ -31,6 +31,15 @@ export interface FieldHost {
 const SETUP_FIRST_FIELD = FieldType.OBJECT_BLOCK;
 const SETUP_LAST_FIELD = FieldType.FIELD_QUICKFIRE;
 
+/** The mask `cCurTown::is_summon_safe` tests against; see the method. */
+const SUMMON_UNSAFE_FIELDS: FieldType[] = [
+  FieldType.WALL_FORCE, FieldType.WALL_FIRE, FieldType.FIELD_ANTIMAGIC,
+  FieldType.CLOUD_STINK, FieldType.WALL_ICE, FieldType.WALL_BLADES,
+  FieldType.CLOUD_SLEEP,
+  FieldType.OBJECT_BLOCK, FieldType.SPECIAL_SPOT, FieldType.OBJECT_CRATE,
+  FieldType.OBJECT_BARREL, FieldType.FIELD_QUICKFIRE,
+];
+
 export class CurTown {
   monsters: Creature[] = [];
   items: Item[] = [];
@@ -462,6 +471,26 @@ export class CurTown {
   isSpecialSpot(x: number, y: number): boolean {
     if (!this.isOnMap(x, y)) return false;
     return this.record.specialLocs.some((l) => l.x === x && l.y === y && l.spec >= 0);
+  }
+
+  /**
+   * cCurTown::is_summon_safe (universe.cpp:239) — "is there anything on this
+   * square that a creature should not be dropped onto?". `find_clear_spot` is
+   * its only caller, and it is the last of that function's six tests.
+   *
+   * The C++ writes the set as a bit mask: `SPECIAL_SPOT | OBJECT_CRATE |
+   * OBJECT_BARREL | OBJECT_BLOCK | FIELD_QUICKFIRE | **254**`, and the 254 is
+   * the interesting part — bits 1 to 7 of the low byte, which is every field
+   * type from `WALL_FORCE` to `CLOUD_SLEEP` written as a range rather than by
+   * name, with bit 0 (`SPECIAL_EXPLORED`) masked off because a square being
+   * explored is not a hazard. Its own comment says so. **`FIELD_WEB`,
+   * `BARRIER_FIRE` and `BARRIER_FORCE` are not in the set** — the barriers
+   * because `is_blocked` has already refused them, the web for no reason
+   * anyone left behind.
+   */
+  isSummonSafe(x: number, y: number): boolean {
+    if (!this.isOnMap(x, y)) return false;
+    return SUMMON_UNSAFE_FIELDS.some((f) => this.hasField(x, y, f));
   }
 
   /** take_explored — put the fog back over a square. */
