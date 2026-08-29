@@ -372,6 +372,21 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
   // here with no spell and doesn't count.
   if (spell !== Spell.NONE) session.spellCaster = univ.curPc;
 
+  // "assign monster summoned, if summoning" (boe.combat.cpp:895) — **once for
+  // the whole cast, before the target loop**, so a five-square Summon Aid
+  // brings five of the *same* creature. This port called `get_summon_monster`
+  // inside the per-target arm, which re-rolled the species for every square
+  // and, because that function is a 200-try search, spent a fresh run of
+  // `get_ran(1,0,195)` draws doing it.
+  let summon = 0;
+  if (spell === Spell.SUMMON_BEAST || spell === Spell.SUMMON_WEAK) {
+    summon = getSummonMonster(session, 1);
+  } else if (spell === Spell.SUMMON || spell === Spell.SUMMON_AID) {
+    summon = getSummonMonster(session, 2);
+  } else if (spell === Spell.SUMMON_MAJOR || spell === Spell.SUMMON_AID_MAJOR) {
+    summon = getSummonMonster(session, 3);
+  }
+
   const rng = univ.rng;
   const min = Math.min;
   const who = univ.curPc;
@@ -457,6 +472,7 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
 
     await resolveOne(session, spell, at, i, {
       pattern: armed.pattern, rot, level, bonus, who, rng, min, deferred, missiles, shared, ashes,
+      summon,
     });
   }
 
@@ -517,7 +533,7 @@ async function resolveOne(
   target: Location,
   index: number,
   ctx: {
-    pattern: SpellPat; rot: number; level: number; bonus: number; who: number;
+    pattern: SpellPat; rot: number; level: number; bonus: number; who: number; summon: number;
     rng: GameSession['univ']['rng']; min: typeof Math.min;
     deferred: { at: Location; type: DamageType; dam: number }[];
     ashes: { at: Location | null };
@@ -529,7 +545,9 @@ async function resolveOne(
   const town = univ.town;
   if (!town) return;
   const caster = univ.currentPc;
-  const { pattern: pat, rot, level, bonus, who, rng, min, deferred, missiles, shared, ashes } = ctx;
+  const {
+    pattern: pat, rot, level, bonus, who, rng, min, deferred, missiles, shared, ashes, summon,
+  } = ctx;
 
   /** add_missile aimed at this square. */
   const missile = (type: number, xAdj = 0, yAdj = 0): void => {
@@ -705,12 +723,14 @@ async function resolveOne(
         // Simulacrum's monster was chosen from the soul crystal before the
         // spell was even aimed.
         case Spell.SIMULACRUM: which = session.sumMonst; dice = 3; break;
-        case Spell.SUMMON_BEAST: which = getSummonMonster(session, 1); dice = 3; break;
-        case Spell.SUMMON_WEAK: which = getSummonMonster(session, 1); dice = 4; break;
+        // The species was chosen once, before the target loop; see `summon`
+        // in `doCombatCast`. Only the duration is rolled per square.
+        case Spell.SUMMON_BEAST: which = summon; dice = 3; break;
+        case Spell.SUMMON_WEAK: which = summon; dice = 4; break;
         case Spell.SUMMON: case Spell.SUMMON_AID:
-          which = getSummonMonster(session, 2); dice = 5; break;
+          which = summon; dice = 5; break;
         case Spell.SUMMON_MAJOR: case Spell.SUMMON_AID_MAJOR:
-          which = getSummonMonster(session, 3); dice = 7; break;
+          which = summon; dice = 7; break;
         case Spell.DEMON: which = 85; dice = 5; break;
         case Spell.SUMMON_RAT: which = 80; dice = 3; break;
         case Spell.SUMMON_SPIRIT: which = 125; dice = 2; break;

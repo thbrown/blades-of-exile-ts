@@ -5809,3 +5809,20 @@ The M6 list below is kept for the history of what it covered:
     down, the creature still found a square. **A rule that only decides how
     many times something is tried is exactly as load-bearing as one that
     decides an outcome**, and the draw stream is the only thing that sees it.
+
+- **Two more per-target rolls that belong to the cast (M8, 2026-08-23).** The
+  `damageMonst` bucket, `ASR_20-05-2025_08-49-39`, gave up two in a row.
+  - **`ABSORB_SPELLS` is in `damage_monst` as well as in `magic_adjust`.** The
+    comment this port had in its place said it wasn't, and reasoned it out
+    nicely: `magic_adjust` catches spell *effects*, so raw damage shouldn't ask
+    again. But boe.specials.cpp:1467 does ask, on the four elemental types,
+    **before the saving throw** — and on a hit it heals the victim by the
+    damage instead and returns. So a monster with the ability turns a fireball
+    into a heal, and rolls `get_ran(1,1,1000)` deciding every time it is hit.
+  - **`get_summon_monster` is called once per cast, not once per square**
+    (boe.combat.cpp:895, above the target loop). A five-square Summon Aid
+    brings five of the *same* creature; this port re-rolled the species per
+    square, and since that function is a 200-try search, each re-roll spent a
+    fresh run of `get_ran(1,0,195)` draws. Hoisted into `doCombatCast` and
+    passed down; only the duration is still rolled per square.
+  - Corpus 254,499 → **259,411** matching draws.

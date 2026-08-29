@@ -385,8 +385,24 @@ export async function damageMonst(
   if (damType < DamageType.SPECIAL) {
     howMuch = Math.trunc((howMuch * (victim.mon.resist[damType] ?? 100)) / 100);
   }
-  // ABSORB_SPELLS doesn't belong here: the C++ puts it in cCreature::magic_adjust,
-  // so it catches spell *effects* (drain, acid, web…) and not raw damage.
+  // **ABSORB_SPELLS is here as well as in `magic_adjust`.** The note that used
+  // to sit in its place said it belonged only to the latter, which reads
+  // sensibly — that one catches spell *effects*, drain and acid and webbing —
+  // and is wrong: `damage_monst` (boe.specials.cpp:1467) has its own copy, on
+  // the four elemental damage types, and it **heals the victim by the damage
+  // it just swallowed** and returns before the saving throw. So a monster with
+  // the ability turns a fireball into a heal, and rolls `get_ran(1,1,1000)`
+  // deciding whether to, every single time it is hit by one.
+  const absorb = victim.mon.abil[MonstAbil.ABSORB_SPELLS];
+  const absorbable = damType === DamageType.FIRE || damType === DamageType.MAGIC
+    || damType === DamageType.COLD || damType === DamageType.ACID;
+  if (absorbable && (absorb?.active ?? false)
+    && univ.rng.getRan(1, 1, 1000) <= (absorb?.special.extra1 ?? 0)) {
+    // `add_check_overflow` clamps at SHRT_MAX rather than wrapping.
+    victim.health = Math.min(32767, victim.health + howMuch);
+    univ.addStringToBuf('  Magic absorbed.');
+    return 0;
+  }
 
   // Saving throw — a tough monster shrugs off half of an elemental hit.
   if ((damType === DamageType.FIRE || damType === DamageType.COLD)
