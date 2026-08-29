@@ -5881,3 +5881,35 @@ The M6 list below is kept for the history of what it covered:
     marked for one of them is a shortcut nobody came back to. This is the
     second such shortcut M8 has found by way of the draw stream rather than by
     reading the list.
+
+- **`handle_missile` is a toggle, and this port only had half of it (M8,
+  2026-08-24).** The head bucket, `handle_target_space @ the C++ draws on`,
+  two files. `ASR_10-05-2025_08-18-51` armed a missile, pressed **s** again to
+  change its mind, and this port answered **"Shoot: Only in combat."** — while
+  standing in a fight.
+  - `handle_missile` (boe.actions.cpp:1370) has exactly two arms: in
+    `MODE_COMBAT` it calls `load_missile`, and in `MODE_FIRING` /
+    `MODE_THROWING` it **cancels** — `"  Cancelled."`, `center =
+    current_pc().combat_pos`, back to `MODE_COMBAT`. There is no else. All
+    three call sites (the **s** key at :1677, Escape's cancel dispatcher at
+    :3118, and the SHOOT toolbar button at :2834) gate on those same three
+    modes before calling, so outside them the key is simply dead.
+  - This port had `startMissile`, which refused anything that wasn't
+    `MODE_COMBAT` with a string that **exists nowhere in the C++** — grep
+    `"Only in combat"` over `../exile-wasm/src` finds one hit and it is
+    `"  Target: Only in combat"` in the specials VM. The cancel arm lived in
+    `main.ts` instead, so the keyboard did the right thing and the replay
+    driver, which calls the session directly, did not: it left the party in
+    `MODE_FIRING` and every action after it was read against the wrong mode.
+  - Ported as `GameSession.handleMissile()` with both arms and the
+    `"  Cancelled."` line; `armMissile` is the old body, now private. The
+    **s** key and Escape both route through it, and only the cancel arm
+    recentres.
+  - **Where it stands.** Corpus 285,845 → **295,964** matching draws, and
+    **17 of 87** files agree the whole way, up from 15. Two of the files that
+    were "blocked outside the rules" cleared as well (41 → 39).
+  - The shape, for the third time running: *"the C++ draws on" means this port
+    stopped*, and a port that stops is missing a hook or an arm of a branch,
+    not a formula. Reading the **transcript at the stop** found this in
+    minutes; the draw stream before it was clean for 5,467 draws and had
+    nothing to say.

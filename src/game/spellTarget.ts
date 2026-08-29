@@ -5,7 +5,7 @@
  * A dozen spells don't resolve where they're cast: they ask for a square
  * first. The C++ drops into `MODE_TOWN_TARGET`, remembers which spell is in
  * the air, and finishes the job in `cast_town_spell` when the next click lands.
- * This is the same shape the missile code already uses (`startMissile` /
+ * This is the same shape the missile code already uses (`handleMissile` /
  * `fireMissileAt` in `session.ts`).
  *
  * The cost is spent in `cast_town_spell`, not when targeting begins — so

@@ -3277,16 +3277,35 @@ export class GameSession {
   }
 
   /**
-   * handle_missile / load_missile — arm the current PC's missile and switch to
-   * FIRING or THROWING, which is a targeting mode: the next click on the
-   * terrain is the shot. Returns false (with the refusal in the transcript)
-   * when there's nothing to shoot with.
+   * `handle_missile` (boe.actions.cpp:1370) — the **s** key, Escape and the
+   * SHOOT button all land here, and it is a *toggle*: in MODE_COMBAT it arms
+   * the acting PC's missile, and in MODE_FIRING / MODE_THROWING it cancels the
+   * aim again. In any other mode it does nothing **and says nothing** — the
+   * C++'s three call sites gate on those modes themselves, and the function
+   * has no else branch.
+   *
+   * This port used to refuse with "Shoot: Only in combat.", a string that
+   * exists nowhere in the C++, *and* it never grew the cancel arm — so a
+   * recording that pressed **s** twice to change its mind armed the missile,
+   * then got the refusal instead of a cancel, and every action after it was
+   * aimed at a party in the wrong mode.
    */
-  startMissile(): boolean {
-    if (this.mode !== GameMode.COMBAT) {
-      this.univ.addStringToBuf('Shoot: Only in combat.');
-      return false;
+  handleMissile(): boolean {
+    if (this.mode === GameMode.COMBAT) return this.armMissile();
+    if (this.mode === GameMode.FIRING || this.mode === GameMode.THROWING) {
+      this.univ.addStringToBuf('  Cancelled.');
+      this.cancelMissile();
     }
+    return false;
+  }
+
+  /**
+   * `load_missile` — arm the current PC's missile and switch to FIRING or
+   * THROWING, which is a targeting mode: the next click on the terrain is the
+   * shot. Returns false (with the refusal in the transcript) when there's
+   * nothing to shoot with.
+   */
+  private armMissile(): boolean {
     const loaded = loadMissile(this.univ);
     if (!isLoaded(loaded)) {
       this.univ.addStringToBuf(loaded.message);

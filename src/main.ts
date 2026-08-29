@@ -1890,11 +1890,16 @@ async function main(): Promise<void> {
           toggleMap();
           break;
         case 's': case 'S':
-          // 's' arms a missile and 's' again cancels, as in the original.
-          if (session.missile !== null) {
-            session.cancelMissile();
+          // 's' arms a missile and 's' again cancels — one function either
+          // way, as in the original, and gated on the same three modes the
+          // C++'s keystroke handler checks (boe.actions.cpp:1677). Outside
+          // them the key is simply dead.
+          if (session.mode === GameMode.COMBAT) session.handleMissile();
+          else if (session.mode === GameMode.FIRING || session.mode === GameMode.THROWING) {
+            session.handleMissile();
+            // The cancel arm alone recentres — `center = current_pc().combat_pos`.
             recentre();
-          } else session.startMissile();
+          }
           break;
         case ' ':
           // start_fancy_spell_targeting's "(Hit space to cast.)".
@@ -1963,7 +1968,9 @@ async function main(): Promise<void> {
         redraw();
       }
       if (key === 'Escape' && session.missile !== null) {
-        session.cancelMissile();
+        // Escape's cancel arm is `handle_missile` too (boe.actions.cpp:3118),
+        // so it prints "  Cancelled." like the **s** key does.
+        session.handleMissile();
         recentre();
         setStatus();
         redraw();

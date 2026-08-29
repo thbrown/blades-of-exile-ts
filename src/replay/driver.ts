@@ -344,10 +344,10 @@ export async function runReplay(
           session.toggleActivePc();
           break;
         case 'handle_missile':
-          // load_missile: arms whatever the acting PC has and drops into
-          // FIRING/THROWING. The shot itself is the `handle_target_space` that
-          // follows.
-          session.startMissile();
+          // A toggle: in COMBAT it arms whatever the acting PC has and drops
+          // into FIRING/THROWING, and in those two it cancels the aim again.
+          // The shot itself is the `handle_target_space` that follows.
+          session.handleMissile();
           break;
         case 'handle_target_space': {
           // One action for every kind of targeting the C++ has. Only the
