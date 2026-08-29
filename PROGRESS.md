@@ -1606,8 +1606,8 @@ bottom. What M8 still owes:
   and takes about four minutes, so measure after every fix. The head of the
   queue on 2026-08-29 has **no bucket bigger than two files**:
   `placeGrid` at two, then some thirty single files.
-  Corpus **424,434** matching draws, **19 of 87** files agreeing all the way,
-  39 blocked outside the rules. **Those numbers were 381,127 / 19 / 40 at the
+  Corpus **442,944** matching draws, **19 of 87** files agreeing all the way,
+  42 blocked outside the rules. **Those numbers were 381,127 / 19 / 40 at the
   end of 2026-08-24, 285,845 / 15 / 41 the morning before that and
   190,362 / 10 / 37 the day before that** — the entries at
   the bottom of this file are what working the queue looks like.
@@ -6361,6 +6361,36 @@ The M6 list below is kept for the history of what it covered:
     are bigger. **The harness's remaining debt is no longer the cheap seam it
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
+
+- **A breath weapon hits the square, not the PC (M8, 2026-08-29).** The
+  `move @ get_ran(1,1,100)` bucket, three files. The C++ made six
+  `get_ran(1,1,100)` where this port made one, and the stack named
+  `hit_party → damage_pc` — six living PCs against one.
+  - `monst_breathe` (boe.combat.cpp:3188) is **its own path**, not a case of
+    `monst_fire_missile`, and `do_monster_turn` gives `DAMAGE2` delivered as a
+    BREATH a chance of its own at :2261 — **before the spells**, and before the
+    ability loop where DAMAGE2 is also a candidate. This port had folded breath
+    into `pickMonsterAbility` and routed it through `monst_basic_abil`, which
+    damages one target.
+  - Three differences fall out of that, and the first is the one worth
+    remembering: **a breath goes through `hit_space`**, so out of combat it
+    lands on the party's *square* and `hit_party` gives every living PC its own
+    armour and luck rolls. The other two: the announcement is `BREATHES` on the
+    caster ("Gremlin breaths.") rather than `BREATHES_ON` the victim, and the
+    strength is divided by three outside combat.
+  - Two shape details kept verbatim: the odds roll comes **before** the range
+    test, so a drake out of reach still spends the draw; and a miss falls
+    through to the ability loop, which rolls DAMAGE2's odds a second time.
+  - **Where it stands.** Corpus 424,434 → **442,944** matching draws.
+    `VoDT_02-05-2025_19-13-20` went from parting at draw 209 to running the
+    C++'s whole prefix — 15,263 draws — and now stops on a harness gap.
+    Files blocked outside the rules went 39 → **42**, which is what that looks
+    like.
+  - There was a `TODO`-shaped comment in `doMonsterTurn` naming this exact
+    divergence ("the C++ tries *breath* before spells, but this port folds
+    breath into `pickMonsterAbility`"). It had been there since M5b and cost
+    18,000 draws. **The inline notes admitting a divergence are a queue**, and
+    it is worth grepping them before opening a bucket.
 
 - **Walking into the town's edge wall walked the party out of the town (M8,
   2026-08-29).** The `move @ the C++ draws on` bucket, two files, both stopping

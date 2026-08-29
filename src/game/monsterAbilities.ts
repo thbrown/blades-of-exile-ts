@@ -25,9 +25,13 @@ import { Living, SpellNote, livingSound } from '../universe/living';
 import { Player } from '../universe/player';
 import { MainStatus, Status } from '../universe/skills';
 import { animSettle } from './anim';
-import { damageMonst, damagePc, hitChance, petrifyMonst, petrifyPc } from './damage';
+import {
+  damageMonst, damagePc, handleMarkedDamage, hitChance, petrifyMonst, petrifyPc,
+} from './damage';
 import { drainPc } from './itemUse';
 import { webSpace } from './fieldEffects';
+import { isCombat } from './modes';
+import { hitSpace } from './processFields';
 import { runAMissile } from './missileAnim';
 import type { GameSession } from './session';
 
@@ -210,6 +214,47 @@ function missileNote(type: MonstMissile): { note: SpellNote; sound: number } {
     case MonstMissile.KNIFE: return { note: SpellNote.THROWS_KNIFE, sound: 14 };
     default: return { note: SpellNote.SHOOTS, sound: 14 };
   }
+}
+
+/**
+ * monst_breathe (boe.combat.cpp:3188) — the *basic breath weapon*, which is
+ * its own path and not a case of `monst_fire_missile`.
+ *
+ * `do_monster_turn` gives `DAMAGE2` a chance of its own **before** the spells
+ * (boe.combat.cpp:2261) whenever its delivery is BREATH, and that branch is
+ * the only caller. The difference that matters is the last line: a breath
+ * hits the **square**, through `hit_space`, so in town it lands on the whole
+ * party rather than on the one PC the monster was aiming at — six luck saves,
+ * not one. The generic path in `monst_basic_abil` damages a single target, and
+ * routing breath through it (which this port used to do) both halved the blow
+ * and spent five fewer draws every time a drake exhaled.
+ *
+ * The other two: the announcement is `BREATHES` on the **caster** ("Gremlin
+ * breaths.") rather than `BREATHES_ON` the victim, and out of combat the
+ * strength is divided by three.
+ */
+export async function monstBreathe(
+  session: GameSession,
+  monst: Creature,
+  targSpace: Location,
+  abil: Ability,
+): Promise<void> {
+  const univ = session.univ;
+  // A wide monster facing north or east breathes from its second column.
+  const from = { ...monst.curLoc };
+  if (monst.direction < 4 && monst.xWidth > 1) from.x++;
+
+  if (abil.gen.pic >= 0) runAMissile(from, targSpace, abil.gen.pic, 0, 44, 0, 0, 100);
+  else livingSound(44);
+
+  monst.spellNote(SpellNote.BREATHES);
+  let level = univ.rng.getRan(abil.gen.strength, 1, 8);
+  if (!isCombat(session.mode)) level = Math.trunc(level / 3);
+  await animSettle();
+  // `monsters_going` is true throughout `do_monster_turn`, so the blame for
+  // anything this kills is 7 ("a monster did it").
+  await hitSpace(session, targSpace, level, abil.gen.extra as DamageType, 1, 1, 7);
+  await handleMarkedDamage(univ, session);
 }
 
 /**

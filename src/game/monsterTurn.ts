@@ -24,7 +24,8 @@ import {
 import { NO_ONE, pcAttack, totalEncumbrance } from './combat';
 import { monstHateSpot } from './monsterPlace';
 import {
-  abilityCost, monstFireMissile, monsterBasicAbil, monsterSummon, pickMonsterAbility,
+  abilityCost, monstBreathe, monstFireMissile, monsterBasicAbil, monsterSummon,
+  pickMonsterAbility,
 } from './monsterAbilities';
 import { GameMode, isCombat, isTown } from './modes';
 import { damageMonst, damagePc, hitChance } from './damage';
@@ -1299,14 +1300,30 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
         const canSpecAttack = target !== NO_ONE && monst.attitude !== Attitude.DOCILE
           && monstCanSee(session, monst, targSpace) && canSeeMonst(session, targSpace, monst);
 
+        // **The basic breath weapon goes first**, ahead of the spells
+        // (boe.combat.cpp:2261): `DAMAGE2` delivered as a BREATH gets a chance
+        // of its own through `monst_breathe`, and only falls through to
+        // `pickMonsterAbility` below — where DAMAGE2 is also a candidate — if
+        // this roll misses. Two things about the shape are load-bearing:
+        // **the odds roll comes before the range test**, so a drake out of
+        // reach still spends the draw; and the whole block is skipped once
+        // something has acted.
+        if (canSpecAttack) {
+          const breath = monst.mon.abil[MonstAbil.DAMAGE2];
+          if (breath?.active && breath.gen.type === MonstGen.BREATH && !actedYet
+            && univ.rng.getRan(1, 1, 1000) < breath.gen.odds
+            && dist(monst.curLoc, targSpace) <= breath.gen.range) {
+            await monstBreathe(session, monst, targSpace, breath);
+            monst.ap = Math.max(0, monst.ap - 4);
+            actedYet = true;
+          }
+        }
+
         // Spells come before the missile abilities, as they do in the C++
         // (boe.combat.cpp:2272). A caster mostly won't bother when the party is
         // already on top of it — unless it is a high-level one, or a scenario
         // monster (number >= 160), or the coin says otherwise.
         //
-        // Divergence worth knowing: the C++ tries *breath* before spells, but
-        // this port folds breath into `pickMonsterAbility` below, so a monster
-        // that both breathes and casts will reach for a spell first.
         // **No `is_friendly` test here, and that is the C++'s** — the gate at
         // :2258 is target/attitude/sight only, so a *charmed* caster (FRIENDLY,
         // not DOCILE) casts at whatever it is fighting for the party. This port
