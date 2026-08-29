@@ -266,6 +266,9 @@ export function emptyPattern(): EffectPattern {
   return Array.from({ length: 9 }, () => new Array<number>(9).fill(0));
 }
 
+/** How many rotations PAT_WALL has — `pat.patterns.size()` in the C++. */
+export const WALL_ROTATIONS = P_WALL.length;
+
 /**
  * cPattern::get_builtin. Only PAT_WALL is rotatable, and its rotation wraps
  * (`rot % patterns.size()`) rather than clamping.

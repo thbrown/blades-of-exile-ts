@@ -18,7 +18,7 @@
 import { Location, dist, locsEqual } from '../core/location';
 import { FieldType } from '../data/fields';
 import { DamageType } from '../data/monster';
-import { SpellPat } from '../data/pattern';
+import { SpellPat, WALL_ROTATIONS } from '../data/pattern';
 import { Spell, SPELLS, isMage, isPriestSide, spellName } from '../data/spell';
 import { ItemAbil } from '../data/item';
 import { SIGHT_BLOCKED } from '../core/sight';
@@ -100,15 +100,36 @@ export function startSpellTargeting(
   univ.addStringToBuf('  Target spell.');
   univ.addStringToBuf(isMage(spell) ? "  (Hit 'm' to cancel.)" : "  (Hit 'p' to cancel.)");
   session.mode = GameMode.SPELL_TARGET;
+  const pattern = patternFor(spell);
+  // The tail of `start_spell_targeting` (boe.combat.cpp:4958): a rotatable
+  // pattern — PAT_WALL is the only one — says so and starts at rotation 0.
+  if (pattern === SpellPat.WALL) {
+    univ.addStringToBuf('  (Hit space to rotate.)');
+    session.forceWallPosition = 0;
+  }
   session.spellTargeting = {
     spell,
     freebie,
-    pattern: patternFor(spell),
+    pattern,
     range: SPELLS[spell]?.range ?? 0,
     itemSpellLevel,
     targets: [],
     targetsLeft: 0,
   };
+}
+
+/**
+ * `spell_cast_hit_return` (boe.combat.cpp:5038) — **Space while a wall spell is
+ * aimed turns the wall**, stepping through PAT_WALL's eight rotations. It is
+ * the only thing Space does in SPELL_TARGET mode: it does not pause the turn
+ * and it does not cast.
+ *
+ * The recordings call it `spell_cast_hit_return`, which is how the replay
+ * driver reaches it.
+ */
+export function spellCastHitReturn(session: GameSession): void {
+  if (session.forceWallPosition >= 10) return;
+  session.forceWallPosition = (session.forceWallPosition + 1) % WALL_ROTATIONS;
 }
 
 /** Back out of targeting; nothing has been spent. */
@@ -312,6 +333,14 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
     if (caster.traits[Trait.ANAMA] && isPriestSide(spell)) level++;
   }
 
+  // `force_wall_position = 10` (boe.combat.cpp:882) — no wall is being aimed
+  // any more. The C++ can reset it here and still place a rotated wall further
+  // down, because the *grid* it chose is sitting in `current_pat`; this port
+  // has no such global, so the rotation is read out first and handed to
+  // `resolveOne`.
+  const rot = session.forceWallPosition < WALL_ROTATIONS ? session.forceWallPosition : 0;
+  session.forceWallPosition = 10;
+
   // Casting drops Sanctuary, whatever the spell.
   caster.status[Status.INVISIBLE] = 0;
 
@@ -394,7 +423,7 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
     }
 
     await resolveOne(session, spell, at, i, {
-      pattern: armed.pattern, level, bonus, who, rng, min, deferred, missiles, shared, ashes,
+      pattern: armed.pattern, rot, level, bonus, who, rng, min, deferred, missiles, shared, ashes,
     });
   }
 
@@ -455,7 +484,7 @@ async function resolveOne(
   target: Location,
   index: number,
   ctx: {
-    pattern: SpellPat; level: number; bonus: number; who: number;
+    pattern: SpellPat; rot: number; level: number; bonus: number; who: number;
     rng: GameSession['univ']['rng']; min: typeof Math.min;
     deferred: { at: Location; type: DamageType; dam: number }[];
     ashes: { at: Location | null };
@@ -467,7 +496,7 @@ async function resolveOne(
   const town = univ.town;
   if (!town) return;
   const caster = univ.currentPc;
-  const { pattern: pat, level, bonus, who, rng, min, deferred, missiles, shared, ashes } = ctx;
+  const { pattern: pat, rot, level, bonus, who, rng, min, deferred, missiles, shared, ashes } = ctx;
 
   /** add_missile aimed at this square. */
   const missile = (type: number, xAdj = 0, yAdj = 0): void => {
@@ -479,10 +508,10 @@ async function resolveOne(
   };
 
   const field = async (which: FieldType): Promise<void> => {
-    await placeSpellPattern(session, pat, target, { field: which, whoHit: who });
+    await placeSpellPattern(session, pat, target, { field: which, whoHit: who, rot });
   };
   const blast = async (type: DamageType, dice: number, shape = pat): Promise<void> => {
-    await placeSpellPattern(session, shape, target, { damage: { type, dice }, whoHit: who });
+    await placeSpellPattern(session, shape, target, { damage: { type, dice }, whoHit: who, rot });
   };
 
   switch (spell) {

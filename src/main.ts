@@ -18,7 +18,7 @@ import { CastStatus, castableSpells, pcCanCastType } from './game/spellCast';
 import { castSpell } from './game/spellTown';
 import { combatCastCheck, combatCastSpell } from './game/spellCombat';
 import {
-  cancelSpellTargeting, castCollected, doCombatCast, placeTarget,
+  cancelSpellTargeting, castCollected, doCombatCast, placeTarget, spellCastHitReturn,
 } from './game/spellCombatTarget';
 import { takeAp } from './game/combat';
 import { openJobBank } from './game/jobBank';
@@ -1899,6 +1899,12 @@ async function main(): Promise<void> {
         case ' ':
           // start_fancy_spell_targeting's "(Hit space to cast.)".
           if (session.mode === GameMode.FANCY_TARGET) await castCollected(session);
+          // "(Hit space to rotate.)" — Space turns a wall spell rather than
+          // pausing the turn (boe.actions.cpp:3001).
+          else if (session.mode === GameMode.SPELL_TARGET) {
+            spellCastHitReturn(session);
+            redraw();
+          }
           break;
         case 'm': case 'M': case 'p': case 'P':
           // While a spell is in the air the same key cancels it, which is what

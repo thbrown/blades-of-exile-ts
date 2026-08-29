@@ -5734,3 +5734,28 @@ The M6 list below is kept for the history of what it covered:
     a fact the port never reset, rather than a rule it got wrong.** The
     giveaway was the first divergence being at draw *4*, far too early for a
     rules bug in code that had already matched thousands of draws elsewhere.
+
+- **Space turns a wall spell, and this port had no such thing (M8,
+  2026-08-23).** The `handle_target_space @ the C++ draws on` bucket — two
+  files whose draws all agreed and which then simply **stopped**, with the
+  driver saying `no handler for 'spell_cast_hit_return'`.
+  - `spell_cast_hit_return` (boe.combat.cpp:5038) is what Space does in
+    MODE_SPELL_TARGET: it steps `force_wall_position` through PAT_WALL's eight
+    rotations and rewrites `current_pat`, which is how you aim Wall of Force,
+    Wall of Ice and Wall of Blades. It is recorded under its own name because
+    the C++ records it inside the function rather than at the keystroke.
+  - Ported as `GameSession.forceWallPosition` (10 = "no wall being aimed", the
+    C++'s own sentinel), `spellCastHitReturn()`, the
+    "(Hit space to rotate.)" line at the tail of `start_spell_targeting`, the
+    reset in `do_combat_cast` — **read out first**, since the C++ can reset the
+    position there and still place a rotated wall further down out of
+    `current_pat`, which this port has no equivalent of — the targeting overlay
+    so you can see which way the wall will lie, the Space key in `main.ts`, and
+    the driver action.
+  - **Where it stands.** Corpus 221,382 → **229,127** matching draws.
+    `VoDT_09-04-2025_11-39-31` went from 94 actions to 195 and now parts at
+    7,055 rather than stopping at 7,022.
+  - Worth noting what the bucket name meant: *"the C++ draws on"* is not a
+    rules divergence at all — it is this port refusing an action, and the fix
+    is in the driver or in a missing feature, not in the rules. Two of the
+    three remaining head buckets are that shape.

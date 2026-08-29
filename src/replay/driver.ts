@@ -32,7 +32,7 @@ import { dropItemAt, handleDropItem, handleGiveItem } from '../game/giveDrop';
 import { GameSession } from '../game/session';
 import { SpellPick } from '../game/spellPick';
 import { combatCastCheck, combatCastSpell } from '../game/spellCombat';
-import { cancelSpellTargeting, doCombatCast, placeTarget } from '../game/spellCombatTarget';
+import { cancelSpellTargeting, doCombatCast, placeTarget, spellCastHitReturn } from '../game/spellCombatTarget';
 import { cancelTownTargeting, castTownSpell } from '../game/spellTarget';
 import { castSpell } from '../game/spellTown';
 import { forcedCast } from '../game/spellRepeat';
@@ -214,6 +214,12 @@ export async function runReplay(
         }
         case 'handle_pause':
           await session.pause();
+          break;
+        case 'spell_cast_hit_return':
+          // Space while a wall spell is aimed: it turns the wall
+          // (boe.combat.cpp:5038). Recorded under this name because the C++
+          // records it inside the function rather than at the keystroke.
+          spellCastHitReturn(session);
           break;
         case 'handle_rest':
           await session.rest();

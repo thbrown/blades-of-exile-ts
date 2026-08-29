@@ -8,7 +8,7 @@
 import { Direction, dist } from '../core/location';
 import { ItemAbil, ItemType, canUse } from '../data/item';
 import { variety } from '../data/itemVariety';
-import { EffectPattern, SpellPat, getBuiltinPattern } from '../data/pattern';
+import { EffectPattern, SpellPat, WALL_ROTATIONS, getBuiltinPattern } from '../data/pattern';
 import { groundFromTer, terFromGround } from '../data/scenario';
 import { TerSpec, TrimType, blocksMove } from '../data/terrain';
 import { Lighting } from '../data/town';
@@ -453,7 +453,11 @@ export class Screen {
   private aiming(session: GameSession): { pattern: EffectPattern; range: number } | null {
     if (session.spellTargeting) {
       return {
-        pattern: getBuiltinPattern(session.spellTargeting.pattern),
+        // The wall spells turn under Space, and the overlay is the only way to
+        // see which way the wall will lie (`force_wall_position`).
+        pattern: getBuiltinPattern(
+          session.spellTargeting.pattern,
+          session.forceWallPosition < WALL_ROTATIONS ? session.forceWallPosition : 0),
         range: session.spellTargeting.range,
       };
     }

@@ -215,6 +215,19 @@ export class GameSession {
   spellTargeting: SpellTarget | null = null;
 
   /**
+   * `force_wall_position` (boe.combat.cpp:58) — which of the eight rotations of
+   * PAT_WALL a wall spell is currently aimed along, or **10 for "no wall being
+   * aimed"**, which is both its initial value and what `do_combat_cast` puts
+   * back. `start_spell_targeting` sets it to 0 for the one rotatable builtin
+   * and prints "(Hit space to rotate.)"; Space in SPELL_TARGET mode steps it on
+   * (`spell_cast_hit_return`, :5038). Kept on the session rather than on
+   * `spellTargeting` because the C++ keeps it as a global that outlives the
+   * targeting state — the rotation chosen is still readable while the spell
+   * resolves, which is when the pattern is actually placed.
+   */
+  forceWallPosition = 10;
+
+  /**
    * The spell waiting for a square while the game is in TOWN_TARGET mode
    * (`start_town_targeting`); null the rest of the time.
    */
