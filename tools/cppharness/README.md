@@ -100,7 +100,7 @@ line-of-sight test — `lit=1` here against `lit=0` there, on a square eight
 squares from any lamp and behind a wall.
 
 `BOE_TRACE_PCS=1` (`PCS=1` here) prints each PC's `main_status`, health,
-**max** health and combat position. The maximum is there because almost every
+**max** health, **level** and combat position. The maximum is there because almost every
 heal in `increase_age` is gated on `cur_health < max_health` rather than on the
 current value alone, so "one side healed and the other didn't" is as often a
 disagreement about the ceiling as about the roll. Whether a PC is alive gates more monster behaviour than you

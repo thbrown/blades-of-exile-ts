@@ -203,6 +203,9 @@ async function play(path: string): Promise<Row> {
               // `increase_age` is gated on that comparison rather than on the
               // current value alone.
               + `/m${pc.maxHealth}`
+              // Level, because half a dozen spell formulas divide by it and a
+              // level that drifted is invisible everywhere else.
+              + `/L${pc.level}`
               + `/(${pc.combatPos.x},${pc.combatPos.y})`).join(''));
         }
         if (process.env.ITEMS) {
