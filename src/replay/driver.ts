@@ -217,6 +217,13 @@ export async function runReplay(
    * and must not be read as a click on the game.
    */
   let helpDialog = false;
+  /**
+   * Whether one of the journal dialogs (`adventure-notes`, `talk-notes`) is up.
+   * Unlike `helpDialog` these stay open across many clicks — they page with
+   * `left`/`right` and delete entries with `del` — so it takes the `done` that
+   * closes them rather than the first click that arrives.
+   */
+  let notesDialog = false;
 
   while (!source.exhausted) {
     const at = source.position;
@@ -506,10 +513,41 @@ export async function runReplay(
           // the game behind it.
           helpDialog = true;
           break;
+        case 'adventure_notes':
+          // `adventure_notes` (boe.infodlg.cpp:530). **The dialog only opens
+          // when there is something in it**: an empty journal prints one line
+          // and returns, so no clicks follow and nothing must be swallowed.
+          if (session.univ.party.specialNotes.length === 0) {
+            session.univ.addStringToBuf('Nothing in your journal.');
+            break;
+          }
+          notesDialog = true;
+          break;
+        case 'talk_notes':
+          // `talk_notes` (:594). Same shape, plus a refusal while a
+          // conversation is on screen.
+          if (session.mode === GameMode.TALKING) {
+            session.univ.addStringToBuf("Talking notes: Can't read while talking.");
+            break;
+          }
+          // TODO(M8): `univ.party.talk_save` — the conversation journal — is
+          // not modelled here, so this port cannot tell an empty one from a
+          // full one and always assumes the dialog opened. That is the safe
+          // way round: a modal that swallows its own clicks costs nothing if
+          // it was never really up, while missing one feeds the dialog's
+          // buttons to the game as if they were moves.
+          notesDialog = true;
+          break;
         case 'click_control': {
           const id = action.info.id ?? '';
           if (helpDialog) {
             helpDialog = false;
+            break;
+          }
+          // The journal pages under `left`/`right` and deletes under `del`;
+          // only `done` closes it (`attachClickHandlers`, boe.infodlg.cpp:615).
+          if (notesDialog) {
+            if (id === 'done' || id === 'cancel') notesDialog = false;
             break;
           }
           options.onClick?.(id, Number(action.info.mods ?? '0'));

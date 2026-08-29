@@ -6280,3 +6280,25 @@ The M6 list below is kept for the history of what it covered:
     worth 6,800 draws and two files. When a bucket is named "the C++ draws on",
     read the stop line before anything else — it is still the cheapest
     instrument in the box.
+
+- **The two journal dialogs (M8, 2026-08-24).** `adventure_notes` and
+  `talk_notes`, two files each, both stopping the driver by name.
+  - Both (boe.infodlg.cpp:530, :594) share a shape worth knowing: **the dialog
+    only opens when there is something in it.** An empty journal prints one
+    line and returns, so no `click_control` follows and nothing must be
+    swallowed; a full one opens a modal that pages with `left`/`right`, deletes
+    with `del`, and closes only on `done`. The corpus shows both — one file
+    clicks three times, another once.
+  - `adventure_notes` is exact here: `party.specialNotes` is modelled and
+    saved, so the empty branch is decidable. `talk_notes` is not —
+    `talk_save` has never been ported (`TODO(M8)` now on the handler) — so it
+    always assumes the dialog opened. **That is the safe way round**: a modal
+    that swallows its own clicks costs nothing if it was never really up, while
+    missing one feeds a dialog's buttons to the game as if they were moves.
+  - **Where it stands.** Corpus 369,458 → **374,311** matching draws, and files
+    blocked outside the rules 42 → **40**.
+  - The unhandled-action list is now down to three, all two files each:
+    `handle_drop_pc`, `debug_launch_scen`, `debug_give_item`. The dominant stop
+    reason across the corpus is no longer a missing handler at all — it is
+    **24 files reporting a movement desync**, which is a rules problem and the
+    right next thing to attack.
