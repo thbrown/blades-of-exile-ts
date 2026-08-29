@@ -322,10 +322,23 @@ export async function monstCastMage(
   const hit = async (dam: number, type: DamageType): Promise<void> => {
     if (victim) await damageTarget(univ, victim, dam, type, 7, Race.UNKNOWN, true, session);
   };
-  const summonN = (which: number, count: number, dice: number): void => {
+  /**
+   * `monst_cast_mage`'s summon arms (boe.combat.cpp:3417). **The count is
+   * rolled after the species and only if the species was found**: the C++'s
+   * `if(r1 == 0) break;` sits between `get_summon_monster` and the
+   * `get_ran(2,1,3)` that decides how many — so a failed lookup costs one draw,
+   * not three. `count` is a thunk here for that reason; passing the number
+   * would have JavaScript evaluate it as an argument before this function
+   * could refuse, which is two draws the C++ never makes.
+   *
+   * The duration is one roll shared by every creature in the batch (`int x =
+   * get_ran(4,1,4)` above the loop), not one per creature.
+   */
+  const summonN = (which: number, count: () => number, dice: number): void => {
     if (which === 0) return;
+    const howMany = count();
     const strength = rng.getRan(dice, 1, 4);
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < howMany; i++) {
       if (!summonMonster(session, which, caster.curLoc, strength,
         caster.attitude, caster.isFriendly, true)) {
         univ.addStringToBuf('  Summon failed.');
@@ -356,7 +369,7 @@ export async function monstCastMage(
       break;
     case Spell.SUMMON_BEAST:
       livingSound(25);
-      summonN(getSummonMonster(session, 1), 1, 3);
+      summonN(getSummonMonster(session, 1), () => 1, 3);
       break;
     case Spell.CONFLAGRATION:
       await placeSpellPattern(session, SpellPat.RADIUS_2, target,
@@ -373,15 +386,15 @@ export async function monstCastMage(
       break;
     case Spell.SUMMON_WEAK:
       livingSound(25);
-      summonN(getSummonMonster(session, 1), rng.getRan(2, 1, 3) + 1, 4);
+      summonN(getSummonMonster(session, 1), () => rng.getRan(2, 1, 3) + 1, 4);
       break;
     case Spell.SUMMON:
       livingSound(25);
-      summonN(getSummonMonster(session, 2), rng.getRan(2, 1, 2) + 1, 4);
+      summonN(getSummonMonster(session, 2), () => rng.getRan(2, 1, 2) + 1, 4);
       break;
     case Spell.SUMMON_MAJOR:
       livingSound(25);
-      summonN(getSummonMonster(session, 3), rng.getRan(1, 2, 3), 4);
+      summonN(getSummonMonster(session, 3), () => rng.getRan(1, 2, 3), 4);
       break;
     case Spell.WEB:
       livingSound(25);
@@ -437,7 +450,7 @@ export async function monstCastMage(
       break;
     case Spell.DEMON:
       livingSound(25);
-      summonN(85, 1, 3);
+      summonN(85, () => 1, 3);
       break;
     case Spell.BLESS_MAJOR:
       livingSound(25);

@@ -6378,8 +6378,20 @@ The M6 list below is kept for the history of what it covered:
     52, all `a2h10`, clustered at (20-22, 39-41).
   - The action is a **Spirit casting Weak Summoning** in combat. Both sides
     print the cast; only the C++ places anything.
-  - `monsterSummon` (`monsterAbilities.ts:520`) is a faithful port of
-    boe.combat.cpp:2503 as far as reading goes — the three `eMonstSummon` arms,
+  - **It is not `MonstAbil.SUMMON`.** A trace on `monsterSummon` shows it is
+    never reached in this recording; the transcript names the spell —
+    *"Spirit casts: | Weak Summoning"* — so the path is `monst_cast_mage`'s
+    `eSpell::SUMMON_WEAK` arm (boe.combat.cpp:3417), which rolls
+    `j = get_ran(2,1,3) + 1` creatures (3 to 7) and places them in a loop that
+    **breaks on the first failure**. The C++ rolled 7 and landed all 7. This
+    port draws from the same stream, so it rolled 7 too — and landed fewer.
+    **So the bug is in `summonMonster`'s placement**, and the loop's
+    break-on-failure is what turns one bad square into six missing creatures.
+    Put a print on its return value and the square it chose; `find_clear_spot`
+    feeds it, and that function has already been wrong once this month (its
+    sixth test, 2026-08-23).
+  - `monsterSummon` (`monsterAbilities.ts:520`), the other summon path, is a
+    faithful port of boe.combat.cpp:2503 as far as reading goes — the three `eMonstSummon` arms,
     `get_ran(1, min, max)` for the count, and the `while(--r1 && !failed)` loop
     with its inverted `failed` flag are all there. So **suspect
     `summonMonster`'s placement, not the count**: if the first call returns
@@ -6387,6 +6399,10 @@ The M6 list below is kept for the history of what it covered:
     looks like from outside. Put a print on its return value and on the square
     it chose; `find_clear_spot` feeds it, and that function has already been
     wrong once this month (its sixth test, 2026-08-23).
-  - Also worth checking whether "Weak Summoning" here is `MonstAbil.SUMMON` at
-    all or a *spell* reached through `pickMonsterAbility` — the transcript line
-    is the ability announcement, which both paths print.
+  - One real fix came out of the reading, though it does not move this file:
+    **the C++ rolls the count only if the species lookup succeeded.**
+    `if(r1 == 0) break;` sits between `get_summon_monster` and the
+    `get_ran(2,1,3)` that decides how many, so a failed lookup costs one draw
+    and this port's argument-evaluation order cost three. `summonN` takes the
+    count as a thunk now. The duration is also **one roll shared by the whole
+    batch** (`int x = get_ran(4,1,4)` above the loop), which was already right.
