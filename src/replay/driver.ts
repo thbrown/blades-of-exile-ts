@@ -27,7 +27,7 @@ import { takeAp } from '../game/combat';
 import { setFeatureFlags } from '../game/featureFlags';
 import { GetItemsPick } from '../game/getItems';
 import { useItem } from '../game/itemUse';
-import { GameMode, isCombat } from '../game/modes';
+import { GameMode, isCombat, isOut } from '../game/modes';
 import { dropItemAt, handleDropItem, handleGiveItem } from '../game/giveDrop';
 import { GameSession } from '../game/session';
 import { SpellPick } from '../game/spellPick';
@@ -218,27 +218,41 @@ export async function runReplay(
       switch (action.type) {
         case 'move': {
           const dest = locationFromAction(action);
-          // **A recorded move is always one square.**
-          // `handle_terrain_screen_actions` (boe.actions.cpp:300) builds
-          // `move_destination` from the party's own square plus a direction —
-          // one step for a key, `get_cur_direction()` for a click — and only
-          // then calls `handle_move`. So a destination further away than that
-          // does not mean the player travelled: it means **the party is not
-          // where the recording's party was**, and everything after it is
-          // measuring a different game.
+          // **Outside combat, a recorded move is one square — from `center`.**
+          // `handle_terrain_screen_actions` (boe.actions.cpp:302) opens with
+          // `location cur_loc = is_out() ? univ.party.out_loc : center;` and
+          // builds `move_destination` from *that* plus a direction — one step
+          // for a key, `get_cur_direction()` for a click, and that function
+          // only ever returns the eight unit vectors. So a longer destination
+          // means **the party is not where the recording's party was**, and
+          // everything after it is measuring a different game. It is the single
+          // most useful desync detector in the format, and worth spending here
+          // rather than letting the step through: `outd_move_party` and
+          // `town_move_party` take the destination at face value, so an
+          // undetected drift silently teleports the party and the run keeps
+          // "succeeding" for hundreds more actions.
           //
-          // This is the single most useful desync detector in the format, and
-          // it is worth spending it here rather than letting the step through:
-          // `outd_move_party` and `town_move_party` both take the destination
-          // at face value, so an undetected drift silently teleports the party
-          // and the run keeps "succeeding" for hundreds more actions.
-          const from = session.mode === GameMode.COMBAT
-            ? session.univ.currentPc.combatPos : session.univ.party.getLoc();
+          // Two corrections, both found on `ZKR-5-16-12-30`:
+          //
+          // - **The origin is `center`, not the party or the acting PC.** They
+          //   come apart the moment `screen_shift` scrolls the view, since
+          //   scrolling moves the centre and nobody else.
+          // - **In combat the invariant does not hold at all**, so the check is
+          //   skipped there. A replayed `move` reaches `handle_move` directly
+          //   (boe.main.cpp:758), never through the function that built the
+          //   one-step destination, and the corpus contains destinations two
+          //   squares from a centre the C++ itself prints — replay
+          //   `ZKR-5-16-12-30` with `BOE_TRACE_CENTER=1` and read action 128.
+          //   `pc_combat_move` then assigns `combat_pos = destination` outright
+          //   (boe.combat.cpp:319), so the C++ *teleports* the PC there and
+          //   plays on. Refusing it cost this file 65 of its 190 actions.
+          const from = isOut(session.mode)
+            ? session.univ.party.outLoc : session.center;
           const step = Math.max(Math.abs(dest.x - from.x), Math.abs(dest.y - from.y));
-          if (step > 1) {
+          if (step > 1 && session.mode !== GameMode.COMBAT) {
             throw new Error(
               `replay desync: the recording stepped to (${dest.x},${dest.y}), `
-              + `but the party is at (${from.x},${from.y}) — ${step} squares away`);
+              + `but the view is centred on (${from.x},${from.y}) — ${step} squares away`);
           }
           // `handle_move`'s first branch (boe.actions.cpp:750): **in combat a
           // move drives the acting PC, not the party.** The driver used to send

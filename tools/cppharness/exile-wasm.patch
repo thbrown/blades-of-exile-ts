@@ -378,7 +378,7 @@ index faaef3f2..2a648966 100644
  }
  
 diff --git a/src/tools/replay.cpp b/src/tools/replay.cpp
-index 3946c875..970f368d 100644
+index 3946c875..e71074f5 100644
 --- a/src/tools/replay.cpp
 +++ b/src/tools/replay.cpp
 @@ -28,6 +28,15 @@
@@ -408,7 +408,7 @@ index 3946c875..970f368d 100644
  			} else if constexpr (std::is_integral_v<T>) {
  				if constexpr (std::is_same_v<S, std::string>) {
  					return static_cast<T>(std::stoi(arg));
-@@ -252,6 +263,137 @@ int next_action_line() {
+@@ -252,6 +263,143 @@ int next_action_line() {
  	return next_action->Row();
  }
  
@@ -468,6 +468,12 @@ index 3946c875..970f368d 100644
 +		std::cout << " pc" << univ.cur_pc << ":" << univ.party[univ.cur_pc].name
 +			<< "(" << univ.party[univ.cur_pc].ap << "ap)";
 +	std::cout << " mode=" << int(overall_mode) << " age=" << univ.party.age;
++	// BOE_TRACE_CENTER: the view centre. `handle_terrain_screen_actions` builds
++	// every recorded `move` destination from *this*, not from the party or the
++	// acting PC, so a move that looks two squares long is usually a centre the
++	// other side put somewhere else.
++	if(getenv("BOE_TRACE_CENTER"))
++		std::cout << " center=(" << center.x << "," << center.y << ")";
 +	// BOE_TRACE_LIGHT: the party's light and whether its own square counts as
 +	// lit. `pt_in_light` gates `can_see_light`, which gates every notice roll
 +	// in a dark town — so a divergence here reads as a creature that saw the
@@ -546,7 +552,7 @@ index 3946c875..970f368d 100644
  Element& pop_next_action(std::string expected_action_type) {
  	if(next_action == nullptr){
  		throw std::string { "Replay error! No action left to pop" };
-@@ -264,6 +406,13 @@ Element& pop_next_action(std::string expected_action_type) {
+@@ -264,6 +412,13 @@ Element& pop_next_action(std::string expected_action_type) {
  
  	Element* to_return = next_action;
  	next_action = next_action->NextSiblingElement(false);

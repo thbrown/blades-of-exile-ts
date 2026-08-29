@@ -5951,3 +5951,43 @@ The M6 list below is kept for the history of what it covered:
     worse than no comment, because it *stops you looking*. `grep -n "clock is
     not touched"` was the reason the age tick was ruled out twice before the
     `[domonst]` diff made it unignorable.
+
+- **A recorded move is measured from `center`, and in combat it isn't measured
+  at all (M8, 2026-08-24).** The `move @ the C++ draws on` bucket, two files.
+  `ZKR-5-16-12-30` stopped with "the recording stepped to (22,17), but the
+  party is at (21,19) — 2 squares away", the driver's own desync guard.
+  - The guard rests on a real invariant: `handle_terrain_screen_actions`
+    (boe.actions.cpp:302) builds `move_destination` from `cur_loc` plus one
+    step, and `get_cur_direction` only ever returns the eight unit vectors.
+    Two things about it were wrong here.
+  - **`cur_loc` is `is_out() ? out_loc : center`** — the *view centre*, not the
+    party and not the acting PC. `screen_shift` moves the centre and nobody
+    else, so after four of them the arrow keys are read off a square the party
+    is not standing on. This port measured from `currentPc.combatPos`.
+  - **In combat the invariant does not hold at all.** A replayed `move` reaches
+    `handle_move` directly (boe.main.cpp:758), never through the function that
+    built the one-step destination, and this corpus contains destinations two
+    squares from a centre the C++ itself prints. `pc_combat_move` then does
+    `univ.current_pc().combat_pos = destination` outright (boe.combat.cpp:319)
+    — it **teleports** the PC there and plays on. So the check is skipped in
+    combat and kept everywhere else, where it has earned its place.
+  - Proving that took a **new instrument, `BOE_TRACE_CENTER=1`**, which adds
+    `center=(x,y)` to the harness's action lines. It is in `exile-wasm.patch`
+    and in the harness README. Reach for it whenever a recorded move looks too
+    long: it answers "did this port lose the party, or does the recording
+    really say that?" in one line, and here it said `center=(21,19)` beside a
+    destination of `(22,17)`.
+  - One real rule came out of the same file on the way: **cancelling a combat
+    spell recentres.** `handle_spellcast`'s MODE_SPELL_TARGET /
+    MODE_FANCY_TARGET arm ends `center = univ.current_pc().combat_pos`
+    (boe.actions.cpp:436) and `cancelSpellTargeting` had no equivalent, so a
+    spell aimed after scrolling and then cancelled left the centre four squares
+    north. Note the MODE_TOWN_TARGET arm directly above it does *not* recentre;
+    that asymmetry is the C++'s.
+  - **Where it stands.** Corpus 297,264 → **297,555** matching draws;
+    `ZKR-5-16-12-30` went from 125 actions to **188 of 190**. Files "agreeing
+    all the way" reads 16 rather than 17, and that is an artefact worth knowing
+    about: `diverge.mjs` calls a file a match when the two draw *lists* are
+    identical, which a pair that both stop early also satisfies. A file that
+    now runs further and finds a real divergence leaves that column. **Draws
+    matched is the meter; the match count is not.**

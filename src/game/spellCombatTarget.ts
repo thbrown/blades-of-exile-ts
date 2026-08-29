@@ -160,6 +160,14 @@ export function cancelSpellTargeting(session: GameSession): void {
   if (session.spellTargeting === null) return;
   session.spellTargeting = null;
   session.mode = GameMode.COMBAT;
+  // **The view snaps back to the caster** — `center =
+  // univ.current_pc().combat_pos` (boe.actions.cpp:436). It matters beyond the
+  // picture: `handle_terrain_screen_actions` reads the next move off `center`,
+  // not off the acting PC, so a spell aimed after scrolling the view and then
+  // cancelled leaves the arrow keys pointing at the scrolled square unless
+  // this runs. Note the MODE_TOWN_TARGET arm just above it does **not**
+  // recentre — that asymmetry is the C++'s, not a slip here.
+  session.center = { ...session.univ.currentPc.combatPos };
 }
 /**
  * How many squares each `REFER_FANCY` spell collects

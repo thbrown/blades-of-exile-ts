@@ -58,14 +58,23 @@ that the other side never even considered". Together they found
 `handle_get_items`: the two sides agreed on every draw and every square, and
 disagreed by one on the *age* at which they were standing there.
 
-Two more, added while chasing turns that make no draws and **currently living
-in the `../exile-wasm` working tree rather than in `exile-wasm.patch`** — if
-that tree is ever reset, re-add them from the entries in PROGRESS.md:
-`[advtime] did= mode= party= age=` at the top of `advance_time`, which says
-whether an action charged a turn at all (that is what named
-`handle_get_items`), and `[outmove] dest= real= corner= ter= blocked= forced=`
-in `outd_move_party`, which prints the destination *after* the window shift
-along with the terrain found there (that is what named the window-shift undo).
+Two more, added while chasing turns that make no draws: `[advtime] did= mode=
+party= age=` at the top of `advance_time`, which says whether an action charged
+a turn at all (that is what named `handle_get_items`), and `[outmove] dest=
+real= corner= ter= blocked= forced=` in `outd_move_party`, which prints the
+destination *after* the window shift along with the terrain found there (that
+is what named the window-shift undo). Both are in `exile-wasm.patch` now — an
+older note here said they lived only in the `../exile-wasm` working tree, and
+that stopped being true.
+
+**`BOE_TRACE_CENTER=1` adds `center=(x,y)` to every action line**, and it is
+the one to reach for whenever a recorded `move` looks too long.
+`handle_terrain_screen_actions` builds every move destination from `center`,
+not from the party and not from the acting PC, and the three drift apart the
+moment `screen_shift` scrolls the view or a spell is cancelled. It settled
+whether `ZKR-5-16-12-30`'s two-square combat move was this port losing the
+party or the recording genuinely containing one: the C++ prints
+`center=(21,19)` beside a destination of `(22,17)`, so it is the recording.
 
 The `[domonst]` diff is the one to reach for first, and it has one trap: both
 sides print it for the **outdoor** half of `do_monsters` as well as the town
