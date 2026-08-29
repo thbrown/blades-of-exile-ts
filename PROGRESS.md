@@ -6106,3 +6106,42 @@ The M6 list below is kept for the history of what it covered:
     facts, and the C++ knows it.** Wherever it re-derives something it was just
     handed, that is a signal, not noise — the same pattern as
     `find_clear_spot`\'s sixth test back in August.
+
+- **OPEN LEAD: drawing the status bar rolls the dice (M8, 2026-08-24).** Not
+  fixed — written down because the evidence was expensive and the fix is not a
+  five-minute one. This is the `placeGrid` / `totalEncumbrance` bucket, and it
+  is the same root as the `totalEncumbrance` bucket noted on 2026-08-23.
+  - `VoDT_05-04-2025_14-32-10` parts at draw 24. The C++ spends **three**
+    `get_ran(1,0,70)` after the cast button is clicked and **two** more inside
+    `handle_target_space`, all before the spell\'s first blast roll; this port
+    spends none. A new harness switch, **`BOE_TRACE_ENC=1`**, prints one line
+    per `cPlayer::total_encumbrance` call and named them all as Feodoric, the
+    caster.
+  - The caller is **`text_bar_text()` (boe.graphics.cpp:719)** — the right-hand
+    half of the status bar, the *"M: Recast Fireball"* hint. To decide between
+    "Recast" and "Cannot recast" it calls `pc_can_cast_spell(current_pc, type)`,
+    whose combat arm rolls `total_encumbrance` (boe.party.cpp:1612), which
+    draws **once per equipped awkward item**. `draw_terrain(0)` ends with
+    `draw_text_bar()` (boe.graphics.cpp:1073), so:
+
+    > **once any PC has cast a spell, every full terrain redraw in combat
+    > spends an encumbrance roll for the acting PC.**
+
+    The gates are `is_combat() && univ.cur_pc < 6 && !monsters_going`, a
+    non-empty `last_cast_type`, and `last_cast[type] != eSpell::NONE`.
+  - `src/render/screen.ts:173` has carried a **`TODO(M6)`** for exactly this —
+    *"the right-hand half — the 'hit m to recast <spell>' hint"* — filed as a
+    cosmetic gap. It is not cosmetic. This is the **fourth** stale `TODO(M0-M7)`
+    M8 has found by way of the draw stream, and the second in one day.
+  - **Why it is not a quick fix.** The number of draws is the number of
+    `draw_terrain(0)` calls, so porting it faithfully means matching the C++\'s
+    *redraw count*, not just its rules — the one kind of fidelity a rewrite gets
+    for free nowhere. Before writing code, count the `draw_terrain(0)` calls in
+    `combat_cast_mage_spell` → `start_spell_targeting` → `do_combat_cast` and
+    check them against the 3-then-2 split above; that split is the spec.
+  - General note, and it is the sharpest one of the day: **in this codebase the
+    draw stream can be moved by the drawing code.** `playAmbientSound` was the
+    first instance (it was really `outd_is_blocked`), `add_explosion`\'s offset
+    roll is another, and this is the clearest: a function whose entire job is to
+    choose a string spends RNG doing it. When a bucket bottoms out in "nobody
+    should be drawing here", check what the C++ *paints* at that moment.

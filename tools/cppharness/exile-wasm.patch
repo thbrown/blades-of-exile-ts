@@ -583,6 +583,19 @@ index 3946c875..6bca72a4 100644
  	
  	if(replay_fps_limit.has_value()) {
  		replay_fps_limit->frame_finished();
+diff --git a/src/universe/pc.cpp b/src/universe/pc.cpp
+index c490c81b..0e43d445 100644
+--- a/src/universe/pc.cpp
++++ b/src/universe/pc.cpp
+@@ -711,6 +711,8 @@ short cPlayer::armor_encumbrance() const {
+ 
+ short cPlayer::total_encumbrance(const std::array<short, 51>& reduce_chance) const {
+ 	short total = 0;
++	if(getenv("BOE_TRACE_ENC"))
++		std::cout << "      [enc] " << name << std::endl;
+ 	
+ 	short burden = free_weight();
+ 	if(burden < 0) total += burden / -10;
 diff --git a/web/web_stubs.cpp b/web/web_stubs.cpp
 index 595f29c2..53d484e4 100644
 --- a/web/web_stubs.cpp

@@ -106,6 +106,14 @@ skips them — so a party-state divergence reads as a creature that moved on one
 side and not the other, with nothing about movement actually wrong. Reach for
 it to *rule that out* before chasing the movement code, which is exactly the
 detour it was written to end.
+**`BOE_TRACE_ENC=1`** prints `[enc] <pc name>` on every call to
+`cPlayer::total_encumbrance`, which rolls once per equipped awkward item and is
+therefore one of the few *draw-making* functions the C++ calls from places a
+rewrite would never think to call anything — including, notably,
+`text_bar_text()` (boe.graphics.cpp:719), i.e. **drawing the status bar**.
+There is no pair for it on this side; it answers the question "who is spending
+these `get_ran(1,0,70)`s", and the answer is usually a redraw.
+
 **`BOE_TRACE_TOUCH=1` (`TOUCH=1` here)** prints one line per ability the
 `for(auto& abil : attacker->abil)` tail of `monster_attack` reaches — the
 attacker, the ability key, its odds and its delivery — **before** the odds
