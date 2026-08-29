@@ -1297,6 +1297,40 @@ export function readSavePreview(data: Uint8Array): SavePreview {
 }
 
 /**
+ * **Everything the save does not mention goes back to its default**, because
+ * that is what `load_party_v2` gets for free: it reads into a scratch
+ * `cUniverse` (fileio_party.cpp:381) and moves it over the real one at the end,
+ * so a field no page writes is the fresh object's, not the running game's. It
+ * never calls `set_scenario` on that scratch universe either — the save is
+ * expected to carry everything `enter_scenario` would have set up.
+ *
+ * This port reads into the *existing* Universe on purpose (the session, the
+ * screen and the host callbacks all hold the reference), so the reset has to be
+ * done by hand. It found a real bug: `out_c`, the ten outdoor encounter slots,
+ * is only written for groups that exist, so loading a second save left the
+ * first one's wandering band on the map — and `do_monsters` then rolled
+ * `get_ran(1,1,6)` for a group the C++ did not have, on every tenth turn, for
+ * the rest of the game.
+ *
+ * `Object.assign` from a freshly constructed object copies every field by name,
+ * so a field added later is covered without this needing to know about it. The
+ * two references that must survive are the PC array (the Universe built it and
+ * `CurOut` closes over the Party) and each PC's back-pointer to the Party.
+ */
+function freshenForLoad(univ: Universe): void {
+  const { pcs } = univ.party;
+  Object.assign(univ.party, new Party());
+  univ.party.pcs = pcs;
+  for (const pc of pcs) {
+    const owner = pc.party;
+    Object.assign(pc, new Player());
+    pc.party = owner;
+  }
+  univ.curPc = 0;
+  univ.town = null;
+}
+
+/**
  * `load_party_v2`'s second half, written into an *existing* Universe. The C++
  * builds a scratch `cUniverse` and moves it over the real one at the end; here
  * the caller usually wants the object identity kept, because the session, the
@@ -1312,6 +1346,7 @@ export function applySave(data: Uint8Array, univ: Universe): void {
   const partyText = ball.text('save/party.txt');
   if (partyText === undefined) throw new Error('not a Blades of Exile save: no save/party.txt');
 
+  freshenForLoad(univ);
   readParty(TagFile.parse(partyText), univ.party);
   for (let i = 0; i < 6; i++) {
     const text = ball.text(`save/pc${i + 1}.txt`);

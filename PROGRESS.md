@@ -5700,3 +5700,37 @@ The M6 list below is kept for the history of what it covered:
   - **Where it stands.** Corpus 201,123 → **202,325** matching draws and the
     `doMonsters` bucket is empty: `ASR_05-05-2025_20-16-18` now agrees on all
     1,702 draws the C++ makes before its own harness stops.
+
+- **Loading a save has to start from a fresh Universe, and this one didn't
+  (M8, 2026-08-23).** The `doOutdoorMonsters` bucket.
+  `VoDT_04-05-2025_16-32-10` parted at **draw 4** — the port rolled
+  `get_ran(1,1,6)` for an outdoor encounter group the C++ did not have.
+  `BOE_TRACE_MONST`'s `outmonst:` line, on both sides, showed the group
+  present after the recording's *first* `load_party` and gone after its
+  **second**.
+  - `load_party_v2` (fileio_party.cpp:381) reads into a **scratch
+    `cUniverse`** and `std::move`s it over the real one at the end. It never
+    calls `set_scenario` on it. So every field no page in the save writes comes
+    back as the *fresh object's* value, not as whatever the running game had.
+  - `out_c`, the ten outdoor encounter slots, is written **only for groups that
+    exist** (party.cpp:844). Loading a second save therefore left the first
+    one's wandering band standing on the map here, and `do_monsters` rolled for
+    it every tenth turn for the rest of the game. Any other field with the same
+    "only written when set" shape had the same hole.
+  - This port reads into the *existing* Universe deliberately — the session,
+    the screen and the host callbacks all hold the reference — so the reset is
+    now explicit: `freshenForLoad` copies a freshly constructed `Party` and six
+    freshly constructed `Player`s over the live ones, keeping only the two
+    references that must survive (the PC array, and each PC's back-pointer to
+    the Party). `Object.assign` from a new object means a field added later is
+    covered without this knowing about it.
+  - **Where it stands.** Corpus 202,325 → **221,382** matching draws, +19,057
+    and the biggest single jump M8 has had: two thirds of the corpus is
+    recordings that open by loading a save, and several of them were carrying a
+    phantom encounter from the file before. The `doOutdoorMonsters` bucket is
+    empty, and the queue's head is now three `the C++ draws on` buckets —
+    the port *stopping*, not disagreeing — plus `damageMonst` and `placeGrid`.
+  - The shape, and it is the fourth time M8 has hit it: **a divergence that is
+    a fact the port never reset, rather than a rule it got wrong.** The
+    giveaway was the first divergence being at draw *4*, far too early for a
+    rules bug in code that had already matched thousands of draws elsewhere.
