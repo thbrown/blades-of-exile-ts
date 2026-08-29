@@ -1604,15 +1604,26 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue at the end of 2026-08-24 still has **no bucket bigger than two files**:
-  `doMonsters`, `increaseAgeEffects` and `placeGrid` at two each, then some
-  thirty single files. Corpus **352,150** matching draws, **17 of 87** files
-  agreeing all the way, 42 blocked outside the rules. **Those numbers were
-  285,845 / 15 / 41 the day before and 190,362 / 10 / 37 the day before that**
-  — the entries at the bottom of this file are what working the queue looks
-  like, and the two biggest wins of 2026-08-24 (`set_up_lights` and
-  `do_monster_turn`'s second loop, +50k draws between them) were both **code
-  that was never written**, found from a draw that was merely downstream of it.
+  queue at the end of 2026-08-24 has **no bucket bigger than two files**:
+  `doMonsters` and `placeGrid` at two each, then some thirty single files.
+  Corpus **381,127** matching draws, **19 of 87** files agreeing all the way,
+  40 blocked outside the rules. **Those numbers were 285,845 / 15 / 41 the
+  morning before and 190,362 / 10 / 37 the day before that** — the entries at
+  the bottom of this file are what working the queue looks like.
+
+  Three things 2026-08-24 is worth remembering for:
+
+  - The two biggest wins (`set_up_lights` and `do_monster_turn`'s second loop,
+    +50k draws between them) were both **code that was never written**, found
+    from a draw that was merely downstream of it. Neither was on any TODO list.
+  - **Four of the day's fixes were in the replay driver, not the rules** —
+    a help dialog, the journal dialogs, bash and pick, and `num_targets_left`.
+    Together they were worth ~17k draws and three files, and every one was
+    named by `tail`ing a trace file rather than by any of the six instruments.
+    The harness's own debt is now down to three unhandled actions
+    (`handle_drop_pc`, `debug_launch_scen`, `debug_give_item`, two files each).
+  - The dominant remaining stop reason is a **movement desync**, which is a
+    rules problem, and that is where the next slice should go.
 
   **A caution about the "agree all the way" column.** `diverge.mjs` calls a
   file a match when the two draw *lists* are identical, which a pair that both
