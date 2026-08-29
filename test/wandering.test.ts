@@ -11,6 +11,7 @@ import { GameRng } from '../src/core/rng';
 import { OutWandering, emptyOutWandering } from '../src/data/outdoors';
 import { Scenario } from '../src/data/scenario';
 import { Town } from '../src/data/town';
+import { TerObstruct } from '../src/data/terrain';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
@@ -45,9 +46,20 @@ async function outdoors(): Promise<GameSession> {
   const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
   const s = new GameSession(univ);
   s.startNewGame();
-  // Step onto the town's southern boundary, which walks the party out.
-  const rect = s.univ.town!.record.inTownRect;
-  await s.moveTo({ x: s.univ.party.townLoc.x, y: rect.bottom });
+  // Step onto the town's southern boundary, which walks the party out. The
+  // exit fires on the square the party *reaches* (handle_move,
+  // boe.actions.cpp:769), so the boundary square has to be one it can stand
+  // on — hence the search rather than a jump straight at `rect.bottom`.
+  const town = s.univ.town!;
+  const rect = town.record.inTownRect;
+  const clear = (x: number, y: number): boolean =>
+    s.univ.terrainType(town.record.terrain[x]![y]!).blockage === TerObstruct.CLEAR;
+  for (let x = rect.left + 1; x < rect.right; x++)
+    if (clear(x, rect.bottom) && clear(x, rect.bottom - 1)) {
+      s.univ.party.townLoc = { x, y: rect.bottom - 1 };
+      await s.moveTo({ x, y: rect.bottom });
+      break;
+    }
   return s;
 }
 

@@ -1605,10 +1605,9 @@ bottom. What M8 still owes:
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
   queue on 2026-08-29 has **no bucket bigger than two files**:
-  `placeGrid` and `move @ the C++ draws on` at two each, then some thirty
-  single files.
-  Corpus **406,460** matching draws, **19 of 87** files agreeing all the way,
-  40 blocked outside the rules. **Those numbers were 381,127 / 19 / 40 at the
+  `placeGrid` at two, then some thirty single files.
+  Corpus **424,434** matching draws, **19 of 87** files agreeing all the way,
+  39 blocked outside the rules. **Those numbers were 381,127 / 19 / 40 at the
   end of 2026-08-24, 285,845 / 15 / 41 the morning before that and
   190,362 / 10 / 37 the day before that** — the entries at
   the bottom of this file are what working the queue looks like.
@@ -6362,6 +6361,37 @@ The M6 list below is kept for the history of what it covered:
     are bigger. **The harness's remaining debt is no longer the cheap seam it
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
+
+- **Walking into the town's edge wall walked the party out of the town (M8,
+  2026-08-29).** The `move @ the C++ draws on` bucket, two files, both stopping
+  in the first hundred actions with the party in the wrong *town*.
+  - `VoDT_20-04-2025_17-52-41` steps from (1,18) to (0,17). The C++ prints
+    "Blocked: west" and stays put; this port printed
+    "You leave Storage Level. | Blocked: west | You enter School Entry." —
+    the exit, the refusal it should have obeyed instead, and an arrival in a
+    town forty squares away, in that order.
+  - **The exit is not in `town_move_party`.** This port opened that function by
+    testing the *destination* against `in_town_rect` and leaving the town on
+    the spot. The C++ tests `loc_off_act_area(univ.party.town_loc)` in
+    `handle_move` (boe.actions.cpp:769) — the party's square **after** a move
+    that returned true — so the border column is walked into like any other
+    square, and a wall standing in it refuses the step. Moved to `moveTo`,
+    where `handle_move` has it, with `update_explored(destination)` alongside
+    it.
+  - Two more lines the same reading turned up, both missing here: the party
+    can't walk out of a **force cage** (:4159 — only the combat half had it),
+    and a successful town move prints **`Moved: <dir>`**, which this port only
+    ever printed outdoors.
+  - **Where it stands.** Corpus 406,460 → **424,434** matching draws, files
+    blocked outside the rules 40 → **39**.
+  - The tests that walked the party out of town did it by aiming at
+    `rect.bottom` from wherever the party started, which only worked because
+    the exit used to fire before the blockage test. They now find a passable
+    boundary square and step onto it (`edgeStep` in `session.test.ts`). Fixing
+    them exposed a second thing worth knowing: **`record.maps` is the
+    scenario's own array and the scenario is loaded once per test file**, so
+    any test that walks the party leaves its reveals for the ones after it. The
+    visibility test now clears the fog before measuring.
 
 - **CLOSED, and it was never the summon: `handle_use_space` (M8,
   2026-08-29).** The lead below is superseded — read it for the method, not for

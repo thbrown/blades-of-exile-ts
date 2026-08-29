@@ -490,7 +490,18 @@ export class GameSession {
     this.pendingOutDest = null;
     if (this.inTown) {
       moved = await this.townMoveParty(destination);
-      if (this.inTown && moved) this.center = { ...this.univ.party.townLoc };
+      if (this.inTown && moved) {
+        this.center = { ...this.univ.party.townLoc };
+        this.updateExplored(destination);
+        // handle_move's exit test (boe.actions.cpp:769): the party leaves the
+        // town when the square it **actually reached** is off the active area,
+        // not when the square it aimed at was. `end_town_mode` hands back the
+        // outdoor square to walk out onto, which handle_move assigns straight
+        // over `destination`.
+        if (this.locOffActiveArea(this.univ.party.townLoc)) {
+          this.pendingOutDest = this.endTownMode(destination);
+        }
+      }
     }
     // A town move that leaves the map switches us to outdoors mid-action, and
     // the outdoor move then runs in the same keypress — same as the original.
@@ -1019,22 +1030,23 @@ export class GameSession {
     );
   }
 
-  /** town_move_party (boe.actions.cpp:4139). */
+  /** town_move_party (boe.actions.cpp:4155). */
   private async townMoveParty(destination: Location): Promise<boolean> {
     const { party } = this.univ;
     const town = this.univ.town!;
-    const rect = town.record.inTownRect;
 
-    // Stepping onto or past the in-town boundary leaves the town.
-    if (
-      destination.x <= rect.left ||
-      destination.x >= rect.right ||
-      destination.y <= rect.top ||
-      destination.y >= rect.bottom
-    ) {
-      // The outdoor square to walk out onto; moveTo picks this up, because
-      // the town coordinate that triggered the exit is meaningless out there.
-      this.pendingOutDest = this.endTownMode(destination);
+    // **Leaving town is not decided here.** It used to be: this function
+    // opened by testing the destination against `in_town_rect` and exiting the
+    // town on the spot. The C++ tests `loc_off_act_area(univ.party.town_loc)`
+    // in `handle_move` (boe.actions.cpp:769) — the party's square *after* a
+    // move that actually succeeded — so a step into the border column is
+    // refused like any other when a wall or a creature is standing in it, and
+    // the party stays put. Walking into the town's edge wall used to walk the
+    // party out of the town instead.
+    // The other line that was missing: a party inside a force cage cannot
+    // walk out of it (boe.actions.cpp:4159). The combat half already had it.
+    if (town.hasField(party.townLoc.x, party.townLoc.y, FieldType.BARRIER_CAGE)) {
+      this.univ.addStringToBuf("Move: Can't escape.");
       return false;
     }
 
@@ -1122,6 +1134,7 @@ export class GameSession {
     }
 
     party.townLoc = destination;
+    this.univ.addStringToBuf(`Moved: ${DIR_NAMES[party.direction] ?? ''}`);
     this.moveSound(town.record.terrain[destination.x]![destination.y]!, this.numTownMoves++);
     town.makeExplored(destination.x, destination.y);
     this.updateExplored(this.univ.party.townLoc);

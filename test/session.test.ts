@@ -41,6 +41,29 @@ function newSession(): GameSession {
   return new GameSession(univ);
 }
 
+/**
+ * Put the party one square inside a *passable* boundary square and hand back
+ * the square that walks it out.
+ *
+ * `handle_move` fires the exit on the square the party actually reached, not
+ * on the one it aimed at, so a boundary square with a wall in it now refuses
+ * the step like any other — which is the whole point of the rule. These tests
+ * used to jump straight at `rect.bottom` from wherever the party started and
+ * relied on the exit happening before the blockage test.
+ */
+function edgeStep(session: GameSession): { x: number; y: number } {
+  const town = session.univ.town!;
+  const rect = town.record.inTownRect;
+  const clear = (x: number, y: number): boolean =>
+    session.univ.terrainType(town.record.terrain[x]![y]!).blockage === TerObstruct.CLEAR;
+  for (let x = rect.left + 1; x < rect.right; x++)
+    if (clear(x, rect.bottom) && clear(x, rect.bottom - 1)) {
+      session.univ.party.townLoc = { x, y: rect.bottom - 1 };
+      return { x, y: rect.bottom };
+    }
+  throw new Error('this town has no passable square on its southern boundary');
+}
+
 describe('party setup', () => {
   it('starts with the six pregen adventurers', async () => {
     const { univ } = newSession();
@@ -143,9 +166,8 @@ describe('start and end town mode', () => {
   it('leaves town when the party steps past the in-town boundary', async () => {
     const session = newSession();
     session.startNewGame();
-    const rect = session.univ.town!.record.inTownRect;
-    // Step straight onto the southern boundary.
-    await session.moveTo({ x: session.univ.party.townLoc.x, y: rect.bottom });
+    // Step onto the southern boundary, which walks the party out.
+    await session.moveTo(edgeStep(session));
     expect(session.mode).toBe(GameMode.OUTDOORS);
     expect(session.univ.party.townNum).toBe(TOWN_NUM_OUTDOORS);
     expect(session.univ.town).toBeNull();
@@ -159,7 +181,7 @@ describe('start and end town mode', () => {
     session.startNewGame();
     const record = session.univ.town!.record;
     const seen = session.univ.party.townLoc;
-    await session.moveTo({ x: seen.x, y: record.inTownRect.bottom });
+    await session.moveTo(edgeStep(session));
     expect(record.maps[seen.x]![seen.y]).toBe(1);
 
     session.startTownMode(scen.startTown, FORCED_ENTRY);
@@ -215,6 +237,15 @@ describe('visibility', () => {
     session.startNewGame();
     const town = session.univ.town!;
     const p = session.univ.party.townLoc;
+    // `record.maps` is the scenario's own map-memory array and the scenario is
+    // loaded once for the whole file, so an earlier test that walked the party
+    // somewhere leaves its reveals here. Put the fog back before measuring.
+    for (let x = 0; x < town.record.maxDim; x++)
+      for (let y = 0; y < town.record.maxDim; y++) {
+        town.record.maps[x]![y] = 0;
+        town.takeExplored(x, y);
+      }
+    session.updateExplored(p);
     expect(town.isExplored(p.x, p.y)).toBe(true);
     // Something within the 9x9 block is revealed…
     let revealed = 0;
@@ -711,8 +742,7 @@ describe('the long wait', () => {
   it('refuses outdoors, where the C++ has nowhere to wait', async () => {
     const s = newSession();
     s.startNewGame();
-    const rect = s.univ.town!.record.inTownRect;
-    await s.moveTo({ x: s.univ.party.townLoc.x, y: rect.bottom });
+    await s.moveTo(edgeStep(s));
     expect(s.mode).toBe(GameMode.OUTDOORS);
     await s.wait();
     expect(s.univ.transcript.at(-1)).toBe('Wait: In town only.');
