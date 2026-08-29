@@ -35,9 +35,16 @@ read the C++ rather than guessing — `PLAN.md` lists the critical files.
 ```
 npx vitest run          # all tests, headless, no browser needed
 npx tsc --noEmit        # strict, with noUncheckedIndexedAccess
+node scripts/floating-promises.mjs   # async calls nobody waits for
 npx vite --port 5199    # then, in another shell:
 node scripts/verify-screen.mjs   # drives the real UI in Chromium, screenshots it
 ```
+
+`floating-promises.mjs` is cheap and worth the habit: **`get_ran`'s call order
+is part of the spec**, and a dropped promise breaks the order while leaving
+every individual answer correct — so the tests pass, the game looks right, and
+the replay corpus reports a divergence in whatever function happened to be
+holding the RNG. Write `void f()` where you mean it.
 
 `verify-screen.mjs` is the end-to-end gate — it exercises every milestone's
 demo path and fails on any console error. `SHOTS_DIR=...` chooses where the

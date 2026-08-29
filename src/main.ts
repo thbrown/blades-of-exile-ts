@@ -1490,7 +1490,13 @@ async function main(): Promise<void> {
     }
     // Targeting a missile: the click (or arrow key) is the shot, not a move.
     if (session.missile !== null) {
-      session.fireMissileAt(target);
+      // **Awaited**, like the two targeting branches above it. `fireMissileAt`
+      // runs the shot, its blast and the turn's tail; dropping the promise let
+      // the three lines below run against a half-resolved turn. The replay
+      // driver already awaits it — this is the browser path catching up. See
+      // the `damagingTerrain` entry in PROGRESS.md for what an unawaited
+      // promise does to `get_ran`'s call order.
+      await session.fireMissileAt(target);
       recentre();
       setStatus();
       redraw();

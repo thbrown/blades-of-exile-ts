@@ -6167,9 +6167,16 @@ The M6 list below is kept for the history of what it covered:
   - `get_ran`'s call *order* is part of the spec (PLAN.md §6), and **an
     unawaited promise is the one way this port can break that while getting
     every individual answer right** — which is also why nothing in the game
-    state showed it and no test caught it. Worth a grep of the other call
-    sites; `handleHunting` next door is sync and fine, and the rest of
-    `checkSpecialTerrain` already awaits.
+    state showed it and no test caught it.
+  - So there is now a standing check: **`node scripts/floating-promises.mjs`**,
+    added to CLAUDE.md's list. It collects every identifier declared `async` in
+    `src/` and flags bare expression statements that call one, skipping names
+    that are also declared sync somewhere (`seekParty` and `moveTo` each exist
+    in both flavours). It is clean today; it was verified by putting the bug
+    back and watching it fail. The sweep found **one more** of the same shape:
+    `main.ts`'s missile click did `session.fireMissileAt(target)` unawaited and
+    then recentred, restatused and redrew against a half-resolved turn — the
+    browser path only, since the replay driver already awaited it.
   - **Where it stands.** Corpus 352,150 → **352,153** matching draws — three,
     because the file promptly parts again at 7,691. The number is not the
     point: an interleaving fault corrupts the *order* of everything downstream
