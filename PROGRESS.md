@@ -1604,17 +1604,25 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue at the end of 2026-08-23 has **no bucket bigger than two files, and
-  only one of the four biggest is a rules bucket** — `doOutdoorMonsters`, plus
-  three `the C++ draws on` ones (`handle_target_space`, `click_control`,
-  `move`), which are the port *stopping*, not disagreeing. Six buckets emptied
-  that day: `seekParty`, `monstCheckOneSpecialTerrain`, `doMonsterTurn`,
-  `pickTargetMonst` and both of `doMonsters`'. Corpus **202,325** matching
-  draws, **11 of 87** files agreeing all the way, 40 blocked outside the rules
-  — three more than the day before, every one of them a file the port now
-  carries further, into an action the *harness* refuses. That last number
-  going **up** is progress, and it is worth saying so: the harness's 28-file
-  debt is now the biggest single thing between this corpus and a clean run.
+  queue at the end of 2026-08-23 has **no bucket bigger than two files**:
+  `handle_target_space @ the C++ draws on`, `doMonsters`, `move @ the C++
+  draws on` and `selectActivePc` at two each, then a dozen single files.
+  Corpus **285,845** matching draws, **15 of 87** files agreeing all the way,
+  41 blocked outside the rules. **Those three numbers were 190,362 / 10 / 37
+  that morning** — the eleven entries at the bottom of this file are what one
+  day of working the queue looks like.
+
+  Two things learned about the queue itself, both worth acting on:
+
+  - **"the C++ draws on" is not a rules bucket.** It means this port
+    *stopped* — an action the driver has no handler for, a callback nobody
+    set, a feature that was never built. Three of the day's fixes were that
+    shape, and they are usually quicker than a rules bug: read the transcript
+    at the stop, not the draw stream before it.
+  - **"Blocked outside the rules" going up is progress.** Four of the day's
+    files now run far enough to reach an action the *harness* refuses. The
+    harness's 28-file debt is now the biggest single thing between this corpus
+    and a clean run, ahead of anything left in the rules.
 
   **A fifth instrument landed 2026-08-22: `SPEC=1`**, one line per opcode a
   chain runs, the pair to the C++ harness's `[spec]` under `BOE_TRACE`. Reach
