@@ -106,6 +106,14 @@ skips them — so a party-state divergence reads as a creature that moved on one
 side and not the other, with nothing about movement actually wrong. Reach for
 it to *rule that out* before chasing the movement code, which is exactly the
 detour it was written to end.
+**`BOE_TRACE_TOUCH=1` (`TOUCH=1` here)** prints one line per ability the
+`for(auto& abil : attacker->abil)` tail of `monster_attack` reaches — the
+attacker, the ability key, its odds and its delivery — **before** the odds
+roll. That ordering is the point: the divergence it answers is one side
+spending a `get_ran(1,1,1000)` on a touch ability and the other never entering
+the loop at all, and the draw stream cannot tell "the ability is missing here"
+from "the attack never landed there".
+
 `BOE_TRACE_PICKT=1` prints one line per candidate `monst_pick_target_monst`
 weighs — `alive`, whether the two are friendly, the distance, and the best so
 far — plus a line per call. It exists because that loop's tie-break draw fires

@@ -922,6 +922,15 @@ async function monsterTouches(
     if (!abil?.active) continue;
     if (abilityCategory(key) !== MonstAbilCat.GENERAL) continue;
     if (abil.gen.type !== MonstGen.TOUCH) continue;
+    // `TOUCH=1`, the pair to the harness's `BOE_TRACE_TOUCH=1`. Printed
+    // *before* the odds roll, because the roll is the divergence this answers:
+    // one side enters the loop for an ability and the other never gets there,
+    // and the draw stream can only say "somebody spent a `get_ran(1,1,1000)`".
+    if (process.env.TOUCH) {
+      // eslint-disable-next-line no-console
+      console.log(`      [touch] ${monst.slot} ${monst.mon.name} key=${key}`
+        + ` odds=${abil.gen.odds} type=${abil.gen.type}`);
+    }
     if (abil.gen.odds > 0 && univ.rng.getRan(1, 1, 1000) <= abil.gen.odds) continue;
 
     let sound = 0;

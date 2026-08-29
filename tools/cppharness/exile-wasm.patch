@@ -128,7 +128,7 @@ index fc7b63f1..3556758d 100644
  			if(!outd_is_blocked(real_dest) //&& !outd_is_special(real_dest)
  				// not in towns
 diff --git a/src/game/boe.combat.cpp b/src/game/boe.combat.cpp
-index 1a26a2a7..1c161346 100644
+index 1a26a2a7..08534c8f 100644
 --- a/src/game/boe.combat.cpp
 +++ b/src/game/boe.combat.cpp
 @@ -2432,6 +2432,11 @@ void do_monster_turn() {
@@ -143,6 +143,17 @@ index 1a26a2a7..1c161346 100644
  			if(overall_mode == MODE_COMBAT) {
  				if(!acted_yet && (cur_monst->mobility == 1)) {  // move monst
  					move_target = (univ.town.monst[i].target != 6) ? univ.town.monst[i].target : closest_pc(cur_monst->cur_loc);
+@@ -2750,6 +2755,10 @@ void monster_attack(short who_att,iLiving* target) {
+ 							continue;
+ 						if(abil.second.gen.type != eMonstGen::TOUCH)
+ 							continue;
++						if(getenv("BOE_TRACE_TOUCH"))
++							std::cout << "      [touch] " << who_att << " " << attacker->m_name
++								<< " key=" << int(abil.first) << " odds=" << abil.second.gen.odds
++								<< " type=" << int(abil.second.gen.type) << std::endl;
+ 						if(abil.second.gen.odds > 0 && get_ran(1,1,1000) <= abil.second.gen.odds)
+ 							continue;
+ 						// Print message and possibly choose sound
 diff --git a/src/game/boe.main.cpp b/src/game/boe.main.cpp
 index b19e0983..a19325ec 100644
 --- a/src/game/boe.main.cpp
