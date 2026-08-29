@@ -395,18 +395,33 @@ export async function runReplay(
             const fancy = session.spellTargeting.targetsLeft > 0;
             if (fancy) {
               // `num_targets_left` is how many squares a multi-target spell
-              // still wanted when the click happened. **The C++ assigns it**
-              // from the recording, overwriting whatever the engine worked out;
-              // this port compares instead, because that number falls out of
-              // the caster's level and the spell's own table
-              // (`fancyTargetCount`), and disagreeing about it is exactly the
-              // kind of divergence these files exist to catch.
+              // still wanted when the click happened, and **the C++ assigns
+              // it** — `num_targets_left = lexical_cast<short>(info[...])`,
+              // boe.main.cpp:909, right before it calls `handle_target_space`.
+              // The recorded number is *input*, not an assertion.
+              //
+              // This port used to compare and throw instead, on the reasoning
+              // that the count falls out of the caster's level and the spell's
+              // own table (`fancyTargetCount`) and so disagreeing about it is a
+              // real divergence. That reasoning is sound and the check still
+              // found nothing wrong: on `ZKR_16-05-2025_15-19-17` this port
+              // matched the recording exactly for five clicks — 6, 5, 4, 3, 2 —
+              // and then the recording jumped to **0** with one placement in
+              // between. `place_target` moves the count by one, so a recording
+              // that steps 2 → 0 is not describing an engine that disagreed
+              // with this one; it is a stream this port cannot reconstruct and
+              // the C++ does not try to. Three files stopped on it.
+              //
+              // So: assign, as the C++ does, and keep the comparison as a
+              // trace (`DBGFANCY=1`) for anyone who wants to see the two
+              // numbers side by side.
               const left = Number(action.info.num_targets_left ?? '0');
-              const want = session.spellTargeting.targetsLeft;
-              if (left !== want) {
-                throw new Error(
-                  `replay: this spell still wants ${want} targets, the recording says ${left}`);
+              if (process.env.DBGFANCY) {
+                // eslint-disable-next-line no-console
+                console.log(`      [ntl] rec=${left}`
+                  + ` ours=${session.spellTargeting.targetsLeft}`);
               }
+              session.spellTargeting.targetsLeft = left;
               await placeTarget(session, target);
             } else await doCombatCast(session, target);
           } else if (session.townTarget !== null) {

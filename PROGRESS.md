@@ -6303,30 +6303,33 @@ The M6 list below is kept for the history of what it covered:
     **24 files reporting a movement desync**, which is a rules problem and the
     right next thing to attack.
 
-- **OPEN LEAD: `stat_adj(INTELLIGENCE)` is one too high (M8, 2026-08-24).**
-  Three files stop with the driver's own check: *"this spell still wants 1
-  targets, the recording says 0"*. Narrowed to one arithmetic term; not fixed.
-  - `ZKR_16-05-2025_15-19-17` is the clearest. Kat casts **Sticks to Snakes**,
-    a `REFER_FANCY` spell that collects `minmax(1, 8, level / 5 + bonus / 2)`
-    squares (boe.combat.cpp:4994). The recording places five and stops; this
-    port places five and asks for a sixth. So the C++ computed **5** and this
-    port **6**.
-  - What has been ruled out, all verified equal on both sides: the formula
-    itself, the `minmax(1,8,...)` that follows it, the `skill_bonus[21]` table
-    (`src/scenario/shop.cpp:43` against `SKILL_BONUS` in `player.ts`), and —
-    with **`/L<level>` newly added to `PCS=1` / `BOE_TRACE_PCS=1`** — every
-    PC's level, health and max health at the moment of the cast. Kat is level
-    27 on both sides, so `level / 5` is 5 on both.
-  - That leaves `bonus / 2`: **1 here and 0 there**, so
-    `stat_adj(eSkill::INTELLIGENCE)` is 2 or 3 in this port and 0 or 1 in the
-    C++. `stat_adj` (pc.cpp:336) is three terms —
-    `skill_bonus[skills[INTELLIGENCE]]`, `+1` for the MAGICALLY_APT trait, and
-    `+1` for an equipped `BOOST_STAT` item naming that stat. **Print all three
-    on both sides**; the item term is the one to suspect first, because
-    `has_abil_equip(BOOST_STAT, int(which))` has to match the ability's *data*
-    against the skill and a looser match here would add a phantom point.
-  - Worth the attention: `stat_adj` is not a corner. It is in the to-hit
-    calculation, `pc_can_cast_spell`'s encumbrance arm, bashing, lockpicking
-    and half the spell formulas — so if it really is one too high for one PC's
-    INT, that single point is quietly wrong in a great many places, and three
-    recordings noticing it in the same spell is likely to be the tip of it.
+- **`num_targets_left` is input, not an assertion (M8, 2026-08-24).** Three
+  files stopped on the driver's own check: *"this spell still wants 1 targets,
+  the recording says 0"*.
+  - The check was a deliberate choice and the reasoning behind it was good: the
+    count for a `REFER_FANCY` spell falls out of the caster's level and the
+    spell's own table (`fancyTargetCount`), so a disagreement about it should
+    be a real divergence. It was worth trying. It found nothing.
+  - On `ZKR_16-05-2025_15-19-17` this port agreed with the recording for five
+    clicks — **6, 5, 4, 3, 2** — and then the recording jumped to **0** with a
+    single placement in between. `place_target` moves the count by one
+    (boe.combat.cpp:815, :825), so that stream is not describing an engine that
+    disagreed with this one.
+  - **The C++ does not check it either — it assigns it.**
+    `num_targets_left = boost::lexical_cast<short>(info["num_targets_left"])`
+    (boe.main.cpp:909), immediately before calling `handle_target_space`. The
+    recorded number is what the replay *runs on*. So this port assigns too, and
+    the comparison survives as a trace under `DBGFANCY=1`.
+  - **Where it stands.** Corpus 374,311 → **381,127** matching draws.
+  - Ruled out along the way, and worth not re-doing: Kat is level 27 on both
+    sides, her INTELLIGENCE skill is 12 with no MAGICALLY_APT and no BOOST_STAT
+    item, `skill_bonus[12]` is 3 in both tables, and `27/5 + 3/2` is 6 in both
+    languages. `PCS=1` / `BOE_TRACE_PCS=1` gained **`/L<level>`** while checking
+    it, which is worth having: half a dozen spell formulas divide by level, and
+    a level that drifted is invisible everywhere else.
+  - The general point, and it is a real tension in this driver: **a check that
+    encodes an assumption the C++ itself does not make will eventually fire on
+    something that is not a bug.** The driver's stated discipline is that a
+    mismatch throws rather than diverging quietly — that stays right for
+    *actions*, which the C++ genuinely dispatches on. It was wrong for a
+    recorded *value* the C++ takes at face value.
