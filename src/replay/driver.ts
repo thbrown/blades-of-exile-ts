@@ -383,6 +383,16 @@ export async function runReplay(
             } else await doCombatCast(session, target);
           } else if (session.townTarget !== null) {
             await castTownSpell(session, target);
+            // **A town cast charges a turn.** `handle_target_space` sets
+            // `did_something = true` for every targeting mode but FANCY
+            // (boe.actions.cpp:888) and `advance_time` runs the town's upkeep
+            // and `do_monsters` on the way out. Without it this port's clock
+            // ran one tick behind for the rest of the recording, and every
+            // creature took one turn fewer than the C++ gave it — visible in
+            // `[domonst]` as a missing line at the same square, one age apart,
+            // and in the draw stream as `select_active_pc`'s run of
+            // `get_ran(1,0,5)` that this side never made.
+            await session.afterPartyTurn();
           } else if (session.missile !== null) {
             await session.fireMissileAt(target);
           } else {

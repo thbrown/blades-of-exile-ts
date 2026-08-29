@@ -5913,3 +5913,41 @@ The M6 list below is kept for the history of what it covered:
     not a formula. Reading the **transcript at the stop** found this in
     minutes; the draw stream before it was clean for 5,467 draws and had
     nothing to say.
+
+- **A town spell costs a turn, and this port cast it for free (M8,
+  2026-08-24).** The `doMonsters` bucket. `ASR_20-05-2025_08-49-39` parted at
+  draw 5,102 on a pair of `get_ran(1,0,5)` — `select_active_pc`'s reroll — that
+  the C++ made and this port didn't.
+  - Found with `[domonst]`, not with the draw stream. Diffing the two lists
+    (`MMOVE=1 CORPUS=1 TRACE=1 ONLY=…` here, `BOE_TRACE_MMOVE=1 run.sh` there,
+    then `grep '\[domonst\]'` and `diff`) showed 105 identical lines and then
+    this, which is the whole bug in two lines:
+
+    ```
+    C++   [domonst] party=(31,6) age=41444      here  [domonst] party=(31,6) age=41444
+          [domonst] party=(31,6) age=41445            [domonst] party=(31,5) age=41445
+    ```
+
+    The C++ ran the town's upkeep **twice at the same square** — once for the
+    move that got there, once for the spell cast from it — and this port ran it
+    once. Every age after that was one behind, so every `age % n` upkeep and
+    every creature's turn was off by one for the rest of the recording.
+  - `handle_target_space` (boe.actions.cpp:888) sets `did_something = true` for
+    **every** targeting mode except FANCY, and `advance_time` then runs
+    `handle_monster_actions`: `increase_age`, `do_monsters`, `do_monster_turn`.
+    The combat modes already had their own tail here (`afterCombatAction`,
+    `fireMissileAt`); MODE_TOWN_TARGET had nothing at all, so a Unlock, a
+    Dispel Barrier or an Antimagic Cloud cast in town stopped the clock.
+  - Fixed at the two `castTownSpell` call sites — `main.ts` and the replay
+    driver — because that is where the C++ spends the flag, and the doc comment
+    on `afterPartyTurn` that claimed **"the clock is not touched here"** is now
+    corrected: it has ticked inside `increaseAgeEffects` since July, so calling
+    `afterPartyTurn` *is* charging a turn.
+  - **Where it stands.** Corpus 295,964 → **297,264** matching draws. The file
+    that named the bucket went from 5,101 matching draws to **6,383** and 327
+    actions to 438, and now stops on a harness limitation rather than a rule.
+  - The general shape, and it is the second time this file has recorded it: a
+    stale comment describing an arrangement that was changed underneath it is
+    worse than no comment, because it *stops you looking*. `grep -n "clock is
+    not touched"` was the reason the age tick was ruled out twice before the
+    `[domonst]` diff made it unignorable.

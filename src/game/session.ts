@@ -514,10 +514,11 @@ export class GameSession {
    * (they notice you and walk over) followed by `do_monster_turn` (they hit
    * you), which is why you can be attacked without ever entering combat mode.
    *
-   * The clock is not touched here: this port folds `increase_age`'s tick into
-   * the move functions themselves, which already advanced it.
-   *
-   * TODO(M7): increase_age's autosave, which eating triggers.
+   * **The clock ticks inside this**, in `increaseAgeEffects` — the note that
+   * used to be here saying otherwise described an arrangement that was
+   * corrected in July. So calling this *is* charging a turn, and any action
+   * the C++ marks `did_something` has to call it or fall a tick behind
+   * forever.
    */
   /**
    * `advance_time`'s `did_something` path. Public because the C++ sets that

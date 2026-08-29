@@ -1479,6 +1479,10 @@ async function main(): Promise<void> {
     // is the one the party is in outside combat.
     if (session.townTarget !== null) {
       await castTownSpell(session, target);
+      // **The cast costs a turn.** `handle_target_space` sets
+      // `did_something = true` for every targeting mode but FANCY
+      // (boe.actions.cpp:888), and `advance_time` then runs a whole town turn.
+      await session.afterPartyTurn();
       recentre();
       setStatus();
       redraw();
