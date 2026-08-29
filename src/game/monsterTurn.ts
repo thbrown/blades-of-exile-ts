@@ -683,7 +683,7 @@ export async function doMonsters(session: GameSession): Promise<void> {
       // Stealth is **46** here and 45 in the combat copy of this roll
       // (boe.combat.cpp:2079). The two were written separately and drifted by
       // one; both are kept as they are.
-      if (TRACE_MMOVE) console.log(`      [notice] ${monst.slot} at (${monst.curLoc.x},${monst.curLoc.y}) party=(${partyLoc.x},${partyLoc.y}) d=${dist(monst.curLoc, partyLoc)} att=${monst.attitude}`);
+      if (TRACE_MMOVE) console.log(`      [notice] ${monst.slot} at (${monst.curLoc.x},${monst.curLoc.y}) party=(${partyLoc.x},${partyLoc.y}) d=${dist(monst.curLoc, partyLoc)} att=${monst.attitude} see=${session.canSeeLight(monst.curLoc, partyLoc)} stealth=${(univ.party.partyStatus[PartyStatus.STEALTH] ?? 0) > 0 ? 1 : 0}`);
       const r1 = univ.rng.getRan(1, 1, 100)
         + ((univ.party.partyStatus[PartyStatus.STEALTH] ?? 0) > 0 ? 46 : 0)
         + session.canSeeLight(monst.curLoc, partyLoc) * 10;

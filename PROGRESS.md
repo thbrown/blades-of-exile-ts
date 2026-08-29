@@ -5991,3 +5991,40 @@ The M6 list below is kept for the history of what it covered:
     identical, which a pair that both stop early also satisfies. A file that
     now runs further and finds a real divergence leaves that column. **Draws
     matched is the meter; the match count is not.**
+
+- **Braziers shone through walls, so creatures noticed the party through them
+  (M8, 2026-08-24).** The `selectActivePc` bucket. `VoDT-5-11` parted at draw
+  259 spending a `get_ran(1,0,5)` where the C++ spent a `get_ran(1,1,100)` — a
+  creature that was ALERTED here and IDLE there.
+  - `can_see_light` (boe.locutils.cpp:173) returns **6** — one past "sight
+    completely blocked" — when the target square is not in the light, and the
+    notice roll adds `can_see_light * 10` to a `get_ran(1,1,100)` that must
+    come in **under 50**. So 6 is not a degree of anything: it is a flat "this
+    creature cannot notice you", and getting it wrong is the difference between
+    a quiet town and one that wakes up.
+  - The C++ printed `see=6` 669 times in this recording and this port printed
+    it 54 times. The reason was `set_up_lights` (town.cpp:196) carrying a
+    **`TODO(M4)`** — *"the original also requires line of sight, so light does
+    not currently stop at walls"* — four milestones after M4 closed. Every
+    brazier lit a square block through its own walls, `pt_in_light` then said
+    yes to squares eight away in the dark, and the notice roll got 0 instead of
+    60.
+  - Two details in the port: the obscurity function is `cTown::light_obscurity`
+    (town.cpp:227), **not** `sight_obscurity` — it knows only about terrain
+    that blocks sight (5) or shooting (1), nothing about webs, crates or
+    barriers — and the already-lit square is skipped *before* the `can_see`
+    call, so overlapping sources cost one trace rather than two.
+  - **Where it stands.** Corpus 297,555 → **304,795** matching draws, +7,240.
+    `scripts/verify-screen.mjs` passes and the start-town shot is the proof
+    worth looking at: the guest quarters are lit and the corridor beyond the
+    wall is black, which is what it should always have looked like.
+  - Two instruments came out of it, both now paired on the two sides and
+    documented in `tools/cppharness/README.md`: `[notice]` grew **`see=` and
+    `stealth=`**, the two terms that decide the roll without costing a draw,
+    and **`LIGHT=1`** finally exists on this side (`light= rad= lit= ltype=`,
+    in `test/corpus.test.ts`) to pair with `BOE_TRACE_LIGHT=1`. The README had
+    said for weeks that it did not.
+  - Third time M8 has found a stale `TODO(M0-M7)` this way, and the second in
+    two days. `grep -rn "TODO(M[0-7])" src/` is a list of promises whose
+    milestone has closed; the draw stream keeps finding them faster than
+    reading it does, but it is worth reading anyway.

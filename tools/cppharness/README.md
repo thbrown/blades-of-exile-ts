@@ -52,11 +52,17 @@ the top of `do_monsters`, and it is the one line that pins *when* a turn's
 upkeep ran and *where the party was standing* while it ran — two runs can hold
 the same party path and still feed `do_monsters` different squares if one of
 them charged a turn the other didn't. `[notice] <slot> at (x,y) party=(x,y) d=
-att=` prints every candidate for the "Monster saw you!" roll, which turns "this
-port makes one extra `get_ran(1,1,100)`" into "creature 13, eight squares away,
-that the other side never even considered". Together they found
-`handle_get_items`: the two sides agreed on every draw and every square, and
-disagreed by one on the *age* at which they were standing there.
+att= see= stealth=` prints every candidate for the "Monster saw you!" roll,
+which turns "this port makes one extra `get_ran(1,1,100)`" into "creature 13,
+eight squares away, that the other side never even considered". The `see=`
+column is `can_see_light`, the term that decides the roll without costing a
+draw — **6 means "not in the light at all"** and is by itself enough to fail
+it. A side that never prints 6 where the other does is not disagreeing about
+line of sight; it is disagreeing about the town's `lighting` grid, and
+`LIGHT=1` / `BOE_TRACE_LIGHT=1` is the next thing to diff. `[domonst]` and
+`[notice]` together found `handle_get_items`: the two sides agreed on every draw
+and every square, and disagreed by one on the *age* at which they were standing
+there.
 
 Two more, added while chasing turns that make no draws: `[advtime] did= mode=
 party= age=` at the top of `advance_time`, which says whether an action charged
@@ -82,6 +88,13 @@ half, so a stretch of walking outdoors fills one side's list with entries the
 other keeps somewhere else. `grep '\[domonst\] mode=1'` on both before
 diffing, or diff the whole thing and read the mode column.
 
+`BOE_TRACE_LIGHT=1` pairs with **`LIGHT=1`** here, which prints
+`light= rad= lit= ltype=` in the same order: the party's lantern, the radius it
+buys, whether the party's own square is in the town's permanent `lighting`
+grid, and the town's lighting type. That pairing named `set_up_lights`' missing
+line-of-sight test — `lit=1` here against `lit=0` there, on a square eight
+squares from any lamp and behind a wall.
+
 `BOE_TRACE_PCS=1` (`PCS=1` here) prints each PC's `main_status`, health and
 combat position. Whether a PC is alive gates more monster behaviour than you
 would guess — `do_monster_turn` will not walk toward a dead one, `closest_pc`
@@ -89,13 +102,6 @@ skips them — so a party-state divergence reads as a creature that moved on one
 side and not the other, with nothing about movement actually wrong. Reach for
 it to *rule that out* before chasing the movement code, which is exactly the
 detour it was written to end.
-`BOE_TRACE_LIGHT=1` adds `light=<level> rad=<radius> lit=<0|1> ltype=<n>` — the
-party's light and whether its own square counts as lit. `pt_in_light` gates
-`can_see_light`, which gates every notice roll in a dark town, so a divergence
-there reads as a creature that saw the party on one side and not the other with
-every position agreeing. There is no `LIGHT=1` on this side yet; print it from a
-scratch `console.log` when you need the pair.
-
 `BOE_TRACE_PICKT=1` prints one line per candidate `monst_pick_target_monst`
 weighs — `alive`, whether the two are friendly, the distance, and the best so
 far — plus a line per call. It exists because that loop's tie-break draw fires

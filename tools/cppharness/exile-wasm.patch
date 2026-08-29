@@ -225,7 +225,7 @@ index b19e0983..a19325ec 100644
  #endif
  #ifdef __APPLE__
 diff --git a/src/game/boe.monster.cpp b/src/game/boe.monster.cpp
-index 937c63d0..aac7728a 100644
+index 937c63d0..00f4f5a0 100644
 --- a/src/game/boe.monster.cpp
 +++ b/src/game/boe.monster.cpp
 @@ -194,6 +194,10 @@ void do_monsters() {
@@ -239,7 +239,7 @@ index 937c63d0..aac7728a 100644
  	
  	if(overall_mode == MODE_TOWN)
  		for(short i = 0; i < univ.town.monst.size(); i++)
-@@ -254,6 +258,12 @@ void do_monsters() {
+@@ -254,6 +258,14 @@ void do_monsters() {
  				// Make hostile monsters active
  				if(univ.town.monst[i].active == eCreatureStatus::IDLE && !univ.town.monst[i].is_friendly()
  					&& (dist(univ.town.monst[i].cur_loc,univ.party.town_loc) <= 8)) {
@@ -248,11 +248,13 @@ index 937c63d0..aac7728a 100644
 +							<< "," << univ.town.monst[i].cur_loc.y << ") party=(" << univ.party.town_loc.x
 +							<< "," << univ.party.town_loc.y << ") d="
 +							<< dist(univ.town.monst[i].cur_loc,univ.party.town_loc)
-+							<< " att=" << int(univ.town.monst[i].attitude) << std::endl;
++							<< " att=" << int(univ.town.monst[i].attitude)
++							<< " see=" << can_see_light(univ.town.monst[i].cur_loc,univ.party.town_loc,sight_obscurity)
++							<< " stealth=" << int(univ.party.status[ePartyStatus::STEALTH] > 0) << std::endl;
  					r1 = get_ran(1,1,100);
  					r1 += (univ.party.status[ePartyStatus::STEALTH] > 0) ? 46 : 0;
  					r1 += can_see_light(univ.town.monst[i].cur_loc,univ.party.town_loc,sight_obscurity) * 10;
-@@ -354,6 +364,7 @@ bool monst_hate_spot(short which_m,location *good_loc) {
+@@ -354,6 +366,7 @@ bool monst_hate_spot(short which_m,location *good_loc) {
  short monst_pick_target(short which_m) {
  	cCreature *cur_monst;
  	short targ_pc,targ_m;
@@ -260,7 +262,7 @@ index 937c63d0..aac7728a 100644
  	
  	cur_monst = &univ.town.monst[which_m];
  	
-@@ -429,8 +440,14 @@ short monst_pick_target(short which_m) {
+@@ -429,8 +442,14 @@ short monst_pick_target(short which_m) {
  
  short monst_pick_target_monst(cCreature *which_m) {
  	short min_dist = 1000,cur_targ = 6;
@@ -275,7 +277,7 @@ index 937c63d0..aac7728a 100644
  		if(univ.town.monst[i].is_alive() && !which_m->is_friendly(univ.town.monst[i]) && // allve + they hate each other
  			((dist(which_m->cur_loc,univ.town.monst[i].cur_loc) < min_dist) ||
  			 ((dist(which_m->cur_loc,univ.town.monst[i].cur_loc) == min_dist) && (get_ran(1,0,7) < 4))) &&
-@@ -698,13 +715,26 @@ bool try_move(short i,location start,short x,short y) {
+@@ -698,13 +717,26 @@ bool try_move(short i,location start,short x,short y) {
  	if((overall_mode == MODE_TOWN || overall_mode == MODE_COMBAT) && univ.town.is_force_cage(start.x,start.y))
  		return false;
  	
@@ -308,7 +310,7 @@ index 937c63d0..aac7728a 100644
  }
  
  bool combat_move_monster(short which,location destination) {
-@@ -765,7 +795,13 @@ location random_shift(location start) {
+@@ -765,7 +797,13 @@ location random_shift(location start) {
  }
  
  bool outdoor_move_monster(short num,location dest) {

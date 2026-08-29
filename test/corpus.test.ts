@@ -175,6 +175,17 @@ async function play(path: string): Promise<Row> {
               + `a${m.active}`
               + (process.env.TARG ? `->(${m.targLoc.x},${m.targLoc.y})` : '')).join(''));
         }
+        // The pair to `BOE_TRACE_LIGHT=1` on the harness, in the same order and
+        // the same names. `pt_in_light` gates `can_see_light`, which gates
+        // every notice roll in a dark town — so a divergence here reads as a
+        // creature that saw the party on one side and not on the other with
+        // every position agreeing, and it is invisible in the draw stream
+        // because none of these four terms costs a draw.
+        if (process.env.LIGHT && univ.town) {
+          emit(`      light=${univ.party.lightLevel} rad=${session.lightRadius()}`
+            + ` lit=${univ.town.isLit(l.x, l.y) ? 1 : 0}`
+            + ` ltype=${univ.town.record.lightingType}`);
+        }
         if (process.env.PCS) {
           // The pair to `BOE_TRACE_PCS=1`. Whether a PC is alive gates a
           // surprising amount of monster behaviour — `do_monster_turn` won't
