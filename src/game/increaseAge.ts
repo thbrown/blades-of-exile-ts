@@ -17,6 +17,7 @@
  */
 
 import { DamageType } from '../data/monster';
+import { TRACE_AGE } from '../core/trace';
 import { tryAutoSave } from './autosave';
 import { ItemAbil, abilGroup, abilHarms } from '../data/item';
 import { Lighting } from '../data/town';
@@ -172,6 +173,11 @@ export async function increaseAgeEffects(session: GameSession): Promise<void> {
     party.age += 5;
     if (party.inHorse < 0) party.age += 5;
   } else party.age++;
+
+  if (TRACE_AGE) {
+    console.log(`      [age] increase_age mode=${session.mode}`
+      + ` horse=${party.inHorse} -> ${party.age}`);
+  }
 
   const age = party.age;
 

@@ -1604,15 +1604,17 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue at the end of 2026-08-29 has **no bucket bigger than three files**:
-  `placeGrid` at three, then some thirty single files. The seven files whose
+  queue at the end of 2026-08-30 has **no bucket bigger than three files**:
+  `click_control @ get_ran(1,0,70)` and `handle_target_space @ get_ran(1,0,1)`
+  at three each, then some thirty single files. The seven files whose
   line reads `harness: … Couldn't replay action: <click_control><id>spellN…`
   are the **oracle** giving up, not this port: `handle_spellcast` returns
   without opening the cast-spell dialog there, so the recording's next click
   has nothing to click on. Those files' numbers are "matched as far as the C++
   got", which for the two at the top of the list is now its whole run.
-  Corpus **459,492** matching draws, **19 of 87** files agreeing all the way,
-  44 blocked outside the rules. **Those numbers were 381,127 / 19 / 40 at the
+  Corpus **466,525** matching draws, **19 of 87** files agreeing all the way,
+  45 blocked outside the rules. **Those numbers were 459,492 / 19 / 44 at the
+  end of 2026-08-29, 381,127 / 19 / 40 at the
   end of 2026-08-24, 285,845 / 15 / 41 the morning before that and
   190,362 / 10 / 37 the day before that** — the entries at
   the bottom of this file are what working the queue looks like.
@@ -6387,9 +6389,67 @@ The M6 list below is kept for the history of what it covered:
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
 
-- **OPEN LEAD: `ZKR_11-05-2025_20-04-33`, an outdoor turn that costs 40 ticks
-  there and 10 here (M8, 2026-08-29).** The biggest remaining rules file,
-  20,922 draws. Pinpointed to one action; not fixed.
+- **`CALL_SPECIAL` terrain calls the *scenario* list unless told otherwise (M8,
+  2026-08-30).** This closes the lead recorded below —
+  `ZKR_11-05-2025_20-04-33`, an outdoor turn that cost 40 ticks in the C++ and
+  10 here — and the cause was not the SDF that lead was pointing at.
+  - `eTerSpec::CALL_SPECIAL`'s `flag1` names a node and **`flag2` says which
+    list that number indexes** (boe.specials.cpp:465). The default is
+    `eSpecCtxType::SCEN`; only `flag2 == 1` means "the town or sector I am
+    standing in". This port ignored `flag2` and always took the town/outdoor
+    list, so it ran whatever node happened to sit at that index locally.
+  - In Za-Khazi Run the rubble squares are `CALL_SPECIAL` → **scenario node 1**,
+    a `CHANGE_TIME +30` followed by "The rubble is very heavy. | It takes a
+    while to pass it." Crossing one costs four turns, not one; that is the
+    whole point of a scenario that is a race against the clock. This port took
+    *outdoor* node 1 instead — a `ONCE_DIALOG` — so the clock fell 30 ticks
+    behind on every rubble square and every `age % n` upkeep after it landed on
+    the wrong turn. The symptom surfaced 20,000 draws later as the C++ spending
+    `refresh_store_items`' `get_ran(1,0,41)`, the every-4000-ticks shop
+    restock, while this port was still 180 ticks short of it.
+  - The location handed to the chain was wrong too, and in the same place:
+    `check_special_terrain` passes the square it was *called* with, i.e. the
+    outdoor **window** coordinate, not the sector-local one that the
+    `special_locs` scan a few lines above uses. It reaches the chain as
+    reserved pointers 10/11/12. The mode and context were also derived from
+    `univ.town` existing rather than from the C++'s
+    `TOWN_MOVE || (COMBAT_MOVE && which_combat_type == 1)`; both fixed here.
+  - **Where it stands.** The file went 20,922 → **27,955** matching draws,
+    which is every draw the C++ made: the oracle crashes at its action 947 on
+    the out-of-range access it has always crashed on, and this port ran past
+    it. Corpus 459,492 → **466,525**, blocked outside the rules 44 → **45** —
+    the file moved into *that* column rather than the "agrees all the way" one,
+    which stays at 19, because a run the oracle cannot finish can never be
+    counted as agreeing to the end.
+  - **Two new instruments, and the first is why this took a day rather than a
+    week the next time.**
+    - **`BOE_TRACE_AGE=1` / `AGE=1`** prints one line per tick the clock takes
+      and who took it: `[age] increase_age mode= horse= -> N`, `[age]
+      CHANGE_TIME +n -> N`, `[age] do_rest +n -> N`. Those three are the *only*
+      writers of `univ.party.age` on either side, so the trace is complete by
+      construction. It named this bug on its first run — the previous session
+      had inferred "+30 arrived from somewhere" correctly and then guessed at
+      the wrong culprit.
+    - **`[spec]` now covers all three lists.** The C++'s line used to sit in
+      `check_special_terrain`, which only ever sees a *town* square's chain; it
+      is now in `run_special`'s own loop, so it prints `SCEN`/`OUTDOOR`/`TOWN`,
+      one line per node, plus `[spec] queued …`. Both sides print the
+      **numeric** opcode as well as the name, because the two engines spell the
+      names differently (enum identifier here, the scenario editor's wording
+      there) and the number is what diffs. The two traces for this file are now
+      identical line for line apart from that wording.
+  - The general point, which is the third time this log has made it: **the lead
+    was right about the mechanism and wrong about the cause**, and it said so
+    honestly ("presumably"). "This port fires a `ONCE_DIALOG` and the C++
+    doesn't" looked like a spent one-shot and an SDF disagreement. It was the
+    same node number read out of the wrong list — the two runs never disagreed
+    about any SDF at all. When a port picks a *different node* than the C++,
+    check which list it indexed before checking what the node did.
+
+- **The lead that found it: `ZKR_11-05-2025_20-04-33`, an outdoor turn that
+  costs 40 ticks there and 10 here (M8, 2026-08-29).** The biggest remaining
+  rules file, 20,922 draws. Pinpointed to one action; **solved by the entry
+  above** — read the two together.
   - It parts in `afterPartyTurnInner`: the C++ spends `return_treasure`'s
     `get_ran(1,0,41)` — `increase_age` → `refresh_store_items`, the every-4000
     -ticks shop restock — and this port spends the next turn's ordinary

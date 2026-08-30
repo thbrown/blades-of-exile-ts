@@ -4,6 +4,7 @@
  */
 
 import { SpecType } from '../../data/special';
+import { TRACE_AGE } from '../../core/trace';
 import { interestingString } from '../../data/item';
 import { BUFFER_STR, Universe } from '../../universe/universe';
 import { QuestStatus } from '../../data/quest';
@@ -150,6 +151,7 @@ export async function generalSpec(
     case SpecType.CHANGE_TIME:
       checkMess = true;
       party.age += spec.ex1a;
+      if (TRACE_AGE) console.log(`      [age] CHANGE_TIME +${spec.ex1a} -> ${party.age}`);
       break;
 
     case SpecType.REST:

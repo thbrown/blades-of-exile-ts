@@ -7,6 +7,7 @@
 import { ItemAbil } from '../data/item';
 import { TerSpec } from '../data/terrain';
 import { dist } from '../core/location';
+import { TRACE_AGE } from '../core/trace';
 import { tryAutoSave } from './autosave';
 import { hasAbilEquip } from '../universe/inventory';
 import { MainStatus, PartyStatus, Status, Trait } from '../universe/skills';
@@ -32,6 +33,7 @@ export function doRest(
 ): void {
   const ageBefore = univ.party.age;
   univ.party.age += length;
+  if (TRACE_AGE) console.log(`      [age] do_rest +${length} -> ${univ.party.age}`);
 
   // Resting clears every timed status, on the party and on each PC.
   for (const pc of univ.party.pcs) pc.status.fill(0);

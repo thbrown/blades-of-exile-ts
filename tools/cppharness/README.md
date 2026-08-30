@@ -16,7 +16,15 @@ BOE_TRACE=1 ./tools/cppharness/run.sh <replay.xml>
 
 `BOE_TRACE=1` prints one line per replayed action in the same shape as
 `CORPUS=1 TRACE=1 ONLY=<file> npx vitest run test/corpus.test.ts`, plus a
-`[spec] town node N (Type) at (x,y)` line whenever a square fires its script.
+`[spec] <LIST> node N type T (Name) at (x,y)` line for **every node a chain
+runs**, in any of the three lists (`SCEN`/`OUTDOOR`/`TOWN`), with `[spec]
+queued …` when a chain fires while another is already running. `SPEC=1` prints
+the same line here. The two engines spell the opcode differently — the enum
+identifier there, the scenario editor's own wording here — so the **numeric**
+type is what the two traces diff on. This line used to sit in
+`check_special_terrain` and so could only ever see a town square's chain, which
+made outdoor and scenario scripts invisible on the C++ side; that is what hid
+the Za-Khazi Run clock bug for a week.
 `BOE_TRACE_MONST=1` adds the town's creature list to each line — position,
 `a<active>` and **`h<health>`** — and pairs with `MONST=1` on the corpus test.
 That pairing is what found the townsperson-drift bucket, on the first turn of a
@@ -147,6 +155,17 @@ wanted here: the line is per action point, and the number of lines a creature
 produces is itself the signal. It found the creature-status save bug —
 identical everything except `hs=1` against `hs=0`, one line after a
 `load_party`, which named the file format rather than the rules.
+
+**`BOE_TRACE_AGE=1` prints one line per tick the clock takes, and who took it**:
+`[age] increase_age mode= horse= -> N`, `[age] CHANGE_TIME +n -> N` and `[age]
+do_rest +n -> N`. Those three are the *only* things in the game that move
+`univ.party.age`, so the trace is complete by construction. Reach for it
+whenever the two runs agree on every draw and disagree about **which turn it
+is** — every `age % n` upkeep (shop restock, wandering monsters, timers) hangs
+off that number, and a clock that has drifted shows up as a draw one side makes
+and the other doesn't, arbitrarily far from the cause. It found the Za-Khazi
+Run drift in one run: an outdoor move that cost 40 ticks there and 10 here was
+a `CHANGE_TIME +30` on a *scenario* node the terrain called.
 
 **`BOE_TRACE_RAN=n` is the sharpest of them**: it dumps the first *n* draws from
 the game stream, and `RAN=n` prints the identical format here. Diff the two and

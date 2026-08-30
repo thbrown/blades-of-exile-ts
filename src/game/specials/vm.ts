@@ -115,6 +115,10 @@ export class SpecialsEngine {
 
     // Only one chain at a time: anything triggered mid-chain waits its turn.
     if (this.inProgress) {
+      if (SPEC_TRACE) {
+        console.log(`      [spec] queued ${SpecCtxType[whichType]} node ${startSpec}`
+          + ` at (${specLoc.x},${specLoc.y})`);
+      }
       this.queue.push({
         spec: startSpec,
         mode: whichMode,
@@ -170,16 +174,24 @@ export class SpecialsEngine {
         ctx.nextSpec = -1;
         ctx.curSpec = this.resolvePointers(this.getNode(curSpec, ctx.curSpecType));
 
-        if (ctx.curSpec.type === SpecType.INVALID) break;
-        // The pair to the C++ harness's own `[spec] town node N (Type) at
-        // (x,y)` line, which it prints under `BOE_TRACE`. Two chains that make
-        // the same draws can still run different *opcodes* — that is how the
-        // `OUT_FORCE_TOWN`/`change_level` mix-up was found: both sides changed
-        // level at the same moment, by different routes, and only the opcode
-        // names said so.
+        if (ctx.curSpec.type === SpecType.INVALID) {
+          if (SPEC_TRACE) {
+            console.log(`      [spec] ${SpecCtxType[ctx.curSpecType]} node ${curSpec} INVALID`);
+          }
+          break;
+        }
+        // The pair to the C++ harness's own `[spec] <LIST> node N type T (Name)
+        // at (x,y)` line, which it prints under `BOE_TRACE`. Two chains that
+        // make the same draws can still run different *opcodes* — that is how
+        // the `OUT_FORCE_TOWN`/`change_level` mix-up was found: both sides
+        // changed level at the same moment, by different routes, and only the
+        // opcode names said so. The two engines spell the opcode differently
+        // (enum identifier here, the scenario editor's own wording there), so
+        // the **numeric** type is what the two traces diff on.
         if (SPEC_TRACE) {
-          console.log(`      [spec] ${ctx.curSpecType} node ${curSpec}`
-            + ` type ${SpecType[ctx.curSpec.type]} at (${specLoc.x},${specLoc.y})`);
+          console.log(`      [spec] ${SpecCtxType[ctx.curSpecType]} node ${curSpec}`
+            + ` type ${ctx.curSpec.type} (${SpecType[ctx.curSpec.type]})`
+            + ` at (${specLoc.x},${specLoc.y})`);
         }
 
         switch (categoryOf(ctx.curSpec.type)) {

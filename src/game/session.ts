@@ -1999,13 +1999,28 @@ export class GameSession {
         await this.onLockedDoor?.(where, ter);
         return stop;
       case TerSpec.CALL_SPECIAL: {
-        // The terrain itself names a node; flag1 is which one. Outdoors the
-        // chain is passed *sector-local* coordinates, as everywhere else.
+        // The terrain itself names a node; flag1 is which one and **flag2 says
+        // which list it indexes** (boe.specials.cpp:465). The default is the
+        // *scenario* list: only `flag2 == 1` means "the town or sector I'm
+        // standing in". This port used to ignore flag2 and always take the
+        // town/outdoor list, which is how Za-Khazi Run's mountain squares —
+        // scenario node 1, a `CHANGE_TIME +30` that makes crossing rough
+        // country cost four turns instead of one — went unspent here, leaving
+        // the clock progressively behind the C++'s.
+        //
+        // The location handed over is the one `check_special_terrain` was
+        // called with, i.e. the outdoor *window* square, not the sector-local
+        // one the `special_locs` scan above uses. It reaches the chain as
+        // reserved pointers 10/11/12.
+        const callsTown = this.mode === GameMode.TOWN
+          || (inCombatMove && this.whichCombatType === 1);
         const r = await this.runSpecial(
-          town ? SpecCtx.TOWN_MOVE : SpecCtx.OUT_MOVE,
-          town ? SpecCtxType.TOWN : SpecCtxType.OUTDOOR,
+          inCombatMove ? SpecCtx.COMBAT_MOVE : (town ? SpecCtx.TOWN_MOVE : SpecCtx.OUT_MOVE),
+          spec.flag2 === 1
+            ? (callsTown ? SpecCtxType.TOWN : SpecCtxType.OUTDOOR)
+            : SpecCtxType.SCEN,
           spec.flag1,
-          town ? where : this.univ.party.globalToLocal(where));
+          where);
         // Only `a` is read here — the C++ ignores this node's `b`.
         if (r.blocked) return stop;
         return { canEnter: true, forced };

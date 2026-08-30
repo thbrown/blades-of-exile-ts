@@ -100,7 +100,7 @@ index 17780bca..a349fe18 100644
  		if(type == "set-sdf") return eSpecType::SET_SDF;
  		if(type == "inc-sdf") return eSpecType::INC_SDF;
 diff --git a/src/game/boe.actions.cpp b/src/game/boe.actions.cpp
-index fc7b63f1..876f8293 100644
+index fc7b63f1..ddbfa43a 100644
 --- a/src/game/boe.actions.cpp
 +++ b/src/game/boe.actions.cpp
 @@ -1907,6 +1907,10 @@ void advance_time(bool did_something, bool need_redraw, bool need_reprint) {
@@ -114,7 +114,37 @@ index fc7b63f1..876f8293 100644
  	if(!special_queue.empty()) {
  		pending_special_type pending = special_queue.front();
  		special_queue.pop();
-@@ -3547,6 +3551,10 @@ void increase_age(bool eating_trigger_autosave) {
+@@ -3288,6 +3292,8 @@ void do_abort() {
+ void do_rest(long length, int hp_restore, int mp_restore) {
+ 	unsigned long age_before = univ.party.age;
+ 	univ.party.age += length;
++	if(getenv("BOE_TRACE_AGE"))
++		std::cout << "      [age] do_rest +" << length << " -> " << univ.party.age << std::endl;
+ 	if(univ.scenario.is_legacy) {
+ 		univ.party.heal(hp_restore);
+ 		univ.party.restore_sp(mp_restore);
+@@ -3367,10 +3373,18 @@ void increase_age(bool eating_trigger_autosave) {
+ 		univ.party.age += 5;
+ 		if(univ.party.in_horse < 0)
+ 			univ.party.age += 5;
+-		
++
+ 	}
+ 	else univ.party.age++;
+-	
++
++	// BOE_TRACE_AGE: one line per tick the clock takes, and who took it. An
++	// outdoor turn is +10 here and the only other things that move the clock
++	// are CHANGE_TIME and do_rest, so this settles "which turn is it"
++	// arguments — which the draw stream cannot see at all.
++	if(getenv("BOE_TRACE_AGE"))
++		std::cout << "      [age] increase_age mode=" << int(overall_mode)
++			<< " horse=" << univ.party.in_horse << " -> " << univ.party.age << std::endl;
++
+ 	move_to_zero(univ.party.light_level);
+ 	
+ 	// decrease monster present counter
+@@ -3547,6 +3561,10 @@ void increase_age(bool eating_trigger_autosave) {
  	// Recuperation and chronic disease disads
  	for(cPlayer& pc : univ.party)
  		if(pc.main_status == eMainStatus::ALIVE) {
@@ -125,7 +155,7 @@ index fc7b63f1..876f8293 100644
  			if(pc.traits[eTrait::RECUPERATION] && get_ran(1,0,10) == 1 && pc.cur_health < pc.max_health) {
  				pc.heal(2);
  			}
-@@ -4009,6 +4017,12 @@ bool outd_move_party(location destination,bool forced) {
+@@ -4009,6 +4027,12 @@ bool outd_move_party(location destination,bool forced) {
  //					party.out_c[i].exists = false;
  		
  		ter = univ.out[real_dest.x][real_dest.y];
@@ -370,22 +400,79 @@ index 937c63d0..00f4f5a0 100644
  		univ.party.out_c[num].direction =
  		set_direction(univ.party.out_c[num].m_loc, dest);
 diff --git a/src/game/boe.specials.cpp b/src/game/boe.specials.cpp
-index 173702da..e282fa9f 100644
+index 173702da..fd0f1ecc 100644
 --- a/src/game/boe.specials.cpp
 +++ b/src/game/boe.specials.cpp
-@@ -251,6 +251,12 @@ bool check_special_terrain(location where_check,eSpecCtx mode,cPlayer& which_pc,
+@@ -251,6 +251,8 @@ bool check_special_terrain(location where_check,eSpecCtx mode,cPlayer& which_pc,
  				if(!univ.scenario.is_legacy && univ.party.in_boat >= 0 && univ.scenario.ter_types[ter].boat_over)
  					runSpecial = true;
  				if(runSpecial) {
-+					// BOE_TRACE names the node a square fires, which is what
-+					// makes a divergence in the *script* legible next to
-+					// exile-js's own trace of the same recording.
-+					if(getenv("BOE_TRACE")) std::cout << "    [spec] town node " << spec_num
-+						<< " (" << (*univ.town->specials[spec_num].type).name() << ") at ("
-+						<< where_check.x << "," << where_check.y << ")" << std::endl;
++					// The [spec] line that used to sit here now lives in
++					// run_special, so it names outdoor and scenario chains too.
  					give_help(54,0);
  					run_special(mode, eSpecCtxType::TOWN, spec_num, where_check, &s1, &s2);
  					if(s1 > 0)
+@@ -2019,6 +2021,18 @@ void run_special(pending_special_type spec, short* a, short* b, bool* redraw) {
+ //   Talk: a,b are response strings
+ //   Encounter: a=1 if monsters flee, b=1 if forced
+ // redraw - true if now need redraw
++// BOE_TRACE's [spec] lines name every node a chain runs, in any of the three
++// lists — the old print sat in check_special_terrain and so could only ever see
++// a *town* square's chain, which made an outdoor script invisible on this side.
++static const char* spec_ctx_name(eSpecCtxType t) {
++	switch(t) {
++		case eSpecCtxType::SCEN: return "SCEN";
++		case eSpecCtxType::OUTDOOR: return "OUTDOOR";
++		case eSpecCtxType::TOWN: return "TOWN";
++	}
++	return "???";
++}
++
+ void run_special(eSpecCtx which_mode, eSpecCtxType which_type, spec_num_t start_spec, location spec_loc, short* a, short* b, bool* redraw) {
+ 	int num_nodes = 0;
+ 
+@@ -2032,6 +2046,8 @@ void run_special(eSpecCtx which_mode, eSpecCtxType which_type, spec_num_t start_
+ 	// We can only have one special node chain running at a time.
+ 	// If the chain triggers an action that calls another chain, delay the chain until the current one has completed.
+ 	if(special_in_progress && start_spec >= 0) {
++		if(getenv("BOE_TRACE")) std::cout << "      [spec] queued " << spec_ctx_name(which_type)
++			<< " node " << start_spec << " at (" << spec_loc.x << "," << spec_loc.y << ")" << std::endl;
+ 		queue_special(which_mode, which_type, start_spec, spec_loc);
+ 		return;
+ 	}
+@@ -2111,13 +2127,20 @@ void run_special(eSpecCtx which_mode, eSpecCtxType which_type, spec_num_t start_
+ 		// (Of course, currently all SDFs are positive, so allowing negative arithmetic is useless.)
+ 		cSpecial& cur_node = ctx.cur_spec;
+ 		resolve_pointers(cur_node);
+-		
++
+ 		//print_nums(1111,cur_spec_type,cur_node.type);
+-		
++
+ 		if(cur_node.type == eSpecType::INVALID) {
++			if(getenv("BOE_TRACE")) std::cout << "      [spec] " << spec_ctx_name(ctx.cur_spec_type)
++				<< " node " << cur_spec << " INVALID" << std::endl;
+ 			special_in_progress = false;
+ 			return;
+ 		}
++
++		if(getenv("BOE_TRACE")) std::cout << "      [spec] " << spec_ctx_name(ctx.cur_spec_type)
++			<< " node " << cur_spec << " type " << int(cur_node.type)
++			<< " (" << (*cur_node.type).name() << ") at ("
++			<< spec_loc.x << "," << spec_loc.y << ")" << std::endl;
+ 		switch((*cur_node.type).cat) {
+ 			case eSpecCat::GENERAL:
+ 				if(cur_node.type == eSpecType::NONE && univ.debug_mode) {
+@@ -2261,6 +2284,9 @@ void general_spec(const runtime_state& ctx) {
+ 		case eSpecType::CHANGE_TIME:
+ 			check_mess = true;
+ 			univ.party.age += cur_node.ex1a;
++			if(getenv("BOE_TRACE_AGE"))
++				std::cout << "      [age] CHANGE_TIME +" << cur_node.ex1a
++					<< " -> " << univ.party.age << std::endl;
+ 			// TODO: Should this trigger special events, timers, etc?
+ 			break;
+ 		case eSpecType::SCEN_TIMER_START:
 diff --git a/src/game/boe.startup.cpp b/src/game/boe.startup.cpp
 index 56cde7c1..9abbdca0 100644
 --- a/src/game/boe.startup.cpp
