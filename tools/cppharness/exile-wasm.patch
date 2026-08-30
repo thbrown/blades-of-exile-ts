@@ -299,7 +299,7 @@ index b19e0983..a19325ec 100644
  #endif
  #ifdef __APPLE__
 diff --git a/src/game/boe.monster.cpp b/src/game/boe.monster.cpp
-index 937c63d0..00f4f5a0 100644
+index 937c63d0..a216581a 100644
 --- a/src/game/boe.monster.cpp
 +++ b/src/game/boe.monster.cpp
 @@ -194,6 +194,10 @@ void do_monsters() {
@@ -336,7 +336,31 @@ index 937c63d0..00f4f5a0 100644
  	
  	cur_monst = &univ.town.monst[which_m];
  	
-@@ -429,8 +442,14 @@ short monst_pick_target(short which_m) {
+@@ -370,6 +383,23 @@ short monst_pick_target(short which_m) {
+ 		if(univ.party[univ.town.monst[which_m].target].main_status != eMainStatus::ALIVE || get_ran(1,0,3) == 1)
+ 			univ.town.monst[which_m].target = 6;
+ 	
++	// BOE_TRACE_PICKT: the two "who annoyed me last" priorities and everything
++	// each tests. A creature that switches onto the wrong PC here spends the
++	// same draws in a different order for the rest of the fight.
++	if(getenv("BOE_TRACE_PICKT")) {
++		std::cout << "      [pickt] " << which_m << " combat=" << int(is_combat())
++			<< " frnd=" << int(cur_monst->is_friendly())
++			<< " caster=" << spell_caster << " firer=" << missile_firer
++			<< " target=" << univ.town.monst[which_m].target
++			<< " at=(" << cur_monst->cur_loc.x << "," << cur_monst->cur_loc.y << ")";
++		if(spell_caster < 6)
++			std::cout << " casterAt=(" << univ.party[spell_caster].combat_pos.x << ","
++				<< univ.party[spell_caster].combat_pos.y << ")"
++				<< " casterSee=" << int(monst_can_see(which_m,univ.party[spell_caster].combat_pos))
++				<< " casterAlive=" << int(univ.party[spell_caster].main_status == eMainStatus::ALIVE);
++		std::cout << std::endl;
++	}
++
+ 	if(is_combat() && !cur_monst->is_friendly()) {
+ 		// First target the last PC who cast a spell
+ 		if(spell_caster < 6)
+@@ -429,8 +459,14 @@ short monst_pick_target(short which_m) {
  
  short monst_pick_target_monst(cCreature *which_m) {
  	short min_dist = 1000,cur_targ = 6;
@@ -351,7 +375,7 @@ index 937c63d0..00f4f5a0 100644
  		if(univ.town.monst[i].is_alive() && !which_m->is_friendly(univ.town.monst[i]) && // allve + they hate each other
  			((dist(which_m->cur_loc,univ.town.monst[i].cur_loc) < min_dist) ||
  			 ((dist(which_m->cur_loc,univ.town.monst[i].cur_loc) == min_dist) && (get_ran(1,0,7) < 4))) &&
-@@ -698,13 +717,26 @@ bool try_move(short i,location start,short x,short y) {
+@@ -698,13 +734,26 @@ bool try_move(short i,location start,short x,short y) {
  	if((overall_mode == MODE_TOWN || overall_mode == MODE_COMBAT) && univ.town.is_force_cage(start.x,start.y))
  		return false;
  	
@@ -384,7 +408,7 @@ index 937c63d0..00f4f5a0 100644
  }
  
  bool combat_move_monster(short which,location destination) {
-@@ -765,7 +797,13 @@ location random_shift(location start) {
+@@ -765,7 +814,13 @@ location random_shift(location start) {
  }
  
  bool outdoor_move_monster(short num,location dest) {
@@ -511,7 +535,7 @@ index faaef3f2..2a648966 100644
  }
  
 diff --git a/src/tools/replay.cpp b/src/tools/replay.cpp
-index 3946c875..8d20f6d9 100644
+index 3946c875..73e88644 100644
 --- a/src/tools/replay.cpp
 +++ b/src/tools/replay.cpp
 @@ -28,6 +28,15 @@
@@ -541,7 +565,7 @@ index 3946c875..8d20f6d9 100644
  			} else if constexpr (std::is_integral_v<T>) {
  				if constexpr (std::is_same_v<S, std::string>) {
  					return static_cast<T>(std::stoi(arg));
-@@ -252,6 +263,155 @@ int next_action_line() {
+@@ -252,6 +263,180 @@ int next_action_line() {
  	return next_action->Row();
  }
  
@@ -567,6 +591,8 @@ index 3946c875..8d20f6d9 100644
 +	return on;
 +}
 +
++void trace_pc_pos();
++
 +void trace_ran(short times, short lo, short hi, short result) {
 +	static long n = 0;
 +	static bool on = getenv("BOE_TRACE_RAN") != nullptr;
@@ -585,6 +611,29 @@ index 3946c875..8d20f6d9 100644
 +		int got = backtrace(frames, 32);
 +		backtrace_symbols_fd(frames, got, 1);
 +	}
++	trace_pc_pos();
++}
++
++// BOE_TRACE_PCPOS=1 — one line whenever a PC's combat position changes, checked
++// on every traced draw. A PC that moved with nobody watching is the hardest
++// divergence to place: the action trace only prints the *active* PC, `pcs:` is
++// a snapshot taken at action dispatch, and everything in between is invisible.
++// Anchoring the check to the draw stream means the line lands between two
++// numbered draws, which names the rule to within a few statements.
++void trace_pc_pos() {
++	static bool on = getenv("BOE_TRACE_PCPOS") != nullptr;
++	if(!on) return;
++	static location last[6];
++	static bool primed = false;
++	for(short p = 0; p < 6; p++) {
++		if(primed && (last[p].x != univ.party[p].combat_pos.x
++			|| last[p].y != univ.party[p].combat_pos.y))
++			std::cout << "      [pcpos] " << p << " (" << last[p].x << "," << last[p].y
++				<< ") -> (" << univ.party[p].combat_pos.x << ","
++				<< univ.party[p].combat_pos.y << ")" << std::endl;
++		last[p] = univ.party[p].combat_pos;
++	}
++	primed = true;
 +}
 +
 +void trace_action(const std::string& type, const std::string& text) {
@@ -697,7 +746,7 @@ index 3946c875..8d20f6d9 100644
  Element& pop_next_action(std::string expected_action_type) {
  	if(next_action == nullptr){
  		throw std::string { "Replay error! No action left to pop" };
-@@ -264,6 +424,13 @@ Element& pop_next_action(std::string expected_action_type) {
+@@ -264,6 +449,13 @@ Element& pop_next_action(std::string expected_action_type) {
  
  	Element* to_return = next_action;
  	next_action = next_action->NextSiblingElement(false);

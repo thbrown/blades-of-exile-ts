@@ -34,6 +34,7 @@ import {
   traitNames, writeEnumTag,
 } from '../data/enumTags';
 import { FieldType } from '../data/fields';
+import { TerSpec } from '../data/terrain';
 import { Item, ItemType, ItemUse, defaultItem } from '../data/item';
 import { Monster, defaultMonster } from '../data/monster';
 import {
@@ -1030,7 +1031,14 @@ export function readCurTown(file: TagFile, univ: Universe, town: CurTown): void 
       }
       const terrain = page.list('TERRAIN');
       for (let y = 0; y < dim && y < terrain.length; y++) {
-        for (let x = 0; x < dim; x++) town.record.terrain[x]![y] = terrain[y]!.int(x, 0);
+        for (let x = 0; x < dim; x++) {
+          const t = terrain[y]!.int(x, 0);
+          town.record.terrain[x]![y] = t;
+          // The C++ re-derives `belt_present` from the loaded terrain here
+          // (universe.cpp:904), because a saved town never goes through
+          // `start_town_mode`'s sweep.
+          if (univ.terrainType(t).special === TerSpec.CONVEYOR) town.beltPresent = true;
+        }
       }
     } else if (page.firstKey() === 'ITEM') {
       const i = page.first('ITEM')!.int(0, -1);

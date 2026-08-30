@@ -141,8 +141,29 @@ function of which candidates are rejected**, and the rejections are invisible
 in every other trace. Comparing the two candidate lists side by side is what
 showed that `monst_can_see(i, monst[i].cur_loc)` — a creature asked whether it
 can see its own square — is really a *lighting* test, and that this port had
-dropped it as a no-op. There is no pair for it on this side; add a scratch
-`console.log` in `pickTargetMonst` when you need one.
+dropped it as a no-op. There is no pair for that half on this side; add a
+scratch `console.log` in `pickTargetMonst` when you need one.
+
+It also prints one line per call to `monst_pick_target` itself — the creature,
+whether it is in combat and friendly, `spell_caster`, `missile_firer`, its
+stored target, and (when there is a caster) that PC's square, whether the
+creature can see it and whether it is alive. **`PICKT=1` prints that line here
+too**, and the pair is what to diff: the two "who annoyed me last" priorities
+each spend a `get_ran(1,1,5)` before testing anything, so a creature that
+disagrees about the caster's *square* still makes the first draw and then takes
+a different branch — which reads in the draw stream as a divergence in whatever
+the next rule happens to be. That is how the missing `push_things` was found.
+
+**`BOE_TRACE_PCPOS=1` prints one line whenever a PC's combat position
+changes**, checked on every traced draw (so it needs `BOE_TRACE_RAN=n` too, and
+lands between two numbered draws). A PC that moved with nobody watching is the
+hardest divergence to place: the action line only prints the *active* PC,
+`pcs:` is a snapshot taken at action dispatch, and everything in between is
+invisible. It answered "who moved three PCs one square north between draws 8998
+and 8999?" in one run — the answer being `push_things`, the conveyor belts,
+which spend no draws at all and so cannot be seen any other way. There is no
+pair for it here; `PCS=1`'s snapshot is usually enough once you know which
+action to look at.
 
 **`BOE_TRACE_TACTIC=1` (`TACTIC=1` here)** prints one line per action point a
 creature spends in `do_monster_turn`, taken just before the flee test:

@@ -12,8 +12,9 @@
  * more frequent. `party.age % n === 0` is the test, so the *phase* matters as
  * well as the rate — don't "simplify" these into counters.
  *
- * Not ported here (each is another milestone): `push_things`, `dump_gold` and
- * the autosave that eating triggers.
+ * Not ported here (each is another milestone): `dump_gold` and the autosave
+ * that eating triggers. (`push_things` was on that list until 2026-08-30; it
+ * lives in `pushThings.ts` now and is called from `afterPartyTurnInner`.)
  */
 
 import { DamageType } from '../data/monster';

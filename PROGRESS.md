@@ -1605,14 +1605,17 @@ bottom. What M8 still owes:
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
   queue at the end of 2026-08-30 has **no bucket bigger than three files**:
-  `click_control @ get_ran(1,0,70)` and `handle_target_space @ get_ran(1,0,1)`
-  at three each, then some thirty single files. The seven files whose
+  `handle_target_space @ get_ran(1,0,1)` at three, then some thirty single
+  files. Four of those single buckets are `handle_target_space @
+  get_ran(n,1,m)` with a different *n* each time — the same shape, a spell
+  resolving against a different number of targets, and worth reading together
+  rather than one at a time. The seven files whose
   line reads `harness: … Couldn't replay action: <click_control><id>spellN…`
   are the **oracle** giving up, not this port: `handle_spellcast` returns
   without opening the cast-spell dialog there, so the recording's next click
   has nothing to click on. Those files' numbers are "matched as far as the C++
   got", which for the two at the top of the list is now its whole run.
-  Corpus **466,525** matching draws, **19 of 87** files agreeing all the way,
+  Corpus **466,654** matching draws, **19 of 87** files agreeing all the way,
   45 blocked outside the rules. **Those numbers were 459,492 / 19 / 44 at the
   end of 2026-08-29, 381,127 / 19 / 40 at the
   end of 2026-08-24, 285,845 / 15 / 41 the morning before that and
@@ -6388,6 +6391,53 @@ The M6 list below is kept for the history of what it covered:
     are bigger. **The harness's remaining debt is no longer the cheap seam it
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
+
+- **Conveyor belts were never ported, and they move PCs (M8, 2026-08-30).**
+  `push_things` (boe.specials.cpp:1683), listed as unported in
+  `increaseAge.ts`'s header comment since M5 and never revisited.
+  - The bucket was `click_control @ get_ran(1,0,70)`, three files, head
+    `ZKR_16-05-2025_15-19-17`. The C++ spent `switch_target_to_adjacent`'s
+    `total_encumbrance` roll where this port spent the *next* draw of
+    `monstPickTarget` — a creature that took an earlier branch.
+  - `PICKT=1` against the C++'s `[pickt]` named the state in one line: both
+    sides agreed the spell-caster was PC 4 and rolled the same
+    `get_ran(1,1,5)`, and then `casterAt=(1,30)` there against `(1,31)` here.
+    **A PC was standing one square out**, so `monst_can_see` answered
+    differently and the creature stopped looking.
+  - Backwards from there with a new instrument, **`BOE_TRACE_PCPOS=1`** — one
+    line whenever a PC's `combat_pos` changes, checked on every traced draw.
+    It put the move between draws 8998 and 8999: PCs 3, 4 and 5 each stepped
+    one square north, all at once, between the end of `do_monster_turn` and
+    `set_pc_moves`. That range holds exactly one thing, `combat_run_monst`'s
+    call to `push_things`.
+  - **A belt spends no draws.** That is why it survived thirty thousand
+    matching draws in this file and why no bucket ever pointed at it: three PCs
+    can walk a square between two turns without touching the RNG, and every
+    trace this project had either prints the *active* PC (the action line) or
+    takes its snapshot at action dispatch (`pcs:`). `[pcpos]` exists now
+    because that combination has no answer otherwise.
+  - What the port gained: `game/pushThings.ts`, called from
+    `combat_run_monst`'s slot (boe.combat.cpp:2019) and `increase_age`'s
+    (boe.actions.cpp:3597), plus `CurTown.beltPresent` latched the same three
+    ways the C++ latches `belt_present` — the `start_town_mode` terrain sweep,
+    `alter_space`, and loading a saved town. Rules worth keeping in mind:
+    - **The direction flags OR and then cancel.** A big creature straddling
+      two opposed belts moves nowhere; N with E is one diagonal step; and no
+      axis is ever double-pushed however many belts agree.
+    - **Walls only stop a push under `conveyor-belts: V2`.** Before that flag
+      the original shoves things into walls, and the recordings made then
+      depend on it.
+    - Under V2 a thing must not block its own destination, and the C++'s way
+      of arranging that is to shove its live position `max_dim` to the right
+      for the duration of the test, restoring it by assigning the result. The
+      port copies the start location first — aliasing the live object there
+      would compare a displaced square with itself.
+  - **Where it stands.** `ZKR_16-05-2025_15-19-17` 9,074 → **9,203** matching
+    draws and no other file moved: corpus 466,525 → **466,654**. That is a
+    small number for a real rule, which is the usual shape — the payoff is that
+    every later divergence in a belt town is now about something else. The
+    bucket went three files → two, and this file's next stop is a spell the
+    C++ refuses to re-cast and this port fires again.
 
 - **`CALL_SPECIAL` terrain calls the *scenario* list unless told otherwise (M8,
   2026-08-30).** This closes the lead recorded below —

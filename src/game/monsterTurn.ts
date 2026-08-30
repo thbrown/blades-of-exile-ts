@@ -37,6 +37,7 @@ import { animSettle, bookActionPause, focusOn } from './anim';
 import { doPoison, handleAcid, handleDisease } from './increaseAge';
 import { monstInflictFields, processFields } from './processFields';
 import { specialIncreaseAge } from './specialIncreaseAge';
+import { pushThings } from './pushThings';
 import { monstCastMage, monstCastPriest } from './monsterSpells';
 import { placeSpellPattern } from './spellPatterns';
 import { pointOnScreen } from './session';
@@ -61,6 +62,15 @@ export const TRACE_TOUCH = Boolean(
   typeof process !== 'undefined' ? process.env?.TOUCH : undefined);
 export const TRACE_TACTIC = Boolean(
   typeof process !== 'undefined' ? process.env?.TACTIC : undefined);
+
+/**
+ * `PICKT=1`, the pair to `BOE_TRACE_PICKT`: what `monstPickTarget` saw before
+ * it chose. The two "who annoyed me last" priorities are the interesting part —
+ * a creature that switches onto the wrong PC spends the same draws in a
+ * different order for the rest of the fight.
+ */
+export const TRACE_PICKT = Boolean(
+  typeof process !== 'undefined' ? process.env?.PICKT : undefined);
 
 /**
  * `futzing` (boe.combat.cpp:60) — how many action points a creature has spent
@@ -360,6 +370,19 @@ export function monstPickTarget(session: GameSession, monst: Creature): number {
   // left to right, so the draw is spent up front and only then thrown away.
   // Ordering the checks the tidy way round would take a number out of the
   // stream at a different moment, which is a divergence like any other.
+  if (TRACE_PICKT) {
+    const caster = univ.party.pcs[session.spellCaster];
+    console.log(`      [pickt] ${univ.town?.monsters.indexOf(monst)}`
+      + ` combat=${isCombat(session.mode) ? 1 : 0} frnd=${monst.isFriendly ? 1 : 0}`
+      + ` caster=${session.spellCaster} firer=${session.missileFirer}`
+      + ` target=${monst.target} at=(${monst.curLoc.x},${monst.curLoc.y})`
+      + (caster && session.spellCaster < NO_ONE
+        ? ` casterAt=(${caster.combatPos.x},${caster.combatPos.y})`
+          + ` casterSee=${monstCanSee(session, monst, caster.combatPos) ? 1 : 0}`
+          + ` casterAlive=${caster.isAlive ? 1 : 0}`
+        : ''));
+  }
+
   if (isCombat(session.mode) && !monst.isFriendly) {
     if (session.spellCaster < NO_ONE) {
       const pc = univ.party.pcs[session.spellCaster];
@@ -1737,6 +1760,10 @@ export async function combatRunMonst(session: GameSession): Promise<void> {
   // combat_run_monst's own call (boe.combat.cpp:2018): the timers get their
   // round in a fight too, so a town timer keeps counting while you fight in it.
   specialIncreaseAge(session);
+  // Conveyor belts move whoever is standing on one, once a round
+  // (boe.combat.cpp:2019). It spends no draws unless someone is shoved into a
+  // stone block, which is what made its absence so hard to see.
+  await pushThings(session);
   // Poison, disease and acid bite far more often in combat than they do on the
   // road: every other round rather than every fiftieth turn.
   if (univ.party.age % 2 === 0) await doPoison(session);

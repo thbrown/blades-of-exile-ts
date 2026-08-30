@@ -78,6 +78,7 @@ import { SpecCtx, SpecCtxType, SpecialHost } from './specials/context';
 import { SpecialsEngine } from './specials/vm';
 import { specialIncreaseAge } from './specialIncreaseAge';
 import { alterSpace } from './specials/general';
+import { pushThings } from './pushThings';
 import { ONCE_DONE } from './specials/oneshot';
 import { Spell } from '../data/spell';
 import { castSpell } from './spellTown';
@@ -562,6 +563,8 @@ export class GameSession {
     // or 10 — that's what the C++ passes (the default argument), so an outdoor
     // turn ticks a party timer down by one, not by the time that passed.
     specialIncreaseAge(this, 1);
+    // Conveyor belts, between the timers and the fields (boe.actions.cpp:3597).
+    await pushThings(this);
     // The fields do their work here, before the monsters move — increase_age
     // runs ahead of do_monsters in town (boe.actions.cpp:1266). Outdoors there
     // are no fields, which is why the C++ gates this on is_town().
@@ -4180,13 +4183,17 @@ export class GameSession {
    * The tail of start_town_mode's field setup (boe.town.cpp:355-369): a door
    * can't have a web, a crate, a barrel, a barrier or quickfire on it, so
    * whatever the presets or the party's own memory put there is swept off —
-   * and while the loop is running it latches whether any quickfire survived.
+   * and while the loop is running it latches whether any quickfire survived,
+   * and whether the town holds a conveyor belt (boe.town.cpp:141-155, which
+   * clears `belt_present` and re-derives it from the terrain every entry).
    */
   private clearDoorFields(town: CurTown): void {
     const dim = town.record.maxDim;
+    town.beltPresent = false;
     for (let x = 0; x < dim; x++)
       for (let y = 0; y < dim; y++) {
         const spec = this.univ.terrainType(town.record.terrain[x]![y]!).special;
+        if (spec === TerSpec.CONVEYOR) town.beltPresent = true;
         if (spec === TerSpec.UNLOCKABLE || spec === TerSpec.CHANGE_WHEN_STEP_ON) {
           town.setField(x, y, FieldType.FIELD_WEB, false);
           town.setField(x, y, FieldType.OBJECT_CRATE, false);

@@ -5,6 +5,7 @@
 
 import { SpecType } from '../../data/special';
 import { TRACE_AGE } from '../../core/trace';
+import { TerSpec } from '../../data/terrain';
 import { interestingString } from '../../data/item';
 import { BUFFER_STR, Universe } from '../../universe/universe';
 import { QuestStatus } from '../../data/quest';
@@ -406,6 +407,9 @@ export function alterSpace(univ: Universe, x: number, y: number, ter: number): v
   if (town) {
     if (town.record.terrain[x]?.[y] === undefined) return;
     town.record.terrain[x]![y] = ter;
+    // A square that becomes a conveyor arms `push_things` for the rest of the
+    // visit (boe.locutils.cpp:596). Never cleared, exactly as in the C++.
+    if (univ.terrainType(ter).special === TerSpec.CONVEYOR) town.beltPresent = true;
   } else {
     univ.out.set(x, y, ter);
   }

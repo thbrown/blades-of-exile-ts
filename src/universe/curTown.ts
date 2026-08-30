@@ -87,6 +87,15 @@ export class CurTown {
    */
   quickfirePresent = false;
 
+  /**
+   * `cCurTown::belt_present` — this town has a conveyor square in it, so
+   * `push_things` has work to do. Latched from the same three places as the
+   * C++: the terrain sweep in `start_town_mode`, `alter_space`, and loading a
+   * saved town. Unlike `quickfirePresent` there is no single road through
+   * `setField` to hang it on, because a belt is *terrain*, not a field.
+   */
+  beltPresent = false;
+
   constructor(readonly record: Town, private readonly host: FieldHost) {
     const grid = (): Uint8Array[] =>
       Array.from({ length: record.maxDim }, () => new Uint8Array(record.maxDim));
