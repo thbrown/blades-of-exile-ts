@@ -1604,19 +1604,18 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue at the end of 2026-08-30 has **no bucket bigger than three files**:
-  `handle_target_space @ get_ran(1,0,1)` at three, then some thirty single
-  files. Four of those single buckets are `handle_target_space @
+  queue at the end of 2026-08-30 has **no bucket bigger than two files**, then
+  some thirty single ones. Five of those are `handle_target_space @
   get_ran(n,1,m)` with a different *n* each time — the same shape, a spell
-  resolving against a different number of targets, and worth reading together
-  rather than one at a time. The seven files whose
-  line reads `harness: … Couldn't replay action: <click_control><id>spellN…`
+  resolving against a different number of targets — and they are worth reading
+  together rather than one at a time. The seven files whose line reads
+  `harness: … Couldn't replay action: <click_control><id>spellN…`
   are the **oracle** giving up, not this port: `handle_spellcast` returns
   without opening the cast-spell dialog there, so the recording's next click
   has nothing to click on. Those files' numbers are "matched as far as the C++
   got", which for the two at the top of the list is now its whole run.
-  Corpus **466,654** matching draws, **19 of 87** files agreeing all the way,
-  45 blocked outside the rules. **Those numbers were 459,492 / 19 / 44 at the
+  Corpus **476,671** matching draws, **19 of 87** files agreeing all the way,
+  46 blocked outside the rules. **Those numbers were 459,492 / 19 / 44 at the
   end of 2026-08-29, 381,127 / 19 / 40 at the
   end of 2026-08-24, 285,845 / 15 / 41 the morning before that and
   190,362 / 10 / 37 the day before that** — the entries at
@@ -6391,6 +6390,44 @@ The M6 list below is kept for the history of what it covered:
     are bigger. **The harness's remaining debt is no longer the cheap seam it
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
+
+- **`isHumanoid` is a numeric *range*, and this port had it as a list — three
+  times (M8, 2026-08-30).** The top bucket, `handle_target_space @
+  get_ran(1,0,1)`, three files.
+  - `race.hpp:45` is two lines: `(code >= 0 && code <= 3) || (code >= 6 &&
+    code <= 9) || code == 21`. Spelled out that is HUMAN, NEPHIL, SLITH,
+    VAHNATAI, **IMPORTANT, MAGE, PRIEST**, HUMANOID and GOBLIN. This port had
+    written the list out by hand in `damage.ts`, `missiles.ts` *and*
+    `monsterTurn.ts`, and every copy had dropped the middle block — so a Mage,
+    a Priest or an Important creature was no kind of humanoid at all.
+  - `isHuman` was wrong the same way and in the opposite direction: `code == 0
+    || (code >= 6 && code <= 8)`, with the C++'s own comment saying *"types
+    IMPORTANT, MAGE and PRIEST are implicitly human"*. The port had it as HUMAN
+    alone.
+  - **What made it visible is a sound.** `kill_monst` opens by picking a death
+    sound, and the humanoid arm picks between two of them with a
+    `get_ran(1,0,1)` (boe.specials.cpp:1605). Kill a mage and the C++ spends
+    that draw; this port fell through to the silent default and spent nothing.
+    One number, at the exact moment a spell killed something, and everything
+    after it was one place out.
+  - What else it was quietly getting wrong, none of which the draw stream can
+    see: the humanoid-bane weapon bonus (`calc_spec_dam`, boe.combat.cpp:727 —
+    which pays out on a humanoid that is **not** human, so both halves of the
+    test were wrong at once), Protection from Humanoids in `damage_pc`
+    (boe.party.cpp:2593), and the "Monster saw you!" alert sound.
+  - Now one exported pair in `universe/skills.ts`, **kept as the range test
+    rather than the list** — that is what the C++ does, and a race added
+    between 6 and 9 later inherits it for free.
+  - **Where it stands.** `VoDT_06-04-2025_16-59-02` 8,092 → **15,606**,
+    `ASR_10-05-2025_08-35-52` 2,950 → **5,453**; corpus 466,654 →
+    **476,671**, the bucket three files → one, and blocked outside the rules
+    45 → **46**. The third file's `get_ran(1,0,1)` is a different one and it
+    has not moved.
+  - The general point, and it is the same one as `activate_monsters` yesterday:
+    **a predicate copied out by hand is a predicate that will drift.** Three
+    copies, one omission, three subsystems wrong, and the only symptom anything
+    could see was a missing coin flip for a sound effect. Grep for the other
+    hand-written race lists before trusting them.
 
 - **Conveyor belts were never ported, and they move PCs (M8, 2026-08-30).**
   `push_things` (boe.specials.cpp:1683), listed as unported in

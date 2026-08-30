@@ -15,7 +15,7 @@ import { Creature, CreatureStatus } from '../universe/creature';
 import { Living, SpellNote, livingSound } from '../universe/living';
 import { MonstMelee } from '../data/monster';
 import { Player } from '../universe/player';
-import { MainStatus, PartyStatus, Race, Skill, Status, Trait } from '../universe/skills';
+import { MainStatus, PartyStatus, Race, Skill, Status, Trait, isHumanoid } from '../universe/skills';
 import { Universe } from '../universe/universe';
 import { SpecCtx, SpecCtxType } from './specials/context';
 import {
@@ -725,8 +725,7 @@ export async function doMonsters(session: GameSession): Promise<void> {
       if (r1 < 50) {
         monst.active = CreatureStatus.ALERTED;
         univ.addStringToBuf('Monster saw you!');
-        livingSound(monst.mon.race === Race.GIANT || monst.mon.race <= Race.VAHNATAI
-          || monst.mon.race === Race.HUMANOID || monst.mon.race === Race.GOBLIN ? 18 : 46);
+        livingSound(isHumanoid(monst.mon.race) || monst.mon.race === Race.GIANT ? 18 : 46);
       }
       for (const other of town.monsters) {
         if (other.active === CreatureStatus.ALERTED && dist(monst.curLoc, other.curLoc) <= 5) {
@@ -801,18 +800,11 @@ function monstSoundType(attacker: Creature, attack: Attack): number {
       if (race === Race.HUMAN) return attack.sides > 9 ? 3 : 2;
       if (race === Race.MAGE) return 1;
       if (race === Race.PRIEST) return 4;
-      if (isHumanoidRace(race) || race === Race.GIANT) return 2;
+      if (isHumanoid(race) || race === Race.GIANT) return 2;
       return 1;
     }
     default: return 0;
   }
-}
-
-/** isHumanoid (race.hpp) — the races Protection from Humanoids covers. */
-function isHumanoidRace(race: Race): boolean {
-  return [
-    Race.HUMAN, Race.NEPHIL, Race.SLITH, Race.VAHNATAI, Race.HUMANOID, Race.GOBLIN,
-  ].includes(race);
 }
 
 /**

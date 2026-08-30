@@ -15,7 +15,7 @@ import { Creature } from '../universe/creature';
 import { getProtLevel, hasAbilEquip, takeItem } from '../universe/inventory';
 import { Living } from '../universe/living';
 import { Player } from '../universe/player';
-import { Race, Skill, Status, Trait } from '../universe/skills';
+import { Race, Skill, Status, Trait, isHuman, isHumanoid } from '../universe/skills';
 import { Universe } from '../universe/universe';
 import { MonstAbil } from '../data/monsterAbility';
 import { runAMissile } from './missileAnim';
@@ -151,15 +151,6 @@ function slayerMultiplier(race: Race): number {
     // UNKNOWN is a negative value the editor won't allow; neutralise it.
     default: return 0;
   }
-}
-
-/** isHumanoid / isHuman (race.hpp), which the humanoid-bane rule needs. */
-function isHumanoid(race: Race): boolean {
-  return race === Race.HUMAN || race === Race.NEPHIL || race === Race.SLITH
-    || race === Race.VAHNATAI || race === Race.HUMANOID || race === Race.GOBLIN;
-}
-function isHuman(race: Race): boolean {
-  return race === Race.HUMAN;
 }
 
 /** What calc_spec_dam worked out: extra damage and the type it arrives as. */

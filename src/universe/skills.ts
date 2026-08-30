@@ -91,6 +91,40 @@ export enum Race {
   GOBLIN = 21,
 }
 
+/**
+ * `isHumanoid` (race.hpp:45) — **a numeric range test, ported verbatim**:
+ * `(code >= 0 && code <= 3) || (code >= 6 && code <= 9) || code == 21`.
+ *
+ * Written out as a list of names it is HUMAN, NEPHIL, SLITH, VAHNATAI,
+ * **IMPORTANT, MAGE, PRIEST**, HUMANOID and GOBLIN. This port had the list
+ * three times over — in `damage.ts`, `missiles.ts` and `monsterTurn.ts` — and
+ * all three had dropped the middle block, so a Mage, a Priest or an Important
+ * creature counted as no kind of humanoid at all: no humanoid-bane bonus
+ * against it, no Protection from Humanoids for it, and no death-sound coin
+ * flip when it died. The last of those spends a draw, which is how it was
+ * finally seen.
+ *
+ * Kept as the range rather than the list, both because that is what the C++
+ * does and because a race added between 6 and 9 later would inherit it.
+ */
+export function isHumanoid(race: Race): boolean {
+  const code = race as number;
+  return (code >= 0 && code <= 3) || (code >= 6 && code <= 9) || code === 21;
+}
+
+/**
+ * `isHuman` (race.hpp:39) — its narrower companion, and wrong here in the same
+ * way: `code == 0 || (code >= 6 && code <= 8)`. The C++'s own comment says it —
+ * *"types IMPORTANT, MAGE and PRIEST are implicitly human"* — and this port
+ * read it as HUMAN alone. It matters to the humanoid-bane rule, which pays out
+ * only against a humanoid that is **not** human, so a Mage was being given the
+ * bonus from both directions at once.
+ */
+export function isHuman(race: Race): boolean {
+  const code = race as number;
+  return code === 0 || (code >= 6 && code <= 8);
+}
+
 /** eStatus (damage.hpp:37) — the per-PC timed status effects. */
 export enum Status {
   MAIN = -1,

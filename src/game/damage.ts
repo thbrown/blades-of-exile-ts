@@ -26,7 +26,7 @@ import { boomAnimActive, boomSpace } from './booms';
 import { findClearSpot, placeMonster } from './monsterPlace';
 import { placeGlands, placeTreasure } from './loot';
 import { NUM_INVEN_SLOTS, Player } from '../universe/player';
-import { MainStatus, Race, Skill, Status, Trait } from '../universe/skills';
+import { MainStatus, Race, Skill, Status, Trait, isHuman, isHumanoid } from '../universe/skills';
 import { Universe } from '../universe/universe';
 import { SpecCtx, SpecCtxType } from './specials/context';
 import type { GameSession } from './session';
@@ -87,11 +87,6 @@ const MAGIC_RESISTS = new Set([DamageType.FIRE, DamageType.COLD]);
 const MAJOR_RESISTS = new Set([
   DamageType.FIRE, DamageType.POISON, DamageType.MAGIC, DamageType.ACID, DamageType.COLD,
 ]);
-
-const isHumanoid = (race: Race): boolean => [
-  Race.HUMAN, Race.NEPHIL, Race.SLITH, Race.VAHNATAI, Race.HUMANOID, Race.GOBLIN,
-].includes(race);
-const isHuman = (race: Race): boolean => race === Race.HUMAN;
 
 export interface DamageOptions {
   /** Forced hit sound; -1 takes the damage type's default. */
