@@ -1711,35 +1711,24 @@ export class GameSession {
   }
 
   /**
-   * screen_shift (boe.actions.cpp:1465) — slide the view one square without
-   * moving the party, so a spell or a shot can reach past the edge of what's
-   * on screen. Bounded by the town's own rect *and* by the 9x9 view's half
-   * width, so the grid never runs off the map. Town and combat only, since the
-   * C++ dereferences `univ.town` here.
+   * screen_shift (boe.actions.cpp:1465) — slide the view without moving the
+   * party, so a spell or a shot can reach past the edge of what's on screen.
+   *
+   * **It is three lines and none of them is a bound**: refuse a zero delta,
+   * then `center.x += dx; center.y += dy`. The view is allowed to run clean
+   * off the map, and `can_draw` paints the squares that aren't there black.
+   * This port used to clamp to the town's rect and to the 9×9 view's half
+   * width, which is tidier and wrong in a way that compounds: `center` is what
+   * `handle_terrain_screen_actions` builds every move destination from, so a
+   * shift the C++ took and this port refused left the two disagreeing about
+   * where a click landed for the rest of the recording. The return value is
+   * this port's own, for the browser's "did anything move?" redraw.
    */
   screenShift(dx: number, dy: number): boolean {
-    const town = this.univ.town;
-    if (!town || (dx === 0 && dy === 0)) return false;
-    const rect = town.record.inTownRect;
-    const maxDim = town.record.maxDim;
-    let moved = false;
-    if (dy < 0 && this.center.y > rect.top && this.center.y > 4) {
-      this.center.y--;
-      moved = true;
-    }
-    if (dy > 0 && this.center.y < rect.bottom && this.center.y < maxDim - 5) {
-      this.center.y++;
-      moved = true;
-    }
-    if (dx < 0 && this.center.x > rect.left && this.center.x > 4) {
-      this.center.x--;
-      moved = true;
-    }
-    if (dx > 0 && this.center.x < rect.right && this.center.x < maxDim - 5) {
-      this.center.x++;
-      moved = true;
-    }
-    return moved;
+    if (dx === 0 && dy === 0) return false;
+    this.center.x += dx;
+    this.center.y += dy;
+    return true;
   }
 
   /** Set by the host so a special that changes the world can repaint. */

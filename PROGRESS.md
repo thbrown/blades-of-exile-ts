@@ -1606,7 +1606,7 @@ bottom. What M8 still owes:
   and takes about four minutes, so measure after every fix. The head of the
   queue on 2026-08-29 has **no bucket bigger than two files**:
   `placeGrid` at two, then some thirty single files.
-  Corpus **458,519** matching draws, **19 of 87** files agreeing all the way,
+  Corpus **459,492** matching draws, **19 of 87** files agreeing all the way,
   44 blocked outside the rules. **Those numbers were 381,127 / 19 / 40 at the
   end of 2026-08-24, 285,845 / 15 / 41 the morning before that and
   190,362 / 10 / 37 the day before that** — the entries at
@@ -6361,6 +6361,22 @@ The M6 list below is kept for the history of what it covered:
     are bigger. **The harness's remaining debt is no longer the cheap seam it
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
+
+- **`screen_shift` has no bounds (M8, 2026-08-29).** `VoDT_20-04-2025_17-52-41`
+  stopped on a movement desync — "the recording stepped to (38,44), but the
+  view is centred on (38,42)" — after a run of five `screen_shift`s in look
+  mode.
+  - The C++ is three lines and none of them is a bound (boe.actions.cpp:1465):
+    refuse a zero delta, then `center.x += dx; center.y += dy`. The view may
+    run clean off the map and `can_draw` blacks out what isn't there. This port
+    clamped to the town's `in_town_rect` and to the 9×9 view's half width.
+  - Tidier and wrong in a way that compounds, because **`center` is what
+    `handle_terrain_screen_actions` builds every move destination from**: one
+    refused shift and the two runs disagree about where every later click
+    landed.
+  - Corpus 458,519 → **459,492** matching draws; the file went 22,796 →
+    23,770 and now parts somewhere else. A small number for a clear rule —
+    which is the usual shape once a file is deep in.
 
 - **`activate_monsters` woke nobody whose slot had been taken (M8,
   2026-08-29).** `doMonsters`, 34,620 draws, the second-biggest file.
