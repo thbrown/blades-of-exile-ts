@@ -1604,13 +1604,38 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue on 2026-08-29 has **no bucket bigger than two files**:
-  `placeGrid` at two, then some thirty single files.
+  queue at the end of 2026-08-29 has **no bucket bigger than three files**:
+  `placeGrid` at three, then some thirty single files. The seven files whose
+  line reads `harness: … Couldn't replay action: <click_control><id>spellN…`
+  are the **oracle** giving up, not this port: `handle_spellcast` returns
+  without opening the cast-spell dialog there, so the recording's next click
+  has nothing to click on. Those files' numbers are "matched as far as the C++
+  got", which for the two at the top of the list is now its whole run.
   Corpus **459,492** matching draws, **19 of 87** files agreeing all the way,
   44 blocked outside the rules. **Those numbers were 381,127 / 19 / 40 at the
   end of 2026-08-24, 285,845 / 15 / 41 the morning before that and
   190,362 / 10 / 37 the day before that** — the entries at
   the bottom of this file are what working the queue looks like.
+
+  Three things **2026-08-29** is worth remembering for, all of the same shape:
+
+  - **Not one of the day's six fixes was in the function the bucket named.**
+    `doMonsters` was `handle_use_space`; `doMonsters` again was
+    `activate_monsters`; `doMonsterTurn` was the *save file*; `move @ …` was
+    `screen_shift`'s bounds. The bucket is where this port was standing when
+    the streams parted, and the cause was between four and three hundred
+    actions earlier every time.
+  - **Three of the six were found by a state trace, not the draw stream.**
+    `[domonst]`'s `party=` column named two of them in one line each — two runs
+    agreeing on every draw and standing two squares apart. The third needed a
+    new instrument (`TACTIC=1`) because the state that differed was a
+    creature's haste. When a bucket is in the monster AI, print the *state*
+    before reading the draws: the AI is usually innocent.
+  - **Two of the six were things this port had already written down.** A
+    comment in `doMonsterTurn` named the breath-before-spells divergence
+    outright, and the comment on `activateMonsters` explained a constraint that
+    had been repaired elsewhere three weeks earlier. `grep -rn "divergence\|
+    this port" src/` over the inline notes is a queue nobody was reading.
 
   Three things 2026-08-24 is worth remembering for:
 
@@ -6361,6 +6386,37 @@ The M6 list below is kept for the history of what it covered:
     are bigger. **The harness's remaining debt is no longer the cheap seam it
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
+
+- **OPEN LEAD: `ZKR_11-05-2025_20-04-33`, an outdoor turn that costs 40 ticks
+  there and 10 here (M8, 2026-08-29).** The biggest remaining rules file,
+  20,922 draws. Pinpointed to one action; not fixed.
+  - It parts in `afterPartyTurnInner`: the C++ spends `return_treasure`'s
+    `get_ran(1,0,41)` — `increase_age` → `refresh_store_items`, the every-4000
+    -ticks shop restock — and this port spends the next turn's ordinary
+    wandering roll. **The rule is not the shops.** Both sides gate on
+    `age % 4000 == 0`; the port's clock is simply **180 ticks behind** by then.
+  - Aligning the two age series (C++ action *k*'s `age=` is printed *before* it,
+    this port's *after*, and the port's numbering is the C++'s minus two)
+    puts the first drift at C++ action **77**, a plain outdoor `move` from
+    (6,7) to (6,6): the C++ goes 1150 → **1190** and this port 1150 → 1160.
+    It happens again at action 83 and several times after, always +40 against
+    +10, and the gap only grows.
+  - `increase_age` outdoors rounds the age up to the next multiple of ten
+    (boe.actions.cpp:3367), so **+40 means 30 ticks arrived from somewhere
+    else before it ran**. The only thing in the C++ that adds an arbitrary
+    amount is `CHANGE_TIME` (`univ.party.age += cur_node.ex1a`,
+    boe.specials.cpp:2269).
+  - And the square is scripted: this port fires an **`ONCE_DIALOG`** at (6,6)
+    (`SPEC=1`) while the C++ raises no dialog there at all — no `click_control`
+    sits between its actions 77 and 78. A spent one-shot ends its chain
+    outright (`PSD[sd1][sd2] == 250` → `next_spec = -1; return`,
+    boe.specials.cpp:2587), so **the two runs disagree about an SDF**, and the
+    chain that the C++ takes instead is presumably the one holding the
+    `CHANGE_TIME`. Start by diffing the SDFs at that action, not the clock.
+  - What is missing to go further: the C++'s `[spec]` prints **town** nodes
+    only, so an outdoor chain is invisible on that side. Teaching it to print
+    outdoor and scenario chains too — and to say which node it *jumped* to —
+    is the next step, and would pay for itself here.
 
 - **`screen_shift` has no bounds (M8, 2026-08-29).** `VoDT_20-04-2025_17-52-41`
   stopped on a movement desync — "the recording stepped to (38,44), but the
