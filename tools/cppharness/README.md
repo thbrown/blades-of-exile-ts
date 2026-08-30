@@ -136,6 +136,18 @@ can see its own square — is really a *lighting* test, and that this port had
 dropped it as a no-op. There is no pair for it on this side; add a scratch
 `console.log` in `pickTargetMonst` when you need one.
 
+**`BOE_TRACE_TACTIC=1` (`TACTIC=1` here)** prints one line per action point a
+creature spends in `do_monster_turn`, taken just before the flee test:
+`i t= target= mtarget= ap= futz= morale= near= d= adj= targ= dt= spd= hs= web=
+at=`. It answers the shape the draw stream is worst at — **two runs that agree
+on every draw and disagree about a creature's *state***, because the flee
+branch's `get_ran(1,1,6)` is the first draw either side spends on the
+disagreement and by then the cause is arbitrarily far back. `uniq` is not
+wanted here: the line is per action point, and the number of lines a creature
+produces is itself the signal. It found the creature-status save bug —
+identical everything except `hs=1` against `hs=0`, one line after a
+`load_party`, which named the file format rather than the rules.
+
 **`BOE_TRACE_RAN=n` is the sharpest of them**: it dumps the first *n* draws from
 the game stream, and `RAN=n` prints the identical format here. Diff the two and
 the first differing line is the rule that diverged — usually a `get_ran` one side

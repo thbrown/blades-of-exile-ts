@@ -388,6 +388,34 @@ describe('the town grid axes, which a round trip cannot check', () => {
     expect(lines[3]![7]).toBe(42);
   });
 
+  /**
+   * `encodeSparse` over a `std::map<eStatus,short>` writes the enum's **tag**
+   * (creature.cpp:357), so a creature page says `STATUS haste-slow 1`. This
+   * port wrote `STATUS 5 1` and read it back with `tag.int(0)`, which agreed
+   * with itself and threw away every status in a save the C++ had written —
+   * a hasted monster came back at half its action points and nothing said so.
+   */
+  it("writes a creature's status by name, as the C++ does", async () => {
+    const univ = (await newGame()).univ;
+    const monst = univ.town!.monsters.find((m) => m.isAlive)!;
+    monst.status[Status.HASTE_SLOW] = 1;
+    const page = openSave(saveGame(univ)).text('save/town.txt')!
+      .split('\f').find((p) => p.includes(`LOCATION ${monst.curLoc.x} ${monst.curLoc.y}`))!;
+    expect(page).toContain('STATUS haste-slow 1');
+  });
+
+  it("reads a C++ save's named creature status", async () => {
+    const univ = (await newGame()).univ;
+    const monst = univ.town!.monsters.find((m) => m.isAlive)!;
+    monst.status[Status.HASTE_SLOW] = 1;
+    monst.status[Status.BLESS_CURSE] = 3;
+    const back = roundTrip(univ);
+    const there = back.town!.monsters.find(
+      (m) => m.curLoc.x === monst.curLoc.x && m.curLoc.y === monst.curLoc.y)!;
+    expect(there.status[Status.HASTE_SLOW]).toBe(1);
+    expect(there.status[Status.BLESS_CURSE]).toBe(3);
+  });
+
   it('reads a foreign grid back the same way', async () => {
     const univ = (await newGame()).univ;
     univ.town!.record.terrain[3]![7] = 41;

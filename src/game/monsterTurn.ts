@@ -52,6 +52,17 @@ export const TRACE_MMOVE = Boolean(
   typeof process !== 'undefined' ? process.env?.MMOVE : undefined);
 
 /**
+ * `TOUCH=1` and `TACTIC=1`, the pairs to `BOE_TRACE_TOUCH` and
+ * `BOE_TRACE_TACTIC`. Same `typeof process` guard as `TRACE_MMOVE` and for the
+ * same reason — `process.env.TOUCH` written bare threw `ReferenceError` in the
+ * browser the moment a creature took a swing, which `verify-screen` caught.
+ */
+export const TRACE_TOUCH = Boolean(
+  typeof process !== 'undefined' ? process.env?.TOUCH : undefined);
+export const TRACE_TACTIC = Boolean(
+  typeof process !== 'undefined' ? process.env?.TACTIC : undefined);
+
+/**
  * `futzing` (boe.combat.cpp:60) — how many action points a creature has spent
  * achieving nothing. A global in the C++, reset at the top of *each monster's*
  * turn in `do_monster_turn` and read at the bottom of each action point: two
@@ -941,7 +952,7 @@ async function monsterTouches(
     // *before* the odds roll, because the roll is the divergence this answers:
     // one side enters the loop for an ability and the other never gets there,
     // and the draw stream can only say "somebody spent a `get_ran(1,1,1000)`".
-    if (process.env.TOUCH) {
+    if (TRACE_TOUCH) {
       // eslint-disable-next-line no-console
       console.log(`      [touch] ${monst.slot} ${monst.mon.name} key=${key}`
         + ` odds=${abil.gen.odds} type=${abil.gen.type}`);
@@ -1271,6 +1282,17 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
           if ((monst.mon.abil[MonstAbil.MISSILE]?.active ?? false)
             && dist(monst.curLoc, targSpace) < 6
             && !monstAdjacent(monst, targSpace)) tactic = 1;
+        }
+        if (TRACE_TACTIC) {
+          const nearest = closestPcLoc(univ, monst.curLoc);
+          // eslint-disable-next-line no-console
+          console.log(`      [tactic] ${i} t=${tactic} target=${target} mtarget=${monst.target}`
+            + ` ap=${monst.ap} futz=${futzing} morale=${monst.morale}`
+            + ` near=(${nearest.x},${nearest.y}) d=${dist(monst.curLoc, nearest)}`
+            + ` adj=${monstAdjacent(monst, nearest) ? 1 : 0}`
+            + ` targ=(${targSpace.x},${targSpace.y}) dt=${dist(monst.curLoc, targSpace)}`
+            + ` spd=${monst.mon.speed} hs=${monst.status[Status.HASTE_SLOW] ?? 0}`
+            + ` web=${monst.status[Status.WEBS] ?? 0} at=(${monst.curLoc.x},${monst.curLoc.y})`);
         }
 
         // Flee when its nerve is gone — but the unliving and the mindless never

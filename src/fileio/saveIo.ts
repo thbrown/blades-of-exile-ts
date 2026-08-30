@@ -383,7 +383,17 @@ export function writeCreature(page: TagPage, c: Creature): void {
   page.add('TALK', c.specialOnTalk);
   page.add('FACE', c.facialPic);
   page.add('TARGET', c.target);
-  page.encodeSparse('STATUS', c.status, 0);
+  // **`encodeSparse` over a `std::map<eStatus,short>` writes the enum's *tag*,
+  // not its index** (creature.cpp:357) — `STATUS haste-slow 1`, exactly as the
+  // PC pages do. This used to write `STATUS 5 1`, and the read side used
+  // `tag.int(0)` on a name and threw the entry away, so **every creature
+  // status was silently dropped by a load**: a hasted monster came back at
+  // half its action points, a blessed one at none of its bonus, and nothing
+  // said so. It cost `VoDT_20-04-2025_21-09-37` 2,000 draws, and the
+  // divergence surfaced as a monster fleeing when the C++'s cast a spell.
+  for (let i = 0; i < c.status.length; i++)
+    if (c.status[i] !== 0)
+      page.add('STATUS', writeEnumTag(statusNames, i, 'main', STATUS_OFFSET), c.status[i]!);
   page.add('HEALTH', c.health, c.maxHealth);
   page.add('MANA', c.mp, c.maxMp);
   page.add('MORALE', c.morale, c.mMorale);
@@ -412,7 +422,10 @@ export function readCreature(page: TagPage, c: Creature): void {
   c.facialPic = page.first('FACE')?.int(0) ?? -1;
   c.target = page.first('TARGET')?.int(0) ?? 6;
   c.status.fill(0);
-  page.extractSparse('STATUS', c.status, 0);
+  for (const tag of page.list('STATUS')) {
+    const which = readEnumTagOrNumber(statusNames, tag.str(0), -1, STATUS_OFFSET);
+    if (which >= 0 && which < c.status.length) c.status[which] = tag.int(1);
+  }
   c.health = page.first('HEALTH')?.int(0) ?? 0;
   c.maxHealth = page.first('HEALTH')?.int(1) ?? 0;
   c.mp = page.first('MANA')?.int(0) ?? 0;

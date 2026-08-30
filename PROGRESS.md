@@ -1606,8 +1606,8 @@ bottom. What M8 still owes:
   and takes about four minutes, so measure after every fix. The head of the
   queue on 2026-08-29 has **no bucket bigger than two files**:
   `placeGrid` at two, then some thirty single files.
-  Corpus **442,944** matching draws, **19 of 87** files agreeing all the way,
-  42 blocked outside the rules. **Those numbers were 381,127 / 19 / 40 at the
+  Corpus **448,074** matching draws, **19 of 87** files agreeing all the way,
+  43 blocked outside the rules. **Those numbers were 381,127 / 19 / 40 at the
   end of 2026-08-24, 285,845 / 15 / 41 the morning before that and
   190,362 / 10 / 37 the day before that** — the entries at
   the bottom of this file are what working the queue looks like.
@@ -6361,6 +6361,42 @@ The M6 list below is kept for the history of what it covered:
     are bigger. **The harness's remaining debt is no longer the cheap seam it
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
+
+- **A load threw away every creature's status (M8, 2026-08-29).** The top
+  bucket by draws, `doMonsterTurn`, 47,449 of them.
+  - The two runs agreed on every draw for 47,449 and then this port rolled
+    `get_ran(1,1,6)` — the flee/tactic block — where the C++ rolled
+    `get_ran(1,1,10)`, the mage-spell decision. Everything the flee test reads
+    was identical on both sides *except* that the C++'s creature was **hasted**
+    and this port's was not, so the C++ gave it two action points and this port
+    one.
+  - Found with a new instrument, `BOE_TRACE_TACTIC=1` / `TACTIC=1`, one line
+    per action point with the creature's target, ap, futzing, morale, speed,
+    haste and webs. The two lists agreed for 67 lines and parted on `hs=`, one
+    line after a **`load_party`** — which named the file format rather than any
+    rule.
+  - `cTagFile`'s `encodeSparse` over a `std::map<eStatus,short>` writes the
+    enum's **tag**, so a C++ creature page says `STATUS haste-slow 1`
+    (creature.cpp:357). This port wrote `STATUS 5 1` and read it back with
+    `tag.int(0)`, which **agreed with itself** — so its own round-trip test
+    passed — and silently discarded every status in a save the C++ had written.
+    A hasted monster came back at half its action points, a blessed one without
+    its bonus, a poisoned one cured, and nothing anywhere said so.
+  - **Where it stands.** Corpus 442,944 → **448,074** matching draws; this file
+    went 47,449 → 52,579 and now stops on a harness gap.
+  - A second bug fell out of adding the instrument: `process.env.TOUCH`,
+    written bare in `monsterTouches` since the `TOUCH=1` trace landed, throws
+    `ReferenceError: process is not defined` in the **browser** — there is no
+    `process` there, and Vite does not shim one. It had never fired because
+    nothing in `verify-screen` reached that line until the new `[tactic]` print
+    did. Both are module-level `Boolean(typeof process !== 'undefined' && …)`
+    constants now, the way `TRACE_MMOVE` always was. `rng.ts`'s
+    `process.env.RANSTACK` is safe only because it sits behind `TRACE_RAN > 0`.
+  - The general lesson: **a symmetric round-trip test proves nothing about a
+    foreign file.** The PC pages had used `writeEnumTag` since M7 and the
+    creature pages had not, and only a save written by the other implementation
+    could tell. Where a save field is an enum, check what the *C++* writes, not
+    what this port reads back.
 
 - **A breath weapon hits the square, not the PC (M8, 2026-08-29).** The
   `move @ get_ran(1,1,100)` bucket, three files. The C++ made six
