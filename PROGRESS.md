@@ -1606,8 +1606,8 @@ bottom. What M8 still owes:
   and takes about four minutes, so measure after every fix. The head of the
   queue on 2026-08-29 has **no bucket bigger than two files**:
   `placeGrid` at two, then some thirty single files.
-  Corpus **448,074** matching draws, **19 of 87** files agreeing all the way,
-  43 blocked outside the rules. **Those numbers were 381,127 / 19 / 40 at the
+  Corpus **458,519** matching draws, **19 of 87** files agreeing all the way,
+  44 blocked outside the rules. **Those numbers were 381,127 / 19 / 40 at the
   end of 2026-08-24, 285,845 / 15 / 41 the morning before that and
   190,362 / 10 / 37 the day before that** — the entries at
   the bottom of this file are what working the queue looks like.
@@ -6361,6 +6361,38 @@ The M6 list below is kept for the history of what it covered:
     are bigger. **The harness's remaining debt is no longer the cheap seam it
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
+
+- **`activate_monsters` woke nobody whose slot had been taken (M8,
+  2026-08-29).** `doMonsters`, 34,620 draws, the second-biggest file.
+  - The shape was the familiar one — the C++ spending `select_active_pc`'s
+    `get_ran(1,0,5)` where this port spent the drift coin — and `[domonst]`
+    said the party was on the same square at the same age this time. The
+    difference was a creature: the C++ walked slot 3 from (15,8) toward the
+    party and this port had no such creature.
+  - A trap worth recording. The harness's `monst:` line, printed with the
+    action, showed **slot 3 at (12,32) with 10 health on both sides**, and the
+    `[mmove]` two lines later moved slot 3 from (15,8) with 60. Both are true:
+    the state line is printed at *action dispatch*, and the special that
+    replaced slot 3 ran afterwards, from `advance_time`'s **queued** chain.
+    A `monst:` line is a snapshot from before the action, not from the moment
+    the draw was made.
+  - `SPEC=1` against the C++'s `[spec]` named it: this port ran
+    `ONCE_TOWN_ENCOUNTER`, and nothing appeared.
+  - `activate_monsters` (boe.monster.cpp:1233) walks the **town record's
+    presets** and reads the **preset's** `spec_enc_code`, then assigns into
+    that slot over whatever is standing in it. This port scanned the *live*
+    population for a live `spec_enc_code` — correct back when the population
+    was compacted and the two lists were not index-aligned, which stopped
+    being true when `populateTown` started keeping the C++'s gaps in August.
+    So a slot some other creature had taken over never woke, and the ambush
+    stayed asleep for the rest of the game.
+  - **Where it stands.** Corpus 448,074 → **458,519** matching draws; this file
+    reached the C++'s whole prefix and now stops on a harness gap. Files
+    blocked outside the rules 43 → **44**.
+  - The general point: **a fix to one data structure leaves stale readers.**
+    The comment on the old loop explained exactly why it could not use `i`, and
+    the reason had been repaired elsewhere three weeks earlier. Grepping for
+    the word "compacted" would have found it.
 
 - **A load threw away every creature's status (M8, 2026-08-29).** The top
   bucket by draws, `doMonsterTurn`, 47,449 of them.

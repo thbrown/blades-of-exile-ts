@@ -207,27 +207,43 @@ export function activateMonsters(univ: Universe, code: number): void {
   if (code === 0) return;
   const town = univ.town;
   if (!town) return;
-  // **Indexed by the creature's own `slot`, not by its place in the list.**
-  // The C++'s `univ.town.monst` mirrors `creatures` one for one, so it can
-  // assign at index i; this port's list is compacted (a preset with no monster
-  // in it is skipped), so writing at i would leave holes in the array — which
-  // is exactly what `process_fields` then walked off the end of.
-  for (let n = 0; n < town.monsters.length; n++) {
-    const existing = town.monsters[n]!;
-    if (existing.specEncCode !== code) continue;
-    const preset = town.record.creatures[existing.slot];
-    const template = preset ? univ.scenario.scenMonsters[preset.number] : undefined;
-    if (!preset || !template) continue;
-    // Same `assign`-into-the-slot rule as `placeMonster`: the creature waking
-    // up is the one already standing there, and its wander target survives.
+  // **It walks the town record's *presets*, not the live population**
+  // (boe.monster.cpp:1233), and it asks the **preset's** `spec_enc_code`. Two
+  // consequences, and this port had neither: a slot whose live occupant is
+  // some *other* creature is overwritten anyway — `cPopulation::assign` writes
+  // into `dudes[i]` whatever is standing there — and a group can therefore be
+  // woken a second time, because the preset's code is never cleared. Only the
+  // live copy's is.
+  //
+  // The old loop scanned `town.monsters` for a live `specEncCode`, which was
+  // written when the population was a *compacted* list and the two were not
+  // index-aligned. `populateTown` has kept the C++'s gaps since 2026-08, so
+  // the indirection is both unnecessary and wrong: a preset whose slot had
+  // been taken over never woke, and a whole ambush stayed asleep.
+  for (let i = 0; i < town.record.creatures.length; i++) {
+    const preset = town.record.creatures[i]!;
+    if (preset.specEncCode !== code) continue;
+    const template = univ.scenario.scenMonsters[preset.number];
+    if (!template) continue;
+    // `assign` resizes to i + 1, so a preset past the end of the population
+    // brings the gaps before it with it — dead, out of the way, and numbered.
+    while (town.monsters.length <= i) {
+      const gap = new Creature();
+      gap.slot = town.monsters.length;
+      gap.active = CreatureStatus.DEAD;
+      town.monsters.push(gap);
+    }
+    // Same `assign`-into-the-slot rule as `placeMonster`: the arrival inherits
+    // whatever the slot's previous occupant left in the fields `assign` does
+    // not write — its wander target among them.
     const monst = assignCreature(
-      existing.slot, preset, template, univ.party.easyMode, univ.difficultyAdjust(),
-      existing);
+      i, preset, template, univ.party.easyMode, univ.difficultyAdjust(),
+      town.monsters[i]);
     monst.specEncCode = 0;
     monst.active = CreatureStatus.ALERTED;
     monst.summonTime = 0;
     monst.target = 6;
-    town.monsters[n] = monst;
+    town.monsters[i] = monst;
     // The crate or barrel it was hiding in is gone.
     town.setField(monst.curLoc.x, monst.curLoc.y, FieldType.OBJECT_CRATE, false);
     town.setField(monst.curLoc.x, monst.curLoc.y, FieldType.OBJECT_BARREL, false);

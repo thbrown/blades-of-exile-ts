@@ -11,6 +11,7 @@ import {
   closestPc, combatRunMonst, doMonsterTurn, doMonsters, monstAdjacent, monsterAttack,
   monstPickTarget,
 } from '../src/game/monsterTurn';
+import { activateMonsters } from '../src/game/monsterPlace';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
 import { statusBarText } from '../src/render/screen';
 import { loadScenario } from '../src/fileio/loadScenario';
@@ -625,5 +626,59 @@ describe('the status bar text', () => {
     // has spent everything is no longer the one acting.
     monst.ap = 0;
     expect(statusBarText(session)).toBe(session.locationName());
+  });
+});
+
+describe('activate_monsters wakes a group by its preset', () => {
+  /**
+   * `activate_monsters` (boe.monster.cpp:1230) walks the **town record's
+   * presets** and asks the *preset's* `spec_enc_code`, then assigns into that
+   * slot whatever is standing in it. This port used to scan the live
+   * population for a live `spec_enc_code` — a leftover from when the two lists
+   * were not index-aligned — so a slot whose occupant had been replaced never
+   * woke, and a scripted ambush stayed asleep for the rest of the game.
+   */
+  function townWithSleeper(): { univ: Universe; session: GameSession; slot: number } {
+    const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
+    const session = new GameSession(univ);
+    session.startTownMode(0, FORCED_ENTRY);
+    const town = univ.town!;
+    // Give a preset a group code, then re-enter so `populateTown` puts it in
+    // the population as a sleeper.
+    const slot = town.record.creatures.findIndex((c) => c.number > 0);
+    town.record.creatures[slot]!.specEncCode = 4;
+    session.startTownMode(0, FORCED_ENTRY);
+    return { univ, session: session, slot };
+  }
+
+  it('brings the group in alerted, on its start square', () => {
+    const { univ, slot } = townWithSleeper();
+    const town = univ.town!;
+    expect(town.monsters[slot]!.isAlive).toBe(false);
+    activateMonsters(univ, 4);
+    const woken = town.monsters[slot]!;
+    expect(woken.active).toBe(CreatureStatus.ALERTED);
+    expect(woken.specEncCode).toBe(0);
+    expect(woken.curLoc).toEqual(town.record.creatures[slot]!.startLoc);
+  });
+
+  it('overwrites a slot some other creature has taken over', () => {
+    const { univ, slot } = townWithSleeper();
+    const town = univ.town!;
+    // Something else moved into the slot and cleared its own code — which is
+    // what a summon or a wandering group does. The preset still says 4.
+    const squatter = town.monsters[slot]!;
+    squatter.active = CreatureStatus.ALERTED;
+    squatter.specEncCode = 0;
+    squatter.curLoc = loc(1, 1);
+    activateMonsters(univ, 4);
+    expect(town.monsters[slot]!.curLoc).toEqual(town.record.creatures[slot]!.startLoc);
+    expect(town.monsters[slot]!.active).toBe(CreatureStatus.ALERTED);
+  });
+
+  it('wakes nobody for group 0', () => {
+    const { univ, slot } = townWithSleeper();
+    activateMonsters(univ, 0);
+    expect(univ.town!.monsters[slot]!.isAlive).toBe(false);
   });
 });
