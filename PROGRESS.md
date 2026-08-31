@@ -6450,6 +6450,47 @@ The M6 list below is kept for the history of what it covered:
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
 
+- **`combine_things` was a `TODO(M6)` two milestones past its date (M8,
+  2026-08-30).** Stackable items never merged, so a pack that had picked up
+  five bundles of twelve arrows held five piles where the C++ held one of
+  sixty — and every slot below the first pile sat four places further down.
+  - Found from the other end: `VoDT_06-04-2025_16-59-02` rolls
+    `get_ran(1,1,ammo.item_level)` for a shot, 12 there and 8 here, and
+    `ITEMS=1` against `BOE_TRACE_ITEMS=1` showed the two packs differing in
+    exactly that shape. **Slot numbers are observable** — `handle_use_item`
+    records one — so this is not bookkeeping.
+  - `cPlayer::combine_things` (pc.cpp:746) merges on **`type_flag` plus
+    identified**, which is why identifying an item can *make* two piles
+    stackable and why `boe.actions.cpp:1166` calls it right after the shop
+    names one. Three details kept verbatim: the cap is **125 and the overflow
+    is lost**, not left behind; the equipped flag is **inherited** by the
+    survivor; and `take_item(j)` shifts the pack up while the loop still does
+    `j++`, so the item that slides into `j` is skipped on that pass — three
+    identical piles in a row need two calls, which is fine because `give_item`
+    calls it once per item taken.
+  - The **scratch slot** came with it. `cPlayer::items` is `INVENTORY_SIZE + 1`
+    long, and the C++'s own comment (pc.hpp:102) explains why: with a full
+    pack, `give_item` drops the incoming item into slot 24, asks
+    `combine_things(true)` whether it would merge, and if so carries on with
+    that slot as the destination. **A full pack can still take another bundle
+    of arrows.** `has_space` and `take_item` both know the slot is not real
+    storage; this port's `firstFreeSlot` and `takeItem` now do too.
+  - **No corpus movement**, and that is the honest report: merging spends no
+    dice, so it only surfaces when something *reads* a slot. The packs now
+    agree with the C++'s line for line across the whole shared prefix of the
+    file that found it, which they did not before.
+  - **Open lead it left behind.** That file still parts at draw 15,607 on the
+    same draw, and the cause is now one field further in: `load_missile` picks
+    the `bow && arrow` branch there and the `no_ammo` branch here, because
+    **this port has the Cavewood Bow unequipped and the C++ has it equipped**.
+    The packs and the `EQUIP` save flags both round-trip correctly, so the
+    divergence happens during the run. The suspect is `give_item`'s auto-equip
+    block (pc.cpp:536-575), which is **entirely unported**: on a failed
+    `equip_item` it hunts down the conflicting item by exclusion class,
+    unequips it — two of them for a two-handed weapon — and retries. Note
+    picking an item off the floor passes `GIVE_DO_PRINT` alone
+    (boe.items.cpp:511), so whatever equips the bow is a different caller.
+
 - **The dual-caster recast hint is a *toggle*, and the first press casts
   nothing (M8, 2026-08-30).** `handle_spellcast` opens with
   `if(spell_recast && is_combat() && current_pc().last_cast_type != which_type)`

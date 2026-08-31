@@ -87,7 +87,16 @@ export class Player extends Living {
   race: Race = Race.HUMAN;
   whichGraphic = 0;
   uniqueId = 0;
-  items: Item[] = Array.from({ length: NUM_INVEN_SLOTS }, () => defaultItem());
+  /**
+   * The pack, **`NUM_INVEN_SLOTS + 1` long**. The C++'s own comment on the
+   * extra slot (pc.hpp:102): "Keep an extra slot for stackable items to go
+   * into before combine_things() is called. This slot is not actually storage
+   * space and will always be eItemType::NO_ITEM unless give_item() is still in
+   * progress." A full pack can therefore still take another bundle of arrows,
+   * because the scratch slot lets `combine_things` merge it away. `equip` is
+   * only `NUM_INVEN_SLOTS` wide, as there.
+   */
+  items: Item[] = Array.from({ length: NUM_INVEN_SLOTS + 1 }, () => defaultItem());
   /** Which slots are currently worn/wielded (cPlayer::equip). */
   equip: boolean[] = new Array<boolean>(NUM_INVEN_SLOTS).fill(false);
   /**

@@ -11,7 +11,7 @@
 import { Item, ItemAbil, ItemType } from '../data/item';
 import { variety } from '../data/itemVariety';
 import { SoundPlayer } from '../platform/sound';
-import { takeItem } from '../universe/inventory';
+import { combineThings, takeItem } from '../universe/inventory';
 import { Player } from '../universe/player';
 import { Universe } from '../universe/universe';
 
@@ -126,6 +126,11 @@ export function handleItemShopAction(
       sound?.play(68);
       say('Your item is identified.');
       item.ident = true;
+      // `shopper.combine_things()` (boe.actions.cpp:1166) — identifying is the
+      // one thing that can *make* two piles stackable, since `combine_things`
+      // refuses unidentified items. Two unknown bundles of the same arrows
+      // merge the moment the second is named.
+      combineThings(pc, false, say);
       return 'done';
 
     case ItemShopMode.RECHARGE: {

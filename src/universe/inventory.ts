@@ -68,7 +68,12 @@ export function freeWeight(pc: Player): number {
 
 /** The first empty inventory slot, or -1. */
 export function firstFreeSlot(pc: Player): number {
-  return pc.items.findIndex((item) => item.variety === ItemType.NO_ITEM);
+  // `has_space()` walks `INVENTORY_SIZE`, not `items.size()` — the scratch slot
+  // at the end is not storage and `give_item` reaches it by its own route.
+  for (let i = 0; i < NUM_INVEN_SLOTS; i++) {
+    if (pc.items[i]!.variety === ItemType.NO_ITEM) return i;
+  }
+  return -1;
 }
 
 /**
@@ -169,16 +174,26 @@ export function giveItem(
   if (itemWeight(item) > freeWeight(pc))
     return { status: GiveStatus.TOO_HEAVY, slot: -1, message: 'Item too heavy to carry.' };
 
-  const slot = firstFreeSlot(pc);
+  // **A full pack can still take a stackable item** (pc.cpp:502). The C++ drops
+  // it into the scratch slot at `INVENTORY_SIZE`, asks `combine_things(true)`
+  // whether that would merge with anything, and if so carries on with the
+  // scratch slot as the destination — `combine_things` below then folds it
+  // away. The slot is cleared again either way before the decision is acted on.
+  let slot = firstFreeSlot(pc);
+  if (slot < 0) {
+    pc.items[NUM_INVEN_SLOTS] = { ...item };
+    if (combineThings(pc, true)) slot = NUM_INVEN_SLOTS;
+    pc.items[NUM_INVEN_SLOTS] = defaultItem();
+  }
   if (slot < 0) return { status: GiveStatus.NO_SPACE, slot: -1, message: 'No room for item.' };
 
   // Taking an item clears the flags that only apply while it's on the floor.
   if (!checkOnly) {
     pc.items[slot] = { ...item, property: false, contained: false, held: false };
-    // `combine_things(); sort_items();` is give_item's last act (pc.cpp:579).
-    // Only the sort is ported — combine_things is still the TODO(M6) above —
-    // and leaving it out is what put one PC's pack in a different order from
-    // the C++'s for the rest of a recording.
+    // `combine_things(); sort_items();` is give_item's last act (pc.cpp:579),
+    // in that order — the merge first, so the sort never has to shuffle a pile
+    // that is about to disappear.
+    combineThings(pc);
     sortItems(pc);
   }
   const name = item.ident ? item.fullName : item.name;
@@ -199,6 +214,67 @@ export function partyCanTake(party: Party, item: Item): boolean {
         return itemWeight(item) <= freeWeight(pc) && firstFreeSlot(pc) >= 0;
     }
   });
+}
+
+/**
+ * `cPlayer::combine_things` (pc.cpp:746) — merge stackable items.
+ *
+ * Two items stack when they share a **`type_flag`** and both are identified;
+ * the flag is the scenario's "these are the same thing" key, so five piles of
+ * twelve arrows become one of sixty. This was a `TODO(M6)` that outlived M6 by
+ * two milestones, and leaving it out is not cosmetic: an unstacked pack is
+ * *longer*, so every slot below the first stack sits one place further down,
+ * and `has_type_equip` — which returns the **first equipped item** of a type —
+ * can come back with a different weapon on each side.
+ *
+ * Three details kept verbatim:
+ *
+ * - **The cap is 125 per stack**, and the overflow is *lost* rather than left
+ *   behind: the C++ clamps `items[i].charges` to 125 and still removes `j`.
+ * - **The equipped flag is inherited.** If the pile being absorbed was the
+ *   equipped one, the survivor becomes equipped.
+ * - **`take_item(j)` shifts the pack up and the loop still increments `j`**,
+ *   so the item that slides into slot `j` is skipped on this pass. Three
+ *   identical piles in a row therefore need two calls to fully merge. Kept —
+ *   `give_item` calls this once per item taken, which is how it converges.
+ *
+ * `checkOnly` answers "would anything combine?" without touching the pack,
+ * which is what `give_item` asks of the extra slot. `say` is the C++'s
+ * `print_result` hook, which is null in most of the paths that reach here.
+ */
+export function combineThings(
+  pc: Player, checkOnly = false, say?: (line: string) => void,
+): boolean {
+  let canCombine = false;
+  // **`items.size()`, not `INVENTORY_SIZE`** — the C++'s own comment says "here
+  // it is correct to check items.size() because the extra slot is *for*
+  // combining things", so the scratch slot at the end takes part.
+  for (let i = 0; i < pc.items.length; i++) {
+    const a = pc.items[i]!;
+    if (a.variety !== ItemType.NO_ITEM && a.typeFlag > 0 && a.ident) {
+      for (let j = i + 1; j < pc.items.length; j++) {
+        const b = pc.items[j]!;
+        if (b.variety === ItemType.NO_ITEM || b.typeFlag !== a.typeFlag || !b.ident) continue;
+        canCombine = true;
+        if (checkOnly) continue;
+        say?.('(items combined)');
+        const total = a.charges + b.charges;
+        if (total > 125) {
+          a.charges = 125;
+          say?.('(Can have at most 125 of any item.)');
+        } else a.charges = total;
+        if (pc.equip[j]) {
+          pc.equip[i] = true;
+          pc.equip[j] = false;
+        }
+        takeItem(pc, j);
+      }
+    }
+    if (pc.items[i]!.variety !== ItemType.NO_ITEM && pc.items[i]!.charges < 0) {
+      pc.items[i]!.charges = 1;
+    }
+  }
+  return canCombine;
 }
 
 export interface EquipResult {
@@ -289,6 +365,13 @@ export function getProtLevel(pc: Player, abil: ItemAbil, dat = -1): number {
  * index shifts with the rest.
  */
 export function takeItem(pc: Player, slot: number): void {
+  // The scratch slot is not part of the pack, so emptying it shifts nothing
+  // (pc.cpp:919). `combine_things` reaches here with it when `give_item` has
+  // used the extra-slot route.
+  if (slot === NUM_INVEN_SLOTS) {
+    pc.items[NUM_INVEN_SLOTS] = defaultItem();
+    return;
+  }
   for (let i = slot; i < NUM_INVEN_SLOTS - 1; i++) {
     pc.items[i] = pc.items[i + 1]!;
     pc.equip[i] = pc.equip[i + 1]!;
