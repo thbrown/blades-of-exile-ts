@@ -10,7 +10,7 @@ import { Attitude, DamageType } from '../data/monster';
 import { MonstAbil } from '../data/monsterAbility';
 import { defaultTownperson } from '../data/town';
 import { FieldType } from '../data/fields';
-import { Creature, CreatureStatus, assignCreature } from '../universe/creature';
+import { Creature, CreatureStatus, assignCreature, copyMonster } from '../universe/creature';
 import { SpellNote } from '../universe/living';
 import { GameMode } from './modes';
 import type { GameSession } from './session';
@@ -100,9 +100,26 @@ export function placeMonster(
   const c: Creature = assignCreature(
     i, preset, template, univ.party.easyMode, univ.difficultyAdjust(),
     town.monsters[i]);
-  // "One effect is resetting max health to ignore difficulty_adjust()".
+  // "One effect is resetting max health to ignore difficulty_adjust()"
+  // (boe.monster.cpp:1184). The assignment is
+  // `static_cast<cMonster&>(univ.town.monst[i]) = monst`, so it writes the
+  // **cMonster** part only — `m_health`, the maximum — and `health`, which is
+  // a `cCreature` member, keeps the value `assign` just scaled. So a placed
+  // monster on a levelled-up party's difficulty comes in at *twice* its own
+  // maximum and stays there: `heal` refuses to touch anything already at or
+  // above `m_health`, and `increase_age` bleeds one point a turn off it
+  // (`monsterTurn.ts:1691`). Resetting `health` here as well made every summon
+  // and every split arrive at half the C++'s hit points.
+  //
+  // The same assignment resets the four `cMonster` fields this port mirrors
+  // outside `mon` — including `assign`'s "an invisible monster draws as
+  // nothing", so a placed invisible monster is visible. Kept; `resumeLoadedGame`
+  // has the identical shape for the same reason.
+  c.mon = copyMonster(template);
   c.maxHealth = template.health;
-  c.health = c.maxHealth;
+  c.pictureNum = template.pictureNum;
+  c.xWidth = template.xWidth;
+  c.yWidth = template.yWidth;
   c.attitude = template.defaultAttitude;
   if (c.isFriendly) c.attitude = Attitude.HOSTILE_A;
   c.mobile = true;
