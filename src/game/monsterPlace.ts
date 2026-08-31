@@ -89,9 +89,19 @@ export function placeMonster(
     : univ.scenario.scenMonsters[which];
   if (!template) return town.monsters.length;
 
+  // **The preset is a bare `cCreature(which)`, and its `start_loc` stays
+  // (80,80)** (boe.monster.cpp:1184 — the constructor at
+  // scenario/monster.cpp:425). Only `cur_loc` is set to `where`, below. Filling
+  // `start_loc` in as well looks like tidying up and is a divergence with a
+  // long fuse: `start_town_mode` restores a remembered town by putting every
+  // creature back on its `start_loc` and then sweeping everything off the
+  // active area (boe.town.cpp:458), so in the C++ a monster placed at runtime
+  // **cannot survive the party leaving and coming back** — (80,80) is off any
+  // town. With `where` here it survived, and one extra idle hostile creature
+  // is one extra `get_ran(1,1,100)` notice roll on every turn of the rest of
+  // the visit.
   const preset = defaultTownperson();
   preset.number = which;
-  preset.startLoc = { ...where };
   // The slot `i` is the first dead one, and `cPopulation::assign` writes
   // **into** it: the arrival inherits whatever that corpse's `targ_loc` and
   // `party_summoned` were. See assignCreature's comment — a wandering monster

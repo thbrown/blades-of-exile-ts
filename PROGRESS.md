@@ -1615,9 +1615,9 @@ bottom. What M8 still owes:
   without opening the cast-spell dialog there, so the recording's next click
   has nothing to click on. Those files' numbers are "matched as far as the C++
   got", which for the two at the top of the list is now its whole run.
-  Corpus **611,526** matching draws, **23 of 87** files agreeing all the way,
-  45 blocked outside the rules. **Those numbers were 567,443 / 22 / 46 at the
-  start of 2026-08-31, 476,671 / 19 / 46 at the
+  Corpus **616,738** matching draws, **23 of 87** files agreeing all the way,
+  45 blocked outside the rules. **Those numbers were 611,526 / 23 / 45 and
+  567,443 / 22 / 46 earlier on 2026-08-31, 476,671 / 19 / 46 at the
   end of 2026-08-30, 459,492 / 19 / 44 at the
   end of 2026-08-29, 381,127 / 19 / 40 at the
   end of 2026-08-24, 285,845 / 15 / 41 the morning before that and
@@ -7261,3 +7261,46 @@ The M6 list below is kept for the history of what it covered:
     area: the **sign** step. A look at a sign raises `do_sign`'s dialog in the
     C++ and this port's driver raises nothing, so the `click_control` that
     dismissed it still falls through to the game.
+
+- **A monster placed at runtime cannot survive the party coming back (M8,
+  2026-08-31).** The top bucket, `giveMonstersMoves`, two files. The draw
+  stream said this port made one more `get_ran(1,1,100)` notice roll than the
+  C++ on every turn of a whole town visit — which is the signature of *one
+  extra idle hostile creature*, not of anything wrong in the AI.
+  - `MONST=1` against `BOE_TRACE_MONST=1`, uniq'd and diffed, said it in one
+    column: identical creature lists except that this port had a slot 6 the
+    C++ did not, from the moment the party re-entered the town. The
+    `[domonst]` lesson generalises — **when a bucket is in the monster AI,
+    diff the creature list before reading a single draw.**
+  - Slot 6 was a *wandering* monster: the preset creature that started there
+    had been killed on the first visit, and `place_monster` had recycled the
+    dead slot. Both sides agreed on it for four hundred actions. The party
+    then left, rested three days, and walked back in.
+  - **`place_monster` builds its creature from a bare `cCreature(which)`**
+    (boe.monster.cpp:1184), whose `cTownperson` half is default-constructed —
+    and `cTownperson()` sets **`start_loc = {80,80}`**
+    (scenario/monster.cpp:425). Only `cur_loc` is set to the square it is
+    placed on. This port filled `start_loc` in as well, which reads like
+    tidying up and is a divergence with a very long fuse: `start_town_mode`
+    restores a remembered town by putting every creature back on its
+    `start_loc` (boe.town.cpp:167) and **then sweeps everything off the active
+    area** (:458). (80,80) is off any town, so in the C++ a monster placed at
+    runtime is *guaranteed* not to survive the party leaving and returning.
+    With the placement square there it survived, and stayed idle and hostile
+    for the rest of the visit.
+  - Found by adding four temporary prints to the C++ and rebuilding — the
+    restored creature's fields, then its state after each of the three places
+    `start_town_mode` can kill something. That is the tool to reach for when
+    the two sides disagree about a creature *existing*: the draw stream and
+    all six instruments can only see creatures that are alive.
+  - One instrument came out of it and is now in the harness patch:
+    **`BOE_TRACE_MONST` prints `[town] enter N restored=0|1`**, which of the
+    two load paths a town entry took. The restore and the rebuild differ in
+    what they kill, so "which path" is the first thing to establish when two
+    runs disagree about a creature existing at all. (Its predecessor was a
+    handful of unconditional `std::cout` lines that were never in
+    `exile-wasm.patch` — a stray local edit a `git checkout` silently loses.
+    Anything worth keeping in that checkout belongs in the patch file.)
+  - **Where it stands.** Corpus 611,526 → **616,738** matching draws. The file
+    went 38,140 → 43,352 draws and 1,390 → 1,498 actions, and moved on to
+    `damagePc`.

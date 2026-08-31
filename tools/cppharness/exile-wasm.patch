@@ -510,6 +510,27 @@ index 56cde7c1..9abbdca0 100644
  		int loaded = EM_ASM_INT({ return Module.audioLoadCount || 0; });
  		int total = EM_ASM_INT({ return Module.audioTotalCount || 0; });
  		if (loaded >= total && total > 0) {
+diff --git a/src/game/boe.town.cpp b/src/game/boe.town.cpp
+index 9c959f85..ddc2161c 100644
+--- a/src/game/boe.town.cpp
++++ b/src/game/boe.town.cpp
+@@ -248,6 +248,16 @@ void start_town_mode(short which_town, short entry_dir, bool debug_enter) {
+ 		}
+ 	
+ 	std::cout << "start_town_mode: monsters_loaded=" << monsters_loaded << std::endl;
++	// BOE_TRACE_MONST also says **where the town's creatures came from**: a
++	// town the party has been in lately is restored from `creature_save`
++	// (loaded=1) and one it hasn't is built from the presets (loaded=0). The two
++	// paths differ in what they kill — the restore puts every creature back on
++	// its `start_loc` and the sweep at :458 then removes whatever that leaves
++	// off the active area — so "which path" is the first thing to establish when
++	// two runs disagree about a creature existing at all.
++	if(getenv("BOE_TRACE_MONST"))
++		std::cout << "      [town] enter " << town_number
++			<< " restored=" << int(monsters_loaded) << std::endl;
+ 	if(!monsters_loaded) {
+ 		univ.town.monst.clear();
+ 		std::cout << "start_town_mode: loading " << univ.town->creatures.size() << " creatures" << std::endl;
 diff --git a/src/mathutil.cpp b/src/mathutil.cpp
 index faaef3f2..2a648966 100644
 --- a/src/mathutil.cpp
