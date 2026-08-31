@@ -790,7 +790,24 @@ export class GameSession {
     // it is also where the sector's own special node fires. Its `forced` is
     // the node's `b` return, which walks the party across water at a ford.
     const check = await this.checkSpecialTerrain(destination);
-    if (!check.canEnter) return false;
+    // **`keep_going && overall_mode == MODE_OUTDOORS`** (boe.actions.cpp:3975),
+    // and the 1997 original pairs them the same way (`ACTIONS.CPP:2687`,
+    // `overall_mode == 0`). The mode test is not redundant with `canEnter`: a
+    // node at the destination can *change the mode* without blocking anything —
+    // `ENTER_SHOP` calls `start_shop_mode`, and a node can drop the party into
+    // a town — and when it does, the step must not also happen. The C++ says so
+    // in a comment: "If not blocked and not put in town by a special".
+    //
+    // Without it the party ends up one square past where the recording left it,
+    // and *stays* there: `ASR_05-05-2025_21-21-52` walks onto a shop node at
+    // outdoor (21,22), shops in both engines, and comes out at (69,70) here
+    // against (68,69) there. Nothing diverges until 20 actions later, when the
+    // recording steps somewhere this port thinks is two squares away.
+    //
+    // `town_move_party` deliberately has **no** such guard (boe.actions.cpp:4196
+    // is a bare `if(keep_going)`, matching `ACTIONS.CPP:2911`), so this belongs
+    // to the outdoor path alone.
+    if (!check.canEnter || this.mode !== GameMode.OUTDOORS) return false;
     const specialForced = check.forced;
 
     const offset = { x: destination.x - party.outLoc.x, y: destination.y - party.outLoc.y };

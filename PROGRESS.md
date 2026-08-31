@@ -7808,3 +7808,55 @@ The M6 list below is kept for the history of what it covered:
     6,676) — but **that lead was false and is now closed**: the two count
     different units, calls against numbers consumed. See the closed entry
     above. Both runners agree with the C++ on all 6,676 calls.
+
+- **An outdoor move must not happen if a special changed the mode (M8,
+  2026-08-31).** One line, **+8,700 matching draws** — the largest single fix
+  of the day, and it came out of the corpus's *dominant* stop reason rather
+  than a bucket.
+  - `ASR_05-05-2025_21-21-52` stopped at action **67** on `replay desync: the
+    recording stepped to (67,69), but the view is centred on (69,70)`, which is
+    the shape **41 files** stop on. This was the earliest instance in the
+    corpus, which is what made it tractable.
+  - The party steps onto an outdoor square whose chain ends in `ENTER_SHOP`.
+    Both engines run the identical chain (`[spec]` node 0/1/2/9/11 at outdoor
+    (21,22)) and both end up shopping — but the C++ leaves the party on
+    **(68,69)** and this port stepped to **(69,70)**. Nothing diverged for
+    another twenty actions, which is why it read as a movement bug.
+  - **The special is innocent.** `ENTER_SHOP` sets `next_spec = -1` and never
+    touches `ret_a`. The block is in the move: `if(keep_going && overall_mode
+    == MODE_OUTDOORS)` (boe.actions.cpp:3975) — `start_shop_mode` had already
+    changed the mode, so the step is skipped. The C++'s own comment says it:
+    "If not blocked and not put in town by a special, process move".
+  - 1997 has the identical pair (`ACTIONS.CPP:2687`, `overall_mode == 0`), so
+    both references agree and no decision was needed. **`town_move_party` has
+    no such guard in either** (`boe.actions.cpp:4196` / `ACTIONS.CPP:2911` are
+    bare `if(keep_going)`), so this belongs to the outdoor path alone — worth
+    knowing before "fixing" the town one to match.
+  - Corpus **676,074 → 684,774**; that file 67 → 435 actions.
+
+- **OPEN, and it is this session's own fault: the harness now dismisses
+  dialogs the port still dies on.** The `[orphan] dialog … dismissing it`
+  change earlier today made the *oracle* tolerant of a modal the recording
+  never answered. This port's replay host stayed strict (`popClick`,
+  `src/replay/host.ts:46`). The two are no longer symmetric, and the asymmetry
+  **blames this port for agreeing with the C++**.
+  - Caught on `ASR_05-05-2025_12-20-07`: at town node 4 (type 54, One-Time Text
+    Message) at (12,14) *both* engines raise the same `2str` box, with the same
+    text ("Feudal states are rare in the Empire these days, and serfs'
+    barracks…"). The recording has no click for it. The C++ dismisses and runs
+    on; this port throws `this port raised a dialog the recording never saw`
+    and the whole chain fails. The port is **right** and looks wrong.
+  - **The dismiss is also not safe in general.** It presses the escape button,
+    which for a *message box* is the only way out and therefore harmless, but
+    for a **choice** dialog picks a branch the recording never chose — silently
+    taking the run down a different path while the trace says nothing but
+    `[orphan]`.
+  - What it should be: symmetric and narrow. Tolerate an unanswered **message
+    box** on both sides (one exit, no state effect); keep **choice** dialogs
+    strict on both, since guessing an answer is worse than stopping. And
+    whatever the harness dismisses should be **counted and reported** at the
+    end of a run, so "43 of 87 ran to the end" cannot quietly include files
+    that only finished because a modal was clicked away for them.
+  - Until that lands, treat any `harness:` file whose cpp trace contains
+    `[orphan] dialog` as measuring less than its draw count suggests:
+    `grep -l 'orphan. dialog' tools/cppharness/traces/*/cpp.txt`.
