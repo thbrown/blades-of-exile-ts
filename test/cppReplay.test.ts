@@ -91,12 +91,29 @@ const DRAW_PIN: Record<string, number> = {
   // in town closed that gap. Six fixes have moved the total here
   // (6,480 -> 6,562 -> 6,765 -> 6,602 -> 6,724 -> 6,726).
   //
-  // **This number is not the one `diverge.mjs` prints** — 6,676 there against
-  // 6,726 here, so the two runners still disagree by 50 and one of them is not
-  // reproducing the recording faithfully. `corpus.test.ts` has its own driver
-  // setup and this file has `play()`. Still tracked as a found-not-fixed in
-  // PROGRESS.md; pin what *this* runner does until it is chased down.
+  // **This number is not the one `diverge.mjs` prints, and that is correct.**
+  // They are different units. `diverge.mjs` counts `[ran]` lines, which are
+  // `get_ran` *calls* — one per call, matching the C++'s `trace_ran`. This pin
+  // is `gameDraws`, which counts the *numbers* those calls consumed:
+  // `get_ran(3,1,6)` is one line and three numbers.
+  //
+  //     6,676 calls + 49 extra numbers from calls with times > 1
+  //           + 1 for `seedLoadedReplay`'s `init_boe` draw  =  6,726
+  //
+  // The 50 was recorded in PROGRESS.md for weeks as "the two runners disagree,
+  // one of them is not reproducing the recording faithfully". Neither is:
+  // both runners and the C++ agree on all 6,676 calls. `CALL_PIN` below pins
+  // the directly comparable number so the confusion cannot come back.
   'ZKR_15-05-2025_18-04-58.xml': 6726,
+};
+
+/**
+ * `get_ran` **calls** on the game stream — the number `diverge.mjs` and the
+ * C++ harness both report, so unlike `DRAW_PIN` this one is comparable across
+ * engines. `ZKR_15-05-2025_18-04-58` agrees with the C++ on every one of them.
+ */
+const CALL_PIN: Record<string, number> = {
+  'ZKR_15-05-2025_18-04-58.xml': 6676,
 };
 
 /**
@@ -143,6 +160,8 @@ interface RunOutcome {
   /** The fingerprint: where everyone ended up, and how much RNG was drawn. */
   end: {
     draws: number;
+    /** `get_ran` *calls* — see `CALL_PIN`. Not the same unit as `draws`. */
+    calls: number;
     age: number;
     gold: number;
     town: number;
@@ -193,6 +212,7 @@ async function play(file: string): Promise<RunOutcome> {
     unsupported: result.unsupported,
     end: {
       draws: univ.rng.gameDraws,
+      calls: univ.rng.gameCalls,
       age: univ.party.age,
       gold: univ.party.gold,
       town: univ.party.townNum,
@@ -215,6 +235,8 @@ describe("the C++ build's own replays", () => {
       expect(out.ran + out.answered).toBe(out.total);
       const pin = DRAW_PIN[file];
       if (pin !== undefined) expect(out.end.draws).toBe(pin);
+      const callPin = CALL_PIN[file];
+      if (callPin !== undefined) expect(out.end.calls).toBe(callPin);
     }, 120000);
   }
 

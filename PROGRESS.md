@@ -4902,14 +4902,29 @@ The M6 list below is kept for the history of what it covered:
     "blocked outside the rules" 30 → 31 for that reason, which is progress.
     Corpus 88,399 → **92,773** matching draws.
 
-- **(Found, not fixed) The two runners disagree about the same recording.**
-  `test/cppReplay.test.ts` says `ZKR_15-05-2025_18-04-58` draws 6,480; running
-  the same file through `test/corpus.test.ts` (which is what `diverge.mjs`
-  drives) says 6,433. Same file, same commit, 47 draws apart. One of the two
-  drivers is not reproducing the recording faithfully — they have separate
-  setup paths (`play()` here, the corpus runner there). Until it is chased
-  down, **`diverge.mjs`'s number is the one PROGRESS quotes**, because it is the
-  one compared against the C++; `DRAW_PIN` pins what its own runner does.
+- **~~(Found, not fixed) The two runners disagree about the same recording.~~
+  CLOSED 2026-08-31 — they never disagreed. Different units.** The entry used
+  to read: `test/cppReplay.test.ts` says `ZKR_15-05-2025_18-04-58` draws 6,480,
+  `test/corpus.test.ts` says 6,433, "one of the two drivers is not reproducing
+  the recording faithfully".
+  - It is not. `diverge.mjs` counts `[ran]` **lines**, which are `get_ran`
+    *calls* — one per call, exactly as the C++'s `trace_ran` does. `DRAW_PIN`
+    is `gameDraws`, which counts the **numbers** those calls consumed.
+    `get_ran(3,1,6)` is one line and three numbers.
+  - Checked exactly, on the post-portal-fix numbers:
+    **6,676 calls + 49 extra numbers from calls with `times > 1` + 1 for
+    `seedLoadedReplay`'s `init_boe` draw = 6,726.** Running the *other* runner
+    with `RAN=99999` and counting its `[ran]` lines gives **6,676** — the same
+    as `diverge.mjs` and the same as the C++. Both runners are faithful and
+    always were.
+  - Cost: this sat as an open lead for weeks and was quoted as recently as the
+    entry at the bottom of this file, which called `DRAW_PIN` "the more
+    suspicious of the two numbers". It was not suspicious. **Before believing
+    two counters disagree, check they count the same thing.**
+  - `GameRng.gameCalls` now exists beside `gameDraws`, with the identity
+    written down in `src/core/rng.ts`, and `CALL_PIN` in
+    `test/cppReplay.test.ts` pins the cross-engine-comparable number so the
+    confusion cannot recur.
 
 - **`DRAW_PIN` was `DRAW_FLOOR`, and the floor was on the wrong axis.** It was
   `toBeGreaterThanOrEqual`, on the theory that more draws is more progress.
@@ -7788,8 +7803,8 @@ The M6 list below is kept for the history of what it covered:
     bucket 4 files → 3. Two draws is a tiny number for a real rule; the file
     moving into the "agrees all the way" column is the result that matters.
   - `test/cppReplay.test.ts`'s `DRAW_PIN` caught the change (6,724 → 6,726) and
-    was updated deliberately. **It also widened a known found-not-fixed**: that
-    runner and `diverge.mjs` now disagree by **50** draws on this file (6,726
-    against 6,676) where they used to differ by 2. One of the two runners is
-    not reproducing the recording faithfully, and this is the sharpest handle
-    anyone has had on it — a file where every draw is known to agree.
+    was updated deliberately. It appeared to widen a known found-not-fixed —
+    that runner and `diverge.mjs` differ by **50** on this file (6,726 against
+    6,676) — but **that lead was false and is now closed**: the two count
+    different units, calls against numbers consumed. See the closed entry
+    above. Both runners agree with the C++ on all 6,676 calls.

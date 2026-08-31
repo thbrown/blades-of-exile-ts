@@ -81,10 +81,29 @@ export class GameRng {
    */
   gameDraws = 0;
   uniqueDraws = 0;
+  /**
+   * How many times `getRan` has been *called* on the game stream, as against
+   * how many numbers those calls consumed. **These are different units and
+   * confusing them cost a real investigation.**
+   *
+   * `get_ran(3,1,6)` is one call and three numbers. The `[ran]` trace prints
+   * one line per *call*, and so does the C++'s `trace_ran`, so a draw-stream
+   * diff is in calls — but `gameDraws` counts numbers. On
+   * `ZKR_15-05-2025_18-04-58` that is 6,676 calls against 6,726 numbers, and
+   * for a while the 50 was written down as "the two runners disagree, one of
+   * them is not reproducing the recording faithfully". Neither was wrong.
+   *
+   * The identity, checked in `test/cppReplay.test.ts`:
+   *
+   *     gameDraws === sum of `times` over every traced call
+   *                 + 1 for `seedLoadedReplay`'s `init_boe` draw
+   */
+  gameCalls = 0;
 
   seedGame(seed: number): void {
     this.game.seed(seed);
     this.gameDraws = 0;
+    this.gameCalls = 0;
     this.traced = 0;
     this.seeded = true;
   }
@@ -111,6 +130,7 @@ export class GameRng {
     // deliberately outside the replay's determinism, so tracing it interleaves
     // numbers with no counterpart on the other side, which reads as "the
     // streams diverge on the first draw" when they in fact agree.
+    if (!useUnique) this.gameCalls++;
     if (!useUnique && this.seeded && TRACE_RAN > 0 && ++this.traced <= TRACE_RAN) {
       // eslint-disable-next-line no-console
       console.log(`    [ran] ${this.traced} get_ran(${times},${min},${max}) = ${toRet}`);
