@@ -702,10 +702,45 @@ index 9c959f85..ddc2161c 100644
  		univ.town.monst.clear();
  		std::cout << "start_town_mode: loading " << univ.town->creatures.size() << " creatures" << std::endl;
 diff --git a/src/mathutil.cpp b/src/mathutil.cpp
-index faaef3f2..2a648966 100644
+index faaef3f2..657185b2 100644
 --- a/src/mathutil.cpp
 +++ b/src/mathutil.cpp
-@@ -26,6 +26,19 @@ short get_ran (short times,short min,short max, bool use_unique_ran){
+@@ -7,6 +7,9 @@
+  */
+ 
+ #include <cstdlib>
++#ifdef BOE_NATIVE_REPLAY
++#include <iostream>
++#endif
+ #include "mathutil.hpp"
+ 
+ std::mt19937 game_rand;
+@@ -17,7 +20,23 @@ short get_ran (short times,short min,short max, bool use_unique_ran){
+ 	short to_ret = 0;
+ 	
+ 	if(max < min) max = min;
+-	if(max == min) return times * min;
++	if(max == min) {
++#ifdef BOE_NATIVE_REPLAY
++		// **The 1997 original draws here and this build does not.** Its guard is
++		// `if((max - min + 1) == 0) return 0;`, which only fires for max == min-1;
++		// max == min falls into the loop and spends `times` calls on `rand() % 1`.
++		// Same answer, different draw count — and these calls are invisible in
++		// every trace, because the hook below sits after this early return.
++		// BOE_TRACE_RAN_DEGENERATE=1 counts them.
++		if(getenv("BOE_TRACE_RAN_DEGENERATE")) {
++			static long n = 0;
++			std::cout << "    [randeg] " << ++n << " get_ran(" << times << ","
++				<< min << "," << max << ") — original would spend " << times
++				<< " draw(s) here" << std::endl;
++		}
++#endif
++		return times * min;
++	}
+ 	
+ 	for(short i = 1; i < times + 1; i++) {
+ 		if(use_unique_ran)
+@@ -26,6 +45,19 @@ short get_ran (short times,short min,short max, bool use_unique_ran){
  			store = game_rand();
  		to_ret += min + (store % (max - min + 1));
  	}

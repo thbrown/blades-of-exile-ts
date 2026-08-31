@@ -806,6 +806,13 @@ Notes for M2 implementer:
 
 ## Key references (do not lose)
 
+- `../boe-source-1997` — **Jeff Vogel's original 1997 source**, Release 3,
+  GPL v2. The *specification* for a faithful port; not buildable and not
+  meant to be. `Windows Code Release 3/` is the readable half.
+  `../exile-wasm` is a decade of community modification on top of it, and the
+  two demonstrably disagree — see the three-way entry at the bottom of this
+  file before treating either as ground truth.
+
 - Reference C++ implementation: `../exile-wasm` (CBoE WASM fork). Critical files listed at the end of `PLAN.md`.
 - Exile 3 data + user's prior reverse-engineering: `../exile3-mapping` (`outdoor-to-json.js` = 90 zones × 3220 B, 48×48 terrain; `display.js` = partial E3→BoE terrain-sprite mapping).
 - RNG must match C++ `std::mt19937` + `get_ran` (`../exile-wasm/src/mathutil.cpp:15`) including **call order** — replays depend on it.
@@ -7616,12 +7623,23 @@ The M6 list below is kept for the history of what it covered:
     `combat_cast_mage_spell`) prints the status, sp, skill, encumbrance and the
     two `spell_forced`/`spell_recast` flags before the pick. On
     `long/VoDT_01-05-2025_17-52-13` action 75 it says
-    `[cast] mage pc=1 status=2 sp=0 skill=0 enc=0 forced=0 recast=0`, and
-    `status=2` is `NO_CAST_ANAMA`. This port prints
-    `Cast (Slish): You're an Anama!` at the identical action. **Both engines
-    refuse and neither opens the cast-spell dialog**, so the recording's next
-    click on `spell12` has nothing to click. The recording is stale — made by a
-    build whose rules differed — and no harness work will change that.
+    `[cast] mage pc=1 status=2 sp=0 skill=0 enc=0 forced=0 recast=0`. This port
+    prints `Cast (Slish): You're an Anama!` at the identical action. **Both
+    engines refuse and neither opens the cast-spell dialog**, so the
+    recording's next click on `spell12` has nothing to click.
+    - **`status=2` is `NO_CAST_ANAMA`, and reading that as *the* cause was
+      wrong** (corrected same day — see the three-way entry at the bottom).
+      Gating the Anama check behind a feature flag and rebuilding does not open
+      the dialog: the status becomes `1`, `NO_CAST_SKILL`, because **Slish has
+      zero mage skill and zero spell points**. The refusal is over-determined,
+      and the 1997 original refuses on the same grounds
+      (`COMBAT.CPP:4096`, "Cast: No mage skill", *before* `pick_spell`).
+    - So the recording's build opened a mage picker for a PC who could not cast
+      — behaviour in **neither** 1997 nor current OBoE. That is exactly what
+      OBoE's own `pacifist-spellcast-check` flag describes as legacy: "lets the
+      player select combat spells and click 'Cast' which will fail". Skipping
+      is still right, because both engines agree; the *reason* is a versioned
+      dialog-opening policy, not any one trait.
     - So an orphaned dialog action is now **skipped**, the way
       `src/replay/driver.ts` has always skipped it on this side:
       `click_control`, `field_input`, `field_focus`, `field_selection`,
@@ -7673,3 +7691,62 @@ The M6 list below is kept for the history of what it covered:
     feature flags it refuses, 2 × signal 11, and one each of signal 10,
     `Unexpectedly failed to give item!`, a missing scenario, and `max-files
     does not exist in dialog preferences`.
+
+- **The 1997 original source is now a third reference, and the corpus is not
+  what it looked like (M8, 2026-08-31).** `../boe-source-1997` is Blades of
+  Exile Source Release 3 (April 2007, **GPL v2**), Jeff Vogel's original 1997
+  code for the game — Windows (~40k lines, 16-bit C++) and Macintosh (Classic,
+  pre-Carbon) — extracted from a StuffIt archive inside a MacBinary wrapper
+  (`dd bs=128 skip=1` to strip the header, then `unar`).
+
+  **Do not try to build it.** The Windows half is a 16-bit app with `far`
+  pointers; the Mac half is Classic QuickDraw with CodeWarrior resource forks.
+  `../exile-wasm` already *is* a working modern build of the same game. The
+  value here is as a **specification**, not an executable.
+
+  - **The corpus is entirely OBoE's, and none of it is 1997.** The 1997 source
+    has no replay system at all — no `record_action`, no `<actions>` XML — so
+    no recording can come from it. What the corpus *is* is recordings made by
+    **several different OBoE builds**, which is why they disagree with the one
+    in `../exile-wasm`.
+  - **OBoE has a mechanism for this and the recordings use it.** Every
+    recording carries a `<feature_flags>` block declaring a version per
+    versioned behaviour (`pacifist-spellcast-check V2`, `file-picker-dialog
+    V1`, `target-lock V1`, …), and `replay_feature_flags` (boe.main.cpp:1186)
+    does `feature_flags = recorded_flags` — **replacing the build's whole
+    table**, so a flag the recording never declares reads as *legacy*. That
+    table (boe.main.cpp:107) is a partial, community-written changelog of
+    OBoE's deliberate deviations, and it is the free seed of any
+    original-vs-OBoE catalogue. Two of the survey's stop reasons are this
+    mechanism refusing outright: `conveyor-belts … 'V2'` and the `pick-save` /
+    `file-picker-dialog` cluster.
+  - **The mechanism is incomplete, and that is the whole harness-gap story.**
+    Behaviours changed without anyone adding a flag. `pacifist-spellcast-check`
+    is flagged; the Anama twin four lines away in the same function is not.
+
+  - **`get_ran` itself differs, in draw *count*, and this is the reason the
+    corpus cannot survive a switch to 1997 semantics.** The original
+    (`GLOBAL.CPP:19`) guards with `if((max - min + 1) == 0) return 0;`, which
+    fires only for `max == min-1`; **`max == min` falls into the loop and
+    spends `times` calls on `rand() % 1`**. OBoE returns `times * min` early
+    and spends none. Same value, different draw count — and these are
+    **invisible in every trace**, because the trace hook sits after that early
+    return. `BOE_TRACE_RAN_DEGENERATE=1` (new) counts them: **307 in
+    `VoDT_01-05-2025_17-52-13` alone**, all `get_ran(1,1,1)`, scattered from
+    early in the run. Adopting the original's `get_ran` would part the streams
+    within the first few actions and they would never realign.
+    - **Recommended deviation #1: keep OBoE's short-circuit.** The two return
+      the identical value; no player can observe the difference; and it is the
+      one place where deviating from the original costs nothing and buys the
+      only automated correctness signal the project has.
+  - Also confirmed OBoE additions: **traits are 15 in the original and 17 in
+    OBoE** — `PACIFIST` (15) and `ANAMA` (16) are community back-ports from
+    Exile III. Nothing sets `ANAMA` at runtime; it is a character-creation
+    trait, so it is inert for Part 1 and belongs with the E3 work.
+
+- **28 files run exactly 2 actions short of the C++, and it is not a bug.**
+  Those two are always `close_window` followed by `click_control quit` at the
+  very end of the recording — the player quitting the game, which this port
+  has no window to close and no game to quit. It shows up in `diverge.mjs`'s
+  action column as `1071/1069`, `338/336`, `856/854` … including on files that
+  agree on every draw. **Don't chase it.**
