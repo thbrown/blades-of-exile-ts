@@ -6,6 +6,7 @@
  */
 
 import { Scenario } from '../data/scenario';
+import { captureScenarioState } from '../data/scenarioState';
 import { SpecType } from '../data/special';
 import { readItemsFromXml } from './itemsXml';
 import { loadMap } from './mapParse';
@@ -96,6 +97,10 @@ export async function loadScenario(
       scen.outdoors[x]!.push(sector);
     }
   }
+  // The pristine copy of everything a game will write on. `applySave` puts it
+  // back, which is this port's stand-in for the C++ reloading the scenario from
+  // disk on every load (fileio_party.cpp:448).
+  scen.pristine = captureScenarioState(scen);
   return scen;
 }
 

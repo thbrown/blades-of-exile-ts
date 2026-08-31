@@ -12,6 +12,7 @@ import { Shop } from './shop';
 import { SpecialNode } from './special';
 import { Speech } from './talking';
 import { Terrain } from './terrain';
+import type { ScenarioState } from './scenarioState';
 import { Timer, Town } from './town';
 import { Vehicle } from './vehicle';
 
@@ -70,6 +71,12 @@ export interface Scenario {
   /** The scenario's boat/horse templates, by vehicle number (fileio_scen.cpp). */
   boats: Vehicle[];
   horses: Vehicle[];
+  /**
+   * The record's mutable state exactly as it was parsed, so `applySave` can put
+   * it back — the C++ gets the same thing by reloading the scenario from disk on
+   * every load. `loadScenario` fills this in; see `data/scenarioState.ts`.
+   */
+  pristine?: ScenarioState;
 }
 
 /**

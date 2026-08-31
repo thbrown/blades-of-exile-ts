@@ -35,6 +35,7 @@ import {
 } from '../data/enumTags';
 import { FieldType } from '../data/fields';
 import { TerSpec } from '../data/terrain';
+import { restoreScenarioState } from '../data/scenarioState';
 import { Item, ItemType, ItemUse, defaultItem } from '../data/item';
 import { Monster, defaultMonster } from '../data/monster';
 import {
@@ -1341,6 +1342,13 @@ export function readSavePreview(data: Uint8Array): SavePreview {
  * `CurOut` closes over the Party) and each PC's back-pointer to the Party.
  */
 function freshenForLoad(univ: Universe): void {
+  // **The scenario record is game state too.** The C++ reloads the whole
+  // scenario from disk here (`load_scenario(path, univ.scenario, FULL)`,
+  // fileio_party.cpp:448), so a load starts from the file's own terrain, maps,
+  // taken items and hidden towns and lays the save's pages on top. This port
+  // parses a scenario once and shares it, so the previous game's changes have
+  // to be undone by hand — see `data/scenarioState.ts` for what that cost.
+  if (univ.scenario.pristine) restoreScenarioState(univ.scenario, univ.scenario.pristine);
   const { pcs } = univ.party;
   Object.assign(univ.party, new Party());
   univ.party.pcs = pcs;

@@ -1615,8 +1615,9 @@ bottom. What M8 still owes:
   without opening the cast-spell dialog there, so the recording's next click
   has nothing to click on. Those files' numbers are "matched as far as the C++
   got", which for the two at the top of the list is now its whole run.
-  Corpus **616,738** matching draws, **23 of 87** files agreeing all the way,
-  45 blocked outside the rules. **Those numbers were 611,526 / 23 / 45 and
+  Corpus **617,501** matching draws, **23 of 87** files agreeing all the way,
+  45 blocked outside the rules. **Those numbers were 616,738 / 23 / 45,
+  611,526 / 23 / 45 and
   567,443 / 22 / 46 earlier on 2026-08-31, 476,671 / 19 / 46 at the
   end of 2026-08-30, 459,492 / 19 / 44 at the
   end of 2026-08-29, 381,127 / 19 / 40 at the
@@ -7304,3 +7305,52 @@ The M6 list below is kept for the history of what it covered:
   - **Where it stands.** Corpus 611,526 → **616,738** matching draws. The file
     went 38,140 → 43,352 draws and 1,390 → 1,498 actions, and moved on to
     `damagePc`.
+
+- **Loading a save has to un-do the last game's scenario (M8, 2026-08-31).**
+  The top bucket, `doMonsters`, two files, and the same "one extra
+  `get_ran(1,1,100)` notice roll every turn" shape as the entry above — but a
+  different cause, and worth reading for how far from the bucket it was.
+  - `ZKR_15-05-2025_15-19-18` parts at draw 27,341 with five notice rolls here
+    and four there. `[domonst]`'s `party=` column named it: at age 40214 the
+    C++ was at (14,22) and this port at (14,21), one turn behind. Creature 18
+    at (14,13) is `dist` 8 from (14,21) and 9 from (14,22), and `do_monsters`
+    stops at 8.
+  - The party fell behind on a **doorway**. The recording steps onto (14,21)
+    twice in a row. The C++ refused the first step and took the second; this
+    port walked through on the first and spent the second standing still, which
+    still charged a turn. That is `CHANGE_WHEN_STEP_ON` working as written
+    (boe.specials.cpp:317): the step swaps the terrain for `flag1` and then
+    **refuses the move if the *old* terrain blocked** — open the door this turn,
+    walk through the next. It costs no draws and no turn, which is why nothing
+    else could see it.
+  - So the two runs disagreed about the terrain: 142 (`Basalt Wall w. Door`,
+    step-change, blocks) in the C++ against 146 (`w. Open Door`) here, from the
+    moment the party first entered town 15. `town15.map` says 142. **The save
+    the recording loads was made in town 15 with that door already open**, and
+    `readCurTown` writes the saved grid into `town.record.terrain` — the
+    scenario's own array, shared by every game in the process. It stayed open
+    for the rest of the run.
+  - **The C++ reloads the whole scenario from disk on every load**
+    (`load_scenario(path, univ.scenario, FULL)`, fileio_party.cpp:448, into the
+    scratch universe `load_party_v2` builds), so a load always starts from the
+    file's terrain and lays the save's pages on top. `freshenForLoad`'s comment
+    already had the right principle for the *party* — "everything the save does
+    not mention goes back to its default" — and the scenario was the missing
+    half of it. `data/scenarioState.ts` captures the pristine parse in
+    `loadScenario` and `freshenForLoad` restores it: per town `terrain`, `maps`,
+    `itemTaken`, `doorUnlocked`, `canFind`, `monstersKilled` and `difficulty`,
+    per sector `terrain` and `maps`. Restored **in place**, because `CurTown`,
+    the renderer and the VM all hold references into the record.
+  - **Where it stands.** Corpus 616,738 → **617,501** matching draws; the file
+    went 27,341 → 28,104 draws and 1,344 → 1,834 actions.
+  - Two things this is a reminder of. **A scenario record is game state**, so
+    anything a game writes on it needs an entry in `captureScenarioState` — the
+    next one added silently rots this fix. And a `[domonst]` divergence of "one
+    extra notice roll" has now been three different bugs in two days: a
+    creature that should not exist, twice, and a party one square behind. The
+    roll count tells you *which* of those it is — count the creatures within 8
+    of each side's party square before reading anything else.
+  - A loose end noticed while instrumenting, not chased: this port runs
+    `startNewGame` (entering town 0) before the recording's `Load Game`, and the
+    C++ does not. The scenario restore above now undoes its side effects and no
+    draws leak, but the two runs are not doing the same thing there.
