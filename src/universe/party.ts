@@ -105,6 +105,14 @@ export class Party {
   horses: import('../data/vehicle').Vehicle[] = [];
   /** Halves every monster's health (cParty::easy_mode). */
   easyMode = false;
+  /**
+   * `cParty::less_wm` — the "fewer wandering monsters" preference, which the
+   * preferences dialog writes onto the *party* rather than into the prefs file
+   * once a game is loaded (boe.dlgutil.cpp:1410). It widens both
+   * wandering-monster rolls by 200 (boe.actions.cpp:1971 and :1994), so it is
+   * game state and part of the draw stream, not a display setting.
+   */
+  lessWm = false;
   /** Running totals the endgame summary reports (cParty::total_*). */
   totalDamTaken = 0;
   totalDamDone = 0;

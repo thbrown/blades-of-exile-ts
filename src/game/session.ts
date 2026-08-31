@@ -607,9 +607,12 @@ export class GameSession {
       this.queueTurn(async () => {
         await doMonsterTurn(this);
         // A town rolls for a new wandering group every turn, and a hard town
-        // rolls more often — the difficulty is subtracted from the divisor.
+        // rolls more often — the difficulty is subtracted from the divisor,
+        // and the party's "fewer wandering monsters" preference adds 200 to it
+        // (boe.actions.cpp:1994).
         const difficulty = this.univ.townRecord?.difficulty ?? 0;
-        if (this.univ.rng.getRan(1, 1, Math.max(2, 160 - difficulty)) === 2) {
+        const lessWm = this.univ.party.lessWm ? 200 : 0;
+        if (this.univ.rng.getRan(1, 1, Math.max(2, 160 - difficulty + lessWm)) === 2) {
           createWandMonst(this);
         }
         this.checkGameOver();
@@ -623,7 +626,10 @@ export class GameSession {
       if (this.univ.party.age % 10 !== 0) return;
       if (!this.univ.party.pcs.some((pc) => pc.isAlive)) return;
       doOutdoorMonsters(this);
-      if (this.univ.rng.getRan(1, 1, 70) === 10) createWandMonst(this);
+      // `get_ran(1,1,70 + less_wm * 200)` (boe.actions.cpp:1971).
+      if (this.univ.rng.getRan(1, 1, 70 + (this.univ.party.lessWm ? 200 : 0)) === 10) {
+        createWandMonst(this);
+      }
       void this.checkOutdoorEncounter();
     }
   }

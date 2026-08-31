@@ -591,6 +591,7 @@ export function writeParty(file: TagFile, party: Party, scenarioId: string): voi
   page.add('FOOD', party.food);
   // TODO(M7): next_pc_id, hostiles_present and less_wm aren't modelled here.
   page.add('EASY', party.easyMode);
+  page.add('LESSWM', party.lessWm);
   for (let i = 0; i < party.stuffDone.length; i++) {
     const row = party.stuffDone[i]!;
     for (let j = 0; j < row.length; j++) {
@@ -753,6 +754,7 @@ export function readParty(file: TagFile, party: Party): void {
       party.gold = page.first('GOLD')?.int(0) ?? 0;
       party.food = page.first('FOOD')?.int(0) ?? 0;
       party.easyMode = page.first('EASY')?.bool(0) ?? false;
+      party.lessWm = page.first('LESSWM')?.bool(0) ?? false;
       party.lightLevel = page.first('LIGHT')?.int(0) ?? 0;
       party.inBoat = page.first('IN')?.int(0) ?? -1;
       party.inHorse = page.first('IN')?.int(1) ?? -1;

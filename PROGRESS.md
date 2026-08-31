@@ -6391,6 +6391,39 @@ The M6 list below is kept for the history of what it covered:
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
 
+- **The preferences dialog is game state, and `less_wm` had never been ported
+  (M8, 2026-08-30).** The `move @ the C++ draws on` bucket — which, as that
+  bucket name always means, was **this port stopping**, not a rule.
+  - Four files open the preferences dialog *mid-run*. The driver refused
+    `pick_preferences` as a startup action reaching the game loop, on the
+    reasoning that a startup action there means the recording reloaded — true
+    for `load_party`, wrong for this one. It is just a dialog.
+  - Almost all of it is preferences the C++ hands to `set_pref` — display mode,
+    sound, UI scale, game speed — but **two LEDs are written straight onto the
+    party** (boe.dlgutil.cpp:1409): `easier` and `lesswm`. Both are in the draw
+    stream. Easy mode halves a creature's health in `assign`; `less_wm` widens
+    *both* wandering-monster rolls by 200 —
+    `get_ran(1,1,70 + less_wm*200)` outdoors (boe.actions.cpp:1971) and
+    `get_ran(1,1,160 - difficulty + less_wm*200)` in town (:1994).
+  - `cParty::less_wm` had no counterpart here at all: not the field, not the
+    `LESSWM` save page, not the two rolls. It is on `Party` now, saved and
+    loaded beside `easyMode`.
+  - Every LED is initialised from the current state and a recording only clicks
+    what it changes, so the write-back on `okay` is a no-op unless those two
+    were touched — and none of the four recordings touches them. **That is what
+    makes the modal cheap**: track the two, swallow the rest, and honour
+    `cancel` writing nothing back (:1389).
+  - **Where it stands.** Corpus 485,309 → **507,994** matching draws, files
+    agreeing end to end 20 → **22**, blocked outside the rules 46 → **44**.
+    `VoDT_06-04-2025_15-56-37` went from 125 draws to running the whole
+    recording.
+  - The reason this was worth 22,000 draws for an afternoon's work is the shape
+    the log keeps recording: **"the C++ draws on" is a hook, not a rule.** The
+    stop-reason histogram is the thing to read first —
+    `CORPUS=1 npx vitest run test/corpus.test.ts` prints it, and it now says
+    **41 files stop on a movement desync**, which is the whole of the rest of
+    the queue and is rules.
+
 - **A monster's spell was never a volley (M8, 2026-08-30).** The
   `handle_target_space @ get_ran(1,0,2)` bucket, two files, and the same shape
   in both: a run of damage rolls with the C++ slipping a `get_ran(1,0,2)`

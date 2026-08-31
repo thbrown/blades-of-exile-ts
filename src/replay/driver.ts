@@ -226,6 +226,25 @@ export async function runReplay(
    * closes them rather than the first click that arrives.
    */
   let notesDialog = false;
+  /**
+   * The preferences dialog (`pick_preferences`, boe.dlgutil.cpp:1463), open
+   * mid-run. It is modal and stays up across many clicks, and **two of its
+   * LEDs are game state rather than preferences**: `easier` and `lesswm` are
+   * written straight onto the party when it is dismissed with `okay`
+   * (:1409). Both change the draw stream — easy mode halves a creature's
+   * health in `assign` and gives ten free days in `day_reached`, and
+   * `less_wm` widens the wandering-monster roll to
+   * `get_ran(1,1,70 + less_wm * 200)` — so the dialog cannot simply be
+   * swallowed the way the help screens are.
+   *
+   * Every LED is initialised from the current state and the recording only
+   * clicks the ones it changes, so these two start where the party is and a
+   * dialog that never touches them writes back what was already there. The
+   * rest of the controls (display mode, sound, UI scale, game speed) are
+   * preferences the C++ hands to `set_pref`; none is game state and none is
+   * modelled here.
+   */
+  let prefsDialog: { easy: boolean; lessWm: boolean } | null = null;
 
   while (!source.exhausted) {
     const at = source.position;
@@ -555,8 +574,31 @@ export async function runReplay(
           // buttons to the game as if they were moves.
           notesDialog = true;
           break;
+        case 'pick_preferences':
+          prefsDialog = {
+            easy: session.univ.party.easyMode,
+            lessWm: session.univ.party.lessWm,
+          };
+          break;
         case 'click_control': {
           const id = action.info.id ?? '';
+          if (prefsDialog) {
+            // A `cLed` toggles when clicked; a `cLedGroup`'s members select
+            // instead, and the recording clicks the group's id and then the
+            // member. Only these two ids are worth tracking — the others are
+            // preferences — so everything else is swallowed as the modal's.
+            if (id === 'easier') prefsDialog.easy = !prefsDialog.easy;
+            else if (id === 'lesswm') prefsDialog.lessWm = !prefsDialog.lessWm;
+            else if (id === 'okay' || id === 'cancel') {
+              // `prefs_event_filter` writes nothing back on cancel (:1389).
+              if (id === 'okay') {
+                session.univ.party.easyMode = prefsDialog.easy;
+                session.univ.party.lessWm = prefsDialog.lessWm;
+              }
+              prefsDialog = null;
+            }
+            break;
+          }
           if (helpDialog) {
             helpDialog = false;
             break;
