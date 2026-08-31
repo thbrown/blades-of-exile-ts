@@ -30,6 +30,9 @@ import { damageTarget } from './combat';
 import { GameMode, isCombat } from './modes';
 import { getSummonMonster, summonMonster } from './monsterPlace';
 import { placeSpellPattern } from './spellPatterns';
+import { runBoomAnim, startBoomAnim } from './booms';
+import { handleMarkedDamage } from './damage';
+import { animSettle } from './anim';
 import { doShockwave } from './spellCombat';
 import type { GameSession } from './session';
 
@@ -347,6 +350,7 @@ export async function monstCastMage(
     }
   };
 
+  try {
   switch (spell) {
     case Spell.SPARK: await hit(rng.getRan(2, 1, 4), DamageType.MAGIC); break;
     case Spell.HASTE_MINOR: livingSound(25); caster.slow(-2); break;
@@ -356,6 +360,7 @@ export async function monstCastMage(
         { field: FieldType.WALL_FIRE, whoHit: 7 });
       break;
     case Spell.FLAME:
+      startBoomAnim();
       await hit(rng.getRan(Math.min(15, caster.getLevel()), 1, 4), DamageType.FIRE);
       break;
     case Spell.POISON_MINOR:
@@ -376,6 +381,7 @@ export async function monstCastMage(
         { field: FieldType.WALL_FIRE, whoHit: 7 });
       break;
     case Spell.FIREBALL:
+      startBoomAnim();
       await placeSpellPattern(session, SpellPat.SQUARE, target, {
         damage: {
           type: DamageType.FIRE,
@@ -405,6 +411,7 @@ export async function monstCastMage(
       victim?.poison(4 + rng.getRan(1, 0, Math.trunc(caster.getLevel() / 2)), rng);
       break;
     case Spell.ICE_BOLT:
+      startBoomAnim();
       await hit(rng.getRan(5 + Math.trunc(caster.getLevel() / 5), 1, 8), DamageType.COLD);
       break;
     case Spell.SLOW_GROUP: {
@@ -430,6 +437,7 @@ export async function monstCastMage(
       livingSound(4);
       break;
     case Spell.FIRESTORM:
+      startBoomAnim();
       await placeSpellPattern(session, SpellPat.RADIUS_2, target, {
         damage: {
           type: DamageType.FIRE,
@@ -446,6 +454,7 @@ export async function monstCastMage(
       victim?.poison(6 + rng.getRan(1, 1, 2), rng);
       break;
     case Spell.KILL:
+      startBoomAnim();
       await hit(35 + rng.getRan(3, 1, 10), DamageType.MAGIC);
       break;
     case Spell.DEMON:
@@ -471,6 +480,17 @@ export async function monstCastMage(
       univ.addStringToBuf(
         `  Error: Mage spell ${spellName(spell)} not implemented for monsters.`);
       break;
+  }
+  } finally {
+    // `monst_cast_mage`'s tail (boe.combat.cpp:3561) — **unconditional**, as it
+    // is in `do_combat_cast`: play whatever the volley collected, then apply
+    // the damage it stood for. Harmless when no arm opened one, since there is
+    // nothing queued. In a `finally` for the same reason `do_combat_cast`'s is:
+    // an arm that throws must not leave the volley open, or every later boom in
+    // the session is swallowed and the damage with it.
+    runBoomAnim(univ.rng);
+    await animSettle();
+    await handleMarkedDamage(univ, session);
   }
   return true;
 }
@@ -527,8 +547,12 @@ export async function monstCastPriest(
     summonMonster(session, which, caster.curLoc, rng.getRan(dice, 1, 4),
       caster.attitude, caster.isFriendly, true);
 
+  try {
   switch (spell) {
-    case Spell.WRACK: await hit(rng.getRan(2, 1, 4), DamageType.UNBLOCKABLE); break;
+    case Spell.WRACK:
+      startBoomAnim();
+      await hit(rng.getRan(2, 1, 4), DamageType.UNBLOCKABLE);
+      break;
     case Spell.GOO:
       livingSound(24);
       await placeSpellPattern(session, SpellPat.SINGLE, victLoc,
@@ -540,7 +564,10 @@ export async function monstCastPriest(
       livingSound(4);
       break;
     case Spell.CURSE: victim?.curse(2 + rng.getRan(1, 0, 1)); break;
-    case Spell.WOUND: await hit(rng.getRan(2, 1, 6) + 2, DamageType.UNBLOCKABLE); break;
+    case Spell.WOUND:
+      startBoomAnim();
+      await hit(rng.getRan(2, 1, 6) + 2, DamageType.UNBLOCKABLE);
+      break;
     case Spell.SUMMON_SPIRIT: case Spell.SUMMON_GUARDIAN:
       livingSound(24);
       summon1(spell === Spell.SUMMON_SPIRIT ? 125 : 122, 3);
@@ -557,7 +584,10 @@ export async function monstCastPriest(
         victim?.curse(rng.getRan(1, 0, 2));
       }
       break;
-    case Spell.SMITE: await hit(rng.getRan(4, 1, 6) + 2, DamageType.COLD); break;
+    case Spell.SMITE:
+      startBoomAnim();
+      await hit(rng.getRan(4, 1, 6) + 2, DamageType.COLD);
+      break;
     case Spell.STICKS_TO_SNAKES: {
       livingSound(24);
       const n = rng.getRan(1, 1, 4) + 2;
@@ -621,6 +651,7 @@ export async function monstCastPriest(
       break;
     }
     case Spell.FLAMESTRIKE:
+      startBoomAnim();
       await placeSpellPattern(session, SpellPat.SQUARE, target, {
         damage: { type: DamageType.FIRE, dice: 2 + Math.trunc(caster.getLevel() / 2) + 2 },
         whoHit: 7,
@@ -643,6 +674,7 @@ export async function monstCastPriest(
       caster.avatar();
       break;
     case Spell.DIVINE_THUD:
+      startBoomAnim();
       await placeSpellPattern(session, SpellPat.RADIUS_2, target, {
         damage: {
           type: DamageType.MAGIC,
@@ -655,6 +687,13 @@ export async function monstCastPriest(
       univ.addStringToBuf(
         `  Error: Priest spell ${spellName(spell)} not implemented for monsters.`);
       break;
+  }
+  } finally {
+    // `monst_cast_priest`'s tail (boe.combat.cpp:3871), the pair to
+    // `monst_cast_mage`'s above and unconditional for the same reason.
+    runBoomAnim(univ.rng);
+    await animSettle();
+    await handleMarkedDamage(univ, session);
   }
   return true;
 }

@@ -6391,6 +6391,44 @@ The M6 list below is kept for the history of what it covered:
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
 
+- **A monster's spell was never a volley (M8, 2026-08-30).** The
+  `handle_target_space @ get_ran(1,0,2)` bucket, two files, and the same shape
+  in both: a run of damage rolls with the C++ slipping a `get_ran(1,0,2)`
+  between two of them that this port never made.
+  - `(1,0,2)` is `add_explosion`'s `offset` (boe.newgraph.cpp:336) —
+    `(i == 0) ? 0 : -1 * get_ran(1,0,2)`, the per-explosion phase nudge that
+    keeps a dozen blasts from pulsing in lockstep. **The first explosion of a
+    volley spends no draw and every one after it does**, which is why the
+    missing draws appeared from the second damaged square onward and why the
+    bucket looked like a target-count problem.
+  - `add_explosion` only runs while `boom_anim_active` is set. `startBoomAnim`
+    / `runBoomAnim` existed here but were called from **`do_combat_cast`
+    only** — so a *monster's* spell went down `boom_space`'s immediate path,
+    made none of those draws, and dealt its damage as it went instead of
+    marking it.
+  - `monst_cast_mage` and `monst_cast_priest` each open a volley in **five**
+    arms and close it unconditionally at the tail with `do_explosion_anim(5,0)`
+    then `handle_marked_damage()` (boe.combat.cpp:3561/3563 and 3871/3873) —
+    exactly `do_combat_cast`'s shape. The arms are FLAME, FIREBALL, ICE_BOLT,
+    FIRESTORM and KILL on the mage side; WRACK, WOUND, SMITE, FLAMESTRIKE and
+    DIVINE_THUD on the priest's. Every one of them is a *damaging* spell; the
+    field and summon arms never open one.
+  - So the second half of this is not about draws at all: a monster's fireball
+    now **marks** its damage and applies the whole lot in `handle_marked_damage`
+    after the blast has played, which is what decides the order things die in —
+    and therefore where `kill_monst`'s own draws land. Both close calls sit in
+    a `finally` for `do_combat_cast`'s reason: an arm that throws must not leave
+    the volley open, or every later boom in the session is swallowed.
+  - **Where it stands.** `ASR_10-05-2025_17-55-45` 12,722 → **13,336**,
+    `ZKR_15-05-2025_15-19-18` 969 → **3,474**, and
+    `ZKR_14-05-2025_11-28-09` went from parting at 3,853 to agreeing all the
+    way. Corpus 481,968 → **485,309**, files agreeing end to end 19 → **20**.
+  - The lesson is the shape, not the spell: **`get_ran(1,0,2)` in the middle of
+    a damage run is `add_explosion`, and its absence means the volley was never
+    opened.** Worth checking the other `start_missile_anim` sites this port has
+    not visited — boe.combat.cpp:599, 1012, 1613, 3087, 3222, 4286, 4316, 4630
+    and 4832 — before opening another bucket that looks like a target count.
+
 - **`place_monster` re-copies the species over the creature, and only the
   *maximum* health goes back (M8, 2026-08-30).** The top bucket,
   `handle_target_space @ get_ran(10,1,6)`, head `ASR_19-05-2025_19-38-44`.
