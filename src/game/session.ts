@@ -1673,14 +1673,39 @@ export class GameSession {
   // be here were inventions: a drop that always landed on the party's own
   // square and a give that offered anyone alive.
 
-  /** Toggle whether a carried item is equipped. */
+  /**
+   * `equip_item` (boe.items.cpp:95) — the free function behind the E button,
+   * which toggles.
+   *
+   * **Two refusals live here rather than in `cPlayer::equip_item`**, and this
+   * port had neither: food can't be equipped in combat, and neither can armour.
+   * They matter beyond the message — a recording that clicks armour during a
+   * fight leaves it unequipped in the C++ and equipped here, and the equipped
+   * set decides what `load_missile` and `has_type_equip` find later.
+   *
+   * Note the order: the *unequip* branch is tested before the armour refusal,
+   * so taking armour off mid-fight is allowed and putting it back on is not.
+   */
   toggleEquip(pcNum: number, slot: number): void {
     const pc = this.univ.party.pcs[pcNum];
     if (!pc) return;
     const item = pc.items[slot];
     if (!item || item.variety === ItemType.NO_ITEM) return;
-    const result = pc.equip[slot] ? unequipItem(pc, slot) : equipItem(pc, slot);
-    this.univ.addStringToBuf(result.message);
+    // `overall_mode == MODE_COMBAT` here, not `is_combat()` — the narrower
+    // test, so the refusal does not fire while a target is being picked.
+    if (this.mode === GameMode.COMBAT && item.variety === ItemType.FOOD) {
+      this.univ.addStringToBuf('Equip: Not in combat');
+      return;
+    }
+    if (pc.equip[slot]) {
+      this.univ.addStringToBuf(unequipItem(pc, slot).message);
+      return;
+    }
+    if (isCombat(this.mode) && item.variety === ItemType.ARMOR) {
+      this.univ.addStringToBuf('Equip: Not armor in combat');
+      return;
+    }
+    this.univ.addStringToBuf(equipItem(pc, slot).message);
   }
 
   // ------------------------------------------------------- special terrain
@@ -3030,6 +3055,8 @@ export class GameSession {
       const ended = this.endOutdoorCombat();
       // end_combat's tail: only an outdoor fight autosaves (boe.combat.cpp:4480).
       if (ended) tryAutoSave('EndOutdoorCombat');
+      // `set_stat_window_for_pc(univ.cur_pc)` (boe.actions.cpp:1347).
+      if (ended) this.onStatWindowForPc?.(this.univ.curPc);
       return ended;
     }
     const direction = endTownCombat(this);
@@ -3038,6 +3065,14 @@ export class GameSession {
     this.mode = GameMode.TOWN;
     this.center = { ...this.univ.party.townLoc };
     this.updateExplored(this.univ.party.townLoc);
+    // **The item pane goes back to whoever was up before the fight**
+    // (boe.actions.cpp:1358). `end_town_combat` has just restored
+    // `univ.cur_pc = store_current_pc`, so this hands the pane to the PC the
+    // party was looking at when the fight started — not to whoever happened to
+    // be acting when it ended. Missing it left the pane on the last combatant,
+    // and `handle_equip_item` is given `stat_window`, so the equips that
+    // followed went into the wrong pack.
+    this.onStatWindowForPc?.(this.univ.curPc);
     return true;
   }
 

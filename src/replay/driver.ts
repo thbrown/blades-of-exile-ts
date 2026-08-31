@@ -705,15 +705,35 @@ export async function runReplay(
           if (!isCombat(session.mode)) session.univ.curPc = numberFromAction(action);
           win.setStatWindow(session.univ, numberFromAction(action) as ItemWinMode);
           break;
-        case 'handle_equip_item':
+        case 'handle_equip_item': {
+          const slot = numberFromAction(action);
+          // **The E button is not always Equip** (boe.actions.cpp:1083). With
+          // "Use Space" armed, clicking beside an item *uses* it instead —
+          // three action points, not one, and the mode drops back to TOWN. The
+          // C++ even says so in the transcript. Without this branch a
+          // recording that armed Use and then clicked an item equipped it here
+          // and used it there, and the two equipped sets never agreed again.
+          if (session.mode === GameMode.USE_TOWN) {
+            session.univ.addStringToBuf(
+              "Note: Clicking 'U' button by item uses the item.");
+            await useItem(session, win.pcPage, slot, session.host ?? undefined);
+            session.mode = GameMode.TOWN;
+            takeAp(session.univ, 3);
+            break;
+          }
           // `prime_time()` (boe.actions.cpp:295) is the gate on all of these:
           // outdoors, town or combat, and nothing half-finished. Equipping
           // costs one action point, using costs three.
           if (session.primeTime) {
-            session.toggleEquip(win.pcPage, numberFromAction(action));
+            session.toggleEquip(win.pcPage, slot);
             takeAp(session.univ, 1);
+          } else if (session.itemShop !== null) {
+            // `stat_screen_mode > MODE_SHOP` — an identify, sell, enchant or
+            // recharge screen is up, and the C++ does **nothing at all** here,
+            // not even the refusal. Its own comment says it isn't sure why.
           } else session.univ.addStringToBuf("Equip: Finish what you're doing first.");
           break;
+        }
         case 'handle_use_item':
           if (!session.primeTime) {
             session.univ.addStringToBuf("Use item: Finish what you're doing first.");
@@ -956,8 +976,17 @@ export async function runReplay(
           // the turn is charged here instead.
           if (getting !== null) gettingCostsTurn = !inFight;
           if (inFight) {
+            // **The four points are taken whether or not there was anything
+            // there, and the *turn* is not** (boe.actions.cpp:1401 against
+            // :1403). `take_ap(4)` sits above the `if(j > 0)` that sets
+            // `did_something`, so rummaging an empty square in combat costs the
+            // PC every point they had and still leaves them active on zero —
+            // `combat_next_step` never runs, so nobody takes over. This port
+            // advanced the turn regardless, which handed the item pane to the
+            // next PC; `handle_equip_item` is given `stat_window`, so the
+            // equips that followed went into the wrong pack.
             takeAp(session.univ, 4);
-            session.afterCombatAction();
+            if (items.length > 0) session.afterCombatAction();
           }
           break;
         }

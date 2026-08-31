@@ -6450,6 +6450,52 @@ The M6 list below is kept for the history of what it covered:
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
 
+- **The item pane is whose pack every item action indexes, and three things
+  moved it wrongly (M8, 2026-08-31).** +42,836 draws, and the chain that found
+  it is worth keeping because none of the three links looks like a rules bug
+  from the outside.
+  - The symptom: `VoDT_06-04-2025_16-59-02` rolled `get_ran(1,1,12)` there and
+    `get_ran(1,1,8)` here for a shot. `dam = ammo.item_level` (boe.combat.cpp:1549),
+    and the two levels are the party's **Arrows** and its **Leather Sling** —
+    so `load_missile` took the `bow && arrow` branch there and the `no_ammo`
+    branch here, which means the C++ had the bow equipped and this port did not.
+  - The recording's five `handle_equip_item` actions on that PC are the same on
+    both sides, and each is only a **slot number**: `equip_item(stat_window,
+    item_hit)` (boe.actions.cpp:1090). So a pane on the wrong PC equips out of
+    the wrong pack, silently, because the named slot is usually empty there.
+    Two of the five landed on the wrong PC here.
+  - **`handle_get_items` charges the four points whether or not there was
+    anything to pick up, and only advances the turn when there was**
+    (boe.actions.cpp:1401 against :1403 — `take_ap(4)` sits *above* the
+    `if(j > 0)` that sets `did_something`). Rummaging an empty square in combat
+    therefore leaves the PC active on zero AP, with nobody taking over. This
+    port advanced the turn regardless, which handed the pane on.
+  - **Ending a town fight puts the pane back on `store_current_pc`**
+    (boe.actions.cpp:1358, after `end_town_combat` has restored
+    `univ.cur_pc = store_current_pc`) — the PC the party was looking at when
+    the fight *started*, not whoever was acting when it ended. Both of
+    `handle_combat_switch`'s end branches do it; this port did neither.
+  - Two more gaps found by reading the same functions, both real and neither
+    the cause here: `equip_item` (boe.items.cpp:95) refuses **food** and
+    **armour** in combat, with the unequip branch tested *between* them so
+    taking armour off mid-fight is allowed and putting it back on is not; and
+    `handle_equip_item` uses the item instead of equipping it when
+    `MODE_USE_TOWN` is armed (:1083) — three action points, not one, and it
+    says so in the transcript.
+  - **Where it stands.** `VoDT_06-04-2025_16-59-02` 15,606 → **32,585 and
+    agreeing on every draw in the file**; `VoDT_09-04-2025_09-41-10` 6,039 →
+    **20,821** (now stopped by a harness gap); `ZKR_15-05-2025_15-19-18` 3,474
+    → **14,551**. Corpus 511,818 → **554,654**.
+  - One file went the other way by two draws and it is worth saying why:
+    `VoDT_09-04-2025_08-59-35` still runs the whole recording, but the C++'s
+    last two draws are `text_bar_text` encumbrance rolls this port does not
+    make, and it used to match that pair by coincidence. It is the open lead
+    below, not a regression.
+  - The general point: **`stat_window` is state, not a view.** It had already
+    caused one silent divergence (the `set_stat_window` note of 2026-08-24) and
+    it caused this one; anything that changes the active PC has to be asked
+    whether the C++ moves the pane with it.
+
 - **`combine_things` was a `TODO(M6)` two milestones past its date (M8,
   2026-08-30).** Stackable items never merged, so a pack that had picked up
   five bundles of twelve arrows held five piles where the C++ held one of
@@ -6511,9 +6557,9 @@ The M6 list below is kept for the history of what it covered:
     harness-gap pile, which is what "blocked outside the rules 44 → 45" means
     here.
 
-- **Where M8 stands, end of 2026-08-30.** Corpus **511,818** matching draws
-  (from 466,525 that morning), **22 of 87** files agreeing end to end, 45
-  blocked outside the rules.
+- **Where M8 stands, 2026-08-31.** Corpus **554,654** matching draws (from
+  466,525 on the morning of 2026-08-30), **22 of 87** files agreeing end to
+  end, 46 blocked outside the rules.
   - The **queue's head is the `text_bar_text` open lead** recorded on
     2026-08-24 and re-measured today — see it below, it now carries the five
     call sites and a measurement of how big the job is. Two files directly, and
