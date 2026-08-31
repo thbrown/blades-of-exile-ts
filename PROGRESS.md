@@ -1615,8 +1615,9 @@ bottom. What M8 still owes:
   without opening the cast-spell dialog there, so the recording's next click
   has nothing to click on. Those files' numbers are "matched as far as the C++
   got", which for the two at the top of the list is now its whole run.
-  Corpus **617,501** matching draws, **23 of 87** files agreeing all the way,
-  45 blocked outside the rules. **Those numbers were 616,738 / 23 / 45,
+  Corpus **621,339** matching draws, **23 of 87** files agreeing all the way,
+  45 blocked outside the rules. **Those numbers were 617,501 / 23 / 45,
+  616,738 / 23 / 45,
   611,526 / 23 / 45 and
   567,443 / 22 / 46 earlier on 2026-08-31, 476,671 / 19 / 46 at the
   end of 2026-08-30, 459,492 / 19 / 44 at the
@@ -7354,3 +7355,34 @@ The M6 list below is kept for the history of what it covered:
     `startNewGame` (entering town 0) before the recording's `Load Game`, and the
     C++ does not. The scenario restore above now undoes its side effects and no
     draws leak, but the two runs are not doing the same thing there.
+
+- **`post_load` puts the item pane back on PC 1 (M8, 2026-08-31).** The other
+  file in the `doMonsters` bucket, and the third fix in a row whose bucket was
+  innocent.
+  - `VoDT-5-11` parts at draw 4,004: the C++ spends two draws inside a
+    `handle_use_item` that this port spends nothing on. `ITEMS=1` against
+    `BOE_TRACE_ITEMS=1`, **uniq'd per PC rather than all six together**, showed
+    the C++'s pc3 holding a potion at slot 3 that this port's pc3 never had —
+    so `handle_use_item 3` drank a targeted potion there and refused an
+    unusable necklace here.
+  - The potion should have arrived from the `handle_give_item 0` ten actions
+    earlier. That give did **nothing** here: `giveThing` returned at
+    `whoTo === pcNum`, because the pane and the recipient were the same PC.
+  - The pane was wrong because of the `load_party` two actions before it.
+    **`post_load` calls `set_stat_window(ITEM_WIN_PC1)`**
+    (boe.actions.cpp:3214), and the pane is whose pack every item action
+    indexes — `handle_equip_item`/`use`/`drop`/`give` are all
+    `f(stat_window, item_hit)`. The recording had flipped to PC 4's pack
+    before saving; the C++ went back to PC 1 on load and this port stayed on
+    PC 4. The driver's `load_party` case sets it now.
+  - **Where it stands.** Corpus 617,501 → **621,339** matching draws; the file
+    went 4,004 → 7,842 draws and 1,237 → 1,804 actions.
+  - Two techniques worth keeping. **Diff the item traces one PC at a time.**
+    The C++ prints all six packs per action and this port prints them at
+    slightly different moments, so `uniq` over the interleaved stream
+    misaligns and the first reported difference is noise — `grep "items pcN:"`
+    then `uniq` per PC gives a clean list of that pack's *transitions*, and the
+    first real one is the bug. And **`post_load` is a checklist**: it is the
+    C++'s "what a load resets" in one function, and only `set_stat_window` of
+    it was ported. `current_switch = 6` (the toggle-active state) is the other
+    line with game meaning and is still not.

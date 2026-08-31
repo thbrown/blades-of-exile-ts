@@ -706,6 +706,15 @@ export async function runReplay(
             continue;
           }
           await options.onLoadParty(decodeReplayFile(action.text));
+          // **`post_load` puts the item pane back on PC 1** (`set_stat_window
+          // (ITEM_WIN_PC1)`, boe.actions.cpp:3214), and the pane is whose pack
+          // every item action indexes. A recording that flipped to PC 4's pack,
+          // loaded a game and then gave item 0 away gave it *from PC 4* here and
+          // from PC 1 there — and in `VoDT-5-11` the two happened to be the same
+          // PC the recording was giving *to*, so `whoTo === pcNum` made the give
+          // a silent no-op and the potion it should have handed over was still
+          // in the wrong pack ten actions later when the recording used it.
+          win.setStatWindow(session.univ, ItemWinMode.PC1);
           break;
         }
         // **`set_stat_window` is not a view, and treating it as one was wrong.**
