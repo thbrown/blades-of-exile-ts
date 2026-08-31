@@ -5,6 +5,12 @@
 
 ## Quick orientation (read this first)
 
+> **`DIVERGENCES.md` is the third thing to read.** This port has three
+> references — the 1997 original (`../boe-source-1997`, the spec), OBoE
+> (`../exile-wasm`, the oracle that runs) and the recordings (several older
+> OBoE builds) — and they do not agree. That file says where, and which one
+> this port follows.
+
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - Keys follow the original's `handle_keystroke` (boe.actions.cpp:2772):
   arrows/keypad move, **f** fight (and end a fight), **e** end combat,

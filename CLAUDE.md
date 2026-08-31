@@ -13,8 +13,12 @@ A from-scratch TypeScript rewrite of the **Blades of Exile game player**
 `../exile-wasm`, a working C++/Emscripten port of Open Blades of Exile. Part 2
 of the plan converts Exile 3 into a scenario the new engine can play.
 
-`../exile-wasm` is the reference implementation. When in doubt about a rule,
-read the C++ rather than guessing — `PLAN.md` lists the critical files.
+`../exile-wasm` is the reference implementation **that runs**, and the corpus is
+measured against it. But it is Open Blades of Exile — a decade of community
+modification — and `../boe-source-1997` is Jeff Vogel's original, which is the
+*specification* this port follows where the two disagree. When in doubt about a
+rule, read the C++ rather than guessing — `PLAN.md` lists the critical files —
+and **read `DIVERGENCES.md` before assuming which C++ is right.**
 
 ## Conventions that matter
 
@@ -24,6 +28,10 @@ read the C++ rather than guessing — `PLAN.md` lists the critical files.
   matching behaviour. `get_ran`'s *call order* is part of the spec.
 - **Numeric enum values are ported verbatim** where they appear in save or
   scenario files. Don't renumber or reorder them.
+- **Original over OBoE where a player could tell, OBoE where only the dice
+  differ.** That is the rule `DIVERGENCES.md` records and justifies; the one
+  decided case so far is `get_ran`, where matching the original would cost the
+  entire replay corpus and change nothing a player can see.
 - **`TODO(Mn)` marks every place the port stops short**, naming the milestone
   that fills it in. `grep -rn "TODO(M" src/` is the honest inventory of what's
   missing.
