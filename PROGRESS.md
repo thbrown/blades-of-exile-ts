@@ -1603,20 +1603,16 @@ bottom. What M8 still owes:
   against the C++'s for all 87 recordings and groups them by the *function* they
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
-  and takes about four minutes, so measure after every fix. The head of the
-  queue at the end of 2026-08-31 has **no bucket bigger than two files**, then
-  fifteen single ones — and the whole rules queue is now seventeen files
-  against the harness's forty-five, so **the harness's own debt is more than
-  twice what the rules still owe**. Three of the two-file buckets and half the
-  singles are in `game/monsterTurn.ts`, which is where the next slice should
-  go. The seven files whose line reads
-  `harness: … Couldn't replay action: <click_control><id>spellN…`
-  are the **oracle** giving up, not this port: `handle_spellcast` returns
-  without opening the cast-spell dialog there, so the recording's next click
-  has nothing to click on. Those files' numbers are "matched as far as the C++
-  got", which for the two at the top of the list is now its whole run.
-  Corpus **639,212** matching draws, **23 of 87** files agreeing all the way,
-  46 blocked outside the rules. **Those numbers were 639,076 / 23 / 46,
+  and takes about four minutes, so measure after every fix. **`--refresh-cpp`
+  takes about ninety**, so run it once at the end of a harness slice, not per
+  fix. The head of the queue after the harness slice of 2026-08-31 is a 4, a 3,
+  five 2s and thirteen singles — see the entry at the bottom for the listing.
+  `move @ the C++ draws on`, at the top with four files, is **this port
+  stopping**, not a rule: read the transcript at the stop. Six of the rest are
+  in `game/monsterTurn.ts`, which is where a rules slice should go.
+  Corpus **676,072** matching draws, **21 of 87** files agreeing all the way,
+  35 blocked outside the rules. **Those numbers were 639,212 / 23 / 46,
+  639,076 / 23 / 46,
   622,158 / 23 / 46,
   621,339 / 23 / 45,
   617,501 / 23 / 45,
@@ -1714,23 +1710,27 @@ bottom. What M8 still owes:
 - **The queue is all singles now, and the shape of the work has changed.**
   Seven rules files remain, no two sharing a bucket, so from here each fix
   unblocks exactly one file — the days of one rule freeing nine recordings are
-  over. Against that, **46 files are blocked by the oracle, not by this port**.
-  That asymmetry is the dominant fact about M8 and it argues for spending the
-  next large slice on `tools/cppharness/` rather than on the rules tail.
+  over. The asymmetry that used to sit here — 46 files blocked by the oracle
+  against seven by the rules — is what the **2026-08-31 harness slice** went
+  after; see the entry at the bottom of this file.
 - **"Blocked outside the rules" means the C++ gave up, not this port.** Every
   line in `diverge.mjs`'s second table beginning `harness:` is the *oracle*
-  failing to replay its own recording. Grouped (2026-08-31):
-  - **9 files** `Couldn't replay action: click_control spellN` — `handle_spellcast`
-    returns without opening the cast-spell dialog, so the next click has
-    nothing to click on. Plus 3 more on `btnN`, 2 on `cast`, 2 on `itemN-key`,
-    and one each on `done`/`pickN`/`cancel`/`save`/`number`. **20 files on this
-    one shape** — a dialog the C++ build no longer raises where the recording
-    expects it. Worth reading as one problem, not twenty.
-  - **9 files** `Dialog '…' has no control '…'`, **4** the harness hangs on
-    outright, **4** `Replaying a dialog, have the wrong replay action`,
-    **3** scenarios whose feature flags it refuses, **2** an out-of-range
-    vector, **1** a missing scenario, **1** `max-files does not exist in
-    dialog preferences`, **1** `Unexpectedly failed to give item!`.
+  failing to replay its own recording. After the harness slice, `survey.sh`
+  says **43 of 87** run to the end there (was 31, and before the watchdog the
+  survey could not finish at all). What remains:
+  - **18 files** the party dies in this build and lived in the recording. The
+    largest single thing left in the oracle, and **nothing in the rules will
+    fix it** — it is a divergence between the build that made the recordings
+    and the one here.
+  - **7** `Dialog '…' has no control '…'`, all singles, all genuinely different
+    dialogs. **5** the harness hangs on (four of them at *action 2*, never
+    looked at). **5** an out-of-range `vector2d`. **3** scenarios whose feature
+    flags it refuses. **2** signal 11 and **1** signal 10. One each: a missing
+    scenario, `max-files does not exist in dialog preferences`,
+    `Unexpectedly failed to give item!`.
+  - **Gone entirely: the 33-file `Couldn't replay action` pile** (the 20-file
+    `click_control spellN` shape and the rest) and the 7-file `pick-save`
+    lookup bug.
   - One file is this port's own: `short/talking-map-blackout.xml` carries no
     tag saying which game it recorded, so the runner skips it.
 - **This port's own unhandled actions are down to three**, and they block two
@@ -7555,3 +7555,121 @@ The M6 list below is kept for the history of what it covered:
     surfaced as `doMonsters`, `dangerousTerrain` and `resolveOne`. **When a
     bucket is a rule that reads the map, check the map before reading the
     rule.**
+
+- **The oracle's own debt, paid down: 43 of 87 recordings now run to the end
+  there, up from a number the survey could not even print (M8, 2026-08-31).**
+  The previous session's handoff said to spend the next slice on
+  `tools/cppharness/` rather than the rules tail, because 46 files were blocked
+  by the oracle against seven by the rules. This is that slice. Four fixes, and
+  **not one of them is a rule** — every one is the harness refusing to replay
+  its own recording.
+
+  `survey.sh`: **31 of 87** → **43 of 87** ran to the end; **52,457** actions
+  dispatched on the C++ side (the cached traces) → **64,312**. The
+  `Couldn't replay action` stop reason, which was **33 files**, is gone.
+
+  And the meter, `diverge.mjs --all --stacks`: corpus **639,212 → 676,072**
+  matching draws, **blocked outside the rules 46 → 35**, files agreeing end to
+  end **23 → 21**. That last number going *down* is the caution three entries
+  up doing exactly what it warns about — a file that now runs further and finds
+  a real divergence *leaves* that column. **Draws matched is the meter.**
+
+  **What it did to the queue is the point.** The head had gone flat — "no
+  bucket bigger than two files, then fifteen singles", so every fix bought one
+  file. Eleven files coming back from the oracle put shape back into it:
+
+  ```
+  4 files  move @ the C++ draws on
+  3 files  parts in doMonsters (game/monsterTurn.ts)
+  2 files  parts in GameSession.dangerousTerrain (game/session.ts)
+  2 files  parts in monstPickTarget (game/monsterTurn.ts)
+  2 files  parts in endTownCombat (game/combat.ts)
+  2 files  parts in resolveOne (game/spellCombatTarget.ts)
+  2 files  click_control @ the C++ draws on
+  ```
+
+  `move @ the C++ draws on` means **this port stopped** — read the transcript
+  at the stop, not the draw stream before it; that shape is usually quicker
+  than a rules bug. `dangerousTerrain` is the swamp lead recorded below, now
+  with a second file behind it.
+
+  - **`survey.sh` had no watchdog, and that is why nobody had these numbers.**
+    Four recordings hang the harness forever. A survey with one hung file never
+    finishes, and because its whole output only lands when it exits, it reports
+    *nothing at all* — one run here ate 69 minutes of CPU and printed an empty
+    file. There is no `timeout(1)` on macOS, so `run_limited` backgrounds the
+    child and kills it from a watchdog; `BOE_SURVEY_TIMEOUT` sets the limit
+    (default 120s) and a killed file reports `TIMEOUT`, which is a harness gap
+    like any other rather than a silent absence.
+    - **Both background jobs must have stdout closed.** The caller reads the
+      function through a command substitution, which does not return until every
+      process holding the pipe's write end lets go — so a watchdog that inherits
+      stdout makes *every* file take the full timeout, hung or not. That is why
+      the run goes to a temp file and is `cat`ed afterwards.
+    - It immediately named the four hangs, all stuck at **action 2**:
+      `short/AskAboutNonsense`, `short/CallOnUse`, `short/CallOnUse-legacy`,
+      `short/SpellcastPage2`. That is the next harness bucket and it has never
+      been looked at.
+
+  - **The 20-file `click_control spellN` block is a *refusal*, not a missing
+    feature — and this port makes the same one.** `BOE_TRACE_CAST=1` (new,
+    `combat_cast_mage_spell`) prints the status, sp, skill, encumbrance and the
+    two `spell_forced`/`spell_recast` flags before the pick. On
+    `long/VoDT_01-05-2025_17-52-13` action 75 it says
+    `[cast] mage pc=1 status=2 sp=0 skill=0 enc=0 forced=0 recast=0`, and
+    `status=2` is `NO_CAST_ANAMA`. This port prints
+    `Cast (Slish): You're an Anama!` at the identical action. **Both engines
+    refuse and neither opens the cast-spell dialog**, so the recording's next
+    click on `spell12` has nothing to click. The recording is stale — made by a
+    build whose rules differed — and no harness work will change that.
+    - So an orphaned dialog action is now **skipped**, the way
+      `src/replay/driver.ts` has always skipped it on this side:
+      `click_control`, `field_input`, `field_focus`, `field_selection`,
+      `handleTab`, plus a null guard on `scrollbar_setPosition` (which is in the
+      action chain already and was dereferencing a null the lookup had just
+      inserted — natively a bare exit 139). Each prints `[orphan] … no dialog is
+      open; skipping`.
+    - A click that lands while a dialog **is** up still gets the strict
+      treatment. That case really does mean the two builds raised different
+      dialogs, and it is the one worth dying on.
+    - That file alone went **76 → 216 → 797** actions across the three fixes.
+
+  - **`controls` is only the top level, and the strict check was reading it.**
+    Seven files died on `Dialog 'pick-save' has no control 'save1'` — about a
+    dialog whose XML plainly defines `save1`, one level down inside
+    `<stack name='list'>`. The flat `controls` map holds the stack, not its
+    page's buttons. `findControl` is the recursive lookup `getControl` already
+    uses; routing the replayed click through it clears all seven. **Upstream has
+    the same bug** — `controls[id]->triggerClickHandler` on a nested name
+    inserts a null and dereferences it — so this is behind `BOE_NATIVE_REPLAY`
+    and the unpatched line is kept in the `#else`.
+
+  - **The other half of the orphan problem: a dialog *this* build raised that
+    the recording never saw.** That is the `Replaying a dialog, have the wrong
+    replay action` shape, and the first thing done to it was to make it say
+    **which** dialog — the `fname` plus the text of its `title` and `str1`
+    controls. That one line turned an undifferentiated pile into a histogram:
+    13 × `party-death`, 3 × `cast-spell`, 3 × `1str-title`, 2 ×
+    `locked-door-action`, 2 × `get-num`, and one each of `attack-friendly` and
+    `2str`. **Name the dialog before theorising about the action.**
+    - All but one are now dismissed by triggering the escape button, falling
+      back to the default one, exactly as the key path would; `BOE_STRICT_DIALOG=1`
+      restores the throw.
+    - **`party-death` is the exception, and trying to dismiss it is what proved
+      it had to be.** The party does not come back: the game drops to
+      MODE_STARTUP, every later action falls on a game that has ended, and the
+      run walks off into a *destroyed* dialog — the giveaway was
+      `Dialog 'party-death' has no control 'spell23' — it has:` followed by 300
+      characters of heap garbage where the control names belong. It stops
+      instead, with a reason that says what happened: **this build's party died
+      where the recording's lived**, which is a divergence between the build
+      that made the recording and this one. **18 files** end there now, and it
+      is the largest single thing left in the oracle. Nothing in the rules will
+      fix it.
+
+  - **What the oracle still owes**, from `survey.sh` after all four:
+    18 party-death, 7 `has no control` (all singles now, all genuinely
+    different dialogs), 5 TIMEOUT, 5 out-of-range vector, 3 scenarios whose
+    feature flags it refuses, 2 × signal 11, and one each of signal 10,
+    `Unexpectedly failed to give item!`, a missing scenario, and `max-files
+    does not exist in dialog preferences`.

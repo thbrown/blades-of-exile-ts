@@ -12,7 +12,17 @@ the first line where the two differ names the rule that diverged.
 ./tools/cppharness/run.sh <replay.xml>          # run one recording
 BOE_TRACE=1 ./tools/cppharness/run.sh <replay.xml>
 ./tools/cppharness/survey.sh                    # the whole corpus, one line each
+BOE_SURVEY_TIMEOUT=90 ./tools/cppharness/survey.sh   # seconds per file
 ```
+
+**`survey.sh` gives every file a watchdog, and it has to.** Four recordings
+hang the harness forever, and a survey with one hung file never finishes —
+worse, because its output only lands when it exits, it reports *nothing at
+all*. One run ate 69 minutes of CPU and printed an empty file. macOS ships no
+`timeout(1)`, so the run is backgrounded and killed by a watchdog; a killed
+file reports `TIMEOUT`, which is a harness gap like any other rather than a
+silent absence. It is what named the four hangs — `AskAboutNonsense`,
+`CallOnUse`, `CallOnUse-legacy`, `SpellcastPage2`, all stuck at **action 2**.
 
 `BOE_TRACE=1` prints one line per replayed action in the same shape as
 `CORPUS=1 TRACE=1 ONLY=<file> npx vitest run test/corpus.test.ts`, plus a
@@ -132,6 +142,15 @@ roll. That ordering is the point: the divergence it answers is one side
 spending a `get_ran(1,1,1000)` on a touch ability and the other never entering
 the loop at all, and the draw stream cannot tell "the ability is missing here"
 from "the attack never landed there".
+
+**`BOE_TRACE_CAST=1`** prints one line at the top of `combat_cast_mage_spell` —
+`[cast] mage pc= status= sp= skill= enc= forced= recast=` — *before* the spell
+is picked. It exists because "the cast-spell dialog never opened" and "the PC
+cannot cast" look identical from outside, and the difference decides whether
+the recording is stale or this build is wrong. It settled the corpus's largest
+harness bucket in one line: `status=2` is `NO_CAST_ANAMA`, and this port
+refuses in the same place, so the recording's next click was always going to
+have nothing to click.
 
 `BOE_TRACE_PICKT=1` prints one line per candidate `monst_pick_target_monst`
 weighs — `alive`, whether the two are friendly, the distance, and the best so
@@ -336,14 +355,57 @@ writing into the `../exile-wasm` checkout: `progDir/data` → `data`, and
 Those files are byte-identical to this port's `public/scenarios`, so both sides
 of a diff are reading the same content.
 
+## Orphaned dialog actions, in both directions
+
+The recording and this build can disagree about whether a dialog is open, and
+it happens in both directions. Neither is a rules divergence you can fix here,
+and dying on either throws away every draw after it.
+
+**The recording answers a dialog this build never raised.** Its `click_control`
+falls through `replay_action`'s chain to the "Couldn't replay action" throw. The
+cause is a *refusal*: `handle_spellcast` on an Anama PC prints "You're an
+Anama!" and returns without opening the cast-spell dialog, and this port refuses
+in the same place — the recording is stale, made by a build whose rules
+differed. These are skipped now (`[orphan] … no dialog is open; skipping`), for
+`click_control`, `field_input`, `field_focus`, `field_selection`, `handleTab`
+and `scrollbar_setPosition`. **33 files** used to stop here; none do.
+
+**This build raises a dialog the recording never saw.** That is `Replaying a
+dialog, have the wrong replay action`, and the message now names the dialog and
+prints its `title` and `str1`, which is the whole diagnosis — it turned an
+undifferentiated pile into a histogram the moment it landed. All but one are
+dismissed by triggering the escape button, falling back to the default one;
+`BOE_STRICT_DIALOG=1` restores the throw.
+
+**`party-death` is the exception.** Dismissing it does not bring the party
+back: the game drops to MODE_STARTUP, every later action lands on a game that
+has ended, and the run walks off into a destroyed dialog — the tell is a
+control-name list that comes back as heap garbage. It stops instead, saying
+that this build's party died where the recording's lived. **18 files** end
+there, and it is the largest single thing left in the oracle.
+
+A click that lands while a dialog *is* up still gets the strict treatment: that
+case really does mean the two builds raised different dialogs. Note the lookup
+behind it is **recursive** (`findControl`), because `controls` holds only the
+top level — seven files used to die on `Dialog 'pick-save' has no control
+'save1'` about a dialog that defines `save1` one level down inside
+`<stack name='list'>`. Upstream has the same bug and is left alone.
+
 ## Known gaps
 
-`survey.sh` is the honest inventory. The two shapes that recur:
+`survey.sh` is the honest inventory; **43 of 87** run to the end. What's left,
+in size order:
 
-- `max-files does not exist in dialog preferences` — the file picker's dialog
-  definition wants a pref the harness's stand-in loader doesn't set.
-- `Replaying a dialog, have the wrong replay action` — the harness raised a
-  dialog the recording didn't, i.e. a real remaining divergence in the build.
+- **18** `The party died here and the recording's did not` — see above.
+- **7** `Dialog '…' has no control '…'`, all singles now, all genuinely
+  different dialogs (`confirm-spend-xp`, `attack-friendly`, `1str`, `2str`, …).
+- **5** `TIMEOUT` — four of them hang at action 2 and have never been looked at.
+- **5** `Tried to access out-of-range element` in a 48×48 `vector2d`.
+- **3** scenarios whose feature flags it refuses (`conveyor-belts … 'V2'`).
+- **2** signal 11, **1** signal 10.
+- one each: `Unexpectedly failed to give item!`, a missing scenario, and
+  `max-files does not exist in dialog preferences` (the file picker's dialog
+  definition wants a pref the harness's stand-in loader doesn't set).
 
 What the harness does **not** yet do is dump an end state. Matching the C++'s
 final party, SDFs and position is the golden master `PROGRESS.md` still asks for;
