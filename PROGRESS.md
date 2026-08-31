@@ -7756,3 +7756,40 @@ The M6 list below is kept for the history of what it covered:
   has no window to close and no game to quit. It shows up in `diverge.mjs`'s
   action column as `1071/1069`, `338/336`, `856/854` … including on files that
   agree on every draw. **Don't chase it.**
+
+- **Declining a generic portal left the party one square short (M8,
+  2026-08-31).** First fix found with the three-way workflow, and a worked
+  example of it. `ZKR_15-05-2025_18-04-58`, head of the `move @ the C++ draws
+  on` bucket, matched 6,674 of the C++'s 6,676 draws and finished every action.
+  - **Two dead ends first, both worth not repeating.** The action-line `age=`
+    columns differ at every `handle_spellcast` — but that is a *print-point*
+    artifact, not a clock divergence: the C++ runs its picker modally inside
+    the `handle_spellcast` action and charges the tick there, while this port
+    is driven by the recording's later `cast` click and charges it there. Net
+    clock identical. And the constant **2-action** shortfall this file shows
+    (`1041/1039`) is **not** the trailing `close_window` + `quit`, which this
+    port dispatches — an earlier note here said otherwise and was wrong.
+  - **`SPEC=1` named it in one line**: `TOWN node 58 type 185 (Generic Portal)`
+    at (11,33), which the recording declines with a `no` click. Both engines
+    fire the node; they disagree about what "no" *does*.
+  - **Then the catalogue workflow did its job.** 1997's `SPECIALS.CPP:2584`
+    sets `*a = 1` — block the move — **only** inside `FCD(870,0) == 2`, the
+    "yes" branch. OBoE's `boe.specials.cpp:3972` matches. Two references agree,
+    so it is a plain port bug: implement, no decision needed.
+  - The cause was a **merged `case`**. `TOWN_GENERIC_PORTAL` and `TOWN_PORTAL`
+    are one case here and two in the C++, and they differ exactly on decline:
+    the custom-text variant sets `next_spec = -1` and `ret_a = 1` (:4073), the
+    generic one sets neither. So declining blocked the move here, the party
+    stayed on (11,34) instead of stepping to (11,33), and the recording's next
+    move was a real move there and a no-op here — visible **only** as two
+    missing `play_ambient_sound` draws at the end of a 1,033-action file.
+  - **Where it stands.** That file now agrees on **all 6,676** draws. Corpus
+    676,072 → **676,074**, files agreeing end to end **21 → 22**, and the
+    bucket 4 files → 3. Two draws is a tiny number for a real rule; the file
+    moving into the "agrees all the way" column is the result that matters.
+  - `test/cppReplay.test.ts`'s `DRAW_PIN` caught the change (6,724 → 6,726) and
+    was updated deliberately. **It also widened a known found-not-fixed**: that
+    runner and `diverge.mjs` now disagree by **50** draws on this file (6,726
+    against 6,676) where they used to differ by 2. One of the two runners is
+    not reproducing the recording faithfully, and this is the sharpest handle
+    anyone has had on it — a file where every draw is known to agree.

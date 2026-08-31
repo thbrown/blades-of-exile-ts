@@ -164,6 +164,23 @@ incomplete rather than wrong.
 
 ---
 
+## Agreements worth recording
+
+The catalogue is not only for differences. When the two references **agree**
+and this port does not, that is a plain port bug and the entry is closed as
+soon as it is fixed — but it is worth writing down that the question was asked,
+so nobody asks it twice.
+
+- **Declining a generic portal does not block the move.** `TOWN_GENERIC_PORTAL`
+  touches neither `ret_a` nor `next_spec` on "No" — OBoE at
+  `boe.specials.cpp:3972` sets `*ctx.ret_a = 1` only inside the "yes" branch,
+  and the original does the same at `SPECIALS.CPP:2584` (`*a = 1` under
+  `FCD(870,0) == 2` alone). Its custom-text sibling `TOWN_PORTAL` *does* block
+  on decline (`:4073`), and the two are separate `case`s in the C++.
+  This port had merged them, so the generic portal inherited the custom one's
+  refusal and the party stopped one square short. Fixed 2026-08-31;
+  `ZKR_15-05-2025_18-04-58` went from 6,674/6,676 draws to **all 6,676**.
+
 ## OBoE's own list of deliberate deviations
 
 `boe.main.cpp:107` is a community-written changelog of behaviours OBoE

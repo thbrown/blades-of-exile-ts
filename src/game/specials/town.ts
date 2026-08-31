@@ -223,22 +223,44 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
 
     case SpecType.TOWN_GENERIC_PORTAL:
     case SpecType.TOWN_PORTAL: {
-      checkMess = false;
-      if (spec.type === SpecType.TOWN_PORTAL && spec.m1 < 0) break;
+      // **These two are one `case` here and two in the C++, and they differ on
+      // the decline path.** Merging them gave the generic portal the custom
+      // one's "No" behaviour, which blocks the move — see the branch below.
+      const generic = spec.type === SpecType.TOWN_GENERIC_PORTAL;
+      // `check_mess` is cleared unconditionally by `TOWN_PORTAL`
+      // (boe.specials.cpp:4053) and only inside the two refusal branches by
+      // `TOWN_GENERIC_PORTAL` (:3956) — and `refuse` below already clears it.
+      if (!generic) checkMess = false;
+      if (!generic && spec.m1 < 0) break;
       if (ctx.whichMode !== SpecCtx.TOWN_MOVE && ctx.whichMode !== SpecCtx.TOWN_LOOK) {
         refuse("Can't teleport now.");
         break;
       }
-      const strs = spec.type === SpecType.TOWN_PORTAL
-        ? messageRun(univ, ctx, spec.m1) : [PORTAL_PROMPT];
+      const strs = generic ? [PORTAL_PROMPT] : messageRun(univ, ctx, spec.m1);
       // Custom text gets `cThreeChoice` with slots 9 (Leave) and 8 (Enter);
       // the generic portal gets basic-portal.xml, whose buttons are No/Yes.
-      const buttons = spec.type === SpecType.TOWN_PORTAL
-        ? threeChoiceButtons([9, 8, -1]) : XML_BUTTONS['basic-portal']!;
+      const buttons = generic
+        ? XML_BUTTONS['basic-portal']! : threeChoiceButtons([9, 8, -1]);
       const picked = await ctx.host.choice(strs, buttons, '', spec.pic, spec.pictype);
       if (picked === 0) {
-        ctx.nextSpec = -1;
-        if (isMoveMode(ctx.whichMode)) ctx.retA = 1;
+        // **Declining a *generic* portal does not stop the party stepping onto
+        // the square, and does not end the chain.** `TOWN_GENERIC_PORTAL`'s
+        // "No" arm touches neither `ret_a` nor `next_spec` — the C++ sets
+        // `*ctx.ret_a = 1` only inside the "yes" branch (boe.specials.cpp:3972),
+        // and the 1997 original is the same (`SPECIALS.CPP:2584`, `*a = 1`
+        // under `FCD(870,0) == 2` alone). Only `TOWN_PORTAL`, the custom-text
+        // variant, blocks on decline (:4073).
+        //
+        // Getting this wrong left the party one square short for the rest of
+        // the run: `ZKR_15-05-2025_18-04-58` declines a portal at (11,33),
+        // stayed on (11,34) here and stepped onto (11,33) there, so the
+        // recording's next move was a real move on one side and a no-op on the
+        // other — visible only as two missing `play_ambient_sound` draws at the
+        // very end of a 1,033-action recording.
+        if (!generic) {
+          ctx.nextSpec = -1;
+          if (isMoveMode(ctx.whichMode)) ctx.retA = 1;
+        }
       } else {
         ctx.retA = 1;
         teleportParty(univ, ctx, at);
