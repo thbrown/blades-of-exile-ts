@@ -6196,6 +6196,34 @@ The M6 list below is kept for the history of what it covered:
     Draws 22 and 23 are a *different* caller and this port already makes them:
     `combat_cast_mage_spell` → `pc_can_cast_spell` is the real refusal, not the
     hint. `pcCanCastType` (spellCast.ts) is a faithful port of it.
+  - **Update (2026-08-30, later): the rule is ported, the call sites are not,
+    and a partial wiring was measured and backed out.** `src/game/textBar.ts`
+    now holds `text_bar_text`'s gates and `drawTerrain`'s mode-0 test, with a
+    `TODO(M8)` saying nothing calls it. What was tried and reverted: the two
+    animation loops and `place_spell_pattern`'s `draw_terrain(0)` — three of
+    the five redraws the head recording needs — for **+87 draws across the
+    whole corpus and one file pushed backwards**. A combat stream short by two
+    rolls is no better aligned than one short by five, so this is all-or-
+    nothing. The two missing are `advance_time`'s redraw and the main loop's
+    `redraw_everything`, and the second needs `need_redraw` modelled.
+  - **The counts are constants, which is the good news, and they check out.**
+    `do_missile_anim` (boe.newgraph.cpp:436) redraws once per step for
+    `num_steps` steps plus once more at the camera swing (`t == num_steps / 2`,
+    under a `!recentered` guard); `do_explosion_anim` (:616) eleven times
+    (`t < 11`, "t goes up to 10 to make sure screen gets cleaned up"). The head
+    recording's run of **72 consecutive `get_ran(1,0,70)`** after a fireball is
+    exactly 60 + 1 + 11, and this port already knew both step counts. Two
+    traps found while checking: **`draw_terrain(1)` and `(2)` spend nothing** —
+    only `mode == 0` reaches `draw_text_bar` (boe.graphics.cpp:1071), so the
+    animation *set-up* passes are free and only the frame loops cost; and
+    `do_combat_cast` flies a whole volley with **one** `do_missile_anim`
+    (:1412), where this port calls `runAMissile` per missile, so a naive
+    port would multiply the count by the number of projectiles.
+  - **The gates do most of the work**, which is why the corpus is not simply
+    2 draws per action: `[enc]` counts per action in the head file run
+    0, 0, 0, 3, 75, 0, 0, 0, 8 — the zeroes are actions where the active PC has
+    never cast, so `last_cast_type` is `INVALID` and the hint is skipped. That
+    field is now on `Player` and set where `finish_pick_spell` sets it.
   - **The size of the job, measured.** 62 `draw_terrain(` call sites and 37
     `redraw_everything`/`redraw_screen` ones, and one of the five above is the
     *main loop's* redraw — driven by `need_redraw`, which a replay driver does
@@ -6422,8 +6450,28 @@ The M6 list below is kept for the history of what it covered:
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
 
-- **Where M8 stands, end of 2026-08-30.** Corpus **511,732** matching draws
-  (from 466,525 that morning), **22 of 87** files agreeing end to end, 44
+- **The dual-caster recast hint is a *toggle*, and the first press casts
+  nothing (M8, 2026-08-30).** `handle_spellcast` opens with
+  `if(spell_recast && is_combat() && current_pc().last_cast_type != which_type)`
+  — flip the M/P hint to this type, set `need_redraw`, and **return**
+  (boe.actions.cpp:385). On replay `spell_forced = spell_recast =
+  info["spell_forced"]` (boe.main.cpp:903), so it fires from the recording too,
+  and this port had none of it: shift-M on a PC whose last spell was a priest
+  one cast the stored *mage* spell instead of just moving the hint.
+  - `cPlayer::last_cast_type` had no counterpart here either. It is set on all
+    three of `finish_pick_spell`'s exits alongside `last_cast`/`last_target`
+    (boe.party.cpp:2061/2070/2089), and it gates far more than the hint's
+    wording — see the `text_bar_text` lead below, where it decides whether a
+    terrain redraw costs a die.
+  - **Where it stands.** `ZKR_15-05-2025_16-09-51` 4,724 → **4,810** and no
+    other file moved in either direction; corpus 511,732 → **511,818**. A small
+    number for a real rule, and the point of checking every file rather than
+    the total: this one moved a file *out* of the rules queue and into the
+    harness-gap pile, which is what "blocked outside the rules 44 → 45" means
+    here.
+
+- **Where M8 stands, end of 2026-08-30.** Corpus **511,818** matching draws
+  (from 466,525 that morning), **22 of 87** files agreeing end to end, 45
   blocked outside the rules.
   - The **queue's head is the `text_bar_text` open lead** recorded on
     2026-08-24 and re-measured today — see it below, it now carries the five

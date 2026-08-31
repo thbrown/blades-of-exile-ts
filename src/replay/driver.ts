@@ -520,6 +520,18 @@ export async function runReplay(
           // makes `repeat_cast_ok` run first; `handle_menu_spell` sets
           // `spell_forced` alone, which is why the check hangs off the second.
           if (action.info.spell_forced === 'true') {
+            // **The dual-caster hint toggle** (boe.actions.cpp:385). On replay
+            // `spell_forced = spell_recast = info["spell_forced"]`
+            // (boe.main.cpp:903), so this fires whenever the shortcut is used
+            // in combat by a PC whose last cast was the *other* kind: it moves
+            // the M/P hint over and returns without casting anything. It also
+            // decides whether the next terrain redraw costs a die, since
+            // `text_bar_text` asks `pc_can_cast_spell` about exactly this
+            // field — see `textBar.ts`.
+            if (isCombat(session.mode) && session.univ.currentPc.lastCastType !== type) {
+              session.univ.currentPc.lastCastType = type;
+              break;
+            }
             const forced = forcedCast(session, type);
             if (forced === null) break;
             const { caster, spell } = forced;

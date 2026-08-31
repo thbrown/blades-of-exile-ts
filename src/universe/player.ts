@@ -124,6 +124,15 @@ export class Player extends Living {
    */
   lastCast: Partial<Record<Skill, Spell>> = {};
   lastTarget: Partial<Record<Skill, number>> = {};
+  /**
+   * `cPlayer::last_cast_type` — **which** of the two the M/P hint should offer,
+   * for a dual-caster who has cast both. `eSkill::INVALID` until the PC casts
+   * something, and that matters beyond the hint's wording: `text_bar_text`
+   * skips its `pc_can_cast_spell` call entirely while this is unset, and that
+   * call is the one that rolls encumbrance. So a PC who has never cast makes
+   * a *terrain redraw* cost nothing. See `textBar.ts`.
+   */
+  lastCastType: Skill = Skill.INVALID;
   /** The weapon carrying the poison from the Poison Weapon skill, if any. */
   weapPoisoned: Item | null = null;
 

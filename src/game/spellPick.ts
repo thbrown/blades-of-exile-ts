@@ -168,6 +168,11 @@ export class SpellPick {
     if (pc) {
       pc.lastCast[this.type] = this.spell;
       pc.lastTarget[this.type] = select === SpellSelect.NO ? NO_TARGET : this.target;
+      // `last_cast_type` goes with them on all three of `finish_pick_spell`'s
+      // exits (boe.party.cpp:2061/2070/2089). It decides which of the two the
+      // M/P hint offers — and, because the hint asks `pc_can_cast_spell`,
+      // whether a terrain redraw in combat costs a die. See `textBar.ts`.
+      pc.lastCastType = this.type;
     }
     return this.choice;
   }

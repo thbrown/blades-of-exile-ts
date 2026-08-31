@@ -323,12 +323,20 @@ function addMissile(
  * C++ passes 35 for a volley and 60 for a single shot.
  */
 async function flyMissiles(
+  session: GameSession,
   queue: QueuedMissile[], from: Location, sound: number, numSteps: number,
 ): Promise<void> {
   for (const m of queue) {
     runAMissile(from, m.dest, m.type, m.pathType, sound, m.xAdj, m.yAdj, numSteps);
   }
   queue.length = 0;
+  // **`do_missile_anim`'s frame loop belongs here and is not ported.** The C++
+  // flies the whole volley with *one* `do_missile_anim(num_steps, ...)`
+  // (boe.combat.cpp:1412) — only `run_a_missile` bundles the two — and each of
+  // those `num_steps` frames is a `draw_terrain(0)`, plus one more at the
+  // camera swing. In combat that is `num_steps + 1` encumbrance rolls. See the
+  // `text_bar_text` lead in PROGRESS.md: the rolls only line up once *every*
+  // redraw is accounted for, so they are all left out rather than some.
   // `do_missile_anim` blocks for the flight, which is what puts the hits that
   // follow it — the deferred `hitSpace` calls, the explosions — after the
   // projectiles have arrived rather than over the top of them.
@@ -486,7 +494,8 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
 
   // The trailing do_missile_anim (boe.combat.cpp:1412): whatever is still
   // queued flies now, faster when there's a volley of them than for one shot.
-  await flyMissiles(missiles, caster.combatPos, shared.sound, targets.length > 1 ? 35 : 60);
+  await flyMissiles(session, missiles, caster.combatPos, shared.sound,
+    targets.length > 1 ? 35 : 60);
 
   // The held-back damage lands now, all of it at once. Still inside the volley,
   // so its explosions join the rest — as in the C++, where these `hit_space`
@@ -563,7 +572,7 @@ async function resolveOne(
   };
   /** The arms that don't wait for the shared volley: fly what's queued now. */
   const flyNow = async (sound: number): Promise<void> => {
-    await flyMissiles(missiles, caster.combatPos, sound, 100);
+    await flyMissiles(session, missiles, caster.combatPos, sound, 100);
   };
 
   const field = async (which: FieldType): Promise<void> => {
@@ -723,7 +732,7 @@ async function resolveOne(
       // Every summon (and Flash Step) throws the same sparkle first, at half
       // the usual length and with its own sound.
       missile(8);
-      await flyMissiles(missiles, caster.combatPos, 61, 50);
+      await flyMissiles(session, missiles, caster.combatPos, 61, 50);
       const adj = caster.statAdj(Skill.INTELLIGENCE);
       let which = 0;
       let dice = 3;
@@ -764,7 +773,7 @@ async function resolveOne(
 
     case Spell.FLASH_STEP:
       missile(8);
-      await flyMissiles(missiles, caster.combatPos, 61, 50);
+      await flyMissiles(session, missiles, caster.combatPos, 61, 50);
       if (session.isBlocked(target)) univ.addStringToBuf('  Teleport failed.');
       else {
         univ.addStringToBuf('  Flash step!');

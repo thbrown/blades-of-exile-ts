@@ -136,7 +136,7 @@ export function startBoomAnim(): void {
  * do_explosion_anim (boe.newgraph.cpp:556) — close the volley and play
  * everything it collected, now that the missiles have landed.
  */
-export function runBoomAnim(rng?: GameRng): void {
+export function runBoomAnim(rng?: GameRng, onFrame?: () => void): void {
   const toPlay = queued;
   volleyOpen = false;
   queued = [];
@@ -165,7 +165,18 @@ export function runBoomAnim(rng?: GameRng): void {
     if (boom.type < 0 || boom.type > 6) continue;
     sink?.({ ...boom, starts, expires: starts + boomMs() });
   }
+  // **Eleven frames, and each one is a `draw_terrain(0)`**
+  // (boe.newgraph.cpp:616: `for(t = 0; t < 11; t++) { ... draw_terrain(); }` —
+  // "t goes up to 10 to make sure screen gets cleaned up"). This port draws the
+  // explosion from a timeline slot rather than a frame loop, but the *count* is
+  // a constant, and in combat every one of those redraws spends the status
+  // bar's encumbrance roll. `onFrame` is how the caller pays it; see
+  // `textBar.ts`.
+  if (onFrame) for (let t = 0; t < EXPLOSION_FRAMES; t++) onFrame();
 }
+
+/** `do_explosion_anim`'s frame count (boe.newgraph.cpp:616). */
+export const EXPLOSION_FRAMES = 11;
 
 /**
  * boom_space — show a hit on `where` and play its sound. `soundType` is an
