@@ -1615,8 +1615,9 @@ bottom. What M8 still owes:
   without opening the cast-spell dialog there, so the recording's next click
   has nothing to click on. Those files' numbers are "matched as far as the C++
   got", which for the two at the top of the list is now its whole run.
-  Corpus **639,076** matching draws, **23 of 87** files agreeing all the way,
-  46 blocked outside the rules. **Those numbers were 622,158 / 23 / 46,
+  Corpus **639,212** matching draws, **23 of 87** files agreeing all the way,
+  46 blocked outside the rules. **Those numbers were 639,076 / 23 / 46,
+  622,158 / 23 / 46,
   621,339 / 23 / 45,
   617,501 / 23 / 45,
   616,738 / 23 / 45,
@@ -7462,3 +7463,23 @@ The M6 list below is kept for the history of what it covered:
     **creature**, which `get_target_i` numbers `100 + slot` and `damage_target`
     then hurts. `curTarget` is a PC index and cannot say that. It is the same
     plumbing `AFFECT_SOUL_CRYSTAL` has been waiting on since M5.
+
+- **Flying and boats make terrain harmless, and combat narrows both arms (M8,
+  2026-08-31).** A `TODO(M5)` that had been sitting in `damagingTerrain` and
+  `dangerousTerrain` since M5a, picked because the `dangerousTerrain` bucket
+  named the same function. Three rules, all of them draw-visible:
+  - **The immunity guard comes before the damage roll** (boe.specials.cpp:326
+    and :393): `flying() || in_boat >= 0`, then a boat moored on the square
+    being entered — the town list for TOWN_MOVE, the outdoor one for OUT_MOVE,
+    neither in combat. An immune party spends *no* draws where a vulnerable one
+    spends `get_ran(flag2,1,flag1)` plus a luck save per PC.
+  - **DAMAGING in combat hurts only the acting PC** (:382), not the party —
+    five spare luck saves otherwise.
+  - **DANGEROUS's loop starts at the acting PC in combat** (:401), so a fight
+    rolls `get_ran(1,1,100)` for that PC and the ones *after* them in the party
+    and no one before. It reads like an oversight and it ships that way.
+  - **Where it stands.** Corpus 639,076 → **639,212** matching draws — +136,
+    and worth saying plainly: this one was small. `ASR_07-05-2025_17-09-03`,
+    the file whose bucket named the function, went 3,780 → 3,917 and is still
+    a rules divergence somewhere else. **The bucket pointed near, not at**, for
+    the fourth time this week.

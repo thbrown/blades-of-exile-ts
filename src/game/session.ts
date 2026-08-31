@@ -2078,7 +2078,7 @@ export class GameSession {
         return { canEnter: true, forced };
       }
       case TerSpec.DANGEROUS:
-        this.dangerousTerrain(spec);
+        this.dangerousTerrain(spec, where, inCombatMove, town !== null);
         return { canEnter: true, forced };
       case TerSpec.DAMAGING:
         // **Awaited.** `damagingTerrain` is async because `hitParty` waits on
@@ -2095,7 +2095,7 @@ export class GameSession {
         // showed it. `get_ran`'s *call order* is part of the spec (PLAN.md §6),
         // and an unawaited promise is the one way this port can break it while
         // getting every individual answer right.
-        await this.damagingTerrain(spec);
+        await this.damagingTerrain(spec, where, inCombatMove, town !== null);
         return { canEnter: true, forced };
       case TerSpec.WILDERNESS_CAVE:
       case TerSpec.WILDERNESS_SURFACE:
@@ -2215,15 +2215,41 @@ export class GameSession {
   }
 
   /**
+   * "if the party is flying, in a boat, or entering a boat, they cannot be
+   * harmed by terrain" — the four lines that open both the DAMAGING and the
+   * DANGEROUS arms of `check_special_terrain` (boe.specials.cpp:326 and :393).
+   *
+   * **It comes before the damage roll**, so an immune party spends no draws at
+   * all where a vulnerable one spends `get_ran(flag2,1,flag1)` and then a luck
+   * save per PC. Leaving it out was not "the party takes damage it shouldn't":
+   * it was a growing offset in the draw stream from the first lava square a
+   * boat sailed over.
+   *
+   * Note the third and fourth tests are about the square being *entered* — a
+   * boat moored on the lava counts, which is what "or entering a boat" means.
+   */
+  private terrainCantHarm(where: Location, inCombatMove: boolean, town: boolean): boolean {
+    if (this.univ.party.partyStatus[PartyStatus.FLIGHT] > 0) return true;
+    if (this.univ.party.inBoat >= 0) return true;
+    // The C++ keys these off the *context*, not the mode: TOWN_MOVE looks in
+    // the town's vehicle list and OUT_MOVE in the outdoor one, and a
+    // COMBAT_MOVE checks neither.
+    if (inCombatMove) return false;
+    if (town) return this.townVehicleAt(this.univ.party.boats, where) !== null;
+    return this.outVehicleAt(this.univ.party.boats, where) !== null;
+  }
+
+  /**
    * The DAMAGING terrain branch of check_special_terrain
    * (boe.specials.cpp:323) — lava, fire, spikes. flag3 names the damage type
    * (0 or out of range means a plain wound), and the damage is
-   * `get_ran(flag2, 1, flag1)`. Outside combat it hits the whole party.
-   *
-   * TODO(M5): flying and boats make the party immune, and combat hurts only
-   * the PC who stepped in it.
+   * `get_ran(flag2, 1, flag1)`. Outside combat it hits the whole party; in
+   * combat only the PC who stepped in it (:383).
    */
-  private async damagingTerrain(spec: Terrain): Promise<void> {
+  private async damagingTerrain(
+    spec: Terrain, where: Location, inCombatMove: boolean, town: boolean,
+  ): Promise<void> {
+    if (this.terrainCantHarm(where, inCombatMove, town)) return;
     let damType: DamageType = spec.flag3 > 0 && spec.flag3 < DamageType.SPECIAL
       ? spec.flag3 as DamageType
       : DamageType.WEAPON;
@@ -2254,6 +2280,12 @@ export class GameSession {
       default: break;
     }
     if (amount < 0) return;
+    // "In combat, only hurt the active player" (:382). `hit_party` makes a
+    // luck save per living PC, so getting this wrong is five spare draws.
+    if (inCombatMove) {
+      await damagePc(this.univ, this.univ.currentPc, amount, damType, Race.UNKNOWN);
+      return;
+    }
     await hitParty(this.univ, amount, damType);
   }
 
@@ -2417,13 +2449,21 @@ export class GameSession {
    * Now that the PC status methods exist, each case hands off to the one the
    * C++ names, and they print their own transcript lines.
    *
-   * TODO(M5): the party can't be harmed while flying or in a boat, which
-   * needs those systems.
+   * Flying and boats make the party immune, as they do for DAMAGING.
    */
-  private dangerousTerrain(spec: Terrain): void {
+  private dangerousTerrain(
+    spec: Terrain, where: Location, inCombatMove: boolean, town: boolean,
+  ): void {
+    if (this.terrainCantHarm(where, inCombatMove, town)) return;
     const strength = spec.flag1;
-    for (const pc of this.univ.party.pcs) {
-      if (pc.mainStatus !== MainStatus.ALIVE) continue;
+    // **The loop starts at the moving PC in combat** and at 0 otherwise
+    // (boe.specials.cpp:401) — so a fight only rolls for that PC and the ones
+    // after them in the party, which is one `get_ran(1,1,100)` per PC fewer
+    // than starting at the top. It reads like an oversight and it ships.
+    const from = inCombatMove ? this.univ.curPc : 0;
+    for (let i = from; i < 6; i++) {
+      const pc = this.univ.party.pcs[i];
+      if (!pc || pc.mainStatus !== MainStatus.ALIVE) continue;
       if (this.univ.rng.getRan(1, 1, 100) > spec.flag2) continue;
       switch (spec.flag3 as Status) {
         case Status.POISONED_WEAPON:
