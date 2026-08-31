@@ -6450,6 +6450,35 @@ The M6 list below is kept for the history of what it covered:
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
 
+- **The two stairway node types skip their prompt on different tests (M8,
+  2026-08-31).** The head bucket, `move @ the C++ draws on` — the port
+  stopping, and once again a hook rather than a rule.
+  - `ZKR_15-05-2025_15-19-18` walks onto (25,5), and the recording's next two
+    actions are `click_control leave` and then a move **back into the town**.
+    So the C++ put up a stairway dialog, the player declined, and the party
+    stayed put. This port climbed without asking and came out at (20,11), five
+    squares from where the recording expected it.
+  - `TOWN_STAIR` skips the prompt when `ex2b == 1` (boe.specials.cpp:4105,
+    where `i` is forced to 2 — "go"). `TOWN_GENERIC_STAIR` asks unless
+    **`ex2b >= 8`** (:3999), with a negative clamped up to 0 first. This port
+    had one test, `ex2b != 1`, for both — so a generic stair with `ex2b == 1`
+    was taken silently and one with `ex2b >= 8` raised a dialog the recording
+    had no click for.
+  - Two more from the same pair of cases: **`ex2c` 1 or 2 lets a stair be taken
+    during a fight** and anything else refuses with "Can't change level in
+    combat." (:3983 and :4090) — a branch this port had neither of; and the
+    eight `stairDlogs` prompts were **invented and in the wrong order**, so
+    "You find a stairway heading up." read as "You see a pit." They are taken
+    from the dialog XML this port already ships, in the C++'s order.
+  - **Where it stands.** `ZKR_15-05-2025_15-19-18` 14,551 → **27,340**; corpus
+    554,654 → **567,443**, and no other file moved in either direction.
+  - Worth noting how it was found, since the draw streams were no help: they
+    **agreed all the way to the stop**. The party moved without spending a
+    die, which is the same shape as the conveyor belts on 2026-08-30. When a
+    file's bucket is "the C++ draws on" and the stop is a position desync,
+    read the *recording's next few actions* — here `leave` followed by a move
+    back the way it came said the whole thing.
+
 - **The item pane is whose pack every item action indexes, and three things
   moved it wrongly (M8, 2026-08-31).** +42,836 draws, and the chain that found
   it is worth keeping because none of the three links looks like a rules bug
@@ -6557,7 +6586,7 @@ The M6 list below is kept for the history of what it covered:
     harness-gap pile, which is what "blocked outside the rules 44 → 45" means
     here.
 
-- **Where M8 stands, 2026-08-31.** Corpus **554,654** matching draws (from
+- **Where M8 stands, 2026-08-31.** Corpus **567,443** matching draws (from
   466,525 on the morning of 2026-08-30), **22 of 87** files agreeing end to
   end, 46 blocked outside the rules.
   - The **queue's head is the `text_bar_text` open lead** recorded on

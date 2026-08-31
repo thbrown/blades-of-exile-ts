@@ -37,15 +37,25 @@ function isHandsOnMode(mode: SpecCtx): boolean {
 /** basic-portal / basic-button — the stock yes-or-no prompts. */
 const PORTAL_PROMPT = 'You see a shimmering portal. Do you wish to enter it?';
 const BUTTON_PROMPT = 'You see a button. Do you want to press it?';
+/**
+ * `stairDlogs` (boe.specials.cpp:3841) — the eight stairway dialogs
+ * `TOWN_GENERIC_STAIR` picks between with `ex2b`, **in the C++'s order**, and
+ * their text taken verbatim from the XML this port already ships in
+ * `public/data/dialogs/`. What used to be here was eight invented strings in a
+ * different order, so a scenario's "stairway heading up" read as "a pit".
+ */
 const STAIR_PROMPTS = [
-  'You see a staircase going down. Do you want to climb down it?',
-  'You see a staircase going up. Do you want to climb up it?',
-  'You see a passage leading downward. Do you want to enter it?',
-  'You see a passage leading upward. Do you want to enter it?',
-  'You see a hole in the ceiling. Do you want to climb up into it?',
-  'You see a pit. Do you want to climb down into it?',
-  'You see a slimy tunnel leading down. Do you want to enter it?',
-  'You see a gate. Do you want to enter it?',
+  'You find a stairway heading up.',
+  'You find a stairway heading down.',
+  "The passageway you're walking down slopes sharply upward here.",
+  "The passageway you're walking down slopes sharply downward here.",
+  'You find a stairway heading up. The steps are covered with a thin layer of'
+    + ' slick, unpleasant slime.',
+  'You find a stairway heading down. You will have to be careful - the steps'
+    + ' are covered with a thin layer of slick, unpleasant slime.',
+  "The passageway you're walking down slopes upward into darkness.",
+  "The passageway you're walking down slopes downward here, descending steeply"
+    + ' into total darkness.',
 ];
 
 export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
@@ -247,23 +257,41 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
     case SpecType.TOWN_GENERIC_STAIR:
     case SpecType.TOWN_STAIR: {
       checkMess = false;
-      if (spec.type === SpecType.TOWN_STAIR && spec.m1 < 0 && spec.ex2b !== 1) break;
+      const townStair = spec.type === SpecType.TOWN_STAIR;
+      if (townStair && spec.m1 < 0 && spec.ex2b !== 1) break;
+      // `ex2c` 1 and 2 let a stair be taken *during* a fight; anything else
+      // refuses (boe.specials.cpp:3983 and :4090).
+      if (spec.ex2c !== 1 && spec.ex2c !== 2 && isCombat(ctx.session.mode)) {
+        refuse("Can't change level in combat.");
+        break;
+      }
       // ex2c relaxes the context rules: 2 and 3 allow it outside a move.
       if (spec.ex2c !== 2 && spec.ex2c !== 3 && ctx.whichMode !== SpecCtx.TOWN_MOVE) {
         refuse("Can't change level now.");
         break;
       }
+      // **The two node types skip the prompt on different tests**, and this
+      // port used `ex2b != 1` for both. `TOWN_STAIR` does skip on
+      // `ex2b == 1` (:4105, where `i` is forced to 2 — "go"), but
+      // `TOWN_GENERIC_STAIR` asks unless **`ex2b >= 8`** (:3999), with a
+      // negative clamped up to 0 first. So a generic stair with `ex2b == 1` —
+      // "You find a stairway heading down." — was climbed here without a word,
+      // and one with `ex2b >= 8` put up a dialog the recording never answered.
       let take = true;
-      if (spec.ex2b !== 1) {
-        const strs = spec.type === SpecType.TOWN_STAIR
-          ? messageRun(univ, ctx, spec.m1)
-          : [STAIR_PROMPTS[Math.max(0, Math.min(7, spec.ex2b))] ?? STAIR_PROMPTS[0]!];
-        // TOWN_STAIR builds `cThreeChoice` from slots 20 (Stay) and 24
-        // (Step In); the generic one loads one of the eight stairway dialogs,
-        // whose pair is Leave/Climb. Either way index 1 is "go".
-        const buttons = spec.type === SpecType.TOWN_STAIR
-          ? threeChoiceButtons([20, 24, -1]) : XML_BUTTONS['stairway']!;
-        take = (await ctx.host.choice(strs, buttons, '', spec.pic, spec.pictype)) === 1;
+      if (townStair) {
+        if (spec.ex2b !== 1) {
+          // `cThreeChoice` from slots 20 (Stay) and 24 (Step In); index 1 goes.
+          take = (await ctx.host.choice(messageRun(univ, ctx, spec.m1),
+            threeChoiceButtons([20, 24, -1]), '', spec.pic, spec.pictype)) === 1;
+        }
+      } else {
+        const which = Math.max(0, spec.ex2b);
+        if (which < 8) {
+          // One of the eight stairway dialogs, whose pair is Leave/Climb —
+          // index 1 is Climb.
+          take = (await ctx.host.choice([STAIR_PROMPTS[which] ?? STAIR_PROMPTS[0]!],
+            XML_BUTTONS['stairway']!, '', spec.pic, spec.pictype)) === 1;
+        }
       }
       ctx.retA = 1;
       if (!take) {
