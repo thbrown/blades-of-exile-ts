@@ -627,8 +627,12 @@ export async function monstCastPriest(
       });
       break;
     case Spell.UNHOLY_RAVAGING: {
+      // The damage die first, then the poison's (boe.combat.cpp:3841). Rolling
+      // them the other way round leaves every number correct and the stream one
+      // draw out of phase — the AP-argument-order trap again.
+      const r1 = rng.getRan(4, 1, 8);
       const r2 = rng.getRan(1, 0, 2);
-      await hit(rng.getRan(4, 1, 8), DamageType.MAGIC);
+      await hit(r1, DamageType.MAGIC);
       victim?.slow(6);
       victim?.poison(5 + r2, rng);
       break;

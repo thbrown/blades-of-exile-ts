@@ -6391,6 +6391,84 @@ The M6 list below is kept for the history of what it covered:
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
 
+- **`place_monster` re-copies the species over the creature, and only the
+  *maximum* health goes back (M8, 2026-08-30).** The top bucket,
+  `handle_target_space @ get_ran(10,1,6)`, head `ASR_19-05-2025_19-38-44`.
+  - The parting draw looked like a spell: the C++ rolled 10d6 twice more where
+    this port had already fallen through to `kill_monst`'s death sound. It was
+    not the spell. Both sides made **identical damage rolls**; the port simply
+    killed **two** creatures with a fireball where the C++ killed one.
+  - `MONST=1` against `BOE_TRACE_MONST=1` said it in one column, three actions
+    earlier: a batch of five creatures arriving at slots 6, 7, 8, 13 and 14 —
+    same slots, same squares, same instant on both sides — with `h30` there and
+    `h15` here. Exactly half.
+  - `place_monster` (boe.monster.cpp:1183) calls `cPopulation::assign`, which
+    scales `m_health` by easy mode and `difficulty_adjust()`, and then does
+    `static_cast<cMonster&>(univ.town.monst[i]) = monst;` — flagged with its own
+    "TODO: Should this static_cast assignment be happening?". **It writes the
+    `cMonster` part only.** `m_health` (the maximum) goes back to the species
+    value; `health` (the current) is a `cCreature` member and keeps what
+    `assign` just computed. This port reset both.
+  - So on a party past level 60 in an `adjust_diff` scenario, a summoned or
+    split creature arrives at **twice its own maximum** and stays there:
+    `heal` refuses to touch anything already at `m_health`, and `increase_age`
+    bleeds one point a turn off it (`monsterTurn.ts:1691` — a line that only
+    makes sense once you know this state exists). Kept verbatim.
+  - The same assignment restores the other three `cMonster` fields this port
+    mirrors outside `mon`, `picture_num` among them — so `assign`'s "an
+    invisible monster draws as nothing" is undone and a *placed* invisible
+    monster is visible. `resumeLoadedGame` already had that shape for the same
+    reason; `activate_monsters` (:1253) has no such re-copy and is right as it
+    stands.
+  - **Where it stands.** `ASR_19-05-2025_19-38-44` 13,173 → **16,520**; corpus
+    476,671 → **480,018**.
+  - The bucket's other file was a different cause, which is the usual warning
+    about grouping by draw arguments: `ASR_10-05-2025_09-08-20` parts at draw
+    **72** with the two sides' PCs standing on different squares, and the
+    fireball hitting one creature rather than two is the symptom, not the rule.
+
+- **`handle_monster_actions` branches on combat *first*, and this port had no
+  combat arm (M8, 2026-08-30).** Two files, found by opening the three
+  remaining one-file `handle_target_space @ get_ran(n,1,m)` buckets — each of
+  which turned out to be one draw wide with everything either side matching.
+  - `VoDT_20-04-2025_17-52-41` rolled `get_ran(8,1,6)` where the C++ rolled
+    `get_ran(7,1,6)`. The Firestorm formula is faithful; the *caster* was not.
+    A temporary print of `level`/`bonus` named her: this port's dice came from
+    **Adrianna** (INTELLIGENCE 7, MAGICALLY_APT, `stat_adj` 2), the C++'s from
+    **Feodoric** (6, no trait, 1). One PC out.
+  - Backwards two actions: Adrianna uses two potions. `handle_use_item` sets
+    `did_something` and `take_ap(3)`, so after the second she is at 0 AP and
+    the C++ has already moved on to Feodoric by the time the spell is cast.
+    This port left her active.
+  - **`handle_monster_actions` (boe.actions.cpp:1941) opens
+    `if(is_combat() && overall_mode != MODE_LOOK_COMBAT)`, and `increase_age`
+    is in the *else*.** A fight has no clock, no fields and no `do_monsters` —
+    it has `combat_next_step`, and `combat_next_step`'s **second**,
+    unconditional `pick_next_pc()` (:1801) is what hands the turn on when the
+    current PC has run dry but the round has not. This port's
+    `afterPartyTurn` — which *is* `handle_monster_actions` — had only the
+    town and outdoor arms, so any did_something action taken inside a fight
+    ran a town turn's upkeep and never advanced the PC.
+  - Most combat callers had been getting it right by branching at the call
+    site (`if (inFight) afterCombatAction(); else afterPartyTurn();`, as
+    `getItems` in main.ts does). `useItem` and `handleGiveItem` did not, and
+    a hand-written branch repeated at every call site is the same trap as a
+    hand-written predicate. The branch lives in `afterPartyTurn` now, where
+    the C++ has it; the explicit call sites still work because they call
+    `afterCombatAction` directly.
+  - The second file, `ASR_10-05-2025_17-55-45`, was `monst_cast_priest`'s
+    UNHOLY_RAVAGING (boe.combat.cpp:3841): `r1 = get_ran(4,1,8)` comes
+    **before** `r2 = get_ran(1,0,2)`, and this port rolled them the other way
+    round. Every number right, the stream one draw out of phase — the
+    argument-evaluation-order trap for the third time this month.
+  - **Where it stands.** Corpus 480,018 → **481,968**;
+    `VoDT_20-04-2025_17-52-41` 23,769 → **24,920**,
+    `ASR_10-05-2025_17-55-45` 11,923 → **12,722**.
+  - Worth keeping: **a divergence exactly one draw wide, with the arguments
+    differing by one, is nearly always the wrong actor rather than the wrong
+    formula.** Both of the "spell resolving against a different target count"
+    buckets read that way and neither was about the spell.
+
 - **`isHumanoid` is a numeric *range*, and this port had it as a list — three
   times (M8, 2026-08-30).** The top bucket, `handle_target_space @
   get_ran(1,0,1)`, three files.

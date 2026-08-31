@@ -550,6 +550,23 @@ export class GameSession {
   }
 
   private async afterPartyTurnInner(): Promise<void> {
+    // **`handle_monster_actions` branches on combat first** (boe.actions.cpp:1945),
+    // and `increase_age` lives in the *else*: a fight has no clock, no fields
+    // and no `do_monsters` — it has `combat_next_step`, which is what hands the
+    // turn to the next PC. This branch was missing, so every did_something
+    // action that reaches here from inside a fight — using an item, giving one
+    // — ran a town turn's upkeep and never advanced the active PC. The visible
+    // form: a PC used two potions, hit 0 AP, and then cast the *next* spell
+    // herself, with her own intelligence bonus, where the C++ had already moved
+    // on to the PC behind her.
+    if (isCombat(this.mode) && this.mode !== GameMode.LOOK_COMBAT) {
+      this.playAmbientSound();
+      // The C++'s own guard (:1946): a wiped party ends the fight instead of
+      // stepping it. `checkGameOver` in the caller's `finally` is this port's
+      // end of that path.
+      if (this.univ.party.isAlive()) this.afterCombatAction();
+      return;
+    }
     // handle_monster_actions opens with draw_map and play_ambient_sound
     // (boe.actions.cpp:1937), *before* increase_age. The sound is not the point
     // — the draws it makes are, and they come first in the turn.
