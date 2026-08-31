@@ -4,15 +4,15 @@
  * party heals; the parts that need systems this port hasn't built are marked.
  */
 
-import { ItemAbil } from '../data/item';
+import { ItemAbil, abilGroup, abilHarms } from '../data/item';
 import { TerSpec } from '../data/terrain';
 import { dist } from '../core/location';
 import { TRACE_AGE } from '../core/trace';
 import { tryAutoSave } from './autosave';
 import { hasAbilEquip } from '../universe/inventory';
-import { MainStatus, PartyStatus, Status, Trait } from '../universe/skills';
+import { MainStatus, PartyStatus, Status, Trait, statusInfo } from '../universe/skills';
 import { Universe } from '../universe/universe';
-import { increaseAgeEffects } from './increaseAge';
+import { handleDisease, increaseAgeEffects, partyHasAbil } from './increaseAge';
 import { NO_ONE } from './combat';
 import type { GameSession } from './session';
 import { specialIncreaseAge } from './specialIncreaseAge';
@@ -24,8 +24,11 @@ import { createWandMonst, doOutdoorMonsters } from './wandering';
  * The `session` is only needed for the timers at the end; without one they are
  * skipped, which is what the older callers did.
  *
- * TODO(M5): handle_disease runs three times first, and apply_status feeds the
- * OCCASIONAL_STATUS item effects.
+ * The order below is the C++'s and it matters: **`handle_disease` runs three
+ * times before the statuses are cleared**, so it finds the sufferers it is
+ * meant to. Clearing first — which this port did — makes all three calls find
+ * nobody and draw nothing, and a party that went to bed ill woke up with the
+ * draw stream several rolls short.
  */
 export function doRest(
   univ: Universe, length: number, hpRestore: number, spRestore: number, isOutdoors = false,
@@ -35,8 +38,46 @@ export function doRest(
   univ.party.age += length;
   if (TRACE_AGE) console.log(`      [age] do_rest +${length} -> ${univ.party.age}`);
 
-  // Resting clears every timed status, on the party and on each PC.
+  // "If some players diseased, allow it to progress a bit" — three bouts'
+  // worth, each a `get_ran(1,1,10)` and a `get_ran(1,0,7)` per sufferer.
+  // Needs the session, so a caller without one still skips it.
+  if (session) {
+    handleDisease(session);
+    handleDisease(session);
+    handleDisease(session);
+  }
+
+  // Resting clears every timed status, on the party and on each PC. The four
+  // party-wide ones were missing here, and **stealth is the one that shows**:
+  // `do_monsters` adds 46 to every notice roll while it is up, so a party that
+  // rested with Stealth on stayed hidden here and stopped being hidden there.
+  const { party } = univ;
+  party.partyStatus[PartyStatus.STEALTH] = 0;
+  party.partyStatus[PartyStatus.DETECT_LIFE] = 0;
+  party.partyStatus[PartyStatus.FIREWALK] = 0;
+  // "This one shouldn't be nonzero anyway, since you can't rest while flying."
+  party.partyStatus[PartyStatus.FLIGHT] = 0;
   for (const pc of univ.party.pcs) pc.status.fill(0);
+
+  // "Specials countdowns" — the same OCCASIONAL_STATUS sweep `increase_age`
+  // does every five hundredth turn, here gated on the rest having *crossed* a
+  // 500 boundary. One `get_ran(1,0,5)` per candidate item.
+  if ((length > 500 || Math.floor(ageBefore / 500) < Math.floor(univ.party.age / 500))
+    && partyHasAbil(party, ItemAbil.OCCASIONAL_STATUS)) {
+    for (const pc of party.pcs) {
+      for (const item of pc.items) {
+        if (item.ability !== ItemAbil.OCCASIONAL_STATUS) continue;
+        if ((item.abilData as number) > 15) continue;
+        if (!abilGroup(item)) continue;
+        if (univ.rng.getRan(1, 0, 5) !== 3) continue;
+        let howMuch = item.abilStrength;
+        if (abilHarms(item)) howMuch *= -1;
+        const which = item.abilData as Status;
+        if (statusInfo(which).isNegative) howMuch *= -1;
+        party.applyStatusAll(which, howMuch);
+      }
+    }
+  }
 
   // Plants regrow and magic shops restock every 4000 ticks.
   if (length > 4000 || Math.floor(ageBefore / 4000) < Math.floor(univ.party.age / 4000))
@@ -51,8 +92,11 @@ export function doRest(
     if (pc.mainStatus !== MainStatus.ALIVE) continue;
     if (pc.traits[Trait.RECUPERATION] && pc.curHealth < pc.maxHealth)
       pc.heal(Math.trunc(hpRestore / 5));
-    // TODO(M5): CHRONIC_DISEASE has a 1-in-111 chance of a bout here.
-    if (pc.traits[Trait.CHRONIC_DISEASE]) univ.rng.getRan(1, 0, 110);
+    // The roll was already here; what was missing is what it does when it
+    // comes up — and `disease()` draws again, so the gap was two draws deep.
+    if (pc.traits[Trait.CHRONIC_DISEASE] && univ.rng.getRan(1, 0, 110) === 1) {
+      pc.disease(6, univ.rng);
+    }
 
     // Regeneration gear tops the PC up — outdoors it only fires sometimes, but
     // when it does it counts for four times as much.

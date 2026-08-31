@@ -7483,3 +7483,25 @@ The M6 list below is kept for the history of what it covered:
     the file whose bucket named the function, went 3,780 → 3,917 and is still
     a rules divergence somewhere else. **The bucket pointed near, not at**, for
     the fourth time this week.
+
+- **`do_rest`'s missing half, and an honest zero (M8, 2026-08-31).** The other
+  `TODO(M5)` picked by cross-referencing the queue (the `Player.disease`
+  bucket). Four things were missing from `doRest`, all faithful, and **the
+  corpus did not move by a single draw** — 639,212 before and after. Recorded
+  because a negative result is worth as much as a positive one when the
+  question is "should we sweep the TODOs".
+  - **`handle_disease()` runs three times before the statuses are cleared**
+    (boe.actions.cpp:3304). Order is the whole point: this port cleared first,
+    so all three calls found nobody and drew nothing.
+  - **The four party-wide statuses are cleared too** — STEALTH, DETECT_LIFE,
+    FIREWALK, FLIGHT. Only the per-PC ones were. Stealth is the one that shows:
+    `do_monsters` adds 46 to every notice roll while it is up.
+  - **The OCCASIONAL_STATUS sweep**, gated on the rest crossing a 500-turn
+    boundary — one `get_ran(1,0,5)` per candidate item, the same block
+    `increase_age` already had.
+  - **CHRONIC_DISEASE's roll had no consequence.** The `get_ran(1,0,110)` was
+    there; `pc.disease(6)` on a 1 was not, and `disease()` draws again.
+  - Why zero: nothing in the corpus rests with a diseased party, with Stealth
+    up, or carrying an OCCASIONAL_STATUS item. The rules are right now and the
+    next recording that does any of those will need them — but this is the
+    shape of a TODO fix chosen by *reading* rather than by measurement.

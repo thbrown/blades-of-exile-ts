@@ -66,7 +66,7 @@ export function takeFood(party: Party, amount: number): number {
  * this ability and a charge left? Note it asks about the pack, not about what
  * is equipped, which is `has_abil_equip`.
  */
-function partyHasAbil(party: Party, abil: ItemAbil): boolean {
+export function partyHasAbil(party: Party, abil: ItemAbil): boolean {
   return party.pcs.some((pc) =>
     pc.mainStatus === MainStatus.ALIVE && hasAbil(pc, abil) !== null);
 }
