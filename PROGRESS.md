@@ -1615,8 +1615,9 @@ bottom. What M8 still owes:
   without opening the cast-spell dialog there, so the recording's next click
   has nothing to click on. Those files' numbers are "matched as far as the C++
   got", which for the two at the top of the list is now its whole run.
-  Corpus **622,158** matching draws, **23 of 87** files agreeing all the way,
-  46 blocked outside the rules. **Those numbers were 621,339 / 23 / 45,
+  Corpus **639,076** matching draws, **23 of 87** files agreeing all the way,
+  46 blocked outside the rules. **Those numbers were 622,158 / 23 / 46,
+  621,339 / 23 / 45,
   617,501 / 23 / 45,
   616,738 / 23 / 45,
   611,526 / 23 / 45 and
@@ -7428,3 +7429,36 @@ The M6 list below is kept for the history of what it covered:
     it changed two draws a turn for the rest of the visit. `grep -rn "TODO(M"
     src/game/damage.ts src/game/monsterTurn.ts` before opening another
     `doMonsters` bucket.
+
+- **A special's default target is the active PC in combat, not the party (M8,
+  2026-08-31).** The biggest single fix of the day, and it was one line of C++
+  this port had read past.
+  - `ASR_19-05-2025_19-38-44` parts at draw 43,352: a `DAMAGE` node spends one
+    `get_ran(1,1,100)` there and three here. That roll is `damage_pc`'s luck
+    check, one per PC — so the C++ hurt **one** PC and this port hurt the whole
+    party. `BOE_TRACE_SPEC=1` named the node in the same window (`[spec] TOWN
+    node 2 type 81 (Do Damage)`), which is what `SPEC=1` is for.
+  - `affect_spec` reads `pc_num = get_target_i(current_pc_picked_in_spec_enc
+    (ctx))` and `DAMAGE` is `if(pc_num == 6) hit_party else damage_target`
+    (boe.specials.cpp:2889). **`current_pc_picked_in_spec_enc`
+    (boe.specials.cpp:4726) does not default to the party**: for every ordinary
+    trigger it is
+    - `is_combat() && !is_legacy` → **`univ.current_pc()`**,
+    - else a split party → `pc_present()`, the one member still there,
+    - else the party.
+    This port had `curTarget: null` meaning "everyone" at all three read sites,
+    and the comment on the field even claimed the combat rule while the code
+    did not implement it.
+  - `defaultTarget` in `specials/context.ts` is that function now, and
+    `affect.ts`'s `targets()`/`DAMAGE` and `ifthen.ts`'s `targetPc` all go
+    through it. The `DAMAGE` arm also tests **`!== TARGET_PARTY` exactly**
+    rather than `>= 6`, which is the C++'s `== 6`: 6 is the party and
+    `100 + slot` is a creature, and only the party gets `hit_party`.
+  - **Where it stands.** Corpus 622,158 → **639,076** matching draws, +16,918
+    from one rule — it fires in every scenario that damages you mid-fight.
+  - **Still missing, and written down in `defaultTarget`'s TODO:** the creature
+    half. `KILL_MONST`, `SEE_MONST`, the four melee/ranged triggers and
+    `TARGET`/`USE_SPACE`/`HAIL` with a monster on the square all return the
+    **creature**, which `get_target_i` numbers `100 + slot` and `damage_target`
+    then hurts. `curTarget` is a PC index and cannot say that. It is the same
+    plumbing `AFFECT_SOUL_CRYSTAL` has been waiting on since M5.

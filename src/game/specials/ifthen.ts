@@ -16,7 +16,7 @@ import { MainStatus, Skill, Status } from '../../universe/skills';
 import { takeItem } from '../../universe/inventory';
 import { Universe } from '../../universe/universe';
 import { QuestStatus } from '../../data/quest';
-import { SpecCtx, SpecCtxType, SpecialCtx } from './context';
+import { SpecCtx, SpecCtxType, SpecialCtx, defaultTarget } from './context';
 import { handleMessage, setSdf } from './vm';
 import { reportUnsupported } from './general';
 
@@ -68,9 +68,15 @@ function partyStat(univ: Universe, skill: Skill, mode: number): number {
   }
 }
 
-/** Which PC a node acts on: SELECT_TARGET's pick, else the party as a whole. */
+/**
+ * Which PC a node acts on: `SELECT_TARGET`'s pick, else
+ * `current_pc_picked_in_spec_enc`'s default — the active PC in combat, the
+ * present one with a split party, the party otherwise. `TARGET_PARTY` (6) and
+ * anything else out of 0..5 mean "everyone", which the callers read as -1.
+ */
 function targetPc(univ: Universe, ctx: SpecialCtx): number {
-  return ctx.curTarget ?? -1;
+  const who = ctx.curTarget ?? defaultTarget(univ, ctx.session);
+  return who >= 0 && who < 6 ? who : -1;
 }
 
 export async function ifThenSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {

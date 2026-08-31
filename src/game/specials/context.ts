@@ -6,6 +6,8 @@
  * files store them.
  */
 
+import { isCombat } from '../modes';
+import type { Universe } from '../../universe/universe';
 import { Location } from '../../core/location';
 import { SpecType, SpecialNode } from '../../data/special';
 import type { GameSession } from '../session';
@@ -194,8 +196,10 @@ export interface SpecialCtx {
   retB: number;
   redraw: boolean;
   /**
-   * SELECT_TARGET's choice, or null for "the default target" — the whole party
-   * outside combat, the active PC inside it.
+   * SELECT_TARGET's choice, or null for "the default target". **Null is not
+   * "the whole party"** — resolve it with `defaultTarget` below, which is
+   * `current_pc_picked_in_spec_enc` (boe.specials.cpp:4726) fed through
+   * `get_target_i` (universe.cpp:1122).
    */
   curTarget: number | null;
   host: SpecialHost;
@@ -214,4 +218,41 @@ export interface PendingSpecial {
   type: SpecCtxType;
   where: Location;
   triggerTime: number;
+}
+
+/** `get_target_i`'s value for "the whole party" (universe.cpp:1124). */
+export const TARGET_PARTY = 6;
+
+/**
+ * `get_target_i(current_pc_picked_in_spec_enc(ctx))` (boe.specials.cpp:4726,
+ * universe.cpp:1122) — **which living thing a node acts on when
+ * `SELECT_TARGET` has not picked one.**
+ *
+ * The default is not "the whole party", which is what this port assumed until
+ * 2026-08-31. In combat it is the **active PC**, and with a split party it is
+ * the one member still present. The difference is a whole `hit_party` against
+ * a single `damage_pc`, so a `DAMAGE` node that fires mid-fight spends one
+ * luck roll in the C++ and up to six here.
+ *
+ * TODO(M8): the creature half. For `KILL_MONST`/`SEE_MONST`/the melee and
+ * ranged triggers, and for `TARGET`/`USE_SPACE`/`HAIL` with a monster on the
+ * square, the C++ returns the **creature** and `get_target_i` gives
+ * `100 + slot` — which `damage_target` then hurts. `curTarget` is a PC index
+ * here and cannot say that, so those modes still fall through to the party.
+ * It is the same missing plumbing `AFFECT_SOUL_CRYSTAL` is waiting on.
+ */
+export function defaultTarget(univ: Universe, session: GameSession): number {
+  // `is_legacy` is always false for the XML format this port reads.
+  if (isCombat(session.mode)) return univ.curPc;
+  if (!univ.party.isSplit()) return TARGET_PARTY;
+  // `cParty::pc_present()` (party.cpp:1230): the single present member, or the
+  // party when none or more than one is. Note the C++ exempts AFFECT_DEADNESS
+  // from the split rule; that arm walks the party itself here either way.
+  let found = -1;
+  for (let i = 0; i < 6; i++) {
+    if (!univ.party.pcPresent(i)) continue;
+    if (found < 0) found = i;
+    else return TARGET_PARTY;
+  }
+  return found < 0 ? TARGET_PARTY : found;
 }

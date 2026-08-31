@@ -21,7 +21,7 @@ import { DamageType } from '../../data/monster';
 import { Race } from '../../universe/skills';
 import { hitParty } from '../damage';
 import { damageTarget } from '../combat';
-import { SpecialCtx } from './context';
+import { SpecialCtx, TARGET_PARTY, defaultTarget } from './context';
 import { SELECT_PC_CANCEL, SelectPcMode, runSelectPc } from '../selectPc';
 import { reportUnsupported } from './general';
 import { handleMessage } from './vm';
@@ -36,10 +36,15 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
   let checkMess = true;
   ctx.nextSpec = spec.jumpto;
 
-  /** Everyone the node applies to: the chosen PC, or the whole party. */
+  /**
+   * Everyone the node applies to. `SELECT_TARGET`'s pick if there was one,
+   * otherwise `current_pc_picked_in_spec_enc`'s default — which is the **active
+   * PC in combat**, not the party.
+   */
+  const target = ctx.curTarget ?? defaultTarget(univ, ctx.session);
   const targets = (): Player[] => {
-    if (ctx.curTarget !== null && ctx.curTarget >= 0 && ctx.curTarget < 6) {
-      const pc = party.pcs[ctx.curTarget];
+    if (target >= 0 && target < 6) {
+      const pc = party.pcs[target];
       return pc ? [pc] : [];
     }
     return party.pcs;
@@ -88,14 +93,17 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       const amount = univ.rng.getRan(spec.ex1a, 1, spec.ex1b) + spec.ex2a;
       const damType = spec.ex2b as DamageType;
       const sndType = spec.ex2c <= 0 ? 0 : -spec.ex2c;
-      if (ctx.curTarget === null || ctx.curTarget < 0 || ctx.curTarget >= 6) {
-        await hitParty(univ, amount, damType, sndType);
-      } else {
-        const pc = party.pcs[ctx.curTarget];
+      // **`pc_num == 6` exactly**, not `>= 6` (boe.specials.cpp:2889): the
+      // party is 6 and a creature is 100 + its slot, and only the party gets
+      // `hit_party`.
+      if (target !== TARGET_PARTY) {
+        const pc = party.pcs[target];
         if (pc) {
           await damageTarget(
             univ, pc, amount, damType, 6, Race.UNKNOWN, true, ctx.session, sndType);
         }
+      } else {
+        await hitParty(univ, amount, damType, sndType);
       }
       break;
     }
