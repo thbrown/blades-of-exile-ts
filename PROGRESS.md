@@ -6180,6 +6180,37 @@ The M6 list below is kept for the history of what it covered:
     for free nowhere. Before writing code, count the `draw_terrain(0)` calls in
     `combat_cast_mage_spell` → `start_spell_targeting` → `do_combat_cast` and
     check them against the 3-then-2 split above; that split is the spec.
+  - **Update (2026-08-30): this is now the head of the queue, and the five
+    call sites are named.** Re-running `BOE_TRACE_RAN_STACK` on each of
+    `VoDT_05-04-2025_14-32-10`'s draws 24-28 gives the whole spec for that
+    file, in order:
+
+    | draw | who called `draw_text_bar` |
+    |------|----------------------------|
+    | 24 | `handle_target_mode` → `draw_terrain` |
+    | 25 | `advance_time` → `draw_terrain` |
+    | 26 | `main_loop_iteration` → `redraw_everything` → `redraw_screen` |
+    | 27 | `do_combat_cast` → `draw_terrain` |
+    | 28 | `place_spell_pattern` → `draw_terrain(0)` (boe.combat.cpp:4093) |
+
+    Draws 22 and 23 are a *different* caller and this port already makes them:
+    `combat_cast_mage_spell` → `pc_can_cast_spell` is the real refusal, not the
+    hint. `pcCanCastType` (spellCast.ts) is a faithful port of it.
+  - **The size of the job, measured.** 62 `draw_terrain(` call sites and 37
+    `redraw_everything`/`redraw_screen` ones, and one of the five above is the
+    *main loop's* redraw — driven by `need_redraw`, which a replay driver does
+    not model at all. So this is not "port `text_bar_text`"; it is "match the
+    C++'s redraw count", and the honest way in is probably to give the port a
+    `drawTerrain()` seam that every one of those sites calls, rather than to
+    sprinkle the roll at the five places one recording happens to show.
+  - **What it is worth.** The bucket is two files, and at least two more
+    single-file buckets look like the same root from the other end: a spell
+    the C++ **refuses to re-cast** and this port fires again
+    (`ZKR_16-05-2025_15-19-17`, `VoDT_02-05-2025_16-42-15`). The refusal is
+    `pc_can_cast_spell`'s encumbrance arm, and whether it fires depends on a
+    die roll — so a port that skips the *hint's* rolls does not merely fall out
+    of phase, it can come out of the same stream with a different answer to
+    "can this PC cast?".
   - General note, and it is the sharpest one of the day: **in this codebase the
     draw stream can be moved by the drawing code.** `playAmbientSound` was the
     first instance (it was really `outd_is_blocked`), `add_explosion`'s offset
@@ -6390,6 +6421,35 @@ The M6 list below is kept for the history of what it covered:
     are bigger. **The harness's remaining debt is no longer the cheap seam it
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
+
+- **Where M8 stands, end of 2026-08-30.** Corpus **511,732** matching draws
+  (from 466,525 that morning), **22 of 87** files agreeing end to end, 44
+  blocked outside the rules.
+  - The **queue's head is the `text_bar_text` open lead** recorded on
+    2026-08-24 and re-measured today — see it below, it now carries the five
+    call sites and a measurement of how big the job is. Two files directly, and
+    two more single-file buckets look like the same root seen from the other
+    end.
+  - The **stop-reason histogram** (`CORPUS=1 npx vitest run
+    test/corpus.test.ts`, printed at the end) is the other half of the picture
+    and reads:
+
+    ```
+    41  replay desync: the recording stepped to (x,y), view centred on (x,y)
+     6  no <load_party>: nothing says which game the recording was playing
+     4  the save is a party with no scenario
+     4  starts a new party from the scenario picker, which needs pick_a_scen
+     2  no handler for 'handle_new_pc'
+     1  each: debug_launch_scen, debug_give_item, two phantom dialogs
+    ```
+
+    **The harness debt is nearly gone** — what remains is the new-party
+    picker (`pick_a_scen` + `handle_new_pc`, 12 files between them, and a big
+    piece of work because the whole run is measured against a party this port
+    would have to build identically) and two dialogs this port raises that the
+    recording never saw. Everything else is the 41, and those are rules: each
+    one is a party that ended up on the wrong square, so the way in is the
+    bucket queue, not the stop reason.
 
 - **A town's lighting map is built once, when the scenario file is read (M8,
   2026-08-30).** The top bucket, `move @ get_ran(1,1,100)`, head
