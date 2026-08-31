@@ -19,7 +19,7 @@
  *     `TODO(Mn)` markers.
  */
 
-import { Direction } from '../core/location';
+import { Direction, dist } from '../core/location';
 import { GameRng } from '../core/rng';
 import { Spell } from '../data/spell';
 import { ItemWinMode, ItemWindow } from '../game/itemWindow';
@@ -356,9 +356,30 @@ export async function runReplay(
             if (session.endCombat() && wasTown) await session.afterPartyTurn();
           }
           break;
-        case 'handle_look':
-          session.lookAt(locationFromAction(action, 'destination'));
+        case 'handle_look': {
+          // **`handle_look` is three steps, not one** (boe.actions.cpp:682):
+          // `do_look` describes the square, then — in town or combat, and only
+          // for an adjacent square — `adj_town_look` *searches* it, and last
+          // a sign on it is read. This port had only the first, so a look at a
+          // scripted square never ran its TOWN_LOOK special and a look into a
+          // chest never opened it. The recording's clicks that answered those
+          // two dialogs then landed on nothing, and the party walked on
+          // without the loot: in `ASR_19-05-2025_19-38-44` that was two
+          // scrolls of Flame, and two hundred actions later a `handle_use_item`
+          // used whatever had shifted into slot 0 instead of casting them.
+          const where = locationFromAction(action, 'destination');
+          const ter = session.lookAt(where);
+          if (ter < 0) break;
+          if ((session.inTown || isCombat(session.mode))
+            && dist(session.univ.party.townLoc, where) <= 1) {
+            const contents = await session.adjTownLook(where);
+            // `get_item(where,6,true)` — the container's own screen, which
+            // stays up across the clicks that empty it. It costs no turn:
+            // `handle_look` never sets `did_something`.
+            if (contents && contents.length > 0) getting = new GetItemsPick(session, contents);
+          }
           break;
+        }
         case 'handle_talk':
           await session.talkTo(locationFromAction(action));
           break;

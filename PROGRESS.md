@@ -1604,18 +1604,21 @@ bottom. What M8 still owes:
   first part in, so the next fix is chosen by how many files it unblocks. Take
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. The head of the
-  queue at the end of 2026-08-30 has **no bucket bigger than two files**, then
-  some thirty single ones. Five of those are `handle_target_space @
-  get_ran(n,1,m)` with a different *n* each time — the same shape, a spell
-  resolving against a different number of targets — and they are worth reading
-  together rather than one at a time. The seven files whose line reads
+  queue at the end of 2026-08-31 has **no bucket bigger than two files**, then
+  fifteen single ones — and the whole rules queue is now seventeen files
+  against the harness's forty-five, so **the harness's own debt is more than
+  twice what the rules still owe**. Three of the two-file buckets and half the
+  singles are in `game/monsterTurn.ts`, which is where the next slice should
+  go. The seven files whose line reads
   `harness: … Couldn't replay action: <click_control><id>spellN…`
   are the **oracle** giving up, not this port: `handle_spellcast` returns
   without opening the cast-spell dialog there, so the recording's next click
   has nothing to click on. Those files' numbers are "matched as far as the C++
   got", which for the two at the top of the list is now its whole run.
-  Corpus **476,671** matching draws, **19 of 87** files agreeing all the way,
-  46 blocked outside the rules. **Those numbers were 459,492 / 19 / 44 at the
+  Corpus **611,526** matching draws, **23 of 87** files agreeing all the way,
+  45 blocked outside the rules. **Those numbers were 567,443 / 22 / 46 at the
+  start of 2026-08-31, 476,671 / 19 / 46 at the
+  end of 2026-08-30, 459,492 / 19 / 44 at the
   end of 2026-08-29, 381,127 / 19 / 40 at the
   end of 2026-08-24, 285,845 / 15 / 41 the morning before that and
   190,362 / 10 / 37 the day before that** — the entries at
@@ -7212,3 +7215,49 @@ The M6 list below is kept for the history of what it covered:
     and this port's argument-evaluation order cost three. `summonN` takes the
     count as a thunk now. The duration is also **one roll shared by the whole
     batch** (`int x = get_ran(4,1,4)` above the loop), which was already right.
+
+- **`handle_look` is three steps and the driver only had one (M8,
+  2026-08-31).** The top bucket, `resolveOne`, two files. The draw stream said
+  a spell resolved against a different number of targets; the cause was two
+  hundred actions earlier and had nothing to do with spells.
+  - `ASR_19-05-2025_19-38-44` parts at draw 20,259, where the C++ spends
+    `get_ran(7,1,6)` then `get_ran(1,0,20)` and this port spends neither. That
+    pair is `eSpell::FLAME`'s damage roll (boe.combat.cpp:1053,
+    `min(10,1+level/3+bonus)` d6 with `level = store_item_spell_level`) and the
+    elemental saving throw `damage_monst` makes for FIRE — so the C++ used a
+    **scroll of Flame** and this port used something else.
+  - `BOE_TRACE_ITEMS=1` against `ITEMS=1` named it in one line: the C++'s pc3
+    held `0:8/1/0 1:8/1/0` — two scrolls — where this port's pack started at
+    the necklace that sat behind them. Everything after those two slots
+    matched exactly, which is what a *missing* item looks like as opposed to a
+    diverged one. `handle_use_item 0` then used the necklace here and the
+    scroll there, and the AP and the turn were spent identically either way,
+    so nothing before the draw could see it.
+  - The two scrolls were never picked up. Grepping the C++ trace for the first
+    pack that contained one landed on a `click_control` inside a
+    `handle_look`, and **`handle_look` (boe.actions.cpp:682) is three steps**:
+    `do_look` describes the square, then `adj_town_look` *searches* it — in
+    town or combat, and only when it is adjacent — and last a sign on it is
+    read. `session.adjTownLook` has existed since M4 and `main.ts` calls it;
+    **the replay driver called only `session.lookAt`.** So a look at a scripted
+    square never ran its TOWN_LOOK special and a look into a chest never opened
+    it, and the recording's clicks that answered those two dialogs — the
+    special's message box, then `pc4` / `item1-key` / `done` on the container's
+    get-items screen — landed on nothing at all. `GetItemsPick` was already
+    wired up for `handle_get_items`; it just needed to be handed the
+    container's contents. It costs no turn, because `handle_look` never sets
+    `did_something`.
+  - **Where it stands.** Corpus 567,443 → **611,526** matching draws, 22 → 23
+    files agreeing all the way, and this one file went 20,259 → 38,140 draws
+    and 1,114 → 1,390 actions.
+  - The lesson is the one 2026-08-24 wrote down and it is worth writing again:
+    **a bucket named after a rule was a driver gap.** Nothing in
+    `spellCombatTarget.ts` was wrong. The instrument that found it was
+    `ITEMS=1` against `BOE_TRACE_ITEMS=1` — the draw stream cannot see a pack
+    that is one item short, and neither can any of the four movement traces.
+    When a divergence is a *spell* resolving differently, ask what was cast
+    before asking how it resolved.
+  - Still missing from the same function, and the next thing to try in this
+    area: the **sign** step. A look at a sign raises `do_sign`'s dialog in the
+    C++ and this port's driver raises nothing, so the `click_control` that
+    dismissed it still falls through to the game.
