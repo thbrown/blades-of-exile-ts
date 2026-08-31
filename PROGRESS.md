@@ -6391,6 +6391,43 @@ The M6 list below is kept for the history of what it covered:
     was this morning** — the next slice is better spent on the movement
     desyncs, which are rules.
 
+- **A town's lighting map is built once, when the scenario file is read (M8,
+  2026-08-30).** The top bucket, `move @ get_ran(1,1,100)`, head
+  `ASR_19-05-2025_19-38-44`.
+  - The C++ made three `get_ran(1,1,100)` in `do_monsters` where this port made
+    one. That draw is the **notice roll** (boe.monster.cpp:269) an idle hostile
+    creature within 8 makes every turn, so the two sides disagreed about how
+    many creatures were still idle.
+  - `MMOVE=1` against `BOE_TRACE_MMOVE=1`, uniq'd and diffed, put it on one
+    column and 667 lines in: party at (7,29), creature at (2,24), the C++
+    saying `see=6` and this port `see=1`. Six is `can_see_light`'s "not in
+    light at all" (boe.locutils.cpp:175) — so `pt_in_light` disagreed, and
+    `LIGHT=1` confirmed it: same light level, same radius, `lit=1` here and
+    `lit=0` there.
+  - The square is lit by a **Campfire** (terrain 104, radius 6) six squares
+    east at (13,29). Between them, at (8,29), is a door — terrain 125, which
+    blocks sight. The party had unlocked it on an earlier visit, so by the time
+    of this run it is terrain 129, Open Door, which blocks nothing.
+  - **`cTown::set_up_lights` runs once, when the scenario file is read**
+    (fileio_scen.cpp:2261, "Don't forget to set up lighting!"), and after that
+    only `alter_space` rebuilds it — and only when the terrain's *light radius*
+    changes (boe.locutils.cpp:598), which a door's never does. So in the
+    original the campfire's light stops at the shut door **forever**: come back
+    with the door standing open and the corridor beyond is still dark. This
+    port rebuilt the map on every town entry, after `doorUnlocked` had already
+    opened it, and lit the corridor.
+  - Ported as the C++ has it: `lighting` moved from `CurTown` to the **town
+    record**, built in `loadScenario` right after `loadTownMapData`, and
+    `CurTown.lighting` is now a getter onto the record's array rather than a
+    grid of its own. `alterSpace` gained the radius test and the rebuild.
+  - **Where it stands.** `ASR_19-05-2025_19-38-44` 16,520 → **20,259**; corpus
+    507,994 → **511,732**.
+  - Worth remembering as a category: **derived state the C++ computes once is
+    not the same as derived state, and recomputing it "correctly" is a
+    divergence.** Nothing about the port's `set_up_lights` was wrong — the
+    line-of-sight test, the obscurity function, the skip-if-already-lit were
+    all right. Only *when* it ran.
+
 - **The preferences dialog is game state, and `less_wm` had never been ported
   (M8, 2026-08-30).** The `move @ the C++ draws on` bucket — which, as that
   bucket name always means, was **this port stopping**, not a rule.

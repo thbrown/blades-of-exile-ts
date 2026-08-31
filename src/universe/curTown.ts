@@ -65,8 +65,14 @@ export class CurTown {
   monstWhichTown = 200;
   /** Explored flags for the current town, [x][y]. */
   explored: Uint8Array[];
-  /** Permanently lit tiles (braziers, bonfires…), cTown::lighting. */
-  lighting: Uint8Array[];
+  /**
+   * Permanently lit tiles, `cTown::lighting` — **the record's own array**, not
+   * a copy. The C++ reads `univ.town->lighting`, which is the scenario town's
+   * map, built once at load; giving the live town its own grid and filling it
+   * on entry is what used to let a door opened on a previous visit relight the
+   * corridor behind it. See `setUpLights`.
+   */
+  get lighting(): Uint8Array[] { return this.record.lighting; }
   /** Road and special-spot overlays, from the town's preset fields. */
   roads: Uint8Array[];
   specialSpots: Uint8Array[];
@@ -100,7 +106,6 @@ export class CurTown {
     const grid = (): Uint8Array[] =>
       Array.from({ length: record.maxDim }, () => new Uint8Array(record.maxDim));
     this.explored = grid();
-    this.lighting = grid();
     this.roads = grid();
     this.specialSpots = grid();
     this.fields = Array.from({ length: record.maxDim }, () =>

@@ -16,6 +16,7 @@ import { emptyScenario, readScenarioFromXml } from './scenarioXml';
 import { ScenarioSource } from './source';
 import { readTerrainFromXml } from './terrainXml';
 import { loadTownMapData, readDialogueFromXml, readTownFromXml } from './townXml';
+import { setUpLights } from '../game/lighting';
 import { parseXmlDoc } from './xml';
 
 export async function loadScenario(
@@ -69,6 +70,10 @@ export async function loadScenario(
       town, t, scen.boats, scen.horses, base,
     );
     town.specials = parseSpecials(await f.spec, opcodes, `${base}.spec`);
+    // "Don't forget to set up lighting!" (fileio_scen.cpp:2261) — **here and
+    // nowhere else**, save for `alter_space`. The map is built from the
+    // scenario's terrain, before a single door has been opened.
+    setUpLights((n) => scen.terTypes[n]!, town);
     scen.towns.push(town);
     scen.townTalk.push(readDialogueFromXml(await parseXmlDoc(await f.talk, `talk${t}.xml`), t, `talk${t}.xml`));
   }

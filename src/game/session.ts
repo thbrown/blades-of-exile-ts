@@ -323,7 +323,9 @@ export class GameSession {
    *
    * Deliberately *not* `startTownMode`: the town's creatures, items, fields and
    * terrain all came out of the save, and repopulating would put the dead back
-   * on their feet. Only the lighting is recomputed, since it is derived.
+   * on their feet. The lighting is **not** recomputed either — the C++ builds
+   * that map when the scenario is read and only `alter_space` rebuilds it, so
+   * see `setUpLights`.
    */
   resumeLoadedGame(): void {
     // **"Saved creatures may not have had their monster attributes saved. Make
@@ -380,7 +382,6 @@ export class GameSession {
     const town = this.univ.town;
     if (town !== null) {
       this.mode = GameMode.TOWN;
-      this.setUpLights(town);
       this.center = { ...this.univ.party.townLoc };
       this.updateExplored(this.univ.party.townLoc);
     } else {
@@ -3698,7 +3699,6 @@ export class GameSession {
       for (let y = 0; y < record.maxDim; y++)
         if (record.maps[x]![y]!) town.makeExplored(x, y);
 
-    this.setUpLights(town);
     // boe.town.cpp:156 — the live population knows which town it belongs to,
     // and `end_town_mode` files it away under that name. A restore below
     // overwrites both, since the C++ assigns the whole saved population.
@@ -3783,52 +3783,6 @@ export class GameSession {
     tryAutoSave('EnterTown');
   }
 
-  /**
-   * cTown::set_up_lights (town.cpp:196): terrain with a light radius lights
-   * the tiles around it permanently.
-   *
-   * **The line-of-sight test is not optional**, and leaving it out (a
-   * `TODO(M4)` that outlived M4 by four milestones) made every brazier shine
-   * through the walls of its own room. That is not a cosmetic difference:
-   * `pt_in_light` returns true for any lit square, and `can_see_light` returns
-   * 6 — "no line of sight at all" — when it returns false. Six is enough to
-   * push `do_monsters`' notice roll over 50 every time, so a town this port
-   * over-lit had creatures noticing the party across a wall eight squares
-   * away, while the C++'s never woke up at all.
-   *
-   * Two details that matter: the obscurity function is `light_obscurity`
-   * (town.cpp:227), **not** `sight_obscurity` — it knows nothing about webs,
-   * crates or barriers, only about terrain that blocks sight (5) or shooting
-   * (1) — and the already-lit square is skipped before the `can_see` call, so
-   * two overlapping light sources cost one visibility trace, not two.
-   */
-  private setUpLights(town: CurTown): void {
-    const dim = town.record.maxDim;
-    for (const row of town.lighting) row.fill(0);
-    const lightObscurity = (x: number, y: number): number => {
-      if (!town.isOnMap(x, y)) return 5;
-      const blockage = this.univ.terrainType(town.record.terrain[x]![y]!).blockage;
-      if (blockage === TerObstruct.BLOCK_SIGHT
-        || blockage === TerObstruct.BLOCK_MOVE_AND_SIGHT) return 5;
-      if (blockage === TerObstruct.BLOCK_MOVE_AND_SHOOT) return 1;
-      return 0;
-    };
-    for (let i = 0; i < dim; i++)
-      for (let j = 0; j < dim; j++) {
-        const rad = this.univ.terrainType(town.record.terrain[i]![j]!).lightRadius;
-        if (rad <= 0) continue;
-        const source = loc(i, j);
-        for (let x = Math.max(0, i - rad); x < Math.min(dim, i + rad + 1); x++)
-          for (let y = Math.max(0, j - rad); y < Math.min(dim, j + rad + 1); y++) {
-            if (town.lighting[x]![y] !== 0) continue;
-            const where = loc(x, y);
-            if (dist(where, source) <= rad
-              && canSee(source, where, lightObscurity) < SIGHT_BLOCKED) {
-              town.lighting[x]![y] = 1;
-            }
-          }
-      }
-  }
 
   /** light_radius (boe.locutils.cpp:458). */
   lightRadius(): number {

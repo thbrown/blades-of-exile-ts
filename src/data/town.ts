@@ -89,10 +89,21 @@ export class Town {
   constructor(readonly maxDim: number) {
     this.terrain = Array.from({ length: maxDim }, () => new Array<number>(maxDim).fill(0));
     this.maps = Array.from({ length: maxDim }, () => new Uint8Array(maxDim));
+    this.lighting = Array.from({ length: maxDim }, () => new Uint8Array(maxDim));
   }
 
   /** Explored flags, persisted in saves (cTown::maps); maps[x][y]. */
   maps: Uint8Array[];
+
+  /**
+   * `cTown::lighting` — permanently lit tiles (braziers, campfires…).
+   *
+   * **On the record, not on `CurTown`**, because the C++ builds it once when
+   * the scenario file is read and only `alter_space` ever rebuilds it. See
+   * `setUpLights`: a town that is entered a second time keeps the map it was
+   * born with, doors and all.
+   */
+  lighting: Uint8Array[];
 
   name = '';
   comment: string[] = ['', '', ''];

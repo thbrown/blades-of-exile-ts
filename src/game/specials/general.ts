@@ -14,6 +14,7 @@ import { takeClass } from '../../universe/inventory';
 import { doRest } from '../rest';
 import { SpecCtx, SpecCtxType, SpecialCtx } from './context';
 import { SpecialsEngine, handleMessage, setSdf } from './vm';
+import { setUpLights } from '../lighting';
 
 export async function generalSpec(
   univ: Universe, ctx: SpecialCtx, engine: SpecialsEngine,
@@ -406,10 +407,23 @@ export function alterSpace(univ: Universe, x: number, y: number, ter: number): v
   const town = univ.town;
   if (town) {
     if (town.record.terrain[x]?.[y] === undefined) return;
+    const former = town.record.terrain[x]![y]!;
     town.record.terrain[x]![y] = ter;
     // A square that becomes a conveyor arms `push_things` for the rest of the
     // visit (boe.locutils.cpp:596). Never cleared, exactly as in the C++.
     if (univ.terrainType(ter).special === TerSpec.CONVEYOR) town.beltPresent = true;
+    // **The lighting map is rebuilt when the light radius changes**
+    // (boe.locutils.cpp:598) — and only then, so putting out a brazier
+    // relights the whole town while swapping one dark tile for another costs
+    // nothing. Without this the map stayed as `start_town_mode` built it: a
+    // square that had lost its light source read as lit for the rest of the
+    // visit, `pt_in_light` said yes, and `can_see_light` returned a real
+    // obscurity where the C++ returned 6. That is the difference between a
+    // creature rolling to notice the party every turn and never seeing it at
+    // all.
+    if (univ.terrainType(former).lightRadius !== univ.terrainType(ter).lightRadius) {
+      setUpLights((n) => univ.terrainType(n), town.record);
+    }
   } else {
     univ.out.set(x, y, ter);
   }
