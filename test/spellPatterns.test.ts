@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { GameRng } from '../src/core/rng';
 import { FieldType } from '../src/data/fields';
-import { DamageType } from '../src/data/monster';
+import { Attitude, DamageType } from '../src/data/monster';
 import { MonstAbil } from '../src/data/monsterAbility';
 import {
   SpellPat, X, copyPattern, emptyPattern, getBuiltinPattern,
@@ -48,6 +48,11 @@ function inTown(): GameSession {
 function aLiveMonster(s: GameSession): Creature {
   const m = s.univ.town!.monsters.find((c) => c.isAlive);
   if (!m) throw new Error('no live monster in the start town');
+  // **Hostile on purpose.** The start town's first live creature is a friendly
+  // guard, and hurting one is `damage_monst`'s "Damaged an innocent." — which
+  // calls `make_town_hostile` and triples every guard's health, so a test that
+  // measures damage would watch its target get *healthier*.
+  m.attitude = Attitude.HOSTILE_A;
   return m;
 }
 

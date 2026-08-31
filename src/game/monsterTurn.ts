@@ -647,7 +647,11 @@ export async function doMonsters(session: GameSession): Promise<void> {
   const town = univ.town;
   if (!town) return;
   const partyLoc = univ.party.townLoc;
-  if (TRACE_MMOVE) console.log(`      [domonst] mode=${session.mode} party=(${partyLoc.x},${partyLoc.y}) age=${univ.party.age}`);
+  // `hostile` is here because it is the one term in the drift test that no
+  // other instrument can see: a hostile town turns `do_monsters`' first block
+  // off entirely, so two runs can agree on every creature and every square and
+  // spend a different number of draws on them.
+  if (TRACE_MMOVE) console.log(`      [domonst] mode=${session.mode} party=(${partyLoc.x},${partyLoc.y}) age=${univ.party.age} hostile=${town.monstHostile ? 1 : 0}`);
 
   for (const monst of town.monsters) {
     if (!monst.isAlive) continue;

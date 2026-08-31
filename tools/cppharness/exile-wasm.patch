@@ -299,7 +299,7 @@ index b19e0983..a19325ec 100644
  #endif
  #ifdef __APPLE__
 diff --git a/src/game/boe.monster.cpp b/src/game/boe.monster.cpp
-index 937c63d0..a216581a 100644
+index 937c63d0..ebe66893 100644
 --- a/src/game/boe.monster.cpp
 +++ b/src/game/boe.monster.cpp
 @@ -194,6 +194,10 @@ void do_monsters() {
@@ -309,7 +309,7 @@ index 937c63d0..a216581a 100644
 +	if(getenv("BOE_TRACE_MMOVE"))
 +		std::cout << "      [domonst] mode=" << int(overall_mode) << " party=("
 +			<< univ.party.town_loc.x << "," << univ.party.town_loc.y << ") age="
-+			<< univ.party.age << std::endl;
++			<< univ.party.age << " hostile=" << int(univ.town.monst.hostile) << std::endl;
  	
  	if(overall_mode == MODE_TOWN)
  		for(short i = 0; i < univ.town.monst.size(); i++)

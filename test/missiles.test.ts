@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { GameRng } from '../src/core/rng';
 import { Item, ItemAbil, ItemType, defaultItem } from '../src/data/item';
+import { Attitude } from '../src/data/monster';
 import { Scenario } from '../src/data/scenario';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
@@ -116,6 +117,11 @@ describe('fire_missile', () => {
     const pc = s.univ.party.pcs[0]!;
     s.univ.curPc = 0;
     const monst = s.univ.town!.monsters.find((c) => c.isAlive)!;
+    // **Hostile on purpose.** The start town's first live creature is a
+    // friendly guard, and shooting one is `damage_monst`'s "Damaged an
+    // innocent." — which calls `make_town_hostile` and triples every guard's
+    // health, so the health this test measures would go *up*.
+    monst.attitude = Attitude.HOSTILE_A;
     monst.curLoc = { x: pc.combatPos.x + 2, y: pc.combatPos.y };
     armWith(pc, anItem(ItemType.BOW, { bonus: 20 }), anItem(ItemType.ARROW, {
       itemLevel: 8, bonus: 30, charges: 10,
@@ -207,6 +213,8 @@ describe('on-hit item abilities', () => {
     s.univ.curPc = 0;
     const pc = s.univ.party.pcs[0]!;
     const monst = s.univ.town!.monsters.find((c) => c.isAlive)!;
+    // Hostile, for the reason `aFight` gives.
+    monst.attitude = Attitude.HOSTILE_A;
     monst.curLoc = { x: pc.combatPos.x + 2, y: pc.combatPos.y };
     monst.maxHealth = 500;
     monst.health = 500;

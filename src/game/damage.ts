@@ -16,7 +16,7 @@ import { Location } from '../core/location';
 import { FieldType } from '../data/fields';
 import { ItemAbil, ItemType } from '../data/item';
 import { variety } from '../data/itemVariety';
-import { DamageType, Monster } from '../data/monster';
+import { Attitude, DamageType, Monster } from '../data/monster';
 import { Creature, CreatureStatus } from '../universe/creature';
 import { getProtLevel, hasAbilEquip, takeItem } from '../universe/inventory';
 import { SpellNote, livingSound } from '../universe/living';
@@ -30,6 +30,7 @@ import { MainStatus, Race, Skill, Status, Trait, isHuman, isHumanoid } from '../
 import { Universe } from '../universe/universe';
 import { SpecCtx, SpecCtxType } from './specials/context';
 import type { GameSession } from './session';
+import { makeTownHostile } from './townAttitude';
 
 /**
  * hit_chance (boe.combat.cpp:66) — the percentage a skill level buys, indexed
@@ -485,11 +486,26 @@ export async function damageMonst(
     if (howMuch > 20) victim.morale -= 2;
   }
 
-  // Attacking a townsperson turns the town against you.
+  // Attacking a townsperson turns **the whole town** against you
+  // (boe.specials.cpp:1576), not just the one you hit.
+  //
+  // The C++ guards this with `(!processing_fields && !monsters_going) ||
+  // (processing_fields && !hostiles_present)`, its two globals for "who is this
+  // damage really from". This port passes that as the `whoHit` argument
+  // instead (see the note at the top of `processFields.ts`), and `whoHit < 7`
+  // already covers both: a monster's blow arrives as 7, and inside
+  // `process_fields` monsters are only ever hurt by `monst_inflict_fields`,
+  // which is 7 as well. The C++'s extra clause is unreachable from here.
+  //
+  // It matters far past the fight it happens in: `monst.hostile` switches off
+  // `do_monsters`' whole drift block, so once a town has turned, its idle
+  // creatures stop wandering and stop spending `get_ran(1,0,1)` +
+  // `rand_move`'s draws every turn. Leaving it out was worth two draws a turn
+  // for the rest of the visit.
   if (victim.isFriendly && whoHit < 7) {
     univ.addStringToBuf('Damaged an innocent.');
-    victim.attitude = 1; // HOSTILE_A
-    // TODO(M5b): make_town_hostile turns the rest of the town on you too.
+    victim.attitude = Attitude.HOSTILE_A;
+    if (options.session) makeTownHostile(options.session);
   }
 
   return howMuch;

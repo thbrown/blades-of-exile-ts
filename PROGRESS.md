@@ -1615,8 +1615,9 @@ bottom. What M8 still owes:
   without opening the cast-spell dialog there, so the recording's next click
   has nothing to click on. Those files' numbers are "matched as far as the C++
   got", which for the two at the top of the list is now its whole run.
-  Corpus **621,339** matching draws, **23 of 87** files agreeing all the way,
-  45 blocked outside the rules. **Those numbers were 617,501 / 23 / 45,
+  Corpus **622,158** matching draws, **23 of 87** files agreeing all the way,
+  46 blocked outside the rules. **Those numbers were 621,339 / 23 / 45,
+  617,501 / 23 / 45,
   616,738 / 23 / 45,
   611,526 / 23 / 45 and
   567,443 / 22 / 46 earlier on 2026-08-31, 476,671 / 19 / 46 at the
@@ -7386,3 +7387,44 @@ The M6 list below is kept for the history of what it covered:
     C++'s "what a load resets" in one function, and only `set_stat_window` of
     it was ported. `current_switch = 6` (the toggle-active state) is the other
     line with game meaning and is still not.
+
+- **Hurting a townsperson turns the whole town, and that is two draws a turn
+  (M8, 2026-08-31).** `VoDT-5-11` again, now parting at draw 7,842: two freshly
+  arrived creatures drift here (`get_ran(1,0,1)` + `rand_move`'s roll, twice)
+  and stand still there, with both runs agreeing on every creature, every
+  square and the party's position.
+  - The term that differs is invisible to all six instruments: **`monst.hostile`**.
+    `do_monsters`' first block is `(attitude == DOCILE || target == 6) &&
+    !univ.town.monst.hostile` (boe.monster.cpp:226) — a hostile town switches
+    idle drifting off entirely, and the second block then does nothing either
+    because a creature 15 squares away has `target == 6`. So a hostile town is
+    *quieter* in the draw stream, not louder.
+  - `[domonst]` now prints `hostile=0|1` on both sides, and the diff named the
+    turn: the C++ turned hostile during a long town fight and this port never
+    did. **`damage_monst`'s "Damaged an innocent." arm calls
+    `make_town_hostile()`** (boe.specials.cpp:1576) and this port had the
+    message and the one creature's attitude but not the call — it was marked
+    `TODO(M5b)` and had been sitting there since M5a.
+  - The C++ guards that arm with `(!processing_fields && !monsters_going) ||
+    (processing_fields && !hostiles_present)`, its two globals for "whose
+    damage is this really". This port passes that as the `whoHit` argument
+    instead (see the header of `processFields.ts`), and `whoHit < 7` already
+    covers both cases — a monster's blow is 7, and inside `process_fields`
+    monsters are only hurt by `monst_inflict_fields`, which is 7 too. Nothing
+    extra to port.
+  - **Five tests had to be corrected, not their expectations.** Four fixtures
+    said "a hostile creature" in the comment and then took
+    `monsters.find(c => c.isAlive)` — which in Fort Talrus is a *friendly
+    guard*. Shooting one now correctly turns the town, and `set_town_attitude`
+    **triples every guard's health**, so tests measuring damage watched their
+    target get healthier. They set `attitude = HOSTILE_A` now, which is what
+    they always meant.
+  - **Where it stands.** Corpus 621,339 → **622,158** matching draws, and
+    `VoDT-5-11` is done as far as the rules go: all 8,660 of its draws match
+    and it now stops on the oracle giving up (`Couldn't replay action:
+    click_control spellN`), not on anything here.
+  - The lesson to carry: **a `TODO(Mn)` in the damage pipeline is a draw-stream
+    bug waiting to happen.** This one changed no draw at the moment it fired —
+    it changed two draws a turn for the rest of the visit. `grep -rn "TODO(M"
+    src/game/damage.ts src/game/monsterTurn.ts` before opening another
+    `doMonsters` bucket.

@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { GameRng } from '../src/core/rng';
+import { Attitude } from '../src/data/monster';
 import { Scenario } from '../src/data/scenario';
 import { SPELLS, Spell, SpellRefer } from '../src/data/spell';
 import { loadScenario } from '../src/fileio/loadScenario';
@@ -249,6 +250,9 @@ describe('do_combat_cast', () => {
   it('Spark hurts whatever is on the square', async () => {
     const { s, pc } = inCombat();
     const monst = s.univ.town!.monsters.find((m) => m.isAlive)!;
+    // Hostile, or "Damaged an innocent." turns the town and triples every
+    // guard's health — including this one's — and the damage vanishes into it.
+    monst.attitude = Attitude.HOSTILE_A;
     const at = { x: pc.combatPos.x + 2, y: pc.combatPos.y };
     monst.curLoc = { ...at };
     monst.health = monst.maxHealth = 200;
@@ -423,6 +427,8 @@ describe('fancy (multi-target) casting', () => {
     // Put a fragile monster on each chosen square.
     const victims = s.univ.town!.monsters.filter((m) => m.isAlive).slice(0, squares.length);
     victims.forEach((m, i) => {
+      // Hostile, or the first hit turns the town and triples the rest.
+      m.attitude = Attitude.HOSTILE_A;
       m.curLoc = { ...squares[i]! };
       m.health = m.maxHealth = 300;
       m.mon.resist = m.mon.resist.map(() => 100);
