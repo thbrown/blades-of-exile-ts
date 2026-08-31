@@ -1711,22 +1711,40 @@ bottom. What M8 still owes:
   The old stop-reason bucketing (`TAIL=n`, the 56 files stopping on an over-long
   `move`) is superseded — a stop is a symptom that surfaces dozens of actions
   after the rule went wrong, and the first diverging draw is the rule itself.
-- **Finishing is not passing.** Only **3 of 87** recordings agree with the C++
-  the whole way. `ZKR_15-05-2025_18-04-58` dispatches all 1,033 of its actions
-  and still parts at draw 6,080, in `doMonsters`. Every file in
-  `test/cppReplay.test.ts` needs re-checking against draws, not actions.
-- **The harness owes 28 files**, separately from the rules: dialog controls it
-  has no stub for, four recordings it hangs on outright, dialog actions replayed
-  out of order, and three scenarios whose feature flags it refuses.
+- **The queue is all singles now, and the shape of the work has changed.**
+  Seven rules files remain, no two sharing a bucket, so from here each fix
+  unblocks exactly one file — the days of one rule freeing nine recordings are
+  over. Against that, **46 files are blocked by the oracle, not by this port**.
+  That asymmetry is the dominant fact about M8 and it argues for spending the
+  next large slice on `tools/cppharness/` rather than on the rules tail.
+- **"Blocked outside the rules" means the C++ gave up, not this port.** Every
+  line in `diverge.mjs`'s second table beginning `harness:` is the *oracle*
+  failing to replay its own recording. Grouped (2026-08-31):
+  - **9 files** `Couldn't replay action: click_control spellN` — `handle_spellcast`
+    returns without opening the cast-spell dialog, so the next click has
+    nothing to click on. Plus 3 more on `btnN`, 2 on `cast`, 2 on `itemN-key`,
+    and one each on `done`/`pickN`/`cancel`/`save`/`number`. **20 files on this
+    one shape** — a dialog the C++ build no longer raises where the recording
+    expects it. Worth reading as one problem, not twenty.
+  - **9 files** `Dialog '…' has no control '…'`, **4** the harness hangs on
+    outright, **4** `Replaying a dialog, have the wrong replay action`,
+    **3** scenarios whose feature flags it refuses, **2** an out-of-range
+    vector, **1** a missing scenario, **1** `max-files does not exist in
+    dialog preferences`, **1** `Unexpectedly failed to give item!`.
+  - One file is this port's own: `short/talking-map-blackout.xml` carries no
+    tag saying which game it recorded, so the runner skips it.
+- **This port's own unhandled actions are down to three**, and they block two
+  files each: `pick_a_scen` (the startup shape that begins a fresh party from
+  the scenario picker), `debug_launch_scen` and `debug_give_item`.
+  `arrow_button_click`, `handle_get_items`, `field_focus`, `toggle_debug_mode`
+  and `handle_drop_pc` are all handled now — the old list here was stale for
+  weeks, so **re-derive this from `grep "case '" src/replay/driver.ts` before
+  trusting it again.**
 - **Captured end states.** Still the missing golden master: matching the C++'s
   *final* party, SDFs and position needs snapshots dumped from the desktop
   build, and `tools/cppharness/` does not dump one yet
   (`tools/cppharness/README.md`). The divergence bisector makes the *first*
   divergence findable; the end state is what proves there are no others.
-- The next unhandled actions, by files blocked: `arrow_button_click` (23),
-  `handle_get_items` (10), `field_focus` (7), `toggle_debug_mode` (7).
-- `pick_a_scen` — the other startup shape, 7 files, which starts a fresh party
-  from the scenario picker.
 - **The dialogxml leftovers**: `display_pc`'s spell lists, and `cThreeChoice`,
   which builds its controls at runtime rather than from a definition.
 
@@ -7505,3 +7523,35 @@ The M6 list below is kept for the history of what it covered:
     up, or carrying an OCCASIONAL_STATUS item. The rules are right now and the
     next recording that does any of those will need them — but this is the
     shape of a TODO fix chosen by *reading* rather than by measurement.
+
+- **OPEN LEAD, pinpointed but not fixed: this port's swamp is somewhere the
+  C++'s is not (M8, 2026-08-31).** The biggest remaining rules file,
+  `ASR_19-05-2025_19-38-44`, parts at draw 44,389 and this is where to start.
+  - Bart (pc1) steps from (2,37) to (3,37) in a **town fight** in ASR's town 8.
+    The C++ spends one `get_ran(1,1,100)` on that move; this port spends seven
+    and lands in `dangerousTerrain`.
+  - The terrain here is **96, Swamp** — `DANGEROUS`, `flag2 = 25`, a 25% chance
+    of disease per PC. A `[dang]` print added to *both* sides settles it: the
+    C++ enters its `DANGEROUS` arm seven times in this recording, **all of them
+    `mode=1` (TOWN_MOVE), never once in combat, and never at (3,37)**. This
+    port enters it at (3,37) with `combat=1`. Both agree on the other swamps —
+    (36,46) and (1,40) in the same town — so the terrain *table* is fine and
+    the square is not.
+  - So the two runs hold different terrain on (3,37), which is the **third**
+    terrain-mismatch divergence this week (the ZKR door, and this). The
+    scenario-state leak that caused the first is fixed, so this is a different
+    cause. Things that write terrain at runtime and are worth checking in
+    order: `alter_space` from a special node, `spreadQuickfire` and
+    `processFields`' `CRUMBLING` arm (`processFields.ts:426`), `fieldEffects.ts:138`,
+    and `unlockDoor`. Note `VoDT_04-05-2025_19-37-17` now parts in
+    `spreadQuickfire`, which may well be the same bug seen from the other end.
+  - **The tool for it is already built.** `BOE_TRACE_MMOVE` now prints
+    `[tmove]` on the C++ side — the destination, the blockage, and **`ter`** —
+    before `town_move_party` decides; the pair on this side is the `DBGTER`
+    print in `checkSpecialTerrain`. Diff those two and the first square where
+    `ter` differs is the bug. That is exactly how the ZKR door fell, and it
+    took ten minutes once the instrument existed.
+  - Not one of the three terrain mismatches showed up as a terrain bucket. They
+    surfaced as `doMonsters`, `dangerousTerrain` and `resolveOne`. **When a
+    bucket is a rule that reads the map, check the map before reading the
+    rule.**

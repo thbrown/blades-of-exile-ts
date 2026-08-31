@@ -100,7 +100,7 @@ index 17780bca..a349fe18 100644
  		if(type == "set-sdf") return eSpecType::SET_SDF;
  		if(type == "inc-sdf") return eSpecType::INC_SDF;
 diff --git a/src/game/boe.actions.cpp b/src/game/boe.actions.cpp
-index fc7b63f1..ddbfa43a 100644
+index fc7b63f1..97db0d7d 100644
 --- a/src/game/boe.actions.cpp
 +++ b/src/game/boe.actions.cpp
 @@ -1907,6 +1907,10 @@ void advance_time(bool did_something, bool need_redraw, bool need_reprint) {
@@ -168,6 +168,26 @@ index fc7b63f1..ddbfa43a 100644
  		if(univ.party.in_boat >= 0) {
  			if(!outd_is_blocked(real_dest) //&& !outd_is_special(real_dest)
  				// not in towns
+@@ -4141,6 +4165,19 @@ bool outd_move_party(location destination,bool forced) {
+ bool town_move_party(location destination,short forced) {
+ 	bool keep_going = true;
+ 	bool check_f = false;
++	// [tmove] — everything `town_move_party` is about to decide on, printed
++	// *before* it decides. `ter` is the one that has paid off twice: a move
++	// refused here and allowed there, with no draws in between, is almost
++	// always the two runs holding different terrain on the square, not a
++	// movement rule. The pair on this side is `DBGTER` in `checkSpecialTerrain`.
++	if(getenv("BOE_TRACE_MMOVE"))
++		std::cout << "      [tmove] dest=(" << destination.x << "," << destination.y << ")"
++			<< " from=(" << univ.party.town_loc.x << "," << univ.party.town_loc.y << ")"
++			<< " cage=" << int(univ.town.is_force_cage(univ.party.town_loc.x, univ.party.town_loc.y))
++			<< " onmap=" << int(univ.town.is_on_map(destination.x, destination.y))
++			<< " monst=" << (univ.target_there(destination, TARG_MONST) != nullptr)
++			<< " blocked=" << int(is_blocked(destination))
++			<< " ter=" << int(univ.town->terrain(destination.x,destination.y)) << std::endl;
+ 	
+ 	if(univ.town.is_force_cage(univ.party.town_loc.x, univ.party.town_loc.y)) {
+ 		add_string_to_buf("Move: Can't escape.");
 diff --git a/src/game/boe.combat.cpp b/src/game/boe.combat.cpp
 index 1a26a2a7..143babe0 100644
 --- a/src/game/boe.combat.cpp
