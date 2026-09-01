@@ -1621,9 +1621,11 @@ bottom. What M8 still owes:
   fix. See the entry at the bottom for the current listing.
   A bucket named `… @ the C++ draws on` is **this port stopping**, not a rule:
   read the transcript at the stop.
-  Corpus **750,960** matching draws, **25 of 87** files agreeing all the way,
-  39 blocked outside the rules.
-  **Those numbers were 738,856 / 25 / 37, 738,811 / 25 / 37,
+  Corpus **792,066** matching draws, **28 of 87** files agreeing all the way,
+  41 blocked outside the rules.
+  **Those numbers were 784,451 / 27 / 40, 784,586 / 27 / 40, 782,199 / 27 / 39,
+  765,933 / 25 / 39 earlier on 2026-09-01, and
+  750,960 / 25 / 39, 738,856 / 25 / 37, 738,811 / 25 / 37,
   687,140 / 25 / 36, 686,842 / 24 / 36,
   684,774 / 22 / 36,
   676,074 / 22 / 35,
@@ -1724,9 +1726,30 @@ bottom. What M8 still owes:
   `move`) is superseded — a stop is a symptom that surfaces dozens of actions
   after the rule went wrong, and the first diverging draw is the rule itself.
 - **The queue is all singles now, and the shape of the work has changed.**
-  Seven rules files remain, no two sharing a bucket, so from here each fix
+  Twelve rules files remain, no two sharing a bucket, so from here each fix
   unblocks exactly one file — the days of one rule freeing nine recordings are
-  over. The asymmetry that used to sit here — 46 files blocked by the oracle
+  over.
+
+  **What 2026-09-01 is worth remembering for**, because all six of its fixes
+  had one shape:
+
+  - **Five of the six were state nothing prints.** A charmed ally's attitude, a
+    conveyor's feature flag, the party's *facing*, `cur_pc` outside combat, the
+    order of a town's item vector. None of them is a draw, none is a message,
+    and each one surfaced hundreds of actions later as a spell refused or an
+    item in the wrong pack. Four new columns went into both traces because of
+    it: `cur=`, `dir=`, `+` for equipped in `items`, and `[push]`/`[alter]`.
+  - **Align two traces by cumulative draw count, never by action index.** This
+    port collapses a C++ move-plus-dialog into one action, and the C++ prints
+    state *before* an action where this port prints it *after*. Every
+    action-index alignment is off by one and then drifts; the draw counter is
+    the one clock both sides agree on. `scripts/` has no tool for this yet —
+    the throwaway was fifteen lines of Python and is worth writing properly.
+  - **A term deleted with a written proof is the hardest kind to find.**
+    `damage_monst`'s `monsters_going` clause had a comment arguing it was
+    unreachable. The argument was true of every call site anyone had checked
+    and false of the one nobody had. `grep -rn "unreachable\|can't happen"
+    src/` is a queue. The asymmetry that used to sit here — 46 files blocked by the oracle
   against seven by the rules — is what the **2026-08-31 harness slice** went
   after; see the entry at the bottom of this file.
 - **"Blocked outside the rules" means the C++ gave up, not this port.** Every
