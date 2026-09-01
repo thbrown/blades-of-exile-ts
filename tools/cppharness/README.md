@@ -205,6 +205,17 @@ prints and nothing else reads — except `start_town_combat`, which deals the
 whole party onto the board from it, so a facing that drifted three hundred
 actions earlier surfaces as four PCs standing on the wrong squares.
 
+**`BOE_TRACE_CAST=1` also prints one line per target `do_combat_cast` weighs**:
+`[cast] spell= from= to= adjust= range= dist= obsc=`, taken right after
+`can_see_light`. Every input to the five refusals, so "the C++ cast it and this
+port said `Can't see target`" becomes one column instead of a hunt — it named
+both the rotated `place_party` formation and a door this port had not opened.
+
+**`BOE_TRACE_ALTER=1` prints every `alter_space`**: `town= (x,y) former -> ter`.
+Terrain a *game* has changed is state, it survives a town exit, and nothing in
+the draw stream can see it; a door open on one side and shut on the other is a
+line of sight that differs and a spell that is refused.
+
 **`BOE_TRACE_PICK=1` prints one line per `pick_lock`**: `pc= at (x,y) ter= r1=
 adj= dex= diff= lock= str= slot= break=`. Every term of the two rolls, so a
 broken lockpick can be attributed without guessing which input differed — it is

@@ -2087,8 +2087,13 @@ export class GameSession {
       case TerSpec.CHANGE_WHEN_STEP_ON: {
         // An unlocked door: walking into it swaps the terrain for flag1, and
         // if the old terrain blocked movement the party doesn't enter yet.
-        if (town) town.record.terrain[where.x]![where.y] = spec.flag1;
-        else this.univ.out.set(where.x, where.y, spec.flag1);
+        //
+        // **Through `alter_space`** (boe.specials.cpp:317), not by writing the
+        // grid: `alter_space` also arms `belt_present` if the new terrain is a
+        // conveyor and rebuilds the lighting map when the light radius changes
+        // — a door opening onto a lit corridor is exactly the case that needs
+        // the second one. Writing the array directly skipped both.
+        alterSpace(this.univ, where.x, where.y, spec.flag1);
         if (spec.flag2 >= 0) this.sound?.play(spec.flag2);
         return { canEnter: !blocksMove(spec), forced };
       }

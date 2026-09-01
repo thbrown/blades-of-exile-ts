@@ -8183,3 +8183,26 @@ The M6 list below is kept for the history of what it covered:
     back to patch-only, as `build.sh` documents. Regenerate the patch with
     `(cd ../exile-wasm && git diff) > tools/cppharness/exile-wasm.patch` — the
     subshell is the point.
+
+- **`CHANGE_WHEN_STEP_ON` must go through `alter_space` (M8, 2026-09-01).** No
+  change to the corpus; a latent fidelity fix found while chasing something
+  else, and worth having written down before it bites.
+  - `checkSpecialTerrain`'s door branch wrote `town.record.terrain[x][y]`
+    directly where the C++ calls `alter_space(x, y, flag1)`
+    (boe.specials.cpp:317). `alter_space` (boe.locutils.cpp:587) does two more
+    things: it arms `belt_present` when the new terrain is a conveyor, and it
+    **rebuilds the lighting map when the light radius changes**. A door opening
+    onto a lit corridor is exactly the case that needs the second, and this
+    port's lighting stayed as `start_town_mode` built it.
+  - It also meant `BOE_TRACE_ALTER`'s pair on this side saw nothing, which is
+    how the omission surfaced: the C++ altered (6,10) three times in
+    `ASR_10-05-2025_17-55-45` and this port's probe printed no lines at all,
+    while its terrain plainly changed.
+  - Two new harness instruments landed with the hunt: **`BOE_TRACE_CAST`** now
+    also prints one line per target `do_combat_cast` weighs (every input to its
+    five refusals), and **`BOE_TRACE_ALTER`** prints every `alter_space`.
+  - `ASR_10-05-2025_17-55-45` itself is still open, and the lead is precise:
+    after the recording's third `load_party`, the C++ re-opens the step-change
+    door at (6,10) in town 15 and this port does not, so a Flame cast across it
+    is refused here with `Can't see target` and resolves there. It is a
+    movement divergence after a load, not a spell bug.

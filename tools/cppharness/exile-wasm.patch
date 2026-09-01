@@ -317,10 +317,24 @@ index fc7b63f1..97db0d7d 100644
  	if(univ.town.is_force_cage(univ.party.town_loc.x, univ.party.town_loc.y)) {
  		add_string_to_buf("Move: Can't escape.");
 diff --git a/src/game/boe.combat.cpp b/src/game/boe.combat.cpp
-index 1a26a2a7..4dd67838 100644
+index 1a26a2a7..81f8b25a 100644
 --- a/src/game/boe.combat.cpp
 +++ b/src/game/boe.combat.cpp
-@@ -2235,6 +2235,21 @@ void do_monster_turn() {
+@@ -917,6 +917,13 @@ void do_combat_cast(location target) {
+ 			}
+ 
+ 			adjust = can_see_light(caster.combat_pos, target, sight_obscurity);
++			if(getenv("BOE_TRACE_CAST"))
++				std::cout << "      [cast] spell=" << int(spell_being_cast)
++					<< " from=(" << caster.combat_pos.x << "," << caster.combat_pos.y
++					<< ") to=(" << target.x << "," << target.y << ") adjust=" << adjust
++					<< " range=" << current_spell_range
++					<< " dist=" << dist(caster.combat_pos,target)
++					<< " obsc=" << sight_obscurity(target.x,target.y) << std::endl;
+ 			// TODO: Should we do this here? Or in the handling of targeting modes?
+ 			// (It really depends whether we want to be able to trigger it for targeting something other than a spell.)
+ 			if(adjust <= 4 && !cast_spell_on_space(target, spell_being_cast)) {
+@@ -2235,6 +2242,21 @@ void do_monster_turn() {
  					!monst_adjacent(targ_space,i))
  					current_monst_tactic = 1; // this means flee
  			}
@@ -342,7 +356,7 @@ index 1a26a2a7..4dd67838 100644
  			
  			
  			// flee
-@@ -2432,6 +2447,11 @@ void do_monster_turn() {
+@@ -2432,6 +2454,11 @@ void do_monster_turn() {
  				flushingInput = true;
  			}
  			
@@ -354,7 +368,7 @@ index 1a26a2a7..4dd67838 100644
  			if(overall_mode == MODE_COMBAT) {
  				if(!acted_yet && (cur_monst->mobility == 1)) {  // move monst
  					move_target = (univ.town.monst[i].target != 6) ? univ.town.monst[i].target : closest_pc(cur_monst->cur_loc);
-@@ -2750,6 +2770,10 @@ void monster_attack(short who_att,iLiving* target) {
+@@ -2750,6 +2777,10 @@ void monster_attack(short who_att,iLiving* target) {
  							continue;
  						if(abil.second.gen.type != eMonstGen::TOUCH)
  							continue;
@@ -365,7 +379,7 @@ index 1a26a2a7..4dd67838 100644
  						if(abil.second.gen.odds > 0 && get_ran(1,1,1000) <= abil.second.gen.odds)
  							continue;
  						// Print message and possibly choose sound
-@@ -4521,9 +4545,17 @@ bool combat_cast_mage_spell() {
+@@ -4521,9 +4552,17 @@ bool combat_cast_mage_spell() {
  	short store_sp = univ.current_pc().cur_sp;
  	
  	eCastStatus status = pc_can_cast_spell(univ.current_pc(), eSkill::MAGE_SPELLS);
@@ -384,6 +398,20 @@ index 1a26a2a7..4dd67838 100644
  		if(status == NO_CAST_ENCUMBERED){
  			// Oops, trying to cast a mage spell while encumbered takes your AP!
  			take_ap(6);
+diff --git a/src/game/boe.locutils.cpp b/src/game/boe.locutils.cpp
+index 259a4d3f..59d2ef5b 100644
+--- a/src/game/boe.locutils.cpp
++++ b/src/game/boe.locutils.cpp
+@@ -592,6 +592,9 @@ void alter_space(short i,short j,ter_num_t ter) {
+ 		univ.out->terrain[i][j] = ter;
+ 	} else {
+ 		ter_num_t former = univ.town->terrain(i,j);
++		if(getenv("BOE_TRACE_ALTER"))
++			std::cout << "      [alter] town=" << univ.party.town_num << " (" << i << "," << j
++				<< ") " << int(former) << " -> " << int(ter) << std::endl;
+ 		univ.town->terrain(i,j) = ter;
+ 		if(univ.scenario.ter_types[ter].special == eTerSpec::CONVEYOR)
+ 			univ.town.belt_present = true;
 diff --git a/src/game/boe.main.cpp b/src/game/boe.main.cpp
 index b19e0983..b8483243 100644
 --- a/src/game/boe.main.cpp
