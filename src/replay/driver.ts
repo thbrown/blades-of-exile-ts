@@ -206,6 +206,22 @@ export async function runReplay(
         if (who < 6) session.pickLock(where, who);
       }
     };
+    /**
+     * **`boat-bridge.xml`, and the same shape of hole as the locked door.**
+     * A boat reaching a bridge asks "pilot under it or land?"
+     * (boe.actions.cpp:4212), and only `main.ts` ever set the hook — so in a
+     * replay the party always landed, and the recording's `click_control
+     * under` fell through to the driver's switch as if it were a move. The
+     * boat then sat on the bridge and every step after it was one square out.
+     */
+    session.onConfirmBoatBridge = async (): Promise<boolean> => {
+      if (!host) return false;
+      const picked = await host.choice(
+        ['You have come to a dock/bridge.', 'Pilot under it or land?'],
+        [{ name: 'under', label: 'Under' }, { name: 'land', label: 'Land' }],
+        '', 0, 0);
+      return picked === 0;
+    };
   }
   /** Whether the open get-items screen owes a turn when it closes. */
   let gettingCostsTurn = false;
