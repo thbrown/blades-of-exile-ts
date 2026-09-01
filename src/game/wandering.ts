@@ -50,7 +50,8 @@ function setDirection(from: Location, to: Location): number {
   if (dx === -1 && dy === 1) return 5;
   if (dx === -1 && dy === 0) return 6;
   if (dx === -1 && dy === -1) return 7;
-  return 8;
+  // The same square is `DIR_S`; see the note on the copy in `session.ts`.
+  return 4;
 }
 
 /**

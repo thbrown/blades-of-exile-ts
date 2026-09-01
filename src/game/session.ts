@@ -100,7 +100,12 @@ function setDirection(from: Location, to: Location): Direction {
   if (dx === -1 && dy === 1) return Direction.SW;
   if (dx === -1 && dy === 0) return Direction.W;
   if (dx === -1 && dy === -1) return Direction.NW;
-  return Direction.Here;
+  // **The same square is `DIR_S`, not "nowhere"** — `set_direction`
+  // (boe.locutils.cpp:95) falls through `old.x == new.x` and `old.y > new.y`
+  // into its `else return DIR_S`, so a move onto the square the party is
+  // already standing on leaves it facing south. It never returns an eighth
+  // value, and code here that tested for one was testing for nothing.
+  return Direction.S;
 }
 
 const DIR_NAMES = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest', ''];
@@ -1109,8 +1114,15 @@ export class GameSession {
      */
     const monsterThere = town.monsterAt(destination);
 
-    party.direction = setDirection(party.townLoc, destination);
-
+    // **`party.direction` is *not* set here.** The C++ sets it inside
+    // `if(keep_going)`, after `check_special_terrain` and after the boat block
+    // (boe.actions.cpp:4228) — `townVehicleStep` below is where this port does
+    // it. Setting it up front turned every *refused* step into a facing change:
+    // a square blocked by a wall, a special that said no, a boat that can't go
+    // diagonally. Nothing prints the facing, so it went unnoticed until
+    // `start_town_combat` dealt the party onto the board from it and four PCs
+    // landed on the wrong squares — two of them on the same one.
+    //
     // check_special_terrain for TOWN_MOVE (boe.specials.cpp:152).
     //
     // **Gated on there being no monster on the square** — the C++ only calls it

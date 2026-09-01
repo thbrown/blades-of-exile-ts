@@ -8150,3 +8150,36 @@ The M6 list below is kept for the history of what it covered:
     six-PC get-items sweep where the C++ hands rows to PC 0 and 1 and this port
     hands some to PC 2. The `[gi]` probe (who/curPc/variety per pickup) is the
     way in; it is not in the patch, being three lines to re-add.
+
+- **A *refused* town move must not turn the party (M8, 2026-09-01).** +7,615
+  matching draws and a 28th file agreeing all the way, from deleting one line.
+  - `ASR_10-05-2025_08-35-52` stopped five draws short of the C++: a Flame cast
+    that resolved there and was refused here with "Can't see target". The
+    caster was standing on the wrong square — and so were three other PCs, two
+    of them on the *same* square.
+  - `place_party` (boe.town.cpp:775) deals the party out of a 14-entry table
+    rotated by **`univ.party.direction`**, the party's facing. This port had
+    `dir` 0 where the C++ had 7, so the whole formation was rotated. Both
+    engines' `[place]` probes then showed the same squares in a different
+    order, which is what named the direction rather than the table.
+  - The C++ sets the facing at boe.actions.cpp:4228 — **inside `if(keep_going)`
+    and after the boat block** — so a step refused by a wall, by a special, or
+    by a boat that can't go diagonally leaves the facing alone. This port set it
+    at the top of `townMoveParty`, before either. `townVehicleStep` already had
+    the assignment in the right place; the early one was a duplicate that fired
+    on refusals too.
+  - **Nothing prints the facing**, which is why it survived: not in the draw
+    stream, not in `pcs:`, not in any message. Both traces now carry `dir=` (and
+    `cur=`) on every action line.
+  - Also fixed while there: `set_direction` returns **DIR_S** for a move onto
+    the square you are already on — it falls through `x == x` and `y > y` into
+    the `else` (boe.locutils.cpp:95) — where both of this port's copies returned
+    an eighth value the C++ never produces.
+  - Corpus **784,451 → 792,066**; "agree all the way" 27 → 28; the file matches
+    all 26,592 draws and now stops on the oracle's own two-action tail.
+  - **A process note**: this entry was first committed into `../exile-wasm` by a
+    `cd ../exile-wasm && … && git commit` whose `cd` outlived the command that
+    needed it. It was reset out again, and the reference repo's working tree is
+    back to patch-only, as `build.sh` documents. Regenerate the patch with
+    `(cd ../exile-wasm && git diff) > tools/cppharness/exile-wasm.patch` — the
+    subshell is the point.

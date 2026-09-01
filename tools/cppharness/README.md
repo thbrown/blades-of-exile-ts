@@ -196,10 +196,14 @@ produces is itself the signal. It found the creature-status save bug —
 identical everything except `hs=1` against `hs=0`, one line after a
 `load_party`, which named the file format rather than the rules.
 
-**Every action line carries `cur=`**, `univ.cur_pc`, on both sides. Outside
-combat the line names no PC at all, and `cur_pc` still decides who the
-get-items screen hands its pile to — a `cur_pc` that drifted is otherwise
-invisible until an item lands in the wrong pack a thousand actions later.
+**Every action line carries `cur=` and `dir=`** — `univ.cur_pc` and
+`univ.party.direction` — on both sides. Outside combat the line names no PC at
+all, and `cur_pc` still decides who the get-items screen hands its pile to: a
+`cur_pc` that drifted is otherwise invisible until an item lands in the wrong
+pack a thousand actions later. `dir=` is the party's *facing*, which nothing
+prints and nothing else reads — except `start_town_combat`, which deals the
+whole party onto the board from it, so a facing that drifted three hundred
+actions earlier surfaces as four PCs standing on the wrong squares.
 
 **`BOE_TRACE_PICK=1` prints one line per `pick_lock`**: `pc= at (x,y) ter= r1=
 adj= dex= diff= lock= str= slot= break=`. Every term of the two rolls, so a

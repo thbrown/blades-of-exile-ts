@@ -158,7 +158,8 @@ async function play(path: string): Promise<Row> {
         mark = univ.transcript.length;
         emit(`  ${String(at).padStart(5)} ${action.type.padEnd(20)} `
           + `${(action.text || action.info.id || '').padEnd(10)} -> (${l.x},${l.y})${who} `
-          + `mode=${session.mode} cur=${univ.curPc} age=${univ.party.age}`
+          + `mode=${session.mode} cur=${univ.curPc} dir=${univ.party.direction}`
+          + ` age=${univ.party.age}`
           + ` draws=${univ.rng.gameDraws} `
           + `${said.slice(0, 110)}`);
         // The creature list, in `BOE_TRACE_MONST`'s format so the two traces
