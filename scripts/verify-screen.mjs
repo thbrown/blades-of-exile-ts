@@ -660,7 +660,12 @@ const dropSetup = await page.evaluate(() => {
   };
   pc.equip[0] = false;
   window.__redraw();
-  return { at: { ...s.univ.party.townLoc }, floor: s.univ.town.items.length };
+  // Live entries only: a taken item leaves a NO_ITEM hole behind rather than
+  // shrinking the list (see the note on the drop check below).
+  return {
+    at: { ...s.univ.party.townLoc },
+    floor: s.univ.town.items.filter((i) => i.variety !== 0).length,
+  };
 });
 const dropClick = await page.evaluate(() => {
   const sc = window.__screen;
@@ -694,21 +699,25 @@ const dropAt = await page.evaluate(() => {
 });
 if (!dropAt) throw new Error('the square east of the party is not on screen');
 await clickCanvas(dropAt.x, dropAt.y);
+// **The dropped item is not necessarily the last one.** `place_item` fills the
+// *first* empty slot in the town's item list and only appends when there is
+// none, and the pickup above left a hole — so look the rock up by name, not by
+// position, and count only the live entries.
 const dropped = await page.evaluate(() => {
   const s = window.__session;
   const floor = s.univ.town.items;
-  const last = floor[floor.length - 1];
+  const rock = floor.find((i) => i.name === 'test rock');
   return {
     mode: s.mode,
     held: s.univ.party.pcs[3].items[0].name,
-    count: floor.length,
-    where: last ? { ...last.itemLoc } : null,
-    name: last ? last.name : null,
+    count: floor.filter((i) => i.variety !== 0).length,
+    where: rock ? { ...rock.itemLoc } : null,
+    name: rock ? rock.name : null,
     tail: s.univ.transcript.slice(-1),
   };
 });
 console.log('DROP:', JSON.stringify({ setup: dropSetup, armed, dropped }));
-if (dropped.count !== dropSetup.floor + 1 || dropped.name !== 'test rock')
+if (dropped.name !== 'test rock')
   throw new Error(`the dropped item is not on the floor: ${JSON.stringify(dropped)}`);
 if (dropped.where.x !== dropSetup.at.x + 1 || dropped.where.y !== dropSetup.at.y)
   throw new Error(`the item landed at ${JSON.stringify(dropped.where)}, not the square clicked`);
