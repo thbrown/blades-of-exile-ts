@@ -12,6 +12,10 @@
 > this port follows.
 
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
+- `node scripts/diverge.mjs --all --stacks` ranks the corpus by the rule each
+  recording first parts on; `node scripts/align-actions.mjs --all` answers the
+  different question of whether the two **action** streams ever drift apart
+  (as of 2026-09-01, they do not: 0 of 73).
 - Keys follow the original's `handle_keystroke` (boe.actions.cpp:2772):
   arrows/keypad move, **f** fight (and end a fight), **e** end combat,
   **Space** pause one turn (stand ready in combat), **w** the *long* wait — up
@@ -1745,6 +1749,12 @@ bottom. What M8 still owes:
     action-index alignment is off by one and then drifts; the draw counter is
     the one clock both sides agree on. `scripts/` has no tool for this yet —
     the throwaway was fifteen lines of Python and is worth writing properly.
+    **Amended 2026-09-01, and the amendment matters**: the draw counter is that
+    clock only *up to the first divergence*. For aligning **action** streams —
+    which is work done past that point by definition — the key is the
+    recording's own arguments, and `scripts/align-actions.mjs` now does it. See
+    the entry at the bottom. For aligning *state* traces the advice above still
+    holds.
   - **A term deleted with a written proof is the hardest kind to find.**
     `damage_monst`'s `monsters_going` clause had a comment arguing it was
     unreachable. The argument was true of every call site anyone had checked
@@ -8296,3 +8306,70 @@ The M6 list below is kept for the history of what it covered:
   - `VoDT_04-05-2025_19-37-17`: with the timer fix in, what is left is this
     port running TOWN node 22 type 55 (`ONCE_DIALOG`) **twice** where the C++
     runs it once — a one-shot chain triggered from two different steps.
+
+- **The action streams never drift, and `scripts/align-actions.mjs` is how we
+  know (M8, 2026-09-01).** The lead above asked for "an action-stream alignment
+  (difflib over the two type sequences, reported as the first *unmatched*
+  pair)" to name two files in one run. It is written, it ran over the whole
+  cached corpus, and the answer is **0 of 73 files drifted** — so the two leads
+  it was built for are **misdiagnosed** and belong in a different queue.
+  - `ASR_11-05-2025_07-55-19` aligns **1,138 of 1,138** of this port's actions;
+    `VoDT_04-05-memory-dump-2` aligns **631 of 631**. Neither runs
+    `handle_combat_switch` against the C++'s `handle_pause`; both simply
+    **stop**, and the tool says so in its own column ("in step for N actions,
+    then this port stopped"). What actually stops them is
+    `replay desync: … — 4 squares away` in both cases, which is a **movement
+    divergence** — the same bucket as the rest of the tail, and what
+    `inferMoves.ts` was built for. Nothing about the driver.
+  - **Do not align by cumulative draw count.** The 2026-09-01 note above says
+    the draw counter is "the one clock both sides agree on", and that is true
+    only *up to the first divergence* — which is behind you on every file this
+    tool is for. `VoDT_04-05-memory-dump-2` is at draw 9,777 on one side and
+    9,888 on the other while replaying the very same action, so a `type@draws`
+    key stops matching and the LCS **invents drift** out of two streams in
+    perfect step. That false answer survived three rounds of tightening and was
+    only caught by reading the raw trace lines, where the arguments lined up
+    one-to-one at a constant offset of two.
+  - **The key that works is the recording's own arguments** — the destination
+    square of a `move`, the id of a `click_control`. Both engines print them
+    verbatim out of the same file, so they hold no matter how far the rules have
+    diverged. Draws are still parsed and displayed, because *where the two draw
+    counts separate* is the context you want beside a drift; they just are not
+    the alignment.
+  - **Three things had to be classified away before the answer was legible**,
+    and each one was a whole false bucket:
+    - **The startup prefix.** The C++ replays `load_prefs`, `srand`, the file
+      picker and `load_party` as actions; `replayStartup` eats them first.
+      Any hunk where nothing has drawn yet is structural — and it is not always
+      the *leading* hunk, because a recording that loads a save and then reopens
+      the picker has two of them with a match in between.
+    - **The replay host's answers.** The host pulls from the same stream the
+      driver walks, and an action it consumes never reaches `onStep`, so it
+      never prints — but **this port's action index still advances**. A jump in
+      the numbering is therefore the trace saying "the host took these", and
+      those actions are now put back as placeholders that match anything.
+      Classifying them after the fact was not enough: where the host answers one
+      of two adjacent clicks, the LCS pairs the printed one with the wrong twin
+      and the leftover reads as drift. That was the last two false positives.
+    - **Columns only one side prints.** The harness prints no argument for
+      `click_control` where this port prints `spell12`/`cast`, so those are
+      compared on type alone — derived per file from "did the oracle ever print
+      an argument for this type", so it sharpens itself if the harness learns
+      to. And the oracle's argument column is **ten characters wide**, which is
+      why `load_party`'s gzipped save has to be truncated to match. The very
+      last hunk in the corpus was one trailing space: `detailOf` trimmed before
+      slicing, so `{(308,80) - (485,92)}` cut to ten kept a space that the
+      oracle's own `{(308,80)` did not have.
+  - **The tool was verified against an injected fault, and this is the habit
+    worth keeping.** Four rounds of classification each made hunks disappear,
+    which is exactly what a tool going blind also looks like. Substituting one
+    mid-game `move` for a `handle_pause` in a cached trace — the precise shape
+    the lead claimed — is reported at the right action with both sides named.
+    A "0 of 73" from an unfalsified filter would have been worth nothing.
+  - **What it means for the queue.** Twelve rules files remain and no lead is
+    closed, but two of them now have the *right* diagnosis and no tool is owed:
+    they are movement desyncs, so they join the tail rather than waiting on
+    driver work. The corpus-wide desync offsets were tabulated while here (33
+    files, `dx`/`dy` from the same message) in case they shared a cause; they do
+    not — the distribution is broad, with `dx = ±2` the most common at 18 of 66
+    lines and nothing dominant. Not a shortcut.
