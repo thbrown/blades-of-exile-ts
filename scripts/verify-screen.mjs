@@ -1142,6 +1142,56 @@ if (searched.detail2 !== 'Not identified.')
   throw new Error(`unidentified item's detail line read "${searched.detail2}"`);
 if (!/carrying \d+ out of \d+\.$/.test(searched.prompt))
   throw new Error(`prompt line wrong: ${searched.prompt}`);
+
+// 2f1. Taking someone else's property asks first — `display_item` raises
+//      `steal-item` as a modal *inside* the get-items screen (boe.items.cpp:475).
+//      Leave abandons the take; Steal goes through and arms the theft check.
+// `steal-item` has no def-key and no shortcut, so its two buttons are clicked
+// through the dialog the way a player clicks them.
+await page.evaluate(() => {
+  window.__stealStep = (name) => {
+    const d = window.__dialogs.active;
+    const dlg = name === null ? d : d.steal;
+    if (name === null) return d;
+    const c = dlg.def.controls.find((x) => x.name === name);
+    const r = dlg.screenRect(c);
+    d.onClick((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+    window.__redraw();
+    return d;
+  };
+});
+const stealAsked = await page.evaluate(() => {
+  const d = window.__dialogs.active;
+  if (!d) return null;
+  const mark = d.items.find((i) => i.variety !== 0);
+  if (!mark) return null;
+  mark.property = true;
+  window.__stealRow = 'abcdefgh'[d.items.indexOf(mark)];
+  const before = d.items.length;
+  d.onKey(window.__stealRow);
+  window.__redraw();
+  return { before, asked: d.steal != null, text: d.steal?.getText('str1') ?? null };
+});
+await shot('01d1-steal');
+const stealing = await page.evaluate(() => {
+  const d = window.__dialogs.active;
+  window.__stealStep('leave');
+  const afterLeave = { items: d.items.length, prompt: d.steal != null, stole: d.stole };
+  d.onKey(window.__stealRow);
+  window.__stealStep('steal');
+  return {
+    afterLeave,
+    afterSteal: { items: d.items.length, prompt: d.steal != null, stole: d.stole },
+  };
+});
+console.log('STEAL:', JSON.stringify({ ...stealAsked, ...stealing }));
+if (!stealAsked || !stealAsked.asked)
+  throw new Error('taking someone else\'s property did not raise steal-item');
+if (stealing.afterLeave.items !== stealAsked.before || stealing.afterLeave.stole !== false)
+  throw new Error('Leave still took the item');
+if (stealing.afterSteal.items !== stealAsked.before - 1 || stealing.afterSteal.stole !== true)
+  throw new Error('Steal did not take the item');
+
 await press('Escape');
 await page.waitForTimeout(200);
 
@@ -1735,6 +1785,13 @@ const encounter = await page.evaluate(async () => {
   const monst = univ.town.monsters.find((m) => m.isAlive && !m.isFriendly)
     ?? univ.town.monsters.find((m) => m.isAlive);
   if (!monst) return { skipped: 'no monsters' };
+  // **The step has to set this itself.** It used to be true by accident: the
+  // earlier "got item" step took a floor item that happened to be someone's
+  // property, and this port turned the town hostile on the spot. It doesn't
+  // any more (the C++ asks first, and asks about the whole screen), and
+  // without it `do_monsters`' first block is back on — so the creature drifts
+  // away between notice rolls instead of standing still and then charging.
+  univ.town.monstHostile = true;
   monst.attitude = 1; // HOSTILE_A
   monst.active = 1; // IDLE, so it has to notice us
   monst.mobile = true;

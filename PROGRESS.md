@@ -7946,3 +7946,11 @@ The M6 list below is kept for the history of what it covered:
   - **Where it stands.** That file now agrees on all 574 draws end to end.
     Corpus **686,842 → 687,140**, files agreeing end to end **24 → 25**, and
     the `doMonsters` bucket 3 files → 2.
+  - **`verify-screen.mjs` was leaning on the bug, which is how big the blast
+    radius was.** Its ENCOUNTER step's own comment said "the town is already
+    hostile by this point" — true only because the earlier GOT ITEM step took a
+    floor item that happened to be someone's property. With the town peaceful,
+    `do_monsters`' first block is back on and the creature *drifts away*
+    between notice rolls instead of standing still and charging. The step sets
+    `monstHostile` itself now. A new STEAL step drives the nested dialog for
+    real: Leave leaves the item, Steal takes it and sets the result.
