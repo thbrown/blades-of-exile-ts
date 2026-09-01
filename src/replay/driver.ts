@@ -19,7 +19,7 @@
  *     `TODO(Mn)` markers.
  */
 
-import { Direction, dist } from '../core/location';
+import { Direction, dist, Location } from '../core/location';
 import { GameRng } from '../core/rng';
 import { Spell } from '../data/spell';
 import { ItemWinMode, ItemWindow } from '../game/itemWindow';
@@ -213,6 +213,11 @@ export async function runReplay(
    */
   let getting: GetItemsPick | null = null;
   /**
+   * `get_item`'s `place` — the square the sweep reached from, which is what
+   * the theft check asks the townsfolk about once the screen closes.
+   */
+  let gettingFrom: Location = { x: 0, y: 0 };
+  /**
    * Whether a plain `cChoiceDlog` raised by `show_dialog_action` is up. It has
    * no state and no effect on the game — the help screens, the welcome box —
    * but it *is* modal, so the `click_control` that dismisses it belongs to it
@@ -376,7 +381,10 @@ export async function runReplay(
             // `get_item(where,6,true)` — the container's own screen, which
             // stays up across the clicks that empty it. It costs no turn:
             // `handle_look` never sets `did_something`.
-            if (contents && contents.length > 0) getting = new GetItemsPick(session, contents);
+            if (contents && contents.length > 0) {
+              getting = new GetItemsPick(session, contents);
+              gettingFrom = where;
+            }
           }
           break;
         }
@@ -650,6 +658,9 @@ export async function runReplay(
           // answer here until `done` closes it.
           if (getting !== null) {
             if (getting.click(id) === 'done') {
+              // `get_item` asks the question after the screen has closed, not
+              // as each item leaves the floor.
+              if (getting.stole) session.reportTheft(gettingFrom);
               getting = null;
               if (gettingCostsTurn) {
                 gettingCostsTurn = false;
@@ -998,6 +1009,7 @@ export async function runReplay(
           // on it, so with an empty square the `click_control`s that would have
           // answered it are simply not in the recording either.
           getting = items.length > 0 ? new GetItemsPick(session, items) : null;
+          gettingFrom = from;
           // **Rummaging costs a turn**, and it is spent when the screen closes:
           // `get_item` runs the dialog inline and `handle_get_items` sets
           // `did_something` from its return, which is 1 as soon as there was

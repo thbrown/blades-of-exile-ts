@@ -10,6 +10,7 @@ import { loc } from '../src/core/location';
 import { GameRng } from '../src/core/rng';
 import { Attitude } from '../src/data/monster';
 import { Scenario } from '../src/data/scenario';
+import { GetItemsPick } from '../src/game/getItems';
 import { GameMode } from '../src/game/modes';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
 import { makeTownHostile, setTownAttitude } from '../src/game/townAttitude';
@@ -181,29 +182,93 @@ describe('attacking a peaceful creature', () => {
 });
 
 describe('theft', () => {
-  it('taking someone else\'s property in plain sight is a crime', async () => {
+  /**
+   * The get-items screen with one property item on it, positioned so a
+   * friendly creature is standing next to the party.
+   */
+  const stealable = (): {
+    univ: Universe; session: GameSession; pick: GetItemsPick; where: { x: number; y: number };
+  } => {
     const { univ, session } = newGame();
     const monst = friendlyBeside(univ, session);
     const item = univ.town!.items.find((i) => i.variety !== 0);
     expect(item).toBeDefined();
     item!.property = true;
     item!.itemLoc = { ...monst.curLoc };
+    return {
+      univ, session, where: univ.party.townLoc,
+      pick: new GetItemsPick(session, [item!]),
+    };
+  };
 
-    session.takeItem(item!, 0);
+  it('asks before taking someone else\'s property, and a crime is seen', async () => {
+    const { univ, session, pick, where } = stealable();
 
+    pick.click('item1-key');
+    // Nothing has moved: the screen is waiting on `steal-item`.
+    expect(pick.pendingSteal).toBe(0);
+    expect(pick.stole).toBe(false);
+    expect(univ.party.pcs[0]!.items.some((i) => i.name === pick.items[0]!.name)).toBe(false);
+
+    pick.click('steal');
+    expect(pick.stole).toBe(true);
+    expect(pick.items).toHaveLength(0);
+    // The question is only asked when the screen closes.
+    expect(univ.town!.monstHostile).toBe(false);
+
+    expect(pick.click('done')).toBe('done');
+    session.reportTheft(where);
     expect(univ.transcript).toContain('Your crime was seen!');
     expect(univ.town!.monstHostile).toBe(true);
   });
 
-  it('taking your own property is not', async () => {
+  /**
+   * "Leave" abandons the take outright (boe.items.cpp:479), so the item stays
+   * on the floor and the screen's result is never set — declining is not a
+   * crime. This port used to have no prompt at all: it took the item and
+   * turned the town hostile on the spot, which is what made
+   * `VoDT_28-03-2025_11-00-52` part from the C++.
+   */
+  it('leaving it alone takes nothing and is no crime', async () => {
+    const { univ, session, pick, where } = stealable();
+
+    pick.click('item1-key');
+    pick.click('leave');
+    expect(pick.stole).toBe(false);
+    expect(pick.items).toHaveLength(1);
+    expect(pick.items[0]!.property).toBe(true);
+
+    pick.click('done');
+    if (pick.stole) session.reportTheft(where);
+    expect(univ.transcript).not.toContain('Your crime was seen!');
+    expect(univ.town!.monstHostile).toBe(false);
+  });
+
+  it('only asks once — the second property item goes quietly', async () => {
+    const { univ, session, pick } = stealable();
+    const second = { ...pick.items[0]!, property: true };
+    univ.town!.items.push(second);
+    pick.items.push(second);
+
+    pick.click('item1-key');
+    pick.click('steal');
+    pick.click('item1-key');
+    expect(pick.pendingSteal).toBe(null);
+    expect(pick.items).toHaveLength(0);
+    void session;
+  });
+
+  it('taking your own property is not a crime', async () => {
     const { univ, session } = newGame();
     friendlyBeside(univ, session);
     const item = univ.town!.items.find((i) => i.variety !== 0);
     expect(item).toBeDefined();
     item!.property = false;
+    const pick = new GetItemsPick(session, [item!]);
 
-    session.takeItem(item!, 0);
-
+    pick.click('item1-key');
+    expect(pick.pendingSteal).toBe(null);
+    expect(pick.stole).toBe(false);
     expect(univ.transcript).not.toContain('Your crime was seen!');
     expect(univ.town!.monstHostile).toBe(false);
   });

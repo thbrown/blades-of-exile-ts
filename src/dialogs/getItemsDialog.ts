@@ -33,10 +33,18 @@ const ROWS = ITEMS_IN_WINDOW;
 export class GetItemsDialog implements ModalScreen {
   private dlg: XmlDialog;
   private pick: GetItemsPick;
+  /**
+   * `steal-item`, while it is up. The C++ raises it as a `cChoiceDlog` with
+   * the get-items screen as its parent, so it is a modal *inside* a modal —
+   * and `DialogHost` only holds one at a time. It lives here instead: while it
+   * exists it draws on top and takes every click, which is what a nested modal
+   * does anyway.
+   */
+  private steal: XmlDialog | null = null;
 
   constructor(
-    ctx: CanvasRenderingContext2D,
-    store: SheetStore,
+    private ctx: CanvasRenderingContext2D,
+    private store: SheetStore,
     private session: GameSession,
     items: Item[],
     title: string,
@@ -64,6 +72,25 @@ export class GetItemsDialog implements ModalScreen {
     this.refresh();
   }
 
+  /** Whether the player answered "steal" at any point — the screen's result. */
+  get stole(): boolean {
+    return this.pick.stole;
+  }
+
+  /** Put `steal-item` up or take it down to match the pick's own state. */
+  private syncSteal(): void {
+    if (this.pick.pendingSteal === null) { this.steal = null; return; }
+    if (this.steal) return;
+    this.steal = new XmlDialog(this.ctx, this.store, getDialogDef('steal-item'));
+  }
+
+  /** Answer the nested prompt, then fall back to the screen underneath. */
+  private answerSteal(name: string): void {
+    this.pick.click(name);
+    this.steal = null;
+    this.refresh();
+  }
+
   /** The pile still on the floor. `verify-screen.mjs` reads this. */
   get items(): Item[] {
     return this.pick.items;
@@ -76,6 +103,7 @@ export class GetItemsDialog implements ModalScreen {
 
   /** `put_item_graphics` — refill every control from the current state. */
   private refresh(): void {
+    this.syncSteal();
     const { univ } = this.session;
     const dlg = this.dlg;
     const pcs = univ.party.pcs;
@@ -136,13 +164,26 @@ export class GetItemsDialog implements ModalScreen {
 
   draw(): void {
     this.dlg.draw();
+    this.steal?.draw();
   }
 
   onClick(x: number, y: number): string | null {
+    if (this.steal) {
+      // Every button on `steal-item` closes it, so its own name comes straight
+      // back; a click that misses is swallowed, as a modal's is.
+      const name = this.steal.onClick(x, y);
+      if (name !== null) this.answerSteal(name);
+      return null;
+    }
     return this.dlg.onClick(x, y);
   }
 
   onKey(key: string): string | null {
+    if (this.steal) {
+      const name = this.steal.onKey(key);
+      if (name !== null) this.answerSteal(name);
+      return null;
+    }
     return this.dlg.onKey(key);
   }
 }

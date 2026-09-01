@@ -39,6 +39,24 @@ export class GetItemsPick {
   first = 0;
 
   /**
+   * `cDialog::getResult<bool>()` — "the player stole something on this
+   * screen". `show_get_items` starts it false and `display_item_event_filter`
+   * sets it the first time a *property* item is taken, which is both the
+   * answer `get_item` acts on afterwards and the reason the steal prompt only
+   * ever appears once per screen.
+   */
+  stole = false;
+
+  /**
+   * The row waiting on `steal-item`'s answer, or null. The C++ raises a nested
+   * `cChoiceDlog` here and blocks; this port cannot block inside a click
+   * handler, so the pick holds the question and the next click answers it —
+   * which is also what a recording replays, since it recorded the nested
+   * dialog's `steal` / `leave` as plain `click_control`s.
+   */
+  pendingSteal: number | null = null;
+
+  /**
    * What the `prompt` field says. Normally the carrier's weight; a refusal
    * ("It's too heavy to carry.") replaces it until the next refresh.
    */
@@ -83,6 +101,21 @@ export class GetItemsPick {
    * screen stays up — `done` is the only thing that closes it.
    */
   click(id: string): 'stay' | 'done' {
+    // While `steal-item` is up it is modal and owns every click, exactly as the
+    // C++'s nested `cChoiceDlog` does. "Leave" abandons the take outright
+    // (`return true` before any of the giving, boe.items.cpp:479).
+    if (this.pendingSteal !== null) {
+      const index = this.pendingSteal;
+      if (id === 'steal') {
+        this.pendingSteal = null;
+        this.stole = true;
+        this.take(index);
+      } else if (id === 'leave') {
+        this.pendingSteal = null;
+      }
+      // Anything else is a click the nested modal swallowed.
+      return 'stay';
+    }
     if (id === 'done') return 'done';
     if (id === 'up') {
       if (this.first > 0) this.first -= ITEMS_IN_WINDOW;
@@ -119,12 +152,26 @@ export class GetItemsPick {
     if (this.who >= NOBODY) return;
     const item = this.items[index];
     if (!item || item.variety === ItemType.NO_ITEM) return;
+    // Someone else's property asks first, and only the *first* time: once the
+    // player has said "steal" the screen's result is set and every later
+    // property item goes quietly (boe.items.cpp:475).
+    if (item.property) {
+      if (!this.stole) { this.pendingSteal = index; return; }
+    }
+    // The C++ hands over a **copy** with `property` cleared and blanks the
+    // floor original, so the item in the pack is never stolen goods and the
+    // one still on the floor after a weight refusal is still someone else's.
+    // One object stands in for both here, so clear it and put it back if the
+    // take doesn't happen.
+    const wasProperty = item.property;
+    item.property = false;
     // `takeItem` reports what happened either way, so success is judged by
     // whether the item actually left the floor — it splices it out of the town
     // on success and leaves it there on a refusal.
     const message = this.session.takeItem(item, this.who);
     const town = this.session.univ.town;
     if (town && town.items.includes(item)) {
+      item.property = wasProperty;
       this.prompt = message || "It's too heavy to carry.";
       return;
     }

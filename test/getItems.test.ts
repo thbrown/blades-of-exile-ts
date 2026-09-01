@@ -79,7 +79,9 @@ describe('the get-items screen', () => {
     const loc = { ...s.univ.party.townLoc };
     town.items.push({
       ...town.items[0]!, variety: ItemType.POTION, name: 'Test Potion',
-      itemLoc: loc, contained: false, ident: true,
+      // Not anyone's property: `take` would stop and raise `steal-item`
+      // otherwise, and this test is about the taking.
+      itemLoc: loc, contained: false, ident: true, property: false,
     });
     const items = pile(s);
     const target = items.findIndex((i) => i.name === 'Test Potion');

@@ -219,7 +219,7 @@ async function main(): Promise<void> {
   ];
   for (let i = 1; i <= 11; i++) sheets.push(`monst${i}`);
   const dialogNames = ['pc-info', 'quest-info', 'get-items', 'item-info', 'many-str', 'monster-info', 'job-board',
-    'pick-potion', 'party-death', ...STR_DIALOG_DEFS];
+    'pick-potion', 'party-death', 'steal-item', ...STR_DIALOG_DEFS];
   addTotal(1 /* opcodes */ + STRING_TABLES.length + dialogNames.length + sheets.length
     + (document.fonts ? 4 : 0) + 1 /* scenario.xml */);
 
@@ -956,8 +956,12 @@ async function main(): Promise<void> {
     // show_get_items: one screen that stays up — pick who is carrying with the
     // PC buttons, take as many things as you like, then Done. The title says
     // which sweep it was: a hostile creature in sight narrows it to adjacent.
-    await dialogs.runScreen(new GetItemsDialog(ctx, store, session, reachable,
-      massGet ? 'Getting all nearby items:' : 'Getting all adjacent items:'));
+    const screen = new GetItemsDialog(ctx, store, session, reachable,
+      massGet ? 'Getting all nearby items:' : 'Getting all adjacent items:');
+    await dialogs.runScreen(screen);
+    // `get_item` asks the townsfolk once, after the screen has closed, and
+    // about **the party's square** rather than the item's (boe.items.cpp:283).
+    if (screen.stole) session.reportTheft(from);
     // **Rummaging costs a turn.** `handle_get_items` sets `did_something` when
     // `get_item` returns non-zero, and `get_item` returns 1 as soon as there is
     // anything in reach at all — not when something is actually taken
@@ -1327,8 +1331,12 @@ async function main(): Promise<void> {
         const contents = await session.adjTownLook(target);
         redraw();
         if (contents && contents.length > 0 && !dialogs.active) {
-          await dialogs.runScreen(
-            new GetItemsDialog(ctx, store, session, contents, 'Looking in container:'));
+          // `get_item(where,6,true)` — the container's own screen, so the
+          // theft check asks about the container's square.
+          const screen = new GetItemsDialog(ctx, store, session, contents,
+            'Looking in container:');
+          await dialogs.runScreen(screen);
+          if (screen.stole) session.reportTheft(target);
           setStatus();
           redraw();
           return;

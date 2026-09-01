@@ -1670,18 +1670,29 @@ export class GameSession {
     if (item.variety === ItemType.GOLD) this.sound?.play(Snd.GOT_GOLD);
     else if (item.variety === ItemType.FOOD) this.sound?.play(Snd.GOT_FOOD);
     else this.sound?.play(Snd.GOT_ITEM);
-    // get_item (boe.items.cpp:286) — taking something that isn't yours in
-    // sight of anyone friendly turns the whole town on the party.
-    if (item.property) {
-      for (const monst of town.monsters) {
-        if (!monst.isAlive || !monst.isFriendly) continue;
-        if (this.canSeeLight(item.itemLoc, monst.curLoc) >= SIGHT_BLOCKED) continue;
-        makeTownHostile(this);
-        this.univ.addStringToBuf('Your crime was seen!');
-        break;
-      }
-    }
     return result.message;
+  }
+
+  /**
+   * `get_item`'s tail (boe.items.cpp:283) — once the get-items screen closes
+   * having seen a theft, anyone friendly who could see **the party's square**
+   * turns the whole town on them.
+   *
+   * Two things about it that this port had wrong. It ran per item taken, from
+   * the *item's* square rather than `place`; and it fired on `property` alone,
+   * where the C++ fires on the screen's result — which is only set when the
+   * player answers "steal", so declining the prompt is not a crime.
+   */
+  reportTheft(place: Location): void {
+    const town = this.univ.town;
+    if (!town) return;
+    for (const monst of town.monsters) {
+      if (!monst.isAlive || !monst.isFriendly) continue;
+      if (this.canSeeLight(place, monst.curLoc) >= SIGHT_BLOCKED) continue;
+      makeTownHostile(this);
+      this.univ.addStringToBuf('Your crime was seen!');
+      break;
+    }
   }
 
   // Giving and dropping live in `game/giveDrop.ts` — they are `give_thing` and

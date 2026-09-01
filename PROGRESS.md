@@ -1618,13 +1618,18 @@ bottom. What M8 still owes:
   the top bucket, fix it, re-run, repeat — `--refresh` re-runs this port only
   and takes about four minutes, so measure after every fix. **`--refresh-cpp`
   takes about ninety**, so run it once at the end of a harness slice, not per
-  fix. The head of the queue after the harness slice of 2026-08-31 is a 4, a 3,
-  five 2s and thirteen singles — see the entry at the bottom for the listing.
-  `move @ the C++ draws on`, at the top with four files, is **this port
-  stopping**, not a rule: read the transcript at the stop. Six of the rest are
-  in `game/monsterTurn.ts`, which is where a rules slice should go.
-  Corpus **676,072** matching draws, **21 of 87** files agreeing all the way,
-  35 blocked outside the rules. **Those numbers were 639,212 / 23 / 46,
+  fix. See the entry at the bottom for the current listing.
+  A bucket named `… @ the C++ draws on` is **this port stopping**, not a rule:
+  read the transcript at the stop.
+  Corpus **687,140** matching draws, **25 of 87** files agreeing all the way,
+  36 blocked outside the rules. The head of the queue is five 2s
+  (`dangerousTerrain`, `doMonsters`, `monstPickTarget`, `endTownCombat`,
+  `resolveOne`) and fourteen singles; four of the ten files in those 2s are in
+  `game/monsterTurn.ts`, which is where a rules slice should go.
+  **Those numbers were 686,842 / 24 / 36,
+  684,774 / 22 / 36,
+  676,074 / 22 / 35,
+  676,072 / 21 / 35, 639,212 / 23 / 46,
   639,076 / 23 / 46,
   622,158 / 23 / 46,
   621,339 / 23 / 45,
@@ -7905,3 +7910,39 @@ The M6 list below is kept for the history of what it covered:
     end **22 → 24**. `survey.sh` **43 → 41 of 87**, and that fall is the honest
     correction: the 43 included files that only finished because a choice was
     answered for them.
+
+- **The get-items screen never asked before stealing (M8, 2026-08-31).** Head
+  of the `doMonsters` bucket, and the third time running that the bucket named
+  a function with nothing wrong in it.
+  - `VoDT_28-03-2025_11-00-52` parted at draw 277, in `doMonsters`, on a turn
+    where this port rolled one creature's notice check and the C++ moved five
+    creatures instead. `MMOVE=1` on both sides said it in one column:
+    `[domonst] … hostile=1` here against `hostile=0` there, for the whole run.
+    A hostile town turns `do_monsters`' first block off entirely, so every
+    idle drifter stops drifting and stops drawing — a rules divergence with no
+    rule of its own anywhere near it.
+  - The town went hostile because this port printed **"Your crime was seen!"**
+    and the C++ never did. Grepping the oracle's trace for `crime` returned
+    nothing at all, which is the fastest thing to check when one side raises a
+    message the other doesn't.
+  - **`display_item` prompts, and this port had no prompt.** Picking up an item
+    with `property` set raises a nested `cChoiceDlog("steal-item")`
+    (boe.items.cpp:475); **"Leave" abandons the take** and only "Steal" sets the
+    dialog's result. The recording's seven `click_control`s were
+    `pc1 / item1-key / pc2 / item2-key / leave / item1-key / done` — the
+    `leave` is the answer to that prompt. This port took the item on the
+    `item2-key` click and then had a spare `leave` click to eat.
+  - **And the theft check was in the wrong place twice over.** `get_item` runs
+    it once, *after* the screen closes, keyed on the dialog's result and asking
+    what could see **the party's square** (`place`, :283). This port ran it per
+    item taken, keyed on `property` alone, and asked what could see the
+    *item's* square. All three now match: `GameSession.reportTheft(place)`, and
+    `GetItemsPick.stole` is the result flag.
+  - The prompt lives in `GetItemsPick` as `pendingSteal`, answered by the next
+    click, because the C++ blocks inside a click handler and this port cannot —
+    the same shape as every other modal here. In the live UI `GetItemsDialog`
+    owns the nested `steal-item` dialog itself and draws it on top, since
+    `DialogHost` holds one modal at a time and this is a modal inside a modal.
+  - **Where it stands.** That file now agrees on all 574 draws end to end.
+    Corpus **686,842 → 687,140**, files agreeing end to end **24 → 25**, and
+    the `doMonsters` bucket 3 files → 2.
