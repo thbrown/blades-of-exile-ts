@@ -77,6 +77,15 @@ export interface ReplayHostOptions {
    * was the click that dismissed a message.
    */
   onAnswered?: () => void;
+  /**
+   * Called when a **message box** was raised that the recording never answered,
+   * and this host dismissed it instead of stopping. It consumes no action, so
+   * it is invisible in the action counts — but a run that only finished because
+   * boxes were clicked away for it finished on the host's terms, not the
+   * recording's, and the caller should be able to say so. The pair on the other
+   * side is the harness's `[ASSISTED]` line.
+   */
+  onOrphanDialog?: (title: string) => void;
 }
 
 /**
@@ -153,6 +162,24 @@ export function makeReplayHost(
       // second control the player *may* press first; a recording that used it
       // would show two clicks here and the extra one would surface as a
       // mismatch on the next action rather than being silently eaten.
+      //
+      // **And if the recording never clicked at all, dismiss it and carry on.**
+      // Some recordings were made by builds that did not raise the box here —
+      // `ASR_05-05-2025_12-20-07` walks onto a one-time message at town (12,14)
+      // that *both* this port and the C++ display and the recording answers
+      // with nothing. The C++ harness skips it (`[orphan] dialog … dismissing
+      // it`, dialog.cpp), so dying here would blame this port for agreeing with
+      // the oracle. The two sides have to be tolerant of exactly the same
+      // thing or the corpus measures the difference in their strictness.
+      //
+      // **Only message boxes.** `choice` below stays strict on purpose: it has
+      // more than one way out, so inventing an answer picks a branch neither
+      // the recording nor the player chose, and the run continues down it
+      // silently. Stopping is better than guessing.
+      if (source.exhausted || source.peek()?.type !== 'click_control') {
+        options.onOrphanDialog?.(title || '(untitled)');
+        return;
+      }
       popClick(source, `the message box "${title || '(untitled)'}"`, options.onAnswered);
     },
 

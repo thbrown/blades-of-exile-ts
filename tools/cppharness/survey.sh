@@ -44,7 +44,7 @@ run_limited() {
   return "$code"
 }
 
-total_ok=0; total_files=0; total_actions=0
+total_ok=0; total_files=0; total_actions=0; total_assisted=0; assisted_files=0
 while IFS= read -r f; do
   case "$f" in */scenarios/*) continue;; esac
   total_files=$((total_files + 1))
@@ -53,10 +53,20 @@ while IFS= read -r f; do
   n=$(printf '%s\n' "$out" | grep -cE '^ +[0-9]+ [a-z_]+ ')
   total_actions=$((total_actions + n))
   why=$(printf '%s\n' "$out" | grep -E '^\[(FATAL )?ERROR\]|^\[CRASH\]' | head -1)
+  # Modals the recording never answered that were dismissed for it. A file that
+  # only reached the end with help did not reach it on the recording's terms,
+  # so it is flagged rather than counted as a clean OK.
+  assist=$(printf '%s\n' "$out" | grep -oE '^\[ASSISTED\] [0-9]+' | grep -oE '[0-9]+' | head -1)
+  [ -n "$assist" ] && total_assisted=$((total_assisted + assist))
   [ $code -eq 124 ] && why="[TIMEOUT] still running after ${LIMIT}s"
   if [ $code -eq 0 ] && [ -z "$why" ]; then
     total_ok=$((total_ok + 1))
-    printf 'OK   %6d  %s\n' "$n" "${f#"$ROOT"/}"
+    if [ -n "$assist" ]; then
+      assisted_files=$((assisted_files + 1))
+      printf 'OK*  %6d  %s  (%s dialog(s) dismissed for it)\n' "$n" "${f#"$ROOT"/}" "$assist"
+    else
+      printf 'OK   %6d  %s\n' "$n" "${f#"$ROOT"/}"
+    fi
   else
     printf 'STOP %6d  %s  %s\n' "$n" "${f#"$ROOT"/}" "${why:-exit $code}"
   fi
@@ -64,3 +74,7 @@ done < <(find "$ROOT" -name '*.xml' | sort)
 
 echo
 echo "$total_ok of $total_files ran to the end; $total_actions actions dispatched"
+if [ "$total_assisted" -gt 0 ]; then
+  echo "$assisted_files of them (marked OK*) needed $total_assisted dialog(s) dismissed —"
+  echo "the recording never answered those, so they finished on the harness's terms."
+fi

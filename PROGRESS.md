@@ -7834,8 +7834,7 @@ The M6 list below is kept for the history of what it covered:
     knowing before "fixing" the town one to match.
   - Corpus **676,074 → 684,774**; that file 67 → 435 actions.
 
-- **OPEN, and it is this session's own fault: the harness now dismisses
-  dialogs the port still dies on.** The `[orphan] dialog … dismissing it`
+- **~~OPEN~~ FIXED same day: the harness dismissed dialogs the port died on.** The `[orphan] dialog … dismissing it`
   change earlier today made the *oracle* tolerant of a modal the recording
   never answered. This port's replay host stayed strict (`popClick`,
   `src/replay/host.ts:46`). The two are no longer symmetric, and the asymmetry
@@ -7860,3 +7859,49 @@ The M6 list below is kept for the history of what it covered:
   - Until that lands, treat any `harness:` file whose cpp trace contains
     `[orphan] dialog` as measuring less than its draw count suggests:
     `grep -l 'orphan. dialog' tools/cppharness/traces/*/cpp.txt`.
+
+- **Auto-dismissing a dialog is only safe when this port does the equivalent
+  (M8, 2026-08-31).** The morning's `[orphan] dialog … dismissing it` change
+  was too broad and asymmetric; this is the corrected version, and the way it
+  was corrected is the point.
+  - **The breakdown was the alarm.** 22 dismissals across 13 files:
+    `attack-friendly` ×6, `locked-door-action` ×5, `1str-title` ×4,
+    `cast-spell` ×3, `get-num` ×2, `2str` ×1. **17 of 22 were on dialogs with
+    more than one way out**, where pressing escape answers *no* / *cancel* /
+    *cast nothing* — steering the oracle down a path nobody chose, with only an
+    `[orphan]` line to show for it.
+  - **Restricting it to message boxes cost more than it saved, and the loss is
+    what taught the rule.** Corpus went 684,774 → 679,879, and a per-file diff
+    showed only two files moving: `ASR_05-05-2025_12-20-07` **+2,068** (real
+    gain) and `VoDT_20-04-2025_16-01-17` **6,963 → 0**. Zero is not "the oracle
+    stops earlier", it is broken — always diff per file before believing a
+    total.
+  - That file's recording is `handle_spellcast` → **`handle_switch_pc`** →
+    `handle_spellcast` → `click_control spell24`: it switches PC *while the
+    picker is open*. So `cast-spell` was never an orphan. And this port already
+    treats an abandoned pick as a **no-op** — `handle_spellcast` sets a
+    non-modal `picking` (driver.ts:573) that the next `handle_spellcast`
+    replaces — so escape-cancelling on the C++ side reproduces exactly what
+    happens here. `cast-spell` is back in the set **on that evidence**, not on
+    its shape.
+  - **The rule, then:** dismiss only where *this port* provably does the
+    equivalent. `cStrDlog`'s one-exit family qualifies by construction;
+    `cast-spell` qualifies by the argument above; `attack-friendly`,
+    `locked-door-action` and `get-num` do not and are strict on both sides.
+  - **A hazard in the first version, found by reading the XML.** It fell back
+    to the **default** button when a dialog had no `escbtn` — and
+    `cast-spell.xml` is `defbtn='cast' escbtn='cancel'`, so on any dialog
+    lacking an escape button "dismissing" would have *performed* the action.
+    Removed: no escape button now means no safe way out, so it refuses.
+  - **Both sides are symmetric now.** `src/replay/host.ts`'s `message` skips an
+    unanswered box (`onOrphanDialog`); its `choice` stays strict. That alone
+    took `ASR_05-05-2025_12-20-07` from stopping at 1,248 actions to a complete
+    **1304/1304** — the port had been right and the asymmetry was hiding it.
+  - **And it is now visible in the numbers.** The harness prints
+    `[ASSISTED] n message box(es) …` at the end of a run and `survey.sh` marks
+    those files **`OK*`** with a trailing count, because "ran to the end" must
+    never quietly mean "ran to the end, with help".
+  - **Where it stands.** Corpus **684,774 → 686,842**, files agreeing end to
+    end **22 → 24**. `survey.sh` **43 → 41 of 87**, and that fall is the honest
+    correction: the 43 included files that only finished because a choice was
+    answered for them.

@@ -1,8 +1,31 @@
 diff --git a/src/dialogxml/dialogs/dialog.cpp b/src/dialogxml/dialogs/dialog.cpp
-index 8b72d7fb..0f6c431f 100644
+index 8b72d7fb..53b1d580 100644
 --- a/src/dialogxml/dialogs/dialog.cpp
 +++ b/src/dialogxml/dialogs/dialog.cpp
-@@ -627,7 +627,32 @@ void cDialog::handle_events() {
+@@ -12,6 +12,7 @@
+ #include <sstream>
+ #include <string>
+ #include <map>
++#include <set>
+ #include "dialog.hpp"
+ #include "gfx/tiling.hpp" // for bg
+ #include "fileio/resmgr/res_dialog.hpp"
+@@ -614,6 +615,14 @@ void cDialog::runWithHelp(short help1, short help2, bool help_forced) {
+ }
+ 
+ // This method is a main event event loop of the dialog.
++#ifdef BOE_NATIVE_REPLAY
++// How many modals the recording never answered were clicked away for it. A run
++// that only finished because of these finished on the harness's terms, not the
++// recording's, so `stubs.cpp` prints it at the end rather than leaving it
++// buried in the trace.
++long boe_orphan_dialogs_dismissed = 0;
++#endif
++
+ void cDialog::handle_events() {
+ 	sf::Event currentEvent;
+ 	cFramerateLimiter fps_limiter;
+@@ -627,7 +636,32 @@ void cDialog::handle_events() {
  			auto info = info_from_action(next_action);
  			if(info["id"].empty()) continue;
  			eKeyMod mods = static_cast<eKeyMod>(std::stoi(info["mods"]));
@@ -35,7 +58,7 @@ index 8b72d7fb..0f6c431f 100644
  		}else if(replaying && has_next_action("field_input")){
  			Element& next_action = pop_next_action();
  			cKey key = key_from_action(next_action);
-@@ -653,10 +678,64 @@ void cDialog::handle_events() {
+@@ -653,10 +687,92 @@ void cDialog::handle_events() {
  			// The error is recorded for debugging only. It should be triggered by replaying the actions.
  			pop_next_action();
  		}else if(replaying && has_next_action()){
@@ -69,16 +92,44 @@ index 8b72d7fb..0f6c431f 100644
 +					" — this build's rules differ from the one that made it (next action: " }
 +					+ next_action_type() + " on line " + std::to_string(next_action_line()) + ")";
 +			}
-+			if(!getenv("BOE_STRICT_DIALOG")) {
++			// **Only a plain message box may be dismissed.** Escape on a
++			// `cStrDlog` is its single exit and changes nothing; escape on a
++			// *choice* picks a branch the recording never chose — "no" to
++			// `attack-friendly`, "cancel" to `locked-door-action`, no spell at
++			// all to `cast-spell` — and then the run continues down a path
++			// neither engine was asked for, with nothing in the trace but an
++			// `[orphan]` line to say so. When this was first written it
++			// dismissed everything, and 17 of the corpus's 22 dismissals were
++			// that dangerous kind.
++			static const std::set<std::string> dismissable = {
++				// The `cStrDlog` family: one way out, escape is it.
++				"1str", "1str-lg", "1str-title", "1str-title-lg",
++				"2str", "2str-lg", "2str-title", "2str-title-lg",
++				// **`cast-spell` is here on evidence, not by shape.** Escape is
++				// `cancel`, and abandoning a pick is exactly what
++				// `src/replay/driver.ts` does on this side: `handle_spellcast`
++				// sets a non-modal `picking`, and a recording that switches PC
++				// instead of clicking simply leaves it to be replaced by the
++				// next `handle_spellcast`. Cancelling here mirrors that, so the
++				// two engines stay comparable. It is worth ~7,000 matching
++				// draws on `VoDT_20-04-2025_16-01-17` alone, whose recording
++				// opens the picker and then sends `handle_switch_pc`.
++				"cast-spell",
++			};
++			// **Never fall back to the default button.** An earlier version of
++			// this did, and on `cast-spell` the default is `cast` — dismissing
++			// the dialog would have *cast a spell* rather than cancelling one.
++			// No escape button means no safe way out: refuse instead.
++			if(!getenv("BOE_STRICT_DIALOG") && dismissable.count(fname)
++				&& !escapeButton.empty() && controls.count(escapeButton)) {
++				++boe_orphan_dialogs_dismissed;
 +				std::cout << "    [orphan] dialog '" << fname << "' is open and the"
 +					<< " recording's next action is " << next_action_type()
 +					<< " (line " << next_action_line() << ") — dismissing it:"
 +					<< (controls.count("title") ? " '" + controls["title"]->getText() + "'" : "")
 +					<< (controls.count("str1") ? " '" + controls["str1"]->getText() + "'" : "")
 +					<< std::endl;
-+				std::string btn = !escapeButton.empty() ? escapeButton : defaultButton;
-+				if(!btn.empty() && controls.count(btn))
-+					controls[btn]->triggerClickHandler(*this, btn, mod_none);
++				controls[escapeButton]->triggerClickHandler(*this, escapeButton, mod_none);
 +				// A button whose handler declined to close it (or no button at
 +				// all) would spin here forever, so insist the second time.
 +				if(dialogNotToast) toast(false);

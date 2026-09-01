@@ -14,6 +14,12 @@ static bool shim_loop_running = false;
 
 extern "C" void boe_shim_cancel_main_loop() { shim_loop_running = false; }
 
+// Modals the recording never answered that were clicked away for it
+// (dialog.cpp). A run that only reached the end because of these reached it on
+// the harness's terms, so say so out loud rather than leaving it in the trace:
+// "ran to the end" must not quietly mean "ran to the end, with help".
+extern long boe_orphan_dialogs_dismissed;
+
 extern "C" void boe_shim_run_main_loop(void (*f)()) {
 	shim_loop_running = true;
 	bool was_replaying = replaying;
@@ -21,6 +27,9 @@ extern "C" void boe_shim_run_main_loop(void (*f)()) {
 		f();
 		if (was_replaying && !replaying) break;
 	}
+	if (boe_orphan_dialogs_dismissed > 0)
+		printf("[ASSISTED] %ld message box(es) the recording never answered were "
+			"dismissed for it\n", boe_orphan_dialogs_dismissed);
 }
 
 // ---- crash trace -------------------------------------------------------
