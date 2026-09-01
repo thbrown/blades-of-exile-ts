@@ -46,6 +46,13 @@ interface TownState {
    * them, because the C++'s load re-reads them from the file.
    */
   timers: Timer[];
+  /**
+   * `cTown::lighting_type`, which `TOWN_CHANGE_LIGHT` writes
+   * (boe.specials.cpp:3900). Nothing in the save file carries it, so a load
+   * has to take it back to the scenario's own value the way the C++'s
+   * re-read from disk does.
+   */
+  lightingType: number;
 }
 
 interface SectorState {
@@ -75,6 +82,7 @@ export function captureScenarioState(scen: Scenario): ScenarioState {
       monstersKilled: town.monstersKilled,
       difficulty: town.difficulty,
       timers: town.timers.map((t) => ({ ...t })),
+      lightingType: town.lightingType,
     })),
     scenarioTimers: scen.scenarioTimers.map((t) => ({ ...t })),
     sectors: scen.outdoors.map((col) => col.map((sector) => ({
@@ -107,6 +115,7 @@ export function restoreScenarioState(scen: Scenario, state: ScenarioState): void
     // In place: `CurTown` and the VM both reach these through the record.
     town.timers.length = 0;
     for (const t of saved.timers) town.timers.push({ ...t });
+    town.lightingType = saved.lightingType;
   }
   scen.scenarioTimers.length = 0;
   for (const t of state.scenarioTimers) scen.scenarioTimers.push({ ...t });

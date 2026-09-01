@@ -8252,8 +8252,12 @@ The M6 list below is kept for the history of what it covered:
   - This is exactly the rot the 2026-08-31 entry predicted in writing: "**a
     scenario record is game state**, so anything a game writes on it needs an
     entry in `captureScenarioState`". The list is now terrain, maps, itemTaken,
-    doorUnlocked, canFind, monstersKilled, difficulty and **timers** per town,
-    the two grids per sector, and the scenario timers. **When you add a field a
-    game can write, add it here in the same commit.**
+    doorUnlocked, canFind, monstersKilled, difficulty, **timers** and
+    **lightingType** per town, the two grids per sector, and the scenario
+    timers. **When you add a field a game can write, add it here in the same
+    commit.** `lightingType` came out of the same sweep —
+    `grep -rn "record\.[a-zA-Z]* =" src/` is how to redo it — and moved
+    nothing on its own; it is a load away from mattering, which is the point.
+    Nothing left in that grep writes the record.
   - Corpus **792,066 → 846,613**; `ASR_11-05-2025_07-55-19` went 4,824 → 31,732
     draws and 320 → 1,159 actions; "blocked outside the rules" 41 → 43.
