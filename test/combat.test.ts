@@ -574,6 +574,54 @@ describe('placement, parry and holding a turn', () => {
     expect(univ.party.pcs[0]!.status[Status.WEBS]).toBe(2);
   });
 
+  /**
+   * **Every `return true` out of `pc_combat_move` owes a `combat_next_step`.**
+   * The C++ never calls it inside the move: `handle_move` sets
+   * `did_something` from the return and `handle_monster_actions` runs it off
+   * that (boe.actions.cpp:751 and :1959). This port called it inline at each
+   * successful branch and missed the two that leave early — and the back-shot
+   * one is the expensive miss, because `kill_pc` parks `cur_pc` on
+   * `first_active_pc()` and only `pick_next_pc` moves it off again. The fight
+   * is then held by a PC with no moves, every later step is refused, and it
+   * never ends.
+   */
+  it('a back-shot that kills the mover still hands the turn on', async () => {
+    const { univ, session } = newGame();
+    const monst = hostileBeside(univ, session);
+    session.startCombat(univ.party.direction);
+    // Make the swing certain and lethal, and stand the creature next to the
+    // PC who is about to step away from it.
+    monst.mon.attacks = [{ dice: 20, sides: 20, type: 0 }];
+    monst.mon.skill = 100;
+    monst.attitude = Attitude.HOSTILE_A;
+    monst.active = CreatureStatus.ALERTED;
+    univ.curPc = 0;
+    const pc = univ.party.pcs[0]!;
+    // A PC only dies from a blow taken while *already* at zero (damage.ts's
+    // own note), so they start there.
+    pc.curHealth = 0;
+    pc.combatPos = { x: monst.curLoc.x + 1, y: monst.curLoc.y };
+    // Only PC 4 can take over — and crucially they are **not**
+    // `first_active_pc()`, which is where `kill_pc` parks `cur_pc`. Without
+    // `pick_next_pc` running afterwards the fight is left on PC 2, who has no
+    // moves, and every later step is refused.
+    setPcMoves(univ);
+    for (const p of univ.party.pcs) p.ap = 0;
+    univ.party.pcs[3]!.ap = 4;
+    pc.ap = 4;
+
+    // Step out of reach: the back-shot lands, kills the mover, and the move
+    // is abandoned.
+    const away = { x: monst.curLoc.x + 3, y: monst.curLoc.y };
+    await session.combatMove(away);
+    await session.settled();
+
+    expect(pc.mainStatus).not.toBe(MainStatus.ALIVE);
+    // The turn moved on to somebody who can actually act.
+    expect(univ.curPc).toBe(3);
+    expect(univ.currentPc.ap).toBeGreaterThan(0);
+  });
+
   it('X holds the turn on one PC and gives it back', async () => {
     const { univ, session } = newGame();
     const monst = hostileBeside(univ, session);

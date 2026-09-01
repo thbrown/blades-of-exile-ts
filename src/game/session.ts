@@ -3669,6 +3669,12 @@ export class GameSession {
     if (this.locOffActiveArea(destination) && this.whichCombatType === 1
       && !this.townIsBlocked(destination)) {
       this.univ.addStringToBuf("Move: Can't leave town during combat.");
+      // **Every `return true` owes a `combat_next_step`.** The C++ doesn't run
+      // it here — `handle_move` sets `did_something` from this return and
+      // `handle_monster_actions` calls `combat_next_step()` off *that*
+      // (boe.actions.cpp:751 and :1959). So the turn moves on even when the
+      // move was refused for this reason, and it did not here.
+      this.afterCombatAction();
       return true;
     }
     // pc_combat_move (boe.combat.cpp:242): terrain 90 marks the edge of an
@@ -3762,7 +3768,17 @@ export class GameSession {
       await monsterAttack(this, monst, pc);
       // `if(s1 != univ.cur_pc) return true;` — the swing killed them and the
       // turn has already moved on, so the move itself is abandoned.
-      if (was !== this.univ.curPc) return true;
+      //
+      // **And this return still owes `combat_next_step`.** `kill_pc` parks
+      // `cur_pc` on `first_active_pc()` — PC 0, whatever their action points —
+      // and only `pick_next_pc` moves it off again. Without that call the
+      // party is left holding a PC with no moves, every later step is refused
+      // and the fight never ends: `VoDT_04-05-2025_14-17-38` sat there for
+      // thirteen actions and then closed combat 250 draws early.
+      if (was !== this.univ.curPc) {
+        this.afterCombatAction();
+        return true;
+      }
     }
 
     // "move if still alive" — a back-shot can finish the mover outright.

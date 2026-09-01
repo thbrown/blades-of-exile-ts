@@ -1621,12 +1621,10 @@ bottom. What M8 still owes:
   fix. See the entry at the bottom for the current listing.
   A bucket named `… @ the C++ draws on` is **this port stopping**, not a rule:
   read the transcript at the stop.
-  Corpus **738,811** matching draws, **25 of 87** files agreeing all the way,
-  37 blocked outside the rules. The head of the queue is five 2s
-  (`move @ the C++ draws on`, `doMonsters`, `monstPickTarget`, `endTownCombat`,
-  `resolveOne`) and fourteen singles; four of the ten files in those 2s are in
-  `game/monsterTurn.ts`, which is where a rules slice should go.
-  **Those numbers were 687,140 / 25 / 36, 686,842 / 24 / 36,
+  Corpus **750,960** matching draws, **25 of 87** files agreeing all the way,
+  39 blocked outside the rules.
+  **Those numbers were 738,856 / 25 / 37, 738,811 / 25 / 37,
+  687,140 / 25 / 36, 686,842 / 24 / 36,
   684,774 / 22 / 36,
   676,074 / 22 / 35,
   676,072 / 21 / 35, 639,212 / 23 / 46,
@@ -7992,3 +7990,31 @@ The M6 list below is kept for the history of what it covered:
     re-derive this list.
   - **The corpus's dominant stop is now one thing: 36 movement desyncs.** That
     is where the remaining work is.
+
+- **Every `return true` out of `pc_combat_move` owes a `combat_next_step`
+  (M8, 2026-08-31).** +12,104 matching draws, and it closed the `endTownCombat`
+  bucket outright.
+  - `VoDT_04-05-2025_14-17-38` parted at draw 857 in `endTownCombat` — this
+    port ended the fight where the C++ carried on for another 900 actions.
+  - **The AP array named it in one line.** A probe printing every PC's
+    `ap/mainStatus` beside the action showed `[0,0,0,4,0,3]` with `curPc = 0`:
+    two PCs still had moves and the fight was being held by one who didn't.
+    Thirteen consecutive `move` actions were refused for that reason, and then
+    combat closed. **When a combat bucket makes no sense, print the AP array.**
+  - The cause is structural. **The C++ never calls `combat_next_step` inside
+    `pc_combat_move`**: `handle_move` sets `did_something` from the return and
+    `handle_monster_actions` calls it off *that* (boe.actions.cpp:751 and
+    :1959) — so **every** `return true` gets one. This port called
+    `afterCombatAction()` inline at each successful branch and missed the two
+    that leave early: `Move: Can't leave town during combat.`, and the
+    back-shot that kills the mover.
+  - The back-shot one is the expensive miss, because `kill_pc` parks `cur_pc`
+    on `first_active_pc()` — PC 0, whatever their action points — and only
+    `pick_next_pc` moves it off again.
+  - **This is worth re-checking wherever the port calls a C++ caller's work
+    from inside the callee.** Inlining a caller's epilogue is fine until the
+    callee grows an early return, and then it is silently wrong on exactly the
+    paths nobody tests.
+  - Corpus **738,856 → 750,960**; `VoDT_04-05-2025_14-17-38` now matches all
+    10,518 of the C++'s draws and stops on the oracle's party-death debt
+    instead. "Blocked outside the rules" 37 → 39.
