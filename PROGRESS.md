@@ -8229,3 +8229,31 @@ The M6 list below is kept for the history of what it covered:
     door at (6,10) in town 15 and this port does not, so a Flame cast across it
     is refused here with `Can't see target` and resolves there. It is a
     movement divergence after a load, not a spell bug.
+
+- **A timer that has fired is spent state, and a load has to un-spend it
+  (M8, 2026-09-01).** +54,547 matching draws, the largest single gain of the
+  day, and two more files now blocked in the oracle rather than in the rules.
+  - Two files in the queue had the same stack on the C++ side and nothing at
+    all on this one: `special_increase_age` → a timer's node →
+    `create_wand_monst` in `ASR_11-05-2025_07-55-19`, and → `cParty::disease`
+    in `VoDT_04-05-2025_19-37-17`. Comparing the two `[spec]` streams by
+    **numeric** node and type showed the shape at a glance: TOWN node 26 type
+    87 fires once here and six times there.
+  - `special_increase_age` sets a timer's `time` to **0** the first time it
+    fires (boe.specials.cpp:1937) and never puts it back, and `univ.town->` is
+    the *scenario's* town record — so firing a timer writes on the scenario.
+    The C++ gets away with it because `load_party_v2` re-reads the whole
+    scenario from disk; this port parses once and shares the object, which is
+    what `data/scenarioState.ts` exists to undo.
+  - **`timers` was not in the snapshot.** So after the first `load_party` every
+    timer this port had already spent stayed spent, and the recurring events a
+    scenario is built on — wandering monsters, a disease that comes back, a
+    clock — simply stopped. `cScenario::scenario_timers` had the same hole.
+  - This is exactly the rot the 2026-08-31 entry predicted in writing: "**a
+    scenario record is game state**, so anything a game writes on it needs an
+    entry in `captureScenarioState`". The list is now terrain, maps, itemTaken,
+    doorUnlocked, canFind, monstersKilled, difficulty and **timers** per town,
+    the two grids per sector, and the scenario timers. **When you add a field a
+    game can write, add it here in the same commit.**
+  - Corpus **792,066 → 846,613**; `ASR_11-05-2025_07-55-19` went 4,824 → 31,732
+    draws and 320 → 1,159 actions; "blocked outside the rules" 41 → 43.

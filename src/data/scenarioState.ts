@@ -29,6 +29,7 @@
  */
 
 import { Scenario } from './scenario';
+import { Timer } from './town';
 
 interface TownState {
   terrain: number[][];
@@ -38,6 +39,13 @@ interface TownState {
   canFind: boolean;
   monstersKilled: number;
   difficulty: number;
+  /**
+   * `cTown::timers`. `special_increase_age` sets a timer's `time` to 0 the
+   * first time it fires (boe.specials.cpp:1937) and never puts it back, so a
+   * scenario's recurring events are spent state — and a load has to un-spend
+   * them, because the C++'s load re-reads them from the file.
+   */
+  timers: Timer[];
 }
 
 interface SectorState {
@@ -47,6 +55,8 @@ interface SectorState {
 
 export interface ScenarioState {
   towns: TownState[];
+  /** `cScenario::scenario_timers`, spent the same way as a town's. */
+  scenarioTimers: Timer[];
   /** sectors[x][y], matching `Scenario.outdoors`. */
   sectors: SectorState[][];
 }
@@ -64,7 +74,9 @@ export function captureScenarioState(scen: Scenario): ScenarioState {
       canFind: town.canFind,
       monstersKilled: town.monstersKilled,
       difficulty: town.difficulty,
+      timers: town.timers.map((t) => ({ ...t })),
     })),
+    scenarioTimers: scen.scenarioTimers.map((t) => ({ ...t })),
     sectors: scen.outdoors.map((col) => col.map((sector) => ({
       terrain: copyGrid(sector.terrain),
       maps: copyMaps(sector.maps),
@@ -92,7 +104,12 @@ export function restoreScenarioState(scen: Scenario, state: ScenarioState): void
     town.canFind = saved.canFind;
     town.monstersKilled = saved.monstersKilled;
     town.difficulty = saved.difficulty;
+    // In place: `CurTown` and the VM both reach these through the record.
+    town.timers.length = 0;
+    for (const t of saved.timers) town.timers.push({ ...t });
   }
+  scen.scenarioTimers.length = 0;
+  for (const t of state.scenarioTimers) scen.scenarioTimers.push({ ...t });
   for (let x = 0; x < scen.outdoors.length; x++) {
     for (let y = 0; y < (scen.outdoors[x]?.length ?? 0); y++) {
       const sector = scen.outdoors[x]![y];
