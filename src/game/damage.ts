@@ -24,7 +24,7 @@ import { MonstAbil } from '../data/monsterAbility';
 import { animSettle } from './anim';
 import { boomAnimActive, boomSpace } from './booms';
 import { findClearSpot, placeMonster } from './monsterPlace';
-import { placeGlands, placeTreasure } from './loot';
+import { placeGlands, placeItem, placeTreasure } from './loot';
 import { NUM_INVEN_SLOTS, Player } from '../universe/player';
 import { MainStatus, Race, Skill, Status, Trait, isHuman, isHumanoid } from '../universe/skills';
 import { Universe } from '../universe/universe';
@@ -343,9 +343,14 @@ export function killPc(univ: Universe, pc: Player, type: MainStatus): void {
 
       // Everything they carried drops where they fell — but not outdoors,
       // where there is nowhere to drop it.
+      // **`place_item`, not a push** (boe.party.cpp:2768): the town's item list
+      // is a vector with holes in it, and a new item fills the *first* hole. A
+      // list that appends instead ends up in a different order from the C++'s,
+      // and the get-items screen indexes into that order — so a recording that
+      // clicks row 3 picks up a different object.
       for (const item of pc.items) {
         if (item.variety === ItemType.NO_ITEM) continue;
-        town.items.push({ ...item, itemLoc: { ...where }, isSpecial: 0 });
+        placeItem(univ, { ...item, isSpecial: 0 }, where);
         item.variety = ItemType.NO_ITEM;
       }
     }

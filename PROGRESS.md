@@ -8105,3 +8105,48 @@ The M6 list below is kept for the history of what it covered:
     is the list to re-check against the C++ call by call.
   - Corpus **782,199 → 784,586**; `ZKR_16-05-2025_15-19-17` 9,204 → all 11,590
     of the C++'s draws, and it now stops on the oracle's dialog debt.
+
+- **`cTown::items` is a vector with holes, and five smaller fidelity fixes
+  around it (M8, 2026-09-01).** Corpus **784,586 → 784,451** — a *loss* of 135
+  draws, and every one of these is a verified port of the C++. Recorded here
+  because a slice that does not move the meter is worth writing down.
+  - `ASR_19-05-2025_19-38-44`, the corpus's largest file, parted at draw 95,416
+    inside `damagePc`'s armour loop: the C++ rolled for one more equipped piece
+    than this port had. The cause was two hundred actions of item divergence
+    upstream, found with a new **draw-aligned** pack diff (see below).
+  - **`take_item` blanks the slot; it does not remove it**
+    (`*item_array[item_hit] = cItem()`, boe.items.cpp:516). `place_item`
+    (boe.items.cpp:168) then fills the **first** hole, so an item dropped after
+    a pickup lands where the taken one was. This port spliced the entry out and
+    pushed new ones on the end, so from the first pickup the two lists were in
+    different orders — and the get-items screen builds its rows from that
+    order, so a recording's `item3-key` named a different object on each side.
+    `killPc`'s spilled pack now goes through `placeItem` too.
+  - **`take_ap(4)` and `combat_next_step` are *after* `get_item`'s dialog**
+    (boe.actions.cpp:1401). The C++ blocks there; this port raises the screen
+    and returns, so it was charging the AP and stepping the turn while the pile
+    was still up. `GetItemsPick.usable` refuses any PC but the acting one in
+    combat, so the carrier silently moved to the next PC mid-pile.
+  - **`handle_switch_pc_items` is not `handle_switch_pc`** (boe.actions.cpp:1051):
+    it has its own `prime_time` gate and its own "PC must be here & active"
+    check. The driver set `cur_pc` with neither, so a recording that clicked a
+    dead PC's tab made a corpse active.
+  - **`skill()`, not `skills[]`**, in `pick_lock` (boe.town.cpp:1186) and
+    `max_weight` (pc.cpp:674) — the effective value, with an equipped item's
+    BOOST_STAT in it, and `max_weight` was also missing a Vahnatai's -25.
+    `grep -rn "\.skills\[" src/game src/universe` is the list to re-check;
+    everything else left is a *write* or a trainer.
+  - **`pick_lock` hand-rolled `remove_charge`** and so kept a rechargeable pick
+    that should have survived, and blanked a slot where `take_item` compacts
+    the pack.
+  - **The instrument that found it**: pack snapshots keyed by **cumulative draw
+    count**, not by action index. The two traces number actions differently —
+    this port collapses a C++ move-plus-dialog into one action — and the C++
+    prints state *before* an action where this port prints it *after*, so any
+    action-index alignment is off by one and drifts. Draw count is the one
+    clock both sides agree on. `items pc…` lines now carry `+` for equipped on
+    both sides, and every action line carries `cur=`.
+  - What is left in that file: the packs still part at draw 90,063, in a
+    six-PC get-items sweep where the C++ hands rows to PC 0 and 1 and this port
+    hands some to PC 2. The `[gi]` probe (who/curPc/variety per pickup) is the
+    way in; it is not in the patch, being three lines to re-add.

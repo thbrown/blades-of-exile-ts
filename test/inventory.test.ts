@@ -279,9 +279,14 @@ describe('picking things up and putting them down', () => {
     const { items: reachable } = session.reachableItems(session.univ.party.townLoc);
     expect(reachable).toContain(target);
 
+    // **The slot is blanked, not removed** — `cTown::items` is a vector with
+    // holes and `place_item` fills the first one, so the list keeps its length
+    // and the entry becomes NO_ITEM. See the note in `takeItem`.
     const before = town.items.length;
+    const at = town.items.indexOf(target);
     session.takeItem(target, 0);
-    expect(town.items.length).toBe(before - 1);
+    expect(town.items.length).toBe(before);
+    expect(town.items[at]!.variety).toBe(ItemType.NO_ITEM);
     expect(session.univ.party.pcs[0]!.items.some((i) => i.name === target.name)).toBe(true);
     // A taken preset item is remembered, so it doesn't reappear.
     expect(town.record.itemTaken[target.isSpecial - 1]).toBe(true);

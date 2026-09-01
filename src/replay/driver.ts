@@ -225,6 +225,8 @@ export async function runReplay(
   }
   /** Whether the open get-items screen owes a turn when it closes. */
   let gettingCostsTurn = false;
+  /** Whether the open get-items screen was raised in combat. */
+  let gettingInFight = false;
   /**
    * The get-items screen, while one is open — `show_get_items`'s own loop,
    * which unlike the spell picker stays up across many clicks.
@@ -717,7 +719,15 @@ export async function runReplay(
               getting = null;
               if (gettingCostsTurn) {
                 gettingCostsTurn = false;
-                await session.afterPartyTurn();
+                // **`take_ap(4)` is *after* the dialog** (boe.actions.cpp:1401):
+                // `get_item` blocks there, so the acting PC keeps their points
+                // for as long as the pile is on screen. Charging them when the
+                // screen opened left a PC on zero while they were still picking,
+                // which changes what `pick_next_pc` does next.
+                if (gettingInFight) {
+                  takeAp(session.univ, 4);
+                  session.afterCombatAction();
+                } else await session.afterPartyTurn();
               }
             }
             break;
@@ -795,9 +805,12 @@ export async function runReplay(
         case 'handle_switch_pc_items':
           // boe.actions.cpp:1051 — the six tabs under the item pane. Out of
           // combat this also changes who is *active*; in combat it only
-          // changes the page, since the turn order decides who acts.
-          if (!isCombat(session.mode)) session.univ.curPc = numberFromAction(action);
-          win.setStatWindow(session.univ, numberFromAction(action) as ItemWinMode);
+          // changes the page, since the turn order decides who acts. The gates
+          // (prime time, and a PC who is actually alive) live in the session —
+          // see `switchPcItems`, which is what this used to be missing.
+          if (session.switchPcItems(numberFromAction(action))) {
+            win.setStatWindow(session.univ, numberFromAction(action) as ItemWinMode);
+          }
           break;
         case 'handle_equip_item': {
           const slot = numberFromAction(action);
@@ -1069,8 +1082,18 @@ export async function runReplay(
           // anything in reach — not when something was actually taken
           // (boe.items.cpp:277). With no screen there is nothing to close, so
           // the turn is charged here instead.
-          if (getting !== null) gettingCostsTurn = !inFight;
-          if (inFight) {
+          // **The turn is stepped when the screen *closes*, in combat as well as
+          // in town.** The C++ runs `get_item`'s dialog inline, so `take_ap(4)`
+          // happens first and `did_something` — and therefore
+          // `combat_next_step` — only after the last click has been answered.
+          // This port raises the screen and returns, so calling
+          // `afterCombatAction` here advanced `cur_pc` while the pile was still
+          // on screen; `GetItemsPick.usable` refuses any PC but the acting one
+          // in combat, so the carrier silently moved on to the next PC and
+          // every item went into the wrong pack.
+          if (getting !== null) gettingCostsTurn = true;
+          gettingInFight = inFight;
+          if (inFight && getting === null) {
             // **The four points are taken whether or not there was anything
             // there, and the *turn* is not** (boe.actions.cpp:1401 against
             // :1403). `take_ap(4)` sits above the `if(j > 0)` that sets
@@ -1080,8 +1103,12 @@ export async function runReplay(
             // advanced the turn regardless, which handed the item pane to the
             // next PC; `handle_equip_item` is given `stat_window`, so the
             // equips that followed went into the wrong pack.
+            // **Nothing in reach: no screen, so the four points are spent
+            // here** — and the turn is *not* stepped, because `did_something`
+            // stays false (boe.actions.cpp:1401 against :1403). A PC who
+            // rummages an empty square in combat spends every point they had
+            // and stays active on zero.
             takeAp(session.univ, 4);
-            if (items.length > 0) session.afterCombatAction();
           }
           break;
         }

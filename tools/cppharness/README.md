@@ -196,6 +196,16 @@ produces is itself the signal. It found the creature-status save bug —
 identical everything except `hs=1` against `hs=0`, one line after a
 `load_party`, which named the file format rather than the rules.
 
+**Every action line carries `cur=`**, `univ.cur_pc`, on both sides. Outside
+combat the line names no PC at all, and `cur_pc` still decides who the
+get-items screen hands its pile to — a `cur_pc` that drifted is otherwise
+invisible until an item lands in the wrong pack a thousand actions later.
+
+**`BOE_TRACE_PICK=1` prints one line per `pick_lock`**: `pc= at (x,y) ter= r1=
+adj= dex= diff= lock= str= slot= break=`. Every term of the two rolls, so a
+broken lockpick can be attributed without guessing which input differed — it is
+what showed that `skill()` and `skills[]` are not the same number.
+
 **`BOE_TRACE_PUSH=1` prints every `push_things` call and every conveyor test
 it makes**: `[push] call mode= belt= combat= town= age=`, then `[push] pcN at
 (x,y) ter=`, `[push]   check (x,y) w= u d l r v2=` and `[push] pcN (x,y) ->

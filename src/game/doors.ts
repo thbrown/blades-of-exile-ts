@@ -8,10 +8,10 @@
  */
 
 import { Location } from '../core/location';
-import { ItemAbil, defaultItem } from '../data/item';
+import { ItemAbil } from '../data/item';
 import { TerSpec } from '../data/terrain';
 import { Snd, SoundPlayer } from '../platform/sound';
-import { hasAbilEquip } from '../universe/inventory';
+import { hasAbilEquip, removeCharge } from '../universe/inventory';
 import { Race, Skill, Trait } from '../universe/skills';
 import { Player } from '../universe/player';
 import { Universe } from '../universe/universe';
@@ -45,7 +45,12 @@ export function pickLock(
     univ.rng.getRan(1, 1, 100) -
     5 * pc.statAdj(Skill.DEXTERITY) +
     town.record.difficulty * 7 -
-    5 * (pc.skills[Skill.LOCKPICKING] ?? 0) -
+    // **`skill()`, not `skills[]`** (boe.town.cpp:1186): the effective
+    // lockpicking, with whatever an equipped item boosts it by. Reading the raw
+    // array made every pick 5 points harder per boost — and the visible form was
+    // not a failed lock but a *broken pick*, since the break roll happens first
+    // and only the failure branch spends it.
+    5 * pc.skill(Skill.LOCKPICKING) -
     picks.item.abilStrength * 7;
   if (pc.traits[Trait.NIMBLE]) r1 -= 8;
   if (hasAbilEquip(pc, ItemAbil.THIEVING)) r1 -= 12;
@@ -55,8 +60,12 @@ export function pickLock(
     univ.addStringToBuf("  Didn't work.");
     if (willBreak) {
       univ.addStringToBuf('  Pick breaks.');
-      const item = pc.items[picks.slot]!;
-      if (item.charges > 0 && --item.charges <= 0) pc.items[picks.slot] = defaultItem();
+      // `remove_charge` (pc.cpp:940), not a hand-rolled decrement: a
+      // **rechargeable** pick survives at zero charges, and one that doesn't
+      // goes through `take_item`, which *compacts the pack*. Blanking the slot
+      // in place left a hole where the C++ shifted everything below it up — and
+      // pack order is observable, because a recording uses items by slot.
+      removeCharge(pc, picks.slot);
     }
     sound?.play(Snd.LOCK_FAILED);
     return 'failed';

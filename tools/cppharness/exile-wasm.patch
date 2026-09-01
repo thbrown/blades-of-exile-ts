@@ -777,7 +777,7 @@ index 56cde7c1..9abbdca0 100644
  		int total = EM_ASM_INT({ return Module.audioTotalCount || 0; });
  		if (loaded >= total && total > 0) {
 diff --git a/src/game/boe.town.cpp b/src/game/boe.town.cpp
-index 9c959f85..ddc2161c 100644
+index 9c959f85..7ab623eb 100644
 --- a/src/game/boe.town.cpp
 +++ b/src/game/boe.town.cpp
 @@ -248,6 +248,16 @@ void start_town_mode(short which_town, short entry_dir, bool debug_enter) {
@@ -797,6 +797,22 @@ index 9c959f85..ddc2161c 100644
  	if(!monsters_loaded) {
  		univ.town.monst.clear();
  		std::cout << "start_town_mode: loading " << univ.town->creatures.size() << " creatures" << std::endl;
+@@ -1183,6 +1193,15 @@ void pick_lock(location where,short pc_num) {
+ 	if(univ.party[pc_num].has_abil_equip(eItemAbil::THIEVING))
+ 		r1 = r1 - 12;
+ 	unlock_adjust = univ.scenario.ter_types[terrain].flag2;
++	if(getenv("BOE_TRACE_PICK"))
++		std::cout << "      [pick] pc=" << pc_num << " at (" << where.x << "," << where.y
++			<< ") ter=" << int(terrain) << " r1=" << r1 << " adj=" << unlock_adjust
++			<< " dex=" << univ.party[pc_num].stat_adj(eSkill::DEXTERITY)
++			<< " diff=" << univ.town->difficulty
++			<< " lock=" << univ.party[pc_num].skill(eSkill::LOCKPICKING)
++			<< " str=" << which_item->abil_strength
++			<< " slot=" << which_item.slot
++			<< " break=" << will_break << std::endl;
+ 	if((unlock_adjust >= 5) || (r1 > (unlock_adjust * 15 + 30))) {
+ 		add_string_to_buf("  Didn't work.");
+ 		if(will_break) {
 diff --git a/src/mathutil.cpp b/src/mathutil.cpp
 index faaef3f2..657185b2 100644
 --- a/src/mathutil.cpp
@@ -857,7 +873,7 @@ index faaef3f2..657185b2 100644
  }
  
 diff --git a/src/tools/replay.cpp b/src/tools/replay.cpp
-index 3946c875..73e88644 100644
+index 3946c875..600e6d1e 100644
 --- a/src/tools/replay.cpp
 +++ b/src/tools/replay.cpp
 @@ -28,6 +28,15 @@
@@ -887,7 +903,7 @@ index 3946c875..73e88644 100644
  			} else if constexpr (std::is_integral_v<T>) {
  				if constexpr (std::is_same_v<S, std::string>) {
  					return static_cast<T>(std::stoi(arg));
-@@ -252,6 +263,180 @@ int next_action_line() {
+@@ -252,6 +263,187 @@ int next_action_line() {
  	return next_action->Row();
  }
  
@@ -971,7 +987,10 @@ index 3946c875..73e88644 100644
 +	if(fight)
 +		std::cout << " pc" << univ.cur_pc << ":" << univ.party[univ.cur_pc].name
 +			<< "(" << univ.party[univ.cur_pc].ap << "ap)";
-+	std::cout << " mode=" << int(overall_mode) << " age=" << univ.party.age;
++	// `cur=` is `univ.cur_pc`. Outside combat the line above prints no PC at
++	// all, and cur_pc still decides who the get-items screen hands its pile to.
++	std::cout << " mode=" << int(overall_mode) << " cur=" << univ.cur_pc
++		<< " age=" << univ.party.age;
 +	// BOE_TRACE_CENTER: the view centre. `handle_terrain_screen_actions` builds
 +	// every recorded `move` destination from *this*, not from the party or the
 +	// acting PC, so a move that looks two squares long is usually a centre the
@@ -1046,7 +1065,11 @@ index 3946c875..73e88644 100644
 +				cItem& it = univ.party[p].items[k];
 +				if(it.variety == eItemType::NO_ITEM) continue;
 +				std::cout << " " << k << ":" << int(it.variety) << "/" << it.charges
-+					<< "/" << int(it.type_flag);
++					<< "/" << int(it.type_flag)
++					// `+` for equipped. Which armour a PC is *wearing* is the
++					// half of the pack that `damage_pc` actually reads, and a
++					// pack that matches item for item can still differ here.
++					<< (univ.party[p].equip[k] ? "+" : "");
 +			}
 +			std::cout << std::endl;
 +		}
@@ -1068,7 +1091,7 @@ index 3946c875..73e88644 100644
  Element& pop_next_action(std::string expected_action_type) {
  	if(next_action == nullptr){
  		throw std::string { "Replay error! No action left to pop" };
-@@ -264,6 +449,13 @@ Element& pop_next_action(std::string expected_action_type) {
+@@ -264,6 +456,13 @@ Element& pop_next_action(std::string expected_action_type) {
  
  	Element* to_return = next_action;
  	next_action = next_action->NextSiblingElement(false);

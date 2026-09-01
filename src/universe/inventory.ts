@@ -10,7 +10,7 @@ import { Item, ItemAbil, ItemType, defaultItem } from '../data/item';
 import { ItemCat, variety } from '../data/itemVariety';
 import { Party } from './party';
 import { NUM_INVEN_SLOTS, Player } from './player';
-import { MainStatus, Skill, Trait } from './skills';
+import { MainStatus, Race, Skill, Trait } from './skills';
 
 export enum GiveStatus {
   OK = 'ok',
@@ -36,13 +36,20 @@ export function itemWeight(item: Item): number {
   return item.weight;
 }
 
-/** cPlayer::max_weight. */
+/**
+ * cPlayer::max_weight (pc.cpp:674).
+ *
+ * **`skill()`, not `skills[]`** — the effective strength, with any BOOST_STAT
+ * or BOOST_WAR an equipped item grants, and clamped to 20 *after* the boost.
+ * Reading the raw array skipped a girdle of strength, and a Vahnatai's -25.
+ */
 export function maxWeight(pc: Player): number {
   return (
     100 +
-    15 * Math.min(pc.skills[Skill.STRENGTH] ?? 0, 20) +
+    15 * Math.min(pc.skill(Skill.STRENGTH), 20) +
     (pc.traits[Trait.STRENGTH] ? 30 : 0) +
-    (pc.traits[Trait.BAD_BACK] ? -50 : 0)
+    (pc.traits[Trait.BAD_BACK] ? -50 : 0) +
+    (pc.race === Race.VAHNATAI ? -25 : 0)
   );
 }
 

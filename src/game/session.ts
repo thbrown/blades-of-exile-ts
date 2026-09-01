@@ -1660,8 +1660,15 @@ export class GameSession {
       if (result.status === GiveStatus.TOO_HEAVY) this.sound?.play(Snd.TOO_HEAVY);
       return result.message;
     }
+    // **The slot is blanked, not removed** (`*item_array[item_hit] = cItem()`,
+    // boe.items.cpp:516). `cTown::items` is a vector with holes: `place_item`
+    // fills the *first* hole, so an item dropped after a pickup lands where the
+    // taken one was. Splicing the entry out instead shifted every later item
+    // down, and the get-items screen builds its rows from that order — so from
+    // the first pickup onwards a recording's `item3-key` named a different
+    // object on each side.
     const index = town.items.indexOf(item);
-    if (index >= 0) town.items.splice(index, 1);
+    if (index >= 0) town.items[index] = defaultItem();
     // Remember that a preset item has been taken, so it doesn't come back.
     if (item.isSpecial > 0) town.record.itemTaken[item.isSpecial - 1] = true;
     this.univ.addStringToBuf(result.message);
@@ -3447,6 +3454,41 @@ export class GameSession {
     this.univ.curPc = which;
     this.univ.addStringToBuf(
       `${this.mode === GameMode.SHOPPING ? 'Now shopping' : 'Now active'}: ${pc.name}`);
+  }
+
+  /**
+   * `handle_switch_pc_items` (boe.actions.cpp:1051) — the six tabs under the
+   * item pane. **It is not `handle_switch_pc` with the page changed**: the
+   * gate is different (no ITEM_TARGET), the refusal wording is different, and
+   * out of combat it makes the PC *active* as well as showing their pack.
+   *
+   * Returns whether the caller should also move the item pane, which the C++
+   * does on every path but the `prime_time` refusal.
+   *
+   * The driver used to set `cur_pc` here unconditionally, with neither gate.
+   * A recording that flipped to a **dead** PC's tab therefore made a corpse
+   * active, and everything that reads `univ.cur_pc` afterwards — the get-items
+   * screen's carrier, above all — handed its pile to the wrong PC.
+   */
+  switchPcItems(which: number): boolean {
+    const pc = this.univ.party.pcs[which];
+    if (!pc) return false;
+    if (!this.primeTime && this.mode !== GameMode.TALKING
+      && this.mode !== GameMode.SHOPPING) {
+      this.univ.addStringToBuf("Set active: Finish what you're doing first.");
+      return false;
+    }
+    if (!isCombat(this.mode)) {
+      const allowDead = this.mode === GameMode.SHOPPING
+        && this.shop !== null && shopAllowsDead(this.shop.shop);
+      if (pc.mainStatus !== MainStatus.ALIVE && !allowDead) {
+        this.univ.addStringToBuf('Set active: PC must be here & active.');
+      } else {
+        this.univ.curPc = which;
+        this.univ.addStringToBuf(`Now active: ${pc.name}`);
+      }
+    }
+    return true;
   }
 
   /**

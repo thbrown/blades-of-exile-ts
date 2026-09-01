@@ -158,7 +158,8 @@ async function play(path: string): Promise<Row> {
         mark = univ.transcript.length;
         emit(`  ${String(at).padStart(5)} ${action.type.padEnd(20)} `
           + `${(action.text || action.info.id || '').padEnd(10)} -> (${l.x},${l.y})${who} `
-          + `mode=${session.mode} age=${univ.party.age} draws=${univ.rng.gameDraws} `
+          + `mode=${session.mode} cur=${univ.curPc} age=${univ.party.age}`
+          + ` draws=${univ.rng.gameDraws} `
           + `${said.slice(0, 110)}`);
         // The creature list, in `BOE_TRACE_MONST`'s format so the two traces
         // diff. Only the living ones, and by `slot` rather than array index:
@@ -215,7 +216,11 @@ async function play(path: string): Promise<Row> {
           for (let p = 0; p < 6; p++) {
             const pc = univ.party.pcs[p];
             emit(`      items pc${p}:` + (pc?.items ?? [])
-              .map((it, k) => (it.variety === 0 ? '' : ` ${k}:${it.variety}/${it.charges}/${it.typeFlag}`))
+              .map((it, k) => (it.variety === 0 ? ''
+                // `+` for equipped: which armour a PC is *wearing* is the half
+                // of the pack `damage_pc` reads, and two packs can match item
+                // for item and still differ here.
+                : ` ${k}:${it.variety}/${it.charges}/${it.typeFlag}${pc?.equip[k] ? '+' : ''}`))
               .join(''));
           }
         }
