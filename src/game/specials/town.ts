@@ -23,6 +23,7 @@ import { isCombat } from '../modes';
 import { createWandMonst } from '../wandering';
 import { handleMessage } from './vm';
 import { XML_BUTTONS, threeChoiceButtons } from './oneshot';
+import { boomSpace, runBoomAnim, startBoomAnim } from '../booms';
 
 /** The three contexts that mean "the party is walking somewhere". */
 function isMoveMode(mode: SpecCtx): boolean {
@@ -89,8 +90,14 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
     }
 
     case SpecType.TOWN_MOVE_PARTY:
-      ctx.retA = 1;
-      teleportParty(univ, ctx, at);
+      // `redraw` is set on both arms in the C++ (boe.specials.cpp:3884), which
+      // is why it sits outside the refusal here.
+      if (isCombat(ctx.session.mode)) refuse('Not while in combat.');
+      else {
+        ctx.retA = 1;
+        teleportParty(univ, ctx, at,
+          ctx.whichMode === SpecCtx.TALK || spec.ex2a === 0 ? 1 : 0);
+      }
       ctx.redraw = true;
       break;
 
@@ -263,7 +270,10 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
         }
       } else {
         ctx.retA = 1;
-        teleportParty(univ, ctx, at);
+        // The C++ writes `which_mode == TALK ? 1 : spec.ex2a` here
+        // (boe.specials.cpp:3974), but the refusal above has already sent every
+        // context but TOWN_MOVE and TOWN_LOOK away — the TALK arm is dead.
+        teleportParty(univ, ctx, at, spec.ex2a);
         ctx.redraw = true;
       }
       break;
@@ -434,12 +444,43 @@ function messageRun(univ: Universe, ctx: SpecialCtx, first: number): string[] {
 }
 
 /**
- * teleport_party (boe.specials.cpp:1346), minus the explosion animation. Any
- * forcecage the party was in breaks.
+ * teleport_party (boe.specials.cpp:1348). Any forcecage the party was in
+ * breaks, and the party fades out of one square and in at the other.
+ *
+ * **The fade is nine explosions and then fourteen**, all on the party's square,
+ * all `place_type = 1` so each is thrown up to 25px off it. That costs
+ * 8 + 18 + 13 + 28 draws — `add_explosion`'s per-slot offset roll (the first
+ * slot of a volley doesn't roll) and `do_explosion_anim`'s two scatter rolls
+ * per queued boom — which is why leaving the animation out was not free.
+ *
+ * `mode` is the C++'s: 0 fades both ways, 2 only out, 3 only in, 1 neither,
+ * and combat forces 1.
  */
-function teleportParty(univ: Universe, ctx: SpecialCtx, where: { x: number; y: number }): void {
+function teleportParty(
+  univ: Universe, ctx: SpecialCtx, where: { x: number; y: number }, mode: number,
+): void {
+  if (isCombat(ctx.session.mode)) mode = 1;
+  const fadeOut = mode === 0 || mode === 2;
+  const fadeIn = mode === 0 || mode === 3;
+
   for (const pc of univ.party.pcs) pc.status[Status.FORCECAGE] = 0;
+
+  if (fadeOut) fade(univ, univ.party.townLoc, 9);
   ctx.host.moveParty(where);
+  // The C++ runs the fade-in on `center`, which `teleport_party` has just set
+  // to the destination — the same square the party now stands on.
+  if (fadeIn) fade(univ, univ.party.townLoc, 14);
+}
+
+/** One half of `teleport_party`'s fade: `n` scattered explosions, played. */
+function fade(univ: Universe, at: { x: number; y: number }, n: number): void {
+  startBoomAnim();
+  // `add_explosion(l, -1, 1, 1, 0, 0)` — no damage number, scattered, boom
+  // type 1. `do_explosion_anim(5, …)` names sound 5 outright.
+  for (let i = 0; i < n; i++) {
+    boomSpace({ x: at.x, y: at.y }, 1, -1, 0, univ.rng, { placeType: 1 });
+  }
+  runBoomAnim(univ.rng, undefined, 5);
 }
 
 /** handle_lever — the square becomes whatever it transforms into. */

@@ -136,7 +136,7 @@ export function startBoomAnim(): void {
  * do_explosion_anim (boe.newgraph.cpp:556) — close the volley and play
  * everything it collected, now that the missiles have landed.
  */
-export function runBoomAnim(rng?: GameRng, onFrame?: () => void): void {
+export function runBoomAnim(rng?: GameRng, onFrame?: () => void, snd = -1): void {
   const toPlay = queued;
   volleyOpen = false;
   queued = [];
@@ -154,12 +154,16 @@ export function runBoomAnim(rng?: GameRng, onFrame?: () => void): void {
       boom.yAdj += rng.getRan(1, 0, 50) - 25;
     }
   }
-  // **One sound for the volley**, from `boom_type_sound` and the *last*
-  // explosion's type — `cur_boom_type` is left holding whatever the set-up
-  // loop saw last. A type of 6 or more finds nothing in the table and the C++
-  // then plays `play_sound(-1 * -1)`, i.e. file 1; ported as written.
+  // **One sound for the volley.** `do_explosion_anim(snd, …)` takes it as an
+  // argument and only falls back to `boom_type_sound` when the caller passed
+  // -1, which every spell does and `teleport_party` (snd 5) does not. The type
+  // it indexes is the *last* explosion's — `cur_boom_type` is left holding
+  // whatever the set-up loop saw last. A type of 6 or more finds nothing in the
+  // table and the C++ then plays `play_sound(-1 * -1)`, i.e. file 1; ported as
+  // written.
   const curBoomType = toPlay[toPlay.length - 1]!.type;
-  const file = curBoomType < 6 ? (BOOM_TYPE_SOUND[curBoomType] ?? 1) : 1;
+  const file = snd !== -1 ? snd
+    : curBoomType < 6 ? (BOOM_TYPE_SOUND[curBoomType] ?? 1) : 1;
   if (file > 0) livingSound(file);
   for (const boom of toPlay) {
     if (boom.type < 0 || boom.type > 6) continue;
@@ -193,7 +197,15 @@ export function boomSpace(
     // that already has one, but takes the larger damage number, and holds 30.
     // It raises **no sound of its own** — the volley makes one noise, in
     // `runBoomAnim` — and it is the animated explosion, not a hit sprite.
-    const already = queued.find((b) => b.where.x === where.x && b.where.y === where.y);
+    //
+    // **The de-duplication is `place_type == 0` only** ("lose redundant
+    // explosions", boe.newgraph.cpp:326). A scattered explosion is *meant* to
+    // stack: `teleport_party` queues nine and then fourteen of them on the one
+    // square, and each is thrown up to 25px off it. Without the guard the fade
+    // was one explosion, and — because the scatter rolls once per queued
+    // boom — sixteen draws short.
+    const already = placeType !== 0 ? undefined
+      : queued.find((b) => b.where.x === where.x && b.where.y === where.y);
     if (already) {
       if (damage > already.damage) already.damage = damage;
       return;

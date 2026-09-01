@@ -8046,3 +8046,30 @@ The M6 list below is kept for the history of what it covered:
     can't happen" src/` is worth a pass: a term deleted with a proof is harder
     to find later than one deleted by accident.
   - Corpus **750,960 → 765,933**; `ASR_10-05-2025_17-55-45` 13,337 → 28,310.
+
+- **`teleport_party` fades in and out, and the fade is 67 draws (M8,
+  2026-08-31).** +16,266 matching draws, two more files agreeing all the way,
+  and it closed the `doMonsters` bucket outright.
+  - `ZKR_15-05-2025_15-19-18` parted at draw 28,104, this port carrying on with
+    `do_monsters`' notice rolls where the C++ spent 8 × `get_ran(1,0,2)`,
+    18 × `get_ran(1,0,50)`, 13 × `get_ran(1,0,2)` and 28 × `get_ran(1,0,50)`.
+    **`BOE_TRACE_RAN_STACK=28104` named it in one line**: `add_explosion` ←
+    `teleport_party`. The port's `teleportParty` carried a comment saying
+    "minus the explosion animation".
+  - `teleport_party` (boe.specials.cpp:1348) queues **nine** explosions on the
+    square being left and **fourteen** on the one arrived at, all
+    `place_type = 1`. The arithmetic: `add_explosion` rolls one `get_ran(1,0,2)`
+    per slot *except the first* (9 → 8, 14 → 13), and `do_explosion_anim`'s
+    set-up loop rolls two `get_ran(1,0,50)` per scattered boom (9 → 18,
+    14 → 28). It is called as `do_explosion_anim(5,1)` then `(5,2)`, and the
+    second call draws nothing — `special_draw == 2` skips the set-up loop.
+  - **A second bug fell out of writing it**: this port's `boomSpace` collapsed a
+    second explosion on an occupied square unconditionally, where
+    `add_explosion` only does so for `place_type == 0` ("lose redundant
+    explosions", boe.newgraph.cpp:326). A scattered explosion is *meant* to
+    stack — that is the whole fade. No existing caller passed `place_type`, so
+    nothing had ever exercised it.
+  - Also landed with it: `mode` (0 both fades, 2 out, 3 in, 1 neither, combat
+    forces 1), which the three call sites pass differently, and
+    `TOWN_MOVE_PARTY`'s missing `is_combat()` refusal.
+  - Corpus **765,933 → 782,199**; "agree all the way" 25 → 27.
