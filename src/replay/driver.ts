@@ -28,6 +28,8 @@ import { killPc } from '../game/damage';
 import { MainStatus } from '../universe/skills';
 import { setFeatureFlags } from '../game/featureFlags';
 import { GetItemsPick } from '../game/getItems';
+import { alchemyChoices, makePotion } from '../game/alchemy';
+import { potionSlot } from '../dialogs/pickPotionDialog';
 import { useItem } from '../game/itemUse';
 import { GameMode, isCombat, isOut } from '../game/modes';
 import { dropItemAt, handleDropItem, handleGiveItem } from '../game/giveDrop';
@@ -315,6 +317,41 @@ export async function runReplay(
         case 'handle_rest':
           await session.rest();
           break;
+        case 'handle_alchemy': {
+          // `handle_alchemy` (boe.actions.cpp:1224) is three refusals and one
+          // real path, and the refusals draw nothing — so the only thing that
+          // has to be right here is *whether* the two dialogs go up, since
+          // each one eats a `click_control` the driver would otherwise read as
+          // a move.
+          if (session.mode !== GameMode.TOWN) {
+            if (isCombat(session.mode)) {
+              session.univ.addStringToBuf('Alchemy: Not in combat.');
+            } else if (!session.inTown) {
+              session.univ.addStringToBuf('Alchemy: Only in town.');
+            } else session.univ.addStringToBuf("Alchemy: Finish what you're doing first.");
+            break;
+          }
+          if (!session.univ.party.alchemy.some((known) => known)) {
+            session.univ.addStringToBuf('Alchemy: No recipes known.');
+            break;
+          }
+          const host = session.host;
+          if (!host) break;
+          const who = await runSelectPc(session.univ, SelectPcMode.ONLY_LIVING,
+            'Who will make a potion?', (rows, title, hl) => host.selectPc(rows, title, hl),
+            { highlight: Skill.ALCHEMY });
+          if (who >= 6) break;
+          // `alch_choice` is the second modal: its answer is `potionN`, and
+          // `cancel` walks away having mixed nothing.
+          const choices = alchemyChoices(session.univ, who);
+          const picked = source.pop('click_control');
+          result.answered++;
+          const which = potionSlot(picked.info.id ?? '');
+          if (which >= 0 && choices.some((c) => c.which === which && c.canMake)) {
+            makePotion(session, who, which);
+          }
+          break;
+        }
         case 'handle_wait':
           // The long wait, which is **w** and not Space. Up to eighty turns
           // pass here, so it is one of the biggest single state changes a

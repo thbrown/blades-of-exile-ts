@@ -7973,3 +7973,22 @@ The M6 list below is kept for the history of what it covered:
     is what a rule that fires on every step through bad terrain is worth across
     87 recordings; "blocked outside the rules" 36 → 37, which is the same file
     changing hands.
+
+- **`handle_alchemy` is handled (M8, 2026-08-31).** One of the four action
+  types this port had no handler for. `ASR_10-05-2025_09-08-20` went **404 →
+  769** actions and 18,314 → 34,497 draws *reached*, and now stops on a
+  movement desync like most of the corpus. **Corpus matched draws did not
+  move**, because that file's first divergence is earlier (in
+  `giveMonstersMoves`) — a stop and a divergence are different meters, and
+  closing a harness gap moves only the first.
+  - The rules were all there; what was missing was that alchemy raises **two**
+    modals, so without a handler the recording's `select_pc` and `alch_choice`
+    clicks fell through to the driver's switch as if they were moves.
+  - **The remaining unhandled actions are `handle_new_pc` (3 files),
+    `debug_launch_scen` and `debug_give_item` (1 each), and all five are worth
+    little**: two of the three `handle_new_pc` files and both debug files are
+    already blocked in the oracle, so between them they can unblock two
+    recordings. `grep "case '" src/replay/driver.ts` is still the way to
+    re-derive this list.
+  - **The corpus's dominant stop is now one thing: 36 movement desyncs.** That
+    is where the remaining work is.
