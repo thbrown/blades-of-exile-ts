@@ -8261,3 +8261,38 @@ The M6 list below is kept for the history of what it covered:
     Nothing left in that grep writes the record.
   - Corpus **792,066 → 846,613**; `ASR_11-05-2025_07-55-19` went 4,824 → 31,732
     draws and 320 → 1,159 actions; "blocked outside the rules" 41 → 43.
+
+- **Open leads, 2026-09-01 — each one pinpointed, none fixed.** The queue is
+  twelve rules files and no two share a bucket, so this is the honest list of
+  where each one stands. All of them were narrowed with the draw-aligned trace
+  diff described above.
+  - `ASR_19-05-2025_19-38-44` (the corpus's biggest file, 95k draws matched):
+    the packs part at **draw 90,063**, in a six-PC get-items sweep where the
+    C++ hands rows to PC 0 and 1 and this port hands some to PC 2. `cur_pc` and
+    the carrier both agree going in. Re-add the three-line `[gi]` probe
+    (`who=`, `curPc=`, `variety=`) in `GetItemsPick.take` and in
+    `display_item_event_filter`, and diff the two streams: they agree for
+    fourteen pickups and then part on one line.
+  - `ASR_10-05-2025_17-55-45`: after the recording's **third `load_party`** the
+    C++ re-opens the step-change door at **(6,10) in town 15** and this port
+    does not, so a Flame across it is refused here with `Can't see target`.
+    `BOE_TRACE_ALTER=1` shows the C++ altering that square three times and this
+    port once. It is a movement divergence after a load, not a spell bug.
+  - `VoDT_02-05-2025_16-42-15`: this port kills a monster inside
+    `handleMarkedDamage` where the C++ still has a damage arm to roll
+    (`get_ran(4,1,6)`). The creature's health differs going in.
+  - `ZKR-5-16-1-26`: the C++ spends `kill_monst`'s death-sound roll
+    (`get_ran(1,0,1)`) and this port kills nothing — again a creature health
+    divergence, not a rule. `MONST=1` against `BOE_TRACE_MONST=1` is the
+    instrument, but note the two sides tag the line differently outdoors
+    (`outmonst:` here, `monst:` there), so a naive diff aligns nothing.
+  - `ASR_11-05-2025_07-55-19` and `VoDT_04-05-memory-dump-2`: the **action
+    lists themselves have drifted** — this port runs `handle_combat_switch`
+    where the C++ runs `handle_pause`, one action apart. Something upstream
+    consumed a different number of actions; the driver, not the rules. There is
+    no tool for this yet: an action-stream alignment (difflib over the two type
+    sequences, reported as the first *unmatched* pair) would name it in one
+    run and is worth writing.
+  - `VoDT_04-05-2025_19-37-17`: with the timer fix in, what is left is this
+    port running TOWN node 22 type 55 (`ONCE_DIALOG`) **twice** where the C++
+    runs it once — a one-shot chain triggered from two different steps.
