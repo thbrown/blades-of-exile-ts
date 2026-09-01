@@ -2535,6 +2535,12 @@ export class GameSession {
           // MAIN and CHARM are illegal here; the C++ ignores them too.
           break;
       }
+      // "only damage once in combat!" (boe.specials.cpp:456) — the break sits
+      // *inside* the roll, so a fight rolls down the party from the moving PC
+      // and stops at the first one the terrain actually catches. This port ran
+      // the whole party, which is up to five extra `get_ran(1,1,100)` on every
+      // step into a swamp.
+      if (inCombatMove) break;
     }
   }
 

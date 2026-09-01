@@ -401,6 +401,43 @@ describe('outdoor terrain specials', () => {
     }
   });
 
+  /**
+   * "only damage once in combat!" (boe.specials.cpp:456). The loop starts at
+   * the moving PC and breaks the moment the terrain catches one, so a step
+   * into a swamp during a fight is one roll, not six — which is up to five
+   * `get_ran(1,1,100)` of draw stream either way.
+   */
+  it('a swamp in combat catches the moving PC and stops', async () => {
+    const s = newSession();
+    s.startNewGame();
+    s.startCombat(s.univ.party.direction);
+    expect(s.mode).toBe(GameMode.COMBAT);
+    const idx = scen.terTypes.findIndex((t) => t.special === TerSpec.DANGEROUS);
+    expect(idx).toBeGreaterThanOrEqual(0);
+    const saved = scen.terTypes[idx]!;
+    scen.terTypes[idx] = {
+      ...saved, flag1: 4, flag2: 100, flag3: Status.POISON, blockage: 0,
+    };
+    try {
+      const who = s.univ.curPc;
+      const from = s.univ.party.pcs[who]!.combatPos;
+      const to = { x: from.x, y: from.y + 1 };
+      s.univ.town!.record.terrain[to.x]![to.y] = idx;
+      const poisoned = (): number[] =>
+        s.univ.party.pcs.map((pc) => pc.status[Status.POISON] ?? 0);
+      expect(poisoned().every((n) => n === 0)).toBe(true);
+
+      await s.combatMove(to);
+
+      const after = poisoned();
+      expect(after[who]).toBeGreaterThan(0);
+      // Everyone after them in the party is untouched.
+      for (let i = who + 1; i < 6; i++) expect(after[i]).toBe(0);
+    } finally {
+      scen.terTypes[idx] = saved;
+    }
+  });
+
   it('loading a game rebuilds the outdoor window from the scenario', async () => {
     // save/out.txt holds a snapshot of the 96x96 window, and finish_load_party
     // (boe.fileio.cpp:96) throws it away and re-stitches the four sectors. A

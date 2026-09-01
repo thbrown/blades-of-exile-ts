@@ -1621,12 +1621,12 @@ bottom. What M8 still owes:
   fix. See the entry at the bottom for the current listing.
   A bucket named `… @ the C++ draws on` is **this port stopping**, not a rule:
   read the transcript at the stop.
-  Corpus **687,140** matching draws, **25 of 87** files agreeing all the way,
-  36 blocked outside the rules. The head of the queue is five 2s
-  (`dangerousTerrain`, `doMonsters`, `monstPickTarget`, `endTownCombat`,
+  Corpus **738,811** matching draws, **25 of 87** files agreeing all the way,
+  37 blocked outside the rules. The head of the queue is five 2s
+  (`move @ the C++ draws on`, `doMonsters`, `monstPickTarget`, `endTownCombat`,
   `resolveOne`) and fourteen singles; four of the ten files in those 2s are in
   `game/monsterTurn.ts`, which is where a rules slice should go.
-  **Those numbers were 686,842 / 24 / 36,
+  **Those numbers were 687,140 / 25 / 36, 686,842 / 24 / 36,
   684,774 / 22 / 36,
   676,074 / 22 / 35,
   676,072 / 21 / 35, 639,212 / 23 / 46,
@@ -7954,3 +7954,22 @@ The M6 list below is kept for the history of what it covered:
     between notice rolls instead of standing still and charging. The step sets
     `monstHostile` itself now. A new STEAL step drives the nested dialog for
     real: Leave leaves the item, Steal takes it and sets the result.
+
+- **A swamp in combat catches one PC, not six (M8, 2026-08-31).** One line,
+  **+51,671 matching draws** — the largest single fix of the corpus so far, and
+  the first time the bucket named the right function.
+  - `ASR_07-05-2025_17-09-03` parted at draw 3917 in `dangerousTerrain`: the
+    C++ spent two draws on a step into a swamp and this port spent seven. The
+    first two matched exactly — the roll for the moving PC and its `poison` —
+    and then this port carried on down the party.
+  - `if(mode == eSpecCtx::COMBAT_MOVE) break; // only damage once in combat!`
+    (boe.specials.cpp:456). The break is **inside** the `get_ran(1,1,100) <=
+    ter_flag2` block, so a fight rolls from the moving PC and stops at the
+    first one the terrain actually catches; this port ran all six every time.
+    The port already had the *start* of that loop right (`from = curPc`) and
+    the comment beside it explaining why — it just never read the end of it.
+  - That file went 3,916 → 4,605 matching draws and now stops on the oracle's
+    party-death debt instead of on a rule. Corpus **687,140 → 738,811**, which
+    is what a rule that fires on every step through bad terrain is worth across
+    87 recordings; "blocked outside the rules" 36 → 37, which is the same file
+    changing hands.
