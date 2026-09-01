@@ -491,18 +491,29 @@ export async function damageMonst(
   //
   // The C++ guards this with `(!processing_fields && !monsters_going) ||
   // (processing_fields && !hostiles_present)`, its two globals for "who is this
-  // damage really from". This port passes that as the `whoHit` argument
-  // instead (see the note at the top of `processFields.ts`), and `whoHit < 7`
-  // already covers both: a monster's blow arrives as 7, and inside
-  // `process_fields` monsters are only ever hurt by `monst_inflict_fields`,
-  // which is 7 as well. The C++'s extra clause is unreachable from here.
+  // damage really from".
+  //
+  // Half of that really is unreachable here: inside `process_fields` a monster
+  // is only ever hurt by `monst_inflict_fields`, whose `who_hit` is 7, so
+  // `whoHit < 7` disposes of the `processing_fields` arm on its own (see the
+  // note at the top of `processFields.ts`).
+  //
+  // **`monsters_going` is not.** This used to say `whoHit < 7` covered that arm
+  // too, on the grounds that a monster's blow arrives as 7 — true of melee
+  // (boe.combat.cpp:2743) and of `hit_space`, which this port hands an explicit
+  // `whoHit` where the C++ reads the global (boe.combat.cpp:4364). It is false
+  // of `handleMarkedDamage`, which blames `univ.curPc` because
+  // boe.combat.cpp:1453 does, and which fires from inside a *monster's* spell.
+  // So a monster casting at a marked, *charmed* creature turned the party's own
+  // charmed ally hostile — and turned the whole town on the party for a blow it
+  // never struck.
   //
   // It matters far past the fight it happens in: `monst.hostile` switches off
   // `do_monsters`' whole drift block, so once a town has turned, its idle
   // creatures stop wandering and stop spending `get_ran(1,0,1)` +
   // `rand_move`'s draws every turn. Leaving it out was worth two draws a turn
   // for the rest of the visit.
-  if (victim.isFriendly && whoHit < 7) {
+  if (victim.isFriendly && whoHit < 7 && !options.session?.monstersGoing) {
     univ.addStringToBuf('Damaged an innocent.');
     victim.attitude = Attitude.HOSTILE_A;
     if (options.session) makeTownHostile(options.session);

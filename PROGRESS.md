@@ -8018,3 +8018,31 @@ The M6 list below is kept for the history of what it covered:
   - Corpus **738,856 → 750,960**; `VoDT_04-05-2025_14-17-38` now matches all
     10,518 of the C++'s draws and stops on the oracle's party-death debt
     instead. "Blocked outside the rules" 37 → 39.
+
+- **`monsters_going` is half of "damaged an innocent", and this port had thrown
+  it away (M8, 2026-08-31).** +14,973 matching draws, and it closed the
+  `monstPickTarget` bucket's larger half.
+  - `ASR_10-05-2025_17-55-45` parted at draw 13,337 in `monstPickTarget`, with
+    this port spending four draws the C++ didn't. `PICKT=1` beside
+    `BOE_TRACE_PICKT` answered it in one line each: the C++'s creature 1 was
+    `frnd=1 target=104`, this port's `frnd=0 target=6`. **A charmed ally had
+    turned hostile here and not there** — the AI was, as usual, innocent.
+  - `damage_monst`'s crime clause is `victim.is_friendly() && who_hit < 7 &&
+    ((!processing_fields && !monsters_going) || (processing_fields &&
+    !hostiles_present))` (boe.specials.cpp:1574). The port kept the first two
+    terms and dropped the rest with a comment arguing `whoHit < 7` implied them.
+    Half of that argument holds — inside `process_fields` a monster is only ever
+    hurt by `monst_inflict_fields`, which passes 7 — and half does not.
+  - **`handleMarkedDamage` is the counter-example**: it blames `univ.curPc`
+    (boe.combat.cpp:1453), and it fires from inside a *monster's* spell, with
+    `monsters_going` set. So an Evil Priest casting at a marked square turned
+    the party's own charmed Shade hostile, printed "Damaged an innocent." and
+    called `make_town_hostile` for a blow the party never struck.
+  - The fix is one term: `&& !options.session?.monstersGoing`.
+  - **The lesson is the comment, not the code.** The dropped term came with a
+    written argument for why it was unreachable, and the argument was true of
+    every call site anyone had checked — melee (7) and `hit_space` (this port
+    passes `whoHit` where the C++ reads the global). `grep -rn "unreachable\|
+    can't happen" src/` is worth a pass: a term deleted with a proof is harder
+    to find later than one deleted by accident.
+  - Corpus **750,960 → 765,933**; `ASR_10-05-2025_17-55-45` 13,337 → 28,310.
