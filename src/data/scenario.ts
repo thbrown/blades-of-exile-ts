@@ -40,6 +40,18 @@ export interface Scenario {
   difficulty: number;
   /** Whether monster health scales with the party's total level. */
   adjustDiff: boolean;
+  /**
+   * `cScenario::feature_flags` (`<feature-flags>` in scenario.xml) — **the
+   * scenario's own flags, not the replay's.** The C++ has two feature-flag maps
+   * that are easy to confuse: the global one a recording replaces wholesale
+   * (`has_feature_flag`, boe.global.hpp:38) and this one, which a *scenario*
+   * ships and which `get_feature_version` prefers when a scenario is loaded.
+   * `push_things` reads this one directly
+   * (`univ.scenario.get_feature_flag("conveyor-belts") == "V2"`,
+   * boe.specials.cpp:1743), so a recording that never mentions conveyor belts
+   * still gets V2 belts when it is playing Za-Khazi.
+   */
+  featureFlags: Record<string, string>;
   townStart: { x: number; y: number };
   /**
    * `out_sec_start` — the *sector* the party starts in. The XML tag it is read

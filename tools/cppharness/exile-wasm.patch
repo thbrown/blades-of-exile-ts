@@ -645,7 +645,7 @@ index 937c63d0..ebe66893 100644
  		univ.party.out_c[num].direction =
  		set_direction(univ.party.out_c[num].m_loc, dest);
 diff --git a/src/game/boe.specials.cpp b/src/game/boe.specials.cpp
-index 173702da..fd0f1ecc 100644
+index 173702da..5fda187b 100644
 --- a/src/game/boe.specials.cpp
 +++ b/src/game/boe.specials.cpp
 @@ -251,6 +251,8 @@ bool check_special_terrain(location where_check,eSpecCtx mode,cPlayer& which_pc,
@@ -657,7 +657,52 @@ index 173702da..fd0f1ecc 100644
  					give_help(54,0);
  					run_special(mode, eSpecCtxType::TOWN, spec_num, where_check, &s1, &s2);
  					if(s1 > 0)
-@@ -2019,6 +2021,18 @@ void run_special(pending_special_type spec, short* a, short* b, bool* redraw) {
+@@ -1681,6 +1683,16 @@ void kill_monst(cCreature& which_m,short who_killed,eMainStatus type) {
+ void push_things() {
+ 	bool redraw = false;
+ 	
++	// BOE_TRACE_PUSH: one line per call, and one per thing actually shoved.
++	// Conveyor belts move PCs without spending a single draw, so a port that
++	// pushes on a turn this one doesn't is invisible in the draw stream and
++	// shows up two hundred actions later as a spell cast from the wrong square.
++	bool trace_push = getenv("BOE_TRACE_PUSH") != nullptr;
++	if(trace_push)
++		std::cout << "      [push] call mode=" << int(overall_mode)
++			<< " belt=" << univ.town.belt_present
++			<< " combat=" << is_combat() << " town=" << is_town()
++			<< " age=" << univ.party.age << std::endl;
+ 	if(is_out()) // TODO: Make these work outdoors
+ 		return;
+ 	if(!univ.town.belt_present)
+@@ -1713,6 +1725,11 @@ void push_things() {
+ 				}
+ 			}
+ 		}
++		if(getenv("BOE_TRACE_PUSH"))
++			std::cout << "      [push]   check (" << l.x << "," << l.y << ") w=" << x_width
++				<< "," << y_width << " u" << up << " d" << down << " l" << left
++				<< " r" << right << " v2="
++				<< (univ.scenario.get_feature_flag("conveyor-belts") == "V2") << std::endl;
+ 		location start_l = l;
+ 		location check_l = l;
+ 		// These may cancel each other out
+@@ -1835,7 +1852,15 @@ void push_things() {
+ 	if(is_combat()) {
+ 		for(short i = 0; i < 6; i++){
+ 			if(univ.party[i].main_status == eMainStatus::ALIVE){
++				location was = univ.party[i].combat_pos;
++				if(trace_push)
++					std::cout << "      [push] pc" << i << " at (" << was.x << "," << was.y
++						<< ") ter=" << int(univ.town->terrain(was.x, was.y)) << std::endl;
+ 				if(check_push(univ.party[i].combat_pos)){
++					if(trace_push)
++						std::cout << "      [push] pc" << i << " (" << was.x << "," << was.y
++							<< ") -> (" << univ.party[i].combat_pos.x << ","
++							<< univ.party[i].combat_pos.y << ")" << std::endl;
+ 					ASB("Someone gets pushed.");
+ 					update_explored(univ.party[i].combat_pos);
+ 					draw_map(true);
+@@ -2019,6 +2044,18 @@ void run_special(pending_special_type spec, short* a, short* b, bool* redraw) {
  //   Talk: a,b are response strings
  //   Encounter: a=1 if monsters flee, b=1 if forced
  // redraw - true if now need redraw
@@ -676,7 +721,7 @@ index 173702da..fd0f1ecc 100644
  void run_special(eSpecCtx which_mode, eSpecCtxType which_type, spec_num_t start_spec, location spec_loc, short* a, short* b, bool* redraw) {
  	int num_nodes = 0;
  
-@@ -2032,6 +2046,8 @@ void run_special(eSpecCtx which_mode, eSpecCtxType which_type, spec_num_t start_
+@@ -2032,6 +2069,8 @@ void run_special(eSpecCtx which_mode, eSpecCtxType which_type, spec_num_t start_
  	// We can only have one special node chain running at a time.
  	// If the chain triggers an action that calls another chain, delay the chain until the current one has completed.
  	if(special_in_progress && start_spec >= 0) {
@@ -685,7 +730,7 @@ index 173702da..fd0f1ecc 100644
  		queue_special(which_mode, which_type, start_spec, spec_loc);
  		return;
  	}
-@@ -2111,13 +2127,20 @@ void run_special(eSpecCtx which_mode, eSpecCtxType which_type, spec_num_t start_
+@@ -2111,13 +2150,20 @@ void run_special(eSpecCtx which_mode, eSpecCtxType which_type, spec_num_t start_
  		// (Of course, currently all SDFs are positive, so allowing negative arithmetic is useless.)
  		cSpecial& cur_node = ctx.cur_spec;
  		resolve_pointers(cur_node);
@@ -708,7 +753,7 @@ index 173702da..fd0f1ecc 100644
  		switch((*cur_node.type).cat) {
  			case eSpecCat::GENERAL:
  				if(cur_node.type == eSpecType::NONE && univ.debug_mode) {
-@@ -2261,6 +2284,9 @@ void general_spec(const runtime_state& ctx) {
+@@ -2261,6 +2307,9 @@ void general_spec(const runtime_state& ctx) {
  		case eSpecType::CHANGE_TIME:
  			check_mess = true;
  			univ.party.age += cur_node.ex1a;

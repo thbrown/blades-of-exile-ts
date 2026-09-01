@@ -196,6 +196,17 @@ produces is itself the signal. It found the creature-status save bug —
 identical everything except `hs=1` against `hs=0`, one line after a
 `load_party`, which named the file format rather than the rules.
 
+**`BOE_TRACE_PUSH=1` prints every `push_things` call and every conveyor test
+it makes**: `[push] call mode= belt= combat= town= age=`, then `[push] pcN at
+(x,y) ter=`, `[push]   check (x,y) w= u d l r v2=` and `[push] pcN (x,y) ->
+(x,y)` for one that actually moves. There is no pair for it here yet — the
+port's own conveyor code is small enough to read. It exists because **a belt
+moves a PC without spending a single draw**: a port that pushes on a turn this
+one doesn't stays byte-identical in the draw stream and surfaces two hundred
+actions later as a spell cast from the wrong square. The `v2=` column is the
+point of the `check` line — it is the *scenario's* feature flag, not the
+replay's, and that distinction is what the trace was written to settle.
+
 **`BOE_TRACE_AGE=1` prints one line per tick the clock takes, and who took it**:
 `[age] increase_age mode= horse= -> N`, `[age] CHANGE_TIME +n -> N` and `[age]
 do_rest +n -> N`. Those three are the *only* things in the game that move

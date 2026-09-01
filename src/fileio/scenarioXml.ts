@@ -18,7 +18,7 @@ import { ItemType } from '../data/item';
 import { attr, children, intAttr, intText, locFromXml, rectFromXml, tag, text } from './xml';
 
 const DEFERRED_TOP = new Set([
-  'icon', 'id', 'version', 'language', 'author', 'feature-flags', 'creator',
+  'icon', 'id', 'version', 'language', 'author', 'creator',
   'editor',
 ]);
 const DEFERRED_GAME = new Set([
@@ -125,6 +125,8 @@ export interface ScenarioHeader {
   startTown: number;
   difficulty: number;
   adjustDiff: boolean;
+  /** `<feature-flags>` — the scenario's own, see `Scenario.featureFlags`. */
+  featureFlags: Record<string, string>;
   townStart: { x: number; y: number };
   outdoorStart: { x: number; y: number };
   sectorStart: { x: number; y: number };
@@ -217,6 +219,7 @@ export function readScenarioFromXml(root: Element, fname = 'scenario.xml'): Scen
     startTown: 0,
     difficulty: 0,
     adjustDiff: false,
+    featureFlags: {},
     townStart: { x: 0, y: 0 },
     outdoorStart: { x: 0, y: 0 },
     sectorStart: { x: 0, y: 0 },
@@ -246,6 +249,10 @@ export function readScenarioFromXml(root: Element, fname = 'scenario.xml'): Scen
       for (const f of children(elem)) {
         if (tag(f) === 'adjust-difficulty') hdr.adjustDiff = text(f) === 'true';
       }
+    } else if (type === 'feature-flags') {
+      // `scenario.feature_flags = info_from_action(*elem)` (fileio_scen.cpp:819)
+      // — one version string per flag, unlike the replay map's list.
+      for (const f of children(elem)) hdr.featureFlags[tag(f)] = text(f);
     } else if (type === 'game') {
       for (const g of children(elem)) {
         const gt = tag(g);

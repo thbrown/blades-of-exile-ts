@@ -8073,3 +8073,35 @@ The M6 list below is kept for the history of what it covered:
     forces 1), which the three call sites pass differently, and
     `TOWN_MOVE_PARTY`'s missing `is_combat()` refusal.
   - Corpus **765,933 → 782,199**; "agree all the way" 25 → 27.
+
+- **There are two feature-flag maps, and `push_things` reads the other one
+  (M8, 2026-09-01).** +2,387 matching draws, another file blocked outside the
+  rules, and it closed half the `resolveOne` bucket.
+  - `ZKR_16-05-2025_15-19-17` parted at draw 9,204, this port casting Flame
+    where the C++ refused. The refusal was real — the C++'s Feodoric stood at
+    (1,30) and this port's at **(1,29)**, on top of Adrianna — and `PCS=1`
+    against `BOE_TRACE_PCS=1` showed the two parties drifting apart 27 actions
+    earlier with **no draw between them**.
+  - A conveyor belt moves a PC for free. `push_things` ran on both sides, on
+    the same turn, over the same terrain (252, `CONVEYOR`, flag1 = N) — and the
+    C++ pushed nobody. A new `BOE_TRACE_PUSH=1` in the harness printed
+    `check (1,30) u1 d0 l0 r0` followed by no move, which is only possible
+    inside the **V2 wall check**: (1,29) was occupied by another PC.
+  - **The C++ has two feature-flag maps.** The global one
+    (`has_feature_flag`, boe.global.hpp:38) is what a recording replaces
+    wholesale, and it is the only one this port had. The other belongs to the
+    *scenario* (`cScenario::feature_flags`, `<feature-flags>` in scenario.xml),
+    and `push_things` reads **that** one directly
+    (`univ.scenario.get_feature_flag("conveyor-belts") == "V2"`,
+    boe.specials.cpp:1743/1808). Za-Khazi declares V2; almost no recording
+    mentions conveyor belts at all. So this port answered "off" for every
+    recording ever made, and shoved PCs into walls and into each other.
+  - `scenarioXml.ts` now reads `<feature-flags>` (it was in `DEFERRED_TOP`),
+    `Scenario.featureFlags` carries it, and `pushThings` asks the scenario.
+  - **Worth a sweep**: `get_feature_version` (boe.global.hpp:45) prefers the
+    scenario's answer over the build's for *every* flag when a scenario is
+    loaded. This port has no equivalent, so any other rule that should consult
+    the scenario is still asking the replay. `grep -rn "hasFeatureFlag(" src/`
+    is the list to re-check against the C++ call by call.
+  - Corpus **782,199 → 784,586**; `ZKR_16-05-2025_15-19-17` 9,204 → all 11,590
+    of the C++'s draws, and it now stops on the oracle's dialog debt.

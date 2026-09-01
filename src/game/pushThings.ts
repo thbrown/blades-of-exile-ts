@@ -19,6 +19,15 @@
  * **Walls only stop a push under the `conveyor-belts: V2` feature flag.** The
  * original shoves things into walls, and the recordings made before the fix
  * depend on that, so the check is behind the flag like every other repaired bug.
+ *
+ * **And it is the *scenario's* flag, not the replay's** — `push_things` reads
+ * `univ.scenario.get_feature_flag("conveyor-belts")` (boe.specials.cpp:1743),
+ * not `has_feature_flag`. The two maps are separate: a recording replaces the
+ * global one wholesale and almost none of them mention conveyor belts, so
+ * asking the global map here answered "off" for every recording ever made —
+ * including Za-Khazi's, whose scenario.xml declares `V2`. The visible form was
+ * a PC shoved onto a square another PC was standing on, and then casting from
+ * there for the rest of the fight.
  */
 
 import { Location, loc, locsEqual } from '../core/location';
@@ -31,9 +40,13 @@ import { MainStatus } from '../universe/skills';
 import { DamageType } from '../data/monster';
 import { Race } from '../universe/skills';
 import { damagePc, hitParty } from './damage';
-import { hasFeatureFlag } from './featureFlags';
 import { pointOnScreen } from './session';
 import type { GameSession } from './session';
+
+/** `univ.scenario.get_feature_flag("conveyor-belts") == "V2"`. */
+function beltsV2(session: GameSession): boolean {
+  return session.univ.scenario.featureFlags['conveyor-belts'] === 'V2';
+}
 
 /** The result of one `check_push`: where the thing ends up, or null for "stays". */
 function checkPush(
@@ -74,7 +87,7 @@ function checkPush(
   if (right) check.x++;
   if (locsEqual(check, from)) return null;
 
-  if (hasFeatureFlag('conveyor-belts', 'V2')) {
+  if (beltsV2(session)) {
     // The thing must not count as blocking its own destination, and the C++'s
     // way of arranging that is to shove its live position a whole map width to
     // the right for the duration of the test. Nothing restores it explicitly —
@@ -167,7 +180,7 @@ export async function pushThings(session: GameSession): Promise<void> {
   if (!town.beltPresent) return;
 
   let redraw = false;
-  const v2 = hasFeatureFlag('conveyor-belts', 'V2');
+  const v2 = beltsV2(session);
 
   // Creatures. Only V2 accounts for a big creature's footprint; before it,
   // everything is pushed as though it stood on one square.
