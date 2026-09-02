@@ -31,6 +31,24 @@ export const ROW_KEYS = 'abcdefgh';
 /** `current_getting_pc` is 6 when nobody in the party can pick anything up. */
 export const NOBODY = 6;
 
+/**
+ * `GI=1`, the pair to the harness's `BOE_TRACE_GI`: the pile the get-items
+ * screen opened on, and one line per row taken.
+ *
+ * Worth having for the same reason `PICK=1` is: **taking an item spends no
+ * draws**, so two engines can hand the same recording's `item3-key` to
+ * different PCs — or find different things under it — and stay byte-identical
+ * in the draw stream until, thousands of actions later, one of them raises a
+ * "how many?" prompt over a stack the other never split. The pile is printed
+ * as `variety/charges/type_flag` in row order, which is the order a recording's
+ * row letters index into.
+ */
+const TRACE_GI = Boolean(
+  typeof process !== 'undefined' ? process.env?.GI : undefined);
+
+const giLine = (item: Item): string =>
+  `${item.variety}/${item.charges}/${item.typeFlag}@${item.itemLoc.x},${item.itemLoc.y}`;
+
 export class GetItemsPick {
   /** `current_getting_pc` — who picks things up. */
   who: number;
@@ -69,6 +87,11 @@ export class GetItemsPick {
   ) {
     this.who = session.univ.curPc;
     this.refresh();
+    if (TRACE_GI) {
+      console.log(`      [gi] open who=${this.who} cur=${session.univ.curPc}`
+        + ` wct=${session.whichCombatType}`
+        + ` n=${items.length} [${items.map(giLine).join(' ')}]`);
+    }
   }
 
   /**
@@ -172,6 +195,12 @@ export class GetItemsPick {
 
   /** Hand item `index` to the current PC and drop it out of the list. */
   take(index: number): void {
+    if (TRACE_GI) {
+      const at = this.items[index];
+      console.log(`      [gi] take idx=${index} who=${this.who}`
+        + ` cur=${this.session.univ.curPc} first=${this.first}`
+        + ` n=${this.items.length} item=${at ? giLine(at) : 'none'}`);
+    }
     if (this.who >= NOBODY) return;
     const item = this.items[index];
     if (!item || item.variety === ItemType.NO_ITEM) return;

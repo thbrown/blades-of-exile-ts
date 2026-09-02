@@ -221,6 +221,20 @@ adj= dex= diff= lock= str= slot= break=`. Every term of the two rolls, so a
 broken lockpick can be attributed without guessing which input differed — it is
 what showed that `skill()` and `skills[]` are not the same number.
 
+**`BOE_TRACE_GI=1` (`GI=1` here) prints the get-items screen's pile and every
+row taken from it**: `[gi] open who= cur= n= [variety/charges/type_flag@x,y …]`
+when the screen goes up, then `[gi] take idx= who= cur= first= n= item=` per
+click. The pile is printed in **row order**, which is the order a recording's
+`item3-key` indexes into, and with each item's square, because the two ways a
+row can name different things are a different *reach* and a different *order*.
+Like `PICK`, it answers a divergence the draw stream cannot see: **taking an
+item spends no draws**, so two engines can hand the same recording's clicks to
+different PCs, or find nothing under a row the other side had an item on, and
+stay byte-identical until — thousands of actions later — one of them raises a
+"how many?" prompt over a stack the other never split. It named the arena reach
+rule on its first run: fifteen items there against nine here, the six missing
+ones all six squares away on one square.
+
 **`BOE_TRACE_PUSH=1` prints every `push_things` call and every conveyor test
 it makes**: `[push] call mode= belt= combat= town= age=`, then `[push] pcN at
 (x,y) ter=`, `[push]   check (x,y) w= u d l r v2=` and `[push] pcN (x,y) ->

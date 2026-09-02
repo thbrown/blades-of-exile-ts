@@ -398,6 +398,43 @@ index 1a26a2a7..81f8b25a 100644
  		if(status == NO_CAST_ENCUMBERED){
  			// Oops, trying to cast a mage spell while encumbered takes your AP!
  			take_ap(6);
+diff --git a/src/game/boe.items.cpp b/src/game/boe.items.cpp
+index 763a6cc7..e17f112c 100644
+--- a/src/game/boe.items.cpp
++++ b/src/game/boe.items.cpp
+@@ -465,6 +465,16 @@ static bool display_item_event_filter(cDialog& me, std::string id, size_t& first
+ 		current_getting_pc = id[2] - '1';
+ 		put_item_graphics(me, first_item_shown, current_getting_pc, item_array);
+ 	} else {
++		size_t item_hit_t = size_t(id[4] - '1') + first_item_shown;
++		if(getenv("BOE_TRACE_GI"))
++			std::cout << "      [gi] take idx=" << item_hit_t << " who=" << current_getting_pc
++				<< " cur=" << univ.cur_pc << " first=" << first_item_shown
++				<< " n=" << item_array.size() << " item="
++				<< (item_hit_t < item_array.size()
++					? fmt::format("{}/{}/{}", int(item_array[item_hit_t]->variety),
++						item_array[item_hit_t]->charges, int(item_array[item_hit_t]->type_flag))
++					: std::string("none"))
++				<< std::endl;
+ 		if(current_getting_pc == 6) return true;
+ 		size_t item_hit;
+ 		item_hit = id[4] - '1';
+@@ -575,6 +585,15 @@ bool show_get_items(std::string titleText, std::vector<cItem*>& itemRefs, short
+ 		itemDialog[sout.str()].attachKey({false, static_cast<unsigned char>('`' + i), mod_none});
+ 		itemDialog[sout.str()].attachClickHandler(handler);
+ 	}
++	if(getenv("BOE_TRACE_GI")) {
++		std::ostringstream pile;
++		for(size_t i = 0; i < itemRefs.size(); i++)
++			pile << (i ? " " : "") << int(itemRefs[i]->variety) << "/" << itemRefs[i]->charges
++				<< "/" << int(itemRefs[i]->type_flag)
++				<< "@" << itemRefs[i]->item_loc.x << "," << itemRefs[i]->item_loc.y;
++		std::cout << "      [gi] open who=" << pc_getting << " cur=" << univ.cur_pc
++			<< " n=" << itemRefs.size() << " [" << pile.str() << "]" << std::endl;
++	}
+ 	put_item_graphics(itemDialog, first_item, pc_getting, itemRefs);
+ 		
+ 	itemDialog.setResult(false); // The result is set to true if the player steals something
 diff --git a/src/game/boe.locutils.cpp b/src/game/boe.locutils.cpp
 index 259a4d3f..59d2ef5b 100644
 --- a/src/game/boe.locutils.cpp

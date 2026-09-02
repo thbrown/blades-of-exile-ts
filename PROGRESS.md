@@ -8283,11 +8283,11 @@ The M6 list below is kept for the history of what it covered:
     (`who=`, `curPc=`, `variety=`) in `GetItemsPick.take` and in
     `display_item_event_filter`, and diff the two streams: they agree for
     fourteen pickups and then part on one line.
-    **Superseded 2026-09-01 — see the entry at the bottom.** The shape is right
-    and the location is wrong: `PICK=1` against `BOE_TRACE_PICK` shows it at
-    **pick 7**, long before draw 90,063, as `slot=4` there against `slot=7`
-    here. Six functions are ruled out in writing; start from
-    `put_item_graphics`.
+    **Closed 2026-09-02 — and the diagnosis above is wrong; see the arena entry
+    at the bottom.** Nobody hands a row to a different PC. This port's pile was
+    six items short, so the recording's later clicks landed on empty rows; the
+    packs that followed are downstream of that, and so is the `slot=4` against
+    `slot=7` the 2026-09-01 pass narrowed to. `put_item_graphics` was innocent.
   - `ASR_10-05-2025_17-55-45`: after the recording's **third `load_party`** the
     C++ re-opens the step-change door at **(6,10) in town 15** and this port
     does not, so a Flame across it is refused here with `Can't see target`.
@@ -8436,3 +8436,57 @@ The M6 list below is kept for the history of what it covered:
     that are not part of a collapse — or compare the `[pick]`-style probes,
     which are emitted at the same point in the rule on both sides and have no
     such ambiguity.
+
+- **In an arena fight you can pick up everything you can see (M8, 2026-09-02).**
+  `ASR_19-05-2025_19-38-44`, the corpus's biggest file and the head of the open
+  queue for two sessions, is closed. **+2,243 matching draws, a 29th file
+  agreeing all the way**, and the file itself went 4,511 → 5,052 actions and
+  99,985 → 102,728 draws, now stopping on a plain movement desync like the rest
+  of the tail.
+  - `get_item` (boe.items.cpp:272) reaches an item that is `adjacent`, **or**
+    `mass_get && !check_container && (dist <= 4 || (is_combat() &&
+    which_combat_type == 0)) && can_see_light < 5`. This port had only the
+    distance half of that inner `||`. `which_combat_type == 0` is an **outdoor**
+    fight (set at boe.combat.cpp:110; town combat sets 1 at boe.town.cpp:703),
+    so what the clause really says is *in an arena the four-space limit is
+    lifted entirely* — which is how a party collects a beaten encounter's
+    dropped packs from the other side of the board. Line of sight still gates
+    it. `display_item` (boe.items.cpp:538) repeats the same condition; one
+    function serves both here.
+  - The symptom was as far from the cause as this milestone gets: a `drop_item`
+    "how many?" prompt this port raised and the C++ never did, **1,700 actions
+    later**. The pile at (20,19) was fifteen items there and nine here, and the
+    six that were missing were the six lying together on (20,25) — six squares
+    away, in sight, in an arena.
+  - **`GI=1` / `BOE_TRACE_GI=1` is what named it, and it is the third probe of
+    its kind.** It prints the pile in row order with each item's square
+    (`variety/charges/type_flag@x,y`) when the screen opens, and one line per
+    row clicked. Like `PICK`, it exists because **taking an item spends no
+    draws**: the two engines' `[ran]` streams stayed identical through the whole
+    divergence. The two piles diff to a single contiguous run of six, which is
+    the shape a *reach* bug makes — an *order* bug scatters instead, and the
+    square column is there to tell those apart at a glance.
+  - **The previous two sessions' lead on this file was wrong in its diagnosis
+    and right in its instrument.** It read the divergence as "the C++ hands rows
+    to PC 0 and 1 and this port hands some to PC 2", and pointed at
+    `put_item_graphics`'s promote/demote pair. Nobody hands anything to a
+    different PC: `who=0 cur=0` on both sides at every one of those clicks. What
+    actually happened is that this port's screen ran out of rows, so the
+    recording's later clicks landed on nothing and six items stayed on the
+    floor — which changed the *packs*, which changed a lockpick's slot, which
+    is the `slot=4` against `slot=7` the last session narrowed to. Three
+    correct observations chained to a wrong cause; the fix was one `||`.
+  - **The method, which is worth reusing.** Diff `ITEMS=1` against
+    `BOE_TRACE_ITEMS=1` pack-for-pack, aligned by action index with a **fixed
+    offset** (the C++'s numbering counts the startup prefix this port's
+    `replayStartup` eats — it was +2 here, and constant, because a host-consumed
+    action still advances this port's index), and **require the difference to
+    persist**. The first *unfiltered* difference in that diff was a lockpick
+    charge at action 560 that both engines spend identically two actions apart —
+    the collapse artefact the 2026-09-01 entry warns about. Requiring the same
+    PC to still differ twelve comparisons later walked straight past it and
+    landed on action 4,084, which was the real one. The throwaway aligner is in
+    the scratchpad, not the repo; it is twenty lines and the offset is
+    per-file.
+  - Corpus **846,613 → 848,856** matching draws; "agree all the way" 28 → 29;
+    43 blocked outside the rules, unchanged. 1,036 tests green.

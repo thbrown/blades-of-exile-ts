@@ -1622,6 +1622,15 @@ export class GameSession {
    * Adjacent items are always in reach; anything further (up to 4 spaces, in
    * sight) only if no hostile creature is watching.
    *
+   * **In an arena fight the four-space limit is lifted entirely** — the C++'s
+   * `(dist(...) <= 4) || (is_combat() && which_combat_type == 0)`
+   * (boe.items.cpp:272), where `which_combat_type == 0` is *outdoor* combat.
+   * Line of sight is still required, so what it really says is "in an outdoor
+   * fight you can sweep up everything you can see", which is how a party
+   * collects a beaten encounter's dropped packs from across the arena. This
+   * port had only the distance half, so a recording's `item9-key` named a row
+   * that was not on this side's screen at all.
+   *
    * `massGet` comes back with them because it is also what titles the dialog:
    * `display_item` says "Getting all **nearby** items:" when the sweep is on
    * and "all adjacent items:" when a hostile creature has narrowed it.
@@ -1645,7 +1654,8 @@ export class GameSession {
         Math.max(Math.abs(place.x - item.itemLoc.x), Math.abs(place.y - item.itemLoc.y)) <= 1;
       const nearby =
         massGet &&
-        dist(place, item.itemLoc) <= 4 &&
+        (dist(place, item.itemLoc) <= 4
+          || (isCombat(this.mode) && this.whichCombatType === 0)) &&
         this.canSeeLight(place, item.itemLoc) < SIGHT_BLOCKED;
       if (!adjacent && !nearby) continue;
       // Worthless items identify themselves when you pick them up.

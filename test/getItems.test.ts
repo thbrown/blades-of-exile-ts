@@ -13,6 +13,7 @@ import { GameRng } from '../src/core/rng';
 import { ItemType } from '../src/data/item';
 import { Scenario } from '../src/data/scenario';
 import { GetItemsPick, NOBODY } from '../src/game/getItems';
+import { GameMode } from '../src/game/modes';
 import { GameSession } from '../src/game/session';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
@@ -96,6 +97,37 @@ describe('the get-items screen', () => {
 
     expect(pick.items.length).toBe(before - 1);
     expect(s.univ.party.pcs[0]!.items.some((i) => i.name === 'Test Potion')).toBe(true);
+  });
+
+  /**
+   * `get_item`'s reach (boe.items.cpp:272): the four-space limit has an `||`
+   * beside it, `(is_combat() && which_combat_type == 0)`, and
+   * `which_combat_type == 0` is an *outdoor* fight. So in an arena the party
+   * sweeps up everything it can see, however far away — which is how it
+   * collects a beaten encounter's dropped packs from the other side of the
+   * board. Line of sight still gates it; only the distance is lifted.
+   */
+  it('lifts the four-space limit in an arena fight, and only there', () => {
+    const s = started();
+    const town = s.univ.town!;
+    const from = { ...s.univ.party.townLoc };
+    const far = { x: from.x, y: from.y + 6 };
+    town.items.push({
+      ...town.items[0]!, variety: ItemType.POTION, name: 'Far Potion',
+      itemLoc: far, contained: false, ident: true, property: false,
+    });
+    // Nothing between the two squares, so only the distance can refuse it.
+    for (let y = from.y; y <= far.y; y++) town.record.terrain[from.x]![y] = 0;
+
+    const holds = () => s.reachableItems(from).items.some((i) => i.name === 'Far Potion');
+    expect(holds()).toBe(false);
+
+    s.mode = GameMode.COMBAT;
+    s.whichCombatType = 1;            // a town fight keeps the limit
+    expect(holds()).toBe(false);
+
+    s.whichCombatType = 0;            // an arena drops it
+    expect(holds()).toBe(true);
   });
 
   it('closes only on Done', () => {
