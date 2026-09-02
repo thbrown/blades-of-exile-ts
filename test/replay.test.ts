@@ -11,6 +11,7 @@ import { GameSession } from '../src/game/session';
 import {
   ReplaySource, locationFromAction, numberFromAction, parseReplay, writeReplay,
 } from '../src/replay/format';
+import { NO_TARGET } from '../src/game/spellPick';
 import { rngForReplay, runReplay } from '../src/replay/driver';
 import { ReplayRecorder } from '../src/replay/recorder';
 import { PartyPreset } from '../src/universe/player';
@@ -251,5 +252,37 @@ describe('recording and replaying a real game', () => {
     expect(result.ran).toBe(2);
     expect(result.error).toBeNull();
     expect(result.unsupported).toEqual({ handle_victory: 1 });
+  });
+});
+
+describe('a spell picker the recording walks away from', () => {
+  /**
+   * The C++'s picker is a modal `cDialog`, so a player's only ways out are Cast
+   * and Cancel — but a recording can hold `handle_spellcast` followed by
+   * something that is not a click, and the oracle's replay driver dismisses the
+   * dialog when that happens. Dismissal runs `finish_pick_spell` with
+   * `spell_toast` set, which **writes `store_last_cast_mage`**
+   * (boe.party.cpp:2041) — and the next `pick_spell` opens on *that* caster
+   * rather than on `univ.cur_pc`.
+   *
+   * This port used to drop the picker on the floor, so the caster memory was
+   * never written and the next cast was paid for by whoever happened to be
+   * active. In `VoDT_20-04-2025_16-01-17` that put a PC three spell points
+   * short, three hundred actions later, of a spell the C++ refuses outright.
+   */
+  it('is cancelled, which is what writes the caster memory', async () => {
+    const session = await newGame();
+    expect(session.lastCaster[0]).toBe(NO_TARGET);
+
+    await runReplay(session, {
+      seed: null, scenario: null, featureFlags: null,
+      actions: [
+        { type: 'handle_spellcast', text: '', info: {} },
+        { type: 'handle_switch_pc', text: '4', info: {} },
+      ],
+    });
+
+    // Written, and to whoever `pick_spell` settled on — not left unset.
+    expect(session.lastCaster[0]).not.toBe(NO_TARGET);
   });
 });

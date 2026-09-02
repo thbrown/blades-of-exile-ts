@@ -215,6 +215,13 @@ async function play(path: string): Promise<Row> {
               // Level, because half a dozen spell formulas divide by it and a
               // level that drifted is invisible everywhere else.
               + `/L${pc.level}`
+              // Spell points, because `pc_can_cast_spell` refuses on them and a
+              // refusal makes **no draws at all** — so "one side cast the spell
+              // and the other didn't" reads in the draw stream as whatever rule
+              // happened to run next. `sp=0` in the harness's `[cast]` line is
+              // the answer; this column is where the two runs first disagreed
+              // about it.
+              + `/p${pc.curSp}`
               + `/(${pc.combatPos.x},${pc.combatPos.y})`).join(''));
         }
         if (process.env.ITEMS) {

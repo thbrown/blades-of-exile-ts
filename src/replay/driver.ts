@@ -275,6 +275,23 @@ export async function runReplay(
     const at = source.position;
     const action = source.pop();
     try {
+      // **An abandoned spell picker is a *cancelled* one.** The C++'s picker is
+      // a modal `cDialog`, so the only ways out for a player are Cast and
+      // Cancel — but a recording can hold `handle_spellcast` followed by
+      // something that is not a click, and the oracle's replay driver dismisses
+      // the dialog when that happens. Dismissal runs `finish_pick_spell` with
+      // `spell_toast` set, which **writes `store_last_cast_mage`**
+      // (boe.party.cpp:2041), and the next `pick_spell` opens on that caster
+      // rather than on `univ.cur_pc`.
+      //
+      // This port used to drop the picker on the floor. In
+      // `VoDT_20-04-2025_16-01-17` that is the difference between a Long Light
+      // paid for by PC 3 and one paid for by PC 4 — and three hundred actions
+      // later, a PC with no spell points left casting a spell the C++ refuses.
+      if (picking !== null && action.type !== 'click_control') {
+        picking.click('cancel');
+        picking = null;
+      }
       switch (action.type) {
         case 'move': {
           const dest = locationFromAction(action);

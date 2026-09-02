@@ -709,6 +709,30 @@ index 937c63d0..ebe66893 100644
  	if(!outd_is_blocked(dest) && !outd_is_special(dest) && (dest != univ.party.out_loc)) {
  		univ.party.out_c[num].direction =
  		set_direction(univ.party.out_c[num].m_loc, dest);
+diff --git a/src/game/boe.party.cpp b/src/game/boe.party.cpp
+index 8736b7ee..75223462 100644
+--- a/src/game/boe.party.cpp
++++ b/src/game/boe.party.cpp
+@@ -2036,6 +2036,9 @@ static bool pick_spell_select_led(cDialog& me, std::string id, eKeyMod mods, con
+ }
+ 
+ static bool finish_pick_spell(cDialog& me, bool spell_toast, const short store_store_target, const short& store_spell, const eSkill store_situation) {
++	if(getenv("BOE_TRACE_PICKSP"))
++		std::cout << "      [picksp] finish toast=" << int(spell_toast) << " spell=" << store_spell
++			<< " pc_casting=" << pc_casting << std::endl;
+ 	if(spell_toast) {
+ 		store_spell_target = store_store_target ;
+ 		if(store_situation == eSkill::MAGE_SPELLS)
+@@ -2137,6 +2140,9 @@ eSpell pick_spell(short pc_num,const eSkill type, bool check_done) { // 70 - no
+ 	short dark = 6;
+ 	
+ 	pc_casting = type == eSkill::MAGE_SPELLS ? store_last_cast_mage : store_last_cast_priest;
++	if(getenv("BOE_TRACE_PICKSP"))
++		std::cout << "      [picksp] enter type=" << int(type) << " stored=" << pc_casting
++			<< " cur=" << univ.cur_pc << " forced=" << int(spell_forced) << std::endl;
+ 	if(pc_casting == 6)
+ 		pc_casting = univ.cur_pc;
+ 	
 diff --git a/src/game/boe.specials.cpp b/src/game/boe.specials.cpp
 index 173702da..5fda187b 100644
 --- a/src/game/boe.specials.cpp
@@ -938,7 +962,7 @@ index faaef3f2..657185b2 100644
  }
  
 diff --git a/src/tools/replay.cpp b/src/tools/replay.cpp
-index 3946c875..aee23f49 100644
+index 3946c875..73fab005 100644
 --- a/src/tools/replay.cpp
 +++ b/src/tools/replay.cpp
 @@ -28,6 +28,15 @@
@@ -968,7 +992,7 @@ index 3946c875..aee23f49 100644
  			} else if constexpr (std::is_integral_v<T>) {
  				if constexpr (std::is_same_v<S, std::string>) {
  					return static_cast<T>(std::stoi(arg));
-@@ -252,6 +263,191 @@ int next_action_line() {
+@@ -252,6 +263,198 @@ int next_action_line() {
  	return next_action->Row();
  }
  
@@ -1121,6 +1145,13 @@ index 3946c875..aee23f49 100644
 +				// Level, because half a dozen spell formulas divide by it and
 +				// a level that drifted is invisible everywhere else.
 +				<< "/L" << univ.party[p].level
++				// Spell points, because `pc_can_cast_spell` refuses on them and
++				// a refusal makes **no draws at all** — so "one side cast the
++				// spell and the other didn't" reads in the draw stream as
++				// whatever rule happened to run next. `sp=0` in `[cast]` is the
++				// answer; this column is where the two runs first disagreed
++				// about it.
++				<< "/p" << univ.party[p].cur_sp
 +				<< "/(" << univ.party[p].combat_pos.x << "," << univ.party[p].combat_pos.y << ")";
 +		std::cout << std::endl;
 +	}
@@ -1160,7 +1191,7 @@ index 3946c875..aee23f49 100644
  Element& pop_next_action(std::string expected_action_type) {
  	if(next_action == nullptr){
  		throw std::string { "Replay error! No action left to pop" };
-@@ -264,6 +460,13 @@ Element& pop_next_action(std::string expected_action_type) {
+@@ -264,6 +467,13 @@ Element& pop_next_action(std::string expected_action_type) {
  
  	Element* to_return = next_action;
  	next_action = next_action->NextSiblingElement(false);

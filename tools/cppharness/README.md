@@ -124,7 +124,12 @@ line-of-sight test — `lit=1` here against `lit=0` there, on a square eight
 squares from any lamp and behind a wall.
 
 `BOE_TRACE_PCS=1` (`PCS=1` here) prints each PC's `main_status`, health,
-**max** health, **level** and combat position. The maximum is there because almost every
+**max** health, **level**, **spell points** and combat position. Spell points
+are in it because `pc_can_cast_spell` refuses on them and **a refusal makes no
+draws at all** — so "one side cast the spell and the other didn't" reads in the
+draw stream as whatever rule happened to run next, arbitrarily far away.
+`[cast]`'s `sp=0` says the cast was refused; this column is where the two runs
+first disagreed about the number. The maximum is there because almost every
 heal in `increase_age` is gated on `cur_health < max_health` rather than on the
 current value alone, so "one side healed and the other didn't" is as often a
 disagreement about the ceiling as about the roll. Whether a PC is alive gates more monster behaviour than you
@@ -222,6 +227,16 @@ both the rotated `place_party` formation and a door this port had not opened.
 Terrain a *game* has changed is state, it survives a town exit, and nothing in
 the draw stream can see it; a door open on one side and shut on the other is a
 line of sight that differs and a spell that is refused.
+
+**`BOE_TRACE_PICKSP=1` prints the spell picker's caster memory**: `[picksp]
+enter type= stored= cur= forced=` at the top of `pick_spell`, and `[picksp]
+finish toast= spell= pc_casting=` on every way out. There is no pair for it
+here; it answers "who is paying for this spell", which is a recurring shape in
+this corpus because there are **three** globals involved (`pc_casting`,
+`store_last_cast_*`, `store_*_caster`) and the picker opens on the *stored* one,
+not on `univ.cur_pc`. `toast=1` is a cancel, and a cancel writes the memory —
+which is why a picker the recording walks away from still changes who casts
+next.
 
 **`BOE_TRACE_PICK=1` prints one line per `pick_lock`**: `pc= at (x,y) ter= r1=
 adj= dex= diff= lock= str= slot= break=`. Every term of the two rolls, so a

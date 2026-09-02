@@ -8879,3 +8879,36 @@ The M6 list below is kept for the history of what it covered:
   - Corpus **884,198 → 884,990** matching draws; 30 of 87 agree all the way;
     blocked outside the rules 45 → **46**. 1,052 tests green,
     `verify-screen.mjs` PASS.
+
+- **A spell picker the recording walks away from is a *cancelled* one (M8,
+  2026-09-02).** `VoDT_20-04-2025_16-01-17` goes 6,964 → **8,645** matching
+  draws — every draw the oracle makes — and the corpus-wide clock sweep is down
+  to one file.
+  - `pick_spell` opens on **`store_last_cast_mage`/`_priest`**, and only falls
+    back to `univ.cur_pc` when that is 6 (boe.party.cpp:1706). Those globals are
+    written by `finish_pick_spell` on **every** way out including Cancel
+    (:2041). So a picker opened, settled on a caster and then dismissed still
+    changes who the *next* cast is paid for by.
+  - A recording can hold `handle_spellcast` followed by an action that is not a
+    click — the player's dialog is modal, but the oracle's replay driver
+    dismisses it. This port dropped the picker on the floor instead, so the
+    memory was never written and the next cast was paid for by whoever happened
+    to be active. Here: a Long Light paid for by PC 4 instead of PC 3, and three
+    hundred actions later a PC three points short of a spell the C++ refuses
+    outright with `sp=0`.
+  - **The chain from symptom to cause ran through three instruments, and two of
+    them are new.** `diverge.mjs` said `resolveOne` — a spell resolving here and
+    not there. `BOE_TRACE_CAST` said `status=4 sp=0`, i.e. *refused for want of
+    spell points*, which is a **state** divergence wearing a rule's clothes.
+    Spell points were in neither `pcs:` line, so **`/p<sp>` was added to both**;
+    diffing that column named the exact action — the first cast — and
+    `BOE_TRACE_PICKSP`, added to read `pick_spell`'s three "who is casting"
+    globals, showed `stored=6 → walked to PC 3 → finish toast=1` on one side and
+    nothing on the other.
+  - Worth writing down: **a refusal makes no draws**, so any rule with a
+    precondition on party state (spell points, food, gold, charges) can diverge
+    invisibly. The fix for that class is to get the state into the `pcs:` line,
+    not to hunt harder in the draw stream.
+  - Corpus **884,990 → 886,672** matching draws; 30 of 87 agree all the way;
+    blocked outside the rules 46 → **47**. `--clocks` is down to **1 file**
+    (`AllMageSpells`, the known `TODO(M5c)` on Identify). 1,053 tests green.
