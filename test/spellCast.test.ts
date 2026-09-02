@@ -18,6 +18,7 @@ import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { GameMode } from '../src/game/modes';
 import { GameSession } from '../src/game/session';
 import { CastStatus, castableSpells, pcCanCastSpell, pcCanCastType } from '../src/game/spellCast';
+import { SpellPick } from '../src/game/spellPick';
 import { BASIC_SPELLS, PartyPreset, Player } from '../src/universe/player';
 import { MainStatus, Skill, Status, Trait } from '../src/universe/skills';
 import { Universe } from '../src/universe/universe';
@@ -342,5 +343,34 @@ describe('the castable list', () => {
     const pc = s.univ.party.pcs[0]!;
     pc.mageSpells.fill(false);
     expect(castableSpells(s, pc, Skill.MAGE_SPELLS)).toEqual([]);
+  });
+});
+
+/**
+ * `pick_spell`'s `pc_num == 6` prologue (boe.party.cpp:2148), which decides
+ * whether the casting dialog appears at all. It matters well beyond the screen:
+ * a recording holds a `click_control` for every button of a dialog that never
+ * opened, and the C++ discards those as orphans — so a port that opens the
+ * picker anyway casts a spell nobody could have cast.
+ */
+describe('whether the spell picker opens', () => {
+  it('refuses, and says so, when nobody in the party can cast', async () => {
+    const s = inTown();
+    for (const pc of s.univ.party.pcs) pc.curSp = 0;
+    const before = s.univ.transcript.length;
+    expect(SpellPick.open(s, Skill.MAGE_SPELLS, true)).toBeNull();
+    expect(s.univ.transcript.slice(before).join('\n')).toContain('Cast: Nobody can.');
+  });
+
+  it('opens on the first PC who can, when the stored caster cannot', async () => {
+    const s = inTown();
+    const pc = archmage(s);
+    // Everyone else is out of points, and the picker was last used by one of
+    // them — `store_last_cast_mage`, which outlives the dialog.
+    for (const other of s.univ.party.pcs) if (other !== pc) other.curSp = 0;
+    s.lastCaster[0] = 3;
+    const pick = SpellPick.open(s, Skill.MAGE_SPELLS, true);
+    expect(pick).not.toBeNull();
+    expect(pick!.caster).toBe(0);
   });
 });

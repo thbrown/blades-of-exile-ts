@@ -566,6 +566,23 @@ export async function runReplay(
             // format catches the real case anyway: a missile this port failed
             // to fire changes what the player does next, so it surfaces at the
             // following action rather than here.
+            //
+            // **Doing nothing is not the same as costing nothing, though.**
+            // `handle_target_space` sets `did_something = true` for every mode
+            // but FANCY *whether or not any of its four branches fired*
+            // (boe.actions.cpp:888), so the main loop's `advance_time` runs
+            // `handle_monster_actions` and **the turn passes**. A recording
+            // reaches this in town when `pick_spell` refused to open — the
+            // clicks for the dialog that never appeared are orphans, and the
+            // `handle_target_space` behind them still burns the turn.
+            // `ASR_20-05-2025_08-49-39` action 986 is the case: the C++'s clock
+            // goes 41,896 → 41,897 over an action that casts nothing.
+            //
+            // TODO(M8): the C++ does this in combat too, where `did_something`
+            // reaches `combat_next_step` rather than `do_monsters`. Left alone
+            // because nothing in the corpus has been shown to need it and the
+            // seven files above go through this branch in combat.
+            if (!isCombat(session.mode)) await session.afterPartyTurn();
           }
           break;
         }
@@ -639,7 +656,11 @@ export async function runReplay(
           // `can_choose_caster` is false in combat: the active PC casts, full
           // stop, and the caster buttons are inert (`pick_spell` is handed
           // `univ.cur_pc` there and 6 out of combat).
-          picking = new SpellPick(session, type, !isCombat(session.mode));
+          // Out of combat the picker only opens if somebody can cast: see
+          // `SpellPick.open`. When it refuses, the `click_control`s the
+          // recording holds for the dialog are orphans, and the C++ skips them
+          // — which is what `picking === null` makes this driver do too.
+          picking = SpellPick.open(session, type, !isCombat(session.mode));
           break;
         }
         case 'show_dialog_action':

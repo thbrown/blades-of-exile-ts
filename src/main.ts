@@ -14,7 +14,7 @@ import { SpecCtx, SpecCtxType } from './game/specials/context';
 import { Location, dist, locsEqual, shiftLoc } from './core/location';
 import { SpellPat } from './data/pattern';
 import { SPELLS, Spell, spellName } from './data/spell';
-import { CastStatus, castableSpells, pcCanCastType } from './game/spellCast';
+import { CastStatus, castableSpells } from './game/spellCast';
 import { castSpell } from './game/spellTown';
 import { combatCastCheck, combatCastSpell } from './game/spellCombat';
 import {
@@ -76,6 +76,7 @@ import { SheetStore } from './render/sheets';
 import { PartyPreset, Player } from './universe/player';
 import { HP_PER_LEVEL, TrainingState, trainCost } from './game/training';
 import { doRest } from './game/rest';
+import { SpellPick } from './game/spellPick';
 import { MainStatus, NUM_SKILLS, Skill, Status } from './universe/skills';
 import { Universe } from './universe/universe';
 
@@ -1030,9 +1031,11 @@ async function main(): Promise<void> {
         redraw();
         return;
       }
-    } else if (!univ.party.pcs.some(
-      (pc) => pcCanCastType(session, pc, type) === CastStatus.OK)) {
-      univ.addStringToBuf('Cast: Nobody can.');
+    }
+    // `pick_spell`'s own prologue decides whether the dialog opens, and prints
+    // the reason when it doesn't — the party scan this used to do by hand
+    // missed the stored caster and the per-PC lines both.
+    if (SpellPick.open(session, type, !inFight) === null) {
       setStatus();
       redraw();
       return;

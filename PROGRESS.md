@@ -1625,11 +1625,10 @@ bottom. What M8 still owes:
   fix. See the entry at the bottom for the current listing.
   A bucket named `… @ the C++ draws on` is **this port stopping**, not a rule:
   read the transcript at the stop.
-  Corpus **1,024,918** matching draws, **32 of 87** files agreeing all the way,
-  37 blocked outside the rules — and the queue's head is now a
-  **`doPriestSpell` bucket of four files**, uncovered when the driver's
-  adjacency guard on a replayed move came out (see the entry at the bottom).
-  **Those numbers were 890,998 / 31 / 48, 886,672 / 30 / 47,
+  Corpus **1,038,282** matching draws, **33 of 87** files agreeing all the way,
+  40 blocked outside the rules. The queue's head is now two two-file buckets,
+  `totalEncumbrance` and `monstPickTarget`.
+  **Those numbers were 1,024,918 / 32 / 37, 890,998 / 31 / 48, 886,672 / 30 / 47,
   884,990 / 30 / 46, 884,198 / 30 / 45, 883,917 / 30 / 44,
   792,066 / 28 / 41, 784,451 / 27 / 40, 784,586 / 27 / 40, 782,199 / 27 / 39,
   765,933 / 25 / 39 earlier on 2026-09-01, and
@@ -9012,3 +9011,47 @@ The M6 list below is kept for the history of what it covered:
     why most candidates in a dark arena are rejected before any obscurity walk
     happens. And `is_summon_safe`'s `254` really is bits 1-7 written as a range;
     the port's `SUMMON_UNSAFE_FIELDS` matches it.
+
+- **The picker that does not open, and the empty aim that still costs a turn
+  (M8, 2026-09-02).** The `doPriestSpell` bucket, which was **four files** and
+  is now one. Corpus **1,024,918 → 1,038,282** matching draws, **33 of 87**
+  agreeing all the way. Two rules, found in one chain, and the second only
+  became visible because the first was fixed.
+  - **`pick_spell` refuses before the dialog exists.** Its `pc_num == 6` branch
+    (boe.party.cpp:2148) keeps the stored caster
+    (`store_last_cast_mage`/`_priest`) if they can cast, otherwise walks the
+    party for the first who can, and when **nobody** can prints "Cast: Nobody
+    can." and returns `eSpell::NONE`. No dialog. This port opened the picker
+    regardless and cast with whoever was stored — on
+    `VoDT_09-04-2025_09-41-10` a party whose only two living members had **no
+    spell points** healed somebody with a `get_ran(2,1,4)` the C++ never spends.
+  - **The tell is `[orphan]`, and it is in the harness's own output.** The
+    recording still holds the three `click_control`s for the dialog, and the
+    C++ prints `[orphan] click_control on line N — no dialog is open; skipping`
+    for each. That line is the cheapest "the C++ did not do what you did" signal
+    in the corpus and nothing had been reading it. `BOE_TRACE_PICKSP=1` names
+    the stored caster (`[picksp] enter type=10 stored=5 cur=6`) and
+    `BOE_TRACE_PCS=1`'s `/p<sp>` column proves the refusal.
+  - **`handle_target_space` sets `did_something = true` even when it does
+    nothing.** (boe.actions.cpp:888, for every mode but FANCY.) So the orphaned
+    aim behind the refused picker still reaches `advance_time` →
+    `handle_monster_actions`, and **the turn passes**. Measured on
+    `ASR_20-05-2025_08-49-39` action 986: the C++'s clock goes 41,896 → 41,897
+    over an action that casts nothing, and this port's `else` branch — the one
+    documented as "nothing armed is not an error" — was charging nothing.
+  - **Fixing the first rule alone *cost* 22,592 draws**, all of it that one
+    file, which is the useful part of the story: the refusal was correct and
+    put the port on a code path it had never taken, where the second rule was
+    waiting. The corpus went 1,024,918 → 1,002,326 → 1,038,282 across the two.
+    **Measure per file, not just the total** — `diverge.mjs --all` piped into a
+    per-file diff of the two tables is twenty lines of script and it separates
+    "this fix regressed something" from "this fix uncovered something".
+  - The combat half of `handle_target_space`'s `did_something` is **left
+    alone**, with a `TODO(M8)`: there it reaches `combat_next_step` rather than
+    `do_monsters`, and the seven files that made this branch tolerant in the
+    first place all go through it in combat.
+  - `SpellPick.open` is now the single seam for "does the dialog appear", used
+    by both `main.ts` and the replay driver — `main.ts` had a hand-rolled party
+    scan that missed the stored caster and the per-PC refusal lines both.
+  - 1,056 tests green, `tsc` clean, `floating-promises` clean,
+    `verify-screen.mjs` PASS.

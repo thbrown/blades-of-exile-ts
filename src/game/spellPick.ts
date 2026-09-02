@@ -15,7 +15,7 @@ import { NUM_NORMAL_SPELLS, SPELLS, Spell, SpellSelect, spellFromNum } from '../
 import { MainStatus } from '../universe/skills';
 import { isCombat } from './modes';
 import { storeFor } from './spellRepeat';
-import { CastStatus, pcCanCastSpell, pcCanCastType } from './spellCast';
+import { CastStatus, pcCanCastSpell, pcCanCastType, printCastStatus } from './spellCast';
 import type { GameSession } from './session';
 import { Skill } from '../universe/skills';
 
@@ -125,6 +125,59 @@ export class SpellPick {
     // page the selected spell is on.
     // `int(default_spell) % 100` — the number within its own list.
     this.page = (want % 100) >= 38 ? 1 : 0;
+  }
+
+  /**
+   * **`pick_spell`'s prologue — and whether the dialog opens at all.**
+   * (boe.party.cpp:2148.) `cast_spell` calls `pick_spell(6, type)`, and its
+   * `pc_num == 6` branch keeps the stored caster if they can cast and otherwise
+   * walks the party for the first who can. When **nobody** can it prints
+   * "Cast: Nobody can." and returns `eSpell::NONE` — so no picker appears, and
+   * the three `click_control`s a recording holds for it are **orphans the C++
+   * skips**. Missing that was worth 4,000 draws on `VoDT_09-04-2025_09-41-10`,
+   * where a party whose only two living members had no spell points opened a
+   * picker here and healed somebody.
+   *
+   * Antimagic is the exception the C++ makes on purpose: it prints and opens
+   * the dialog anyway, and skips the party scan (which in combat would spend
+   * an encumbrance roll per PC).
+   *
+   * The combat callers pass `pc_num = univ.cur_pc` and `check_done = true`
+   * (boe.combat.cpp:4574, :4793), so neither this branch nor the
+   * `!can_choose_caster` refusal below it runs there — `combatCastCheck` is
+   * that path's gate. Which is also why this scan costs no dice: every arm of
+   * `pc_can_cast_spell` that draws is `is_combat()`-gated.
+   *
+   * Returns `null` where the C++ returns `eSpell::NONE` without a dialog.
+   */
+  static open(
+    session: GameSession, type: Skill, canChooseCaster: boolean,
+  ): SpellPick | null {
+    if (!canChooseCaster) return new SpellPick(session, type, canChooseCaster);
+    const { univ } = session;
+    let who = session.lastCaster[type === Skill.PRIEST_SPELLS ? 1 : 0];
+    if (who === NO_TARGET) who = univ.curPc;
+    const same = univ.party.pcs[who]
+      ? pcCanCastType(session, univ.party.pcs[who]!, type) : CastStatus.NO_UNKNOWN;
+    if (same === CastStatus.NO_ANTIMAGIC) {
+      printCastStatus(univ, same, type);
+    } else if (same !== CastStatus.OK) {
+      let found = -1;
+      for (const pc of univ.party.pcs) {
+        const status = pcCanCastType(session, pc, type);
+        if (status === CastStatus.OK) { found = 1; break; }
+        // The immutable reasons — no skill, Anama — say nothing; the rest name
+        // the PC. `NO_SP` through `NO_ASLEEP` is the C++'s own range test.
+        if (status >= CastStatus.NO_SP && status <= CastStatus.NO_ASLEEP) {
+          printCastStatus(univ, status, type, pc.name);
+        }
+      }
+      if (found < 0) {
+        univ.addStringToBuf('Cast: Nobody can.');
+        return null;
+      }
+    }
+    return new SpellPick(session, type, canChooseCaster);
   }
 
   /** `pc_can_cast_spell(univ.party[i], spell)` for an arbitrary caster. */
