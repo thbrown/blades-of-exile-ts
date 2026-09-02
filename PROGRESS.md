@@ -8636,3 +8636,33 @@ The M6 list below is kept for the history of what it covered:
     hard-coding it, because which seed does that is not a fact about the rule.
   - Corpus **869,293 → 880,876** matching draws; 29 of 87 agree all the way; 44
     blocked outside the rules. 1,043 tests green.
+
+- **`IMMUNE` is written by damage-type *name*, and a save was making every
+  monster invulnerable (M8, 2026-09-02).** The corpus's biggest file,
+  `ASR_19-05-2025_19-38-44`, now **agrees on all 109,379 draws** — the first
+  time it has — and "agree all the way" goes 29 → **30 of 87**.
+  - `cMonster::writeTo` does `page["IMMUNE"].encodeSparse(resist)`, and `resist`
+    is a `std::map<eDamageType,int>`, so the *pair* overload runs and the index
+    it writes is the enum's **tag**: `IMMUNE weap 100`. This port wrote
+    `IMMUNE 0 100` and read the index back with `tag.int(0)`, which threw every
+    entry away.
+  - The consequence is as bad as it gets and completely silent. `extractSparse`
+    over a map **clears it first**, and `resist[dam_type]` on a `std::map`
+    default-constructs to **0** — so an unnamed entry is not "no resistance", it
+    is *total immunity*. `damage_monst`'s first line is `percent(how_much,
+    victim.resist[dam_type])`, so every monster that came out of a save shrugged
+    off every blow, for the rest of the game, with nothing printed.
+  - **This is the second time this exact trap has been paid for.** The
+    `STATUS`/`std::map<eStatus,short>` version of it cost
+    `VoDT_20-04-2025_21-09-37` 2,000 draws in August and has a note beside it in
+    `writeCreature`. The rule to take away: **every `encodeSparse` in the C++
+    over a `std::map` writes enum tags, and every one over a vector writes
+    indices** — check the container, not the call.
+  - How it surfaced: a summoned Serpent (`num=10000`, an exported summon saved
+    with the party) took 10 points of weapon damage and lost none, so the C++
+    ran its touch-ability loop and this port did not. `BOE_TRACE_TOUCH`'s stream
+    against `TOUCH=1`'s was 53 lines identical and then two the C++ had alone —
+    which named the *attack*, not the resistance. What named the resistance was
+    printing `victim.mon.resist` beside the damage.
+  - Corpus **880,876 → 881,151** matching draws; **30 of 87 agree all the way**;
+    44 blocked outside the rules. 1,044 tests green.

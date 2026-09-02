@@ -80,7 +80,9 @@ describe('the stand-ready volley', () => {
     // Deterministic, but which seed lands the killing blow is not something to
     // hard-code: search a few and assert on the first that kills.
     for (let seed = 1; seed <= 200 && checked === 0; seed++) {
-      const univ = new Universe(scen, new GameRng(seed), PartyPreset.DEFAULT);
+      const rng = new GameRng();
+      rng.seedGame(seed);
+      const univ = new Universe(scen, rng, PartyPreset.DEFAULT);
       const session = new GameSession(univ);
       session.startTownMode(0, FORCED_ENTRY);
       expect(session.startCombat(Direction.N)).toBe(true);

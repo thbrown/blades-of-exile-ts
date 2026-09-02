@@ -301,7 +301,17 @@ export function writeMonster(page: TagPage, mon: Monster): void {
   page.add('RACE', writeEnumTag(raceNames, mon.race, 'humanoid'));
   page.add('TREASURE', mon.treasure);
   page.add('CORPSEITEM', mon.corpseItem, mon.corpseItemChance);
-  page.encodeSparse('IMMUNE', mon.resist, 0);
+  // **`encodeSparse` over a `std::map<eDamageType,int>` writes the enum's
+  // *tag*, not its index** (monster.cpp:804) — `IMMUNE weap 100` — the same
+  // trap `STATUS` fell into on the creature pages. Writing `IMMUNE 0 100` and
+  // reading it back with `tag.int(0)` made every entry unreadable, so a monster
+  // that came out of a save had **every resistance at zero**, which in
+  // `damage_monst` means immune to everything: `percent(how_much, 0)` is 0.
+  // The summoned Serpent in `ASR_19-05-2025_19-38-44` shrugged off every blow
+  // for the rest of the recording.
+  for (let i = 0; i < mon.resist.length; i++)
+    if (mon.resist[i] !== 0)
+      page.add('IMMUNE', writeEnumTag(dmgNames, i, 'weap'), mon.resist[i]!);
   page.add('SIZE', mon.xWidth, mon.yWidth);
   page.add('ATTITUDE', writeEnumTag(attitudeStrs, mon.defaultAttitude, 'docile'));
   page.add('SUMMON', mon.summonType);
@@ -341,10 +351,15 @@ export function readMonster(page: TagPage): Monster {
   mon.treasure = page.first('TREASURE')?.int(0) ?? 0;
   mon.corpseItem = page.first('CORPSEITEM')?.int(0) ?? 0;
   mon.corpseItemChance = page.first('CORPSEITEM')?.int(1) ?? 0;
-  // `resist` defaults to 100 per type, but the sparse form only names the
-  // non-zero ones, so the array is cleared first exactly as extractSparse does.
+  // `extractSparse` over a map **clears it first**, so an entry the save does
+  // not name is absent — and `resist[dam_type]` on a `std::map` default-
+  // constructs to 0, i.e. total immunity. The array is cleared to match, and
+  // the index is a damage-type *tag*: see the note in `writeMonster`.
   mon.resist.fill(0);
-  page.extractSparse('IMMUNE', mon.resist, 0);
+  for (const tag of page.list('IMMUNE')) {
+    const which = readEnumTagOrNumber(dmgNames, tag.str(0), -1);
+    if (which >= 0 && which < mon.resist.length) mon.resist[which] = tag.int(1);
+  }
   mon.xWidth = page.first('SIZE')?.int(0) ?? 1;
   mon.yWidth = page.first('SIZE')?.int(1) ?? 1;
   mon.defaultAttitude = readEnumTagOrNumber(attitudeStrs, page.first('ATTITUDE')?.str(0) ?? '', 0);

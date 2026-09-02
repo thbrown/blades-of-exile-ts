@@ -2,18 +2,20 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { GameRng } from '../src/core/rng';
+import { DamageType } from '../src/data/monster';
+import { TagPage } from '../src/fileio/tagfile';
 import { FieldType } from '../src/data/fields';
 import { ItemType, presetItem, ItemPreset } from '../src/data/item';
 import { QuestStatus } from '../src/data/quest';
 import { Scenario } from '../src/data/scenario';
 import { loadScenario } from '../src/fileio/loadScenario';
 import {
-  loadSave, openSave, readSavePreview, saveGame, serialiseSave,
+  loadSave, openSave, readSavePreview, saveGame, serialiseSave, writeMonster,
 } from '../src/fileio/saveIo';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { GameSession } from '../src/game/session';
-import { CreatureStatus } from '../src/universe/creature';
+import { CreatureStatus, copyMonster } from '../src/universe/creature';
 import { EncNoteType, TOWN_NUM_OUTDOORS } from '../src/universe/party';
 import { PartyPreset } from '../src/universe/player';
 import { MainStatus, Status } from '../src/universe/skills';
@@ -369,6 +371,38 @@ describe('.exg round trip', () => {
  * in the wrong place. That is why this test asserts against the **file text**
  * rather than against a reloaded universe.
  */
+describe('a monster page', () => {
+  /**
+   * `encodeSparse` over a `std::map<eDamageType,int>` writes the enum's **tag**
+   * (monster.cpp:804) — `IMMUNE weap 100`, not `IMMUNE 0 100`. The read side
+   * has to match, and the cost of not matching is invisible: `extractSparse`
+   * over a map *clears* it, and `resist[dam_type]` on a map default-constructs
+   * to **0**, which `damage_monst` reads as total immunity. A monster that came
+   * out of a save shrugged off every blow in the game.
+   */
+  it('round-trips a summoned monster\'s resistances, by damage-type name', async () => {
+    const { univ } = await newGame();
+    const summon = copyMonster(scen.scenMonsters.find((m) => m.name.length > 0)!);
+    summon.resist.fill(100);
+    summon.resist[DamageType.FIRE] = 50;
+    summon.resist[DamageType.COLD] = 0;
+    univ.party.summons = [summon];
+
+    const page = new TagPage();
+    writeMonster(page, summon);
+    const text = page.serialise();
+    expect(text).toContain('IMMUNE weap 100');
+    expect(text).toContain('IMMUNE fire 50');
+    // Zero is the sparse form's default, so it is the one value not written.
+    expect(text).not.toContain('cold');
+
+    const back = roundTrip(univ).party.summons[0]!;
+    expect(back.resist[DamageType.WEAPON]).toBe(100);
+    expect(back.resist[DamageType.FIRE]).toBe(50);
+    expect(back.resist[DamageType.COLD]).toBe(0);
+  });
+});
+
 describe('the town grid axes, which a round trip cannot check', () => {
   it('writes one TERRAIN line per y, with x along it', async () => {
     const univ = (await newGame()).univ;
