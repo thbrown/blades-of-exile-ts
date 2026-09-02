@@ -8838,3 +8838,44 @@ The M6 list below is kept for the history of what it covered:
   - Corpus **883,917 → 884,198** matching draws; 30 of 87 agree all the way;
     blocked outside the rules 44 → **45**. 1,051 tests green,
     `verify-screen.mjs` PASS.
+
+- **`--clocks`: the clock diff, made a tool — and the two bugs it found
+  immediately (M8, 2026-09-02).** The 2026-09-02 `is_blocked` entry above says
+  "diff the clocks before diffing anything else"; this is that, in
+  `scripts/align-actions.mjs --all --clocks`, reusing the alignment that file
+  already does properly.
+  - `univ.party.age` is printed by both traces and **a turn one side charges
+    and the other doesn't spends no draws**, so `diverge.mjs` structurally
+    cannot see it and points at an innocent bystander arbitrarily far
+    downstream. Aligned by the recording's own arguments, the first action whose
+    two `age=` values differ *is* the action that charged the turn.
+  - **The C++'s printed age is a before-value and this port's is an after-value**
+    — the same asymmetry `parseActions` already corrects for `draws`, so the fix
+    was three lines in the same place.
+  - **The filter that makes it usable: require the difference to persist.**
+    Unfiltered it reported **51 of 73** files, almost all of them at action 1.
+    Those are the move-plus-dialog collapse: this port charges the turn on the
+    collapsed action and the C++ on the last click of the dialog, so the clocks
+    read one apart for two actions and re-converge. A real extra turn never
+    re-converges — nothing subtracts from `age` — so "still different twenty
+    compared actions later" separates them exactly. **51 → 3.** The same
+    unfalsified-filter trap as `align-actions.mjs`'s own "0 of 73", and it
+    wanted the same answer.
+  - **`ZKR_15-05-2025_16-09-51`, fixed: `pc_combat_move` has no action-point
+    guard.** It is `pick_next_pc` that keeps a spent PC from being the one you
+    drive, and a *recording* can still hand a move to one. The C++ lets the step
+    through, `take_ap(1)` clamps at zero, `did_something` is set, and
+    `combat_next_step` then finds nobody with points and **turns the round
+    over**. This port refused the move, so the round never ended: the file sat
+    on a PC with no moves and refused every action after it for three hundred
+    actions. 4,810 → **5,602** matching draws, and it now agrees on every draw
+    it reaches.
+  - **`AllMageSpells`, still open and now precisely named.** The C++'s `click_control`
+    at action 15 casts **Identify**, charges a turn and enters
+    `MODE_ITEM_TARGET`; this port prints "Identify needs the item screen; not in
+    yet" and charges nothing. That is the standing `TODO(M5c)` on
+    `Spell.IDENTIFY`/`Spell.RECHARGE` in `spellTown.ts`, not a new bug — the
+    clock diff just says exactly what it costs.
+  - Corpus **884,198 → 884,990** matching draws; 30 of 87 agree all the way;
+    blocked outside the rules 45 → **46**. 1,052 tests green,
+    `verify-screen.mjs` PASS.

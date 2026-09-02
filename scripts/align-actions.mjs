@@ -3,6 +3,7 @@
 //   node scripts/align-actions.mjs ASR_11-05-2025_07-55-19   # one file, with context
 //   node scripts/align-actions.mjs --all                     # every cached file, ranked
 //   node scripts/align-actions.mjs --all --drift             # only files that drifted
+//   node scripts/align-actions.mjs --all --clocks            # first age= divergence per file
 //
 // ## Why this exists, next to diverge.mjs
 //
@@ -53,6 +54,23 @@
 // disagree about what the next action *is*, which means the recording's action
 // list was consumed differently, not that a rule fired wrong.
 
+// ## `--clocks`: the same alignment, asked about the turn counter
+//
+// A turn one side charges and the other doesn't is the hardest divergence in
+// this corpus to place, because **it spends no draws**. It shifts every
+// creature in the town by one move, and the draw streams stay byte-identical
+// until something arbitrarily far downstream happens to roll — so `diverge.mjs`
+// points at an innocent bystander several rules away from the cause.
+//
+// `univ.party.age` is the tell, and both traces already print it. Aligned by
+// the same argument key, the **first action whose two `age=` values differ** is
+// the action that charged the turn — an action, not a rule, which is a much
+// smaller thing to read. It found `town_move_party`'s missing "the party's own
+// square is blocked" clause in one run, after the draw stream had spent 270
+// draws pointing somewhere else entirely.
+//
+// Reach for this **before** reading a draw diff, not after.
+
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -64,6 +82,7 @@ const args = process.argv.slice(2);
 const flag = (name) => args.includes(`--${name}`);
 const ALL = flag('all');
 const DRIFT_ONLY = flag('drift');
+const CLOCKS = flag('clocks');
 const CONTEXT = 4;
 const target = args.find((a) => !a.startsWith('--'));
 
@@ -106,7 +125,11 @@ function parseActions(path, side) {
   for (const line of text.split('\n')) {
     const a = ACTION.exec(line);
     if (a) {
-      const rec = { at: Number(a[1]), type: a[2], draws: 0, detail: detailOf(line) };
+      const printedAge = /\bage=(\d+)/.exec(line);
+      const rec = {
+        at: Number(a[1]), type: a[2], draws: 0, detail: detailOf(line),
+        age: printedAge ? Number(printedAge[1]) : null,
+      };
       // **A gap in this port's own numbering is not a missing action.** The
       // replay host pulls from the same action stream the driver is walking —
       // that is how a message raised mid-move eats the click that dismissed it
@@ -129,7 +152,12 @@ function parseActions(path, side) {
       prevAt = rec.at;
       if (side === 'cpp') {
         // Printed before it runs: the draws so far close the *previous* action.
-        if (open) { open.draws = draws; acts.push(open); }
+        // **And so does the age** — the value on this line is the clock as it
+        // stood *before* this action, i.e. after the one before it. This port
+        // prints its line after the action, so its `age` is already an
+        // after-value and needs no shifting. Lining the two up is the whole
+        // point of `--clocks`.
+        if (open) { open.draws = draws; open.age = rec.age; acts.push(open); }
         open = rec;
       } else {
         rec.draws = draws;
@@ -140,7 +168,9 @@ function parseActions(path, side) {
     const d = DRAW.exec(line);
     if (d) draws = Number(d[1]);
   }
-  if (open) { open.draws = draws; acts.push(open); }
+  // The last C++ action has no successor to read its after-age from; leave it
+  // null rather than reporting the before-value as though it were one.
+  if (open) { open.draws = draws; open.age = null; acts.push(open); }
   return acts;
 }
 
@@ -291,6 +321,56 @@ function side(rec) {
   return `${at} ${type} ${String(rec.draws).padStart(7)}`;
 }
 
+/**
+ * `--clocks` — the first aligned action whose two `age=` values disagree.
+ *
+ * Only matched pairs are looked at: an unmatched action is a drift question,
+ * which `report` already answers, and comparing clocks across one would name
+ * the wrong action. A pair where either side printed no age (the C++'s last
+ * action, which has no successor to read an after-value from) is skipped.
+ */
+const CLOCK_PERSIST = 20;
+
+function reportClocks(name, cpp, js) {
+  const script = align(cpp, js);
+  // **A one-action difference is normally an artefact, not a divergence.**
+  // This port collapses a C++ move-plus-dialog into a single action and charges
+  // the turn there, while the C++ charges it on the *last click* of the dialog
+  // — so between the two the clocks read one apart and then re-converge. Every
+  // file in the corpus does this, dozens of times.
+  //
+  // A turn genuinely charged by one side and not the other never re-converges:
+  // nothing subtracts from `age`. So the answer is the first difference that is
+  // **still there** twenty compared actions later, and the ones that heal are
+  // the collapse.
+  const pairs = [];
+  for (const s of script) {
+    if (s.op !== '=' || !s.cpp || !s.js) continue;
+    if (s.cpp.age === null || s.js.age === null || s.js.answered) continue;
+    pairs.push(s);
+  }
+  let checked = 0;
+  for (const s of pairs) {
+    checked++;
+    if (s.cpp.age === s.js.age) continue;
+    const later = pairs.slice(checked, checked + CLOCK_PERSIST);
+    if (later.length < CLOCK_PERSIST) break;   // too near the end to judge
+    if (later.some((t) => t.cpp.age === t.js.age)) continue;
+    console.log(`\n${name}`);
+    console.log(`  clocks part after ${fmt(checked)} compared actions,`
+      + ` at draw ${fmt(s.js.draws)}: the C++ ${fmt(s.cpp.age)}, this port ${fmt(s.js.age)}`
+      + ` (${s.js.age > s.cpp.age ? 'a turn charged here and not there' : 'a turn charged there and not here'})`);
+    console.log(`      the C++  ${side(s.cpp)}  age=${s.cpp.age}`);
+    console.log(`      here     ${side(s.js)}  age=${s.js.age}`);
+    return { name, clockDrift: true, at: checked, draw: s.js.draws };
+  }
+  if (!ALL) {
+    console.log(`\n${name}\n  clocks agree over all ${fmt(pairs.length)} compared actions`
+      + ' (transient one-turn gaps from move-plus-dialog collapses ignored).');
+  }
+  return { name, clockDrift: false, at: checked };
+}
+
 function report(name, cpp, js) {
   const script = align(cpp, js);
   const all = hunks(script);
@@ -365,12 +445,21 @@ for (const d of dirs) {
     }
     continue;
   }
-  const r = report(d, cpp, js);
+  const r = CLOCKS ? reportClocks(d, cpp, js) : report(d, cpp, js);
+  if (CLOCKS) { if (r.clockDrift) results.push(r); continue; }
   if (DRIFT_ONLY && !r.drift) continue;
   results.push(r);
 }
 
-if (ALL) {
+if (ALL && CLOCKS) {
+  console.log(`\n${'='.repeat(72)}`);
+  console.log(`${results.length} file(s) whose clocks part. A turn one side charges and`
+    + ' the other does not spends no draws, so this is upstream of wherever'
+    + ' diverge.mjs points.');
+  for (const r of results.sort((x, y) => x.at - y.at)) {
+    console.log(`  ${String(r.at).padStart(6)} actions in, draw ${String(fmt(r.draw)).padStart(9)}  ${r.name}`);
+  }
+} else if (ALL) {
   const drifted = results.filter((r) => r.drift);
   console.log(`\n${'='.repeat(72)}`);
   console.log(`${drifted.length} of ${results.length} files drifted.`);

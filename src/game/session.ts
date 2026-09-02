@@ -3825,7 +3825,14 @@ export class GameSession {
     // happen here.
     let pc = this.univ.currentPc;
     if (this.mode !== GameMode.COMBAT || !town) return false;
-    if (pc.ap <= 0) return false;
+    // **No action-point guard.** `pc_combat_move` (boe.combat.cpp:216) has
+    // none: it is `pick_next_pc` that keeps a spent PC from being the one you
+    // are driving, and a *recording* can still hand a move to one. The C++ lets
+    // the step through, `take_ap(1)` clamps at zero, and `did_something` is set
+    // — so `advance_time` runs `combat_next_step`, nobody has points, and the
+    // **round turns over**. This port refused instead, so the round never
+    // ended: `ZKR_15-05-2025_16-09-51` sat on a PC with no moves and refused
+    // every action after it.
 
     const monstHit = town.monsterAt(destination);
     if (!monstHit && (pc.status[Status.FORCECAGE] ?? 0) > 0) {

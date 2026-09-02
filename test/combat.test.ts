@@ -65,6 +65,42 @@ function hostileBeside(univ: Universe, session: GameSession, index = 1): Creatur
   return monst;
 }
 
+describe('a combat move by a PC with no action points', () => {
+  /**
+   * `pc_combat_move` (boe.combat.cpp:216) has **no action-point guard**: it is
+   * `pick_next_pc` that keeps a spent PC from being the one you are driving,
+   * and a recording can still hand a move to one. The C++ lets the step
+   * through, `take_ap(1)` clamps at zero, and `did_something` is set — so
+   * `advance_time` runs `combat_next_step`, finds nobody with points left, and
+   * **turns the round over**.
+   *
+   * This port refused the move outright, so the round never ended:
+   * `ZKR_15-05-2025_16-09-51` sat on a PC with no moves and refused every
+   * action after it, for three hundred actions.
+   */
+  it('goes through, and turns the round over', async () => {
+    const { univ, session } = newGame();
+    expect(session.startCombat(Direction.N)).toBe(true);
+    const pc = univ.currentPc;
+    const from = { ...pc.combatPos };
+    const dest = [
+      loc(from.x + 1, from.y), loc(from.x - 1, from.y),
+      loc(from.x, from.y + 1), loc(from.x, from.y - 1),
+    ].find((c) => !univ.town!.monsterAt(c) && !session.townIsBlocked(c)
+      && !univ.party.pcs.some((p) => p.isAlive && locsEqual(p.combatPos, c)))!;
+    // Everybody spent, which is what makes `combat_next_step` start a round.
+    for (const p of univ.party.pcs) p.ap = 0;
+
+    expect(await session.combatMove(dest)).toBe(true);
+
+    expect(pc.combatPos).toEqual(dest);
+    // The monster round is queued rather than awaited (see `afterCombatAction`).
+    await session.settled();
+    // A fresh round was handed out rather than the fight sticking.
+    expect(univ.party.pcs.some((p) => p.isAlive && p.ap > 0)).toBe(true);
+  });
+});
+
 describe('the stand-ready volley', () => {
   /**
    * `do_monster_turn`'s parry check is one `&&` chain re-evaluated per PC
