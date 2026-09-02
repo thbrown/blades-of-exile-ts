@@ -1184,11 +1184,18 @@ export class GameSession {
     const vehicleForced = vehicleStep === 'forced';
 
     // `is_blocked` (boe.locutils.cpp:261) is more than the terrain: a creature,
-    // a force barrier or a force cage all stop the step the same way.
-    const blocked = this.townIsBlocked(destination)
-      || monsterThere !== null
-      || town.hasField(destination.x, destination.y, FieldType.BARRIER_FORCE)
-      || town.hasField(destination.x, destination.y, FieldType.BARRIER_CAGE);
+    // a force barrier or a force cage all stop the step the same way — **and so
+    // does the party's own square** (`if(is_town() && to_check ==
+    // univ.party.town_loc) return true`, :294).
+    //
+    // That last one is why this calls `isBlocked` rather than assembling the
+    // list here, which is what it used to do: a `move` onto the square the
+    // party is *already standing on* is refused by the C++ and was allowed
+    // here, so it charged a turn the C++ never charges. Recordings contain
+    // those moves — the original's own `set_direction` has a fall-through for
+    // exactly this case — and one extra turn puts every creature in the town a
+    // step ahead, permanently, while spending **no draws at all** to say so.
+    const blocked = this.isBlocked(destination);
 
     // A `forced` return from the square's special — like the bridge prompt's —
     // only bypasses the blockage test. It does **not** short-circuit the rest

@@ -8806,3 +8806,35 @@ The M6 list below is kept for the history of what it covered:
     taken, and it does not depend on what the projectile then does.
   - Corpus **881,151 → 883,917** matching draws; 30 of 87 agree all the way; 44
     blocked outside the rules. 1,050 tests green.
+
+- **The party's own square is blocked, and walking into it costs no turn (M8,
+  2026-09-02).** `ASR_10-05-2025_17-55-45` goes 31,260 → **31,532** matching
+  draws, which is **every draw the oracle makes** — what stops it now is the
+  harness dying at action 480 while this port runs 639.
+  - `is_blocked` counts the party's own square in town: `if(is_town() &&
+    to_check == univ.party.town_loc) return true` (boe.locutils.cpp:294). So a
+    `move` to where the party already stands is refused, `did_something` stays
+    false, and **no turn is charged**. Recordings contain those moves — the
+    original's own `set_direction` has a fall-through for exactly this case,
+    noted here on 2026-09-01.
+  - `town_move_party` assembled `is_blocked`'s list by hand — terrain, a
+    creature, the two barriers — and left that clause out. The step went
+    through, the clock ticked, and from then on **every creature in the town
+    was one move ahead of the C++'s**. It now calls `isBlocked`, which this port
+    already had and which `monst_check_special_terrain` and combat placement
+    already used.
+  - **This is the movement-drift shape the harness README warns about, in its
+    purest form.** The extra turn spends no draws; the creature positions it
+    shifts spend no draws; the two runs stayed byte-identical for 270 more
+    draws and then parted inside `monst_check_one_special_terrain`'s `guts`
+    roll, which is an innocent bystander three rules away from the cause.
+  - **What found it was the `age` column, not the draws.** Aligning the two
+    traces' `age=` by action (fixed offset, C++ prints before and this port
+    after, so compare `js[n]` with `cpp[n+off+1]`) named the exact action:
+    `move (4,10)` from (4,10), where the C++'s `[tmove]` probe says
+    `blocked=1` on a square whose terrain is a plain floor. **Diff the clocks
+    before diffing anything else** — it is two lines of script and it points at
+    an action rather than at a rule.
+  - Corpus **883,917 → 884,198** matching draws; 30 of 87 agree all the way;
+    blocked outside the rules 44 → **45**. 1,051 tests green,
+    `verify-screen.mjs` PASS.

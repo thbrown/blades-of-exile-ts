@@ -981,3 +981,31 @@ describe('town memory', () => {
     expect(s.univ.town!.monsters[0]!.isAlive).toBe(true);
   });
 });
+
+describe('a move onto the square the party is already on', () => {
+  /**
+   * `is_blocked` counts the party's own square in town (`if(is_town() &&
+   * to_check == univ.party.town_loc) return true`, boe.locutils.cpp:294), so
+   * `town_move_party` refuses a `move` to where the party already stands and
+   * **charges no turn**. Recordings contain those moves — the original's own
+   * `set_direction` has a fall-through for exactly this case.
+   *
+   * This port assembled `is_blocked`'s list by hand in `town_move_party` and
+   * left that clause out, so the step went through, the clock ticked, and every
+   * creature in the town was one move ahead of the C++'s from then on —
+   * spending **no draws at all** to say so. `ASR_10-05-2025_17-55-45` parted
+   * from the oracle 270 draws later, in a creature's terrain roll.
+   */
+  it('is refused, and costs no turn', async () => {
+    const s = newSession();
+    s.startNewGame();
+    const here = { ...s.univ.party.townLoc };
+    const age = s.univ.party.age;
+
+    expect(await s.moveTo(here)).toBe(false);
+
+    expect(s.univ.party.townLoc).toEqual(here);
+    expect(s.univ.party.age).toBe(age);
+    expect(s.univ.transcript.some((l) => l.startsWith('Blocked:'))).toBe(true);
+  });
+});
