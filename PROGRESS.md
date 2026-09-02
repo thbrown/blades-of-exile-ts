@@ -8666,3 +8666,33 @@ The M6 list below is kept for the history of what it covered:
     printing `victim.mon.resist` beside the damage.
   - Corpus **880,876 → 881,151** matching draws; **30 of 87 agree all the way**;
     44 blocked outside the rules. 1,044 tests green.
+
+- **The rest of the `encodeSparse` audit: `SKILL` and the party's `STATUS`
+  (M8, 2026-09-02).** Corpus-neutral (881,151 before and after) and worth
+  having anyway — one of the two was losing state on every load of a C++ save,
+  and only luck kept it out of the draw stream.
+  - The rule from the `IMMUNE` entry above, applied to every sparse tag in the
+    save. **A `std::map` writes the key's enum tag; a vector or `std::array`
+    writes the index.** Going through them:
+    - `cMonster::resist` — map, **fixed above**.
+    - `cPlayer::skills` (`std::map<eSkill,short>`, pc.hpp:93) — map. This port
+      *wrote* `SKILL 15 7` and read it back with `readEnumTagOrNumber`, so its
+      own round trip worked and a C++ save loaded fine; only the file it
+      produced was wrong, and the C++ could not have read it. Now `SKILL
+      lockpick 7`.
+    - `cParty::status` (`std::map<ePartyStatus,short>`, party.hpp:122) — map,
+      and this one was **losing data**: written and read as an index, so every
+      save the C++ wrote came back with **stealth, flight, detect life and
+      firewalk all zeroed**. Nothing prints them, so the only way it would ever
+      have surfaced is a monster noticing a party that should have been
+      sneaking.
+    - `cParty::key_times` is `std::map<int,int>` — the key is an `int`, not an
+      enum, so `EVENT 5 100` is right as it is. **The container is a map and
+      the tag is still numeric**, which is exactly why "check the container,
+      not the call" needs the second half: check the *key type*.
+    - `active_quests` (`map<int,cJob>`), `jobs` (`array<int,6>`),
+      `cOutdoors::friendly`/`monst` (`array`), `SHOPSTOCK`, `ITEMTAKEN`,
+      `TOWNSLAUGHTER` — all numeric keys or plain arrays, all already right.
+    - `cCreature::status` and `cPlayer::status` were fixed in August and are
+      the reason the shape was recognisable at all.
+  - 1,046 tests green.

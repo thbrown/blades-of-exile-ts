@@ -18,7 +18,7 @@ import { GameSession } from '../src/game/session';
 import { CreatureStatus, copyMonster } from '../src/universe/creature';
 import { EncNoteType, TOWN_NUM_OUTDOORS } from '../src/universe/party';
 import { PartyPreset } from '../src/universe/player';
-import { MainStatus, Status } from '../src/universe/skills';
+import { MainStatus, PartyStatus, Skill, Status } from '../src/universe/skills';
 import { Universe } from '../src/universe/universe';
 
 const opcodes = buildOpcodeTable(
@@ -371,6 +371,39 @@ describe('.exg round trip', () => {
  * in the wrong place. That is why this test asserts against the **file text**
  * rather than against a reloaded universe.
  */
+describe('the sparse tags the C++ keys by enum name', () => {
+  /**
+   * `encodeSparse` over a `std::map` writes the key's **tag**; over a vector or
+   * an array it writes the index. Three of the save's sparse lists are maps —
+   * `cMonster::resist`, `cPlayer::skills` and `cParty::status` — and the last
+   * of those was being read with `tag.int(0)`, so a save written by the C++
+   * came back with stealth, flight, detect life and firewalk all zeroed.
+   */
+  it('writes and reads the party status by name', async () => {
+    const { univ } = await newGame();
+    univ.party.partyStatus[PartyStatus.STEALTH] = 5;
+    univ.party.partyStatus[PartyStatus.FIREWALK] = 3;
+
+    const text = new TextDecoder().decode(serialiseSave(univ).files
+      .find((f) => f.name === 'save/party.txt')!.data);
+    expect(text).toContain('STATUS STEALTH 5');
+    expect(text).toContain('STATUS FIREWALK 3');
+
+    const back = roundTrip(univ).party;
+    expect(back.partyStatus[PartyStatus.STEALTH]).toBe(5);
+    expect(back.partyStatus[PartyStatus.FIREWALK]).toBe(3);
+  });
+
+  it('writes a PC\'s skills by name', async () => {
+    const { univ } = await newGame();
+    univ.party.pcs[0]!.skills[Skill.LOCKPICKING] = 7;
+    const text = new TextDecoder().decode(serialiseSave(univ).files
+      .find((f) => f.name === 'save/pc1.txt')!.data);
+    expect(text).toContain('SKILL lockpick 7');
+    expect(roundTrip(univ).party.pcs[0]!.skills[Skill.LOCKPICKING]).toBe(7);
+  });
+});
+
 describe('a monster page', () => {
   /**
    * `encodeSparse` over a `std::map<eDamageType,int>` writes the enum's **tag**

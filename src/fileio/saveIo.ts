@@ -30,7 +30,8 @@ import { GameRng } from '../core/rng';
 import {
   attitudeStrs, creatureStatusNames, dirTags, dmgNames, encNoteTypes, itemAbils, itemTypes,
   itemUses, mainStatusNames, monstAbilTypes, monstAbils, monstMelee, monstMissiles, monstSummons,
-  monstTimes, pcStatus, questStatusNames, raceNames, readEnumTagOrNumber, skillNames, spellPats,
+  monstTimes, partyStatusNames, pcStatus, questStatusNames, raceNames, readEnumTagOrNumber,
+  skillNames, spellPats,
   traitNames, writeEnumTag,
 } from '../data/enumTags';
 import { FieldType } from '../data/fields';
@@ -507,7 +508,11 @@ export function writePlayer(file: TagFile, pc: Player): void {
   page.add('NAME', pc.name);
   page.add('SKILL', 'hp', pc.maxHealth);
   if (pc.maxSp > 0) page.add('SKILL', 'sp', pc.maxSp);
-  page.encodeSparse('SKILL', pc.skills, 0);
+  // `skills` is a `std::map<eSkill,short>` (pc.hpp:93), so `encodeSparse`
+  // writes the skill's **tag** — `SKILL str 8` — exactly as the two lines above
+  // already do for `hp` and `sp`. See the note on `IMMUNE` in `writeMonster`.
+  for (let i = 0; i < pc.skills.length; i++)
+    if (pc.skills[i] !== 0) page.add('SKILL', writeEnumTag(skillNames, i, 'edged'), pc.skills[i]!);
   page.add('HEALTH', pc.curHealth);
   page.add('MANA', pc.curSp);
   page.add('EXPERIENCE', pc.experience);
@@ -634,7 +639,13 @@ export function writeParty(file: TagFile, party: Party, scenarioId: string): voi
     PartyStatus.STEALTH, PartyStatus.FLIGHT, PartyStatus.DETECT_LIFE, PartyStatus.FIREWALK,
   ]) {
     const value = party.partyStatus[which];
-    if (value !== 0) page.add('STATUS', which, value);
+    // `cParty::status` is a `std::map<ePartyStatus,short>` (party.hpp:122), so
+    // this is `STATUS STEALTH 5`, not `STATUS 0 5`. Writing the index meant a
+    // save written by the C++ — every recording in the corpus — came back with
+    // **stealth, flight, detect life and firewalk all zeroed**, silently.
+    if (value !== 0) {
+      page.add('STATUS', writeEnumTag(partyStatusNames, which, 'STEALTH'), value);
+    }
   }
   for (const i of party.mNoted) page.add('ROSTER', i);
   for (const i of party.mSeen) page.add('SEEN', i);
@@ -794,7 +805,7 @@ export function readParty(file: TagFile, party: Party): void {
         party.partyStatus[which] = 0;
       }
       for (const tag of page.list('STATUS')) {
-        const which = tag.int(0, -1);
+        const which = readEnumTagOrNumber(partyStatusNames, tag.str(0), -1);
         if (which >= 0 && which <= PartyStatus.FIREWALK) {
           party.partyStatus[which as PartyStatus] = tag.int(1);
         }
