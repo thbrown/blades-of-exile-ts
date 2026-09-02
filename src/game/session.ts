@@ -3141,15 +3141,30 @@ export class GameSession {
    * Enter town combat, facing `direction` — the C++'s `start_town_combat` plus
    * the mode change `handle_action` does around it. `whichCombatType` is 1 for a
    * fight inside a town, which is all this port supports so far.
+   *
+   * **A party in a boat or on a horse cannot start a fight**
+   * (`handle_combat_switch`, boe.actions.cpp:1321): the two refusals sit above
+   * the branch that calls `start_town_combat`, and Space — which dismounts —
+   * is what a player presses between the refusal and the second attempt.
+   * Returns whether the fight actually started.
    */
-  startCombat(direction: Direction): void {
+  startCombat(direction: Direction): boolean {
     this.recorder?.recordValue('handle_combat_switch', direction);
-    if (!this.univ.town) return;
+    if (!this.univ.town) return false;
+    if (this.univ.party.inBoat >= 0) {
+      this.univ.addStringToBuf('Combat: Not while in boat.');
+      return false;
+    }
+    if (this.univ.party.inHorse >= 0) {
+      this.univ.addStringToBuf('Combat: Not while on horseback.');
+      return false;
+    }
     startTownCombat(this, direction);
     this.whichCombatType = 1;
     this.mode = GameMode.COMBAT;
     this.combatActivePc = NO_ONE;
     this.center = { ...this.univ.currentPc.combatPos };
+    return true;
   }
 
   /**

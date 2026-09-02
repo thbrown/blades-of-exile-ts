@@ -8490,3 +8490,30 @@ The M6 list below is kept for the history of what it covered:
     per-file.
   - Corpus **846,613 → 848,856** matching draws; "agree all the way" 28 → 29;
     43 blocked outside the rules, unchanged. 1,036 tests green.
+
+- **You cannot start a fight from a boat or a horse (M8, 2026-09-02).**
+  +17,292 matching draws from two `if`s. `handle_combat_switch`
+  (boe.actions.cpp:1321) refuses on `univ.party.in_boat >= 0` and
+  `in_horse >= 0` *before* the branch that calls `start_town_combat`; this port
+  had neither guard, so it dropped into combat where the C++ printed "Combat:
+  Not while on horseback." and stayed in town.
+  - What the recording holds is the player's own recovery: a refused Fight, a
+    **Space** — which is the key that dismounts — and a Fight that works. This
+    port ran all three as written, so it entered combat on the first one,
+    *ended* it on the third, and was an action out of step from there on.
+    `ASR_11-05-2025_07-55-19`: 31,732 → 49,023 matching draws, 1,159 → 1,917 of
+    1,929 actions.
+  - **The tell was in the mode column, not the draws.** The two `[ran]` streams
+    part on `get_ran(1,0,3)` there against `get_ran(1,0,5)` here, which reads
+    like a rule with a different range and is nothing of the sort — the C++ was
+    three draws into `handle_pause`'s town upkeep and this port was in
+    `endTownCombat`. What actually named it is that the C++'s action line said
+    `mode=1` on the action *after* its first `handle_combat_switch`, and
+    `start_town_combat` sets `MODE_COMBAT` unconditionally, so the only way to
+    still be in town is a branch that never reached it. There are exactly two.
+  - The bucket's other file, `ASR_10-05-2025_17-55-45`, did **not** move
+    (28,309 draws, still the (6,10) door lead) — the bucket ranked them together
+    because `endTownCombat` is where the *first innocent bystander* stands, as
+    the `diverge.mjs` note warns.
+  - Corpus **848,856 → 866,148** matching draws; 29 of 87 agree all the way; 43
+    blocked outside the rules. 1,038 tests green.

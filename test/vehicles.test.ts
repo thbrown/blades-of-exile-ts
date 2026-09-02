@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { GameRng } from '../src/core/rng';
 import { Scenario } from '../src/data/scenario';
 import { SpecType, emptySpecialNode } from '../src/data/special';
+import { GameMode } from '../src/game/modes';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
 import { ChoiceButton, SpecCtx, SpecCtxType, SpecialHost } from '../src/game/specials/context';
 import { loadScenario } from '../src/fileio/loadScenario';
@@ -153,6 +154,34 @@ describe('boats and horses', () => {
     expect(await session.moveTo(east)).toBe(true);
     expect(univ.party.inBoat).toBe(0);
     expect(univ.transcript.at(-1)).toBe('Move: You board the boat.');
+  });
+
+  /**
+   * `handle_combat_switch` (boe.actions.cpp:1321) refuses in a boat and on a
+   * horse before it ever reaches `start_town_combat`. Space is the key that
+   * dismounts, so what a recording holds is a refused Fight, a Space, and a
+   * Fight that works — and a port without the guard starts the fight on the
+   * first press and is a whole action out of step from there on.
+   */
+  it('will not start a fight from a boat or a horse', () => {
+    const session = newSession();
+    session.startTownMode(1, FORCED_ENTRY);
+    const { univ } = session;
+
+    univ.party.inHorse = 0;
+    expect(session.startCombat(univ.party.direction)).toBe(false);
+    expect(univ.transcript.at(-1)).toBe('Combat: Not while on horseback.');
+    expect(session.inTown).toBe(true);
+
+    univ.party.inHorse = -1;
+    univ.party.inBoat = 0;
+    expect(session.startCombat(univ.party.direction)).toBe(false);
+    expect(univ.transcript.at(-1)).toBe('Combat: Not while in boat.');
+    expect(session.inTown).toBe(true);
+
+    univ.party.inBoat = -1;
+    expect(session.startCombat(univ.party.direction)).toBe(true);
+    expect(session.mode).toBe(GameMode.COMBAT);
   });
 
   it('a mounted party moves ten ticks per step outdoors, five on a horse', async () => {
