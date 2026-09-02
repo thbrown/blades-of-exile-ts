@@ -401,6 +401,18 @@ export async function generalSpec(
   if (checkMess) await handleMessage(univ, ctx);
 }
 
+/**
+ * `ALTER=1`, the pair to the harness's `BOE_TRACE_ALTER`: every `alter_space`,
+ * in the same column order.
+ *
+ * Terrain a *game* has changed is state — it survives a town exit, it is in
+ * `captureScenarioState`, and **nothing in the draw stream can see it**. A door
+ * open on one side and shut on the other is a line of sight that differs and a
+ * spell that is refused, arbitrarily far from the step that opened it.
+ */
+const TRACE_ALTER = Boolean(
+  typeof process !== 'undefined' ? process.env?.ALTER : undefined);
+
 /** alter_space — write a terrain type and remember it in the town's map. */
 export function alterSpace(univ: Universe, x: number, y: number, ter: number): void {
   if (ter < 0) return;
@@ -408,6 +420,10 @@ export function alterSpace(univ: Universe, x: number, y: number, ter: number): v
   if (town) {
     if (town.record.terrain[x]?.[y] === undefined) return;
     const former = town.record.terrain[x]![y]!;
+    if (TRACE_ALTER) {
+      console.log(`      [alter] town=${univ.party.townNum} (${x},${y})`
+        + ` ${former} -> ${ter}`);
+    }
     town.record.terrain[x]![y] = ter;
     // A square that becomes a conveyor arms `push_things` for the rest of the
     // visit (boe.locutils.cpp:596). Never cleared, exactly as in the C++.

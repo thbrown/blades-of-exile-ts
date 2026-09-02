@@ -8517,3 +8517,39 @@ The M6 list below is kept for the history of what it covered:
     the `diverge.mjs` note warns.
   - Corpus **848,856 → 866,148** matching draws; 29 of 87 agree all the way; 43
     blocked outside the rules. 1,038 tests green.
+
+- **A combat step onto a scripted square never reached the terrain switch
+  (M8, 2026-09-02).** +2,951 matching draws, and `ASR_10-05-2025_17-55-45` —
+  the (6,10) door lead, open since 2026-09-01 — is closed. It went 28,309 →
+  31,261 draws and 478 → 639 actions, which is past where the harness itself
+  dies.
+  - `check_special_terrain` runs a square's chain and then **carries on into
+    the terrain switch**. The only thing that breaks it out is the loop
+    condition `town_num == univ.party.town_num` (boe.specials.cpp:238) — "stop
+    if the chain moved us to another town" — and nothing else. This port asked
+    `!this.inTown`, and **`inTown` is false in combat**: `MODE_COMBAT` sits
+    outside `is_town`'s range, which is exactly the trap `worldIsTown` exists
+    to document three hundred lines higher in the same file. So every combat
+    step onto a scripted square returned before `switch (spec.special)`, and a
+    CHANGE_WHEN_STEP_ON door walked into during a fight stayed shut for the
+    rest of it — along with DAMAGING, the boat and horse branches, and every
+    other terrain effect.
+  - The symptom was a spell: a Flame across (6,10) refused here with "Can't see
+    target" and cast there. **The door is not on the draw stream** and the
+    refusal makes no draws, so the two runs stayed byte-identical for a hundred
+    actions after the step that caused it.
+  - **`ALTER=1` is new** (`game/specials/general.ts`), the pair to the
+    harness's existing `BOE_TRACE_ALTER`, and it is what settled this: both
+    sides alter (6,10) three times, so the door was *not* the missing alter the
+    2026-09-01 lead assumed — the third alter simply happened 110 actions late
+    here. Reading where each `[alter]` sat against the action lines is what
+    turned "a load doesn't restore the door" into "a combat move doesn't open
+    it".
+  - **The lead this closes had the wrong cause written down**, for the second
+    time tonight. It read the divergence as "after the recording's third
+    `load_party` the C++ re-opens the door and this port does not", and there
+    is no load involved at all. What made that reading plausible is that
+    `BOE_TRACE_ALTER` had no pair here when it was written, so one side's
+    stream was compared against nothing.
+  - Corpus **866,148 → 869,099** matching draws; 29 of 87 agree all the way; 43
+    blocked outside the rules. 1,039 tests green.

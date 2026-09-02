@@ -2042,6 +2042,10 @@ export class GameSession {
     // to script.
     if ((this.mode === GameMode.TOWN || (inCombatMove && this.whichCombatType === 1))
       && canEnter && town) {
+      // The C++'s loop condition, hoisted: "stop if the current town changes"
+      // is `town_num == univ.party.town_num` (boe.specials.cpp:238) and
+      // **nothing else**. See the note on the early return below.
+      const townNumBefore = this.univ.party.townNum;
       const special = this.specialAt(where);
       if (special >= 0) {
         const blockedTer = this.townIsBlocked(where);
@@ -2074,7 +2078,18 @@ export class GameSession {
           // a successful move charges a turn. So every transition between two
           // towns cost a turn here and none in the C++, and every `age % n`
           // upkeep after it was one turn out.
-          if (!this.inTown || this.univ.town !== town) return { canEnter, forced };
+          //
+          // **The test is the town, not the mode.** This asked `!this.inTown`,
+          // and `inTown` is false in combat — `MODE_COMBAT` sits outside
+          // `is_town`'s range — so *every* combat step onto a scripted square
+          // returned here and never reached the terrain switch below. A door
+          // opened by walking into it therefore stayed shut for the whole
+          // fight, which is a line of sight that differs and, in
+          // `ASR_10-05-2025_17-55-45`, a Flame refused with "Can't see target"
+          // while the C++ cast it.
+          if (this.univ.party.townNum !== townNumBefore || this.univ.town !== town) {
+            return { canEnter, forced };
+          }
         }
       }
     }

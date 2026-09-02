@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { Direction } from '../src/core/location';
 import { GameRng } from '../src/core/rng';
 import { Scenario } from '../src/data/scenario';
+import { emptySpecialNode } from '../src/data/special';
 import { TerSpec } from '../src/data/terrain';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
 import { loadScenario } from '../src/fileio/loadScenario';
@@ -88,6 +89,42 @@ describe('unlocked doors', () => {
     // Now that it's open, walking in works.
     expect(await session.move(Direction.N)).toBe(true);
     expect(session.univ.party.townLoc).toEqual(where);
+  });
+});
+
+describe('a scripted door in a town fight', () => {
+  /**
+   * `check_special_terrain` runs a square's chain and then goes on to the
+   * terrain switch — the loop it breaks out of is guarded on
+   * `town_num == univ.party.town_num` (boe.specials.cpp:238) and nothing else.
+   * This port asked `!this.inTown` instead, and `inTown` is false in combat
+   * (`MODE_COMBAT` sits outside `is_town`'s range), so every combat step onto
+   * a *scripted* square returned before the switch and the door stayed shut
+   * for the whole fight.
+   */
+  it('still opens when the square is scripted and the step is a combat move', async () => {
+    const session = newSession();
+    const where = findTerrain(session, TerSpec.CHANGE_WHEN_STEP_ON)!;
+    expect(where).not.toBeNull();
+    const town = session.univ.town!;
+    const opened = session.univ.terrainType(town.record.terrain[where.x]![where.y]!).flag1;
+
+    // Hang a chain on the door's own square. What the node *does* is beside
+    // the point — running one at all is what used to end the step early.
+    town.record.specials.set(900, emptySpecialNode());
+    town.record.specialLocs.push({ x: where.x, y: where.y, spec: 900 });
+    expect(session.specialAt(where)).toBe(900);
+
+    const outside = { x: where.x, y: where.y + 1 };
+    session.univ.party.townLoc = { ...outside };
+    session.center = { ...outside };
+    expect(session.startCombat(Direction.N)).toBe(true);
+    const pc = session.univ.currentPc;
+    pc.combatPos = { ...outside };
+    pc.ap = 4;
+
+    await session.combatMove(where);
+    expect(town.record.terrain[where.x]![where.y]).toBe(opened);
   });
 });
 

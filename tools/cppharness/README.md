@@ -211,7 +211,8 @@ actions earlier surfaces as four PCs standing on the wrong squares.
 port said `Can't see target`" becomes one column instead of a hunt — it named
 both the rotated `place_party` formation and a door this port had not opened.
 
-**`BOE_TRACE_ALTER=1` prints every `alter_space`**: `town= (x,y) former -> ter`.
+**`BOE_TRACE_ALTER=1` prints every `alter_space`** (`ALTER=1` here):
+`town= (x,y) former -> ter`.
 Terrain a *game* has changed is state, it survives a town exit, and nothing in
 the draw stream can see it; a door open on one side and shut on the other is a
 line of sight that differs and a spell that is refused.
