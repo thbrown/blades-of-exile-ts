@@ -1419,8 +1419,16 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
           // monster already has, *not* a fresh one. In town that index was
           // chosen once by `do_monsters`, and re-rolling `select_active_pc`
           // here spent a draw the C++ never spends and shot at the wrong PC.
+          //
+          // **And no aliveness test.** The C++ guards the *melee* block with
+          // `who.is_alive()` (boe.combat.cpp:2432) and the ranged one with
+          // nothing at all, so a creature whose shot has just killed its target
+          // goes on rolling for another ability against the corpse. This port
+          // had the guard on both, so the moment something died it stopped
+          // spending the `get_ran(1,1,1000)`s the C++ still spends — one per
+          // ability per remaining action point, for the rest of the fight.
           const who: Living | null = resolveTarget(session, target);
-          if (who && who.isAlive) {
+          if (who) {
             const picked = pickMonsterAbility(
               session, monst, targSpace, monstAdjacent(monst, targSpace), target);
             if (picked) {

@@ -8779,3 +8779,30 @@ The M6 list below is kept for the history of what it covered:
     remaining candidates are the DAMAGE2 breath odds (boe.combat.cpp:2285) and
     the three rolls inside the missile-ability pick (:2333, :2374,
     :2385/:2392). 1,049 tests green.
+
+- **A ranged attack does not check whether its target is still alive (M8,
+  2026-09-02).** +2,766 matching draws from deleting two words, and
+  `ASR_11-05-2025_07-55-19` goes 49,024 → **51,790** draws and 1,917 → **1,927
+  of its 1,929 actions** — the whole recording bar the oracle's own tail.
+  - `do_monster_turn` guards the **melee** block with `who.is_alive()`
+    (boe.combat.cpp:2432) and the **ranged** one with nothing at all. So a
+    creature whose shot has just killed its target goes on rolling for another
+    ability against the corpse — and **in town it keeps the target it was
+    given**, because only the combat branch re-picks one, so there is nothing
+    to move it onto someone living.
+  - This port had the guard on both. The moment something died it stopped
+    spending the `get_ran(1,1,1000)`s the C++ still spends: one per ranged
+    ability per remaining action point, for the rest of the fight.
+  - **How it was placed, and the technique is the useful part.**
+    `BOE_TRACE_RAN_STACK` was taken for the *matching* draw as well as the
+    diverging one, and both came back `do_monster_turn + 8848` — the **same
+    call site**. That turns "one side makes an extra roll" into "one side makes
+    the same roll twice", which is a much smaller question: not *which* rule,
+    but *what stopped the loop*. Reach for the stack of the last agreeing draw,
+    not only the first disagreeing one.
+  - The test asserts on `print_monst_name`'s transcript line rather than on a
+    missile reaching the animation sink: the line is the first thing the branch
+    does once an ability has been picked, so it is the branch having been
+    taken, and it does not depend on what the projectile then does.
+  - Corpus **881,151 → 883,917** matching draws; 30 of 87 agree all the way; 44
+    blocked outside the rules. 1,050 tests green.

@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { dist, loc } from '../src/core/location';
 import { GameRng } from '../src/core/rng';
 import { Attitude } from '../src/data/monster';
+import { MonstAbil, MonstMissile } from '../src/data/monsterAbility';
 import { Scenario } from '../src/data/scenario';
 import { animClear, animPending } from '../src/game/anim';
 import { NO_ONE } from '../src/game/combat';
@@ -475,6 +476,43 @@ describe('encounters in town mode', () => {
     const before = { ...monst.curLoc };
     for (let i = 0; i < 5; i++) doMonsters(session);
     expect(monst.curLoc).toEqual(before);
+  });
+  /**
+   * `do_monster_turn` guards the **melee** block with `who.is_alive()`
+   * (boe.combat.cpp:2432) and the **ranged** one with nothing at all: a
+   * creature whose shot has just killed its target goes on rolling for another
+   * ability against the corpse. In town it keeps the target it was given, so
+   * there is nothing to re-pick it onto someone living.
+   *
+   * This port had the guard on both, so the moment something died it stopped
+   * spending the `get_ran(1,1,1000)`s the C++ still spends — one per ability
+   * per remaining action point, for the rest of the fight.
+   * `ASR_11-05-2025_07-55-19` parted from the oracle on exactly one of them.
+   */
+  it('still rolls a ranged ability at a target that is already dead', async () => {
+    const { univ, session, monst } = townWithOne();
+    // Nothing to do in melee, and a sure-fire missile with reach.
+    monst.mon.attacks = [{ dice: 0, sides: 0, type: 0 }];
+    const missile = monst.mon.abil[MonstAbil.MISSILE]!;
+    missile.active = true;
+    missile.missile.type = MonstMissile.ARROW;
+    missile.missile.range = 12;
+    missile.missile.odds = 1000;
+    missile.missile.dice = 1;
+    missile.missile.sides = 2;
+    missile.missile.pic = 0;
+    monst.active = CreatureStatus.ALERTED;
+    monst.target = 0;
+    univ.party.pcs[0]!.mainStatus = MainStatus.DEAD;
+
+    await doMonsterTurn(session);
+
+    // `print_monst_name(cur_monst->number)` (boe.combat.cpp:2406) is the first
+    // thing the ranged branch does once an ability has been picked, so its line
+    // in the transcript is the branch having been taken — one per action point
+    // the creature spends on it.
+    const announced = univ.transcript.filter((l) => l === `${monst.mon.name}:`).length;
+    expect(announced).toBeGreaterThan(0);
   });
 });
 
