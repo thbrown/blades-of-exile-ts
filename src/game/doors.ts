@@ -20,6 +20,20 @@ import { damagePc } from './damage';
 
 export type DoorResult = 'opened' | 'failed' | 'no-picks' | 'wrong-terrain';
 
+/**
+ * `PICK=1`, the pair to the harness's `BOE_TRACE_PICK`: every input
+ * `pick_lock` weighs, in the same column order, so the two streams diff
+ * line-for-line.
+ *
+ * Worth having because the draws cannot see this one. Both engines spend the
+ * same two `get_ran` calls whatever the answer, so a pick that breaks here and
+ * holds there costs a *charge* and no draw — invisible until, hundreds of
+ * actions later, one side raises a "how many?" prompt over a stack the other
+ * side never split.
+ */
+const TRACE_PICK = Boolean(
+  typeof process !== 'undefined' ? process.env?.PICK : undefined);
+
 /** pick_lock (boe.town.cpp:1156). */
 export function pickLock(
   univ: Universe,
@@ -56,6 +70,17 @@ export function pickLock(
   if (hasAbilEquip(pc, ItemAbil.THIEVING)) r1 -= 12;
 
   const unlockAdjust = univ.terrainType(terrain).flag2;
+  if (TRACE_PICK) {
+    // eslint-disable-next-line no-console
+    console.log(`      [pick] pc=${pcNum} at (${where.x},${where.y})`
+      + ` ter=${terrain} r1=${r1} adj=${unlockAdjust}`
+      + ` dex=${pc.statAdj(Skill.DEXTERITY)}`
+      + ` diff=${town.record.difficulty}`
+      + ` lock=${pc.skill(Skill.LOCKPICKING)}`
+      + ` str=${picks.item.abilStrength}`
+      + ` slot=${picks.slot}`
+      + ` break=${willBreak ? 1 : 0}`);
+  }
   if (unlockAdjust >= 5 || r1 > unlockAdjust * 15 + 30) {
     univ.addStringToBuf("  Didn't work.");
     if (willBreak) {

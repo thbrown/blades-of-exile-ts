@@ -71,23 +71,40 @@ export class GetItemsPick {
     this.refresh();
   }
 
-  /** Can this PC be handed something — alive, present, and with a free slot? */
-  usable(index: number): boolean {
+  /**
+   * Can this PC hold anything at all — alive, with a free slot?
+   *
+   * **Deliberately without the combat clause**, because the C++'s two tests are
+   * not the same test. `put_item_graphics` demotes the current carrier on
+   * `main_status != ALIVE || !has_space()` alone (boe.items.cpp:367); only the
+   * loop that *promotes* a replacement also asks `(!is_combat() || univ.cur_pc
+   * == i)`. So in combat a PC who is neither dead nor full stays the carrier
+   * even when they are not the acting PC, and this port used to demote them.
+   */
+  canHold(index: number): boolean {
     const pc = this.session.univ.party.pcs[index];
     if (pc === undefined || pc.mainStatus !== MainStatus.ALIVE) return false;
-    if (hasSpace(pc) < 0) return false;
+    return hasSpace(pc) >= 0;
+  }
+
+  /** Whose button is *shown* — and so who may be promoted to carrier. */
+  usable(index: number): boolean {
     // In combat only the acting PC can take things: the rest are elsewhere on
     // the battlefield.
-    return !isCombat(this.session.mode) || this.session.univ.curPc === index;
+    return this.canHold(index)
+      && (!isCombat(this.session.mode) || this.session.univ.curPc === index);
   }
 
   /**
    * `put_item_graphics`'s bookkeeping half — settle who is carrying and what
    * the prompt says. A PC who has died or filled their pack stops being the
-   * one picking up, and the first PC who *can* takes over.
+   * one picking up, and the first PC whose button is shown takes over.
+   *
+   * Note the asymmetry between the two conditions, which is the C++'s and is
+   * load-bearing: see `canHold`.
    */
   refresh(): void {
-    if (this.who < NOBODY && !this.usable(this.who)) this.who = NOBODY;
+    if (this.who < NOBODY && !this.canHold(this.who)) this.who = NOBODY;
     if (this.who === NOBODY) {
       for (let i = 0; i < 6; i++) {
         if (this.usable(i)) { this.who = i; break; }
@@ -129,11 +146,17 @@ export class GetItemsPick {
     }
     const pc = /^pc([1-6])$/.exec(id);
     if (pc) {
-      // The C++ hides a button it can't use, so a click on one cannot happen;
-      // the guard is here because a *recording* can still name it, and quietly
-      // handing the pile to a dead PC would be worse than ignoring it.
-      const which = Number(pc[1]) - 1;
-      if (this.usable(which)) this.who = which;
+      // **Unconditionally**, as `display_item_event_filter` does
+      // (`current_getting_pc = id[2] - '1'`, boe.items.cpp:466). This used to
+      // be guarded on `usable`, reasoning that the C++ hides a button it cannot
+      // use so a click on one can never arrive — true of a player, false of a
+      // recording, and the guard changed the answer rather than ignoring the
+      // click: refusing the assignment leaves the *previous* carrier in place,
+      // where the C++ takes the click, demotes to `NOBODY` in `refresh` and
+      // promotes the first PC who can hold something. That is the whole of
+      // `ASR_19-05-2025_19-38-44`'s divergence — the C++ handing rows to PCs 0
+      // and 1 while this port went on handing them to PC 2.
+      this.who = Number(pc[1]) - 1;
       this.refresh();
       return 'stay';
     }

@@ -8283,6 +8283,11 @@ The M6 list below is kept for the history of what it covered:
     (`who=`, `curPc=`, `variety=`) in `GetItemsPick.take` and in
     `display_item_event_filter`, and diff the two streams: they agree for
     fourteen pickups and then part on one line.
+    **Superseded 2026-09-01 — see the entry at the bottom.** The shape is right
+    and the location is wrong: `PICK=1` against `BOE_TRACE_PICK` shows it at
+    **pick 7**, long before draw 90,063, as `slot=4` there against `slot=7`
+    here. Six functions are ruled out in writing; start from
+    `put_item_graphics`.
   - `ASR_10-05-2025_17-55-45`: after the recording's **third `load_party`** the
     C++ re-opens the step-change door at **(6,10) in town 15** and this port
     does not, so a Flame across it is refused here with `Can't see target`.
@@ -8373,3 +8378,61 @@ The M6 list below is kept for the history of what it covered:
     files, `dx`/`dy` from the same message) in case they shared a cause; they do
     not — the distribution is broad, with `dx = ±2` the most common at 18 of 66
     lines and nothing dominant. Not a shortcut.
+
+- **`ASR_19-05-2025_19-38-44`, narrowed hard and still open — plus `PICK=1` and
+  one invention removed (M8, 2026-09-01).** The corpus did not move: **846,613
+  draws / 28 of 87 / 43 blocked**, before and after. What changed is that the
+  lead is now precise and a lot of ground is ruled out in writing, so the next
+  session does not re-walk it.
+  - **The stop is a "how many?" prompt this port raises and the C++ never
+    does.** `handle_drop_item_id 12` → `drop_item` finds `type_flag > 0 &&
+    charges > 1` here and not there, so this port opens the split dialog, the
+    host reaches for the click that would dismiss it, and the recording's next
+    action is `arrow_button_click`. The prompt is the *symptom*: the two packs
+    already disagree about what is in that slot.
+  - **`PICK=1` is new** (`src/game/doors.ts`), the pair to the harness's
+    existing `BOE_TRACE_PICK`, printing every input `pick_lock` weighs in the
+    same column order. It earned itself immediately, and it is the kind of
+    divergence the draw stream cannot see: both engines spend the same two
+    `get_ran` calls whatever the answer, so a pick that breaks here and holds
+    there costs a **charge and no draw**.
+  - **The two streams agree for six picks and part on the seventh, on `slot`
+    alone** — `slot=4` there, `slot=7` here, with `r1`, `break`, `dex`, `diff`,
+    `lock` and `str` all identical. `has_abil_equip` is returning a different
+    item because the *pack* is different: at that moment this port's PC 2 holds
+    **eighteen** items with three extra at the front (`9/4/0` — a wand with four
+    charges — plus `7/1/0` and `7/3/0`), which pushes the lockpicks from slot 4
+    to slot 7. The C++ gives that same wand to **PC 0**. So the 2026-09-01 lead
+    was right about the shape — the C++ hands rows to PC 0 while this port hands
+    them to PC 2 — and wrong about where to look: it is visible at **pick 7**,
+    thousands of draws before the reported draw 90,063.
+  - **Ruled out, all read line-by-line against the C++ and identical:**
+    `pick_lock` (boe.town.cpp:1166), `remove_charge` (pc.cpp), `has_abil_equip`
+    and `find_item_matching` (pc.cpp:788, both scanning ascending),
+    `drop_item`'s two prompt conditions (boe.items.cpp:110), `give_item`'s
+    entry rules, and `display_item`'s `short current_getting_pc = univ.cur_pc`.
+    The remaining suspect is which PC the get-items screen is *on* when each row
+    is taken, and `put_item_graphics`'s promote/demote pair is the place.
+  - **One invention removed while there, and it is a real fidelity fix even
+    though it moved nothing.** `GetItemsPick.click` guarded the carrier
+    assignment on `usable`, reasoning that the C++ hides a button it cannot use
+    so the click can never arrive — true of a player, false of a recording, and
+    the guard *changed the answer*: refusing the assignment leaves the previous
+    carrier in place where `display_item_event_filter` (boe.items.cpp:466) sets
+    `current_getting_pc` unconditionally. And `put_item_graphics`'s two tests
+    are **not the same test** — it demotes on `main_status != ALIVE ||
+    !has_space()` alone, and only the loop that *promotes* a replacement also
+    asks `(!is_combat() || univ.cur_pc == i)`. So in combat a PC who is neither
+    dead nor full stays the carrier even when they are not the acting PC, and
+    this port demoted them. Split into `canHold` (demote) and `usable`
+    (promote, and which buttons show). Corpus-neutral, 1,035 tests green.
+  - **A trap for whoever compares state blocks next.** The harness prints its
+    `items`/`pcs` block **before** running an action and this port prints it
+    **after**, so pairing them by action reads before-against-after. Shifting
+    the C++ by one is *still* wrong wherever this port collapses a
+    move-plus-dialog into a single action: the first "divergence" found that way
+    was a lockpick charge at action 563 that both engines spend identically,
+    two actions apart, and it cost a good while. Compare state only at actions
+    that are not part of a collapse — or compare the `[pick]`-style probes,
+    which are emitted at the same point in the rule on both sides and have no
+    such ambiguity.
