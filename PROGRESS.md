@@ -9121,3 +9121,31 @@ The M6 list below is kept for the history of what it covered:
     works because it exhausts **one** call, selected by its `from_where`.
     Exhausting every call (the first attempt) changes the draw stream from the
     first summon onwards, so the interesting call never happens.
+
+- **Two more things learned about the open leads, both without a fix
+  (M8, 2026-09-02).** Written down because they cost an hour each to establish
+  and they change which lead is worth opening next.
+  - **The `find_clear_spot` lead is not a *field* divergence either.** Dumping
+    this port's `CurTown.fields` for all nine squares around the caster at the
+    moment of the disputed summon
+    (`VoDT_04-05-2025_16-32-10` action 877) gives **nine empty sets**. So if the
+    C++'s rejection of the caster's four free neighbours comes from
+    `is_summon_safe`'s mask or `is_blocked`'s SPECIAL_SPOT/BARRIER arms, the
+    divergence is in *field placement*, not in the predicate — which points at
+    the still-open `placeGrid` bucket rather than at `find_clear_spot`. The
+    honest next step is a field dump on the **C++** side; nothing in the
+    harness prints one.
+  - **The queue's `placeGrid` file is the `text_bar_text` lead wearing another
+    name, and so is at least one `monstPickTarget` file.**
+    `VoDT_05-04-2025_14-32-10` parts at draw **24**, and draws 24-28 are five
+    `get_ran(1,0,70)` this port does not make — exactly the five status-bar
+    redraws tabulated in the 2026-08-30 entry below. Draws 22 and 23, which
+    both engines make, are `combat_cast_mage_spell`'s *real* refusal check, and
+    this port has them right. And `VoDT_04-05-memory-dump` parts where the C++
+    damages several creatures with a force wall (`get_ran(3,1,6)` /
+    `get_ran(1,1,6)` pairs out of `place_spell_pattern`) and this port has
+    nobody standing in one — a field the two engines laid on different squares.
+    **Three of the queue's remaining buckets are one job**, and that job is
+    matching the C++'s redraw count. It is the largest single thing left in M8
+    and it should be taken whole, not in the three-of-five slice that was
+    measured and backed out on 2026-08-30.
