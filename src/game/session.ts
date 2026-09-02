@@ -48,6 +48,7 @@ import { processFields, syncForceCages } from './processFields';
 import type { TownTarget } from './spellTarget';
 import type { SpellTarget } from './spellCombatTarget';
 import { LoadedMissile, fireMissile, isLoaded, loadMissile } from './missiles';
+import { setCentreSink } from './missileAnim';
 import { CurTown } from '../universe/curTown';
 import type { Player } from '../universe/player';
 import {
@@ -306,6 +307,11 @@ export class GameSession {
   constructor(readonly univ: Universe) {
     this.center = { ...univ.party.outLoc };
     this.updateExplored(univ.party.outLoc);
+    // `do_missile_anim` writes the C++'s global `center` and never restores it,
+    // and `party_can_see` reads it — see the note on `setCentreSink`. Installed
+    // here for the same reason `Universe` installs `setPrintResult`: the C++
+    // keeps the thing static, so the last session to be built owns it.
+    setCentreSink((where) => { this.center = { ...where }; });
   }
 
   /**

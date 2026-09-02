@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { locsEqual } from '../src/core/location';
 import { GameRng } from '../src/core/rng';
 import { FieldType } from '../src/data/fields';
 import { DamageType } from '../src/data/monster';
@@ -22,7 +23,7 @@ import {
 } from '../src/game/anim';
 import { BOOM_MS, boomMs } from '../src/game/booms';
 import { monstFireMissile } from '../src/game/monsterAbilities';
-import { GameSession } from '../src/game/session';
+import { GameSession, pointOnScreen } from '../src/game/session';
 import { Creature } from '../src/universe/creature';
 import { setLivingSound } from '../src/universe/living';
 import { PartyPreset } from '../src/universe/player';
@@ -282,5 +283,34 @@ describe('the combat pace knob', () => {
       setCombatPace(original);
       animClear();
     }
+  });
+});
+
+describe('the camera a missile leaves behind', () => {
+  /**
+   * `do_missile_anim` writes the C++'s global `center` and never puts it back
+   * (boe.newgraph.cpp:392, :453), and `party_can_see`'s town branch is
+   * `(point_onscreen(town_loc, w) || center != town_loc) && ...`. So a shot
+   * fired in town leaves the whole map past the first term until
+   * `do_monster_turn`'s tail restores the camera — which is how a creature
+   * nine squares away becomes visible to `party_can_see_monst`.
+   */
+  it('moves the session centre off the party, which changes what the party can see', () => {
+    const s = inTown();
+    const from = { ...s.univ.party.townLoc };
+    const at = { x: from.x, y: from.y + 8 };
+    // Well past the nine-square view, so only the `center != town_loc` escape
+    // can let it through.
+    const far = { x: from.x, y: from.y + 6 };
+    expect(s.center).toEqual(from);
+    const before = s.partyCanSee(far);
+
+    runAMissile(from, at, 2, 1, 0, 0, 0, 100);
+
+    expect(s.center).not.toEqual(from);
+    // The escape is now open; whether the square is *lit* still decides, so
+    // this asserts the term that changed rather than the final answer.
+    expect(pointOnScreen(s.center, far) || !locsEqual(s.center, s.univ.party.townLoc)).toBe(true);
+    expect(before).toBe(6);
   });
 });

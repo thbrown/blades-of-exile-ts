@@ -95,8 +95,14 @@ is what named the window-shift undo). Both are in `exile-wasm.patch` now — an
 older note here said they lived only in the `../exile-wasm` working tree, and
 that stopped being true.
 
-**`BOE_TRACE_CENTER=1` adds `center=(x,y)` to every action line**, and it is
-the one to reach for whenever a recorded `move` looks too long.
+**`BOE_TRACE_CENTER=1` adds `center=(x,y)` to every action line** (`CENTER=1`
+here), and it is the one to reach for whenever a recorded `move` looks too
+long — or whenever two runs disagree about what the party can *see*. The camera
+is not only a camera: `party_can_see`'s town branch passes anything on screen
+**or** anything at all once `center` has left the party's square, and
+`do_missile_anim` moves it and never puts it back. A `center` that has drifted
+is a creature the party can suddenly see, and nothing else in either trace
+shows it.
 `handle_terrain_screen_actions` builds every move destination from `center`,
 not from the party and not from the acting PC, and the three drift apart the
 moment `screen_shift` scrolls the view or a spell is cancelled. It settled

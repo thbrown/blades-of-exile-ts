@@ -81,6 +81,29 @@ export function setMissileSink(fn: ((missile: Missile) => void) | null): void {
  * passes it as `play_sound(-1 * sound_num)`, where the sign only means "don't
  * block on it", which is what our sound layer does anyway.
  */
+/**
+ * `center` is a **global** in the C++ (`extern location center`) and
+ * `do_missile_anim` writes it twice — once to frame the shooter and the target
+ * together and once onto the target half way through the flight
+ * (boe.newgraph.cpp:392 and :453) — and **never puts it back**. That leaks out
+ * of the graphics and into the *rules*: `party_can_see`'s town branch is
+ * `(point_onscreen(town_loc, w) || center != town_loc) && pt_in_light(...) &&
+ * can_see_light(...)`, so from the moment a missile has moved the camera every
+ * square in the town passes the first term, until `do_monster_turn`'s tail
+ * restores it. A creature nine squares away is then visible to
+ * `party_can_see_monst` where it was not a moment before.
+ *
+ * This port keeps `center` on the session and its camera on an animation
+ * timeline, so the two have to be bridged: a module-level hook, the same
+ * arrangement `living.ts` uses and for the same reason — the C++ keeps the
+ * thing static and it is written from places that have no session to hand.
+ */
+let centreSink: ((where: Location) => void) | null = null;
+
+export function setCentreSink(fn: ((where: Location) => void) | null): void {
+  centreSink = fn;
+}
+
 export function runAMissile(
   from: Location,
   dest: Location,
@@ -119,6 +142,12 @@ export function runAMissile(
   const cameraDest = betweenAnchorPoints(dest, from);
   focusAt(betweenAnchorPoints(from, cameraDest), started);
   focusAt(cameraDest, started + dur / 2);
+  // **The rules see the second write, not the first.** The C++ blocks for the
+  // whole flight, so by the time anything reads `center` again it holds
+  // `camera_dest`. Set synchronously, because `party_can_see` is consulted
+  // between one creature's shot and the next — long before this port's camera
+  // timeline has caught up.
+  centreSink?.(cameraDest);
   sink?.({
     from: { ...from }, dest: { ...dest }, type, pathType, xAdj, yAdj, len, started, dur,
   });

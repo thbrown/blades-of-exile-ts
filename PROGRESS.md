@@ -8742,3 +8742,40 @@ The M6 list below is kept for the history of what it covered:
     at that action. The remaining candidates in `do_monster_turn` are the
     DAMAGE2 breath odds (boe.combat.cpp:2285) and the three rolls inside the
     missile-ability pick (:2333, :2374, :2385/:2392).
+
+- **The camera is part of the rules: `do_missile_anim` moves `center` and never
+  puts it back (M8, 2026-09-02).** Corpus-neutral (881,151 either side) and the
+  answer to the open lead written down two entries above — which is why that
+  lead's own hypothesis (`fog_lifted`) is recorded there as wrong.
+  - `center` is a **global** in the C++ (`extern location center`).
+    `do_missile_anim` writes it twice — once to frame the shooter and the
+    target together, once onto the target half way through the flight
+    (boe.newgraph.cpp:392 and :453) — and never restores it. In town, the only
+    thing that does is `do_monster_turn`'s tail (boe.combat.cpp:2660).
+  - That leaks straight into a *rules* predicate. `party_can_see`'s town branch
+    is `(point_onscreen(town_loc, w) || center != town_loc) && pt_in_light(...)
+    && can_see_light(...) < 5`, so **from the moment a missile has moved the
+    camera, the nine-square view stops applying** and only light and line of
+    sight decide. `party_can_see_monst` is built on it, and that gates whether
+    a creature may use its SPECIAL ability and whether `check_if_monst_seen`
+    announces it.
+  - This port keeps `center` on the session and its camera on an animation
+    timeline, so the two were decoupled and `center` never left the party.
+    Bridged with a module-level hook (`setCentreSink`), the arrangement
+    `living.ts` already uses and for the same stated reason. **The value the
+    rules see is the *second* write**: the C++ blocks for the whole flight, so
+    by the time anything reads `center` again it holds `camera_dest`.
+  - What it looked like: at action 1795 of `ASR_11-05-2025_07-55-19`, four
+    creatures six to nine squares from the party were visible to the C++'s
+    `party_can_see_monst` and invisible to this port's, with every draw before
+    it matching. The two sides' `center` agreed at the *end* of every action —
+    because the tail restores it — and disagreed only in the middle, which is
+    the only place anything reads it.
+  - **`CENTER=1` is new**, the pair to the harness's `BOE_TRACE_CENTER`. Reach
+    for it whenever two runs disagree about what the party can see, not just
+    when a recorded `move` looks too long.
+  - `ASR_11-05-2025_07-55-19` is **unmoved** (49,024 draws): its extra
+    `get_ran(1,1,1000)` is still open and is not the SPECIAL ability — the
+    remaining candidates are the DAMAGE2 breath odds (boe.combat.cpp:2285) and
+    the three rolls inside the missile-ability pick (:2333, :2374,
+    :2385/:2392). 1,049 tests green.

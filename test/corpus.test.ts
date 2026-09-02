@@ -160,6 +160,13 @@ async function play(path: string): Promise<Row> {
           + `${(action.text || action.info.id || '').padEnd(10)} -> (${l.x},${l.y})${who} `
           + `mode=${session.mode} cur=${univ.curPc} dir=${univ.party.direction}`
           + ` age=${univ.party.age}`
+          // `CENTER=1`, the pair to the harness's `BOE_TRACE_CENTER`. The
+          // camera is not only a camera: `party_can_see`'s town branch passes
+          // anything on screen **or** anything at all once `center` has left
+          // the party's square, which `do_missile_anim` makes it do and never
+          // undoes. So a `center` that has drifted is a creature the party can
+          // suddenly see, and nothing else in the trace shows it.
+          + (process.env.CENTER ? ` center=(${session.center.x},${session.center.y})` : '')
           + ` draws=${univ.rng.gameDraws} `
           + `${said.slice(0, 110)}`);
         // The creature list, in `BOE_TRACE_MONST`'s format so the two traces
