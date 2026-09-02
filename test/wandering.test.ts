@@ -265,7 +265,7 @@ describe('the arena', () => {
     let died = 0;
     s.onPartyDeath = () => { died++; };
 
-    s.pause();
+    await s.pause();
 
     expect(died).toBe(0);
     expect(s.mode).toBe(GameMode.OUTDOORS);

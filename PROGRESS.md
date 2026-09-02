@@ -8581,3 +8581,36 @@ The M6 list below is kept for the history of what it covered:
     later on the next thing, which is a `handle_pause` that damages a PC
     standing in a field here and does not there. Corpus **869,099 → 869,104**;
     29 of 87 agree all the way. 1,040 tests green.
+
+- **`check_fields` takes a PC, and it is not always `cur_pc` (M8,
+  2026-09-02).** Three rules in one slice, all from the same signature.
+  `check_special_terrain(where, mode, cPlayer& which_pc, ...)` threads that
+  reference down to `check_fields` (boe.specials.cpp:517), which damages,
+  curses and puts to sleep **exactly that PC**. This port's `checkFields` read
+  `univ.currentPc` instead, and two of the three callers pass something else.
+  - **Standing ready in a fire still burns you.** `handle_pause`'s combat
+    branch ends with `check_fields(univ.current_pc().combat_pos, COMBAT_MOVE,
+    univ.current_pc())` (boe.actions.cpp:627). This port's `pause` had the
+    parry, the "Stand ready." and the webs and stopped there, so a PC could
+    hold a wall of fire for a whole fight and take nothing. The town branch has
+    no such call, which is why the omission looked symmetrical and was not.
+  - **A swap checks the square it vacates, for the PC swapped *into* it**
+    (`check_special_terrain(store_loc, COMBAT_MOVE, switch_pc)`,
+    boe.combat.cpp:292). Two people move, so two squares are checked — and a
+    PC swapping with **themselves**, which the C++ allows and this port already
+    ports, is therefore burnt *twice by the same square in one action*. That
+    doubled pair of draws inside a single `move` is exactly what named it.
+  - **A town or outdoor move passes `univ.party[0]`**, not the current PC
+    (boe.actions.cpp:4190, :3968). Outside combat `check_fields` skips the
+    damage — but not the stinking cloud's `curse` or the sleep cloud's
+    `sleep`, which are unconditional. So walking the party into a stinking
+    cloud in town curses **PC 0**, whoever is showing in the item pane.
+  - One test had to keep its floating promise: `party death > waits for the
+    blast that killed you before saying so` is about *when* the hook fires, so
+    it has to look before `pause` runs to completion. It is `void s.pause()`
+    now, with the reason written down — the seven other unawaited `pause()`
+    calls in the suite were latent and are awaited.
+  - `VoDT_09-04-2025_09-41-10` goes 21,830 → 22,019 draws, and now stops on a
+    movement desync like the rest of the tail. Corpus **869,104 → 869,293**
+    matching draws; 29 of 87 agree all the way; blocked outside the rules 43 →
+    44. 1,042 tests green.

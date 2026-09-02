@@ -49,6 +49,7 @@ import type { TownTarget } from './spellTarget';
 import type { SpellTarget } from './spellCombatTarget';
 import { LoadedMissile, fireMissile, isLoaded, loadMissile } from './missiles';
 import { CurTown } from '../universe/curTown';
+import type { Player } from '../universe/player';
 import {
   GiveStatus,
   equipItem,
@@ -794,7 +795,7 @@ export class GameSession {
     // this is what poisons you in a swamp and burns you in lava out here, and
     // it is also where the sector's own special node fires. Its `forced` is
     // the node's `b` return, which walks the party across water at a ford.
-    const check = await this.checkSpecialTerrain(destination);
+    const check = await this.checkSpecialTerrain(destination, this.univ.party.pcs[0]!);
     // **`keep_going && overall_mode == MODE_OUTDOORS`** (boe.actions.cpp:3975),
     // and the 1997 original pairs them the same way (`ACTIONS.CPP:2687`,
     // `overall_mode == 0`). The mode test is not redundant with `canEnter`: a
@@ -1131,7 +1132,7 @@ export class GameSession {
     // the script from running as well as stopping the step.
     let specialForced = false;
     if (monsterThere === null) {
-      const check = await this.checkSpecialTerrain(destination);
+      const check = await this.checkSpecialTerrain(destination, this.univ.party.pcs[0]!);
       if (!check.canEnter) return false;
       specialForced = check.forced;
       // The chain may have taken the party somewhere else entirely.
@@ -1966,6 +1967,16 @@ export class GameSession {
    */
   private async checkSpecialTerrain(
     where: Location,
+    /**
+     * `which_pc` (boe.specials.cpp:152) — **whose** step this is, which is not
+     * always `univ.cur_pc`. `check_fields` damages, curses and puts to sleep
+     * exactly this PC, and the two callers that pass something else are the
+     * ones that matter: a town or outdoor move passes `univ.party[0]`
+     * (boe.actions.cpp:4190), and `pc_combat_move`'s swap branch passes the PC
+     * who was *swapped into* the square being left (boe.combat.cpp:292). The
+     * webs below are a separate rule and do read `univ.current_pc()`.
+     */
+    who: Player,
   ): Promise<{ canEnter: boolean; forced: boolean }> {
     const town = this.univ.town;
     const inCombatMove = isCombat(this.mode);
@@ -2103,7 +2114,7 @@ export class GameSession {
     // Everything between the special node and the terrain switch: the fields
     // you walk into, the webs that catch you, and the things you shove.
     if (town) {
-      await this.checkFields(where, inCombatMove);
+      await this.checkFields(where, inCombatMove, who);
       this.walkIntoWebs(where, inCombatMove);
       this.pushThings(fromLoc, where);
     }
@@ -2189,10 +2200,12 @@ export class GameSession {
    * walls only announce themselves: the C++ only damages on a COMBAT_MOVE,
    * because in town the party is about to be hit by `process_fields` anyway.
    */
-  private async checkFields(where: Location, inCombatMove: boolean): Promise<void> {
+  private async checkFields(
+    where: Location, inCombatMove: boolean, who: Player,
+  ): Promise<void> {
     const town = this.univ.town;
     if (!town) return;
-    const pc = this.univ.currentPc;
+    const pc = who;
     const rng = this.univ.rng;
     const say = (line: string): void => this.univ.addStringToBuf(line);
     const hit = async (dam: number, type: DamageType): Promise<void> => {
@@ -3383,6 +3396,13 @@ export class GameSession {
         this.univ.addStringToBuf('You clean webs.');
         pc.status[Status.WEBS] = Math.max(0, (pc.status[Status.WEBS] ?? 0) - 2);
       }
+      // **Standing still in a fire still burns you** — `handle_pause` ends with
+      // `check_fields(univ.current_pc().combat_pos, COMBAT_MOVE,
+      // univ.current_pc())` (boe.actions.cpp:627). Only the combat branch has
+      // it; a town pause does not. Without it a PC could stand ready on a wall
+      // of fire for the whole fight and take nothing, and the C++ spent two
+      // draws here that this port did not.
+      await this.checkFields(pc.combatPos, true, pc);
       this.afterCombatAction();
       return;
     }
@@ -3773,7 +3793,7 @@ export class GameSession {
       this.univ.addStringToBuf('  (Try doing something else.)');
       return false;
     }
-    if (!monstHit && !(await this.checkSpecialTerrain(destination)).canEnter) return false;
+    if (!monstHit && !(await this.checkSpecialTerrain(destination, pc)).canEnter) return false;
     pc = this.univ.currentPc;
 
     const dir = setDirection(pc.combatPos, destination);
@@ -3849,6 +3869,13 @@ export class GameSession {
       other.combatPos = storeLoc;
       pc.direction = dir;
       takeAp(this.univ, 1);
+      // **The square you just left is checked again, for the PC now standing on
+      // it** (`check_special_terrain(store_loc, COMBAT_MOVE, switch_pc)`,
+      // boe.combat.cpp:292). A swap walks *two* people onto new squares, so a
+      // wall of fire between two PCs burns both of them — and a PC swapping
+      // with themselves, which the C++ allows, is burnt twice by the same
+      // square in one action. That second pair of draws is what named this.
+      await this.checkSpecialTerrain(storeLoc, other);
       this.moveSound(town.record.terrain[destination.x]![destination.y]!, pc.ap);
       this.afterCombatAction();
       return true;

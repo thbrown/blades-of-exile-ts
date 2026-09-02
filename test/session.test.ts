@@ -634,12 +634,12 @@ describe('party death', () => {
     let fired = 0;
     s.onPartyDeath = () => { fired++; };
     for (const pc of s.univ.party.pcs) pc.mainStatus = MainStatus.DEAD;
-    s.pause();
+    await s.pause();
     await flush();
     expect(fired).toBe(1);
     // Upkeep keeps running on a dead party (nothing un-registers it), but the
     // hook must not fire again.
-    s.pause();
+    await s.pause();
     await flush();
     expect(fired).toBe(1);
   });
@@ -650,7 +650,9 @@ describe('party death', () => {
     let fired = 0;
     s.onPartyDeath = () => { fired++; };
     for (const pc of s.univ.party.pcs) pc.mainStatus = MainStatus.DEAD;
-    s.pause();
+    // **Deliberately not awaited** — this test is about *when* the hook fires,
+    // so it has to look before `pause` has run to completion.
+    void s.pause();
     // Not on the same tick the damage resolved: `handle_party_death` is
     // reached from the C++'s main loop, after the blocking blast has played.
     expect(fired).toBe(0);
@@ -664,7 +666,7 @@ describe('party death', () => {
     let fired = 0;
     s.onPartyDeath = () => { fired++; };
     for (const pc of s.univ.party.pcs.slice(1)) pc.mainStatus = MainStatus.DEAD;
-    s.pause();
+    await s.pause();
     await flush();
     expect(fired).toBe(0);
   });
@@ -725,7 +727,7 @@ describe('the end of the scenario', () => {
     s.onVictory = () => { won++; };
     await s.runSpecial(SpecCtx.STARTUP, SpecCtxType.SCEN, 0, { x: 0, y: 0 });
     await flush();
-    s.pause();
+    await s.pause();
     await flush();
     expect(won).toBe(1);
   });
@@ -757,14 +759,14 @@ describe('the end of the scenario', () => {
     let died = 0;
     s.onPartyDeath = () => { died++; };
     for (const pc of s.univ.party.pcs) pc.mainStatus = MainStatus.DEAD;
-    s.pause();
+    await s.pause();
     await flush();
     expect(died).toBe(1);
 
     for (const pc of s.univ.party.pcs) pc.mainStatus = MainStatus.ALIVE;
     s.resumeLoadedGame();
     for (const pc of s.univ.party.pcs) pc.mainStatus = MainStatus.DEAD;
-    s.pause();
+    await s.pause();
     await flush();
     expect(died).toBe(2);
   });

@@ -82,7 +82,7 @@ describe('boats and horses', () => {
     expect(session.univ.party.townLoc).toEqual({ x: 6, y: 24 });
 
     const mountIndex = session.univ.party.inHorse;
-    session.pause();
+    await session.pause();
     expect(session.univ.party.inHorse).toBe(-1);
     expect(session.univ.party.horses[mountIndex]!.loc).toEqual({ x: 6, y: 24 });
     expect(session.univ.party.horses[mountIndex]!.whichTown).toBe(1);

@@ -64,6 +64,61 @@ function hostileBeside(univ: Universe, session: GameSession, index = 1): Creatur
   return monst;
 }
 
+describe('the fields a step walks into', () => {
+  /**
+   * `handle_pause` in combat ends with `check_fields(univ.current_pc()
+   * .combat_pos, COMBAT_MOVE, univ.current_pc())` (boe.actions.cpp:627):
+   * standing still in a fire still burns you. Only the combat branch has it —
+   * a town pause does not.
+   */
+  it('burns a PC who stands ready in a fire', async () => {
+    const { univ, session } = newGame();
+    expect(session.startCombat(Direction.N)).toBe(true);
+    const pc = univ.currentPc;
+    univ.town!.setField(pc.combatPos.x, pc.combatPos.y, FieldType.WALL_FIRE, true);
+    const before = pc.curHealth;
+
+    await session.pause();
+
+    expect(pc.curHealth).toBeLessThan(before);
+    expect(univ.transcript).toContain('  Fire wall!');
+  });
+
+  /**
+   * A swap walks *two* people onto new squares, so `pc_combat_move` checks the
+   * vacated one as well — `check_special_terrain(store_loc, COMBAT_MOVE,
+   * switch_pc)` (boe.combat.cpp:292), and note the third argument: the fields
+   * hurt **the PC who was swapped in**, not the one whose turn it is.
+   */
+  it('checks the square a swap vacates, for the PC swapped into it', async () => {
+    const { univ, session } = newGame();
+    expect(session.startCombat(Direction.N)).toBe(true);
+    const mover = univ.currentPc;
+    const other = univ.party.pcs.find(
+      (p) => p !== mover && p.isAlive && p.ap > 0)!;
+    expect(other).toBeTruthy();
+    // Stand them next to each other with a fire under the one about to move.
+    const here = { ...mover.combatPos };
+    const there = [
+      loc(here.x + 1, here.y), loc(here.x - 1, here.y),
+      loc(here.x, here.y + 1), loc(here.x, here.y - 1),
+    ].find((c) => !univ.town!.monsterAt(c) && !session.townIsBlocked(c)
+      && !univ.party.pcs.some((p) => p.isAlive && locsEqual(p.combatPos, c)))!;
+    expect(there).toBeTruthy();
+    other.combatPos = { ...there };
+    univ.town!.setField(here.x, here.y, FieldType.WALL_FIRE, true);
+    const moverBefore = mover.curHealth;
+    const otherBefore = other.curHealth;
+
+    await session.combatMove(there);
+
+    expect(univ.transcript).toContain('Move: Switch places.');
+    // The mover left the fire and took nothing; the PC swapped onto it burns.
+    expect(mover.curHealth).toBe(moverBefore);
+    expect(other.curHealth).toBeLessThan(otherBefore);
+  });
+});
+
 describe('a combat move that kills the PC making it', () => {
   /**
    * `pc_combat_move` reads `univ.current_pc()` afresh at every use, and
@@ -599,7 +654,7 @@ describe('placement, parry and holding a turn', () => {
     const pc = univ.currentPc;
     pc.status[Status.WEBS] = 5;
     pc.ap = 4;
-    session.pause();
+    await session.pause();
     expect(pc.parry).toBe(100);
     expect(pc.status[Status.WEBS]).toBe(3);
     expect(univ.transcript).toContain('Stand ready.');
@@ -608,7 +663,7 @@ describe('placement, parry and holding a turn', () => {
   it('pausing outside combat is a plain pause', async () => {
     const { univ, session } = newGame();
     univ.party.pcs[0]!.status[Status.WEBS] = 4;
-    session.pause();
+    await session.pause();
     expect(univ.transcript).toContain('Pause.');
     expect(univ.party.pcs[0]!.status[Status.WEBS]).toBe(2);
   });
