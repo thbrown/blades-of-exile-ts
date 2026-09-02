@@ -8553,3 +8553,31 @@ The M6 list below is kept for the history of what it covered:
     stream was compared against nothing.
   - Corpus **866,148 → 869,099** matching draws; 29 of 87 agree all the way; 43
     blocked outside the rules. 1,039 tests green.
+
+- **`univ.current_pc()` is a lookup, not a reference, and a combat move can
+  change who it is (M8, 2026-09-02).** A small corpus gain (+5 matching draws)
+  and a real rule: `pc_combat_move` (boe.combat.cpp:216) writes
+  `univ.current_pc()` afresh at **every** use, and `check_special_terrain` sits
+  in the middle of it. A field or damaging terrain on the destination kills the
+  acting PC, `kill_pc` parks `cur_pc` on `first_active_pc()`, and every line
+  below — the direction, the back-shots, the step, the AP — then belongs to
+  **the next PC**, who is standing somewhere else entirely.
+  - This port bound `const pc = this.univ.currentPc` once at the top, so after
+    the death it went on walking a corpse: the back-shot loop measured
+    adjacency from the dead PC's square and found nothing, and the
+    `main_status == ALIVE` test at the bottom refused the move. The recording's
+    step simply did not happen here.
+  - **A PC on zero health is still ALIVE.** That is what the harness's `pcs:`
+    column means by `s1/h0`, and it is why this is reachable at all: the PC
+    walks into the fire on 0 and the next hit finishes them. The test needed
+    the same setup — `curHealth = 1` and a four-point hit leaves them standing.
+  - How it was found: the C++ spent five extra draws inside a `move` —
+    `monster_attack` from `pc_combat_move`, i.e. a back-shot — against a
+    creature that was **not adjacent to the acting PC**. It was adjacent to the
+    *next* one. `BOE_TRACE_PCS` and `BOE_TRACE_MONST` side by side are what
+    made that legible; the draw stream alone said "a rule with a different
+    range", which it was not.
+  - `VoDT_09-04-2025_09-41-10` goes 21,825 → 21,830 draws and stops five draws
+    later on the next thing, which is a `handle_pause` that damages a PC
+    standing in a field here and does not there. Corpus **869,099 → 869,104**;
+    29 of 87 agree all the way. 1,040 tests green.

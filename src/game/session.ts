@@ -3752,7 +3752,18 @@ export class GameSession {
    */
   async combatMove(destination: Location): Promise<boolean> {
     const town = this.univ.town;
-    const pc = this.univ.currentPc;
+    // **`pc` is re-read after the terrain check, and that is load-bearing.**
+    // The C++ writes `univ.current_pc()` afresh at every use — it is a lookup
+    // through `univ.cur_pc`, not a bound reference — and `check_special_terrain`
+    // can *change who that is*: a field or damaging terrain at the destination
+    // kills the acting PC, `kill_pc` parks `cur_pc` on `first_active_pc()`, and
+    // every line below then belongs to **the next PC**, who takes the
+    // back-shots and makes the step. Binding it once at the top left this port
+    // walking a corpse: the back-shot loop measured adjacency from the dead
+    // PC's square, found nothing, and the `main_status == ALIVE` test at the
+    // bottom refused the move outright — so the recording's step simply did not
+    // happen here.
+    let pc = this.univ.currentPc;
     if (this.mode !== GameMode.COMBAT || !town) return false;
     if (pc.ap <= 0) return false;
 
@@ -3763,6 +3774,7 @@ export class GameSession {
       return false;
     }
     if (!monstHit && !(await this.checkSpecialTerrain(destination)).canEnter) return false;
+    pc = this.univ.currentPc;
 
     const dir = setDirection(pc.combatPos, destination);
     if (this.locOffActiveArea(destination) && this.whichCombatType === 1

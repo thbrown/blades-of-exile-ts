@@ -64,6 +64,45 @@ function hostileBeside(univ: Universe, session: GameSession, index = 1): Creatur
   return monst;
 }
 
+describe('a combat move that kills the PC making it', () => {
+  /**
+   * `pc_combat_move` reads `univ.current_pc()` afresh at every use, and
+   * `check_special_terrain` can change who that is: a field at the destination
+   * kills the acting PC, `kill_pc` parks `cur_pc` on `first_active_pc()`, and
+   * the rest of the function — the back-shots and the step itself — belongs to
+   * **the next PC**. Binding the PC once at the top left this port walking a
+   * corpse and refusing the move outright.
+   */
+  it('hands the back-shots and the step to whoever cur_pc becomes', async () => {
+    const { univ, session } = newGame();
+    expect(session.startCombat(Direction.N)).toBe(true);
+    const town = univ.town!;
+
+    const acting = univ.curPc;
+    const from = univ.currentPc.combatPos;
+    const dest = [
+      loc(from.x + 1, from.y), loc(from.x - 1, from.y),
+      loc(from.x, from.y + 1), loc(from.x, from.y - 1),
+    ].find((c) => !town.monsterAt(c) && !session.townIsBlocked(c)
+      && !univ.party.pcs.some((p) => p.isAlive && locsEqual(p.combatPos, c)))!;
+    expect(dest).toBeTruthy();
+
+    // A wall of fire on the destination, and an acting PC who cannot survive
+    // walking into it. **Zero health, not one**: a PC on 0 is still ALIVE in
+    // BoE — that is the `s1/h0` the harness's `pcs:` column prints — and only
+    // the next hit finishes them.
+    town.setField(dest.x, dest.y, FieldType.WALL_FIRE, true);
+    univ.currentPc.curHealth = 0;
+
+    await session.combatMove(dest);
+
+    expect(univ.party.pcs[acting]!.isAlive).toBe(false);
+    expect(univ.curPc).not.toBe(acting);
+    // The step went through — for the PC who inherited it.
+    expect(univ.currentPc.combatPos).toEqual(dest);
+  });
+});
+
 describe('action points', () => {
   it('gives four a round, three to the sluggish', async () => {
     const { univ } = newGame();
