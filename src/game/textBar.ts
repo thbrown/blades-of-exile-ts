@@ -19,20 +19,27 @@
  * `num_steps` steps, `do_explosion_anim` eleven times. Both numbers this port
  * already had.
  *
- * **TODO(M8): nothing calls `drawTerrain` yet, and that is deliberate.** The
- * rule below is ported and correct; the call sites are not, and wiring *some*
- * of them is worse than wiring none. Measured: the missile and explosion loops
- * plus `place_spell_pattern`'s `draw_terrain(0)` — three of the five redraws
- * the head recording needs — moved the corpus by +87 draws and pushed one file
- * backwards, because a combat stream that is short by two rolls is no better
- * aligned than one short by five. The two that remain are `advance_time`'s
- * redraw and the main loop's `redraw_everything`, and the second needs
- * `need_redraw` modelled. See the `text_bar_text` lead in PROGRESS.md.
+ * **Four of the five call sites round a combat cast are wired; the fifth is
+ * not.** In order, for `VoDT_05-04-2025_14-32-10`'s draws 24-28:
  *
- * Only `mode == 0` reaches `draw_text_bar`. `draw_terrain(1)` (the one that
- * fills the terrain template) and `draw_terrain(2)` (the monster-suppressing
- * one) draw nothing here, which is why the animation set-up passes cost
- * nothing and only the frame loops do.
+ * | draw | caller | here |
+ * |------|--------|------|
+ * | 24 | `handle_target_mode` → `draw_terrain` | `targetMode.ts` |
+ * | 25 | `advance_time` → `if(need_redraw) draw_terrain()` | **TODO(M8)** |
+ * | 26 | `main_loop_iteration` → `redraw_everything` | `replay/driver.ts` |
+ * | 27 | `do_combat_cast` → `draw_terrain(2)` | `spellCombatTarget.ts` |
+ * | 28 | `place_spell_pattern` → `draw_terrain(0)` | `spellPatterns.ts` |
+ *
+ * The missing one needs `need_redraw` modelled, which is a per-handler audit —
+ * see the PROGRESS entry, which has the ground-truth table for it.
+ *
+ * **`draw_terrain(2)` is not free, and an earlier note here said it was.**
+ * Mode 2 suppresses the working creature's own square and then **sets
+ * `mode = 0`** (boe.graphics.cpp:859) and falls through, so it reaches
+ * `draw_text_bar` like any other full redraw. What makes some mode-2 calls free
+ * is the early-out above that — `if(current_working_monster < 0) return;`.
+ * Mode 1, the one that only fills the terrain template, really does cost
+ * nothing: it never enters the `if(mode == 0)` block at the end.
  */
 
 import { Spell } from '../data/spell';

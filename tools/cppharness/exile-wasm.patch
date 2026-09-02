@@ -228,7 +228,7 @@ index 17780bca..a349fe18 100644
  		if(type == "set-sdf") return eSpecType::SET_SDF;
  		if(type == "inc-sdf") return eSpecType::INC_SDF;
 diff --git a/src/game/boe.actions.cpp b/src/game/boe.actions.cpp
-index fc7b63f1..97db0d7d 100644
+index fc7b63f1..481d7ab8 100644
 --- a/src/game/boe.actions.cpp
 +++ b/src/game/boe.actions.cpp
 @@ -1907,6 +1907,10 @@ void advance_time(bool did_something, bool need_redraw, bool need_reprint) {
@@ -236,7 +236,7 @@ index fc7b63f1..97db0d7d 100644
   	// MARK: At this point, see if any specials have been queued up, and deal with them
  	// Note: We just check once here instead of looping because run_special also pulls from the queue.
 +	if(getenv("BOE_TRACE_MMOVE"))
-+		std::cout << "      [advtime] did=" << int(did_something) << " mode=" << int(overall_mode)
++		std::cout << "      [advtime] did=" << int(did_something) << " redraw=" << int(need_redraw) << " mode=" << int(overall_mode)
 +			<< " party=(" << univ.party.town_loc.x << "," << univ.party.town_loc.y
 +			<< ") age=" << univ.party.age << std::endl;
  	if(!special_queue.empty()) {

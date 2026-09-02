@@ -32,6 +32,7 @@ import { alchemyChoices, makePotion } from '../game/alchemy';
 import { potionSlot } from '../dialogs/pickPotionDialog';
 import { useItem } from '../game/itemUse';
 import { GameMode, isCombat } from '../game/modes';
+import { drawTerrain } from '../game/textBar';
 import { dropItemAt, handleDropItem, handleGiveItem } from '../game/giveDrop';
 import { GameSession } from '../game/session';
 import { SpellPick } from '../game/spellPick';
@@ -1193,6 +1194,31 @@ export async function runReplay(
       // RNG draw counts. The live UI enforces the same rule through
       // `flushingInput`, which drops keystrokes while anything is still going.
       await session.settled();
+      // **`redraw_everything()` runs once per main-loop iteration, and a replay
+      // runs exactly one action per iteration** (boe.main.cpp:1452 and :1513).
+      // It is `redraw_screen(REFRESH_ALL)`, whose default branch ends in
+      // `draw_text_bar()` (boe.graphics.cpp:628) — and *that* spends an
+      // encumbrance roll per equipped awkward item once the acting PC has cast
+      // anything, because `text_bar_text` asks `pc_can_cast_spell` which of
+      // "Recast X" and "Cannot recast" to print. See `textBar.ts`: the rule was
+      // ported long ago and nothing called it.
+      //
+      // This is the one redraw of the five that is *structural* rather than
+      // scattered: once per iteration, after the action. The gates inside
+      // `text_bar_text` make it free for most of a recording — out of combat,
+      // or with a PC who has never cast, nothing is drawn at all.
+      //
+      // **A click a modal swallows is not an iteration.** The C++'s dialogs run
+      // their own event loop and *pull* actions out of the recording
+      // themselves, so `handle_spellcast` plus the four `click_control`s that
+      // work the casting dialog are **one** trip round the main loop, not five
+      // — its `[advtime]` line (`BOE_TRACE_MMOVE=1`) prints once for the whole
+      // group, after the click that closes the dialog. Testing "is a modal
+      // still up now?" reproduces that exactly: the opening action and every
+      // click inside are skipped, and the closing one fires.
+      const modalUp = picking !== null || getting !== null
+        || helpDialog || notesDialog || prefsDialog !== null;
+      if (!modalUp) drawTerrain(session);
       options.onStep?.(at, action);
     } catch (err) {
       result.error = String(err);

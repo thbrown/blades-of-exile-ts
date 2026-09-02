@@ -31,6 +31,8 @@ import { takeAp } from './combat';
 import { boomType, damageMonst, damagePc, handleMarkedDamage, hitChance } from './damage';
 import { targetThere } from './missiles';
 import { GameMode } from './modes';
+import { handleTargetMode } from './targetMode';
+import { drawTerrain } from './textBar';
 import { getSummonMonster, summonMonster } from './monsterPlace';
 import { Attitude } from '../data/monster';
 import { animSettle } from './anim';
@@ -123,6 +125,10 @@ export function startSpellTargeting(
   univ.addStringToBuf('  Target spell.');
   univ.addStringToBuf(isMage(spell) ? "  (Hit 'm' to cancel.)" : "  (Hit 'p' to cancel.)");
   session.mode = GameMode.SPELL_TARGET;
+  // `handle_target_mode(MODE_SPELL_TARGET, current_spell_range, num)`
+  // (boe.combat.cpp:4961) — between the prompt and the pattern switch. The
+  // range it locks on is the spell's own.
+  handleTargetMode(session, SPELLS[spell]?.range ?? 0, spell);
   const pattern = patternFor(spell);
   // The tail of `start_spell_targeting` (boe.combat.cpp:4958): a rotatable
   // pattern — PAT_WALL is the only one — says so and starts at rotation 0.
@@ -210,6 +216,11 @@ export function startFancySpellTargeting(
   const bonus = caster.statAdj(Skill.INTELLIGENCE);
   const level = freebie ? itemSpellLevel : caster.level;
   session.mode = GameMode.FANCY_TARGET;
+  // `handle_target_mode(MODE_FANCY_TARGET, …)` (boe.combat.cpp:5016). The C++
+  // calls it before it works out the bonus and level below, but neither of
+  // those draws, so only the mode being FANCY by now matters — and it is,
+  // because `handle_target_mode` is what sets it there.
+  handleTargetMode(session, SPELLS[spell]?.range ?? 0, spell);
   session.spellTargeting = {
     spell,
     freebie,
@@ -484,6 +495,14 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
     if (!apTaken) {
       if (!freebie) takeAp(univ, 5);
       apTaken = true;
+      // `draw_terrain(2)` (boe.combat.cpp:955), and **mode 2 is not free**:
+      // it suppresses the working creature's own square and then falls through
+      // by setting `mode = 0` (boe.graphics.cpp:859), so it reaches
+      // `draw_text_bar` like any other full redraw. The early-out above it —
+      // `if(current_working_monster < 0) return;` — is what makes some mode-2
+      // redraws free, and here the caster is `univ.cur_pc` (:903), so this one
+      // is not.
+      drawTerrain(session);
     }
 
     await resolveOne(session, spell, at, i, {

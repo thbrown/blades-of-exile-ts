@@ -84,6 +84,7 @@ import { pushThings } from './pushThings';
 import { ONCE_DONE } from './specials/oneshot';
 import { Spell } from '../data/spell';
 import { castSpell } from './spellTown';
+import { handleTargetMode } from './targetMode';
 
 /** d_string (boe.combat.cpp:70) — the direction names the transcript prints. */
 const DIRECTION_NAMES = [
@@ -3691,6 +3692,11 @@ export class GameSession {
     }
     this.missile = loaded;
     this.mode = loaded.mode;
+    // `handle_target_mode` (boe.combat.cpp:1488, :1504, :1516, :1528) — the
+    // target lock scrolls the view onto the enemies, and its redraw spends an
+    // encumbrance roll. A missile passes `eSpell::NONE`, so the spell table's
+    // `target_lock` column does not gate it.
+    handleTargetMode(this, loaded.range);
     this.univ.addStringToBuf(
       loaded.mode === GameMode.THROWING ? 'Throw: Select a target.' : 'Fire: Select a target.');
     this.univ.addStringToBuf("  (Hit 's' to cancel.)");

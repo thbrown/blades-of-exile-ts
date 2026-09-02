@@ -19,6 +19,7 @@
  */
 
 import { Location, dist } from '../core/location';
+import { drawTerrain } from './textBar';
 import { FieldType } from '../data/fields';
 import { DamageType } from '../data/monster';
 import {
@@ -164,6 +165,12 @@ async function placeGrid(
           break;
       }
     }
+
+  // `draw_terrain(0)` (boe.combat.cpp:4100) — between laying the fields and
+  // dealing the damage, and it is the fifth of the five redraws the C++ makes
+  // around a combat cast. It spends an encumbrance roll through
+  // `draw_text_bar`; see `textBar.ts`.
+  drawTerrain(session);
 
   // --- Then the damage, to the party --------------------------------------
   for (const pc of univ.party.pcs) {

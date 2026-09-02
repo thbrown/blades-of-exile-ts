@@ -1625,11 +1625,12 @@ bottom. What M8 still owes:
   fix. See the entry at the bottom for the current listing.
   A bucket named `… @ the C++ draws on` is **this port stopping**, not a rule:
   read the transcript at the stop.
-  Corpus **1,039,203** matching draws, **33 of 87** files agreeing all the way,
-  40 blocked outside the rules. The queue's head is `monstPickTarget`
-  (two files); `find_clear_spot` is two more and has a sharpened open lead at
-  the bottom of this file.
-  **Those numbers were 1,038,282 / 33 / 40, 1,024,918 / 32 / 37, 890,998 / 31 / 48, 886,672 / 30 / 47,
+  Corpus **1,039,207** matching draws, **33 of 87** files agreeing all the way,
+  40 blocked outside the rules. The queue's head is the **redraw count**, which
+  is three buckets in one job and is four fifths done — see the entry at the
+  bottom; `find_clear_spot` is two more files and has a sharpened open lead
+  there too.
+  **Those numbers were 1,039,203 / 33 / 40, 1,038,282 / 33 / 40, 1,024,918 / 32 / 37, 890,998 / 31 / 48, 886,672 / 30 / 47,
   884,990 / 30 / 46, 884,198 / 30 / 45, 883,917 / 30 / 44,
   792,066 / 28 / 41, 784,451 / 27 / 40, 784,586 / 27 / 40, 782,199 / 27 / 39,
   765,933 / 25 / 39 earlier on 2026-09-01, and
@@ -9149,3 +9150,71 @@ The M6 list below is kept for the history of what it covered:
     matching the C++'s redraw count. It is the largest single thing left in M8
     and it should be taken whole, not in the three-of-five slice that was
     measured and backed out on 2026-08-30.
+
+- **The redraw-count job, four fifths of it (M8, 2026-09-02).** The
+  `text_bar_text` lead, open since 2026-08-24, is now mostly closed. Corpus
+  **1,039,203 → 1,039,207**, and the four draws are all
+  `VoDT_05-04-2025_14-32-10`, which goes 23 → **27**. The number is small on
+  purpose: **until the fifth site lands no file can get past its first combat
+  cast**, so this is measured as "nothing regressed" rather than as a win. The
+  2026-08-30 attempt that was backed out scored +87 *and pushed a file
+  backwards*; this one moves nothing but the target.
+  - The five sites, from `BOE_TRACE_RAN_STACK` on draws 24-28 of that file:
+
+    | draw | caller | ported in |
+    |------|--------|-----------|
+    | 24 | `handle_target_mode` → `draw_terrain` | `game/targetMode.ts` (new) |
+    | 25 | `advance_time` → `if(need_redraw) draw_terrain()` | **not yet** |
+    | 26 | `main_loop_iteration` → `redraw_everything` | `replay/driver.ts` |
+    | 27 | `do_combat_cast` → `draw_terrain(2)` | `spellCombatTarget.ts` |
+    | 28 | `place_spell_pattern` → `draw_terrain(0)` | `spellPatterns.ts` |
+
+  - **Two things the old notes had wrong, and both cost days if believed.**
+    - **`draw_terrain(2)` is not free.** `textBar.ts` said mode 1 and mode 2
+      both spend nothing. Mode 2 *sets `mode = 0`* after its
+      monster-suppression set-up (boe.graphics.cpp:859) and falls through to
+      `draw_text_bar` like any full redraw; what makes some mode-2 calls free is
+      the early-out above it, `if(current_working_monster < 0) return;`. Draw 27
+      is a `draw_terrain(2)`. There are fourteen more mode-2 sites in
+      `boe.combat.cpp` alone, so this widens the job rather than narrowing it.
+    - **A click a modal swallows is not a main-loop iteration.** `redraw_everything`
+      runs once per iteration, and a replay runs one *top-level* action per
+      iteration — but the C++'s dialogs run their own event loop and pull
+      actions out of the recording themselves. `handle_spellcast` plus the four
+      `click_control`s that work the casting dialog are **one** trip round the
+      loop; `[advtime]` prints once for the group, after the click that closes
+      the dialog. The driver reproduces that by testing whether a modal is still
+      up *after* the action — which skips the opener and the inner clicks and
+      fires on the closer.
+  - **`handle_target_mode` had never been ported at all**, and it is not only a
+    redraw: the **target lock** scrolls `center` onto the point that sees the
+    most in-range hostile creatures, and `center` is what `screen_shift` bounds
+    itself against and what `party_can_see`'s town branch reads.
+    `game/targetMode.ts` ports it with `points_containing_most` and
+    `closest_point` (location.cpp:370, :436). Note the C++ `std::sort`s the
+    candidates — an **unstable** sort — and then keeps every one with the
+    maximum count; this port keeps the sweep order, which is what a stable sort
+    would have left, because the surviving order decides which of two equally
+    close centres `closest_point` returns.
+  - **The fifth site, and the instrument for it.** `advance_time`'s
+    `if(need_redraw) draw_terrain()` needs `need_redraw` modelled, which the C++
+    threads out of every handler. **`BOE_TRACE_MMOVE=1`'s `[advtime]` line now
+    prints `redraw=`** (one line added to the harness patch), so the ground
+    truth is a `grep` away. Over three files it comes out:
+
+    ```
+    redraw=1 always: move (2717/2725), handle_target_space, handle_parry,
+                     handle_pause, handle_spellcast, handle_equip_item,
+                     handle_drop_item_*, handle_use_item, handle_rest,
+                     handle_combat_switch, handle_talk (did=1)
+    redraw=0 always: screen_shift (48), handle_begin_talk (14), handle_sale,
+                     click_shop_item, set_stat_window, handle_talk (did=0)
+    mixed:           click_control (64 on / 29 off), handle_look (1 / 22),
+                     handle_missile (2 / 35), handle_switch_pc (9 / 2),
+                     move (8 off out of 2725)
+    ```
+
+    So it is **true for nearly everything that acts and false for the view-only
+    actions**, and the mixed rows are where the per-handler reading has to be
+    done rather than guessed. That reading is the remaining work, and it is the
+    last thing between three of the queue's buckets and a measurement.
