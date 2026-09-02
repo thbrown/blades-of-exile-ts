@@ -370,6 +370,35 @@ describe('damageMonst', () => {
   });
 });
 
+describe('debug mode', () => {
+  /**
+   * `univ.debug_mode` is not only a key gate. `damage_monst` sets the victim's
+   * health to **-1** outright (boe.specials.cpp:1532), so any hit kills; and
+   * `kill_monst` skips the experience, the glands and the treasure (:1628,
+   * :1643), so a tester clearing a dungeon levels nobody up and picks nothing
+   * up. All three of those draw, so a replay that flips the switch mid-run
+   * diverges immediately if the flag is only a transcript line — which is what
+   * it was here, and `VoDT_02-05-2025_16-42-15` turns it on at action 240.
+   */
+  it('kills whatever it touches, and pays nothing for it', async () => {
+    const { univ } = newGame();
+    const monst = monster(1, 10);
+    monst.mon.armor = 0;
+    monst.health = 500;
+    univ.debugMode = true;
+    const xpBefore = univ.party.pcs[0]!.experience;
+    const killsBefore = univ.party.totalMKilled;
+
+    await damageMonst(univ, monst, 0, 1, DamageType.UNBLOCKABLE);
+
+    expect(monst.isAlive).toBe(false);
+    // No experience, and the kill is not even counted — `total_m_killed` sits
+    // inside the same `if(!univ.debug_mode)`.
+    expect(univ.party.pcs[0]!.experience).toBe(xpBefore);
+    expect(univ.party.totalMKilled).toBe(killsBefore);
+  });
+});
+
 describe('awardXp', () => {
   it('scales the award by level and levels the PC up', async () => {
     const { univ } = newGame();

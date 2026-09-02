@@ -8912,3 +8912,33 @@ The M6 list below is kept for the history of what it covered:
   - Corpus **884,990 → 886,672** matching draws; 30 of 87 agree all the way;
     blocked outside the rules 46 → **47**. `--clocks` is down to **1 file**
     (`AllMageSpells`, the known `TODO(M5c)` on Identify). 1,053 tests green.
+
+- **Debug mode is three rules, not a transcript line (M8, 2026-09-02).**
+  +4,326 matching draws, a **31st** file agreeing all the way, and
+  `VoDT_02-05-2025_16-42-15` — one of the twelve open leads written down on
+  2026-09-01 — now matches **all 7,597** of the oracle's draws.
+  - `univ.debug_mode` is the shift-D toggle, and this port had it as a flag
+    nothing reads, with a comment saying so. It reads it three times:
+    - `damage_monst` sets `victim.health = -1` outright
+      (boe.specials.cpp:1532), so **any hit kills**.
+    - `kill_monst` skips the experience, the `total_m_killed` count and the
+      glands (:1628) — all inside one `if(!univ.debug_mode)`.
+    - and skips `place_treasure` (:1643).
+    All three draw, so the moment a recording flips the switch the streams part.
+  - The 2026-09-01 lead read this as "this port kills a monster inside
+    `handleMarkedDamage` where the C++ still has a damage arm to roll — the
+    creature's health differs going in". Right in every particular and pointing
+    the wrong way: the health differs because **four actions earlier the
+    recording pressed shift-D**, and the C++'s nine-point arrow then killed a
+    ten-hit-point goblin that survived here on one.
+  - The diff that found it is the `monst:` health column aligned by action, the
+    same twenty-line script shape as the `age` and `sp` diffs. That is now three
+    state columns in a row where **the first divergence is a state divergence,
+    invisible in the draw stream until something happens to roll**. The general
+    move: when `diverge.mjs` lands in a kill or a refusal, diff the *state* the
+    rule reads before reading the rule.
+  - `ghost_mode` — the other half of the pair, which `debug_mode && ghost_mode`
+    uses to force a step through anything — is **not modelled**, and nothing in
+    the corpus toggles it. `TODO(M8)` recorded on `debugMode` if one ever does.
+  - Corpus **886,672 → 890,998** matching draws; **31 of 87** agree all the way;
+    blocked outside the rules 47 → **48**. 1,054 tests green.

@@ -41,8 +41,19 @@ export class Universe {
   saveSlot: string | null = null;
   /**
    * `cUniverse::debug_mode` — the shift-D toggle that unlocks the debug keys.
-   * Not saved, and nothing in the rules reads it; it is here because a replay
-   * can turn it on mid-run and the transcript says so.
+   * Not saved.
+   *
+   * **It is not only a key gate: three rules read it.** `damage_monst` sets the
+   * victim's health to -1 outright (boe.specials.cpp:1532), so any hit kills;
+   * and `kill_monst` skips the experience, the glands and the treasure
+   * (:1628, :1643), so a tester clearing a dungeon levels nobody up and picks
+   * nothing up. All three draw, so a replay that flips this mid-run diverges
+   * immediately if the flag is only a transcript line — which is what it was
+   * here until 2026-09-02.
+   *
+   * `ghost_mode` — the other half of the pair, which `debug_mode && ghost_mode`
+   * uses to force a step through anything — is **not modelled**; no recording in
+   * the corpus toggles it. TODO(M8) if one ever does.
    */
   debugMode = false;
 

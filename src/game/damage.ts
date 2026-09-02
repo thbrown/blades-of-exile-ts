@@ -458,6 +458,12 @@ export async function damageMonst(
     await animSettle();
   }
   victim.health -= howMuch;
+  // **Debug mode kills whatever it touches** (boe.specials.cpp:1532): one point
+  // of damage takes the health straight to -1. It is the shift-D "clear the
+  // room" switch, and a recording can turn it on mid-run —
+  // `VoDT_02-05-2025_16-42-15` does, and the goblin the C++ kills with a
+  // nine-point arrow survived here on one hit point for the rest of the file.
+  if (univ.debugMode) victim.health = -1;
 
   // Splitting monsters. The copy takes the *current* health of the original,
   // so hacking a slime apart gives you two weakened slimes, not two fresh
@@ -559,8 +565,13 @@ export function killMonst(
       SpecCtx.KILL_MONST, SpecCtxType.SCEN, trigger.special.extra1, monst.curLoc);
   }
 
-  // No experience for something the party summoned itself.
-  if (monst.summonTime === 0 || !monst.partySummoned) {
+  // **Debug mode buys nothing** (boe.specials.cpp:1628 and :1643): no
+  // experience, no glands, no treasure — the shift-D kill is for testing, and
+  // paying for it would let a tester level the party up by walking through a
+  // dungeon. All three of those *draw*, so this is not cosmetic.
+  //
+  // No experience for something the party summoned itself, either.
+  if (!univ.debugMode && (monst.summonTime === 0 || !monst.partySummoned)) {
     const xp = monst.mon.level * 2;
     if (whoKilled < 6) awardXp(univ, whoKilled, xp);
     else if (whoKilled === 6) awardPartyXp(univ, Math.trunc(xp / 6) + 1);
@@ -573,8 +584,8 @@ export function killMonst(
     placeGlands(univ, monst.curLoc, monsterDef(univ, monst));
   }
   // Treasure has its own condition: a summoned creature carries nothing,
-  // whoever called it up.
-  if (monst.summonTime === 0) {
+  // whoever called it up — and debug mode again buys none of it.
+  if (!univ.debugMode && monst.summonTime === 0) {
     placeTreasure(univ, monst.curLoc, Math.trunc(monst.mon.level / 2), monst.mon.treasure, 0);
   }
 
