@@ -8696,3 +8696,49 @@ The M6 list below is kept for the history of what it covered:
     - `cCreature::status` and `cPlayer::status` were fixed in August and are
       the reason the shape was recognisable at all.
   - 1,046 tests green.
+
+- **`fog_lifted` is a one-action flag, not "explore the whole town" (M8,
+  2026-09-02).** Corpus-neutral (881,151 before and after) and a real fidelity
+  fix: this port's `TOWN_LIFT_FOG` was an invention with the polarity reversed.
+  - `fog_lifted = spec.ex1a` (boe.specials.cpp:4292) sets a global that
+    short-circuits `party_can_see` to *"is it on screen"* (boe.locutils.cpp:525
+    — above the town branch **and** the combat one) and makes `can_draw` true
+    for every square (boe.graphics.cpp:956). `advance_time` clears it at its
+    tail (boe.actions.cpp:1930), **after** `handle_monster_actions`, so the
+    creatures take their turn with it still up: for that one turn
+    `party_can_see_monst` says yes to everything on screen, which decides which
+    of them may use their SPECIAL ability and which `check_if_monst_seen`
+    announces.
+  - This port instead walked the whole town calling `makeExplored`, which is
+    **permanent, saved with the game and the opposite polarity** (`ex1a === 0`
+    lifted it here; an int assigned to a `bool` means non-zero lifts it there).
+    A cutscene that showed you one corner of a dungeon handed you the finished
+    map for good.
+  - `TODO(M8)` left in place: the C++ clears the flag on **every** action and
+    this port has no single per-action hook, so it clears in `afterPartyTurn`.
+    Every node that can raise it fires from a move, a look or a use, all of
+    which come through there.
+  - 1,048 tests green, `verify-screen.mjs` PASS.
+
+- **Open lead, pinpointed: `party_can_see` disagrees on distance (M8,
+  2026-09-02).** `ASR_11-05-2025_07-55-19` is still stopped at draw 49,024 on
+  one extra `get_ran(1,1,1000)` the C++ spends inside `do_monster_turn`, and
+  the hunt for it turned up a *different* divergence that is worth writing down
+  because it is exact.
+  - At action 1795 the party is at (52,18) and four creatures — 2 at (53,26), 5
+    at (52,24), 31 at (53,23), 50 at (53,24) — are **visible to the C++'s
+    `party_can_see_monst` and invisible to this port's**, on the same turn, with
+    every draw before it matching. Six to nine squares away, in town mode.
+  - The three terms are `(point_onscreen(town_loc, w) || center != town_loc)`,
+    `pt_in_light(town_loc, w)` and `can_see_light(town_loc, w, sight_obscurity)
+    < 5`, and this port has all three in the same order — so one of them
+    computes differently. `LIGHT=1` against `BOE_TRACE_LIGHT=1` is the next
+    instrument; `pt_in_light` is the likeliest of the three.
+  - **`fog_lifted` was the first hypothesis and is not the cause** — the fix
+    above landed and the columns did not move. It is written down so nobody
+    tries it twice.
+  - The extra `get_ran(1,1,1000)` itself is **not** the SPECIAL ability: a
+    temporary `[sab]` probe on both sides shows `active=0` for every creature
+    at that action. The remaining candidates in `do_monster_turn` are the
+    DAMAGE2 breath odds (boe.combat.cpp:2285) and the three rolls inside the
+    missile-ability pick (:2333, :2374, :2385/:2392).

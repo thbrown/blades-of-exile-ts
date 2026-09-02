@@ -139,6 +139,9 @@ export function canDrawTerrainSpot(
   const { univ } = session;
   const town = univ.town;
   if (x < 0 || y < 0 || x >= maxDim || y >= maxDimY) return false;
+  // `if(fog_lifted) can_draw = true` (boe.graphics.cpp:956) — the cutscene flag
+  // draws the whole town, explored or not.
+  if (session.fogLifted) return true;
   if (town && isCombat(session.mode)) {
     // `monsters_going` is the third of these, and the one that was missing:
     // while the monsters go, the camera is centred on whichever monster is

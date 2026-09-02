@@ -191,13 +191,17 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
       break;
 
     case SpecType.TOWN_LIFT_FOG:
-      // ex1a: 0 lifts the fog, anything else puts it back.
-      if (town) {
-        for (let x = 0; x < town.record.maxDim; x++)
-          for (let y = 0; y < town.record.maxDim; y++)
-            if (spec.ex1a === 0) town.makeExplored(x, y);
-        ctx.redraw = true;
-      }
+      // `fog_lifted = spec.ex1a` (boe.specials.cpp:4292) — an int assigned to a
+      // `bool`, so **any non-zero value lifts it** and zero puts it back.
+      //
+      // It is a flag that lives for the rest of this action and is cleared at
+      // the tail of `advance_time`; while it is up, `party_can_see` is just
+      // "is it on screen". This port used to walk the town marking every square
+      // **explored**, which is a different thing entirely — permanent, saved
+      // with the game, and the opposite polarity — so a cutscene that showed
+      // you one corner of a dungeon handed you the whole map for good.
+      ctx.session.fogLifted = spec.ex1a !== 0;
+      ctx.redraw = true;
       break;
 
     case SpecType.TOWN_GENERIC_LEVER:

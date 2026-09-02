@@ -645,3 +645,45 @@ describe('a scripted square that is also a door', () => {
     expect(host.messages).toHaveLength(0);
   });
 });
+
+describe('TOWN_LIFT_FOG', () => {
+  /**
+   * `fog_lifted = spec.ex1a` (boe.specials.cpp:4292) is a **one-action flag**,
+   * cleared at the tail of `advance_time`, that short-circuits `party_can_see`
+   * to "is it on screen" (boe.locutils.cpp:525). It is not the same as marking
+   * the town explored, which is permanent and saved with the game — that is
+   * what this port used to do, with the polarity reversed as well.
+   */
+  it('raises a one-action flag rather than exploring the town', async () => {
+    const { univ, session, run } = withNodes({
+      0: { type: SpecType.TOWN_LIFT_FOG, ex1a: 1 },
+    });
+    const town = univ.town!;
+    // Somewhere on screen the party has never been.
+    const far = { x: univ.party.townLoc.x, y: univ.party.townLoc.y + 3 };
+    town.explored[far.x]![far.y] = 0;
+    expect(town.isExplored(far.x, far.y)).toBe(false);
+
+    await run(0);
+    expect(session.fogLifted).toBe(true);
+    expect(session.partyCanSee(far)).toBe(1);
+    // **Not** explored: the flag is the whole mechanism.
+    expect(town.isExplored(far.x, far.y)).toBe(false);
+
+    // A turn puts it back down.
+    await session.afterPartyTurn();
+    expect(session.fogLifted).toBe(false);
+  });
+
+  /** `fog_lifted = spec.ex1a` — an int into a bool, so zero is the one that clears. */
+  it('takes ex1a as the flag, so zero puts the fog back', async () => {
+    const { session, run } = withNodes({
+      0: { type: SpecType.TOWN_LIFT_FOG, ex1a: 1 },
+      1: { type: SpecType.TOWN_LIFT_FOG, ex1a: 0 },
+    });
+    await run(0);
+    expect(session.fogLifted).toBe(true);
+    await run(1);
+    expect(session.fogLifted).toBe(false);
+  });
+});

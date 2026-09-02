@@ -168,6 +168,22 @@ export class GameSession {
   missileFirer = 0;
   /** which_combat_type: 1 for a fight in a town, 0 for an outdoor arena. */
   whichCombatType = 0;
+
+  /**
+   * `fog_lifted` (boe.specials.cpp:58) — a **one-action** flag a
+   * `TOWN_LIFT_FOG` node raises, which makes the whole town visible for the
+   * rest of that action and is cleared at the tail of `advance_time`
+   * (boe.actions.cpp:1930). It is what a scenario uses to show you something
+   * happening across the map in a cutscene.
+   *
+   * It is *not* the same as marking the town explored, which is what this port
+   * used to do: that is permanent, it is written into the save, and it left
+   * every square the party had never walked on lit for the rest of the game.
+   * The real thing short-circuits `party_can_see` instead, so it also changes
+   * `party_can_see_monst` — and therefore which creatures may use their
+   * SPECIAL ability, and which ones `check_if_monst_seen` announces.
+   */
+  fogLifted = false;
   /**
    * combat_active_pc — the PC in the middle of a multi-step action (firing,
    * casting). 6 means nobody, and then everyone acts in turn as normal.
@@ -553,6 +569,17 @@ export class GameSession {
       // upkeep (poison, disease, a field) or a monster's turn can be what
       // finishes the party off outside of combat.
       this.checkGameOver();
+      // `fog_lifted = false` (boe.actions.cpp:1930) — *after* the monsters have
+      // gone, which is the point: the creatures act while the fog is still up,
+      // so `party_can_see_monst` says yes to everything on screen for that one
+      // turn.
+      //
+      // TODO(M8): the C++ clears it at the tail of `advance_time`, which runs
+      // on **every** action; this port has no single per-action hook, so a
+      // `TOWN_LIFT_FOG` raised by an action that sets no `did_something` would
+      // linger one action longer. Every node that can raise it fires from a
+      // move, a look or a use, all of which come through here.
+      this.fogLifted = false;
     }
   }
 
@@ -4151,6 +4178,10 @@ export class GameSession {
       return pointOnScreen(from, where) && this.canSeeLight(from, where) < SIGHT_BLOCKED
         ? 1 : 6;
     }
+    // **Above the town *and* the combat branch** (boe.locutils.cpp:525): while
+    // the fog is lifted, being on screen is the whole test — no light, no line
+    // of sight, and in combat as well as in town.
+    if (this.fogLifted) return pointOnScreen(this.univ.party.townLoc, where) ? 1 : 6;
     if (!isCombat(this.mode)) {
       const from = this.univ.party.townLoc;
       const onScreen = pointOnScreen(from, where) || !locsEqual(this.center, from);
