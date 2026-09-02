@@ -543,11 +543,18 @@ function dirToward(from: Location, to: Location): number {
  * instead of act. Kept out of `char_parry`/`handle_pause` themselves because
  * it's the monster's *movement*, not the PC's own turn, that triggers it.
  */
-async function checkParryOpportunity(session: GameSession, monst: Creature): Promise<void> {
-  if (!monst.isAlive) return;
+export async function checkParryOpportunity(session: GameSession, monst: Creature): Promise<void> {
   for (const pc of session.univ.party.pcs) {
+    // **`cur_monst->is_alive()` is inside the loop, and that is the whole
+    // rule**: the C++'s four conditions are one `&&` chain re-evaluated per PC
+    // (boe.combat.cpp:2471), so the first stand-ready PC to *kill* the creature
+    // ends the volley — the rest keep their parry and their swing. This port
+    // tested it once before the loop, so a second and third PC swung at a
+    // corpse, each one spending `pc_attack`'s four `get_ran(1,1,100)`s on
+    // nothing.
     if (pc.parry <= 99) continue;
     if (!monstAdjacent(monst, pc.combatPos)) continue;
+    if (!monst.isAlive) continue;
     if (pc.traits[Trait.PACIFIST]) continue;
     pc.parry = 0;
     await pcAttack(session.univ, session.univ.party.pcs.indexOf(pc), monst, session);

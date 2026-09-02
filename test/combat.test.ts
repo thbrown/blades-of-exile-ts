@@ -10,6 +10,7 @@ import { Scenario } from '../src/data/scenario';
 import {
   NO_ONE, getWeapons, pcAttack, pickNextPc, placeParty, setPcMoves, takeAp, totalEncumbrance,
 } from '../src/game/combat';
+import { checkParryOpportunity } from '../src/game/monsterTurn';
 import { GameMode } from '../src/game/modes';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
 import { loadScenario } from '../src/fileio/loadScenario';
@@ -63,6 +64,48 @@ function hostileBeside(univ: Universe, session: GameSession, index = 1): Creatur
   univ.town!.monsters.push(monst);
   return monst;
 }
+
+describe('the stand-ready volley', () => {
+  /**
+   * `do_monster_turn`'s parry check is one `&&` chain re-evaluated per PC
+   * (boe.combat.cpp:2471), and `cur_monst->is_alive()` is *inside* it: the
+   * first stand-ready PC to kill the creature ends the volley, and the rest
+   * keep both their parry and their swing. This port tested aliveness once
+   * before the loop, so a second and third PC swung at a corpse — four wasted
+   * `get_ran(1,1,100)`s each, which is what parted `ASR_19-05-2025_19-38-44`
+   * eleven thousand draws from the end.
+   */
+  it('stops as soon as the creature dies, and the later PCs keep their parry', async () => {
+    let checked = 0;
+    // Deterministic, but which seed lands the killing blow is not something to
+    // hard-code: search a few and assert on the first that kills.
+    for (let seed = 1; seed <= 200 && checked === 0; seed++) {
+      const univ = new Universe(scen, new GameRng(seed), PartyPreset.DEFAULT);
+      const session = new GameSession(univ);
+      session.startTownMode(0, FORCED_ENTRY);
+      expect(session.startCombat(Direction.N)).toBe(true);
+
+      const monst = hostileBeside(univ, session);
+      monst.health = 1;
+      // Two PCs standing ready, both within reach of it.
+      const [first, second] = [univ.party.pcs[0]!, univ.party.pcs[1]!];
+      for (const pc of univ.party.pcs) pc.parry = 0;
+      for (const pc of [first, second]) {
+        pc.combatPos = loc(monst.curLoc.x, monst.curLoc.y + 1);
+        pc.parry = 100;
+      }
+
+      await checkParryOpportunity(session, monst);
+      if (monst.isAlive) continue;   // first swing missed; try another seed
+
+      checked++;
+      expect(first.parry).toBe(0);
+      // The kill ended the volley before PC 1 was reached.
+      expect(second.parry).toBe(100);
+    }
+    expect(checked).toBe(1);
+  });
+});
 
 describe('the fields a step walks into', () => {
   /**

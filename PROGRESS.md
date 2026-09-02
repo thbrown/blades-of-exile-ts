@@ -8614,3 +8614,25 @@ The M6 list below is kept for the history of what it covered:
     movement desync like the rest of the tail. Corpus **869,104 → 869,293**
     matching draws; 29 of 87 agree all the way; blocked outside the rules 43 →
     44. 1,042 tests green.
+
+- **The stand-ready volley stops at the kill (M8, 2026-09-02).** +11,583
+  matching draws from moving one condition inside a loop, and
+  `ASR_19-05-2025_19-38-44` — the corpus's biggest file, closed once already
+  tonight and back at the head of the queue — now runs **6,288 of its 6,290
+  actions** and matches 109,105 draws.
+  - `do_monster_turn`'s parry check (boe.combat.cpp:2471) is a single `&&`
+    chain re-evaluated for each of the six PCs, and **`cur_monst->is_alive()`
+    is inside it**. So the first stand-ready PC whose free swing kills the
+    creature ends the volley: everyone after them keeps their parry *and* their
+    swing. This port hoisted the aliveness test to the top of
+    `checkParryOpportunity`, so a second and a third PC swung at a corpse, each
+    spending `pc_attack`'s four `get_ran(1,1,100)`s on nothing.
+  - The signature in the draw stream is unmistakable once you have seen it: a
+    `get_ran(1,0,1)` — `kill_monst`'s death sound — and then one side going
+    quietly on to the next creature's `monst_pick_target` while the other opens
+    another attack. It is worth remembering that **a hoisted loop-invariant is
+    a rule change** in a port whose spec includes call order.
+  - The test searches seeds for one where the first swing kills rather than
+    hard-coding it, because which seed does that is not a fact about the rule.
+  - Corpus **869,293 → 880,876** matching draws; 29 of 87 agree all the way; 44
+    blocked outside the rules. 1,043 tests green.
