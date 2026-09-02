@@ -1625,10 +1625,11 @@ bottom. What M8 still owes:
   fix. See the entry at the bottom for the current listing.
   A bucket named `… @ the C++ draws on` is **this port stopping**, not a rule:
   read the transcript at the stop.
-  Corpus **1,038,282** matching draws, **33 of 87** files agreeing all the way,
-  40 blocked outside the rules. The queue's head is now two two-file buckets,
-  `totalEncumbrance` and `monstPickTarget`.
-  **Those numbers were 1,024,918 / 32 / 37, 890,998 / 31 / 48, 886,672 / 30 / 47,
+  Corpus **1,039,203** matching draws, **33 of 87** files agreeing all the way,
+  40 blocked outside the rules. The queue's head is `monstPickTarget`
+  (two files); `find_clear_spot` is two more and has a sharpened open lead at
+  the bottom of this file.
+  **Those numbers were 1,038,282 / 33 / 40, 1,024,918 / 32 / 37, 890,998 / 31 / 48, 886,672 / 30 / 47,
   884,990 / 30 / 46, 884,198 / 30 / 45, 883,917 / 30 / 44,
   792,066 / 28 / 41, 784,451 / 27 / 40, 784,586 / 27 / 40, 782,199 / 27 / 39,
   765,933 / 25 / 39 earlier on 2026-09-01, and
@@ -9055,3 +9056,68 @@ The M6 list below is kept for the history of what it covered:
     scan that missed the stored caster and the per-PC refusal lines both.
   - 1,056 tests green, `tsc` clean, `floating-promises` clean,
     `verify-screen.mjs` PASS.
+
+- **Starting a town fight costs a turn, and the two refusals do not (M8,
+  2026-09-02).** The `totalEncumbrance` bucket, which was the queue's head.
+  Corpus **1,038,282 → 1,039,203** matching draws; `VoDT_04-05-2025_16-32-10`
+  goes 28,989 → 29,045 and now reproduces the whole first monster round of the
+  fight, and `ASR_10-05-2025_09-08-20` gains 865.
+  - `handle_combat_switch`'s start branch sets `did_something = true`
+    (boe.actions.cpp:1335), so `advance_time` runs `handle_monster_actions` on
+    the way out — and by then the mode is MODE_COMBAT, so it takes the combat
+    arm and steps the round with `combat_next_step`. This port called
+    `startCombat` and went straight on to the next recorded action; the C++
+    spent thirteen `get_ran(1,1,100)` and a whole creature round there.
+    The **end** branch had been ported for exactly this reason a month earlier
+    (:1362) and the start branch had not — the pair is worth checking whenever
+    one half of a toggle is found to advance time.
+  - **The two refusals above it do not set the flag** (:1322, :1326): in a boat
+    or on horseback the toggle prints a line and nothing else. Charging the turn
+    unconditionally cost `ASR_11-05-2025_07-55-19` **19,983 draws** — the party
+    was mounted, every later toggle was one turn out — so the fix is gated on
+    `startCombat()`'s own return value, which this port already had. Measured
+    both ways: −19,062 ungated, +921 gated.
+
+- **OPEN LEAD, sharpened: `find_clear_spot` rejects the caster's own
+  neighbours in the C++ and not here (M8, 2026-09-02).** Supersedes the summon
+  lead written earlier the same day; the earlier reading (`monst_hate_spot`'s
+  extra calls) was wrong — that function *is* ported, at both of its call
+  sites. Two files sit on this: `ASR_20-05-2025_07-20-41` and, since the fix
+  above, `VoDT_04-05-2025_16-32-10`.
+  - The clean case is `VoDT_04-05-2025_16-32-10` action 877. A creature casts
+    SUMMON_SPIRIT from (3,39); `find_clear_spot(that, 0)` runs 45 tries in the
+    C++ and 9 here. Forcing this port's loop to run all 75 (a throwaway
+    `FCS`/`FCSFROM` probe in `monsterPlace.ts` that exhausts one named call and
+    leaves every other stream intact) shows what each side accepts:
+
+    | candidate | offset | this port | the C++ |
+    |-----------|--------|-----------|---------|
+    | (3,40) (4,40) (3,38) (4,38) | the four diagonal/orthogonal neighbours | accepts | **rejects** |
+    | (5,40) | (+2,+1) | accepts | accepts, at try 44 |
+
+    Every square the two disagree about is **adjacent to `from_where`**, and the
+    first non-adjacent, lit, unblocked candidate is where the C++ stops. Every
+    other candidate in between is rejected by *both* — blocked terrain, or
+    `can_see_light` = 5 for an unlit square.
+  - **What has been ruled out.** The boards are identical: `BOE_TRACE_MMOVE=1`
+    against `MMOVE=1` gives **238 lines of `[mbranch]`/`[mmove]`, byte for byte
+    the same**, and the summon sits at the same place in that sequence on both
+    sides (immediately after `[mbranch] 2 … ap=4` opens a fresh round). The
+    caster and every creature within three squares is 1×1, so the C++'s "NO
+    ADJUSTMENTS FOR BIG MONSTERS" comment is not it. `loc_off_act_area`,
+    `is_summon_safe`'s 254 mask, `combat_pt_in_light` and `combat_obscurity`
+    are all faithful ports and all agree.
+  - **Where to look next.** What is left is per-square *field* state, which
+    nothing in the corpus's instruments prints: `is_summon_safe` refuses any of
+    bits 1-7 (force/fire/ice/blade walls, antimagic, stink and sleep clouds)
+    plus block/spot/crate/barrel/quickfire, and `is_blocked` refuses
+    SPECIAL_SPOT, BARRIER_FORCE and BARRIER_CAGE. A creature with RADIATE lays
+    a field on its square through `monst_inflict_fields` every time it moves, so
+    a radiating summoner would ring itself with exactly the four squares in
+    dispute. **The next instrument is a per-square field dump, not another
+    movement trace** — add one to both engines and diff the eight squares round
+    the caster.
+  - Method note worth keeping: the probe that produced the table above only
+    works because it exhausts **one** call, selected by its `from_where`.
+    Exhausting every call (the first attempt) changes the draw stream from the
+    first summon onwards, so the interesting call never happens.

@@ -406,7 +406,24 @@ export async function runReplay(
           // The direction is the party's own facing, set by the last move, not
           // anything the recording states.
           if (session.mode === GameMode.TOWN) {
-            session.startCombat(session.univ.party.direction);
+            // **Starting a town fight costs a turn too**, and for the same
+            // reason as ending one: the start branch sets `did_something = true`
+            // (boe.actions.cpp:1335), so `advance_time` runs
+            // `handle_monster_actions` on the way out — and by then the mode is
+            // MODE_COMBAT, so it takes the combat arm and steps the round with
+            // `combat_next_step`. The C++ spends thirteen `get_ran(1,1,100)`
+            // there on `VoDT_04-05-2025_16-32-10` action 877 where this port
+            // spent nothing and went straight on to the next recorded action.
+            //
+            // **Only when the fight actually starts.** The two refusals above
+            // it — in a boat, on horseback — print a line and leave
+            // `did_something` false (:1322, :1326), so the clock does not move;
+            // charging a turn for them cost `ASR_11-05-2025_07-55-19` twenty
+            // thousand draws, because the party was mounted and every recorded
+            // toggle after that was one turn out.
+            if (session.startCombat(session.univ.party.direction)) {
+              await session.afterPartyTurn();
+            }
           } else if (session.mode === GameMode.COMBAT) {
             // **Ending a town fight costs a turn.** `handle_combat_switch`
             // sets `did_something = true` on that branch (boe.actions.cpp:1362)
