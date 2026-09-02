@@ -32,7 +32,7 @@ import { boomType, damageMonst, damagePc, handleMarkedDamage, hitChance } from '
 import { targetThere } from './missiles';
 import { GameMode } from './modes';
 import { handleTargetMode } from './targetMode';
-import { drawTerrain } from './textBar';
+import { drawTerrain, missileAnimFrames } from './textBar';
 import { getSummonMonster, summonMonster } from './monsterPlace';
 import { Attitude } from '../data/monster';
 import { animSettle } from './anim';
@@ -337,17 +337,17 @@ async function flyMissiles(
   session: GameSession,
   queue: QueuedMissile[], from: Location, sound: number, numSteps: number,
 ): Promise<void> {
+  const flew = queue.length > 0;
   for (const m of queue) {
     runAMissile(from, m.dest, m.type, m.pathType, sound, m.xAdj, m.yAdj, numSteps);
   }
   queue.length = 0;
-  // **`do_missile_anim`'s frame loop belongs here and is not ported.** The C++
-  // flies the whole volley with *one* `do_missile_anim(num_steps, ...)`
-  // (boe.combat.cpp:1412) — only `run_a_missile` bundles the two — and each of
-  // those `num_steps` frames is a `draw_terrain(0)`, plus one more at the
-  // camera swing. In combat that is `num_steps + 1` encumbrance rolls. See the
-  // `text_bar_text` lead in PROGRESS.md: the rolls only line up once *every*
-  // redraw is accounted for, so they are all left out rather than some.
+  // **The whole volley flies on one `do_missile_anim`** (boe.combat.cpp:1419),
+  // which is why the frames are counted here and not inside `runAMissile`:
+  // paying them per projectile would multiply the count by the size of the
+  // volley. `have_missile` is `flew` — an empty queue returns before the loop
+  // there, and must cost nothing here.
+  if (flew) missileAnimFrames(session, numSteps);
   // `do_missile_anim` blocks for the flight, which is what puts the hits that
   // follow it — the deferred `hitSpace` calls, the explosions — after the
   // projectiles have arrived rather than over the top of them.
@@ -542,7 +542,10 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
     // `finally` because a handler that throws must not leave the volley open —
     // every later boom in the session would be swallowed, and the damage with
     // it.
-    if (animated) runBoomAnim(univ.rng);
+    // `do_explosion_anim`'s eleven frames are eleven `draw_terrain(0)`s, and
+    // in combat each one spends the status bar's encumbrance roll —
+    // `onFrame` is how `runBoomAnim` hands them back. See `textBar.ts`.
+    if (animated) runBoomAnim(univ.rng, () => drawTerrain(session));
     // `do_explosion_anim` blocks for the whole explosion before
     // `handle_marked_damage` runs (boe.combat.cpp:1435/1439). Without this
     // wait the cast returned while its blast was still on screen: the damage
@@ -559,7 +562,10 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
   // a targeted combat spell could be cast over and over with the caster
   // never running out of AP, since `doCombatCast` is a free function and
   // can't trigger GameSession's own turn-advance on its own.
-  if (apTaken) session.afterCombatAction();
+  // `handle_monster_actions`' combat arm, not the bare step: `do_combat_cast`
+  // returns into `handle_target_space` and then into `advance_time`, which is
+  // where the C++ pays the redraw that precedes the round.
+  if (apTaken) session.monsterActionsCombat();
 }
 
 /** Everything `do_combat_cast` does to one square. */

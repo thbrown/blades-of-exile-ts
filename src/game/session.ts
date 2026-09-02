@@ -85,6 +85,7 @@ import { ONCE_DONE } from './specials/oneshot';
 import { Spell } from '../data/spell';
 import { castSpell } from './spellTown';
 import { handleTargetMode } from './targetMode';
+import { drawTerrain } from './textBar';
 
 /** d_string (boe.combat.cpp:70) — the direction names the transcript prints. */
 const DIRECTION_NAMES = [
@@ -605,7 +606,7 @@ export class GameSession {
       // The C++'s own guard (:1946): a wiped party ends the fight instead of
       // stepping it. `checkGameOver` in the caller's `finally` is this port's
       // end of that path.
-      if (this.univ.party.isAlive()) this.afterCombatAction();
+      if (this.univ.party.isAlive()) this.monsterActionsCombat();
       return;
     }
     // handle_monster_actions opens with draw_map and play_ambient_sound
@@ -1899,6 +1900,19 @@ export class GameSession {
    * (`flushingInput`, boe.combat.cpp:2432). `settled()` is how a test or the
    * host waits for the fight to catch up.
    */
+  /**
+   * `need_redraw` — the out-param `replay_action` declares and every handler
+   * writes (boe.main.cpp:709). It is not cosmetic: `advance_time` ends with
+   * `if(need_redraw) draw_terrain();` (boe.actions.cpp:1931) and *that* spends
+   * an encumbrance roll through the status bar's recast hint. See `textBar.ts`.
+   *
+   * It lives on the session rather than in the driver because
+   * `handle_monster_actions` reads **and rewrites** it in combat, and that is
+   * session code. The driver owns its lifetime: false at the start of every
+   * top-level action, and the handlers set it.
+   */
+  needRedraw = false;
+
   private turnChain: Promise<void> = Promise.resolve();
   private turnsQueued = 0;
 
@@ -3549,6 +3563,11 @@ export class GameSession {
     }
     if (isCombat(this.mode)) {
       if (pc.ap > 0) {
+        // `draw_terrain()` (boe.actions.cpp:1041), and it is **before**
+        // `univ.cur_pc = which_pc` — so the recast hint it pays for is the
+        // *outgoing* PC's, not the incoming one's. This branch leaves
+        // `need_redraw` alone; only the out-of-combat one below sets it.
+        drawTerrain(this);
         this.univ.curPc = which;
         this.center = { ...pc.combatPos };
       } else this.univ.addStringToBuf('Set active: PC has no APs.');
@@ -3572,6 +3591,7 @@ export class GameSession {
     this.univ.curPc = which;
     this.univ.addStringToBuf(
       `${this.mode === GameMode.SHOPPING ? 'Now shopping' : 'Now active'}: ${pc.name}`);
+    this.needRedraw = true;
   }
 
   /**
@@ -3749,6 +3769,37 @@ export class GameSession {
    * spellCombat.ts/spellCombatTarget.ts) that takes AP and has to be able to
    * trigger the same turn advance, or the caster never runs out of AP.
    */
+  /**
+   * `handle_monster_actions`' combat arm (boe.actions.cpp:1953) — the redraw
+   * that runs **before** the round is stepped, then the step itself.
+   *
+   * It is its own method because two paths reach it: `advance_time` by way of
+   * `afterPartyTurn`, and `do_combat_cast`, which in the C++ returns into
+   * `handle_target_space` and then into `advance_time` but here calls the step
+   * itself. Both have to pay the same rolls in the same order.
+   *
+   * The redraw comes first so its encumbrance roll lands ahead of everything
+   * `combat_next_step` draws rather than behind it, and the clear after it is
+   * the C++'s: the flag survives only while one PC is pinned active with no
+   * points left.
+   */
+  monsterActionsCombat(): void {
+    if (this.needRedraw) {
+      drawTerrain(this);
+      const pinned = this.univ.party.pcs[this.combatActivePc];
+      if (this.combatActivePc === NO_ONE || (pinned?.ap ?? 0) > 0) {
+        this.needRedraw = false;
+      }
+    }
+    this.afterCombatAction();
+    // `if(combat_next_step()) need_redraw = true;` (:1960). The return is true
+    // whenever the cages changed, the monsters ran or the active PC moved on —
+    // which is every path that gets this far, since something has just been
+    // spent. This port's `afterCombatAction` queues the monster loop rather
+    // than running it, so the flag is set rather than read back.
+    this.needRedraw = true;
+  }
+
   afterCombatAction(): void {
     // combat_next_step opens by reconciling the cage barriers with the
     // FORCECAGE statuses — on *every* step, not only when the round rolls

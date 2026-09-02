@@ -15,6 +15,8 @@ import { CreatureStatus } from '../../universe/creature';
 import { Status } from '../../universe/skills';
 import { Universe } from '../../universe/universe';
 import { SpecCtx, SpecCtxType, SpecialCtx } from './context';
+import { drawTerrain } from '../textBar';
+import type { GameSession } from '../session';
 import { alterSpace, reportUnsupported } from './general';
 import { setTownAttitude } from '../townAttitude';
 import { placeMonster } from '../monsterPlace';
@@ -469,22 +471,24 @@ function teleportParty(
 
   for (const pc of univ.party.pcs) pc.status[Status.FORCECAGE] = 0;
 
-  if (fadeOut) fade(univ, univ.party.townLoc, 9);
+  if (fadeOut) fade(ctx.session, univ, univ.party.townLoc, 9);
   ctx.host.moveParty(where);
   // The C++ runs the fade-in on `center`, which `teleport_party` has just set
   // to the destination — the same square the party now stands on.
-  if (fadeIn) fade(univ, univ.party.townLoc, 14);
+  if (fadeIn) fade(ctx.session, univ, univ.party.townLoc, 14);
 }
 
 /** One half of `teleport_party`'s fade: `n` scattered explosions, played. */
-function fade(univ: Universe, at: { x: number; y: number }, n: number): void {
+function fade(
+  session: GameSession, univ: Universe, at: { x: number; y: number }, n: number,
+): void {
   startBoomAnim();
   // `add_explosion(l, -1, 1, 1, 0, 0)` — no damage number, scattered, boom
   // type 1. `do_explosion_anim(5, …)` names sound 5 outright.
   for (let i = 0; i < n; i++) {
     boomSpace({ x: at.x, y: at.y }, 1, -1, 0, univ.rng, { placeType: 1 });
   }
-  runBoomAnim(univ.rng, undefined, 5);
+  runBoomAnim(univ.rng, () => drawTerrain(session), 5);
 }
 
 /** handle_lever — the square becomes whatever it transforms into. */

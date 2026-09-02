@@ -272,9 +272,33 @@ export async function runReplay(
    */
   let prefsDialog: { easy: boolean; lessWm: boolean } | null = null;
 
+  /**
+   * `need_redraw` is declared per `replay_action` (boe.main.cpp:709) and read
+   * by `advance_time` at the end of it. A modal pulls its own actions out of
+   * the recording, so those are *not* separate `replay_action` calls and must
+   * not reset it: the value that reaches `advance_time` is the **opening**
+   * action's, which is why the reset is gated on no modal being up.
+   *
+   * Which handlers set it is a reading of boe.actions.cpp, not a guess — the
+   * ground truth is in `BOE_TRACE_MMOVE=1`'s `[advtime] redraw=` column, and
+   * PROGRESS.md carries the table it was checked against.
+   */
+  const REDRAWS = new Set([
+    'move', 'handle_target_space', 'handle_parry', 'handle_pause',
+    'handle_spellcast', 'handle_equip_item', 'handle_use_item',
+    'handle_give_item', 'handle_drop_item_id', 'handle_drop_item_location',
+    'handle_rest', 'handle_combat_switch', 'handle_use_space',
+    'handle_bash_pick', 'handle_pick_lock', 'handle_get_items',
+    'handle_alchemy', 'handle_switch_pc_items', 'handle_begin_look',
+    'handle_wait',
+  ]);
+
   while (!source.exhausted) {
     const at = source.position;
     const action = source.pop();
+    const inModal = picking !== null || getting !== null
+      || helpDialog || notesDialog || prefsDialog !== null;
+    if (!inModal) session.needRedraw = REDRAWS.has(action.type);
     try {
       // **An abandoned spell picker is a *cancelled* one.** The C++'s picker is
       // a modal `cDialog`, so the only ways out for a player are Cast and
@@ -1218,7 +1242,13 @@ export async function runReplay(
       // click inside are skipped, and the closing one fires.
       const modalUp = picking !== null || getting !== null
         || helpDialog || notesDialog || prefsDialog !== null;
-      if (!modalUp) drawTerrain(session);
+      if (!modalUp) {
+        // `advance_time`'s tail: `if(need_redraw) draw_terrain();`
+        // (boe.actions.cpp:1931), which runs *before* the main loop's redraw
+        // below it and is the fifth of the five sites round a combat cast.
+        if (session.needRedraw) drawTerrain(session);
+        drawTerrain(session);
+      }
       options.onStep?.(at, action);
     } catch (err) {
       result.error = String(err);

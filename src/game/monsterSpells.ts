@@ -35,6 +35,7 @@ import { handleMarkedDamage } from './damage';
 import { animSettle } from './anim';
 import { doShockwave } from './spellCombat';
 import type { GameSession } from './session';
+import { drawTerrain } from './textBar';
 
 /** The 7x18 mage table, indexed by the caster's magic level then a d18. */
 const MAGE_TABLE: Spell[][] = [
@@ -488,7 +489,7 @@ export async function monstCastMage(
     // nothing queued. In a `finally` for the same reason `do_combat_cast`'s is:
     // an arm that throws must not leave the volley open, or every later boom in
     // the session is swallowed and the damage with it.
-    runBoomAnim(univ.rng);
+    runBoomAnim(univ.rng, () => drawTerrain(session));
     await animSettle();
     await handleMarkedDamage(univ, session);
   }
@@ -691,7 +692,7 @@ export async function monstCastPriest(
   } finally {
     // `monst_cast_priest`'s tail (boe.combat.cpp:3871), the pair to
     // `monst_cast_mage`'s above and unconditional for the same reason.
-    runBoomAnim(univ.rng);
+    runBoomAnim(univ.rng, () => drawTerrain(session));
     await animSettle();
     await handleMarkedDamage(univ, session);
   }

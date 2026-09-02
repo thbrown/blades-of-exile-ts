@@ -1625,12 +1625,13 @@ bottom. What M8 still owes:
   fix. See the entry at the bottom for the current listing.
   A bucket named `… @ the C++ draws on` is **this port stopping**, not a rule:
   read the transcript at the stop.
-  Corpus **1,039,207** matching draws, **33 of 87** files agreeing all the way,
-  40 blocked outside the rules. The queue's head is the **redraw count**, which
-  is three buckets in one job and is four fifths done — see the entry at the
-  bottom; `find_clear_spot` is two more files and has a sharpened open lead
-  there too.
-  **Those numbers were 1,039,203 / 33 / 40, 1,038,282 / 33 / 40, 1,024,918 / 32 / 37, 890,998 / 31 / 48, 886,672 / 30 / 47,
+  Corpus **1,039,384** matching draws, **33 of 87** files agreeing all the way,
+  40 blocked outside the rules. The queue's head is still the **redraw count** —
+  three buckets in one job, and the combat-cast path of it is now done; see the
+  entry at the bottom for what is left. `find_clear_spot` is two more files and
+  has a sharpened open lead there too.
+  **Those numbers were 1,039,207 / 33 / 40, 1,039,203 / 33 / 40,
+  1,038,282 / 33 / 40, 1,024,918 / 32 / 37, 890,998 / 31 / 48, 886,672 / 30 / 47,
   884,990 / 30 / 46, 884,198 / 30 / 45, 883,917 / 30 / 44,
   792,066 / 28 / 41, 784,451 / 27 / 40, 784,586 / 27 / 40, 782,199 / 27 / 39,
   765,933 / 25 / 39 earlier on 2026-09-01, and
@@ -9218,3 +9219,67 @@ The M6 list below is kept for the history of what it covered:
     actions**, and the mixed rows are where the per-handler reading has to be
     done rather than guessed. That reading is the remaining work, and it is the
     last thing between three of the queue's buckets and a measurement.
+
+- **The redraw count, the rest of it — and the head file goes 23 → 204 draws
+  (M8, 2026-09-02).** The `text_bar_text` lead, open since 2026-08-24, is
+  closed for the combat-cast path. Corpus **1,039,207 → 1,039,384**; every draw
+  of it is `VoDT_05-04-2025_14-32-10`, which now matches **204** of the oracle's
+  where it matched 23 this morning. Nothing else moved, in either direction, at
+  any of the four measurements it took to get here.
+  - **`need_redraw`, modelled where the C++ declares it.** `replay_action`
+    declares it per action and `advance_time` ends with
+    `if(need_redraw) draw_terrain()`. The driver now does the same: a `Set` of
+    the action types whose handlers set it, reset at the top of each *top-level*
+    action — the reset is gated on no modal being up, because a dialog pulls its
+    own actions and those are not separate `replay_action` calls, so the value
+    that reaches `advance_time` is the **opening** action's.
+  - **`BOE_TRACE_MMOVE=1`'s `[advtime]` line now prints `redraw=`**, one line
+    added to the harness patch, and that is what the set was checked against
+    rather than guessed. Two readings worth keeping: `handle_missile` sets it
+    only when **cancelling**, never when arming; `handle_look` only when
+    `adj_town_look` actually opened something.
+  - **Two more redraw sites the five-site table had not named**, both found by
+    reading the handlers rather than the stacks: `handle_switch_pc`'s combat
+    branch calls `draw_terrain()` outright (boe.actions.cpp:1041) — and does it
+    **before** `univ.cur_pc = which_pc`, so the hint it pays for is the
+    *outgoing* PC's — and `handle_monster_actions` has its own
+    `if(need_redraw) draw_terrain()` *before* stepping the round (:1954), with a
+    clear after it that keeps the flag only while a PC is pinned active with no
+    points. That one is now `session.monsterActionsCombat()`, called from both
+    paths that reach it: `advance_time` by way of `afterPartyTurn`, and
+    `do_combat_cast`, which in this port calls the step itself.
+  - **The animation loops, counted rather than drawn.** `do_missile_anim` is one
+    `draw_terrain()` per step plus one at the camera swing, and
+    `do_explosion_anim` is eleven — and the head recording's run of **72
+    consecutive `get_ran(1,0,70)`** is exactly 60 + 1 + 11, which is how the
+    arithmetic was confirmed before a line was written. This port flies missiles
+    from a timeline slot rather than a frame loop, so it cannot pay the rolls
+    while drawing; `missileAnimFrames` pays them at the same point in the
+    stream instead. **The count belongs to the volley, not the projectile**:
+    `do_combat_cast` flies everything with *one* `do_missile_anim`
+    (boe.combat.cpp:1419), so the frames are paid in `flyMissiles` after the
+    loop, not inside `runAMissile` — paying per projectile would multiply the
+    count by the size of the volley. `booms.ts`'s `runBoomAnim` already had an
+    `onFrame` hook waiting for this.
+  - **`handle_target_mode` had never been ported at all**, and it is not only a
+    redraw: the **target lock** scrolls `center` onto the point that sees the
+    most in-range hostile creatures, and `center` is what `screen_shift` bounds
+    against and what `party_can_see`'s town branch reads. `game/targetMode.ts`
+    ports it with `points_containing_most` and `closest_point`
+    (location.cpp:370, :436). The C++ `std::sort`s the candidates — an
+    **unstable** sort — and keeps every one with the maximum count; this port
+    keeps the sweep order, which is what a stable sort would have left, because
+    the surviving order decides which of two equally close centres wins.
+  - **`draw_terrain(2)` is not free, and the old note here said it was.** Mode 2
+    sets `mode = 0` after its monster-suppression set-up
+    (boe.graphics.cpp:859) and falls through to `draw_text_bar`; what makes some
+    mode-2 calls free is the `if(current_working_monster < 0) return;` above it.
+    Mode 1 really is free.
+  - **What is left.** The head file now parts at draw 205, on a `move` in
+    combat where the C++ spends two more `get_ran(1,0,70)` — so the same job
+    continues into `handle_move`'s path. And the direct `run_a_missile` sites
+    (eight of them, outside `flyMissiles`) still pay no frames: each is one
+    `do_missile_anim(len)`, so `len + 1`, guarded by `have_missile`. Neither is
+    a new kind of problem — both are more of this one.
+  - 1,062 tests green, `tsc` clean, `floating-promises` clean,
+    `verify-screen.mjs` PASS.

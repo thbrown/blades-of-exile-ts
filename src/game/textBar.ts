@@ -19,19 +19,26 @@
  * `num_steps` steps, `do_explosion_anim` eleven times. Both numbers this port
  * already had.
  *
- * **Four of the five call sites round a combat cast are wired; the fifth is
- * not.** In order, for `VoDT_05-04-2025_14-32-10`'s draws 24-28:
+ * **The sites, and where each is paid.** In order, for
+ * `VoDT_05-04-2025_14-32-10`'s draws 24-108:
  *
- * | draw | caller | here |
- * |------|--------|------|
+ * | draw(s) | caller | here |
+ * |---------|--------|------|
  * | 24 | `handle_target_mode` → `draw_terrain` | `targetMode.ts` |
- * | 25 | `advance_time` → `if(need_redraw) draw_terrain()` | **TODO(M8)** |
+ * | 25 | `advance_time` → `if(need_redraw) draw_terrain()` | `replay/driver.ts` |
  * | 26 | `main_loop_iteration` → `redraw_everything` | `replay/driver.ts` |
  * | 27 | `do_combat_cast` → `draw_terrain(2)` | `spellCombatTarget.ts` |
  * | 28 | `place_spell_pattern` → `draw_terrain(0)` | `spellPatterns.ts` |
+ * | 37-96 | `do_missile_anim`, one per step | `missileAnimFrames` below |
+ * | 97 | the same, at the camera swing | `missileAnimFrames` below |
+ * | 98-108 | `do_explosion_anim`, eleven frames | `booms.ts`'s `onFrame` |
  *
- * The missing one needs `need_redraw` modelled, which is a per-handler audit —
- * see the PROGRESS entry, which has the ground-truth table for it.
+ * plus `handle_monster_actions`' own `if(need_redraw) draw_terrain()`
+ * (`session.monsterActionsCombat`) and `handle_switch_pc`'s in combat.
+ *
+ * `need_redraw` is modelled in the driver, which is where `replay_action`
+ * declares it; PROGRESS.md carries the ground-truth table it was checked
+ * against (`BOE_TRACE_MMOVE=1`'s `[advtime] redraw=` column).
  *
  * **`draw_terrain(2)` is not free, and an earlier note here said it was.**
  * Mode 2 suppresses the working creature's own square and then **sets
@@ -80,4 +87,24 @@ function drawTextBar(session: GameSession): void {
   // `pc_can_cast_spell(current_pc, type) == CAST_OK && spell.cost <= get_magic()`
   // — the left side always runs, and it is the side that draws.
   pcCanCastType(session, pc, type);
+}
+
+/**
+ * `do_missile_anim`'s frame loop, counted rather than drawn
+ * (boe.newgraph.cpp:436). One `draw_terrain()` per step for `numSteps` steps,
+ * **plus one more** for the camera swing — the recentre block redraws and then
+ * does `i--; continue;` to redo the frame, so it costs a redraw of its own and
+ * only ever fires once (`!recentered`).
+ *
+ * The count is a constant, which is what makes this portable at all: this port
+ * flies a missile from a timeline slot rather than a frame loop, so it cannot
+ * pay the rolls *while* drawing. It pays them here instead, at the same point
+ * in the stream.
+ *
+ * The C++ returns before any of it when nothing was queued (`have_missile`),
+ * so the caller must not call this for an empty volley.
+ */
+export function missileAnimFrames(session: GameSession, numSteps: number): void {
+  for (let t = 0; t < numSteps; t++) drawTerrain(session);
+  drawTerrain(session);
 }
