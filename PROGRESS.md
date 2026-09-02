@@ -1625,9 +1625,13 @@ bottom. What M8 still owes:
   fix. See the entry at the bottom for the current listing.
   A bucket named `… @ the C++ draws on` is **this port stopping**, not a rule:
   read the transcript at the stop.
-  Corpus **792,066** matching draws, **28 of 87** files agreeing all the way,
-  41 blocked outside the rules.
-  **Those numbers were 784,451 / 27 / 40, 784,586 / 27 / 40, 782,199 / 27 / 39,
+  Corpus **1,024,918** matching draws, **32 of 87** files agreeing all the way,
+  37 blocked outside the rules — and the queue's head is now a
+  **`doPriestSpell` bucket of four files**, uncovered when the driver's
+  adjacency guard on a replayed move came out (see the entry at the bottom).
+  **Those numbers were 890,998 / 31 / 48, 886,672 / 30 / 47,
+  884,990 / 30 / 46, 884,198 / 30 / 45, 883,917 / 30 / 44,
+  792,066 / 28 / 41, 784,451 / 27 / 40, 784,586 / 27 / 40, 782,199 / 27 / 39,
   765,933 / 25 / 39 earlier on 2026-09-01, and
   750,960 / 25 / 39, 738,856 / 25 / 37, 738,811 / 25 / 37,
   687,140 / 25 / 36, 686,842 / 24 / 36,
@@ -8942,3 +8946,69 @@ The M6 list below is kept for the history of what it covered:
     the corpus toggles it. `TODO(M8)` recorded on `debugMode` if one ever does.
   - Corpus **886,672 → 890,998** matching draws; **31 of 87** agree all the way;
     blocked outside the rules 47 → **48**. 1,054 tests green.
+
+- **The adjacency guard on a replayed move was an invention, and it was the
+  corpus's biggest single stopper (M8, 2026-09-02).** Corpus **890,998 →
+  1,024,918** matching draws — the largest single jump M8 has had — and a
+  **32nd** file agreeing all the way. `VoDT_04-05-memory-dump-2` goes 9,791 →
+  **33,686** draws, which is every draw the oracle makes, and 580 → 1,763 of its
+  1,763 actions.
+  - The driver refused a recorded `move` whose destination was more than one
+    square from `center`, outside combat, and called it a desync. The reasoning
+    written down beside it was sound about the **recorder** —
+    `handle_terrain_screen_actions` (boe.actions.cpp:302) builds every
+    destination as `center` plus one of the eight unit vectors — and wrong about
+    the **replay**: a replayed `move` never goes through that function. It
+    reaches `handle_move` directly (boe.main.cpp:758), which hands the
+    destination to `pc_combat_move` / `town_move_party` / `outd_move_party`, and
+    **not one of those three checks adjacency**. The C++ walks the party there
+    and plays on.
+  - A `TODO`-shaped exception for combat had already been carved out of the
+    guard on `ZKR-5-16-12-30`. That was the same bug seen through a keyhole: the
+    invariant does not hold in *any* mode. `VoDT_04-05-memory-dump-2` action 583
+    is the town proof — the C++'s own `BOE_TRACE_CENTER` prints
+    `center=(24,28)` and the recording's next move is `(23,26)`, two squares
+    off, with both engines' centres agreeing.
+  - **32 of 87 files were stopping on it.** It was worth measuring rather than
+    assuming: for a file whose draws had already parted the guard costs nothing
+    (`diverge.mjs` stops counting at the first divergence either way), so the
+    +134k is all from files that were still byte-identical when the driver threw.
+    "Blocked outside the rules" went 48 → **37** at the same time, which is not a
+    regression: those files now run far enough to reach a real rules divergence
+    instead of a driver refusal, and the queue's head is a **`doPriestSpell`
+    bucket of four files** that nothing could see before.
+  - The general shape, and it is the third time M8 has hit it: **a rule this
+    port keeps that the C++ does not is a divergence like any other**, even when
+    the rule is a safety check and even when it is in the harness rather than
+    the game. Desync detection belongs in `diverge.mjs`, which compares draw
+    streams and cannot be fooled by a party that lands on the recording's square
+    by accident.
+  - 1,054 tests green (`replay.test.ts` gains one asserting the two-square town
+    move goes through), `tsc` clean, `floating-promises` clean,
+    `verify-screen.mjs` PASS.
+
+- **OPEN LEAD: the summon bucket is a monster casting five times where the C++
+  casts once (M8, 2026-09-02).** Not fixed. `ASR_20-05-2025_07-20-41` parts at
+  draw 2,264 inside `summon1`, and the bucket name is the usual innocent
+  bystander.
+  - What the evidence actually says. In the diverging action the C++ makes
+    **one** `get_ran(3,1,4)` — one `SUMMON_SPIRIT` — and **344**
+    `get_ran(1,-2,2)`, which is 172 tries of `find_clear_spot`'s 75-try loop, so
+    it is *three* calls (75 + 75 + 22). This port makes **five** casts from the
+    same creature at (58,9) and its first `find_clear_spot` succeeds on try 22.
+  - `find_clear_spot` itself looks right. Forcing the loop to run all 75 tries
+    (a throwaway `FCS=1`/`FCSALL=1` probe in `monsterPlace.ts`) shows this port
+    would accept only (57,8) and (57,9) out of 75 candidates, both of them plain
+    floor with `blocked=false`, `light=0`, `safe=false`, `trim=0` — nothing for
+    the C++'s six tests to catch either. So the extra C++ calls are **not** the
+    summon's: the other caller is `monst_hates_spot` (boe.monster.cpp:356),
+    which calls `find_clear_spot(loc, 1)` when a creature is standing in a field
+    it dislikes, and this port does not appear to make that call.
+  - Two things to check before touching the rules: whether `monst_hates_spot`'s
+    relocation is ported at all, and why a creature gets five casts here and one
+    there — the second is an action-point or `mp` question, not a placement one.
+  - Worth reusing: `can_see_light` returns **6** for any square the caster
+    cannot see lit (`!combat_pt_in_light(p2)`, boe.locutils.cpp:174), which is
+    why most candidates in a dark arena are rejected before any obscurity walk
+    happens. And `is_summon_safe`'s `254` really is bits 1-7 written as a range;
+    the port's `SUMMON_UNSAFE_FIELDS` matches it.

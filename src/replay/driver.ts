@@ -31,7 +31,7 @@ import { GetItemsPick } from '../game/getItems';
 import { alchemyChoices, makePotion } from '../game/alchemy';
 import { potionSlot } from '../dialogs/pickPotionDialog';
 import { useItem } from '../game/itemUse';
-import { GameMode, isCombat, isOut } from '../game/modes';
+import { GameMode, isCombat } from '../game/modes';
 import { dropItemAt, handleDropItem, handleGiveItem } from '../game/giveDrop';
 import { GameSession } from '../game/session';
 import { SpellPick } from '../game/spellPick';
@@ -295,42 +295,31 @@ export async function runReplay(
       switch (action.type) {
         case 'move': {
           const dest = locationFromAction(action);
-          // **Outside combat, a recorded move is one square — from `center`.**
-          // `handle_terrain_screen_actions` (boe.actions.cpp:302) opens with
-          // `location cur_loc = is_out() ? univ.party.out_loc : center;` and
-          // builds `move_destination` from *that* plus a direction — one step
-          // for a key, `get_cur_direction()` for a click, and that function
-          // only ever returns the eight unit vectors. So a longer destination
-          // means **the party is not where the recording's party was**, and
-          // everything after it is measuring a different game. It is the single
-          // most useful desync detector in the format, and worth spending here
-          // rather than letting the step through: `outd_move_party` and
-          // `town_move_party` take the destination at face value, so an
-          // undetected drift silently teleports the party and the run keeps
-          // "succeeding" for hundreds more actions.
+          // **A recorded move is not always one square, in any mode.** The
+          // driver used to throw here when the destination was more than a step
+          // from `center`, on the reasoning that
+          // `handle_terrain_screen_actions` (boe.actions.cpp:302) builds every
+          // destination as `center` plus one of the eight unit vectors, so a
+          // longer one means the party is not where the recording's party was.
           //
-          // Two corrections, both found on `ZKR-5-16-12-30`:
+          // **The reasoning is right about the *recorder* and wrong about the
+          // *replay*.** A replayed `move` never goes through that function: it
+          // reaches `handle_move` directly (boe.main.cpp:758), and `handle_move`
+          // hands the destination to `pc_combat_move` / `town_move_party` /
+          // `outd_move_party`, none of which check adjacency. The C++ therefore
+          // teleports the party there and plays on — and the corpus contains
+          // recordings where it does exactly that with the two engines' centres
+          // *agreeing*: `ZKR-5-16-12-30` action 128 in combat, and
+          // `VoDT_04-05-memory-dump-2` action 583 in **town**, where the C++'s
+          // own `BOE_TRACE_CENTER` prints `center=(24,28)` and then walks the
+          // party to (23,26) two squares away. The guard was an invention, it
+          // was the single biggest stopper in the corpus (32 of 87 files), and
+          // a rule this port keeps that the C++ does not is a divergence like
+          // any other.
           //
-          // - **The origin is `center`, not the party or the acting PC.** They
-          //   come apart the moment `screen_shift` scrolls the view, since
-          //   scrolling moves the centre and nobody else.
-          // - **In combat the invariant does not hold at all**, so the check is
-          //   skipped there. A replayed `move` reaches `handle_move` directly
-          //   (boe.main.cpp:758), never through the function that built the
-          //   one-step destination, and the corpus contains destinations two
-          //   squares from a centre the C++ itself prints — replay
-          //   `ZKR-5-16-12-30` with `BOE_TRACE_CENTER=1` and read action 128.
-          //   `pc_combat_move` then assigns `combat_pos = destination` outright
-          //   (boe.combat.cpp:319), so the C++ *teleports* the PC there and
-          //   plays on. Refusing it cost this file 65 of its 190 actions.
-          const from = isOut(session.mode)
-            ? session.univ.party.outLoc : session.center;
-          const step = Math.max(Math.abs(dest.x - from.x), Math.abs(dest.y - from.y));
-          if (step > 1 && session.mode !== GameMode.COMBAT) {
-            throw new Error(
-              `replay desync: the recording stepped to (${dest.x},${dest.y}), `
-              + `but the view is centred on (${from.x},${from.y}) — ${step} squares away`);
-          }
+          // Desync detection belongs in `scripts/diverge.mjs`, which compares
+          // the two draw streams and cannot be fooled by a party that ends up
+          // on the recording's square by accident.
           // `handle_move`'s first branch (boe.actions.cpp:750): **in combat a
           // move drives the acting PC, not the party.** The driver used to send
           // every recorded move to `moveTo`, which is the town/outdoor path, so

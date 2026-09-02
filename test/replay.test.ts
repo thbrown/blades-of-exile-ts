@@ -176,10 +176,11 @@ describe('recording and replaying a real game', () => {
     // Record: walk out of the guest quarters, look around, wait a turn.
     const first = await newGame();
     first.recorder = new ReplayRecorder(SEED, scen.id);
-    // A real path out of the guest quarters, one open square at a time. It has
-    // to be legal *and* adjacent: a recorded `move` is always one step from
-    // where the party is (`handle_terrain_screen_actions` builds it from a
-    // direction), and the driver treats anything further as a desync.
+    // A real path out of the guest quarters, one open square at a time. The
+    // recorder writes whatever destination `moveTo` was given, and a *recorded*
+    // move is always one step from the party because
+    // `handle_terrain_screen_actions` builds it from a direction — but see the
+    // test below: the driver no longer insists on that when replaying.
     const walk = [
       { x: 8, y: 8 }, { x: 9, y: 8 }, { x: 9, y: 7 }, { x: 10, y: 7 },
       { x: 10, y: 6 },
@@ -210,6 +211,34 @@ describe('recording and replaying a real game', () => {
     // The fingerprint is only worth something if the run actually moved the
     // RNG — a replay of nothing would match trivially.
     expect(second.univ.rng.gameDraws).toBeGreaterThan(0);
+  });
+
+  /**
+   * **A replayed `move` is not required to be adjacent.** The recorder only
+   * ever writes single steps, so it is tempting to enforce that on the way back
+   * in — and this driver used to, throwing "replay desync" on anything longer.
+   * The C++ does not: a replayed `move` reaches `handle_move` directly
+   * (boe.main.cpp:758), which hands the destination to `town_move_party`
+   * (boe.actions.cpp:4165) with no adjacency test anywhere in between, so the
+   * party simply arrives. `VoDT_04-05-memory-dump-2` action 583 is the corpus's
+   * proof: the C++'s own `BOE_TRACE_CENTER` prints `center=(24,28)` and the
+   * recording's next move is `(23,26)`, two squares off.
+   */
+  it('replays a town move two squares away, as the C++ does', async () => {
+    const session = await newGame();
+    const from = { ...session.univ.party.townLoc };
+    // Two squares east of the start, along the corridor the walk above uses —
+    // not adjacent, and not a square the party could have stepped to in one
+    // action.
+    const far = { x: from.x + 2, y: from.y };
+    const doc = await parseXmlDoc(
+      `<actions><move>(${far.x},${far.y})</move></actions>`, 'far.xml',
+    );
+    const result = await runReplay(session, parseReplay(doc));
+
+    expect(result.error).toBeNull();
+    expect(result.ran).toBe(1);
+    expect(session.univ.party.townLoc).toEqual(far);
   });
 
   it('a different seed produces a different game, so the check has teeth', async () => {
