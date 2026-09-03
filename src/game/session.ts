@@ -4922,11 +4922,27 @@ export class GameSession {
       }
       item.property = preset.property;
       item.contained = preset.contained;
-      // An item marked "contained" is hidden inside a crate or barrel; without
-      // fields we can't tell, so it just stays undrawn.
-      item.held = item.contained;
+      // **`held` needs the crate to actually be there** (boe.town.cpp:440):
+      // `if(item.contained && (is_barrel(x,y) || is_crate(x,y))) item.held =
+      // true;`. The note this replaces said "without fields we can't tell" —
+      // the fields have been in since M4, and a contained item on a square
+      // whose crate a scenario has since removed is loose on the floor, not
+      // still hidden.
+      item.held = item.contained
+        && (town.hasField(preset.loc.x, preset.loc.y, FieldType.OBJECT_BARREL)
+          || town.hasField(preset.loc.x, preset.loc.y, FieldType.OBJECT_CRATE));
       item.isSpecial = i + 1;
       town.items.push(item);
+    }
+
+    // `for(auto& item : univ.town.items) if(loc_off_act_area(item.item_loc))
+    // item.variety = NO_ITEM;` (boe.town.cpp:448) — the same sweep the
+    // creatures get on the line above it. A town's active area is smaller than
+    // its map, and anything a preset put in the border is not merely
+    // unreachable, it is **deleted**, so it cannot be picked up by a
+    // mass-get from just inside the edge.
+    for (const item of town.items) {
+      if (this.locOffActiveArea(item.itemLoc)) item.variety = ItemType.NO_ITEM;
     }
   }
 

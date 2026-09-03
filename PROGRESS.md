@@ -9611,3 +9611,18 @@ The M6 list below is kept for the history of what it covered:
     party a stash.
   - 1,085 tests green, `tsc` clean, `floating-promises` clean,
     `verify-screen.mjs` PASS.
+
+- **Two more lines of the preset-item sweep (M8, 2026-09-03).** Corpus-neutral
+  (**1,079,618** either side), both read off `start_town_mode` while chasing the
+  bitset bug above and both kept because they are one line each.
+  - **`held` needs the crate to actually be there.** `if(item.contained &&
+    (is_barrel(x,y) || is_crate(x,y))) item.held = true;` (boe.town.cpp:440).
+    This port set `held = contained` outright, with a note saying "without
+    fields we can't tell" — the fields have been in since M4, and a contained
+    item whose crate a scenario has since removed is loose on the floor, not
+    still hidden.
+  - **A preset in the border is deleted, not merely unreachable.**
+    `for(auto& item : univ.town.items) if(loc_off_act_area(item.item_loc))
+    item.variety = NO_ITEM;` (:448) — the same sweep the creatures get on the
+    line above it. Without it a mass-get from just inside the edge could reach
+    something the C++ had already thrown away.
