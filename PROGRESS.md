@@ -12,10 +12,19 @@
 > this port follows.
 
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
-- `node scripts/diverge.mjs --all --stacks` ranks the corpus by the rule each
-  recording first parts on; `node scripts/align-actions.mjs --all` answers the
-  different question of whether the two **action** streams ever drift apart
-  (as of 2026-09-01, they do not: 0 of 73).
+- **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
+  it by the rule each recording first parts on — as of **2026-09-03** that is
+  **1,112,680 matching draws, 40 of 87 files agreeing all the way**, 39 blocked
+  by the oracle rather than by this port, and **7 rule buckets left in the
+  queue**. Add `--refresh` after a code change.
+- Two companion meters answer questions the draw stream cannot.
+  `node scripts/align-actions.mjs --all` asks whether the two **action**
+  streams ever drift apart (they do not: 0 of 73), and
+  `--clocks` asks whether the two **clocks** do — a turn one side charges and
+  the other does not spends no draws at all, so it is invisible to
+  `diverge.mjs` and upstream of wherever it points. Four files part on their
+  clocks today, and three of the five biggest wins of 2026-09-02/03 were found
+  that way.
 - Keys follow the original's `handle_keystroke` (boe.actions.cpp:2772):
   arrows/keypad move, **f** fight (and end a fight), **e** end combat,
   **Space** pause one turn (stand ready in combat), **w** the *long* wait — up
@@ -46,6 +55,22 @@
   full list of known gaps — that's the honest inventory of what's missing.
 
 ## Current state
+
+**M8, fidelity hardening, is the live milestone (2026-09-03).** M0–M7 are
+closed; what M8 does is take the C++ replay corpus and drive the two engines'
+`get_ran` streams together, rule by rule. It stands at **1,112,680 matching
+draws and 40 of 87 recordings agreeing all the way**, against 33 and 1,039,384
+at the start of 2026-09-02. Seven rule buckets remain in the queue (see
+`diverge.mjs --all --stacks`); 39 of the 87 are blocked by the *oracle* rather
+than by this port and cannot be won at all.
+
+M8 is not only dice. Chasing the corpus has filled in real features it turned
+out to need — **creating a character** (`handle_new_pc` and its four dialogs),
+the **town replacement** (`<town-flag>`), **Identify and Recharge**'s item
+screen, the **stash** (`store_item_rects`), the **debug keys**, and a
+save-format bug that had every bitset in a loaded game mirrored. The paragraph
+below is the pre-M8 summary of what the game itself can do, and is still
+accurate.
 
 **M2 and M4–M7 are complete, M3 nearly so (2026-08-01): full 605×430 UI on the real Universe/GameSession architecture. A new game starts in the scenario's start town with the pregen party; you can walk the world with line-of-sight fog, lighting, terrain trim, roads, floor items and step sounds, talk to townspeople, open and bash doors, look at things and read signs, **pick up, equip, give and drop items**, and **buy, sell, identify, recharge, train and stay the night**. Scenario scripting runs: walking onto a scripted square, looking at one, entering or leaving a town, or using a lever fires its chain, and Fort Talrus's own messages, its Rest prompt and its walk-through-a-wall node all work. Remaining M3: enchanting (needs M5's enchantment table), job banks (M6), and the full dialogxml toolkit. Remaining M4: the opcodes that need combat, fields, timers or quests — each one says so in the transcript rather than failing silently. **Combat is playable**: the SWORD button (or **C**) starts a fight, the party spreads out as six figures with action points, and you can swing, move, swap places, kill things and earn experience. Monsters notice you, walk over and hit back, in town mode as well as in combat — so Fort Talrus's eight Giant Rats will come for you from the moment a new game starts. The `uAbility` port landed 2026-07-26, so monster abilities are real data now; monsters shoot, breathe, summon aid and land their touch attacks; the party can shoot back with **S**; projectiles fly across the screen; and `place_spell_pattern` works, so exploding weapons blast, monsters lay fields and a protective circle raises four rings of wall. **M5 is closed**: monster spellcasting, the 147-spell list, `process_fields` and the real casting dialog all landed 2026-07-26. **M6 has started**: quests, job banks, special items and the town/scenario/party timers work as of 2026-07-27, so a scripted deadline can expire and a timed node can fire — **items can be Used**: the USE button on an inventory row drinks the potion, fires the wand and reads the book — and **boats and horses work**: walk onto one to board it, dry land to leave it, Space to dismount or re-board, and `CHANGE_HORSE_OWNER`/`CHANGE_BOAT_OWNER` hand one to the party — and **the job board works**: a JOB_BANK conversation node opens it, and a quest taken there (or handed over by a RECEIVE_QUEST node) runs on the timers that were already ported — and **the item panel has all three of its pages**: the tabs along its bottom (or 9 and 0) show the party's special items and its quests, and the scrollbar beside them finally reaches the other sixteen slots of a pack. **M7 is closed**: the whole `.exg` round trip, the IndexedDB save slots, the File menu, the autosave and the startup screen landed 2026-08-01, and so did M2's replay driver. **M6 is closed too**: the two endings — the party-death dialog and end-scenario — landed 2026-08-01, so a game can now be won as well as lost. Next up is **M8, fidelity hardening**.
 
@@ -86,7 +111,7 @@ Notes for M2 implementer:
 - Town reader reference: readTownFromXml (fileio_scen.cpp:1839), loadTownMapData; town terrain templates are variable-size (min 24); talkN.xml via readDialogueFromXml.
 - scenarioXml.ts skips deferred sections by name (quests/shops/special-items/strings) — tighten as those land.
 
-- `npm test` → 998 tests green (62 files); `npm run dev` → the game screen (arrow keys / keypad, Home/End/PgUp/PgDn for diagonals; `?scenario=stealth` to load another).
+- `npm test` → 1,086 tests green (66 files); `npm run dev` → the game screen (arrow keys / keypad, Home/End/PgUp/PgDn for diagonals; `?scenario=stealth` to load another).
 - `node scripts/verify-screen.mjs` (needs `npx vite --port 5199` running) drives the real UI headless and screenshots it. Playwright + chromium installed as devDependency.
 - Parsers: `src/fileio/mapParse.ts` (.map), `specialParse.ts` (.spec + opcode table from strings resource, 'nop'=NONE special case), `terrainXml.ts`, `outdoorsXml.ts`, `scenarioXml.ts` (header+game block; quests/shops/etc. deferred by name), `loadScenario.ts` (out{x}~{y} assembly), `source.ts` (Fetch/Fs sources).
 - Data: `special.ts` (SpecType enum + 15-short node), `terrain.ts`, `fields.ts` (FieldType — note SPECIAL_SPOT=9, SPECIAL_ROAD=25), `outdoors.ts`, `enumTags.ts` (estreams.cpp lookup tables), `scenario.ts`.
