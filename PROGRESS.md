@@ -14,17 +14,17 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-03** that is
-  **1,112,680 matching draws, 40 of 87 files agreeing all the way**, 39 blocked
-  by the oracle rather than by this port, and **7 rule buckets left in the
+  **1,128,782 matching draws, 40 of 87 files agreeing all the way**, 38 blocked
+  by the oracle rather than by this port, and **6 rule buckets left in the
   queue**. Add `--refresh` after a code change.
 - Two companion meters answer questions the draw stream cannot.
   `node scripts/align-actions.mjs --all` asks whether the two **action**
   streams ever drift apart (they do not: 0 of 73), and
   `--clocks` asks whether the two **clocks** do — a turn one side charges and
   the other does not spends no draws at all, so it is invisible to
-  `diverge.mjs` and upstream of wherever it points. Four files part on their
-  clocks today, and three of the five biggest wins of 2026-09-02/03 were found
-  that way.
+  `diverge.mjs` and upstream of wherever it points. **Two** files part on their
+  clocks today, down from six, and three of the biggest wins of 2026-09-02/03
+  were found that way.
 - Keys follow the original's `handle_keystroke` (boe.actions.cpp:2772):
   arrows/keypad move, **f** fight (and end a fight), **e** end combat,
   **Space** pause one turn (stand ready in combat), **w** the *long* wait — up
@@ -58,10 +58,10 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-03).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,112,680 matching
-draws and 40 of 87 recordings agreeing all the way**, against 33 and 1,039,384
-at the start of 2026-09-02. Seven rule buckets remain in the queue (see
-`diverge.mjs --all --stacks`); 39 of the 87 are blocked by the *oracle* rather
+`get_ran` streams together, rule by rule. It stands at **1,128,782 matching
+draws and 40 of 87 recordings agreeing all the way**, against 1,039,384 and 33
+at the start of 2026-09-02. Six rule buckets remain in the queue (see
+`diverge.mjs --all --stacks`); 38 of the 87 are blocked by the *oracle* rather
 than by this port and cannot be won at all.
 
 M8 is not only dice. Chasing the corpus has filled in real features it turned
