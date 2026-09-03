@@ -100,10 +100,29 @@ function outdBlocked(univ: Universe, where: Location): boolean {
   return false;
 }
 
-/** try_move + seek_party, cut down to the outdoor case. */
+/**
+ * try_move + seek_party, cut down to the outdoor case.
+ *
+ * **The `[mmove]` line belongs here, not in `outdoorMoveMonster`.** The C++
+ * logs inside `try_move` (boe.monster.cpp:726), and `rand_move`'s outdoor arm
+ * calls `outdoor_move_monster` *directly* without going through it
+ * (boe.monster.cpp:624) — so a random outdoor drift prints nothing on either
+ * side. Logging in the mover instead would print a line the C++ never does and
+ * make the two traces undiffable, which is worse than not logging at all:
+ * outdoor movement spends no dice, so this trace is the *only* way to see a
+ * group drift apart, and it has to line up to be read.
+ */
 function seekParty(session: GameSession, which: number, from: Location, to: Location): boolean {
-  const step = (dx: number, dy: number): boolean =>
-    outdoorMoveMonster(session, which, loc(from.x + dx, from.y + dy));
+  const step = (dx: number, dy: number): boolean => {
+    const dest = loc(from.x + dx, from.y + dy);
+    const ok = outdoorMoveMonster(session, which, dest);
+    if (TRACE_MMOVE) {
+      // eslint-disable-next-line no-console
+      console.log(`      [mmove] ${which} (${from.x},${from.y}) -> `
+        + `(${dest.x},${dest.y}) ${ok ? 'ok' : 'no'}`);
+    }
+    return ok;
+  };
   if (from.x > to.x && from.y > to.y && step(-1, -1)) return true;
   if (from.x < to.x && from.y < to.y && step(1, 1)) return true;
   if (from.x > to.x && from.y < to.y && step(-1, 1)) return true;

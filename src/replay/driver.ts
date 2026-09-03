@@ -229,7 +229,10 @@ export async function runReplay(
   /** Whether the open get-items screen owes a turn when it closes. */
   let gettingCostsTurn = false;
   /** Whether the open get-items screen was raised in combat. */
-  let gettingInFight = false;
+  /** `handle_get_items` took the non-TOWN arm, so `take_ap(4)` is owed. */
+  let gettingTakesAp = false;
+  /** …and the turn is stepped by the *combat* arm of `handle_monster_actions`. */
+  let gettingInCombat = false;
   /**
    * The get-items screen, while one is open — `show_get_items`'s own loop,
    * which unlike the spell picker stays up across many clicks.
@@ -813,10 +816,14 @@ export async function runReplay(
                 // for as long as the pile is on screen. Charging them when the
                 // screen opened left a PC on zero while they were still picking,
                 // which changes what `pick_next_pc` does next.
-                if (gettingInFight) {
-                  takeAp(session.univ, 4);
-                  session.monsterActionsCombat();
-                } else await session.afterPartyTurn();
+                if (gettingTakesAp) takeAp(session.univ, 4);
+                // **The turn is stepped by whichever arm of
+                // `handle_monster_actions` the *mode* selects**, which is not
+                // the same question as which arm of `handle_get_items` took
+                // the points: outdoors takes the points and still steps the
+                // clock through `increase_age` and `do_monsters`.
+                if (gettingInCombat) session.monsterActionsCombat();
+                else await session.afterPartyTurn();
               }
             }
             break;
@@ -1288,10 +1295,22 @@ export async function runReplay(
           session.tradePlaces(numberFromAction(action));
           break;
         case 'handle_get_items': {
-          // boe.actions.cpp:1389. In town the sweep is from the party's square,
-          // in combat from the **acting PC's** — and there it costs four action
-          // points whether or not anything was picked up.
-          const inFight = isCombat(session.mode);
+          // boe.actions.cpp:1389. **The split is `MODE_TOWN` against
+          // *everything else*, not town against combat.** Only the town arm
+          // sweeps from `univ.party.town_loc`; the `else` sweeps from
+          // `univ.current_pc().combat_pos` and spends `take_ap(4)` — and
+          // outdoors falls into that `else` too, where `combat_pos` is a stale
+          // leftover from the last fight and the town data behind it is
+          // whatever was last loaded. So pressing **g** on the world map
+          // rummages the square the acting PC stood on in their last battle,
+          // finds whatever was dropped there, and **charges a turn for it**.
+          // It reads like a bug and it is kept: this port asked from
+          // `town_loc` outdoors, found nothing, charged nothing, and its clock
+          // fell six ticks behind the C++'s for the rest of
+          // `VoDT_09-04-2025_09-41-10` — outdoors `increase_age` rounds down to
+          // a multiple of ten before adding ten, so one skipped turn is not one
+          // tick but however many the rounding swallows.
+          const inFight = session.mode !== GameMode.TOWN;
           const from = inFight
             ? session.univ.currentPc.combatPos : session.univ.party.townLoc;
           const { items } = session.reachableItems(from);
@@ -1316,7 +1335,8 @@ export async function runReplay(
           // in combat, so the carrier silently moved on to the next PC and
           // every item went into the wrong pack.
           if (getting !== null) gettingCostsTurn = true;
-          gettingInFight = inFight;
+          gettingTakesAp = inFight;
+          gettingInCombat = isCombat(session.mode);
           if (inFight && getting === null) {
             // **The four points are taken whether or not there was anything
             // there, and the *turn* is not** (boe.actions.cpp:1401 against

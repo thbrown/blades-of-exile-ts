@@ -9512,3 +9512,55 @@ The M6 list below is kept for the history of what it covered:
     dereference in `townMoveParty` is deliberately **not** guarded, because it
     is the only thing currently pointing at that chain.
   - 1,082 tests green, `tsc` clean, `floating-promises` clean.
+
+- **`handle_get_items` splits TOWN against *everything else*, and the outdoor
+  arm rummages the last fight's floor (M8, 2026-09-02).** Corpus-neutral
+  (**1,079,542** either side) because the fix cannot fire until a bigger one
+  lands, and written down in full because it took the whole chain of
+  instruments to find and it is the biggest single thing now blocking
+  `VoDT_09-04-2025_09-41-10` (22,616 draws matched, oracle 26,937).
+  - **The `[mmove]` instrument was blind outdoors, and that is fixed first.**
+    The C++ logs inside `try_move`, which serves all three modes; this port's
+    outdoor mover is called straight from `wandering.ts` and logged nothing, so
+    a diff of the two traces showed the C++ walking an outdoor group the port
+    appeared not to have. It had it — the line was just missing. The line now
+    goes in `seekParty`'s step, **not** in `outdoorMoveMonster`, because
+    `rand_move`'s outdoor arm bypasses `try_move` (boe.monster.cpp:624) and so
+    prints nothing on either side; logging in the mover would have printed a
+    line the C++ never does and made the traces undiffable, which is worse than
+    silence — outdoor movement spends **no dice**, so this trace is the only
+    instrument that can see an outdoor group drift at all.
+  - With that fixed the traces line up and the drift is plain: an outdoor group
+    at (9,33) steps **west** in the C++ and **east** here, which is
+    `seek_party` reading a different `univ.party.out_loc` — a *clock*
+    divergence, not a rules one. `align-actions.mjs --clocks` names it exactly:
+    the two part at draw 22,019, the C++ on age **24,440** and this port on
+    **24,434**.
+  - **The rule.** `handle_get_items` (boe.actions.cpp:1389) has two arms:
+    `MODE_TOWN` sweeps from `univ.party.town_loc`, and the `else` — which
+    **outdoors falls into** — sweeps from `univ.current_pc().combat_pos` and
+    spends `take_ap(4)`. Outdoors `combat_pos` is a stale leftover from the last
+    fight, so pressing **g** on the world map rummages the square the acting PC
+    stood on in their last battle. It reads like a bug and it is kept.
+  - **And the turn it charges is not one tick.** `increase_age` outdoors is
+    `age -= age % 10; age += 10` (boe.actions.cpp:3369) — round *down* to a
+    multiple of ten, then add ten. Coming out of a town, where the clock ticks
+    by one, the first outdoor turn therefore swallows the remainder: 24,434
+    became 24,440, a jump of six. One skipped outdoor turn is not one tick out,
+    it is however many the rounding eats.
+  - **Fixed here**: the driver's arm test is now `mode !== TOWN` rather than
+    `isCombat`, and the two things that used to ride one flag are separated —
+    `take_ap(4)` belongs to `handle_get_items`' arm, while *which* arm of
+    `handle_monster_actions` steps the turn belongs to the mode. Outdoors takes
+    the points **and** goes round `increase_age`/`do_monsters`.
+  - **Still blocked, and this is the lead.** It cannot fire yet, because
+    `end_town_mode` **does not clear the town** in the C++: it sets
+    `univ.party.town_num = 200` and leaves `cCurTown`'s own `monst` and `items`
+    vectors loaded (boe.town.cpp:546-610). "Am I in a town" is `overall_mode`
+    there, never a null pointer. This port sets `univ.town = null` in four
+    places and **184 sites read it as the outdoors test**, so the last town's
+    floor is gone the moment the party steps out and the outdoor `get_item`
+    finds nothing to charge a turn for. Making `univ.town` outlive the town is
+    the right change and it is a structural one — every `if (!town) return`
+    has to be re-read against `is_town()` first.
+  - 1,082 tests green, `tsc` clean, `floating-promises` clean.
