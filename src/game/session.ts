@@ -4177,7 +4177,7 @@ export class GameSession {
     return true;
   }
 
-  startTownMode(townNum: number, entryDir: number): void {
+  startTownMode(townNum: number, entryDir: number, debugEnter = false): void {
     if (this.univ.scenario.towns[townNum] === undefined) {
       this.univ.addStringToBuf('The scenario tried to put you into a town that does not exist.');
       return;
@@ -4297,8 +4297,10 @@ export class GameSession {
     // handle_town_specials (boe.town.cpp:659): the town's entry node fires once
     // we're inside — and a town the party has emptied fires a *different* one,
     // which is how a scenario says "the place is a ruin now".
+    // `if(!debug_enter) handle_town_specials(...)` (boe.town.cpp:356) — the
+    // debug Enter Town key drops the party in without waking the place up.
     const entryNode = townToast ? record.specOnEntryIfDead : record.specOnEntry;
-    if (entryNode >= 0)
+    if (entryNode >= 0 && !debugEnter)
       void this.runSpecial(
         SpecCtx.ENTER_TOWN, SpecCtxType.TOWN, entryNode, this.univ.party.townLoc);
 

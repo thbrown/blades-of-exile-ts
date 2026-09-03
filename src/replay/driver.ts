@@ -27,7 +27,7 @@ import { takeAp } from '../game/combat';
 import { awardPartyXp, killPc } from '../game/damage';
 import { GiveStatus, giveItem } from '../universe/inventory';
 import { MainStatus, PartyStatus, isDeadStatus } from '../universe/skills';
-import { setFeatureFlags } from '../game/featureFlags';
+import { hasFeatureFlag, setFeatureFlags } from '../game/featureFlags';
 import { TOWN_NUM_OUTDOORS } from '../universe/party';
 import { GetItemsPick } from '../game/getItems';
 import { SpecCtx, SpecCtxType } from '../game/specials/context';
@@ -311,6 +311,50 @@ export async function runReplay(
     receivedHelp.add(help1);
     if (help2 !== -1) receivedHelp.add(help2);
     popClick(source, `the instant-help box for ${help1}`, () => { result.answered++; });
+  };
+
+  /**
+   * `get_num_response` (strchoice.cpp:323) — the "type a number, or pick from a
+   * list" dialog, replayed by control name. **Two dialogs, not one**: the outer
+   * panel has the field, an optional `extra-led` and `okay`/`cancel`, and its
+   * `choose` button opens a `cStringChoice` that pages **forty at a time**
+   * (`per_page`, strchoice.hpp:31) with one-based LEDs within the page.
+   *
+   * Returns the number, or null if the outer dialog was cancelled. `ledToggle`
+   * is called for a click on `extra-led`, which is how `debug_give_item` reads
+   * its "identified" box.
+   */
+  const popNumResponse = async (
+    src: typeof source, what: string, initial: number,
+    onAnswered: () => void, listLength: number, ledToggle?: () => void,
+  ): Promise<number | null> => {
+    // `field_focus` with nothing typed leaves the initial value.
+    let value = Number(typeInto(src, `${what} field`, String(initial), onAnswered));
+    for (;;) {
+      const id = popClick(src, what, onAnswered);
+      if (id === 'okay') return value;
+      if (id === 'cancel') return null;
+      if (id === 'extra-led') { ledToggle?.(); continue; }
+      if (id !== 'choose') continue;
+      const PER_PAGE = 40;
+      const last = Math.max(0, Math.trunc((listLength - 1) / PER_PAGE));
+      let cur = value >= 0 && value < listLength ? value : 0;
+      let page = Math.trunc(cur / PER_PAGE);
+      for (;;) {
+        const inner = popClick(src, `${what} list`, onAnswered);
+        if (inner === 'done') { value = cur; break; }
+        if (inner === 'cancel') break;
+        if (inner === 'left') { page = page === 0 ? last : page - 1; continue; }
+        if (inner === 'right') { page = page === last ? 0 : page + 1; continue; }
+        const led = /^led(\d+)$/.exec(inner);
+        if (led) { cur = page * PER_PAGE + Number(led[1]) - 1; continue; }
+        // `strings` is the LED group itself; `search` opens a find box this
+        // port does not model, and saying so beats guessing.
+        if (inner === 'strings') continue;
+        throw new Error(`replay: ${what} list was clicked '${inner}', `
+          + 'which this port does not model');
+      }
+    }
   };
 
   const REDRAWS = new Set([
@@ -1337,6 +1381,251 @@ export async function runReplay(
           session.univ.addStringToBuf('Debug: Reunite party and leave town.');
           session.debugLeaveTown();
           break;
+        case 'debug_enter_town': {
+          // boe.actions.cpp:2396 — `get_num_response` over every town name,
+          // then `start_town_mode(town, dir, debug_enter = true)`, which skips
+          // the town's entry specials. With the `debug-enter-town` feature flag
+          // at `move-outdoors` the party is first repositioned onto the town's
+          // **first** outdoor entrance, so that leaving puts it somewhere sane.
+          const { univ } = session;
+          const value = await popNumResponse(
+            source, 'the debug town number', 0, () => { result.answered++; },
+            univ.scenario.towns.length);
+          if (value === null || value < 0) break;
+          if (hasFeatureFlag('debug-enter-town', 'move-outdoors')) {
+            // `find_town_entrances` sweeps the sectors in x-then-y order and
+            // takes the first `city_locs` entry naming this town.
+            outer: for (let x = 0; x < univ.scenario.outWidth; x++) {
+              for (let y = 0; y < univ.scenario.outHeight; y++) {
+                const sector = univ.scenario.outdoors[x]?.[y];
+                if (!sector) continue;
+                const at = sector.cityLocs.find((c) => c.spec === value);
+                if (at) { session.positionParty(x, y, at.x, at.y); break outer; }
+              }
+            }
+          }
+          const dir = univ.party.direction === Direction.N ? 2
+            : univ.party.direction === Direction.S ? 0
+              : univ.party.direction < Direction.S ? 3 : 1;
+          session.startTownMode(value, dir, true);
+          break;
+        }
+        case 'debug_ghost_mode':
+          // boe.actions.cpp:2467 — walk through walls. Nothing else in this
+          // port reads it yet, but it is universe state a recording can set.
+          session.univ.ghostMode = !session.univ.ghostMode;
+          session.univ.addStringToBuf(
+            session.univ.ghostMode ? 'Debug: Ghost mode ON.' : 'Debug: Ghost mode OFF.');
+          break;
+        case 'debug_heal_plus_extra': {
+          // boe.actions.cpp:2553 — gold, food, a full revive, 25 xp each, every
+          // spell, and the shops restocked. `revive_all_dead(true)` is the
+          // *full restore* arm: health to maximum and **spell points to a flat
+          // 100**, not to `max_sp` (:2532).
+          const { univ } = session;
+          univ.party.gold += 100;
+          univ.party.food += 100;
+          for (const pc of univ.party.pcs) {
+            if (isDeadStatus(pc.mainStatus)) pc.mainStatus = MainStatus.ALIVE;
+            pc.curHealth = pc.maxHealth;
+            pc.curSp = 100;
+          }
+          awardPartyXp(univ, 25);
+          for (const pc of univ.party.pcs) {
+            pc.mageSpells.fill(true);
+            pc.priestSpells.fill(true);
+          }
+          univ.refreshStoreItems();
+          univ.addStringToBuf('Debug: Add stuff and heal.');
+          break;
+        }
+        case 'debug_give_item': {
+          // boe.actions.cpp:2166 — `get_num_response` over every scenario item,
+          // with an `identified` LED that starts **on**. The chosen item is
+          // given to the current PC with `GIVE_ALLOW_OVERLOAD`, and if that
+          // fails, to anyone who will take it.
+          const { univ } = session;
+          let ident = true;
+          const value = await popNumResponse(
+            source, 'the debug give-item dialog', lastDebugItem,
+            () => { result.answered++; }, univ.scenario.scenItems.length,
+            () => { ident = !ident; });
+          if (value === null) break;
+          lastDebugItem = value;
+          const template = univ.scenario.scenItems[value];
+          if (template === undefined) break;
+          // `scen_items[i].ident = ident` around the give, then put back — so
+          // it is the *copy in the pack* that comes out identified.
+          const item = { ...template, ident };
+          const pc = univ.currentPc;
+          let given = giveItem(pc, univ.party, item, false, true).status === GiveStatus.OK;
+          if (!given) {
+            univ.addStringToBuf(`Debug: can't give to ${pc.name}`);
+            given = univ.party.pcs.some((other) =>
+              giveItem(other, univ.party, item, false, true).status === GiveStatus.OK);
+          }
+          if (!given) {
+            univ.addStringToBuf(`Debug: can't give anyone ${template.fullName}`);
+          }
+          break;
+        }
+        case 'menu_give_help':
+          // `menu_give_help(n)` is `give_help(n, 0, help_forced = true)`
+          // (boe.main.cpp:1894) — **forced**, so it ignores both the
+          // `ReceivedHelp` list and the `ShowInstantHelp` preference and always
+          // puts the box up. It still records the id, so the id is still added.
+          receivedHelp.add(numberFromAction(action));
+          popClick(source, 'the Help menu box', () => { result.answered++; });
+          break;
+        case 'journal':
+          // `journal()` (boe.infodlg.cpp:653). **It is always empty in this
+          // build**: `add_to_journal(short)` exists and nothing calls it — no
+          // special opcode reaches it — so the function takes its early return
+          // every time, prints one line and opens no dialog. Ported as the
+          // early return, with the entries themselves left out: a `<journal>`
+          // node in a scenario is parsed and never fired.
+          session.univ.addStringToBuf('Nothing in your events journal.');
+          break;
+        case 'show_debug_help':
+          // boe.actions.cpp:2627 — the panel of debug keys. **Every button
+          // toasts and does nothing else while replaying** — the C++'s own
+          // comment says "In a replay, the action will have been recorded next
+          // anyway" — so all this owes is the one click that closed it.
+          popClick(source, 'the debug help panel', () => { result.answered++; });
+          break;
+        case 'debug_heal':
+          // boe.actions.cpp:2541. `revive_all_dead(false)` is the *partial*
+          // arm: the dead come back and then the party is healed 250 and given
+          // 100 spell points **through the normal caps**, where
+          // `debug_heal_plus_extra`'s `true` arm sets health to maximum and
+          // spell points to a flat 100 regardless.
+          session.univ.party.gold += 100;
+          session.univ.party.food += 100;
+          for (const pc of session.univ.party.pcs) {
+            if (isDeadStatus(pc.mainStatus)) pc.mainStatus = MainStatus.ALIVE;
+          }
+          session.univ.party.healAll(250);
+          session.univ.party.restoreSpAll(100);
+          session.univ.addStringToBuf('Debug: Heal party.');
+          break;
+        case 'debug_clean_up':
+          // `univ.party.clear_bad_status()` (:2430) — every PC, every effect.
+          for (const pc of session.univ.party.pcs) pc.clearBadStatus();
+          session.univ.addStringToBuf('Debug: You get cleaned up!');
+          break;
+        case 'debug_stealth_detect_life_firewalk': {
+          // :2440 — ten turns of each, added rather than set.
+          const st = session.univ.party.partyStatus;
+          st[PartyStatus.STEALTH] += 10;
+          st[PartyStatus.DETECT_LIFE] += 10;
+          st[PartyStatus.FIREWALK] += 10;
+          session.univ.addStringToBuf('Debug: Stealth, Detect Life, Firewalk!');
+          break;
+        }
+        case 'debug_fly':
+          // :2453 — and it is outdoors only, with its own refusal.
+          if (session.mode !== GameMode.OUTDOORS) {
+            session.univ.addStringToBuf('Debug: Can only fly outdoors.');
+          } else {
+            session.univ.party.partyStatus[PartyStatus.FLIGHT] += 10;
+            session.univ.addStringToBuf('Debug: You start flying!');
+          }
+          break;
+        case 'debug_magic_map': {
+          // :2379 — the whole of whichever map the party is standing on.
+          const { univ } = session;
+          if (session.mode === GameMode.OUTDOORS) {
+            for (const row of univ.out.explored) row.fill(1);
+          } else if (univ.town) {
+            for (let x = 0; x < univ.town.record.maxDim; x++)
+              for (let y = 0; y < univ.town.record.maxDim; y++) univ.town.makeExplored(x, y);
+          }
+          univ.addStringToBuf('Debug:  Magic Map.');
+          break;
+        }
+        case 'debug_refresh_stores':
+          session.univ.refreshStoreItems();
+          session.univ.addStringToBuf('Debug: Refreshed jobs/shops.');
+          break;
+        case 'debug_increase_age':
+          // :2503 — and the two lines are printed *before* the clock moves.
+          session.univ.addStringToBuf('Debug: Increase age.');
+          session.univ.addStringToBuf('  It is now 1 day later.');
+          session.univ.party.age += 3700;
+          break;
+        case 'debug_towns_forget':
+          // :2514 — the four saved town populations are orphaned by setting
+          // their town number out of range, so every town repopulates.
+          session.univ.addStringToBuf('DEBUG: Towns have short memory.');
+          session.univ.addStringToBuf('Your deeds have been forgotten.');
+          for (const pop of session.univ.party.creatureSave) pop.whichTown = TOWN_NUM_OUTDOORS;
+          break;
+        case 'debug_hurt_party': {
+          // :2327 — `select_pc(ONLY_LIVING, …, all_option = true)`, where **7
+          // means everyone**; the wound is "half your maximum, or what you have
+          // already, whichever is lower".
+          const dlg = session.host;
+          if (!dlg) break;
+          const who = await runSelectPc(session.univ, SelectPcMode.ONLY_LIVING,
+            'Hurt who?', (rows, title, hl) => dlg.selectPc(rows, title, hl));
+          // `select_pc(..., all_option = true)` adds an "All" button, which the
+          // replay host already maps to `SELECT_PC_ALL` = 7.
+          if (who === SELECT_PC_CANCEL || who === SELECT_PC_NONE) break;
+          session.univ.party.pcs.forEach((pc, i) => {
+            if (i === who || (pc.isAlive && who === SELECT_PC_ALL)) {
+              pc.curHealth = Math.min(pc.curHealth, Math.trunc(pc.maxHealth / 2));
+            }
+          });
+          break;
+        }
+        case 'debug_step_through':
+          // :2247 — a scripting-debug toggle. Nothing in this port reads it
+          // yet (the C++ pauses on each special node), but it is universe
+          // state a recording sets. TODO(M8) if a node ever has to stop.
+          session.univ.nodeStepThrough = !session.univ.nodeStepThrough;
+          session.univ.addStringToBuf(session.univ.nodeStepThrough
+            ? 'Debug: Step-through enabled' : 'Debug: Step-through disabled');
+          break;
+        case 'debug_leave_town':
+          // :2258 — `end_town_mode(false, {0,0}, debug_leave = true)`, which is
+          // the arm that skips the exit specials and the boundary maths and
+          // simply puts the party back where it came from.
+          if (session.mode === GameMode.OUTDOORS) {
+            session.univ.addStringToBuf("Debug - Leave Town: You're not in town!");
+            break;
+          }
+          session.univ.addStringToBuf('Debug: Reunite party and leave town.');
+          session.debugLeaveTown();
+          break;
+        case 'debug_enter_town': {
+          // boe.actions.cpp:2396 — `get_num_response` over every town name,
+          // then `start_town_mode(town, dir, debug_enter = true)`, which skips
+          // the town's entry specials. With the `debug-enter-town` feature flag
+          // at `move-outdoors` the party is first repositioned onto the town's
+          // **first** outdoor entrance, so that leaving puts it somewhere sane.
+          const { univ } = session;
+          const value = await popNumResponse(
+            source, 'the debug town number', 0, () => { result.answered++; },
+            univ.scenario.towns.length);
+          if (value === null || value < 0) break;
+          if (hasFeatureFlag('debug-enter-town', 'move-outdoors')) {
+            // `find_town_entrances` sweeps the sectors in x-then-y order and
+            // takes the first `city_locs` entry naming this town.
+            outer: for (let x = 0; x < univ.scenario.outWidth; x++) {
+              for (let y = 0; y < univ.scenario.outHeight; y++) {
+                const sector = univ.scenario.outdoors[x]?.[y];
+                if (!sector) continue;
+                const at = sector.cityLocs.find((c) => c.spec === value);
+                if (at) { session.positionParty(x, y, at.x, at.y); break outer; }
+              }
+            }
+          }
+          const dir = univ.party.direction === Direction.N ? 2
+            : univ.party.direction === Direction.S ? 0
+              : univ.party.direction < Direction.S ? 3 : 1;
+          session.startTownMode(value, dir, true);
+          break;
+        }
         case 'debug_ghost_mode':
           // boe.actions.cpp:2467 — walk through walls. Nothing else in this
           // port reads it yet, but it is universe state a recording can set.

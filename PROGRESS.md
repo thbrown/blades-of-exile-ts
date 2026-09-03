@@ -9834,3 +9834,26 @@ The M6 list below is kept for the history of what it covered:
     and its **absence** is what proved the C++ never reached the arm.
   - 1,086 tests green, `tsc` clean, `floating-promises` clean,
     `verify-screen.mjs` PASS.
+
+- **`debug_enter_town`, and `get_num_response` factored out (M8,
+  2026-09-03).** Corpus-neutral (**1,128,782** either side) — the three files
+  it unblocks all stop behind an earlier rule divergence — and worth having
+  because it is the last debug key that is more than a state poke.
+  - `debug_enter_town` (boe.actions.cpp:2396) is `get_num_response` over every
+    town name, then `start_town_mode(town, dir, debug_enter = true)`. The third
+    argument is the interesting one: `if(!debug_enter) handle_town_specials(…)`
+    (boe.town.cpp:356), so the debug key drops the party in **without waking the
+    place up** — no entry node, no "you enter" script.
+  - With the `debug-enter-town` feature flag at `move-outdoors` the party is
+    first repositioned onto the town's **first** outdoor entrance, so that
+    leaving puts it somewhere sane. `find_town_entrances` sweeps the sectors
+    x-then-y and takes the first `city_locs` entry naming the town; the order
+    is the rule, since a town with two entrances is common.
+  - `get_num_response` is now one helper in the driver rather than inline in
+    `debug_give_item`. It is **two dialogs, not one** — the outer panel with its
+    field, its optional `extra-led` and `okay`/`cancel`, and the `cStringChoice`
+    behind `choose` that pages forty at a time with one-based LEDs within the
+    page. Both debug keys that ask for a number go through it.
+  - What is left in the handler list is genuinely hard rather than merely
+    unported: `new_party` and `debug_launch_scen` **restart the game mid-run**,
+    and `debug_fight_encounter` builds an arena from nothing.
