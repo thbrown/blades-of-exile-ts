@@ -72,6 +72,13 @@ export const MAX_FOOD = 25000;
 export const TOWN_NUM_OUTDOORS = 200;
 
 export class Party {
+  /**
+   * `cParty::next_pc_id` (party.hpp:91) — the id the next PC created gets.
+   * Starts at 1000, which is why the preset party's six are 1000-1005
+   * (`cPlayer::cPlayer(cParty&,ePartyPreset,short)` sets `slot + 1000` and
+   * pushes this past it). Saved as `NEXTID`.
+   */
+  nextPcId = 1000;
   gold = 200;
   food = 100;
   /** Ticks since the game started; a day is 3700 (cParty::calc_day). */

@@ -28,6 +28,7 @@ import { killPc } from '../game/damage';
 import { MainStatus } from '../universe/skills';
 import { setFeatureFlags } from '../game/featureFlags';
 import { GetItemsPick } from '../game/getItems';
+import { ShopItemType } from '../data/shop';
 import { alchemyChoices, makePotion } from '../game/alchemy';
 import { potionSlot } from '../dialogs/pickPotionDialog';
 import { useItem } from '../game/itemUse';
@@ -46,7 +47,8 @@ import { SelectPcMode, runSelectPc } from '../game/selectPc';
 import {
   Replay, ReplayAction, ReplaySource, locationFromAction, numberFromAction,
 } from './format';
-import { makeReplayHost } from './host';
+import { makeReplayHost, popClick, typeInto } from './host';
+import { PcGraphicPick, RaceAbilPick, SpendXp, XpMode, newPc, pcNameOk } from '../game/createPc';
 import { STARTUP_ACTIONS, decodeReplayFile } from './startup';
 
 /**
@@ -283,6 +285,24 @@ export async function runReplay(
    * ground truth is in `BOE_TRACE_MMOVE=1`'s `[advtime] redraw=` column, and
    * PROGRESS.md carries the table it was checked against.
    */
+  /**
+   * `give_help` (strdlog.cpp:182) is a *preference*, not an unconditional
+   * dialog: it shows a help id once and remembers it in the `ReceivedHelp`
+   * integer array, and `ShowInstantHelp` turns the whole mechanism off. Both
+   * arrive in the recording's `load_prefs`, so a replay can say for certain
+   * whether a given `give_help` put a box up and ate a click — which matters,
+   * because `handle_new_pc` opens with `give_help(56,0)` and `spend_xp` calls
+   * it whenever a step is refused for want of points or gold.
+   */
+  const receivedHelp = new Set<number>();
+  let showInstantHelp = true;
+  const giveHelp = (help1: number, help2: number): void => {
+    if (!showInstantHelp || receivedHelp.has(help1)) return;
+    receivedHelp.add(help1);
+    if (help2 !== -1) receivedHelp.add(help2);
+    popClick(source, `the instant-help box for ${help1}`, () => { result.answered++; });
+  };
+
   const REDRAWS = new Set([
     'move', 'handle_target_space', 'handle_parry', 'handle_pause',
     'handle_spellcast', 'handle_equip_item', 'handle_use_item',
@@ -821,7 +841,27 @@ export async function runReplay(
         }
         // Recorded by the C++ but carrying no game state: preferences, the
         // window furniture, and the seed/scenario this port reads up front.
-        case 'load_prefs':
+        case 'error':
+          // The recording's own tombstone: the C++ writes one when a fatal
+          // error dialog goes up and then *stops recording*, so it is always
+          // the last action in the file. Its replay arm is a comment —
+          // "recorded for debugging only. It should be triggered by replaying
+          // the actions" (boe.main.cpp:1120) — so a replay that reaches it
+          // without having crashed simply ends.
+          break;
+        case 'load_prefs': {
+          // The block is one `key = value` per line. Only the two the help
+          // mechanism reads are taken; the rest are display and sound.
+          const prefs = action.text;
+          showInstantHelp = !/^ShowInstantHelp\s*=\s*false/m.test(prefs);
+          const got = /^ReceivedHelp\s*=\s*\[([^\]]*)\]/m.exec(prefs);
+          if (got) {
+            for (const n of (got[1] ?? '').trim().split(/\s+/)) {
+              if (n !== '') receivedHelp.add(Number(n));
+            }
+          }
+          break;
+        }
         case 'feature_flags':
         case 'srand':
         case 'scenario':
@@ -1011,6 +1051,96 @@ export async function runReplay(
           await session.afterPartyTurn();
           break;
         }
+        case 'handle_new_pc': {
+          // `handle_new_pc` (boe.actions.cpp:3680) — the Create PC button.
+          // Three refusals, then `give_help(56,0)` and `create_pc(6,nullptr)`,
+          // which is four dialogs in a row. The rules are in `game/createPc.ts`;
+          // this feeds them the recording's control names.
+          if (!session.inTown) {
+            session.univ.addStringToBuf('Add PC: Town mode only.');
+            break;
+          }
+          const spot = session.univ.party.pcs
+            .findIndex((p) => p.mainStatus === MainStatus.ABSENT);
+          if (spot < 0) {
+            session.univ.addStringToBuf('Add PC: You already have 6 PCs.');
+            break;
+          }
+          if (!session.univ.townRecord?.hasTavern) {
+            session.univ.addStringToBuf('Add PC: You cannot add new characters in '
+              + 'this town. Try in the town you started in.');
+            break;
+          }
+          giveHelp(56, 0);
+
+          const pc = newPc(session.univ, spot);
+
+          // `pick_race_abil(pc, 0)` — race and the seventeen traits.
+          const race = new RaceAbilPick(pc);
+          for (;;) {
+            const id = popClick(source, 'the race-and-traits dialog',
+              () => { result.answered++; });
+            const what = race.click(id);
+            if (what === 'done') { race.keep(); break; }
+            if (what === 'cancel') break;
+          }
+
+          // `spend_xp(spot, 0)` — and **a false return abandons the PC**
+          // (boe.party.cpp:258), which is why Cancel puts the slot back to
+          // ABSENT rather than leaving a half-built character in the party.
+          const xp = new SpendXp(session.univ, spot, XpMode.CREATE);
+          let kept = false;
+          for (;;) {
+            const act = source.pop('click_control');
+            result.answered++;
+            const what = xp.click(act.info.id ?? '',
+              (Number(act.info.mods ?? '0') & 1) !== 0);
+            if (what === 'info') {
+              // `display_skills` / the About Health and About Spell Points
+              // boxes: one more click closes whichever went up.
+              popClick(source, 'the skill description box', () => { result.answered++; });
+              continue;
+            }
+            if (what === 'keep') { xp.keep(); kept = true; break; }
+            if (what === 'cancel') break;
+          }
+          if (!kept) {
+            pc.mainStatus = MainStatus.ABSENT;
+            break;
+          }
+
+          // `pick_pc_graphic(spot, 0)` — a `cPictChoice` over PC pictures
+          // 0-36 with Cancel hidden.
+          const pic = new PcGraphicPick(pc.whichGraphic);
+          for (;;) {
+            const id = popClick(source, 'the PC graphic picker',
+              () => { result.answered++; });
+            const what = pic.click(id);
+            if (what === 'done') { pc.whichGraphic = pic.cur; break; }
+            if (what === 'cancel') break;
+          }
+
+          // `pick_pc_name(spot)` — Okay only closes when the name is usable,
+          // so this loops rather than taking the first click as final.
+          for (;;) {
+            const typed = typeInto(source, 'the PC name field', pc.name,
+              () => { result.answered++; });
+            const id = popClick(source, 'the PC name dialog', () => { result.answered++; });
+            if (id === 'okay' && pcNameOk(typed)) { pc.name = typed; break; }
+            if (id !== 'okay') break;
+            pc.name = typed;
+          }
+
+          pc.mainStatus = MainStatus.ALIVE;
+          // `if(overall_mode != MODE_STARTUP) finish_create();` — a PC built
+          // during party creation is finalised later, one added to a live
+          // party is finalised now.
+          if (session.mode !== GameMode.STARTUP) pc.finishCreate();
+          pc.curHealth = pc.maxHealth;
+          pc.curSp = pc.maxSp;
+          win.setStatWindowForPc(session.univ, session.univ.curPc);
+          break;
+        }
         case 'handle_drop_pc': {
           // `handle_drop_pc` (boe.actions.cpp:3646) — the Delete PC button. Two
           // refusals, then `select_pc(ANY)` and a **yes/no confirmation**, and
@@ -1107,6 +1237,31 @@ export async function runReplay(
           break;
         }
         // The shop, in the four actions it is played with.
+        case 'handle_info_request': {
+          // `handle_info_request` (boe.dlgutil.cpp:510) — the little **?**
+          // beside a shop row. It changes nothing at all: every arm opens a
+          // description box and closes it again. What it *does* do is eat the
+          // click that closes that box, and four of the shop item types open
+          // no box, so whether there is a click to eat depends on the row.
+          const shop = session.shop;
+          const entry = shop?.shop.getItem(numberFromAction(action));
+          const silent = entry === undefined
+            || entry.type === ShopItemType.EMPTY
+            || entry.type === ShopItemType.TREASURE
+            || entry.type === ShopItemType.CLASS
+            || entry.type === ShopItemType.OPT_ITEM;
+          if (!silent) {
+            // The two paged dialogs — `display_spells` and the item info — have
+            // arrows of their own, so anything but the closing click is read
+            // as one of those and the loop goes round again.
+            for (;;) {
+              const id = popClick(source, 'the shop item description box',
+                () => { result.answered++; });
+              if (id !== 'left' && id !== 'right') break;
+            }
+          }
+          break;
+        }
         case 'click_shop_item':
         case 'click_shop_item_help':
           // Cosmetic, exactly like `arrow_button_click`: `click_shop_rect`

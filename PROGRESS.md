@@ -9417,3 +9417,55 @@ The M6 list below is kept for the history of what it covered:
     file has no earlier rule divergence.** `draws matched` counts to the first
     divergence, so the missing-handler list below is behind the rule queue, not
     beside it.
+
+- **Creating a character, and `give_help` is a preference (M8, 2026-09-02).**
+  Corpus **1,039,632 → 1,079,542** — **+39,910 matching draws**, the second
+  largest single jump M8 has had — and 37 of 87 files agree all the way, up
+  from 35. `VoDT_05-04-2025_17-03-14` goes from **372 draws to all 14,263**: it
+  had no rule divergence at all, only a missing action handler, and it was the
+  largest such file in the corpus.
+  - **`handle_new_pc` (boe.actions.cpp:3680) had never been ported**, and it is
+    four dialogs, now in `game/createPc.ts` as state objects driven by control
+    name — the shape `spellPick.ts` uses, so the same rules serve the replay
+    driver and (TODO(M8)) a real screen later.
+    - `cParty::new_pc` — a blank `cPlayer`, ALIVE. **The three stats start at
+      one, not zero** (pc.cpp:1011); this port's `Player` fields start every
+      skill at zero, which is right for a slot a preset or a save is about to
+      overwrite and wrong for the one caller that reads the defaults.
+    - `pick_race_abil` mode 0 — the race group and seventeen trait LEDs.
+      `good1`-`good10` are `eTrait` 0-9 and `bad1`-`bad7` are 10-16, one array,
+      which is why the C++ writes `hit + 10` for the second group.
+    - `spend_xp` mode 0 — `xp_dlog_state` ported as written: a working copy,
+      `can_change_skill` per row, and `do_xp_keep` at the end. Health moves
+      **two at a time** for one skill point; the three stats floor at 1 and
+      health at 6; mode 0 is handed a flat 20,000 gold it never spends; **the
+      Anama curse is a *training* rule** (`save.mode == 1`), so breaking the
+      oath at creation is free.
+      - `training.ts` still holds the shop's copy of this dialog. TODO(M8)
+        recorded there and here: the new one is the faithful shape.
+    - `pick_pc_graphic` — `cPictChoice(0, 36, PIC_PC)` with Cancel hidden,
+      thirty-six pictures to a page, so there are two and the second holds one.
+    - `pick_pc_name` — Okay only closes when the name is non-empty and starts
+      with a letter, so a recording can click it and stay put.
+    - `next_pc_id` is now on `Party` and in the `.exg` round trip as `NEXTID`,
+      closing half of a `TODO(M7)` in `saveIo.ts`.
+  - **`give_help` is a preference, and modelling it is what makes the click
+    stream line up.** `give_help(n, m)` (strdlog.cpp:182) shows a box **once per
+    help id**, remembering it in the `ReceivedHelp` integer array, and
+    `ShowInstantHelp` turns the mechanism off entirely. Both arrive in the
+    recording's own `load_prefs`, which this driver had been discarding as
+    "preferences, carrying no game state". They are not: `handle_new_pc` opens
+    with `give_help(56, 0)`, and whether that box goes up decides whether the
+    next `click_control` belongs to it or to the race dialog. In this
+    recording's prefs, 56 and 24 are absent and 25 is present — so the create
+    box shows and `spend_xp`'s two out-of-points helps would not have.
+  - **`handle_info_request` (boe.dlgutil.cpp:510) changes nothing and still has
+    to be ported**, because it *eats a click*: every arm opens a description box
+    and closes it — except `EMPTY`, `TREASURE`, `CLASS` and `OPT_ITEM`, which
+    open none. So whether there is a click to consume depends on the shop row.
+  - **`error` is the recording's tombstone.** The C++ records one when a fatal
+    error dialog goes up and stops recording, so it is always the last action in
+    the file; its replay arm is a comment. A replay that reaches it without
+    having crashed simply ends.
+  - 1,080 tests green (18 new in `test/createPc.test.ts`), `tsc` clean,
+    `floating-promises` clean.

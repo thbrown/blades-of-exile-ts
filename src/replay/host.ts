@@ -44,7 +44,7 @@ import { PcChoice, SELECT_PC_ALL, SELECT_PC_CANCEL } from '../game/selectPc';
  * own is not enough to find anything: the useful question is always *which*
  * dialog this port put up that the recording did not.
  */
-function popClick(source: ReplaySource, what: string, onAnswered?: () => void): string {
+export function popClick(source: ReplaySource, what: string, onAnswered?: () => void): string {
   if (source.exhausted) {
     throw new Error(`replay: ${what} needed an answer, but the recording has ended `
       + '— this port raised a dialog the recording never saw');
@@ -103,7 +103,7 @@ export interface ReplayHostOptions {
  * Anything else — including `field_selection`, which is how a player replaces a
  * field's default text — is refused by name rather than guessed at.
  */
-function typeInto(
+export function typeInto(
   source: ReplaySource, what: string, initial: string, onAnswered?: () => void,
 ): string {
   let text = initial;
