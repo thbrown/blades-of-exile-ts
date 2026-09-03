@@ -30,6 +30,7 @@ import { MainStatus, PartyStatus, isDeadStatus } from '../universe/skills';
 import { setFeatureFlags } from '../game/featureFlags';
 import { TOWN_NUM_OUTDOORS } from '../universe/party';
 import { GetItemsPick } from '../game/getItems';
+import { SpecCtx, SpecCtxType } from '../game/specials/context';
 import { ShopItemType } from '../data/shop';
 import { alchemyChoices, makePotion } from '../game/alchemy';
 import { potionSlot } from '../dialogs/pickPotionDialog';
@@ -1195,6 +1196,36 @@ export async function runReplay(
         // The debug keys. They are not cheats a recording can be waved past:
         // each one changes real party state, and half the corpus's long
         // recordings press at least one.
+        case 'use_spec_item': {
+          // `use_spec_item` (boe.specials.cpp:578) — the 9 pane's special
+          // items. One line: run the item's **scenario** special at the
+          // party's square, in the `USE_SPEC_ITEM` context. It costs no turn,
+          // takes no charge, and the item stays; everything it does it does
+          // through the node.
+          const which = numberFromAction(action);
+          const spec = session.univ.scenario.specialItems[which]?.special ?? -1;
+          if (spec < 0) break;
+          await session.runSpecialRaw(SpecCtx.USE_SPEC_ITEM, SpecCtxType.SCEN,
+            spec, session.univ.party.getLoc());
+          break;
+        }
+        case 'menu_give_help':
+          // `menu_give_help(n)` is `give_help(n, 0, help_forced = true)`
+          // (boe.main.cpp:1894) — **forced**, so it ignores both the
+          // `ReceivedHelp` list and the `ShowInstantHelp` preference and always
+          // puts the box up. It still records the id, so the id is still added.
+          receivedHelp.add(numberFromAction(action));
+          popClick(source, 'the Help menu box', () => { result.answered++; });
+          break;
+        case 'journal':
+          // `journal()` (boe.infodlg.cpp:653). **It is always empty in this
+          // build**: `add_to_journal(short)` exists and nothing calls it — no
+          // special opcode reaches it — so the function takes its early return
+          // every time, prints one line and opens no dialog. Ported as the
+          // early return, with the entries themselves left out: a `<journal>`
+          // node in a scenario is parsed and never fired.
+          session.univ.addStringToBuf('Nothing in your events journal.');
+          break;
         case 'show_debug_help':
           // boe.actions.cpp:2627 — the panel of debug keys. **Every button
           // toasts and does nothing else while replaying** — the C++'s own

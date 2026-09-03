@@ -9705,3 +9705,32 @@ The M6 list below is kept for the history of what it covered:
     *area* each of them thinks it is in before looking at the square.**
   - The check for a nonexistent town runs **twice** in the C++, once on the
     number asked for and once on the number arrived at; ported as written.
+
+- **Three more action handlers, and the `summon1` lead narrowed to a creature
+  (M8, 2026-09-03).** Corpus-neutral (**1,092,580** either side) — all three
+  files stop behind a rule divergence that comes first — and taken because they
+  are the last cheap ones and they will matter the moment the rules ahead of
+  them land.
+  - **`use_spec_item`** (3 files) is one line: run the special item's
+    **scenario** special at the party's square in the `USE_SPEC_ITEM` context
+    (boe.specials.cpp:578). No turn, no charge, the item stays.
+  - **`menu_give_help(n)`** (2 files) is `give_help(n, 0, help_forced = true)`
+    — **forced**, so unlike every other `give_help` it ignores both the
+    `ReceivedHelp` list and the `ShowInstantHelp` preference and always puts the
+    box up. It still records the id.
+  - **`journal`** (2 files) is **always empty in this build.**
+    `add_to_journal(short)` is defined in `boe.infodlg.cpp:681` and **nothing
+    calls it** — no special opcode reaches it — so `journal()` takes its early
+    return every time, prints "Nothing in your events journal." and opens no
+    dialog. A `<journal>` node in a scenario is parsed and never fired. Ported
+    as the early return, which is the whole of the observable behaviour.
+  - **`ASR_20-05-2025_07-20-41`'s clock split is a creature, not a rule.** It
+    parts at draw 2,829 on a `move` to (50,7) that the C++ takes and this port
+    refuses. The square is terrain 0, unblocked, carries no special and is
+    inside the map: `is_blocked` says yes **because a monster is standing on
+    it here and not there**. That puts the file's `summon1` divergence and its
+    clock divergence on the same root cause — where creatures end up — and it
+    is the same family as the `find_clear_spot` lead open since 2026-09-02.
+    The instrument that answered it in one line was a print of
+    `isBlocked`/`specialAt`/`monsterAt` at the top of `townMoveParty`; worth
+    re-adding rather than re-deriving.
