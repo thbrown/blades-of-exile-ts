@@ -9390,3 +9390,30 @@ The M6 list below is kept for the history of what it covered:
     still the stand-in for `combat_next_step` itself, which the C++ calls from
     exactly three places.
   - 1,062 tests green, `tsc` clean, `floating-promises` clean.
+
+- **The "port raised a dialog the recording never saw" bucket is the *oracle's*
+  limit, not this port's (M8, 2026-09-02).** Written down because it is the
+  single biggest stopper class in the corpus — **15 of 87 files** end on it —
+  and it looks exactly like a fidelity bug until you check the other side.
+  - The symptom: `popClick` throws because a modal this port raised wants a
+    `click_control` and the recording's next action is a `move`.
+  - The clean case is `VoDT_01-05-2025_17-52-13`, which agrees for **7,539**
+    draws and then stops on the locked-door choice at (44,5). The recording is
+    `move (44,5)`, `click bash`, `click pick2`, `move (44,5)` — and that second
+    move raises the prompt again, with no click behind it, because **the bash
+    failed**. That is not a divergence: run the same file through the oracle and
+    it dies in the same place, on its own assertion —
+    `[FATAL ERROR] Replaying a dialog, have the wrong replay action: move on
+    line 1608 — dialog 'locked-door-action' is open`. The recording was made by
+    a build whose bash succeeded; neither engine here reproduces it.
+  - Note the port reaches **7,539** draws where the oracle reaches **7,490**, so
+    there is nothing to win in this file even in principle.
+  - **The general lesson, and it is the second time M8 has needed it:** before
+    taking a stopper as a lead, run the file through `run.sh` and read the
+    oracle's own tail. `scripts/diverge.mjs` already buckets these under
+    "harness gaps" when the oracle dies *first*; it cannot when the two die at
+    the same place for the same reason.
+  - Corollary worth keeping: **a stopper only adds to "draws matched" if the
+    file has no earlier rule divergence.** `draws matched` counts to the first
+    divergence, so the missing-handler list below is behind the rule queue, not
+    beside it.
