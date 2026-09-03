@@ -111,7 +111,7 @@ Notes for M2 implementer:
 - Town reader reference: readTownFromXml (fileio_scen.cpp:1839), loadTownMapData; town terrain templates are variable-size (min 24); talkN.xml via readDialogueFromXml.
 - scenarioXml.ts skips deferred sections by name (quests/shops/special-items/strings) — tighten as those land.
 
-- `npm test` → 1,086 tests green (66 files); `npm run dev` → the game screen (arrow keys / keypad, Home/End/PgUp/PgDn for diagonals; `?scenario=stealth` to load another).
+- `npm test` → 1,097 tests green (66 files); `npm run dev` → the game screen (arrow keys / keypad, Home/End/PgUp/PgDn for diagonals; `?scenario=stealth` to load another).
 - `node scripts/verify-screen.mjs` (needs `npx vite --port 5199` running) drives the real UI headless and screenshots it. Playwright + chromium installed as devDependency.
 - Parsers: `src/fileio/mapParse.ts` (.map), `specialParse.ts` (.spec + opcode table from strings resource, 'nop'=NONE special case), `terrainXml.ts`, `outdoorsXml.ts`, `scenarioXml.ts` (header+game block; quests/shops/etc. deferred by name), `loadScenario.ts` (out{x}~{y} assembly), `source.ts` (Fetch/Fs sources).
 - Data: `special.ts` (SpecType enum + 15-short node), `terrain.ts`, `fields.ts` (FieldType — note SPECIAL_SPOT=9, SPECIAL_ROAD=25), `outdoors.ts`, `enumTags.ts` (estreams.cpp lookup tables), `scenario.ts`.
@@ -9857,3 +9857,25 @@ The M6 list below is kept for the history of what it covered:
   - What is left in the handler list is genuinely hard rather than merely
     unported: `new_party` and `debug_launch_scen` **restart the game mid-run**,
     and `debug_fight_encounter` builds an arena from nothing.
+
+- **Eleven tests over the night's fixes (M8, 2026-09-03).** Corpus untouched;
+  this is the part of the work that keeps. The ones worth naming, because each
+  pins a rule that a plausible refactor would quietly undo:
+  - **`SUMMON_HOST` draws `get_ran(3,1,4)` exactly once**, counted by wrapping
+    the RNG, and every creature it summons carries the same duration. The
+    per-creature version passed every behavioural test there was.
+  - **A node's default target.** Three tests: a `KILL_MONST` chain on an
+    occupied square does *nothing* (the creature is the target and nine AFFECT
+    opcodes refuse a creature), the same chain on an empty square hits the
+    party, and a `TARGET` chain on the party's own square still hits the party
+    because it asks for a monster only.
+  - **A monster's dying special**, with its control. The interesting assertion
+    is a *negative* one — the node does nothing — so it is paired with the same
+    node fired from a plain move, which does hit everyone. Without the control
+    the first test would pass against a port that had simply lost the node.
+    It also has to use `AFFECT_SKILL_PTS` rather than `AFFECT_XP`: killing
+    something awards experience by itself, which drowns out what the node did.
+  - **`AFFECT_XP` goes through `award_xp`**: 100 points at level 1 become
+    **150**, because `xp_percent[0]` is 150 — an addition would give 100. Plus
+    the drain arm and the negative-`ex1a` "set to the threshold" arm.
+  - **A priest cast costs five action points and a mage cast six.**

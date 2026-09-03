@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { GameRng } from '../src/core/rng';
 import { FieldType } from '../src/data/fields';
+import { Spell } from '../src/data/spell';
 import { Scenario } from '../src/data/scenario';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
@@ -192,5 +193,38 @@ describe('monst_cast_priest', () => {
       if (s.univ.transcript.slice(before).some((l) => l.includes('Heal All'))) sawHealAll = true;
     }
     expect(sawHealAll).toBe(false);
+  });
+});
+
+describe('SUMMON_HOST', () => {
+  // boe.combat.cpp:3777. `x = get_ran(3,1,4) + 1` sits **above** the summons,
+  // so the leader (126) and up to four of 125 all share one duration. Rolling
+  // per creature is five draws where the C++ makes one, and every draw after
+  // it lands somewhere else.
+  it('rolls the duration once for the whole host', async () => {
+    const { s, m } = withCaster(0, 6);
+    // Give the caster room, so the summons actually land.
+    const rng = s.univ.rng;
+    const drawn: string[] = [];
+    const real = rng.getRan.bind(rng);
+    rng.getRan = (times: number, lo: number, hi: number): number => {
+      drawn.push(`${times},${lo},${hi}`);
+      return real(times, lo, hi);
+    };
+    await monstCastPriest(s, m, Spell.SUMMON_HOST);
+    rng.getRan = real;
+    expect(drawn.filter((d) => d === '3,1,4')).toHaveLength(1);
+  });
+
+  it('gives every summoned creature the same duration', async () => {
+    const { s, m } = withCaster(0, 6);
+    const town = s.univ.town!;
+    const before = town.monsters.filter((c) => c.isAlive).length;
+    await monstCastPriest(s, m, Spell.SUMMON_HOST);
+    const summoned = town.monsters.filter((c) => c.isAlive && c.summonTime > 0);
+    // Nothing to assert if the square was too crowded for any of them to land.
+    if (town.monsters.filter((c) => c.isAlive).length === before) return;
+    expect(summoned.length).toBeGreaterThan(0);
+    expect(new Set(summoned.map((c) => c.summonTime)).size).toBe(1);
   });
 });

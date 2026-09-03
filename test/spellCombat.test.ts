@@ -153,6 +153,26 @@ describe('the refer dispatcher', () => {
     expect(s.univ.transcript).toContain(`${other.name} casts Light.`);
   });
 
+  it('a priest cast costs five action points and a mage cast six', async () => {
+    // `combat_cast_priest_spell` spends `take_ap(5)` (boe.combat.cpp:4811 and
+    // :4823) where `combat_cast_mage_spell` spends 6 (:4610, :4622). One
+    // `SPELL_AP = 6` for both left every priest a point poorer per cast, which
+    // changes what `pick_next_pc` does next.
+    const mage = inCombat();
+    mage.pc.ap = 20;
+    await combatCastSpell(mage.s, Spell.LIGHT);
+    expect(mage.pc.ap).toBe(14);
+
+    const priest = inCombat();
+    priest.pc.ap = 20;
+    priest.pc.priestSpells.fill(true);
+    priest.pc.skills[Skill.PRIEST_SPELLS] = 20;
+    priest.pc.curSp = 100;
+    // Bless is a priest REFER_IMMED with the caster as its default target.
+    await combatCastSpell(priest.s, Spell.BLESS_MINOR);
+    expect(priest.pc.ap).toBe(15);
+  });
+
   it('a pacifist still refuses the violent ones', async () => {
     const { s, pc } = inCombat();
     pc.traits[Trait.PACIFIST] = true;

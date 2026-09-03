@@ -13,7 +13,8 @@ import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { PartyPreset } from '../src/universe/player';
-import { Status } from '../src/universe/skills';
+import { MainStatus, Status } from '../src/universe/skills';
+import { killMonst } from '../src/game/damage';
 import { Universe } from '../src/universe/universe';
 
 const opcodes = buildOpcodeTable(
@@ -111,8 +112,8 @@ function withNodes(nodes: Record<number, Partial<SpecialNode>>) {
     map.set(Number(num), { ...emptySpecialNode(), ...node });
   univ.town!.record.specials = map;
   univ.town!.record.specStrs = ['first string', 'second string', 'third string'];
-  const run = (node = 0, mode = SpecCtx.TOWN_MOVE) =>
-    session.runSpecialRaw(mode, SpecCtxType.TOWN, node, { x: 5, y: 5 });
+  const run = (node = 0, mode = SpecCtx.TOWN_MOVE, where = { x: 5, y: 5 }) =>
+    session.runSpecialRaw(mode, SpecCtxType.TOWN, node, where);
   return { univ, session, host, run };
 }
 
@@ -568,6 +569,112 @@ describe('affect nodes', () => {
     await session.runSpecialRaw(SpecCtx.OUT_MOVE, SpecCtxType.OUTDOOR, 2, { x: 0, y: 0 });
     expect(univ.party.pcs.every((pc) => (pc.status[Status.DISEASE] ?? 0) > 0)).toBe(true);
     expect(univ.transcript.some((l) => l.includes('diseased'))).toBe(true);
+  });
+});
+
+describe("a node's default target", () => {
+  // `current_pc_picked_in_spec_enc` (boe.specials.cpp:4749) and `get_target_i`
+  // (universe.cpp:1122). The default is not "the whole party": seven trigger
+  // modes take the creature on the trigger square instead, numbered
+  // `100 + slot`, and nine of the AFFECT opcodes then do **nothing at all**
+  // rather than falling back to the party.
+  it('is the creature on the square for a KILL_MONST chain', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.AFFECT_XP, ex1a: 20, ex1b: 0 },
+    });
+    const monst = univ.town!.monsters.find((m) => m.isAlive)!;
+    const before = univ.party.pcs.map((pc) => pc.experience);
+    await run(0, SpecCtx.KILL_MONST, monst.curLoc);
+    expect(univ.party.pcs.map((pc) => pc.experience)).toEqual(before);
+  });
+
+  it('is the whole party when the trigger square is empty', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.AFFECT_XP, ex1a: 20, ex1b: 0 },
+    });
+    // Somewhere with nothing standing on it.
+    const before = univ.party.pcs.map((pc) => pc.experience);
+    await run(0, SpecCtx.KILL_MONST, { x: 1, y: 1 });
+    expect(univ.party.pcs.map((pc) => pc.experience)).not.toEqual(before);
+  });
+
+  it('takes only a monster for a TARGET chain, never a PC', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.AFFECT_XP, ex1a: 20, ex1b: 0 },
+    });
+    const before = univ.party.pcs.map((pc) => pc.experience);
+    // The party's own square: `target_there(where, TARG_MONST)` finds nothing
+    // there, so the default is the party and the node fires.
+    await run(0, SpecCtx.TARGET, univ.party.townLoc);
+    expect(univ.party.pcs.map((pc) => pc.experience)).not.toEqual(before);
+  });
+});
+
+describe('AFFECT_XP', () => {
+  // boe.specials.cpp:2936 — three arms, and the middle one is `award_xp` with
+  // `force`, not a bare addition to `experience`.
+  it('goes through award_xp, which scales by the level bracket', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.AFFECT_XP, ex1a: 100, ex1b: 0 },
+    });
+    const pc = univ.party.pcs[0]!;
+    pc.level = 1;
+    pc.expAdj = 100;
+    pc.experience = 0;
+    await run(0, SpecCtx.TOWN_MOVE, { x: 1, y: 1 });
+    // xp_percent[0] is 150, so 100 points become 150 — not 100.
+    expect(pc.experience).toBe(150);
+  });
+
+  it('drains rather than awards when ex1b is set', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.AFFECT_XP, ex1a: 40, ex1b: 1 },
+    });
+    for (const pc of univ.party.pcs) pc.experience = 100;
+    await run(0, SpecCtx.TOWN_MOVE, { x: 1, y: 1 });
+    expect(univ.party.pcs[0]!.experience).toBe(60);
+  });
+
+  it('sets the level threshold when ex1a is negative', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.AFFECT_XP, ex1a: -1, ex1b: 0 },
+    });
+    const pc = univ.party.pcs[0]!;
+    pc.experience = 0;
+    await run(0, SpecCtx.TOWN_MOVE, { x: 1, y: 1 });
+    expect(pc.experience).toBe(pc.level * pc.getTnl());
+  });
+});
+
+describe('a monster\'s dying special', () => {
+  // `kill_monst` runs its `KILL_MONST` chain at boe.specials.cpp:1623 and only
+  // writes `which_m.active = DEAD` at :1677, so the chain's default target is
+  // **the creature that just died**. This port queues its chains, so by the
+  // time one runs the creature is dead and `target_there` would find nothing —
+  // `runSpecial`'s `seedTarget` pins what the C++ resolves lazily.
+  // Skill points rather than experience: killing something awards experience
+  // by itself, which would drown out what the node did.
+  const skillNode = { 0: { type: SpecType.AFFECT_SKILL_PTS, ex1a: 5, ex1b: 0 } };
+
+  it('does nothing, because a monster target is not "everyone"', async () => {
+    const { univ, session } = withNodes(skillNode);
+    const monst = univ.town!.monsters.find((m) => m.isAlive)!;
+    monst.specialOnKill = 0;
+    const before = univ.party.pcs.map((pc) => pc.skillPts);
+    killMonst(univ, monst, 6, MainStatus.DEAD, session);
+    await session.settled();
+    await new Promise((r) => { setTimeout(r, 0); });
+    expect(univ.party.pcs.map((pc) => pc.skillPts)).toEqual(before);
+  });
+
+  it('and the same node from a plain move does hit everyone', async () => {
+    // The control: without a creature on the trigger square the default target
+    // is the party, so the node lands. If this fails the test above proves
+    // nothing.
+    const { univ, run } = withNodes(skillNode);
+    const before = univ.party.pcs[0]!.skillPts;
+    await run(0, SpecCtx.TOWN_MOVE, { x: 1, y: 1 });
+    expect(univ.party.pcs[0]!.skillPts).toBe(before + 5);
   });
 });
 
