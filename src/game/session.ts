@@ -4177,13 +4177,44 @@ export class GameSession {
   }
 
   startTownMode(townNum: number, entryDir: number): void {
+    if (this.univ.scenario.towns[townNum] === undefined) {
+      this.univ.addStringToBuf('The scenario tried to put you into a town that does not exist.');
+      return;
+    }
+
+    // **`town_mods` — the town replacement** (boe.town.cpp:99), and the
+    // check for a nonexistent town runs **twice**, once on the number asked
+    // for and once on the number arrived at.
+    //
+    // A `<town-flag town="17" add-x="15" add-y="1">` says: entering town 17
+    // with that Stuff Done Flag set enters `17 + PSD[15][1]` instead. It is how
+    // a scenario shows the same place changed — A Small Rebellion's Stalker's
+    // Fortress is towns **17 and 18**, identical terrain and different scripts,
+    // and this port walked into 17 for the whole recording where the C++ was in
+    // 18 from the moment the rebellion started. Nothing about that shows in the
+    // draw stream until a door with a `Prevent Action` node on it in one town
+    // and nothing on it in the other refuses a step, a hundred actions later.
+    //
+    // The horses and boats stabled in the old town number are re-homed to the
+    // new one, or they would be stranded in a town nobody can reach.
+    const formerTown = townNum;
+    for (const mod of this.univ.scenario.townMods) {
+      if (mod.spec < 0 || mod.spec >= 200 || townNum !== mod.spec) continue;
+      if (!this.univ.party.sdLegit(mod.x, mod.y)) continue;
+      townNum += this.univ.party.getSdf(mod.x, mod.y);
+      for (const horse of this.univ.party.horses) {
+        if (horse.exists && horse.whichTown === formerTown) horse.whichTown = townNum;
+      }
+      for (const boat of this.univ.party.boats) {
+        if (boat.exists && boat.whichTown === formerTown) boat.whichTown = townNum;
+      }
+    }
     const record = this.univ.scenario.towns[townNum];
     if (!record) {
       this.univ.addStringToBuf('The scenario tried to put you into a town that does not exist.');
       return;
     }
 
-    // TODO(M4): town_mods can redirect townNum via an SDF before we load.
     this.mode = GameMode.TOWN;
     this.univ.party.townNum = townNum;
     this.sound?.play(

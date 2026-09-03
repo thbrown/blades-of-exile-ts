@@ -67,8 +67,8 @@ export function intAttr(el: Element, name: string): number {
 }
 
 /** readLocFromXml — reads x/y attributes. */
-export function locFromXml(el: Element): { x: number; y: number } {
-  return { x: intAttr(el, 'x'), y: intAttr(el, 'y') };
+export function locFromXml(el: Element, prefix = ''): { x: number; y: number } {
+  return { x: intAttr(el, `${prefix}x`), y: intAttr(el, `${prefix}y`) };
 }
 
 /** readRectFromXml — reads top/left/bottom/right attributes. */

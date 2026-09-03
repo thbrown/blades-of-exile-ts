@@ -200,6 +200,31 @@ describe('start and end town mode', () => {
     session.startTownMode(num, 0);
     expect(session.univ.party.townLoc).toEqual(town.startLocs[0]);
   });
+
+  it('redirects the town number through town_mods', () => {
+    // `<town-flag town="N" add-x="X" add-y="Y">`: entering town N with that
+    // Stuff Done Flag set enters `N + PSD[X][Y]` instead (boe.town.cpp:99).
+    // It is how a scenario shows the same place changed, and it is silent —
+    // nothing in the transcript says which of the two you walked into.
+    const session = newSession();
+    const from = 0;
+    const to = 1;
+    if (scen.towns.length < 2) return;
+    scen.townMods.push({ spec: from, x: 3, y: 4 });
+    try {
+      session.univ.party.setSdf(3, 4, to - from);
+      session.startTownMode(from, FORCED_ENTRY);
+      expect(session.univ.party.townNum).toBe(to);
+
+      // A flag of zero is still a match and still adds nothing.
+      session.univ.party.setSdf(3, 4, 0);
+      session.startTownMode(from, FORCED_ENTRY);
+      expect(session.univ.party.townNum).toBe(from);
+    } finally {
+      scen.townMods.pop();
+      session.univ.party.setSdf(3, 4, 0);
+    }
+  });
 });
 
 describe('town items', () => {

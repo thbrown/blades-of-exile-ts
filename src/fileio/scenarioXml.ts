@@ -22,7 +22,7 @@ const DEFERRED_TOP = new Set([
   'editor',
 ]);
 const DEFERRED_GAME = new Set([
-  'journal', 'town-flag',
+  'journal',
 ]);
 
 /** The entry tags that carry a single number and map straight to a type. */
@@ -140,6 +140,8 @@ export interface ScenarioHeader {
   initSpec: number;
   /** spec_strs — the scenario-level message strings specials print. */
   specStrs: string[];
+  /** town_mods — `<town-flag>`, an SDF-driven redirect of a town number. */
+  townMods: { spec: number; x: number; y: number }[];
   /** store_item_rects — where each town's shops keep sold-back goods. */
   storeItemRects: Map<number, { top: number; left: number; bottom: number; right: number }>;
 }
@@ -229,6 +231,7 @@ export function readScenarioFromXml(root: Element, fname = 'scenario.xml'): Scen
     scenarioTimers: [],
     initSpec: -1,
     specStrs: [],
+    townMods: [],
     storeItemRects: new Map(),
   };
   for (const elem of children(root)) {
@@ -275,6 +278,17 @@ export function readScenarioFromXml(root: Element, fname = 'scenario.xml'): Scen
           const id = intAttr(g, 'id');
           while (hdr.specStrs.length <= id) hdr.specStrs.push('');
           hdr.specStrs[id] = text(g);
+        }
+        else if (gt === 'town-flag') {
+          // `<town-flag town="17" add-x="15" add-y="1" />` — a **town
+          // replacement**: entering town 17 with SDF (15,1) set enters
+          // `17 + PSD[15][1]` instead (boe.town.cpp:99). It is how a scenario
+          // shows the same place changed — A Small Rebellion's Stalker's
+          // Fortress is towns 17 and 18, identical terrain and different
+          // scripts. Ten of them at most, as the C++'s fixed array allows.
+          if (hdr.townMods.length >= 10)
+            throw new Error(`${fname}: more than ten <town-flag> nodes`);
+          hdr.townMods.push({ spec: intAttr(g, 'town'), ...locFromXml(g, 'add-') });
         }
         else if (gt === 'store-items') {
           const town = intAttr(g, 'town');

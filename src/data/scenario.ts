@@ -79,6 +79,11 @@ export interface Scenario {
   scenarioTimers: Timer[];
   initSpec: number;
   specStrs: string[];
+  /**
+   * `cScenario::town_mods` — up to ten `<town-flag>` entries, each redirecting
+   * one town number by the value of a Stuff Done Flag (boe.town.cpp:99).
+   */
+  townMods: { spec: number; x: number; y: number }[];
   storeItemRects: Map<number, { top: number; left: number; bottom: number; right: number }>;
   /** The scenario's boat/horse templates, by vehicle number (fileio_scen.cpp). */
   boats: Vehicle[];

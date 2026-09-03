@@ -9673,3 +9673,35 @@ The M6 list below is kept for the history of what it covered:
     corpus is the only thing that can tell you which way.**
   - 1,085 tests green, `tsc` clean, `floating-promises` clean,
     `verify-screen.mjs` PASS.
+
+- **`<town-flag>` — the town replacement, and this port had been walking into
+  the wrong fortress (M8, 2026-09-03).** Corpus **1,087,755 → 1,092,580**, 40 of
+  87 files agree all the way. A `TODO(M4)` in `startTownMode` said *"town_mods
+  can redirect townNum via an SDF before we load"*; this is that.
+  - `<town-flag town="17" add-x="15" add-y="1"/>` in a scenario's `<game>` block
+    means: entering town 17 with Stuff Done Flag (15,1) set enters
+    `17 + PSD[15][1]` **instead** (boe.town.cpp:99). Up to ten of them, as the
+    C++'s fixed array allows. It is how a scenario shows the same place changed
+    — and the horses and boats stabled in the old number are re-homed to the new
+    one, or they are stranded in a town nobody can reach.
+  - **A Small Rebellion's Stalker's Fortress is towns 17 and 18**: same name,
+    same 64×64 terrain, different specials. This port walked into 17 for the
+    whole of `ASR_11-05-2025_09-38-14` where the C++ was in 18 from the moment
+    the rebellion started.
+  - **What that looks like from the draw stream: nothing, for a hundred
+    actions.** The two towns' terrain is identical, so every move, every sight
+    check and every monster agrees. It surfaces only when a square carries a
+    `Prevent Action` node in *one* of them — town 17 has node 30 on the door at
+    (14,36) and town 18 has nothing — so this port refused a step the C++ took,
+    the door never opened, and the clock fell a turn behind for the rest of the
+    recording.
+  - **How it was found, and the step that mattered.** `align-actions --clocks`
+    put the split on that door; the port's own trace showed a `Prevent Action`
+    node blocking it; and the C++'s trace showed **no special ran there at
+    all**. The two engines agreed on the terrain (125, a closed door) and
+    disagreed on whether a node sat on it, which is impossible within one town.
+    `BOE_TRACE_ALTER=1` settled it in one line: `[alter] town=18 (14,36) 125 ->
+    129`. **When two engines disagree about a square's contents, ask which
+    *area* each of them thinks it is in before looking at the square.**
+  - The check for a nonexistent town runs **twice** in the C++, once on the
+    number asked for and once on the number arrived at; ported as written.
