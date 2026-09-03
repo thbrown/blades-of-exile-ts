@@ -9364,3 +9364,29 @@ The M6 list below is kept for the history of what it covered:
     — so only those last two are the second kind. Everything else in this port
     that calls `afterCombatAction` is standing in for the first.
   - 1,062 tests green, `tsc` clean, `floating-promises` clean.
+
+- **The rest of the `handle_monster_actions` sweep, and an encumbered priest
+  pays nothing (M8, 2026-09-02).** Corpus-neutral — **1,039,632** either side,
+  35 of 87 files — and taken because the rule was already established twice
+  today and leaving three of its sites unconverted is worse than a measurement
+  that does not move. What changed:
+  - `parry`, `pause`'s combat branch, and both get-items-in-a-fight callers
+    (`main.ts` and the replay driver) now call `monsterActionsCombat` rather
+    than `afterCombatAction`. All four are `did_something` handlers, so in the
+    C++ it is `advance_time` that steps the round, through
+    `handle_monster_actions` — which draws *before* it steps.
+  - `handle_pause`'s combat arm calls **`char_stand_ready`**, not
+    `handle_stand_ready` (boe.actions.cpp:619). The names are one letter apart
+    and only the second calls `combat_next_step` for itself; getting them the
+    wrong way round would have double-stepped every stand-ready in the corpus.
+  - **Only a mage pays for casting encumbered.** `combat_cast_mage_spell` has
+    the `NO_CAST_ENCUMBERED` arm — "Oops, trying to cast a mage spell while
+    encumbered takes your AP!", `take_ap(6)`, `return true`
+    (boe.combat.cpp:4566). `combat_cast_priest_spell` has **no such arm**
+    (:4788): the refusal prints and the turn is untouched. This port charged
+    both six points, so an encumbered priest lost a turn's worth of action per
+    attempt where the C++ lost none.
+  - The two remaining `afterCombatAction` callers are the right ones: it is
+    still the stand-in for `combat_next_step` itself, which the C++ calls from
+    exactly three places.
+  - 1,062 tests green, `tsc` clean, `floating-promises` clean.

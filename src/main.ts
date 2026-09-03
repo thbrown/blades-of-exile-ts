@@ -972,7 +972,7 @@ async function main(): Promise<void> {
     // inline inside `handle_get_items` and `advance_time` follows it.
     if (inFight) {
       takeAp(univ, 4);
-      session.afterCombatAction();
+      session.monsterActionsCombat();
     } else await session.afterPartyTurn();
     setStatus();
     redraw();

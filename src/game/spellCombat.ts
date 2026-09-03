@@ -327,9 +327,17 @@ export function combatCastCheck(session: GameSession, type: Skill): boolean {
   // The C++ prints the reason with no PC name here — see `printCastStatus`'s
   // note about the missing separator that leaves.
   printCastStatus(univ, status, type, pc.name);
-  if (status === CastStatus.NO_ENCUMBERED) {
-    takeAp(univ, 6);
-    session.afterCombatAction();
+  // **Only the mage pays for being encumbered.** `combat_cast_mage_spell`
+  // has the `NO_CAST_ENCUMBERED` arm — "Oops, trying to cast a mage spell
+  // while encumbered takes your AP!", `take_ap(6)` and `return true`
+  // (boe.combat.cpp:4566) — and `combat_cast_priest_spell` has no such arm at
+  // all (:4788): its refusal prints and leaves the turn alone. This port
+  // charged both, so an encumbered priest lost six points a try.
+  if (status === CastStatus.NO_ENCUMBERED && type === Skill.MAGE_SPELLS) {
+    takeAp(univ, MAGE_AP);
+    // `return true` from the refusal is `did_something`, so this one does owe
+    // `handle_monster_actions`.
+    session.monsterActionsCombat();
   }
   return false;
 }

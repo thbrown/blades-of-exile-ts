@@ -3317,7 +3317,9 @@ export class GameSession {
       * (2 + pc.statAdj(Skill.DEXTERITY) + pc.skill(Skill.DEFENSE));
     pc.ap = 0;
     this.univ.addStringToBuf('Parry.');
-    this.afterCombatAction();
+    // `handle_parry` sets `did_something`, so the round is stepped by
+    // `advance_time` through `handle_monster_actions` — which draws first.
+    this.monsterActionsCombat();
     return true;
   }
 
@@ -3458,7 +3460,13 @@ export class GameSession {
       // of fire for the whole fight and take nothing, and the C++ spent two
       // draws here that this port did not.
       await this.checkFields(pc.combatPos, true, pc);
-      this.afterCombatAction();
+      // `handle_pause` ends `did_something = true; need_redraw = true;`
+      // (boe.actions.cpp:678) — so, like every other action, the round is
+      // stepped by `handle_monster_actions`, which draws before it steps.
+      // Note it is `char_stand_ready` that runs here, **not**
+      // `handle_stand_ready`: that is a different key, and it is one of the
+      // only two places the C++ calls `combat_next_step` for itself.
+      this.monsterActionsCombat();
       return;
     }
     this.univ.addStringToBuf('Pause.');

@@ -795,7 +795,7 @@ export async function runReplay(
                 // which changes what `pick_next_pc` does next.
                 if (gettingInFight) {
                   takeAp(session.univ, 4);
-                  session.afterCombatAction();
+                  session.monsterActionsCombat();
                 } else await session.afterPartyTurn();
               }
             }
