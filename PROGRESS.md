@@ -14,8 +14,8 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-03** that is
-  **1,128,782 matching draws, 40 of 87 files agreeing all the way**, 38 blocked
-  by the oracle rather than by this port, and **6 rule buckets left in the
+  **1,151,036 matching draws, 40 of 87 files agreeing all the way**, 39 blocked
+  by the oracle rather than by this port, and **7 rule buckets left in the
   queue**. Add `--refresh` after a code change.
 - Two companion meters answer questions the draw stream cannot.
   `node scripts/align-actions.mjs --all` asks whether the two **action**
@@ -23,7 +23,7 @@
   `--clocks` asks whether the two **clocks** do — a turn one side charges and
   the other does not spends no draws at all, so it is invisible to
   `diverge.mjs` and upstream of wherever it points. **Two** files part on their
-  clocks today, down from six, and three of the biggest wins of 2026-09-02/03
+  clocks today, down from six, and four of the biggest wins of 2026-09-02/03
   were found that way.
 - Keys follow the original's `handle_keystroke` (boe.actions.cpp:2772):
   arrows/keypad move, **f** fight (and end a fight), **e** end combat,
@@ -58,10 +58,10 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-03).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,128,782 matching
+`get_ran` streams together, rule by rule. It stands at **1,151,036 matching
 draws and 40 of 87 recordings agreeing all the way**, against 1,039,384 and 33
-at the start of 2026-09-02. Six rule buckets remain in the queue (see
-`diverge.mjs --all --stacks`); 38 of the 87 are blocked by the *oracle* rather
+at the start of 2026-09-02. Seven rule buckets remain in the queue (see
+`diverge.mjs --all --stacks`); 39 of the 87 are blocked by the *oracle* rather
 than by this port and cannot be won at all.
 
 M8 is not only dice. Chasing the corpus has filled in real features it turned
@@ -9879,3 +9879,34 @@ The M6 list below is kept for the history of what it covered:
     **150**, because `xp_percent[0]` is 150 — an addition would give 100. Plus
     the drain arm and the negative-`ex1a` "set to the threshold" arm.
   - **A priest cast costs five action points and a mage cast six.**
+
+- **`handle_target_space` charges a turn in combat too, and a PC with no points
+  was holding it (M8, 2026-09-03).** Corpus **1,128,782 → 1,151,036** —
+  **+22,254 matching draws** — and `VoDT-5-11` goes from parting at draw 9,709
+  to matching **all 31,963** of the oracle's before the harness dies on it. One
+  line, and it was a `TODO(M8)` written months ago that said nothing had been
+  shown to need it.
+  - `handle_target_space` sets `did_something = true` for **every** targeting
+    mode but FANCY, and it does so *whether or not any of its four branches
+    fired* (boe.actions.cpp:888). This port had that for town but skipped it in
+    combat, where `did_something` reaches `combat_next_step` rather than
+    `do_monsters` — and `combat_next_step` is what hands the turn to the next
+    PC.
+  - **What that looks like from the game.** Lenny arms a missile with 0 action
+    points; the shot never fires; the C++'s `pick_next_pc` skips him because
+    `ap <= 0` and moves on to Bart. Here he kept the turn, so *every PC
+    afterwards was one behind* — and eighteen actions later the spells the
+    recording meant for Kat were being cast by Adrianna, who could not afford
+    them, so the cast silently did nothing and the C++'s `SUMMON_GUARDIAN`
+    `get_ran(6,1,4)` had no partner.
+  - **The bucket named `totalEncumbrance`, which is the round-start redraw** —
+    innocent, and two PCs' worth of actions downstream of the cause. The thing
+    that placed it was the trace pair read side by side on the **active PC
+    column**: the C++ printed `pc1:Bart(3ap)` where this port printed
+    `pc0:Lenny(0ap)`, at the same recording position, with both draw streams
+    still byte-identical. Same shape as 2026-08-29's three: *print the state,
+    not the draws, and the AI is usually innocent.*
+  - The `--clocks` meter had this file too (its split is at exactly the
+    divergence draw), which is a fourth win for the instrument; two files part
+    on their clocks now.
+  - 1,098 tests green, `tsc` clean, `floating-promises` clean, `verify-screen.mjs` PASS.

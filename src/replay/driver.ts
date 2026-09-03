@@ -694,11 +694,16 @@ export async function runReplay(
             // `ASR_20-05-2025_08-49-39` action 986 is the case: the C++'s clock
             // goes 41,896 → 41,897 over an action that casts nothing.
             //
-            // TODO(M8): the C++ does this in combat too, where `did_something`
-            // reaches `combat_next_step` rather than `do_monsters`. Left alone
-            // because nothing in the corpus has been shown to need it and the
-            // seven files above go through this branch in combat.
-            if (!isCombat(session.mode)) await session.afterPartyTurn();
+            // **And it does it in combat too**, where `did_something` reaches
+            // `combat_next_step` rather than `do_monsters` — which is what
+            // hands the turn to the next PC. This was a `TODO(M8)` on the
+            // reasoning that nothing had been shown to need it;
+            // `VoDT-5-11` needs it. Lenny arms a missile with 0 action points,
+            // the shot never fires, and the C++'s `pick_next_pc` moves on to
+            // Bart while this port left Lenny holding the turn — so every PC
+            // afterwards was one behind, and the spells the recording meant
+            // for Kat were cast by Adrianna, who could not afford them.
+            await session.afterPartyTurn();
           }
           break;
         }

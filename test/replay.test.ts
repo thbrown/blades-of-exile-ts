@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { Direction } from '../src/core/location';
 import { GameRng } from '../src/core/rng';
 import { Scenario } from '../src/data/scenario';
 import { loadScenario } from '../src/fileio/loadScenario';
@@ -313,5 +314,47 @@ describe('a spell picker the recording walks away from', () => {
 
     // Written, and to whoever `pick_spell` settled on — not left unset.
     expect(session.lastCaster[0]).not.toBe(NO_TARGET);
+  });
+});
+
+describe('a targeted square with nothing armed, in combat', () => {
+  /**
+   * `handle_target_space` sets `did_something = true` for **every** targeting
+   * mode but FANCY, and it does so whether or not any of its four branches
+   * fired (boe.actions.cpp:888). Plain `MODE_COMBAT` is none of the four — it
+   * is what a player gets for clicking a square after a shot that never armed —
+   * so the click does nothing *and costs the turn anyway*.
+   *
+   * In combat that turn goes to `combat_next_step`, which is what hands the
+   * round to the next PC. This port only charged it in town, so a PC who
+   * clicked a square with no action points left kept the turn: in `VoDT-5-11`
+   * Lenny armed a missile on 0 AP, the C++ moved on to Bart, and from there
+   * every PC was one behind — eighteen actions later the spells the recording
+   * meant for Kat were being cast by Adrianna, who could not afford them.
+   */
+  it('costs the turn, so a spent PC does not keep it', async () => {
+    const session = await newGame();
+    const univ = session.univ;
+    expect(session.startCombat(Direction.N)).toBe(true);
+
+    // Spent, but not the whole party: `pick_next_pc` has to have somewhere to
+    // go, or it starts a fresh round and the assertion below passes for the
+    // wrong reason.
+    const spent = univ.curPc;
+    univ.currentPc.ap = 0;
+    expect(univ.party.pcs.some((p, i) => i !== spent && p.isAlive && p.ap > 0)).toBe(true);
+
+    const target = univ.currentPc.combatPos;
+    await runReplay(session, {
+      seed: null, scenario: null, featureFlags: null,
+      actions: [{
+        type: 'handle_target_space',
+        text: '',
+        info: { destination: `(${target.x},${target.y})`, num_targets_left: '0' },
+      }],
+    });
+    await session.settled();
+
+    expect(univ.curPc).not.toBe(spent);
   });
 });
