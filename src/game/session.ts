@@ -848,8 +848,11 @@ export class GameSession {
     // `town_move_party` deliberately has **no** such guard (boe.actions.cpp:4196
     // is a bare `if(keep_going)`, matching `ACTIONS.CPP:2911`), so this belongs
     // to the outdoor path alone.
-    if (!check.canEnter || this.mode !== GameMode.OUTDOORS) return false;
-    const specialForced = check.forced;
+    // `if(univ.debug_mode && univ.ghost_mode) forced = keep_going = true;`
+    // (boe.actions.cpp:3971) — with both on, nothing refuses a step.
+    const ghost = this.univ.debugMode && this.univ.ghostMode;
+    if ((!check.canEnter && !ghost) || this.mode !== GameMode.OUTDOORS) return false;
+    const specialForced = check.forced || ghost;
 
     const offset = { x: destination.x - party.outLoc.x, y: destination.y - party.outLoc.y };
     const storeCorner = { ...party.outdoorCorner };
@@ -1165,11 +1168,13 @@ export class GameSession {
     // `if(univ.target_there(destination, TARG_MONST) == nullptr)`
     // (boe.actions.cpp:4152), so a creature standing on a scripted square stops
     // the script from running as well as stopping the step.
-    let specialForced = false;
+    // The town mover's copy of the same two lines (boe.actions.cpp:4193).
+    const ghost = this.univ.debugMode && this.univ.ghostMode;
+    let specialForced = ghost;
     if (monsterThere === null) {
       const check = await this.checkSpecialTerrain(destination, this.univ.party.pcs[0]!);
-      if (!check.canEnter) return false;
-      specialForced = check.forced;
+      if (!check.canEnter && !ghost) return false;
+      specialForced = check.forced || ghost;
       // The chain may have taken the party somewhere else entirely.
       if (!this.inTown || this.univ.town !== town) return true;
     }
@@ -2914,9 +2919,34 @@ export class GameSession {
    * out there moves in tens anyway.
    */
   async castTownSpell(pcNum: number, spell: Spell, freebie = false): Promise<void> {
+    // `handle_spellcast`'s MODE_TOWN arm (boe.actions.cpp:400): snapshot every
+    // PC's spell points, cast, and set `did_something` from whether any of them
+    // moved. **The mode test is on the way *in*, not on the way out** — this
+    // used to return early when the cast had left some other mode behind, on
+    // the reasoning that town targeting must not charge a turn. It must not,
+    // and the spell-point test already says so: `start_town_targeting` spends
+    // nothing. What the early return also swallowed was **Identify and
+    // Recharge**, which spend their points *and* leave `MODE_ITEM_TARGET`
+    // behind — so the one spell in the game that pays up front and then opens a
+    // screen was the one that never cost a turn.
+    // `handle_spellcast` has one branch per mode (boe.actions.cpp:394): the
+    // outdoor arm calls `cast_spell` and sets **no** `did_something`, and the
+    // town arm snapshots every PC's spell points, casts, and sets it from
+    // whether any of them moved.
+    //
+    // **The mode is read on the way in, and the cast happens either way.** This
+    // used to test `mode !== TOWN` *after* the cast, which is right for
+    // everything that leaves the mode alone and wrong for the two spells that
+    // do not: Identify and Recharge spend their points and then open
+    // `MODE_ITEM_TARGET`, so the only spells in the game that pay up front were
+    // the only ones that never cost a turn. Moving the same test to the top
+    // fixed that and broke something bigger — it skipped the **cast** outdoors,
+    // where the C++ has a branch of its own — which is what the two-part shape
+    // below avoids.
+    const townCast = this.mode === GameMode.TOWN;
     const before = this.univ.party.pcs.map((pc) => pc.curSp);
     castSpell(this, pcNum, spell, freebie);
-    if (this.mode !== GameMode.TOWN) return;
+    if (!townCast) return;
     if (this.univ.party.pcs.some((pc, i) => pc.curSp !== before[i])) {
       await this.afterPartyTurn();
     }
@@ -3226,8 +3256,45 @@ export class GameSession {
     this.itemShop = { mode, cost, rechargeLimit, rechargeAmount };
   }
 
-  endItemShop(): void {
+  /**
+   * `do_mage_spell`'s Identify and Recharge arms (boe.party.cpp:646 and :678) —
+   * the same item panel a shop opens, but reached from a spell, and **it takes
+   * the game mode with it**: `overall_mode = MODE_ITEM_TARGET`, so the world is
+   * frozen behind it until Space or `cancel_item_target` closes it. A talk
+   * node's identify/recharge does *not* do that — it sets `stat_screen_mode`
+   * alone and the conversation stays up — which is why this is a second
+   * entry point rather than an argument to `startItemShop`.
+   */
+  startItemTarget(
+    mode: ItemShopMode, cost = 0, rechargeLimit = 0, rechargeAmount = 0,
+  ): void {
+    this.startItemShop(mode, cost, rechargeLimit, rechargeAmount);
+    this.mode = GameMode.ITEM_TARGET;
+  }
+
+  /**
+   * `cancel_item_target` (boe.actions.cpp:2579) — Space, or the panel's Done.
+   *
+   * Three things beyond closing the panel, and this port had none of them:
+   * it names which queue it was, it sets `overall_mode = MODE_TOWN`
+   * **unconditionally**, and it sets `did_something` — the C++'s own comment
+   * says why: *"Time passes because a spell was cast."* Identify and Recharge
+   * spend their points when they open the screen, so the turn they owe is
+   * charged when it closes.
+   *
+   * Returns whether the caller owes that turn, so the one caller that is not a
+   * spell — a shop's identify queue, reached from a conversation — can be told
+   * apart if it ever needs to be.
+   */
+  endItemShop(): boolean {
+    if (this.itemShop?.mode === ItemShopMode.IDENTIFY) {
+      this.univ.addStringToBuf('Identify: Finished');
+    } else if (this.itemShop?.mode === ItemShopMode.RECHARGE) {
+      this.univ.addStringToBuf('Recharge: Finished');
+    }
     this.itemShop = null;
+    this.mode = GameMode.TOWN;
+    return true;
   }
 
   /** Act on one item's spec button. */
@@ -5172,6 +5239,23 @@ export class GameSession {
    * the outdoor exit; a town with no explicit exit for that side just steps
    * the party one tile further out.
    */
+  /**
+   * `end_town_mode(false, {0,0}, debug_leave = true)` (boe.town.cpp:546), the
+   * arm the debug Leave Town key takes: the town is stored and the mode drops
+   * to outdoors, but the boundary maths and the exit specials are **skipped**
+   * — `if(!switching_level && !debug_leave)` guards the whole exit block — so
+   * the party simply reappears wherever `out_loc` already says.
+   */
+  debugLeaveTown(): void {
+    if (this.univ.town === null) return;
+    this.univ.party.endSplit();
+    this.storeTownOnLeaving();
+    this.mode = GameMode.OUTDOORS;
+    this.univ.town = null;
+    this.univ.party.townNum = TOWN_NUM_OUTDOORS;
+    this.center = { ...this.univ.party.outLoc };
+  }
+
   endTownMode(destination: Location): Location {
     const { party } = this.univ;
     const town = this.univ.town!;

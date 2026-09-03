@@ -9626,3 +9626,50 @@ The M6 list below is kept for the history of what it covered:
     item.variety = NO_ITEM;` (:448) — the same sweep the creatures get on the
     line above it. Without it a mass-get from just inside the edge could reach
     something the C++ had already thrown away.
+
+- **Identify, Recharge, the debug keys, and a bisect that paid for itself
+  (M8, 2026-09-03).** Corpus **1,079,618 → 1,087,755**, 39 of 87 files agree all
+  the way. `AllMageSpells` goes from parting at draw 87 to **agreeing on all
+  5,097 draws it reaches**, and its clocks agree over every compared action.
+  - **`increase_age` has no mode gate of its own**, and this port's had two
+    equality tests where the C++ asks `is_out()` and `is_town()` — both
+    *ranges*. So the clock stopped dead in any of the town's sub-modes, and the
+    one that matters is `MODE_ITEM_TARGET`.
+  - **`do_mage_spell`'s Identify and Recharge open `MODE_ITEM_TARGET`**
+    (boe.party.cpp:646 and :678), which was a `TODO(M5c)` and is now ported onto
+    the item panel the shop already had. Identify's cost is the odd one:
+    `if(!(freebie || all_identified)) cur_sp -= cost;` — casting it with nothing
+    left to identify is **free**, and it is the only arm of `do_mage_spell` that
+    decides the price before it decides the work.
+  - **`cancel_item_target` costs a turn**, and the C++ says why in as many
+    words: *"Time passes because a spell was cast"* (boe.actions.cpp:2589). It
+    also names the queue it closed and forces `overall_mode = MODE_TOWN`. This
+    port only closed the panel.
+  - **Ten debug keys**, which are not cheats a recording can be waved past —
+    each changes real party state and half the corpus's long recordings press at
+    least one. `show_debug_help` (16 uses; every button toasts and the *action*
+    is recorded next, so it owes exactly one click), `debug_give_item` (15;
+    `get_num_response` with a `cStringChoice` behind its Choose button, forty
+    to a page), `debug_heal`, `debug_heal_plus_extra`, `debug_ghost_mode` —
+    which is **not** cosmetic: with `debug_mode` it forces a step through
+    anything, in both movers (boe.actions.cpp:3971 and :4193) —
+    `debug_hurt_party`, `debug_stealth_detect_life_firewalk`, `debug_fly`,
+    `debug_magic_map`, `debug_refresh_stores`, `debug_clean_up`,
+    `debug_increase_age`, `debug_towns_forget`, `debug_step_through` and
+    `debug_leave_town`.
+    - `revive_all_dead`'s two arms differ and both are used: `false` (plain
+      Heal) revives and then heals 250 / restores 100 **through the caps**,
+      `true` (Heal Plus Extra) sets health to maximum and spell points to a flat
+      **100** regardless of `max_sp`.
+  - **The bisect, and why it is written down.** The first version of the
+    `castTownSpell` fix moved its mode test from *after* the cast to *before*
+    it. That reads like a tidy-up and it is not: `handle_spellcast` has a branch
+    per mode, and the **outdoor** one calls `cast_spell` too — it just sets no
+    `did_something`. Testing on the way in skipped the cast outdoors entirely.
+    The corpus fell **1,079,618 → 977,207** and thirteen files acquired a
+    divergence in `playAmbientSound` at draws as low as 9. `git stash` on the
+    whole batch and then one change at a time named it in three measurements.
+    The shape to remember: **a guard that moves is a behaviour change, and the
+    corpus is the only thing that can tell you which way.**
+  - 1,085 tests green, `tsc` clean, `floating-promises` clean,
+    `verify-screen.mjs` PASS.

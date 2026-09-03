@@ -51,11 +51,20 @@ export class Universe {
    * immediately if the flag is only a transcript line — which is what it was
    * here until 2026-09-02.
    *
-   * `ghost_mode` — the other half of the pair, which `debug_mode && ghost_mode`
-   * uses to force a step through anything — is **not modelled**; no recording in
-   * the corpus toggles it. TODO(M8) if one ever does.
+   * `ghost_mode` is the other half of the pair: with both on, a move is forced
+   * through anything (boe.actions.cpp:3971 and :4193, in the outdoor and town
+   * movers respectively — `forced = keep_going = true`). One recording in the
+   * corpus toggles it, `ZKR_15-05-2025_18-38-53`.
    */
   debugMode = false;
+  ghostMode = false;
+  /**
+   * `univ.node_step_through` — the scripting debugger's single-step flag
+   * (boe.actions.cpp:2247). Toggled by a debug key and read by the specials VM,
+   * which this port does not pause. TODO(M8) if a recording ever needs a node
+   * to stop.
+   */
+  nodeStepThrough = false;
 
   constructor(
     readonly scenario: Scenario,

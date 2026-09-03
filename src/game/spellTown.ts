@@ -20,7 +20,7 @@
  */
 
 import { Spell, SPELLS, spellName } from '../data/spell';
-import { ItemAbil } from '../data/item';
+import { ItemAbil, ItemType } from '../data/item';
 import { FieldType } from '../data/fields';
 import { Skill, MainStatus, PartyStatus, Status, Trait } from '../universe/skills';
 import { getProtLevel, hasAbilEquip } from '../universe/inventory';
@@ -32,6 +32,7 @@ import { Attitude } from '../data/monster';
 import { GameMode } from './modes';
 import { SpellPat } from '../data/pattern';
 import { startTownTargeting } from './spellTarget';
+import { ItemShopMode } from './itemShop';
 import type { GameSession } from './session';
 
 /** `increase_light` (boe.party.cpp:288) — brighten the party's own lantern. */
@@ -291,11 +292,52 @@ export function doMageSpell(
       startTownTargeting(session, spellNum, pcNum, freebie, SpellPat.SINGLE, storeItemSpellLevel);
       break;
 
-    case Spell.IDENTIFY:
+    case Spell.IDENTIFY: {
+      // boe.party.cpp:646. **The spell points go first and they go
+      // conditionally**: `if(!(freebie || all_identified)) cur_sp -= cost;` —
+      // so casting it with nothing left to identify is free, and that is the
+      // only arm of `do_mage_spell` that decides the cost before it decides
+      // what to do.
+      const allIdent = univ.party.pcs.every(
+        (p) => p.items.every((it) => it.variety === ItemType.NO_ITEM || it.ident));
+      if (!freebie && !allIdent) pc.curSp -= info.cost ?? 0;
+      // `!univ.scenario.is_legacy && is_town() && !all_identified` — legacy is
+      // always false for the XML format this port reads (see
+      // `specials/context.ts`), so the gate is the town and the work left.
+      if (session.inTown && !allIdent) {
+        univ.addStringToBuf('Select items to identify. Press Space');
+        univ.addStringToBuf('   when done.');
+        session.startItemTarget(ItemShopMode.IDENTIFY);
+        break;
+      }
+      // Outdoors, or with nothing to do, it is instant and says so — and the
+      // sentence is built either way, with "already " in it when there was
+      // nothing to identify.
+      if (!allIdent) {
+        for (const p of univ.party.pcs) for (const it of p.items) it.ident = true;
+      }
+      univ.addStringToBuf(
+        `All of your items are ${allIdent ? 'already ' : ''}identified.`);
+      break;
+    }
+
     case Spell.RECHARGE:
-      // TODO(M5c): these open MODE_ITEM_TARGET, the pick-items-to-treat screen
-      // the shop already has a version of (`itemShop.ts`).
-      univ.addStringToBuf(`  ${spellName(spellNum)} needs the item screen; not in yet.`);
+      // boe.party.cpp:678. Unlike Identify the cost is unconditional, and the
+      // town gate has no second half: there is always something to select.
+      if (!freebie) pc.curSp -= info.cost ?? 0;
+      if (session.inTown) {
+        univ.addStringToBuf('Select items to recharge. Press Space');
+        univ.addStringToBuf('   when done.');
+        // `shop_recharge_limit = 0` (any wand) and `shop_recharge_amount = 1`.
+        session.startItemTarget(ItemShopMode.RECHARGE, 0, 0, 1);
+        break;
+      }
+      univ.addStringToBuf('All of your items are recharged.');
+      for (const p of univ.party.pcs) {
+        for (const it of p.items) {
+          if (it.rechargeable && it.charges < it.maxCharges) it.charges = it.maxCharges;
+        }
+      }
       break;
 
     default:

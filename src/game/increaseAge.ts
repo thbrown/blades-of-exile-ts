@@ -153,8 +153,16 @@ export async function handleAcid(session: GameSession): Promise<void> {
 export async function increaseAgeEffects(session: GameSession): Promise<void> {
   const { univ } = session;
   const { party } = univ;
-  const outdoors = session.mode === GameMode.OUTDOORS;
-  const town = session.mode === GameMode.TOWN;
+  // **`is_out()` and `is_town()`, not two equality tests.** `increase_age` has
+  // no mode gate of its own — `handle_monster_actions` only reaches it when
+  // the party is not in combat — and every branch inside it asks `is_out()` or
+  // `is_town()`, both of which are *ranges*. Testing `mode === TOWN` exactly
+  // meant the clock stopped dead in any of the town's sub-modes, and the one
+  // that matters is `MODE_ITEM_TARGET`: Identify and Recharge spend their
+  // spell points and then open the item screen, so the only two spells that
+  // pay before they act were also the only two that cost no turn.
+  const outdoors = session.isOutdoors;
+  const town = session.inTown;
   if (!outdoors && !town) return;
 
   // **The clock ticks here, not in the move** (boe.actions.cpp:3362). This port

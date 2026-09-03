@@ -153,7 +153,7 @@ export interface GiveResult {
  * lets a full pack still accept more arrows.
  */
 export function giveItem(
-  pc: Player, party: Party, item: Item, checkOnly = false,
+  pc: Player, party: Party, item: Item, checkOnly = false, allowOverload = false,
 ): GiveResult {
   if (pc.mainStatus !== MainStatus.ALIVE)
     return { status: GiveStatus.DEAD, slot: -1, message: '' };
@@ -178,7 +178,9 @@ export function giveItem(
       break;
   }
 
-  if (itemWeight(item) > freeWeight(pc))
+  // `GIVE_ALLOW_OVERLOAD` (pc.cpp) — the debug give and the get-items screen's
+  // overload path skip the weight test outright.
+  if (!allowOverload && itemWeight(item) > freeWeight(pc))
     return { status: GiveStatus.TOO_HEAVY, slot: -1, message: 'Item too heavy to carry.' };
 
   // **A full pack can still take a stackable item** (pc.cpp:502). The C++ drops
