@@ -23,6 +23,7 @@ import { calcSpecDam } from './missiles';
 import { SpellPat } from '../data/pattern';
 import { placeSpellPattern } from './spellPatterns';
 import { onHitItemAbility } from './weaponAbilities';
+import { drawTerrain } from './textBar';
 import type { GameSession } from './session';
 import type { Item } from '../data/item';
 
@@ -397,6 +398,10 @@ export async function pcAttack(
       // The punch passes sound type 4 (a thump) in the C++.
       await damageTarget(univ, target, r2, type, whoAtt, attacker.race, true, session, 4);
     } else {
+      // `draw_terrain(2)` (boe.combat.cpp:434) before the message — and it is
+      // not free: `pc_attack` set `current_working_monster = who_att`, so mode
+      // 2 gets past its early-out, sets `mode = 0` and pays a full redraw.
+      if (session) drawTerrain(session);
       univ.addStringToBuf(`${attacker.name} misses.`);
       livingSound(2);
     }
@@ -513,6 +518,8 @@ export async function pcAttackWeapon(
   }
 
   if (r1 > hitChance(skill)) {
+    // `draw_terrain(2)` (boe.combat.cpp:702) — see the punch's miss above.
+    if (session) drawTerrain(session);
     univ.addStringToBuf(`  ${attacker.name} misses.`);
     livingSound(weap.weapType === Skill.POLE_WEAPONS ? 19 : 2);
     return;

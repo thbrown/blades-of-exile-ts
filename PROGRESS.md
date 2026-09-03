@@ -9283,3 +9283,46 @@ The M6 list below is kept for the history of what it covered:
     a new kind of problem — both are more of this one.
   - 1,062 tests green, `tsc` clean, `floating-promises` clean,
     `verify-screen.mjs` PASS.
+
+- **A miss redraws, and `combat_next_step`'s return is an `if` (M8,
+  2026-09-02).** Corpus **1,039,384 → 1,039,618**, and the head recording
+  `VoDT_05-04-2025_14-32-10` — which parted at draw 23 yesterday morning and at
+  204 last night — now **agrees on all 438 of its draws**, the first long file
+  in the corpus to go from a rule divergence to none. 34 of 87 agree all the
+  way, up from 33. Three findings, each one a `draw_terrain` this port did not
+  pay:
+  - **A missed swing redraws.** Both miss branches — `pc_attack`'s punch
+    (boe.combat.cpp:434) and `pc_attack_weapon`'s (:702) — open with
+    `draw_terrain(2)` *before* the "misses." line. It is not one of the free
+    mode-2 calls: `pc_attack` sets `current_working_monster = who_att` at :402
+    and clears it at :456, so the early-out at boe.graphics.cpp:842 is never
+    taken for the whole of a PC's attack, and mode 2 falls through to
+    `draw_text_bar` like any full redraw.
+  - **Every did-something return of `pc_combat_move` owes
+    `handle_monster_actions`, not just `combat_next_step`.** `combatMove` called
+    `afterCombatAction` at all six of its `return true` sites, which is the
+    C++'s `combat_next_step` — but the C++ reaches that through
+    `advance_time` → `handle_monster_actions`, whose combat arm draws *first*
+    (boe.actions.cpp:1953) and steps the round second. The six calls are now
+    `monsterActionsCombat`, which is that arm. A refused move still pays
+    nothing, and correctly: `advance_time` runs `handle_monster_actions` only
+    `if(did_something)`, and `BOE_TRACE_MMOVE`'s `[advtime]` line prints
+    `did=0 redraw=0` for every refusal in combat.
+  - **`if(combat_next_step()) need_redraw = true;` is an `if`.** The port set
+    the flag unconditionally, with a comment reasoning that the return "is true
+    on every path that gets this far, since something has just been spent".
+    That is wrong, and it cost a redraw per action: `combat_next_step`
+    (boe.combat.cpp:1789) returns false whenever `sync_force_cages` changed
+    nothing, `pick_next_pc` said the monsters need not run, and `cur_pc` came
+    out where it went in — which is the ordinary case of a PC who still has
+    action points. `afterCombatAction` now returns `to_return` and
+    `monsterActionsCombat` reads it.
+    - It is answerable synchronously even though this port *queues* the monster
+      loop rather than running it: the queued path is exactly the path where
+      `pick_next_pc` returned true, and that already makes `to_return` true.
+  - Method note: the three sit on top of each other, and only the first two
+    could be found from the draw stream alone. The third announced itself as
+    the *opposite* symptom — after the first two landed the file parted with
+    this port drawing one **too many** — which is worth remembering, since a
+    fix that overshoots reads exactly like a fresh bug one draw later.
+  - 1,062 tests green, `tsc` clean, `floating-promises` clean.

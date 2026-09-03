@@ -3791,20 +3791,25 @@ export class GameSession {
         this.needRedraw = false;
       }
     }
-    this.afterCombatAction();
-    // `if(combat_next_step()) need_redraw = true;` (:1960). The return is true
-    // whenever the cages changed, the monsters ran or the active PC moved on —
-    // which is every path that gets this far, since something has just been
-    // spent. This port's `afterCombatAction` queues the monster loop rather
-    // than running it, so the flag is set rather than read back.
-    this.needRedraw = true;
+    // `if(combat_next_step()) need_redraw = true;` (:1960) — and it is an
+    // `if`, not an assignment, so a step that changes nothing leaves the flag
+    // alone. This used to set the flag unconditionally on the reasoning that
+    // "something has just been spent", which is wrong: `combat_next_step`
+    // returns false whenever the cages did not move, the monsters did not run
+    // and `cur_pc` did not change — the ordinary case of a PC who still has
+    // action points. That bought an extra `draw_terrain` in `advance_time`'s
+    // tail for every such action.
+    if (this.afterCombatAction()) this.needRedraw = true;
   }
 
-  afterCombatAction(): void {
+  afterCombatAction(): boolean {
     // combat_next_step opens by reconciling the cage barriers with the
     // FORCECAGE statuses — on *every* step, not only when the round rolls
     // over, so someone who just walked into one is caught straight away.
-    syncForceCages(this);
+    //
+    // Its return is `to_return`, which starts here: the cages moving is the
+    // first of the three things that make a step count.
+    let toReturn = syncForceCages(this);
 
     const storePc = this.univ.curPc;
     // `pick_next_pc` is always called at least once, even when the current PC
@@ -3812,9 +3817,15 @@ export class GameSession {
     // is pinned active, which the old `ap > 0` early-out skipped.
     if (!pickNextPc(this.univ, this.combatActivePc)) {
       this.finishCombatStep(storePc);
-      return;
+      // `pick_next_pc(); if(univ.cur_pc != store_pc) to_return = true;` — the
+      // second call is the one `finishCombatStep` has already made.
+      return toReturn || this.univ.curPc !== storePc;
     }
 
+    // The monsters are going to run, so `to_return` is true whatever the tail
+    // finds — which is what makes this answerable now rather than when the
+    // queued turn settles.
+    toReturn = true;
     this.queueTurn(async () => {
       // `while(pick_next_pc()) { combat_run_monst(); set_pc_moves(); ... }`
       // (boe.combat.cpp:1789). The **loop** matters: if nobody can act after
@@ -3832,6 +3843,7 @@ export class GameSession {
       // The monsters ran, which is `to_return` in the C++.
       this.finishCombatStep(storePc, true);
     });
+    return toReturn;
   }
 
   /**
@@ -3909,7 +3921,7 @@ export class GameSession {
       // `handle_monster_actions` calls `combat_next_step()` off *that*
       // (boe.actions.cpp:751 and :1959). So the turn moves on even when the
       // move was refused for this reason, and it did not here.
-      this.afterCombatAction();
+      this.monsterActionsCombat();
       return true;
     }
     // pc_combat_move (boe.combat.cpp:242): terrain 90 marks the edge of an
@@ -3928,7 +3940,7 @@ export class GameSession {
         takeAp(this.univ, 1);
         this.univ.addStringToBuf("Moved: Couldn't flee.");
       }
-      this.afterCombatAction();
+      this.monsterActionsCombat();
       return true;
     }
 
@@ -3941,7 +3953,7 @@ export class GameSession {
         if (monstHit.isFriendly) makeTownHostile(this);
         pc.lastAttacked = monstHit;
         await pcAttack(this.univ, this.univ.curPc, monstHit, this);
-        this.afterCombatAction();
+        this.monsterActionsCombat();
         return true;
       }
       return false;
@@ -3981,7 +3993,7 @@ export class GameSession {
       // square in one action. That second pair of draws is what named this.
       await this.checkSpecialTerrain(storeLoc, other);
       this.moveSound(town.record.terrain[destination.x]![destination.y]!, pc.ap);
-      this.afterCombatAction();
+      this.monsterActionsCombat();
       return true;
     }
 
@@ -4018,7 +4030,7 @@ export class GameSession {
       // and the fight never ends: `VoDT_04-05-2025_14-17-38` sat there for
       // thirteen actions and then closed combat 250 draws early.
       if (was !== this.univ.curPc) {
-        this.afterCombatAction();
+        this.monsterActionsCombat();
         return true;
       }
     }
@@ -4033,7 +4045,7 @@ export class GameSession {
     this.moveSound(town.record.terrain[destination.x]![destination.y]!, pc.ap);
     this.updateExplored(destination);
     this.center = { ...destination };
-    this.afterCombatAction();
+    this.monsterActionsCombat();
     return true;
   }
 
