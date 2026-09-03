@@ -27,15 +27,25 @@ import { MainStatus, Skill, Status, Trait } from '../universe/skills';
 import { takeAp } from './combat';
 import { CastStatus, pcCanCastType, printCastStatus } from './spellCast';
 import { hasTrappedMonst } from './soulCrystal';
-import { damageMonst, damagePc } from './damage';
+import { damageMonst, damagePc, handleMarkedDamage } from './damage';
+import { runBoomAnim, startBoomAnim } from './booms';
+import { animSettle } from './anim';
 import { placeSpellPattern } from './spellPatterns';
 import { doMageSpell, doPriestSpell } from './spellTown';
 import { startFancySpellTargeting, startSpellTargeting } from './spellCombatTarget';
 import { SIGHT_BLOCKED } from '../core/sight';
+import { drawTerrain } from './textBar';
 import type { GameSession } from './session';
 
-/** The AP a spell costs, win or lose (`take_ap(6)`). */
-const SPELL_AP = 6;
+/**
+ * The AP a spell costs, win or lose — and **the two schools charge
+ * differently**: `combat_cast_mage_spell` spends `take_ap(6)`
+ * (boe.combat.cpp:4610 and :4622) where `combat_cast_priest_spell` spends
+ * `take_ap(5)` (:4811 and :4823). This port charged 6 for both, which is one
+ * action point a round too many for every priest in the corpus.
+ */
+const MAGE_AP = 6;
+const PRIEST_AP = 5;
 
 /**
  * `poison_weapon` — the Envenom effect. The C++ helper also prints and picks a
@@ -54,6 +64,14 @@ function poisonWeapon(session: GameSession, pcNum: number, howMuch: number): voi
  */
 export async function doShockwave(session: GameSession, target: { x: number; y: number }): Promise<void> {
   const { univ } = session;
+  // `start_missile_anim()` … `do_explosion_anim(5,0)` … `end_missile_anim()` …
+  // `handle_marked_damage()` (boe.combat.cpp:4293/4303). The volley was never
+  // opened here, so every hit `damage_pc`/`damage_monst` collected was dropped
+  // — and with it `do_explosion_anim`'s **eleven** `draw_terrain()`s, which in
+  // combat each spend the status bar's encumbrance roll. The sound is 5,
+  // passed rather than looked up from the boom type.
+  startBoomAnim();
+  try {
   for (const pc of univ.party.pcs) {
     const d = dist(target, pc.combatPos);
     if (d <= 0 || d >= 11 || pc.mainStatus !== MainStatus.ALIVE) continue;
@@ -66,6 +84,11 @@ export async function doShockwave(session: GameSession, target: { x: number; y: 
     if (session.canSeeLight(target, monst.curLoc) >= SIGHT_BLOCKED) continue;
     await damageMonst(univ, monst, univ.curPc,
       univ.rng.getRan(2 + Math.trunc(d / 2), 1, 6), DamageType.UNBLOCKABLE, { session });
+  }
+  } finally {
+    runBoomAnim(univ.rng, () => drawTerrain(session), 5);
+    await animSettle();
+    await handleMarkedDamage(univ, session);
   }
 }
 
@@ -360,22 +383,34 @@ export async function combatCastSpell(
     || (spellNum >= 100 && info.type === undefined);
   univ.addStringToBuf(`${caster.name} casts ${spellName(spellNum)}.`);
 
+  const cost = isPriest ? PRIEST_AP : MAGE_AP;
+
   switch (info.refer) {
     case SpellRefer.YES:
       // The town implementation does the work; the AP go first either way.
-      takeAp(univ, SPELL_AP);
+      takeAp(univ, cost);
+      // `draw_terrain(2)` between the AP and the spell (boe.combat.cpp:4611,
+      // :4812). Not free: both casters set
+      // `combat_posing_monster = current_working_monster = univ.cur_pc` on the
+      // line above `print_spell_cast`, so mode 2 gets past its early-out for
+      // the whole of the cast.
+      drawTerrain(session);
       if (isPriest) doPriestSpell(session, pcNum, spellNum, freebie);
       else doMageSpell(session, pcNum, spellNum, freebie);
       // Casting is a free function, not a GameSession method, so it has to
-      // trigger the turn advance itself — see afterCombatAction's doc.
-      session.afterCombatAction();
+      // trigger the turn advance itself. **`monsterActionsCombat`, not
+      // `afterCombatAction`**: `combat_cast_mage_spell` returns
+      // `did_something` and it is `advance_time` that steps the round, through
+      // `handle_monster_actions` — whose combat arm draws before it steps.
+      session.monsterActionsCombat();
       break;
 
     case SpellRefer.IMMED:
-      takeAp(univ, SPELL_AP);
+      takeAp(univ, cost);
+      drawTerrain(session);
       if (isPriest) await combatImmedPriestCast(session, pcNum, spellNum, freebie);
       else await combatImmedMageCast(session, pcNum, spellNum, freebie);
-      session.afterCombatAction();
+      session.monsterActionsCombat();
       break;
 
     case SpellRefer.TARGET:

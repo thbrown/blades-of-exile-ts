@@ -9326,3 +9326,41 @@ The M6 list below is kept for the history of what it covered:
     this port drawing one **too many** — which is worth remembering, since a
     fix that overshoots reads exactly like a fresh bug one draw later.
   - 1,062 tests green, `tsc` clean, `floating-promises` clean.
+
+- **A combat cast costs five points for a priest, and `do_shockwave` never
+  opened its volley (M8, 2026-09-02).** Corpus **1,039,618 → 1,039,632**, 35 of
+  87 files agree all the way, and `short/Shockwave.xml` — the smallest rule
+  divergence in the queue, parting at draw 5 — now agrees on all 19 of its
+  draws. Four findings in one small file:
+  - **`take_ap(6)` is the *mage* number.** `combat_cast_priest_spell` spends
+    `take_ap(5)` (boe.combat.cpp:4811 and :4823) where
+    `combat_cast_mage_spell` spends 6 (:4610, :4622). This port had one
+    `SPELL_AP = 6` for both, so every priest in the corpus was a point poorer
+    per cast than the C++'s — which changes `pick_next_pc` and therefore the
+    whole shape of the round, not just the number in the status bar.
+  - **`draw_terrain(2)` sits between the AP and the spell**, in all four of
+    those branches. Not free, for the same reason a missed swing's is not: both
+    casters set `combat_posing_monster = current_working_monster = univ.cur_pc`
+    on the line above `print_spell_cast`.
+  - **`do_shockwave` never opened a boom volley.** The C++ is
+    `start_missile_anim()` … damage … `do_explosion_anim(5,0)` …
+    `end_missile_anim()` … `handle_marked_damage()` (boe.combat.cpp:4293-4305),
+    and this port had only the damage. So the hits it collected were dropped on
+    the floor — visibly, no explosion at all — and with them
+    `do_explosion_anim`'s **eleven** `draw_terrain()`s. Note the sound is
+    passed as **5** rather than looked up from the boom type, which is the
+    `snd != -1` arm of `do_explosion_anim`.
+  - **A cast owes `handle_monster_actions` too.** Same rule as `combatMove`'s
+    six sites this morning: `combat_cast_mage_spell` returns `did_something`
+    and it is `advance_time` that steps the round. The two `afterCombatAction`
+    calls in `combatCastSpell` are now `monsterActionsCombat`.
+  - **The remaining shape of this rule, for whoever takes it next.** `grep -n
+    "afterCombatAction()" src/` still lists a dozen callers, and each one is
+    either "an action finished, `advance_time` ran" (which owes
+    `monsterActionsCombat`) or "the C++ calls `combat_next_step` from inside a
+    function" (which does not). The C++ has exactly **three** call sites of
+    `combat_next_step`: `handle_monster_actions` (boe.actions.cpp:1960),
+    `handle_stand_ready` (:524) and `handle_switch_pc`'s combat branch (:1027)
+    — so only those last two are the second kind. Everything else in this port
+    that calls `afterCombatAction` is standing in for the first.
+  - 1,062 tests green, `tsc` clean, `floating-promises` clean.
