@@ -16,10 +16,10 @@ import { GiveStatus, giveItem } from '../../universe/inventory';
 import { Player } from '../../universe/player';
 import { MainStatus, Skill, Status } from '../../universe/skills';
 import { Universe } from '../../universe/universe';
-import { poisonWeapon } from '../itemUse';
+import { drainPc, poisonWeapon } from '../itemUse';
 import { DamageType } from '../../data/monster';
 import { Race } from '../../universe/skills';
-import { hitParty } from '../damage';
+import { awardXp, hitParty } from '../damage';
 import { damageTarget } from '../combat';
 import { SpecialCtx, TARGET_PARTY, defaultTarget } from './context';
 import { SELECT_PC_CANCEL, SelectPcMode, runSelectPc } from '../selectPc';
@@ -41,7 +41,8 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
    * otherwise `current_pc_picked_in_spec_enc`'s default — which is the **active
    * PC in combat**, not the party.
    */
-  const target = ctx.curTarget ?? defaultTarget(univ, ctx.session);
+  const target = ctx.curTarget
+    ?? defaultTarget(univ, ctx.session, ctx.whichMode, ctx.specLoc);
   const targets = (): Player[] => {
     if (target >= 0 && target < 6) {
       const pc = party.pcs[target];
@@ -49,6 +50,19 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
     }
     return party.pcs;
   };
+  /**
+   * **`if(pc_num >= 100) break;`** — nine of the AFFECT opcodes open with it
+   * (boe.specials.cpp:2937, :2947, :3088, :3122, :3139, :3193, :3203, :3255
+   * and `GIVE_ITEM` at :3352): a special whose target is a **monster** does
+   * nothing at all, rather than falling back to the whole party.
+   *
+   * `targets()` alone cannot express that, because `pc_num == 6` and
+   * `pc_num >= 100` both fail its `< 6` test and the C++ treats them
+   * oppositely — 6 is everyone, 100-plus is nobody. Leaving it out ran
+   * `AFFECT_XP` over all six PCs where the C++ ran it over none, and
+   * `award_xp` draws.
+   */
+  const monsterTarget = target >= 100;
   /** ex1b picks the direction: 0 up, anything else down. */
   const signed = (amount: number): number => amount * (spec.ex1b !== 0 ? -1 : 1);
 
@@ -120,18 +134,32 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       break;
 
     case SpecType.AFFECT_XP:
+      if (monsterTarget) break;
+      // boe.specials.cpp:2936. **Three arms, and the middle one is
+      // `award_xp`, not an addition** — which is the whole point: `award_xp`
+      // scales the amount by the PC's level bracket, may lose a point to a
+      // `get_ran(1,1,100)` roll past level 7, and then **levels the PC up as
+      // far as it takes them**, rolling `get_ran(1,2,6)` for health at each
+      // step. This port added the number to `experience` and drew nothing, so
+      // a scenario handing out experience left the two engines several draws
+      // and one level apart. `true` is the `force` flag: a scenario may hand
+      // out more than the 200 the sanity check refuses.
       for (const pc of targets()) {
-        if (spec.ex1a < 0) continue; // "set to the level's threshold" needs get_tnl (M5)
-        pc.experience = Math.max(0, pc.experience + signed(spec.ex1a));
+        const i = univ.party.pcs.indexOf(pc);
+        if (spec.ex1a < 0) pc.experience = pc.level * pc.getTnl();
+        else if (spec.ex1b === 0) awardXp(univ, i, spec.ex1a, true);
+        else drainPc(pc, spec.ex1a);
       }
       break;
 
     case SpecType.AFFECT_SKILL_PTS:
+      if (monsterTarget) break;
       for (const pc of targets())
         pc.skillPts = clamp(0, 100, pc.skillPts + signed(spec.ex1a));
       break;
 
     case SpecType.AFFECT_STAT: {
+      if (monsterTarget) break;
       if (spec.ex2a < 0 || spec.ex2a > 20) {
         univ.addStringToBuf('Skill is out of range.');
         break;
@@ -149,6 +177,7 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
     }
 
     case SpecType.AFFECT_LEVEL:
+      if (monsterTarget) break;
       for (const pc of targets()) pc.level = Math.max(1, pc.level + signed(spec.ex1a));
       break;
 
@@ -171,6 +200,7 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       break;
 
     case SpecType.AFFECT_STATUS: {
+      if (monsterTarget) break;
       // affect_spec's AFFECT_STATUS (boe.specials.cpp:2981) routes each
       // status through its own iLiving method rather than nudging the raw
       // number — that's what prints "X poisoned."/"X diseased." and rolls
@@ -256,6 +286,7 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
 
     case SpecType.AFFECT_MAGE_SPELL:
     case SpecType.AFFECT_PRIEST_SPELL: {
+      if (monsterTarget) break;
       if (spec.ex1a < 0 || spec.ex1a > 61) {
         univ.addStringToBuf('Spell is out of range (0 - 61).');
         break;
@@ -287,6 +318,7 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       break;
 
     case SpecType.GIVE_ITEM: {
+      if (monsterTarget) break;
       const item = univ.scenario.scenItems[spec.ex1a];
       if (!item) break;
       let given = false;

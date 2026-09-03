@@ -8,7 +8,7 @@
 
 import { isCombat } from '../modes';
 import type { Universe } from '../../universe/universe';
-import { Location } from '../../core/location';
+import { Location, locsEqual } from '../../core/location';
 import { SpecType, SpecialNode } from '../../data/special';
 import type { GameSession } from '../session';
 import type { Skill } from '../../universe/skills';
@@ -224,6 +224,28 @@ export interface PendingSpecial {
 export const TARGET_PARTY = 6;
 
 /**
+ * `univ.target_there(where, …)` fed through `get_target_i` — a PC's index, a
+ * creature's `100 + slot`, or null for an empty square. `monstOnly` is the
+ * `TARG_MONST` argument the `TARGET`/`USE_SPACE`/`HAIL` modes pass.
+ *
+ * The PC half comes first in `target_there` (universe.cpp:1152), so a square
+ * holding both answers with the PC unless `monstOnly` says otherwise.
+ */
+function targetIndexAt(univ: Universe, where: Location, monstOnly: boolean): number | null {
+  if (!monstOnly) {
+    const pc = univ.party.pcs.findIndex(
+      (p) => p.isAlive && locsEqual(p.getLoc(), where));
+    if (pc >= 0) return pc;
+  }
+  const town = univ.town;
+  if (!town) return null;
+  const slot = town.monsters.findIndex(
+    (m) => m.isAlive && where.x >= m.curLoc.x && where.x < m.curLoc.x + m.xWidth
+      && where.y >= m.curLoc.y && where.y < m.curLoc.y + m.yWidth);
+  return slot >= 0 ? 100 + slot : null;
+}
+
+/**
  * `get_target_i(current_pc_picked_in_spec_enc(ctx))` (boe.specials.cpp:4726,
  * universe.cpp:1122) — **which living thing a node acts on when
  * `SELECT_TARGET` has not picked one.**
@@ -234,14 +256,36 @@ export const TARGET_PARTY = 6;
  * a single `damage_pc`, so a `DAMAGE` node that fires mid-fight spends one
  * luck roll in the C++ and up to six here.
  *
- * TODO(M8): the creature half. For `KILL_MONST`/`SEE_MONST`/the melee and
- * ranged triggers, and for `TARGET`/`USE_SPACE`/`HAIL` with a monster on the
- * square, the C++ returns the **creature** and `get_target_i` gives
- * `100 + slot` — which `damage_target` then hurts. `curTarget` is a PC index
- * here and cannot say that, so those modes still fall through to the party.
- * It is the same missing plumbing `AFFECT_SOUL_CRYSTAL` is waiting on.
+ * **The creature half** (boe.specials.cpp:4768). Seven of the trigger modes do
+ * not default to a PC at all: `KILL_MONST`, `SEE_MONST`, `MONST_SPEC_ABIL` and
+ * the four melee/ranged triggers take whatever is standing on the trigger
+ * square, and `TARGET`, `USE_SPACE` and `HAIL` take the **monster** there if
+ * there is one. `get_target_i` numbers a creature `100 + slot`
+ * (universe.cpp:1129), and nine of the AFFECT opcodes open with
+ * `if(pc_num >= 100) break;` — so for those modes the usual answer is *do
+ * nothing*, not *do it to everyone*.
+ *
+ * Falling through to the party instead is not a quiet difference: `AFFECT_XP`
+ * on a monster target is silent in the C++ and, here, ran `award_xp` over the
+ * whole party — which rolls.
  */
-export function defaultTarget(univ: Universe, session: GameSession): number {
+export function defaultTarget(
+  univ: Universe, session: GameSession, mode?: SpecCtx, where?: Location,
+): number {
+  if (mode !== undefined && where !== undefined) {
+    switch (mode) {
+      case SpecCtx.KILL_MONST: case SpecCtx.SEE_MONST: case SpecCtx.MONST_SPEC_ABIL:
+      case SpecCtx.ATTACKED_MELEE: case SpecCtx.ATTACKING_MELEE:
+      case SpecCtx.ATTACKED_RANGE: case SpecCtx.ATTACKING_RANGE:
+        // "The monster/PC on the trigger space is the target" — either kind.
+        return targetIndexAt(univ, where, false) ?? TARGET_PARTY;
+      case SpecCtx.TARGET: case SpecCtx.USE_SPACE: case SpecCtx.HAIL:
+        // A monster only; a PC standing there is not the target.
+        return targetIndexAt(univ, where, true) ?? TARGET_PARTY;
+      default:
+        break;
+    }
+  }
   // `is_legacy` is always false for the XML format this port reads.
   if (isCombat(session.mode)) return univ.curPc;
   if (!univ.party.isSplit()) return TARGET_PARTY;

@@ -257,6 +257,14 @@ stay byte-identical until — thousands of actions later — one of them raises 
 rule on its first run: fifteen items there against nine here, the six missing
 ones all six squares away on one square.
 
+**`BOE_TRACE_XP=1` prints every `award_xp` call and the state that decides
+whether it rolls**: `[xp] pc= amt= force= status= level=`. The function is
+silent when it refuses — a dead PC, a level over 49, more than 200 points
+without `force` — and its `get_ran(1,1,100)` is the only thing the draw stream
+sees, so "did it even get called?" is otherwise unanswerable. `grep force=1`
+answers the narrower question of whether a **special** handed out the
+experience, since `AFFECT_XP` is the only caller that forces.
+
 **`BOE_TRACE_CLEAR=1` (`CLEAR=1` here) prints every candidate
 `find_clear_spot` tries and which of its six tests turned it down**:
 `[clear] from(x,y) try(x,y) mode= off= blk= see= pc= party= unsafe= adj=`. The

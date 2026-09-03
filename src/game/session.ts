@@ -1843,9 +1843,10 @@ export class GameSession {
    */
   async runSpecial(
     mode: SpecCtx, type: SpecCtxType, node: number, where: Location,
+    seedTarget: number | null = null,
   ): Promise<{ blocked: boolean; forced: boolean }> {
     if (!this.specials || node < 0) return { blocked: false, forced: false };
-    const result = await this.specials.run(mode, type, node, where);
+    const result = await this.specials.run(mode, type, node, where, seedTarget);
     if (result.redraw) this.onRedraw?.();
     // Every C++ path that runs a chain returns through `handle_action`, whose
     // tail is `advance_time` — so a node that ends the scenario is acted on as

@@ -105,11 +105,26 @@ export class SpecialsEngine {
    * run_special. `startSpec` < 0 is a no-op. Returns the two values the caller
    * cares about — for movement, `a` means blocked and `b` means forced.
    */
+  /**
+   * `seedTarget` pins `ctx.cur_target` before the chain starts.
+   *
+   * **It exists because this port's chains are not synchronous.** The C++
+   * resolves the default target lazily, per node, out of the *live* game state
+   * — and `kill_monst` runs its chain **before** it writes
+   * `which_m.active = DEAD` (boe.specials.cpp:1623 against :1677), so a
+   * `KILL_MONST` special still finds the dying creature standing there and
+   * `get_target_i` numbers it `100 + slot`. This port launches the chain with
+   * `void session.runSpecial(...)`, so by the time it runs the creature is
+   * dead, `target_there` finds nothing and the default falls back to the whole
+   * party. That is the difference between `AFFECT_XP` doing nothing and
+   * `award_xp` running over four PCs, and `award_xp` rolls.
+   */
   async run(
     whichMode: SpecCtx,
     whichType: SpecCtxType,
     startSpec: number,
     specLoc: Location,
+    seedTarget: number | null = null,
   ): Promise<SpecialResult> {
     if (startSpec < 0) return { a: -1, b: -1, redraw: false };
 
@@ -141,7 +156,7 @@ export class SpecialsEngine {
       retA: -1,
       retB: -1,
       redraw: false,
-      curTarget: null,
+      curTarget: seedTarget,
       host: this.host,
       session: this.session,
     };

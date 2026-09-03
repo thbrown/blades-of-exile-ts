@@ -9791,3 +9791,46 @@ The M6 list below is kept for the history of what it covered:
     creature standing on (50,7) here and nowhere there refuses a step the C++
     takes, and a refused step charges no turn.
   - 1,086 tests green, `tsc` clean, `floating-promises` clean.
+
+- **`AFFECT_XP` is `award_xp`, the creature is the target, and a dying monster
+  is still standing there (M8, 2026-09-03).** Corpus **1,112,680 → 1,128,782** —
+  **+16,102** — and two more files fall out of the queue:
+  `ASR_20-05-2025_07-20-41` goes from 3,901 draws to **20,002** and
+  `ASR_10-05-2025_17-55-45` now matches **all 31,532** of the oracle's. Three
+  faults, and they had to be fixed together — the first two on their own cost
+  the corpus 2,119.
+  - **`AFFECT_XP` calls `award_xp`, it does not add a number.**
+    `award_xp` scales the amount by the PC's level bracket, may lose a point to
+    a `get_ran(1,1,100)` past level 7, and then **levels the PC up as far as it
+    takes them**, rolling `get_ran(1,2,6)` for health at each step
+    (boe.specials.cpp:2942). The `true` is `force`, which skips the "Oops! Too
+    much xp!" refusal — now modelled, since a scenario may hand out more than
+    200 and nothing else may.
+  - **Nine AFFECT opcodes open with `if(pc_num >= 100) break;`** — a special
+    whose target is a **monster** does nothing at all, rather than falling back
+    to the whole party. `targets()` could not say that: `pc_num == 6` and
+    `pc_num >= 100` both fail its `< 6` test and the C++ treats them oppositely.
+  - **`current_pc_picked_in_spec_enc`'s creature half** (boe.specials.cpp:4768),
+    a `TODO(M8)` since 2026-08-31. Seven trigger modes do not default to a PC:
+    `KILL_MONST`, `SEE_MONST`, `MONST_SPEC_ABIL` and the four melee/ranged
+    triggers take whatever stands on the trigger square, and `TARGET`,
+    `USE_SPACE` and `HAIL` take the **monster** there. `get_target_i` numbers a
+    creature `100 + slot`, which is exactly what the guard above refuses.
+  - **And the one that made it all work: a dying monster is still standing
+    there.** `kill_monst` runs its `KILL_MONST` chain at boe.specials.cpp:1623
+    and writes `which_m.active = DEAD` only at :1677, so the chain's default
+    target is the creature that just died. **This port's chains are queued, not
+    synchronous** — `void session.runSpecial(...)` — so by the time one runs the
+    creature is dead, `target_there` finds nothing, and the default falls all
+    the way back to the party. `runSpecial` now takes a `seedTarget` that
+    `killMonst` fills with `100 + slot`, pinning what the C++ resolves lazily.
+    - **This is the shape to expect wherever a chain is launched with `void`:**
+      the C++ reads live state at each node and this port reads it one turn of
+      the event loop later. Anything the launching function is about to change
+      has to be pinned at launch.
+  - **`BOE_TRACE_XP=1`** added to the harness: every `award_xp` call and the
+    state that decides whether it rolls. `grep force=1` answers "did a
+    *special* hand this out", since `AFFECT_XP` is the only forcing caller —
+    and its **absence** is what proved the C++ never reached the arm.
+  - 1,086 tests green, `tsc` clean, `floating-promises` clean,
+    `verify-screen.mjs` PASS.

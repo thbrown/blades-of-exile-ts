@@ -75,7 +75,7 @@ function partyStat(univ: Universe, skill: Skill, mode: number): number {
  * anything else out of 0..5 mean "everyone", which the callers read as -1.
  */
 function targetPc(univ: Universe, ctx: SpecialCtx): number {
-  const who = ctx.curTarget ?? defaultTarget(univ, ctx.session);
+  const who = ctx.curTarget ?? defaultTarget(univ, ctx.session, ctx.whichMode, ctx.specLoc);
   return who >= 0 && who < 6 ? who : -1;
 }
 

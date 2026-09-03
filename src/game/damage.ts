@@ -551,18 +551,27 @@ export function killMonst(
   if (univ.party.sdLegit(monst.spec1, monst.spec2)) {
     univ.party.setSdf(monst.spec1, monst.spec2, 1);
   }
+  // **The dying creature is still the chain's target.** `kill_monst` runs its
+  // specials at boe.specials.cpp:1623 and only writes
+  // `which_m.active = eCreatureStatus::DEAD` at :1677, so
+  // `current_pc_picked_in_spec_enc`'s `KILL_MONST` arm finds it alive on the
+  // trigger square and `get_target_i` numbers it `100 + slot`. This port's
+  // chains are queued, not synchronous, so by the time one runs the creature is
+  // dead — hence the seed, which pins what the C++ would have resolved.
+  const dying = univ.town ? univ.town.monsters.indexOf(monst) : -1;
+  const seed = dying >= 0 ? 100 + dying : null;
   if (monst.specialOnKill >= 0 && session) {
     // Fire and forget: the VM serialises chains through its own queue, which is
     // how the rest of this port launches a special from inside a sync path.
     void session.runSpecial(
-      SpecCtx.KILL_MONST, SpecCtxType.TOWN, monst.specialOnKill, monst.curLoc);
+      SpecCtx.KILL_MONST, SpecCtxType.TOWN, monst.specialOnKill, monst.curLoc, seed);
   }
   // A DEATH_TRIGGER ability runs a *scenario* special, where special_on_kill
   // above runs a town one.
   const trigger = monst.mon.abil[MonstAbil.DEATH_TRIGGER]!;
   if (trigger.active && session) {
     void session.runSpecial(
-      SpecCtx.KILL_MONST, SpecCtxType.SCEN, trigger.special.extra1, monst.curLoc);
+      SpecCtx.KILL_MONST, SpecCtxType.SCEN, trigger.special.extra1, monst.curLoc, seed);
   }
 
   // **Debug mode buys nothing** (boe.specials.cpp:1628 and :1643): no
@@ -655,14 +664,30 @@ const XP_PERCENT = [
  * award_xp (boe.party.cpp) — give one PC experience and level them up as far
  * as it takes them. Note the level-up loop can run more than once.
  */
-export function awardXp(univ: Universe, pcNum: number, amount: number): void {
+export function awardXp(
+  univ: Universe, pcNum: number, amount: number, force = false,
+): void {
   const pc = univ.party.pcs[pcNum];
   if (!pc) return;
   if (pc.level > 49) {
     pc.level = 50;
     return;
   }
-  if (amount < 0) return;
+  // **`force` skips the sanity check** (boe.party.cpp:323): more than 200
+  // experience at once is a bug everywhere it can come from *play*, and the
+  // C++ beeps, says "Oops! Too much xp! Report this!" and refuses. The one
+  // caller that passes `force` is the `AFFECT_XP` special, where a scenario
+  // means it.
+  if (!force && amount > 200) {
+    univ.addStringToBuf('Oops! Too much xp!');
+    univ.addStringToBuf('Report this!');
+    return;
+  }
+  if (amount < 0) {
+    univ.addStringToBuf('Oops! Negative xp!');
+    univ.addStringToBuf('Report this!');
+    return;
+  }
   if (!pc.isAlive) return;
 
   const bracket = XP_PERCENT[Math.min(Math.trunc(pc.level / 2), XP_PERCENT.length - 1)] ?? 15;

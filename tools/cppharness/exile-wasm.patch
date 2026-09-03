@@ -731,10 +731,25 @@ index 937c63d0..2fe1109b 100644
  		univ.party.out_c[num].direction =
  		set_direction(univ.party.out_c[num].m_loc, dest);
 diff --git a/src/game/boe.party.cpp b/src/game/boe.party.cpp
-index 8736b7ee..75223462 100644
+index 8736b7ee..62e18aab 100644
 --- a/src/game/boe.party.cpp
 +++ b/src/game/boe.party.cpp
-@@ -2036,6 +2036,9 @@ static bool pick_spell_select_led(cDialog& me, std::string id, eKeyMod mods, con
+@@ -332,6 +332,14 @@ void award_xp(short pc_num,short amt,bool force) {
+ 		ASB("Report this!");
+ 		return;
+ 	}
++	// BOE_TRACE_XP: one line per `award_xp` call and the state that decides
++	// whether it rolls. The function is silent when it refuses, and its
++	// `get_ran(1,1,100)` is the only thing the draw stream sees.
++	if(getenv("BOE_TRACE_XP"))
++		std::cout << "      [xp] pc=" << pc_num << " amt=" << amt
++			<< " force=" << int(force)
++			<< " status=" << int(univ.party[pc_num].main_status)
++			<< " level=" << univ.party[pc_num].level << std::endl;
+ 	if(univ.party[pc_num].main_status != eMainStatus::ALIVE)
+ 		return;
+ 	
+@@ -2036,6 +2044,9 @@ static bool pick_spell_select_led(cDialog& me, std::string id, eKeyMod mods, con
  }
  
  static bool finish_pick_spell(cDialog& me, bool spell_toast, const short store_store_target, const short& store_spell, const eSkill store_situation) {
@@ -744,7 +759,7 @@ index 8736b7ee..75223462 100644
  	if(spell_toast) {
  		store_spell_target = store_store_target ;
  		if(store_situation == eSkill::MAGE_SPELLS)
-@@ -2137,6 +2140,9 @@ eSpell pick_spell(short pc_num,const eSkill type, bool check_done) { // 70 - no
+@@ -2137,6 +2148,9 @@ eSpell pick_spell(short pc_num,const eSkill type, bool check_done) { // 70 - no
  	short dark = 6;
  	
  	pc_casting = type == eSkill::MAGE_SPELLS ? store_last_cast_mage : store_last_cast_priest;
