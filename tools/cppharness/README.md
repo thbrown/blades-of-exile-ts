@@ -257,6 +257,24 @@ stay byte-identical until — thousands of actions later — one of them raises 
 rule on its first run: fifteen items there against nine here, the six missing
 ones all six squares away on one square.
 
+**`BOE_TRACE_PRESET=1` prints the floor a town lays down when you walk in**:
+`[preset] town= presets= placed= taken={ … }`, then one line per item actually
+placed with its `is_special`, variety and square. The `taken=` set is the whole
+point — it is `is_item_taken` read back after the save has been applied, and it
+is what decides which presets are missing. An item on one engine's floor and
+not the other's is invisible until a `get_item` screen opens over it, which can
+be thousands of actions later and reads as a spurious dialog rather than as a
+missing item.
+
+It earned its keep immediately: town 6 of `VoDT_04-05-2025_15-47-42` prints
+`taken={ 0 1 2 3 23 27 }` where this port had read the same `ITEMTAKEN` string
+as `{15,19,39,40,41,42}` — the same six bits, mirrored. **The `.exg` format's
+bitsets are index-order, not boost's**, because the build that wrote every save
+in the corpus does not use boost: `src/compat/dynamic_bitset.hpp` is the wasm
+build's own reimplementation and its stream operators run
+`for(i = 0; i < size; ++i)`, so character *i* is bit *i*. Both conventions
+round-trip within one engine, which is why it hid.
+
 **`BOE_TRACE_PUSH=1` prints every `push_things` call and every conveyor test
 it makes**: `[push] call mode= belt= combat= town= age=`, then `[push] pcN at
 (x,y) ter=`, `[push]   check (x,y) w= u d l r v2=` and `[push] pcN (x,y) ->

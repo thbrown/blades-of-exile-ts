@@ -4885,10 +4885,18 @@ export class GameSession {
    * The preset-item half of start_town_mode (boe.town.cpp:370). Items the
    * party has already taken stay gone unless the preset says "always there".
    *
-   * TODO(M6): store_item_rects restores player-dropped stock.
+   * **The stash goes down first.** A town named in the scenario's
+   * `store_item_rects` starts from `univ.party.stored_items[town_number]`
+   * rather than from an empty list (boe.town.cpp:384), and the presets are
+   * appended after — so the order of `univ.town.items` is stash-then-presets,
+   * which is the order the get-items screen builds its rows in and therefore
+   * the order a recording's `itemN-key` names.
    */
   private placePresetItems(town: CurTown): void {
-    town.items = [];
+    const townNum = this.univ.party.townNum;
+    town.items = this.univ.scenario.storeItemRects.has(townNum)
+      ? (this.univ.party.storedItems.get(townNum) ?? []).map((it) => ({ ...it }))
+      : [];
     const presets = town.record.presetItems;
     for (let i = 0; i < presets.length; i++) {
       const preset = presets[i]!;
@@ -5117,6 +5125,19 @@ export class GameSession {
     const { party } = this.univ;
 
     this.saveTownPopulation();
+
+    // The storage rectangle: everything real and non-special left inside it is
+    // remembered (boe.town.cpp:578). `is_special == 0` is the whole filter —
+    // a preset special item dropped in the stash is *not* kept, because
+    // `start_town_mode` would place it again from the preset list.
+    const rect = this.univ.scenario.storeItemRects.get(party.townNum);
+    if (rect) {
+      party.storedItems.set(party.townNum, town.items
+        .filter((it) => it.variety !== ItemType.NO_ITEM && it.isSpecial === 0
+          && it.itemLoc.x >= rect.left && it.itemLoc.x <= rect.right
+          && it.itemLoc.y >= rect.top && it.itemLoc.y <= rect.bottom)
+        .map((it) => ({ ...it })));
+    }
 
     // Persist what the party mapped, so re-entering keeps it.
     for (let x = 0; x < town.record.maxDim; x++)

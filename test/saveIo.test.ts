@@ -510,3 +510,54 @@ describe('the save preview', () => {
     expect(() => readSavePreview(new Uint8Array(1024))).toThrow(/save\/party.txt/);
   });
 });
+
+describe("the .exg format's bitsets", () => {
+  // The town maps, the outdoor maps and ITEMTAKEN are all `dynamic_bitset`s,
+  // and the build that wrote every save in the replay corpus does **not** use
+  // boost: `src/compat/dynamic_bitset.hpp` streams `for(i = 0; i < size; ++i)`,
+  // so character *i* is bit *i*. boost's own operators are the other way round
+  // — most significant first — and this port used to follow them, which
+  // mirrored every bitset in a save the oracle had written.
+  //
+  // Both conventions round-trip within one engine, so a round-trip test cannot
+  // see this. These pin the *bytes*.
+  it('writes ITEMTAKEN in index order, lowest preset first', async () => {
+    const univ = (await newGame()).univ;
+    const town = univ.scenario.towns[6]!;
+    town.itemTaken = new Array<boolean>(8).fill(false);
+    town.itemTaken[0] = true;
+    town.itemTaken[1] = true;
+    town.itemTaken[5] = true;
+    const text = openSave(saveGame(univ)).text('save/scenario.txt') ?? '';
+    expect(text).toContain('ITEMTAKEN 6 11000100');
+  });
+
+  it('reads back the oracle\'s own string for VoDT town 6', async () => {
+    // Taken verbatim from `VoDT_04-05-2025_15-47-42`'s save, and the set below
+    // is what `BOE_TRACE_PRESET=1` prints on the oracle for that town.
+    const univ = (await newGame()).univ;
+    const town = univ.scenario.towns[6]!;
+    town.itemTaken = new Array<boolean>(43).fill(false);
+    for (const n of [0, 1, 2, 3, 23, 27]) town.itemTaken[n] = true;
+    const text = openSave(saveGame(univ)).text('save/scenario.txt') ?? '';
+    expect(text).toContain(
+      'ITEMTAKEN 6 1111000000000000000000010001000000000000000');
+  });
+
+  it('keeps a town map the right way round', async () => {
+    const univ = (await newGame()).univ;
+    const town = univ.scenario.towns[0]!;
+    for (let x = 0; x < town.maxDim; x++)
+      for (let y = 0; y < town.maxDim; y++) town.maps[x]![y] = 0;
+    // A single explored square near the left edge: mirrored, it would come
+    // back near the right one.
+    town.maps[1]![2] = 1;
+    const back = roundTrip(univ);
+    const backTown = back.scenario.towns[0]!;
+    expect(backTown.maps[1]![2]).toBe(1);
+    expect(backTown.maps[town.maxDim - 2]![2]).toBe(0);
+    const line = (openSave(saveGame(univ)).text('save/townmaps.dat') ?? '')
+      .split('\n')[2] ?? '';
+    expect(line.indexOf('1')).toBe(1);
+  });
+});

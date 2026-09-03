@@ -9564,3 +9564,50 @@ The M6 list below is kept for the history of what it covered:
     the right change and it is a structural one — every `if (!town) return`
     has to be re-read against `is_town()` first.
   - 1,082 tests green, `tsc` clean, `floating-promises` clean.
+
+- **The `.exg` format's bitsets are index-order, not boost's — this port had
+  every one of them mirrored (M8, 2026-09-03).** Corpus **1,079,542 →
+  1,079,618**, 38 of 87 files agree all the way. The number is small and the
+  bug is not: **three things ride on this codec** — the town maps, the outdoor
+  maps and `ITEMTAKEN` — so a game loaded from a save the oracle wrote came
+  back with its explored map flipped left-for-right and the wrong preset items
+  remembered as taken.
+  - `boost::dynamic_bitset`'s stream operators are most-significant-bit first:
+    `to_string()` prints bit `size()-1` leftmost, the way a binary number is
+    written. This port followed that. **The build that wrote every save in the
+    corpus does not use boost.** `src/compat/dynamic_bitset.hpp` is the wasm
+    build's own reimplementation and its operators run
+    `for(i = 0; i < size; ++i) os << bitset[i]` out and `bitset[i] = str[i]`
+    back, so **character *i* is bit *i***.
+  - **Both conventions round-trip within one engine, which is exactly why this
+    hid for two milestones.** This port's own saves reloaded perfectly; only the
+    oracle's came back mirrored, and a mirrored *explored map* is invisible
+    until something reads it — `can_draw`, `party_can_see`, the lighting.
+  - **How it was found, because the route is reusable.** `VoDT_04-05-2025_15-47-42`
+    parted at draw 10,909 with the port's clock one turn behind. `align-actions
+    --clocks` put the split on a `handle_get_items` whose screen the port never
+    opened; a print showed nothing in reach; `BOE_TRACE_GI=1` on the oracle
+    showed exactly which items were on the floor; and those were presets this
+    port had skipped as already taken. The last step needed a new instrument.
+  - **`BOE_TRACE_PRESET=1`** is that instrument, added to the harness patch: one
+    line per preset a town lays down, plus the `is_item_taken` set it filtered
+    them through. Town 6 prints `taken={ 0 1 2 3 23 27 }` where this port read
+    the same string as `{15,19,39,40,41,42}` — the same six bits, mirrored, and
+    the answer in one line.
+  - **This changes what this port's own older saves mean.** They were written
+    mirrored and are now read straight, so a save made before today comes back
+    with a mirrored map. That is the right way round: agreeing with the format's
+    only other implementation matters more than agreeing with this port's past
+    self.
+  - Three tests pin the **bytes** rather than the round trip, since a round trip
+    cannot see this at all — including the oracle's own 43-character string for
+    VoDT town 6.
+  - **Also landed here: `stored_items`**, which was a `TODO(M6)` and is a real
+    mechanic — a scenario names a storage rectangle per town
+    (`store_item_rects`, already parsed and never used), `end_town_mode` sweeps
+    everything non-special inside it into `party.stored_items[town]`, and
+    `start_town_mode` puts it back **before** the presets, which is the order
+    the get-items screen builds its rows in. It is how a scenario gives the
+    party a stash.
+  - 1,085 tests green, `tsc` clean, `floating-promises` clean,
+    `verify-screen.mjs` PASS.

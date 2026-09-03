@@ -78,6 +78,15 @@ export class Party {
    * (`cPlayer::cPlayer(cParty&,ePartyPreset,short)` sets `slot + 1000` and
    * pushes this past it). Saved as `NEXTID`.
    */
+  /**
+   * `cParty::stored_items` (party.hpp) — what the party left lying inside a
+   * town's **storage rectangle**, keyed by town number. A scenario declares one
+   * per town with `<store_item_rect>`; `end_town_mode` sweeps everything inside
+   * it into here, and `start_town_mode` puts it back before the presets go
+   * down. It is how a scenario gives the party a stash: drop your spare armour
+   * on the marked floor and it is still there when you come back.
+   */
+  storedItems = new Map<number, import('../data/item').Item[]>();
   nextPcId = 1000;
   gold = 200;
   food = 100;

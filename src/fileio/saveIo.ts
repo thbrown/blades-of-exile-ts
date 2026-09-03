@@ -1142,16 +1142,45 @@ export function readCurOut(text: string, out: CurOut): void {
  * each line reads right to left. Its `maps[y]` is indexed by x; this port's
  * `maps[x][y]` is the transpose, hence the swap here.
  */
+/**
+ * A `dynamic_bitset` as the `.exg` format holds one — **index order, not
+ * boost's**.
+ *
+ * `boost::dynamic_bitset`'s stream operators are most-significant-bit first:
+ * `to_string()` prints bit `size()-1` leftmost, the way a binary number is
+ * written. This port copied that, and it is wrong for every save the corpus
+ * contains, because **the build those saves came from does not use boost**.
+ * `src/compat/dynamic_bitset.hpp` is the wasm build's own reimplementation and
+ * its operators run the other way — `for(i = 0; i < size; ++i) os << bitset[i]`
+ * on the way out and `bitset[i] = str[i]` on the way back — so character *i* is
+ * bit *i*.
+ *
+ * Both conventions round-trip within one engine, which is exactly why this hid:
+ * this port's own saves reloaded perfectly and only the oracle's came back
+ * mirrored. Three things ride on it — the town maps, the outdoor maps and
+ * `ITEMTAKEN` — so a loaded game had its explored map flipped left-for-right
+ * and remembered the wrong preset items as taken.
+ *
+ * Found from `VoDT_04-05-2025_15-47-42`: town 6's `ITEMTAKEN` reads
+ * `{15,19,39,40,41,42}` mirrored and `{0,1,2,3,23,27}` the C++'s way, and
+ * `BOE_TRACE_PRESET` on the oracle prints the second.
+ *
+ * **This changes what this port's *own* older saves mean.** They were written
+ * mirrored and will now be read straight; a save made before 2026-09-03 comes
+ * back with a mirrored map. That is the right way round: agreeing with the
+ * format's only other implementation matters more than agreeing with this
+ * port's past self.
+ */
 function writeBitset(bit: (i: number) => boolean, dim: number): string {
   let out = '';
-  for (let i = dim - 1; i >= 0; i--) out += bit(i) ? '1' : '0';
+  for (let i = 0; i < dim; i++) out += bit(i) ? '1' : '0';
   return out;
 }
 
 function readBitset(line: string, dim: number, set: (i: number, on: boolean) => void): void {
   const trimmed = line.trim();
   for (let i = 0; i < dim && i < trimmed.length; i++) {
-    set(dim - 1 - i, trimmed[i] === '1');
+    set(i, trimmed[i] === '1');
   }
 }
 

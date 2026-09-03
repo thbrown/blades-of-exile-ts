@@ -866,7 +866,7 @@ index 56cde7c1..9abbdca0 100644
  		int total = EM_ASM_INT({ return Module.audioTotalCount || 0; });
  		if (loaded >= total && total > 0) {
 diff --git a/src/game/boe.town.cpp b/src/game/boe.town.cpp
-index 9c959f85..7ab623eb 100644
+index 9c959f85..725ea450 100644
 --- a/src/game/boe.town.cpp
 +++ b/src/game/boe.town.cpp
 @@ -248,6 +248,16 @@ void start_town_mode(short which_town, short entry_dir, bool debug_enter) {
@@ -886,7 +886,33 @@ index 9c959f85..7ab623eb 100644
  	if(!monsters_loaded) {
  		univ.town.monst.clear();
  		std::cout << "start_town_mode: loading " << univ.town->creatures.size() << " creatures" << std::endl;
-@@ -1183,6 +1193,15 @@ void pick_lock(location where,short pc_num) {
+@@ -433,6 +443,25 @@ void start_town_mode(short which_town, short entry_dir, bool debug_enter) {
+ 		}
+ 	
+ 	
++	// BOE_TRACE_PRESET=1 — one line per preset item the town lays down, plus
++	// the taken bitset it filtered them through. An item that is on one side's
++	// floor and not the other's is otherwise invisible until a `get_item`
++	// screen opens on it, hundreds of actions later.
++	if(getenv("BOE_TRACE_PRESET")) {
++		std::ostringstream taken;
++		for(size_t t = 0; t < 200; t++)
++			if(univ.town->is_item_taken(t)) taken << " " << t;
++		std::cout << "      [preset] town=" << town_number
++			<< " presets=" << univ.town->preset_items.size()
++			<< " placed=" << univ.town.items.size()
++			<< " taken={" << taken.str() << " }" << std::endl;
++		for(size_t t = 0; t < univ.town.items.size(); t++)
++			std::cout << "      [preset] " << t << " spec=" << univ.town.items[t].is_special
++				<< " var=" << int(univ.town.items[t].variety)
++				<< " @" << univ.town.items[t].item_loc.x << "," << univ.town.items[t].item_loc.y
++				<< std::endl;
++	}
++
+ 	for(auto& monst : univ.town.monst)
+ 		if(loc_off_act_area(monst.cur_loc))
+ 			monst.active = eCreatureStatus::DEAD;
+@@ -1183,6 +1212,15 @@ void pick_lock(location where,short pc_num) {
  	if(univ.party[pc_num].has_abil_equip(eItemAbil::THIEVING))
  		r1 = r1 - 12;
  	unlock_adjust = univ.scenario.ter_types[terrain].flag2;
