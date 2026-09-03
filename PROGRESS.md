@@ -9469,3 +9469,46 @@ The M6 list below is kept for the history of what it covered:
     having crashed simply ends.
   - 1,080 tests green (18 new in `test/createPc.test.ts`), `tsc` clean,
     `floating-promises` clean.
+
+- **`cancel_when_empty` defaults to *false*, and this port had it the other way
+  round (M8, 2026-09-02).** Corpus-neutral (**1,079,542** either side, 37 of 87)
+  and a real rules cluster, found from a null dereference rather than from the
+  draw stream. Four things, all in `start_shop_mode`'s neighbourhood:
+  - **An empty shop still opens.** `start_shop_mode`'s fourth argument defaults
+    to false (boe.dlgutil.hpp:8), and only two of its four callers pass true —
+    the talk SHOP node and `start_shop_mode_other_pc`'s per-PC sweep. A
+    scenario's `ENTER_SHOP` opcode passes three arguments
+    (boe.specials.cpp:2504), so a scripted shop with nothing to sell **puts the
+    counter on screen anyway** and waits for Done. This port refused every
+    empty shop, always — and a refusal is not free: the mode stays where it
+    was, `store_pre_shop_mode` keeps whatever a much earlier shop left in it,
+    and the `end_shop_mode` the recording plays next then sets the mode from
+    that stale value. `VoDT_06-04-2025_18-20-44` walks into an **outdoor**
+    healer and comes out in `MODE_TOWN` with no town loaded, which is a null
+    dereference two actions later.
+  - **`ENTER_SHOP` has no "try another PC" fallback**, which both hosts had
+    invented. It is one call to `start_shop_mode` and nothing else.
+  - **`store_cur_pc`** (boe.dlgutil.cpp:136) was missing entirely. A healer
+    walks `univ.cur_pc` down the party looking for someone who needs the
+    service, and `end_shop_mode` puts it back to whoever was active when
+    shopping began — recorded on the *first* sweep only, since the shop may
+    walk the party more than once. Without it the player leaves the counter as
+    whichever PC the healer last landed on, and `handle_equip_item` and its
+    siblings then work out of the wrong pack.
+  - **The healer's move-on is not an `end_shop_mode`.** `handle_sale` ends
+    `if(shop_array.empty()) start_shop_mode_other_pc(true, true);` (:505) — with
+    `already_started`, so `store_pre_shop_mode` is left alone, and with
+    `allow_empty`, so a counter nobody can buy from stays open on the PC who
+    opened it. This port closed the shop and reopened it, which restored
+    `cur_pc`, rewrote the pre-shop mode and banked the limited stock twice.
+  - Two shop tests encoded the old rule and now encode the new one; two more
+    cover the default-open and the `store_cur_pc` restore.
+  - **Open lead left behind.** `VoDT_06-04-2025_18-20-44` still crashes at the
+    same place, and now for a different reason: the outdoor special at (80,29)
+    shows **one** dialog here and **two** in the C++, so the recording's `btn2`
+    falls through to the driver as a top-level click and the shop is never
+    entered at all. The oracle dies in this file at action 471 where this port
+    reaches 507, so it is worth nothing to the corpus — but the null
+    dereference in `townMoveParty` is deliberately **not** guarded, because it
+    is the only thing currently pointing at that chain.
+  - 1,082 tests green, `tsc` clean, `floating-promises` clean.

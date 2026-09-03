@@ -3004,8 +3004,12 @@ export class GameSession {
     this.preTalkMode = this.mode;
     this.mode = GameMode.TALKING;
     this.talk = new TalkState(this.univ, monsterIndex, personality, monsterType, facePic);
+    // A talk SHOP node asks for `cancel_when_empty` (boe.dlgutil.cpp:1000) and
+    // then tries the rest of the party; only when nobody can buy does the node
+    // fall through to its "nothing available" line.
     this.talk.onShop = (shopNum, costAdj, name) =>
-      this.startShopMode(shopNum, costAdj, name) || this.startShopModeAnyPc(shopNum, costAdj, name);
+      this.startShopMode(shopNum, costAdj, name, true)
+      || this.startShopModeAnyPc(shopNum, costAdj, name);
     this.talk.onItemShop = (mode, a, b, c) => this.startItemShop(mode, a, b, c);
     this.talk.onTrain = () => this.onTrain?.();
     this.talk.onJobBank = (which, title) => this.onJobBank?.(which, title, personality);
@@ -3049,7 +3053,28 @@ export class GameSession {
    * nothing the current PC can use, which is how the caller knows to try
    * another PC or print "There is nothing available to buy."
    */
-  startShopMode(which: number, costAdj: number, storeName: string): boolean {
+  /**
+   * `start_shop_mode` (boe.dlgutil.cpp:160).
+   *
+   * **`cancel_when_empty` defaults to false**, and this port had it wired the
+   * other way round: it refused any shop whose list came out empty, always.
+   * Only two of the four callers ask for that — the talk SHOP node and
+   * `start_shop_mode_other_pc`'s per-PC sweep. A scenario's `ENTER_SHOP`
+   * opcode passes three arguments and gets the default, so **an empty shop
+   * still opens**: the player is put in front of a counter with nothing on it
+   * and has to press Done. Refusing instead left the game in whatever mode it
+   * was in with a stale `store_pre_shop_mode` behind it, and the recorded
+   * `end_shop_mode` that followed then teleported the mode to a town the party
+   * was nowhere near — `VoDT_06-04-2025_18-20-44` walked into an outdoor
+   * healer and came out in `MODE_TOWN` with no town loaded.
+   *
+   * `already_started` keeps `store_pre_shop_mode` where it is, for the calls
+   * that re-enter a shop that is already open.
+   */
+  startShopMode(
+    which: number, costAdj: number, storeName: string,
+    cancelWhenEmpty = false, alreadyStarted = false,
+  ): boolean {
     const scenShop = this.univ.scenario.shops[which];
     if (!scenShop) {
       this.univ.addStringToBuf('The scenario tried to place you in a nonexistent shop!');
@@ -3075,32 +3100,56 @@ export class GameSession {
     }
 
     const state = new ShopState(this.univ, which, shop);
-    if (state.visible.length === 0) return false;
+    if (state.visible.length === 0 && cancelWhenEmpty) return false;
 
-    this.preShopMode = this.mode;
+    if (!alreadyStarted) this.preShopMode = this.mode;
     this.mode = GameMode.SHOPPING;
     this.shop = state;
     return true;
   }
 
   /**
+   * `store_cur_pc` (boe.dlgutil.cpp:136) — who was active when shopping began.
+   * A healer walks `univ.cur_pc` down the party looking for someone who needs
+   * the service, so without this the PC the player left the counter with is
+   * whoever the shop last landed on. -1 means "not shopping".
+   */
+  private storeCurPc = -1;
+
+  /**
    * start_shop_mode_other_pc (boe.dlgutil.cpp:132) — a healer with nothing for
    * the active PC may still have something for someone else, so try each in
    * turn and leave the first who can buy as the active PC.
    */
-  startShopModeAnyPc(which: number, costAdj: number, storeName: string): boolean {
-    const wasPc = this.univ.curPc;
+  startShopModeAnyPc(
+    which: number, costAdj: number, storeName: string,
+    allowEmpty = false, alreadyStarted = false,
+  ): boolean {
+    // `if(store_cur_pc == -1) store_cur_pc = univ.cur_pc;` — only the *first*
+    // sweep records it, because the shop may walk the party more than once
+    // and it is the PC from before any of that who should come back.
+    if (this.storeCurPc === -1) this.storeCurPc = this.univ.curPc;
+    const pcBuying = this.univ.curPc;
     for (let i = 0; i < this.univ.party.pcs.length; i++) {
       if (this.univ.party.pcs[i]!.mainStatus === MainStatus.ABSENT) continue;
       this.univ.curPc = i;
-      if (this.startShopMode(which, costAdj, storeName)) return true;
+      if (this.startShopMode(which, costAdj, storeName, true, alreadyStarted)) return true;
     }
-    this.univ.curPc = wasPc;
+    // "if no one can buy anything but we want to leave an empty shop, we can
+    // leave the PC selection where it is" (boe.dlgutil.cpp:139).
+    if (allowEmpty) {
+      this.univ.curPc = pcBuying;
+      this.startShopMode(which, costAdj, storeName, false, alreadyStarted);
+    } else this.univ.curPc = pcBuying;
     return false;
   }
 
   /** end_shop_mode (boe.dlgutil.cpp:227). */
   endShopMode(): void {
+    if (this.storeCurPc >= 0) {
+      this.univ.curPc = this.storeCurPc;
+      this.storeCurPc = -1;
+    }
     this.shop = null;
     this.mode = this.preShopMode === GameMode.TALK_TOWN ? GameMode.TOWN : this.preShopMode;
     if (this.mode === GameMode.TALKING && this.talk) {
@@ -3130,11 +3179,14 @@ export class GameSession {
     if (!state) return;
     handleSale(this.univ, state, index, this.sound);
     this.recordShopStock(state);
-    // A healer whose list just emptied moves on to the next PC who needs help.
-    if (state.visible.length === 0) {
-      const { shopNum, costAdj, name } = state;
-      this.endShopMode();
-      if (shopNum >= 0) this.startShopModeAnyPc(shopNum, costAdj, name);
+    // A healer whose list just emptied moves on to the next PC who needs help
+    // — `if(shop_array.empty()) start_shop_mode_other_pc(true, true);`
+    // (boe.dlgutil.cpp:505). **Not through `end_shop_mode`**, which is what
+    // this used to do: that restores `cur_pc`, rewrites `store_pre_shop_mode`
+    // and banks the limited stock a second time, none of which the C++ does
+    // between two sales at the same counter.
+    if (state.visible.length === 0 && state.shopNum >= 0) {
+      this.startShopModeAnyPc(state.shopNum, state.costAdj, state.name, true, true);
     }
   }
 

@@ -250,12 +250,24 @@ describe('shop mode', () => {
     }
   });
 
-  it('refuses to open a shop with nothing on offer', async () => {
+  it('refuses a shop with nothing on offer only when asked to', async () => {
     const { session } = newGame();
     const empty = scen.shops.findIndex((s) => s.numItems() === 0);
-    expect(session.startShopMode(empty, 2, 'Unused')).toBe(false);
+    expect(session.startShopMode(empty, 2, 'Unused', true)).toBe(false);
     expect(session.mode).toBe(GameMode.TOWN);
     expect(session.shop).toBeNull();
+  });
+
+  it('opens an empty shop by default, which is what a scenario node gets', async () => {
+    // `cancel_when_empty` defaults to **false** (boe.dlgutil.hpp:8), and
+    // `ENTER_SHOP` passes three arguments — so a scripted shop with nothing to
+    // sell still puts the counter on screen and waits for Done. Only the talk
+    // SHOP node and `start_shop_mode_other_pc`'s sweep ask for the refusal.
+    const { session } = newGame();
+    const empty = scen.shops.findIndex((s) => s.numItems() === 0);
+    expect(session.startShopMode(empty, 2, 'Unused')).toBe(true);
+    expect(session.mode).toBe(GameMode.SHOPPING);
+    expect(session.shop?.visible).toEqual([]);
   });
 
   it('reports a shop that does not exist', async () => {
@@ -270,9 +282,25 @@ describe('shop mode', () => {
     const healerIndex = scen.shops.findIndex((s) => s.prompt === ShopPrompt.HEALING);
     univ.curPc = 0;
     univ.party.pcs[3]!.curHealth = 1;
-    expect(session.startShopMode(healerIndex, 2, 'Healing')).toBe(false);
+    expect(session.startShopMode(healerIndex, 2, 'Healing', true)).toBe(false);
     expect(session.startShopModeAnyPc(healerIndex, 2, 'Healing')).toBe(true);
     expect(univ.curPc).toBe(3);
+    // `store_cur_pc`: closing the counter puts the player back on the PC they
+    // walked in with, not on whoever the healer walked to.
+    session.endShopMode();
+    expect(univ.curPc).toBe(0);
+  });
+
+  it('leaves an empty healer open on the PC who opened it', async () => {
+    // `start_shop_mode_other_pc(true, …)`: nobody needs healing, so the sweep
+    // finds no buyer — and `allow_empty` then re-opens it for the PC who was
+    // standing there rather than leaving the party on PC 5.
+    const { univ, session } = newGame();
+    const healerIndex = scen.shops.findIndex((s) => s.prompt === ShopPrompt.HEALING);
+    univ.curPc = 2;
+    expect(session.startShopModeAnyPc(healerIndex, 2, 'Healing', true)).toBe(false);
+    expect(session.mode).toBe(GameMode.SHOPPING);
+    expect(univ.curPc).toBe(2);
   });
 
   it('returns to town mode when the shop closes', async () => {

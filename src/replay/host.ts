@@ -269,9 +269,12 @@ export function makeReplayHost(
 
     // The rest are not dialogs at all: they change state and the recording's
     // following actions act on the result, exactly as in the live game.
+    // `ENTER_SHOP` is `start_shop_mode(ex1a, ex1b, str1)` and nothing else
+    // (boe.specials.cpp:2504) — three arguments, so `cancel_when_empty` takes
+    // its default of false and the shop opens whether or not it has anything
+    // to sell. The `|| startShopModeAnyPc` fallback here was an invention.
     startShop: (which: number, costAdj: number, name: string): boolean =>
-      session.startShopMode(which, costAdj, name)
-      || session.startShopModeAnyPc(which, costAdj, name),
+      session.startShopMode(which, costAdj, name),
     startTalk: (monsterIndex: number, personality: number,
       monsterType: number, pic: number): void => {
       session.startTalkMode(monsterIndex, personality, monsterType, pic);

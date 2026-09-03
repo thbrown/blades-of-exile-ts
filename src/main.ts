@@ -524,9 +524,9 @@ async function main(): Promise<void> {
     askText: (prompt) => askForText(prompt),
     selectPc: askSelectPc,
     getNumOfItems,
+    // `start_shop_mode(ex1a, ex1b, str1)` — see the note in `replay/host.ts`.
     startShop: (which, costAdj, shopName) =>
-      session.startShopMode(which, costAdj, shopName)
-      || session.startShopModeAnyPc(which, costAdj, shopName),
+      session.startShopMode(which, costAdj, shopName),
     startTalk: (monsterIndex, personality, monsterType, pic) =>
       session.startTalkMode(monsterIndex, personality, monsterType, pic),
     sound: (which) => sound.play(which),
