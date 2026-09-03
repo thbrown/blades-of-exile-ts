@@ -25,6 +25,19 @@ import type { GameSession } from './session';
  * Returns `{x: 0, y: 0}` when nothing was found — the C++ leaves `store_loc`
  * default-constructed and its callers test `x > 0`.
  */
+/**
+ * `CLEAR=1` — every candidate `find_clear_spot` tries and which of its six
+ * tests turned it down, the pair to the harness's `BOE_TRACE_CLEAR=1`. Read
+ * once at module load and guarded on `process` existing, as `TRACE_MMOVE` is
+ * and for the same reason.
+ *
+ * The loop spends **two draws per try** and ends the moment one is accepted,
+ * so a single disagreement about a single rejection shifts every draw after it
+ * — and nothing else in the stream says which of the six tests disagreed.
+ */
+export const TRACE_CLEAR = Boolean(
+  typeof process !== 'undefined' ? process.env?.CLEAR : undefined);
+
 export function findClearSpot(
   session: GameSession, fromWhere: Location, mode: number,
 ): Location {
@@ -35,6 +48,21 @@ export function findClearSpot(
       x: fromWhere.x + rng.getRan(1, -2, 2),
       y: fromWhere.y + rng.getRan(1, -2, 2),
     };
+    if (TRACE_CLEAR) {
+      const adj = Math.abs(loc.x - fromWhere.x) <= 1 && Math.abs(loc.y - fromWhere.y) <= 1;
+      // eslint-disable-next-line no-console
+      console.log(`      [clear] from(${fromWhere.x},${fromWhere.y}) `
+        + `try(${loc.x},${loc.y}) mode=${mode}`
+        + ` off=${Number(session.locOffActiveArea(loc))}`
+        + ` blk=${Number(session.isBlocked(loc))}`
+        + ` see=${session.canSeeLight(fromWhere, loc, session.combatObscurity)}`
+        + ` pc=${Number(session.mode === GameMode.COMBAT
+          && session.univ.party.pcs.some((pc) => pc.isAlive && locsEqual(pc.combatPos, loc)))}`
+        + ` party=${Number(session.inTown && loc.x === session.univ.party.townLoc.x
+          && loc.y === session.univ.party.townLoc.y)}`
+        + ` unsafe=${Number(session.univ.town?.isSummonSafe(loc.x, loc.y) ?? false)}`
+        + ` adj=${Number(adj)}`);
+    }
     if (session.locOffActiveArea(loc)) continue;
     if (session.isBlocked(loc)) continue;
     // combat_obscurity, as the C++ passes (boe.monster.cpp:745): a creature

@@ -9734,3 +9734,35 @@ The M6 list below is kept for the history of what it covered:
     The instrument that answered it in one line was a print of
     `isBlocked`/`specialAt`/`monsterAt` at the top of `townMoveParty`; worth
     re-adding rather than re-deriving.
+
+- **`SUMMON_HOST` rolls one duration for the whole host, and the `summon1`
+  bucket is closed (M8, 2026-09-03).** Corpus **1,092,580 → 1,112,680** —
+  **+20,100 matching draws** — and `ASR_20-05-2025_07-20-41` goes from parting
+  at draw 2,263 to 3,901.
+  - `x = get_ran(3,1,4) + 1` sits **above** the summons (boe.combat.cpp:3779),
+    and all five creatures — the leader (126) and up to four of 125 — are given
+    that same duration. This port rolled it per creature through its `summon1`
+    helper, which is **five draws where the C++ makes one**, and dropped the
+    `+ 1` besides.
+  - The other four monster summon arms are per-creature and were already right:
+    `SUMMON_SPIRIT`/`SUMMON_GUARDIAN` roll once for their one creature, and
+    `STICKS_TO_SNAKES` rolls `get_ran(1,0,7)` then `get_ran(3,1,4)` inside its
+    loop. It is only the host that hoists.
+  - **This was the `find_clear_spot` lead, open since 2026-09-02, and it was
+    never in `find_clear_spot`.** The 2026-09-02 note had narrowed it to "the
+    C++ rejects the caster's four free neighbours" and pointed at field
+    placement. The new instrument shows the opposite: **the candidate lists are
+    identical for 22 tries**, including the accepted one, and the C++ simply
+    has three more tries afterwards — which is not a rejection at all, it is a
+    *later call* starting from a different point in the stream. The four extra
+    `get_ran(3,1,4)` were upstream of all of it.
+  - **`BOE_TRACE_CLEAR=1` / `CLEAR=1`** is the pair of traces that showed it,
+    added to the harness patch and to `monsterPlace.ts`: every candidate and
+    which of the six tests turned it down. The reading rule is in the README
+    and is the part worth keeping — *if the candidate lists agree and one side
+    simply has more tries, the disagreement is not in `find_clear_spot`; it is
+    in what the caller drew before it.*
+  - It also explains the file's clock divergence, which looked separate: a
+    creature standing on (50,7) here and nowhere there refuses a step the C++
+    takes, and a refused step charges no turn.
+  - 1,086 tests green, `tsc` clean, `floating-promises` clean.

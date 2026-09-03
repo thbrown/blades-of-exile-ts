@@ -585,7 +585,7 @@ index b19e0983..b8483243 100644
  #endif
  #ifdef __APPLE__
 diff --git a/src/game/boe.monster.cpp b/src/game/boe.monster.cpp
-index 937c63d0..ebe66893 100644
+index 937c63d0..2fe1109b 100644
 --- a/src/game/boe.monster.cpp
 +++ b/src/game/boe.monster.cpp
 @@ -194,6 +194,10 @@ void do_monsters() {
@@ -694,7 +694,28 @@ index 937c63d0..ebe66893 100644
  }
  
  bool combat_move_monster(short which,location destination) {
-@@ -765,7 +814,13 @@ location random_shift(location start) {
+@@ -741,6 +790,20 @@ location find_clear_spot(location from_where,short mode) {
+ 		loc.x = loc.x + r1;
+ 		r1 = get_ran(1,-2,2);
+ 		loc.y = loc.y + r1;
++		// BOE_TRACE_CLEAR: every candidate `find_clear_spot` tries and which of
++		// its six tests turned it down. The rolls are two per try, so a
++		// disagreement about *one* rejection shifts every draw after it — and
++		// nothing else in the stream says which test disagreed.
++		if(getenv("BOE_TRACE_CLEAR"))
++			std::cout << "      [clear] from(" << from_where.x << "," << from_where.y
++				<< ") try(" << loc.x << "," << loc.y << ") mode=" << mode
++				<< " off=" << int(loc_off_act_area(loc))
++				<< " blk=" << int(is_blocked(loc))
++				<< " see=" << int(can_see_light(from_where,loc,combat_obscurity))
++				<< " pc=" << int(is_combat() && univ.target_there(loc,TARG_PC) != nullptr)
++				<< " party=" << int(is_town() && loc == univ.party.town_loc)
++				<< " unsafe=" << int(univ.town.is_summon_safe(loc.x, loc.y))
++				<< " adj=" << int(adjacent(from_where,loc)) << std::endl;
+ 		if(!loc_off_act_area(loc) && !is_blocked(loc)
+ 			&& can_see_light(from_where,loc,combat_obscurity) == 0
+ 			&& (!is_combat() || univ.target_there(loc,TARG_PC) == nullptr)
+@@ -765,7 +828,13 @@ location random_shift(location start) {
  }
  
  bool outdoor_move_monster(short num,location dest) {

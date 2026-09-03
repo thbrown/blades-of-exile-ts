@@ -603,11 +603,28 @@ export async function monstCastPriest(
       caster.status[Status.MARTYRS_SHIELD] =
         Math.min(10, (caster.status[Status.MARTYRS_SHIELD] ?? 0) + 5);
       break;
-    case Spell.SUMMON_HOST:
+    case Spell.SUMMON_HOST: {
+      // boe.combat.cpp:3777. **One roll for the whole host**: `x =
+      // get_ran(3,1,4) + 1` sits above the summons and every one of the five —
+      // the leader (126) and up to four of 125 — is given that same duration.
+      // This port rolled per creature through `summon1`, which is five draws
+      // where the C++ makes one, and dropped the `+ 1` as well.
+      //
+      // The extra four draws are what made `ASR_20-05-2025_07-20-41` part: the
+      // second summon spent a `get_ran(3,1,4)` where the C++ was already
+      // inside `find_clear_spot` rolling `get_ran(1,-2,2)`, and from there the
+      // two engines placed every later creature on different squares. That is
+      // the `summon1` bucket, and it is also why the file's clock parted — a
+      // creature standing where the C++ had none refuses a step.
       livingSound(24);
-      summon1(126, 3);
-      for (let i = 0; i < 4; i++) if (!summon1(125, 3)) break;
+      const strength = rng.getRan(3, 1, 4) + 1;
+      const one = (which: number): boolean =>
+        summonMonster(session, which, caster.curLoc, strength,
+          caster.attitude, caster.isFriendly, true);
+      one(126);
+      for (let i = 0; i < 4; i++) if (!one(125)) break;
       break;
+    }
     case Spell.CURSE_ALL: case Spell.PESTILENCE: {
       livingSound(24);
       const r1 = rng.getRan(2, 0, 2);

@@ -257,6 +257,21 @@ stay byte-identical until — thousands of actions later — one of them raises 
 rule on its first run: fifteen items there against nine here, the six missing
 ones all six squares away on one square.
 
+**`BOE_TRACE_CLEAR=1` (`CLEAR=1` here) prints every candidate
+`find_clear_spot` tries and which of its six tests turned it down**:
+`[clear] from(x,y) try(x,y) mode= off= blk= see= pc= party= unsafe= adj=`. The
+loop spends **two draws per try** and stops the moment one is accepted, so a
+single disagreement about a single rejection shifts every draw after it — and
+the draw stream cannot say *which* test disagreed, only that the counts differ.
+
+Diff the two side by side and read the first line that differs. **If the
+candidate *lists* agree and one side simply has more tries, the disagreement is
+not in `find_clear_spot` at all**: it is in what the caller drew before it. That
+is how the `summon1` bucket was closed — the candidate lists were identical and
+the C++ had three extra tries, which turned out to be this port spending a
+`get_ran(3,1,4)` per summoned creature where `SUMMON_HOST` rolls one for the
+whole host.
+
 **`BOE_TRACE_PRESET=1` prints the floor a town lays down when you walk in**:
 `[preset] town= presets= placed= taken={ … }`, then one line per item actually
 placed with its `is_special`, variety and square. The `taken=` set is the whole
