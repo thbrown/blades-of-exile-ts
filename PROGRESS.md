@@ -14,7 +14,7 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-03** that is
-  **1,183,528 matching draws, 41 of 87 files agreeing all the way**, 40 blocked
+  **1,188,410 matching draws, 41 of 87 files agreeing all the way**, 40 blocked
   by the oracle rather than by this port, and **6 rule buckets left in the
   queue** — every one of them a single file now. Add `--refresh` after a code change.
 - Two companion meters answer questions the draw stream cannot.
@@ -58,7 +58,7 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-03).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,183,528 matching
+`get_ran` streams together, rule by rule. It stands at **1,188,410 matching
 draws and 41 of 87 recordings agreeing all the way**, against 1,039,384 and 33
 at the start of 2026-09-02. Six rule buckets remain in the queue (see
 `diverge.mjs --all --stacks`), one file each; 40 of the 87 are blocked by the
@@ -10096,3 +10096,39 @@ The M6 list below is kept for the history of what it covered:
   - **Re-derive the unhandled-action list from `grep "case '" src/replay/driver.ts`**
     — the list in "Next steps" above named three actions and `new_party` was not
     among them.
+
+- **A corpus run's timeouts are not evidence, and one of them cost an hour
+  (M8, 2026-09-04).** Housekeeping, written down because it looked exactly like
+  a regression and will again.
+  - `diverge.mjs` gives each side a 300-second watchdog. On the C++ side that is
+    a real signal — four recordings hang the harness outright. **On this side it
+    never is**: the slowest recording in the corpus finishes in about ten
+    seconds. A timeout here is the machine, and a killed run's trace is a
+    *truncated* stream that `sideFailure` reports as a hang, so the file's draws
+    silently leave the total.
+  - Three corpus runs in a row lost two, then three, files that way — different
+    files each time, all of them finishing in **two seconds** when run alone
+    afterwards, one of them not even reaching vitest's first line of output. The
+    reported total dropped by 57,562 draws and a file left the "agree" column,
+    which reads precisely like a bug in whatever was edited last. It was not:
+    load average on the box was near 6 with nothing of this session's running.
+  - **The fix is in the tool**: a timed-out JS run is now retried up to three
+    times, and only the JS side (the C++'s hangs are the file, and retrying them
+    costs 300 seconds each to learn nothing). The rule to carry: *before
+    believing a corpus regression, check `grep -l "killed after 300s"
+    tools/cppharness/traces/*/js.txt` — it should be empty.*
+  - Kill `npx vite` before a corpus run. `verify-screen.mjs` needs it; nothing
+    else does, and it was up for the first of the three bad runs.
+
+- **249 lines of unreachable duplicate `case` clauses deleted from the replay
+  driver (M8, 2026-09-04).** The whole debug-key block — `menu_give_help`
+  through `debug_give_item`, eighteen labels — appeared **twice** in the one
+  switch. The second copy was the older, inline version of `debug_give_item`'s
+  string-chooser loop, left behind when it was extracted into
+  `popNumResponse`; the labels were otherwise identical, so the second copy had
+  never run.
+  - **Vitest had been saying so on every corpus run since**: eight esbuild
+    "This case clause will never be evaluated" warnings at the top of every
+    trace file, ignored as banner noise for weeks. They are gone now, and the
+    traces are that much shorter.
+  - Corpus-neutral, as dead code must be — 1,188,410 either side.

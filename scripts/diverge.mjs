@@ -278,8 +278,22 @@ async function traces(path) {
     // other test's `[ran]` lines land in the trace as if this file had drawn
     // them. Without the flag, vitest's console interception adds a banner per
     // line and turns a 14-second file into a 15-minute one.
-    await run('npx', ['vitest', 'run', 'test/corpus.test.ts', '--disable-console-intercept'],
-      { CORPUS: '1', TRACE: '1', RAN: String(BUDGET), ONLY: rel }, js);
+    const args = ['vitest', 'run', 'test/corpus.test.ts', '--disable-console-intercept'];
+    const env = { CORPUS: '1', TRACE: '1', RAN: String(BUDGET), ONLY: rel };
+    let outcome = await run('npx', args, env, js);
+    // **A timeout on *this* side is retried once, and the C++'s is not.** The
+    // slowest recording here finishes in about ten seconds, so a 300-second
+    // timeout is never the file: it is the machine (a dev server, a browser
+    // gate, another corpus run) taking the CPU away. Left alone it is *silent*
+    // and expensive — a killed run's trace is a truncated stream, `sideFailure`
+    // reports it as a hang, and the file's draws vanish from the total. That is
+    // what happened on 2026-09-04: a corpus run with `npx vite` still up lost
+    // two files to spurious timeouts and reported 57,562 fewer matching draws
+    // than the run ten minutes earlier, which reads exactly like a regression
+    // in whatever was last edited. One retry costs nothing when it is real.
+    for (let tries = 0; outcome === 'timeout' && tries < 3; tries++) {
+      outcome = await run('npx', args, env, js);
+    }
   }
   return { cpp, js, rel };
 }
