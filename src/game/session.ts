@@ -3549,18 +3549,31 @@ export class GameSession {
    * bonus scales with the action points given up, so parrying early is worth
    * more; `damagePc` and the to-hit rolls both read it.
    */
-  parry(): boolean {
-    if (this.mode !== GameMode.COMBAT) return false;
+  async parry(): Promise<void> {
+    // **`handle_parry` (boe.actions.cpp:529) has no guards at all** — no mode
+    // test and no action-point test. Both of those live at the *call sites*:
+    // the `d` key (:3119) and the SHIELD button (:1644) each check
+    // `overall_mode == MODE_COMBAT` before calling it, and `main.ts` keeps
+    // that check for the same two. **The replay dispatcher does not**
+    // (boe.main.cpp:1103), so a recording can parry outdoors — and it does:
+    // `VoDT_09-04-2025_09-41-10` parries three times on the world map after a
+    // rout, and each one charges an outdoor turn. This port refused them and
+    // its clock fell ten ticks behind per parry.
+    //
+    // A PC with no points parries for zero and still spends the turn, which is
+    // the same shape as `handle_target_space`'s `did_something` (see the entry
+    // for `VoDT-5-11`).
     const pc = this.univ.currentPc;
-    if (pc.ap <= 0) return false;
     pc.parry = Math.trunc(pc.ap / 4)
       * (2 + pc.statAdj(Skill.DEXTERITY) + pc.skill(Skill.DEFENSE));
     pc.ap = 0;
     this.univ.addStringToBuf('Parry.');
-    // `handle_parry` sets `did_something`, so the round is stepped by
-    // `advance_time` through `handle_monster_actions` — which draws first.
-    this.monsterActionsCombat();
-    return true;
+    // `did_something = true`, unconditionally — so `advance_time` runs
+    // `handle_monster_actions`, whichever arm the *mode* selects. Going through
+    // `afterPartyTurn` rather than straight to `monsterActionsCombat` also
+    // picks up the `play_ambient_sound()` that sits above the combat branch
+    // (boe.actions.cpp:1960), which this port was skipping on every parry.
+    await this.afterPartyTurn();
   }
 
   /**

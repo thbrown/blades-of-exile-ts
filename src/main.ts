@@ -1702,7 +1702,7 @@ async function main(): Promise<void> {
           if (session.mode === GameMode.COMBAT) void session.pause();
         } else if (btn.btn === ToolbarButton.SHIELD) {
           // handle_parry — spend what's left of the turn on defence.
-          if (session.mode === GameMode.COMBAT) session.parry();
+          if (session.mode === GameMode.COMBAT) void session.parry();
         } else if (btn.btn === ToolbarButton.MAGE || btn.btn === ToolbarButton.PRIEST) {
           // The two spellbook buttons are the same flow as the 'm' and 'p'
           // keys — handle_spell_button dispatches on which book.
@@ -1879,7 +1879,7 @@ async function main(): Promise<void> {
           await session.wait();
           break;
         case 'd': case 'D':
-          if (inCombat) session.parry();
+          if (inCombat) void session.parry();
           break;
         case 'x': case 'X':
           session.toggleActivePc();

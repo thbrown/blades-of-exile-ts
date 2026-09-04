@@ -280,6 +280,18 @@ async function traces(path) {
     // line and turns a 14-second file into a 15-minute one.
     const args = ['vitest', 'run', 'test/corpus.test.ts', '--disable-console-intercept'];
     const env = { CORPUS: '1', TRACE: '1', RAN: String(BUDGET), ONLY: rel };
+    // **A JS trace is only trusted if it says it finished.** The corpus runner
+    // ends every run with `N of 1 ran to the end; …`; a trace without that line
+    // was cut off — the process died, or its stdout was dropped mid-pipe — and
+    // what is left reads as a *short* draw stream, which `compare` reports as
+    // "the C++ draws on": a stop this port never made. That has now produced
+    // two false regressions (2026-09-04), one of them a 1,938-draw "loss" on a
+    // file that runs to the end in two seconds when asked on its own.
+    const finished = () => {
+      try {
+        return readFileSync(js, 'utf8').includes('ran to the end;');
+      } catch { return false; }
+    };
     let outcome = await run('npx', args, env, js);
     // **A timeout on *this* side is retried once, and the C++'s is not.** The
     // slowest recording here finishes in about ten seconds, so a 300-second
@@ -291,7 +303,7 @@ async function traces(path) {
     // two files to spurious timeouts and reported 57,562 fewer matching draws
     // than the run ten minutes earlier, which reads exactly like a regression
     // in whatever was last edited. One retry costs nothing when it is real.
-    for (let tries = 0; outcome === 'timeout' && tries < 3; tries++) {
+    for (let tries = 0; (outcome === 'timeout' || !finished()) && tries < 3; tries++) {
       outcome = await run('npx', args, env, js);
     }
   }

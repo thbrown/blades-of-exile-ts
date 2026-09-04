@@ -593,7 +593,12 @@ export async function runReplay(
           break;
         }
         case 'handle_parry':
-          session.parry();
+          // **No mode gate here**: `replay_action` calls `handle_parry`
+          // straight (boe.main.cpp:1103), where the `d` key and the SHIELD
+          // button both gate on `MODE_COMBAT`. A recording made in a fight can
+          // therefore replay a parry the party is no longer in a fight for,
+          // and the oracle charges the turn for it.
+          await session.parry();
           break;
         case 'handle_toggle_active':
           session.toggleActivePc();

@@ -722,11 +722,38 @@ describe('placement, parry and holding a turn', () => {
     const pc = univ.currentPc;
     pc.skills[Skill.DEFENSE] = 8;
     pc.ap = 8;
-    expect(session.parry()).toBe(true);
+    // `handle_parry` has no return value and no guards — see `session.parry`.
+    await session.parry();
     expect(pc.parry).toBeGreaterThan(0);
     expect(pc.ap).toBe(0);
     expect(univ.transcript).toContain('Parry.');
   });
+
+  it('parry has no guards: it works out of combat, and on a PC with no points',
+    async () => {
+      // `handle_parry` (boe.actions.cpp:529) tests neither the mode nor the
+      // action points — the `d` key and the SHIELD button do that for it, and
+      // the replay dispatcher does not. So a recording made in a fight can
+      // parry after the fight has ended, and the C++ charges the turn.
+      const { univ, session } = newGame();
+      const before = univ.party.age;
+      await session.parry();
+      expect(univ.transcript).toContain('Parry.');
+      // A town turn: `advance_time` ran `handle_monster_actions`, whose
+      // non-combat arm is `increase_age`.
+      expect(univ.party.age).toBe(before + 1);
+
+      // And in combat with nothing left to spend: parry is zero, and the turn
+      // still passes rather than leaving the PC holding it.
+      const { univ: u2, session: s2 } = newGame();
+      hostileBeside(u2, s2);
+      s2.startCombat(u2.party.direction);
+      const pc = u2.currentPc;
+      pc.ap = 0;
+      await s2.parry();
+      expect(pc.parry).toBe(0);
+      expect(u2.transcript).toContain('Parry.');
+    });
 
   it('standing ready is parry pinned at 100, and clears webs', async () => {
     const { univ, session } = newGame();

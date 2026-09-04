@@ -14,7 +14,7 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-03** that is
-  **1,188,475 matching draws, 42 of 87 files agreeing all the way**, 40 blocked
+  **1,188,534 matching draws, 42 of 87 files agreeing all the way**, 40 blocked
   by the oracle rather than by this port, and **5 rule buckets left in the
   queue** — every one of them a single file now. Add `--refresh` after a code change.
 - Two companion meters answer questions the draw stream cannot.
@@ -58,7 +58,7 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-03).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,188,475 matching
+`get_ran` streams together, rule by rule. It stands at **1,188,534 matching
 draws and 42 of 87 recordings agreeing all the way**, against 1,039,384 and 33
 at the start of 2026-09-02. Five rule buckets remain in the queue (see
 `diverge.mjs --all --stacks`), one file each; 40 of the 87 are blocked by the
@@ -10206,3 +10206,46 @@ The M6 list below is kept for the history of what it covered:
     disagreeing about what turn it was. `[getitem]` then said it in one line:
     `combat_pos=(20,23) items=23` there against `from=(-1,-1) items=0` here.
   - 1,099 tests green, `tsc` clean, `verify-screen.mjs` PASS.
+
+- **`handle_parry` has no guards; both of its guards live at the call sites
+  (M8, 2026-09-04).** Corpus **1,188,475 → 1,188,534**, and
+  `VoDT_09-04-2025_09-41-10` goes 22,632 → 22,691. Straight on from the rout
+  above: it is the *next* thing that file needed.
+  - `handle_parry` (boe.actions.cpp:529) is four lines and tests nothing — not
+    the mode and not the action points. The two tests are in its **callers**:
+    the `d` key (:3119) and the SHIELD button (:1644) each check
+    `overall_mode == MODE_COMBAT`. **`replay_action` does not**
+    (boe.main.cpp:1103), which is why a recording can parry on the world map —
+    and this one does, three times, after the rout that left it outdoors mid-fight.
+    Each parry charges an outdoor turn; this port refused them all and its clock
+    fell ten ticks behind per parry.
+  - The `ap <= 0` guard was invented here too. A PC with nothing left parries
+    for zero and still spends the turn — the same shape as
+    `handle_target_space`'s unconditional `did_something` (the `VoDT-5-11`
+    entry above).
+  - `session.parry` also went through `monsterActionsCombat` directly rather
+    than `afterPartyTurn`, so it was skipping `advance_time`'s tail —
+    `play_ambient_sound` (a no-op in combat, so no draws lost), the party-death
+    check and the `fog_lifted` reset. It goes through `afterPartyTurn` now, and
+    the mode picks the arm, exactly as `handle_monster_actions` does.
+  - `main.ts` keeps the `MODE_COMBAT` test on the key and the toolbar button,
+    because that is where the C++ keeps it. **The guard is not wrong; it was in
+    the wrong function.**
+  - Two tests: a parry out of combat charges a town turn, and a parry with no
+    action points is zero and still passes the turn.
+
+- **A truncated trace reads exactly like a regression, and it has now cost two
+  investigations (M8, 2026-09-04).** Second half of the timeout entry above,
+  and the more dangerous half.
+  - `diverge.mjs` retries a JS run that *times out*. It did not check a run that
+    **ended early without a marker** — the process died or its stdout was
+    dropped mid-pipe, and the trace just stops. `compare` then sees a short
+    draw stream and reports `move @ the C++ draws on`: a stop this port never
+    made. `VoDT_04-05-memory-dump-2` "lost" 1,938 draws and left the
+    agreeing-all-the-way column that way, on a file that runs to the end in two
+    seconds when asked on its own — and the loss was the same size as the
+    change being measured, which is the worst possible coincidence.
+  - The runner now checks for the corpus test's own last line (`ran to the
+    end;`) and retries a trace without it, on the same three-attempt loop as the
+    timeout. **The rule to carry: a corpus regression is not real until the
+    trace it comes from ends with that line.**
