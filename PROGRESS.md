@@ -14,8 +14,8 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-03** that is
-  **1,188,410 matching draws, 41 of 87 files agreeing all the way**, 40 blocked
-  by the oracle rather than by this port, and **6 rule buckets left in the
+  **1,188,459 matching draws, 42 of 87 files agreeing all the way**, 40 blocked
+  by the oracle rather than by this port, and **5 rule buckets left in the
   queue** — every one of them a single file now. Add `--refresh` after a code change.
 - Two companion meters answer questions the draw stream cannot.
   `node scripts/align-actions.mjs --all` asks whether the two **action**
@@ -58,11 +58,11 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-03).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,188,410 matching
-draws and 41 of 87 recordings agreeing all the way**, against 1,039,384 and 33
-at the start of 2026-09-02. Six rule buckets remain in the queue (see
+`get_ran` streams together, rule by rule. It stands at **1,188,459 matching
+draws and 42 of 87 recordings agreeing all the way**, against 1,039,384 and 33
+at the start of 2026-09-02. Five rule buckets remain in the queue (see
 `diverge.mjs --all --stacks`), one file each; 40 of the 87 are blocked by the
-*oracle* rather than by this port and cannot be won at all — and one of the six
+*oracle* rather than by this port and cannot be won at all — and one of the five
 remaining "rule" buckets, `OneOfEverything`, is really a 41st oracle gap; see
 the entry at the bottom of this file.
 
@@ -10132,3 +10132,41 @@ The M6 list below is kept for the history of what it covered:
     trace file, ignored as banner noise for weeks. They are gone now, and the
     traces are that much shorter.
   - Corpus-neutral, as dead code must be — 1,188,410 either side.
+
+- **An empty fancy cast is still a cast, and it is what every monster in the
+  fight is watching (M8, 2026-09-04).** Corpus **1,188,410 → 1,188,459**, and
+  `ASR_20-05-2025_07-20-41` agrees on **all 57,314** of the oracle's draws — the
+  whole file, up from 20,002 at the start of the night. Third and last of the
+  three bugs stacked in that one recording.
+  - **The rule.** `place_target`'s tail is a bare
+    `if(num_targets_left == 0) do_combat_cast(spell_targets[0])`
+    (boe.combat.cpp:831) — no test for whether anything was ever collected, and
+    Space in FANCY mode reaches it by *setting the count to zero itself*
+    (boe.actions.cpp:3011). With nothing collected, `spell_targets[0]` is the
+    `(-1,0)` that `start_fancy_spell_targeting` wrote, `num_targets` is 8, and
+    the per-target loop finds nothing: no action points, no spell points, no
+    spell. **The preamble still runs.** It drops the caster's Sanctuary, resets
+    `force_wall_position`, rolls a summon's species if the spell summons — and
+    sets `spell_caster`, which `monst_pick_target` reads first of all
+    (boe.monster.cpp:405), so every hostile creature in the fight prefers that
+    PC from then on.
+  - This port cancelled instead, on the reading that a cast with no target is
+    not a cast. `castCollected` now always casts, and `SpellTarget` carries a
+    `fancy` flag so `doCombatCast` knows to walk the collected list rather than
+    fall back to the square that was clicked — the two paths are
+    indistinguishable from `targets.length`, which is 0 in both.
+  - **The consequence was six draws and two functions away.** The recording
+    recasts a priest spell whose `num_targets_left` the recording gives as 0, so
+    the empty branch is the only one taken. Here `spell_caster` stayed on
+    Adrianna; there it moved to Kat, who was out of reach — so the C++ fell
+    through to `switch_target_to_adjacent`'s "Anyone unarmored? Heh heh heh..."
+    sweep and spent **three PCs' worth of `total_encumbrance`** (six draws,
+    `get_ran(1,0,70)`/`(1,0,130)`, one per equipped item) that this port never
+    made, because its creature had an adjacent target already.
+  - **The bucket named `monsterAttack`, which was innocent**, and the two
+    instruments that placed it were both state, not draws:
+    `BOE_TRACE_PICKT`/`PICKT=1` printed `caster=5` against `caster=3` with the
+    draw streams still byte-identical, and `BOE_TRACE_ENC` named the three PCs
+    whose armour was being weighed. Same shape as 2026-08-29's three and
+    2026-09-03's: *print the state, and the AI is usually innocent.*
+  - 1,099 tests green, `tsc` clean, `floating-promises` clean.

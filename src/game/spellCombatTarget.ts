@@ -15,7 +15,7 @@
  *   spells that fly at a square, and spells that need somebody standing there.
  */
 
-import { Location, dist, locsEqual } from '../core/location';
+import { Location, dist, loc, locsEqual } from '../core/location';
 import { FieldType } from '../data/fields';
 import { DamageType } from '../data/monster';
 import { SpellPat, WALL_ROTATIONS } from '../data/pattern';
@@ -57,6 +57,17 @@ export interface SpellTarget {
   targets: Location[];
   /** How many more squares a fancy spell still wants (`num_targets_left`). */
   targetsLeft: number;
+  /**
+   * Whether this is `start_fancy_spell_targeting`'s mode rather than
+   * `start_spell_targeting`'s. The two feed `do_combat_cast` differently: the
+   * single-target arm writes `spell_targets[0] = target` and leaves
+   * `num_targets` at 1, while the fancy arm sets `num_targets = 8` and walks
+   * the eight collected slots — so a fancy cast with **nothing** collected
+   * casts at nothing, where a single-target one always has its square. That
+   * distinction cannot be recovered from `targets.length`, which is 0 in both
+   * cases at the moment it is asked.
+   */
+  fancy: boolean;
 }
 
 /**
@@ -144,6 +155,7 @@ export function startSpellTargeting(
     itemSpellLevel,
     targets: [],
     targetsLeft: 0,
+    fancy: false,
   };
 }
 
@@ -231,6 +243,7 @@ export function startFancySpellTargeting(
     itemSpellLevel,
     targets: [],
     targetsLeft: fancyTargetCount(spell, level, bonus),
+    fancy: true,
   };
 }
 
@@ -286,15 +299,35 @@ export async function placeTarget(session: GameSession, target: Location): Promi
   if (armed.targetsLeft === 0) await castCollected(session);
 }
 
-/** Space — fire with however many squares have been picked so far. */
+/**
+ * Space — fire with however many squares have been picked so far, **including
+ * none**.
+ *
+ * `place_target`'s tail is a bare `if(num_targets_left == 0) {
+ * do_combat_cast(spell_targets[0]); }` (boe.combat.cpp:831) with no test for
+ * whether anything was ever collected, and Space in FANCY mode reaches it by
+ * setting the count to 0 itself (boe.actions.cpp:3011). So a fancy spell fired
+ * with an empty list runs `do_combat_cast` on `spell_targets[0]`, which
+ * `start_fancy_spell_targeting` has set to (-1,0): the per-target loop finds
+ * nothing and resolves nothing, no points and no spell points are spent — and
+ * the **preamble still runs**. It drops the caster's Sanctuary, resets the
+ * force-wall rotation, rolls a summon's species if the spell summons, and sets
+ * `spell_caster`, which is what makes every hostile creature in the fight
+ * prefer that PC for the rest of it.
+ *
+ * This port used to cancel instead, on the reasonable reading that a cast with
+ * no target is not a cast. It costs a file: `ASR_20-05-2025_07-20-41` recasts a
+ * priest spell whose `num_targets_left` the recording gives as **0**, so the
+ * empty branch is the only one taken, and `spell_caster` stayed on the PC who
+ * had cast before. Six draws later — three PCs' worth of `total_encumbrance` in
+ * `switch_target_to_adjacent`, which this port never reached because its
+ * creature had picked an adjacent target already — the streams part.
+ */
 export async function castCollected(session: GameSession): Promise<void> {
   const armed = session.spellTargeting;
   if (!armed) return;
-  if (armed.targets.length === 0) {
-    cancelSpellTargeting(session);
-    return;
-  }
-  await doCombatCast(session, armed.targets[0]!);
+  // The square is ignored on the fancy path; `doCombatCast` reads the list.
+  await doCombatCast(session, armed.targets[0] ?? loc(-1, 0));
 }
 
 /**
@@ -357,7 +390,11 @@ async function flyMissiles(
 export async function doCombatCast(session: GameSession, target: Location): Promise<void> {
   const armed = session.spellTargeting;
   if (!armed) return;
-  const targets = armed.targets.length > 0 ? [...armed.targets] : [target];
+  // `num_targets = 8` and a walk of `spell_targets` on the fancy path
+  // (boe.combat.cpp:888), `spell_targets[0] = target` and one target on the
+  // other. An empty list on the fancy path is a real state — see
+  // `castCollected` — and must not fall back to the square that was clicked.
+  const targets = armed.fancy ? [...armed.targets] : [target];
   session.spellTargeting = null;
   session.mode = GameMode.COMBAT;
 
