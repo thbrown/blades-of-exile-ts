@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { Direction } from '../src/core/location';
+import { Direction, shiftLoc } from '../src/core/location';
 import { GameRng } from '../src/core/rng';
 import { FieldType } from '../src/data/fields';
 import { ItemType } from '../src/data/item';
@@ -1032,5 +1032,48 @@ describe('a move onto the square the party is already on', () => {
     expect(s.univ.party.townLoc).toEqual(here);
     expect(s.univ.party.age).toBe(age);
     expect(s.univ.transcript.some((l) => l.startsWith('Blocked:'))).toBe(true);
+  });
+});
+
+describe('a party with nobody awake', () => {
+  /**
+   * `someone_awake()` (boe.actions.cpp:2000) is the guard `handle_move`'s
+   * MODE_TOWN arm opens with: if every living PC is asleep or paralysed the
+   * move is refused **above** `town_move_party`, so it sets no
+   * `did_something` and no turn passes either.
+   *
+   * The clock standing still is the load-bearing half. Nothing wears the sleep
+   * off while the party is stuck, so a recording shows a run of clicks that do
+   * nothing at all — `ZKR_15-05-2025_16-09-51` has seven of them and then a
+   * Combat switch, which is the way out. This port walked all seven and took
+   * seven turns doing it.
+   */
+  it('cannot move, and does not spend the turn trying', async () => {
+    const session = newSession();
+    await session.startNewGame();
+    await session.settled();
+    const univ = session.univ;
+
+    const from = { ...univ.party.townLoc };
+    const age = univ.party.age;
+    // A direction that is walkable while awake, so the refusal below is the
+    // sleep and not the scenery.
+    const dir = [Direction.N, Direction.S, Direction.E, Direction.W]
+      .find((d) => !session.townIsBlocked(shiftLoc(from, d)))!;
+    expect(dir).toBeDefined();
+
+    for (const pc of univ.party.pcs) pc.status[Status.ASLEEP] = 5;
+
+    expect(await session.move(dir)).toBe(false);
+    expect(univ.party.townLoc).toEqual(from);
+    // No turn: the sleep still has all five of its ticks left.
+    expect(univ.party.age).toBe(age);
+    expect(univ.party.pcs[0]!.status[Status.ASLEEP]).toBe(5);
+
+    // One PC awake is enough, which is the control the refusal above needs —
+    // without it the test would pass against a port that had simply lost the
+    // step for some other reason.
+    univ.party.pcs[2]!.status[Status.ASLEEP] = 0;
+    expect(await session.move(dir)).toBe(true);
   });
 });

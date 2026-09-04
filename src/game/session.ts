@@ -521,6 +521,20 @@ export class GameSession {
     let moved = false;
     this.pendingOutDest = null;
     if (this.inTown) {
+      // `someone_awake()` (boe.actions.cpp:2000), the guard `handle_move`'s
+      // MODE_TOWN arm opens with (:759). A party where every living PC is
+      // asleep or paralysed **cannot move at all**, and the refusal is
+      // upstream of `town_move_party` — so it sets no `did_something` either,
+      // and no turn passes. That last part is the whole of its observable
+      // shape: the party is stuck *and* the clock is stuck, so nothing wears
+      // the sleep off, and the only way out is the one the player took in
+      // `ZKR_15-05-2025_16-09-51` — seven refused clicks and then Combat.
+      if (!this.univ.party.pcs.some((pc) => pc.isAlive
+        && (pc.status[Status.ASLEEP] ?? 0) <= 0
+        && (pc.status[Status.PARALYZED] ?? 0) <= 0)) {
+        this.univ.addStringToBuf("Everyone's asleep/paralyzed.");
+        return false;
+      }
       moved = await this.townMoveParty(destination);
       if (this.inTown && moved) {
         this.center = { ...this.univ.party.townLoc };

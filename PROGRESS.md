@@ -14,9 +14,9 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-03** that is
-  **1,151,036 matching draws, 40 of 87 files agreeing all the way**, 39 blocked
+  **1,151,145 matching draws, 40 of 87 files agreeing all the way**, 40 blocked
   by the oracle rather than by this port, and **7 rule buckets left in the
-  queue**. Add `--refresh` after a code change.
+  queue** — every one of them a single file now. Add `--refresh` after a code change.
 - Two companion meters answer questions the draw stream cannot.
   `node scripts/align-actions.mjs --all` asks whether the two **action**
   streams ever drift apart (they do not: 0 of 73), and
@@ -58,11 +58,11 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-03).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,151,036 matching
+`get_ran` streams together, rule by rule. It stands at **1,151,145 matching
 draws and 40 of 87 recordings agreeing all the way**, against 1,039,384 and 33
 at the start of 2026-09-02. Seven rule buckets remain in the queue (see
-`diverge.mjs --all --stacks`); 39 of the 87 are blocked by the *oracle* rather
-than by this port and cannot be won at all.
+`diverge.mjs --all --stacks`), one file each; 40 of the 87 are blocked by the
+*oracle* rather than by this port and cannot be won at all.
 
 M8 is not only dice. Chasing the corpus has filled in real features it turned
 out to need — **creating a character** (`handle_new_pc` and its four dialogs),
@@ -9910,3 +9910,32 @@ The M6 list below is kept for the history of what it covered:
     divergence draw), which is a fourth win for the instrument; two files part
     on their clocks now.
   - 1,098 tests green, `tsc` clean, `floating-promises` clean, `verify-screen.mjs` PASS.
+
+- **`someone_awake` — a party asleep cannot move, and the clock stops with it
+  (M8, 2026-09-03).** Corpus **1,151,036 → 1,151,145**, and
+  `ZKR_15-05-2025_16-09-51` matches **all 5,867** of the oracle's draws before
+  the harness dies on it. Small in draws, but it empties the queue's last
+  two-file bucket: every remaining rule bucket is one file now.
+  - `handle_move`'s MODE_TOWN arm opens with `if(!someone_awake())`
+    (boe.actions.cpp:759) — every living PC asleep or paralysed and the move is
+    refused **above** `town_move_party`, so it sets no `did_something` and
+    **no turn passes**. That second half is the load-bearing one: nothing wears
+    the sleep off while the party is stuck, so the party is stuck for good until
+    the player does something that is not a move. `someone_awake` was simply
+    not ported.
+  - **What it looks like in a recording:** seven consecutive `move`s that do
+    nothing at all, and then a Combat switch — which is the way out, since
+    `handle_combat_switch` is not a move. This port walked all seven steps and
+    charged seven turns for them, and from there its whole town was one age
+    ahead.
+  - **The instrument that placed it was the *absence* of a trace line.**
+    `BOE_TRACE_MMOVE=1` prints `[tmove]` at the top of `town_move_party` with
+    everything it is about to decide on — and for those seven actions it
+    printed nothing, with `[advtime] did=0` beside them. A move that never
+    reaches `town_move_party` is not a movement rule at all, and looking for a
+    blocked square or a terrain disagreement (which is what `[tmove]` is
+    normally for) would have found nothing to find. **When a trace at the top
+    of a function is missing, the caller is the bug.**
+  - The bucket named `monstPickTarget`, three hundred actions of drifted town
+    downstream. Bucket names near, not at.
+  - 1,099 tests green, `tsc` clean, `floating-promises` clean.
