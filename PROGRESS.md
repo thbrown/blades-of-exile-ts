@@ -14,8 +14,8 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-03** that is
-  **1,151,145 matching draws, 40 of 87 files agreeing all the way**, 40 blocked
-  by the oracle rather than by this port, and **7 rule buckets left in the
+  **1,151,147 matching draws, 41 of 87 files agreeing all the way**, 40 blocked
+  by the oracle rather than by this port, and **6 rule buckets left in the
   queue** — every one of them a single file now. Add `--refresh` after a code change.
 - Two companion meters answer questions the draw stream cannot.
   `node scripts/align-actions.mjs --all` asks whether the two **action**
@@ -58,11 +58,13 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-03).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,151,145 matching
-draws and 40 of 87 recordings agreeing all the way**, against 1,039,384 and 33
-at the start of 2026-09-02. Seven rule buckets remain in the queue (see
+`get_ran` streams together, rule by rule. It stands at **1,151,147 matching
+draws and 41 of 87 recordings agreeing all the way**, against 1,039,384 and 33
+at the start of 2026-09-02. Six rule buckets remain in the queue (see
 `diverge.mjs --all --stacks`), one file each; 40 of the 87 are blocked by the
-*oracle* rather than by this port and cannot be won at all.
+*oracle* rather than by this port and cannot be won at all — and one of the six
+remaining "rule" buckets, `OneOfEverything`, is really a 41st oracle gap; see
+the entry at the bottom of this file.
 
 M8 is not only dice. Chasing the corpus has filled in real features it turned
 out to need — **creating a character** (`handle_new_pc` and its four dialogs),
@@ -9982,3 +9984,64 @@ The M6 list below is kept for the history of what it covered:
     draw stream could only ever say "a turn happened there and not here".
     Documented in `tools/cppharness/README.md` and in the patch.
   - 1,099 tests green, `tsc` clean, `floating-promises` clean.
+
+- **The leave-town chain died at its second node, because this port unloads the
+  town the C++ keeps (M8, 2026-09-03).** Corpus **1,151,145 → 1,151,147**, and
+  `ASR_11-05-2025_07-55-19` — the largest file still in the rules queue at
+  51,791 draws — now matches **all** of them. Two draws, one whole file.
+  - **The rule.** `handle_leave_town_specials` (boe.town.cpp:692) *queues* a
+    `TOWN`-list chain and hands it `univ.party.out_loc`. It runs after
+    `end_town_mode` has already put the party outdoors and set `town_num` to
+    200 — and it still resolves, because the C++ never unloads `univ.town`.
+    This port clears `univ.town`, so `get_node`'s TOWN arm returned nothing and
+    the chain stopped at its **second** node with "special node out of range".
+  - `Universe.departedTown` is the narrow fix: the record of the town just left,
+    consulted by `getNode` only when `univ.town` is null. It is deliberately not
+    the general repair — making the *mode* the authority everywhere `univ.town`
+    is read as one is its own job (see the rout entry above, which measured what
+    the general version costs) — but the leave-town chain is the one rule that
+    cannot work without it, since by construction it runs outdoors.
+  - **A second bug in the same three lines**: the chain's location was
+    `destination`, the *town* square the party walked off, where the C++ reads
+    `univ.party.out_loc` — the outdoor square, assigned on the line above.
+    The C++'s `start_loc` parameter is named and then ignored, which is what
+    made the wrong one look right.
+  - **What it looked like from the game.** The recording walks out of an ASR
+    town whose exit chain sets a flag, prints a message and then runs
+    `SET_TOWN_VISIBILITY` to **hide the town it just left**. Here the message
+    never printed and the town stayed visible, so the next step back onto the
+    town's square walked straight back in — mode TOWN at (1,62) where the C++
+    was still outdoors at (84,53). Everything after that was a different game.
+  - **`SPEC=1` beside the harness's `[spec]` is what named it**, in two lines
+    read side by side: `TOWN node 38 INVALID` here against
+    `TOWN node 38 type 3 (Display Message)` there, with the two draw streams
+    still identical. The location column in the same pair gave up the second
+    bug for free — `at (60,32)` here, `at (84,53)` there.
+  - 1,099 tests green, `tsc` clean, `floating-promises` clean,
+    `verify-screen.mjs` PASS.
+
+- **`long/OneOfEverything.xml` is an oracle gap, not a rule — the harness never
+  opens a dialog a *debug action* raises (M8, 2026-09-03).** A negative result,
+  written down because `diverge.mjs` files it under a rules bucket
+  (`move @ get_ran(1,0,24)`) and the next person to take the queue's head will
+  otherwise spend the same hour on it.
+  - **What happens.** The recording's `debug_enter_town` is followed by six
+    dialog actions — `field_focus number`, then `choose`, `strings`, `led21`,
+    `done`, `okay` — which pick **town 20** out of `get_num_response`'s string
+    chooser. The harness replays `debug_enter_town`, prints
+    `start_town_mode: town_number=0` **before** any of the six, and then reports
+    all six as `[orphan] … no dialog is open; skipping`. So `get_num_response`
+    returned its default 0 without ever pumping an action, and the oracle enters
+    **Fort Talrus** (19 creatures) where the recording meant **Small Cave** (4).
+    This port picks town 20 and is right.
+  - It is not specific to that action: the same recording's two
+    `debug_give_item`s and its `show_debug_help` orphan their dialogs the same
+    way, one draw into the run. Every draw after the town entry is two different
+    towns being simulated, which is why the file reports 0 matching draws.
+  - **Not chased further.** The cause is inside the harness's `cDialog::run` →
+    `handle_events` path, which visibly *does* consume actions for other
+    dialogs (that is what raises the "has no control" errors elsewhere), so it
+    is not a missing branch; and confirming a fix costs a `--refresh-cpp` at
+    ~90 minutes for one file. If someone does pick it up, instrument
+    `get_num_response` first — the question is whether `numPanel.run()` reaches
+    `handle_events` at all.

@@ -74,7 +74,11 @@ export class SpecialsEngine {
         node = this.univ.out.sector.specials.get(which);
         break;
       case SpecCtxType.TOWN:
-        node = this.univ.town?.record.specials.get(which);
+        // `univ.departedTown` is the fallback the leave-town chain needs: it
+        // runs with the party already outdoors, and the C++ resolves it against
+        // a `univ.town` it never unloaded. See the field's comment.
+        node = this.univ.town?.record.specials.get(which)
+          ?? this.univ.departedTown?.specials.get(which);
         break;
     }
     if (!node) {

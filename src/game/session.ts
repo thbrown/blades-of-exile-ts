@@ -4264,6 +4264,8 @@ export class GameSession {
     );
     const town = new CurTown(record, this.univ);
     this.univ.town = town;
+    // The town that was kept only for the leave-town chain is superseded now.
+    this.univ.departedTown = null;
 
     // Doors the party unlocked on a previous visit stay unlocked.
     for (const where of record.doorUnlocked) {
@@ -5326,6 +5328,7 @@ export class GameSession {
     this.univ.party.endSplit();
     this.storeTownOnLeaving();
     this.mode = GameMode.OUTDOORS;
+    this.univ.departedTown = this.univ.town.record;
     this.univ.town = null;
     this.univ.party.townNum = TOWN_NUM_OUTDOORS;
     this.center = { ...this.univ.party.outLoc };
@@ -5344,9 +5347,13 @@ export class GameSession {
       const exit = town.record.exits[idx]!;
       toReturn = exit.x > 0 ? party.localToGlobal(exit) : fallback;
       party.outLoc = { x: toReturn.x + nudge.x, y: toReturn.y + nudge.y };
-      // handle_leave_town_specials: the exit this side of the town uses.
+      // handle_leave_town_specials (boe.town.cpp:692): the exit this side of
+      // the town uses. **Its location is `univ.party.out_loc`, not the square
+      // the party walked off** — the C++ passes a `start_loc` it then ignores,
+      // and reads the out_loc assigned on the line above. A town node that asks
+      // where it is (or writes terrain there) was getting town coordinates.
       if (exit.spec >= 0)
-        void this.runSpecial(SpecCtx.LEAVE_TOWN, SpecCtxType.TOWN, exit.spec, destination);
+        void this.runSpecial(SpecCtx.LEAVE_TOWN, SpecCtxType.TOWN, exit.spec, { ...party.outLoc });
     };
 
     if (destination.x <= rect.left)
@@ -5360,6 +5367,7 @@ export class GameSession {
 
     this.mode = GameMode.OUTDOORS;
     this.univ.addStringToBuf(`You leave ${town.record.name}.`);
+    this.univ.departedTown = town.record;
     this.univ.town = null;
     party.townNum = TOWN_NUM_OUTDOORS;
     // applyExit has already put the party one step *inside* the exit square;

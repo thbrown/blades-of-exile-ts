@@ -29,6 +29,21 @@ export class Universe {
   party = new Party();
   out: CurOut;
   town: CurTown | null = null;
+  /**
+   * The record of the town the party has just walked out of, kept only so a
+   * `TOWN`-list special node can still be *looked up* after the town is gone.
+   *
+   * The C++ needs no such field: `end_town_mode` sets `town_num` to 200 and
+   * leaves `univ.town` loaded, so `get_node`'s TOWN arm keeps working
+   * outdoors. This port clears `univ.town` (a great deal of code reads
+   * `town !== null` as "we are in a town", and making the mode the authority
+   * everywhere is its own job — see the rout entry in PROGRESS.md), and the
+   * one rule that actually depends on the C++'s shape is the **leave-town
+   * chain**: `handle_leave_town_specials` queues a TOWN node that by
+   * construction runs once the party is already outdoors. Without this the
+   * chain died at its second node with "special node out of range".
+   */
+  departedTown: Town | null = null;
   /** Index of the PC whose turn/selection is active. */
   curPc = 0;
   /** Scrolling text pane contents, oldest first. */
