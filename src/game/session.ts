@@ -748,6 +748,64 @@ export class GameSession {
    * `handle_party_death` (boe.actions.cpp:1436) has no such check at all,
    * because there's nobody left standing to still be fighting.
    */
+  /**
+   * `handle_party_death`'s rout arm (boe.actions.cpp:1453) — **not**
+   * `exitArenaCombat`, which is `end_combat` plus `end_town_mode`. The three
+   * lines the C++ runs are:
+   *
+   *     end_town_mode(0, univ.party.town_loc);
+   *     add_string_to_buf("End combat.");
+   *     handle_wandering_specials(2);
+   *
+   * and `end_combat` is not among them. What that leaves behind is the whole
+   * point:
+   *
+   *  - **`combat_pos` survives.** Every other exit clears it to (-1,-1);
+   *    after a rout each PC still carries the square they stood on in the
+   *    arena, and `handle_get_items` outdoors sweeps it — see
+   *    `Universe.departedTown` and `reachableItems`.
+   *  - **`parry` survives**, and so do POISONED_WEAPON, BLESS_CURSE and
+   *    HASTE_SLOW: `end_town_mode` calls `clear_brief_status`, which is a
+   *    different list.
+   *  - **`univ.cur_pc` is not handed back to `store_current_pc`.** The fight
+   *    left it at 6, and `party[6]` resolves to PC 0 (party.cpp:1143), so the
+   *    square `handle_get_items` reads is PC **0**'s, whoever was acting.
+   *  - **The special is `spec_on_flee`, not `spec_on_win`**
+   *    (`handle_wandering_specials(2)`, boe.specials.cpp:138). The party ran;
+   *    it did not win.
+   *  - There is no `play_sound(93)`. That belongs to `end_outdoor_combat`.
+   *
+   * Bonus SP and HP are still trimmed, because that is at the top of
+   * `end_town_mode` rather than in `end_combat`.
+   */
+  private routOutOfArena(): void {
+    const univ = this.univ;
+    for (const pc of univ.party.pcs) {
+      // The bonus trim (boe.town.cpp:570), which is `end_town_mode`'s own.
+      if (pc.curSp > pc.maxSp) pc.curSp = pc.maxSp;
+      if (pc.curHealth > pc.maxHealth) pc.curHealth = pc.maxHealth;
+      // `clear_brief_status` (:604), for every PC.
+      pc.clearBriefStatus();
+    }
+    univ.party.partyStatus[PartyStatus.STEALTH] = 0;
+    univ.party.partyStatus[PartyStatus.DETECT_LIFE] = 0;
+    // The arena stays reachable, exactly as `univ.town` does there.
+    univ.departedTown = univ.town;
+    univ.town = null;
+    this.arena = null;
+    univ.party.townNum = TOWN_NUM_OUTDOORS;
+    this.mode = GameMode.OUTDOORS;
+    this.center = { ...univ.party.outLoc };
+    this.updateExplored(univ.party.outLoc);
+    univ.addStringToBuf('End combat.');
+    const fled = this.storeWanderingSpecial;
+    this.storeWanderingSpecial = null;
+    if (fled && fled.specOnFlee >= 0) {
+      void this.runSpecial(
+        SpecCtx.FLEE_ENCOUNTER, SpecCtxType.OUTDOOR, fled.specOnFlee, univ.party.locInSec);
+    }
+  }
+
   private exitArenaCombat(): void {
     const univ = this.univ;
     for (const pc of univ.party.pcs) {
@@ -1713,7 +1771,14 @@ export class GameSession {
    * and "all adjacent items:" when a hostile creature has narrowed it.
    */
   reachableItems(place: Location): { items: Item[]; massGet: boolean } {
-    const town = this.univ.town;
+    // **`univ.town` outdoors is the town the party last left, not nothing.**
+    // The C++ never unloads it — `end_town_mode` only sets `town_num` to 200 —
+    // so `get_item` outdoors sweeps whatever was last loaded. That is normally
+    // harmless, because the square it sweeps is `combat_pos` and every ordinary
+    // way out of a fight sets that to (-1,-1); after a **rout** it is a real
+    // square in the arena the party ran from, and pressing **g** on the world
+    // map rummages the fight. See `Universe.departedTown`.
+    const town = this.univ.town ?? this.univ.departedTown;
     if (!town) return { items: [], massGet: false };
     let massGet = true;
     for (const monst of town.monsters)
@@ -2845,16 +2910,15 @@ export class GameSession {
         // `univ.town` that is never unloaded, and `handle_get_items` outdoors
         // then rummages the arena it ran from.
         //
-        // **This port models it as `end_combat` anyway, and that is a
-        // deliberate divergence.** Porting it faithfully was tried on
-        // 2026-09-03 and cost the corpus 40,048 draws and two files: keeping
-        // `univ.town` loaded outdoors is a state this port has never been in,
-        // and a great deal of code reads `univ.town !== null` as "we are in a
-        // town" where the C++ reads `is_out()`. Reaching the real behaviour
-        // means making the mode the authority everywhere first, which is its
-        // own job. See the entry in `PROGRESS.md` for the measurement.
+        // The 2026-09-03 attempt at this kept `univ.town` loaded outdoors and
+        // cost the corpus 40,048 draws, because a great deal of code reads
+        // `univ.town !== null` as "we are in a town". `univ.departedTown` is
+        // the narrow version: a *separate* field, so nothing that asks the old
+        // question changes its answer, and the two rules that actually need
+        // the town after it is gone — the leave-town chain and
+        // `handle_get_items` — ask the new one.
         if (this.mode === GameMode.COMBAT) {
-          if (this.whichCombatType === 0) this.exitArenaCombat();
+          if (this.whichCombatType === 0) this.routOutOfArena();
           else {
             const direction = endTownCombat(this);
             if (direction !== Direction.Here) {
@@ -5343,7 +5407,7 @@ export class GameSession {
     this.univ.party.endSplit();
     this.storeTownOnLeaving();
     this.mode = GameMode.OUTDOORS;
-    this.univ.departedTown = this.univ.town.record;
+    this.univ.departedTown = this.univ.town;
     this.univ.town = null;
     this.univ.party.townNum = TOWN_NUM_OUTDOORS;
     this.center = { ...this.univ.party.outLoc };
@@ -5382,7 +5446,7 @@ export class GameSession {
 
     this.mode = GameMode.OUTDOORS;
     this.univ.addStringToBuf(`You leave ${town.record.name}.`);
-    this.univ.departedTown = town.record;
+    this.univ.departedTown = town;
     this.univ.town = null;
     party.townNum = TOWN_NUM_OUTDOORS;
     // applyExit has already put the party one step *inside* the exit square;

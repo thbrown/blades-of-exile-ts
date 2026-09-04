@@ -30,8 +30,8 @@ export class Universe {
   out: CurOut;
   town: CurTown | null = null;
   /**
-   * The record of the town the party has just walked out of, kept only so a
-   * `TOWN`-list special node can still be *looked up* after the town is gone.
+   * The town the party has just walked out of — the whole `CurTown`, not just
+   * its record, because two rules need its *mutable* halves.
    *
    * The C++ needs no such field: `end_town_mode` sets `town_num` to 200 and
    * leaves `univ.town` loaded, so `get_node`'s TOWN arm keeps working
@@ -42,8 +42,14 @@ export class Universe {
    * chain**: `handle_leave_town_specials` queues a TOWN node that by
    * construction runs once the party is already outdoors. Without this the
    * chain died at its second node with "special node out of range".
+   *
+   * The second is `handle_get_items` outdoors, which sweeps
+   * `univ.current_pc().combat_pos` on `univ.town.items` — see
+   * `GameSession.reachableItems`. After a **rout** that square is a real one in
+   * the arena the party ran from, so pressing **g** on the world map rummages
+   * the fight; the item list has to still be here for that.
    */
-  departedTown: Town | null = null;
+  departedTown: CurTown | null = null;
   /** Index of the PC whose turn/selection is active. */
   curPc = 0;
   /** Scrolling text pane contents, oldest first. */

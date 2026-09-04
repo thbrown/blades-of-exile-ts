@@ -78,7 +78,7 @@ export class SpecialsEngine {
         // runs with the party already outdoors, and the C++ resolves it against
         // a `univ.town` it never unloaded. See the field's comment.
         node = this.univ.town?.record.specials.get(which)
-          ?? this.univ.departedTown?.specials.get(which);
+          ?? this.univ.departedTown?.record.specials.get(which);
         break;
     }
     if (!node) {

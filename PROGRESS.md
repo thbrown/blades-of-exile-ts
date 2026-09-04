@@ -14,7 +14,7 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-03** that is
-  **1,188,459 matching draws, 42 of 87 files agreeing all the way**, 40 blocked
+  **1,188,475 matching draws, 42 of 87 files agreeing all the way**, 40 blocked
   by the oracle rather than by this port, and **5 rule buckets left in the
   queue** — every one of them a single file now. Add `--refresh` after a code change.
 - Two companion meters answer questions the draw stream cannot.
@@ -58,7 +58,7 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-03).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,188,459 matching
+`get_ran` streams together, rule by rule. It stands at **1,188,475 matching
 draws and 42 of 87 recordings agreeing all the way**, against 1,039,384 and 33
 at the start of 2026-09-02. Five rule buckets remain in the queue (see
 `diverge.mjs --all --stacks`), one file each; 40 of the 87 are blocked by the
@@ -10170,3 +10170,39 @@ The M6 list below is kept for the history of what it covered:
     whose armour was being weighed. Same shape as 2026-08-29's three and
     2026-09-03's: *print the state, and the AI is usually innocent.*
   - 1,099 tests green, `tsc` clean, `floating-promises` clean.
+
+- **The rout is ported after all, and the way through was a *second* field
+  rather than a bigger `univ.town` (M8, 2026-09-04).** Corpus
+  **1,188,459 → 1,188,475**; `VoDT_09-04-2025_09-41-10` goes 22,616 → 22,632
+  and its next divergence is a fresh one. Sixteen draws, and worth having for a
+  different reason: **the negative result recorded on 2026-09-03 is now
+  positive**, and the divergence deliberately left in `checkPartyDeath` is
+  gone.
+  - **What changed since the failed attempt.** That one made `univ.town` stay
+    loaded while the mode was OUTDOORS — a state this port has never been in,
+    with a great deal of code reading `univ.town !== null` as "we are in a
+    town". It cost 40,048 draws and dropped `VoDT_06-04-2025_15-56-37` from
+    13,764 to 6,554. This one puts the departing town in a **separate**
+    field, `Universe.departedTown`, so nothing that asks the old question gets
+    a different answer; only the two rules that genuinely need the town after
+    it is gone look at the new one. `VoDT_06-04-2025_15-56-37` is still at
+    13,764 and nothing else moved.
+  - `departedTown` was already half-built: it landed earlier the same day for
+    the **leave-town chain**, which has the same shape (a TOWN node that by
+    construction runs outdoors). Widening it from the `Town` record to the
+    whole `CurTown` is what gave `handle_get_items` the item list it needed.
+  - **`routOutOfArena` replaces `exitArenaCombat` on that path**, and the list
+    of what it does *not* do is the rule: `handle_party_death` runs
+    `end_town_mode(0, town_loc)`, `"End combat."` and
+    `handle_wandering_specials(2)` — and **not** `end_combat`. So `combat_pos`
+    and `parry` survive, `univ.cur_pc` is not handed back (it is 6, and
+    `party[6]` is PC 0), and the special is **`spec_on_flee`, not
+    `spec_on_win`** — this port was running the victory chain on a party that
+    had run away. There is no `play_sound(93)` either.
+  - **The instrument was `--clocks`, for the fifth time.** `diverge.mjs` put
+    the first divergence at draw 22,617; `align-actions --clocks` put the
+    clocks apart at draw **22,019**, which is the exact moment the party was
+    routed. Between them sat 600 draws of two engines agreeing about dice while
+    disagreeing about what turn it was. `[getitem]` then said it in one line:
+    `combat_pos=(20,23) items=23` there against `from=(-1,-1) items=0` here.
+  - 1,099 tests green, `tsc` clean, `verify-screen.mjs` PASS.
