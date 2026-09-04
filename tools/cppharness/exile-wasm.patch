@@ -228,10 +228,41 @@ index 17780bca..a349fe18 100644
  		if(type == "set-sdf") return eSpecType::SET_SDF;
  		if(type == "inc-sdf") return eSpecType::INC_SDF;
 diff --git a/src/game/boe.actions.cpp b/src/game/boe.actions.cpp
-index fc7b63f1..481d7ab8 100644
+index fc7b63f1..10508792 100644
 --- a/src/game/boe.actions.cpp
 +++ b/src/game/boe.actions.cpp
-@@ -1907,6 +1907,10 @@ void advance_time(bool did_something, bool need_redraw, bool need_reprint) {
+@@ -1394,12 +1394,30 @@ void handle_get_items(bool& did_something, bool& need_redraw, bool& need_reprint
+ 	int j = 0;
+ 	if(univ.party.in_boat >= 0)
+ 		add_string_to_buf("Get: Not while in boat.");
++	// [getitem] — which arm `handle_get_items` takes, the square it sweeps from
++	// and how many items answered. The pair on this side is `DBGGET=1`.
++	if(getenv("BOE_TRACE_GET"))
++		std::cout << "      [getitem] mode=" << int(overall_mode)
++			<< " town=" << int(univ.party.town_num)
++			<< " items=" << univ.town.items.size()
++			<< " cur_pc=" << univ.cur_pc
++			<< " combat_pos=(" << univ.current_pc().combat_pos.x << ","
++			<< univ.current_pc().combat_pos.y << ")"
++			<< " town_loc=(" << univ.party.town_loc.x << "," << univ.party.town_loc.y << ")"
++			<< " pcs=";
++	if(getenv("BOE_TRACE_GET")) {
++		for(short i = 0; i < 6; i++)
++			std::cout << "(" << univ.party[i].combat_pos.x << "," << univ.party[i].combat_pos.y << ")";
++		std::cout << std::endl;
++	}
+ 	if(overall_mode == MODE_TOWN)
+ 		j = get_item(univ.party.town_loc,6,false);
+ 	else {
+ 		j = get_item(univ.current_pc().combat_pos,univ.cur_pc,false);
+ 		take_ap(4);
+ 	}
++	if(getenv("BOE_TRACE_GET"))
++		std::cout << "      [getitem] j=" << j << std::endl;
+ 	if(j > 0) {
+ 		put_item_screen(stat_window);
+ 		put_pc_screen();
+@@ -1907,6 +1925,10 @@ void advance_time(bool did_something, bool need_redraw, bool need_reprint) {
  
   	// MARK: At this point, see if any specials have been queued up, and deal with them
  	// Note: We just check once here instead of looping because run_special also pulls from the queue.
@@ -242,7 +273,7 @@ index fc7b63f1..481d7ab8 100644
  	if(!special_queue.empty()) {
  		pending_special_type pending = special_queue.front();
  		special_queue.pop();
-@@ -3288,6 +3292,8 @@ void do_abort() {
+@@ -3288,6 +3310,8 @@ void do_abort() {
  void do_rest(long length, int hp_restore, int mp_restore) {
  	unsigned long age_before = univ.party.age;
  	univ.party.age += length;
@@ -251,7 +282,7 @@ index fc7b63f1..481d7ab8 100644
  	if(univ.scenario.is_legacy) {
  		univ.party.heal(hp_restore);
  		univ.party.restore_sp(mp_restore);
-@@ -3367,10 +3373,18 @@ void increase_age(bool eating_trigger_autosave) {
+@@ -3367,10 +3391,18 @@ void increase_age(bool eating_trigger_autosave) {
  		univ.party.age += 5;
  		if(univ.party.in_horse < 0)
  			univ.party.age += 5;
@@ -272,7 +303,7 @@ index fc7b63f1..481d7ab8 100644
  	move_to_zero(univ.party.light_level);
  	
  	// decrease monster present counter
-@@ -3547,6 +3561,10 @@ void increase_age(bool eating_trigger_autosave) {
+@@ -3547,6 +3579,10 @@ void increase_age(bool eating_trigger_autosave) {
  	// Recuperation and chronic disease disads
  	for(cPlayer& pc : univ.party)
  		if(pc.main_status == eMainStatus::ALIVE) {
@@ -283,7 +314,7 @@ index fc7b63f1..481d7ab8 100644
  			if(pc.traits[eTrait::RECUPERATION] && get_ran(1,0,10) == 1 && pc.cur_health < pc.max_health) {
  				pc.heal(2);
  			}
-@@ -4009,6 +4027,12 @@ bool outd_move_party(location destination,bool forced) {
+@@ -4009,6 +4045,12 @@ bool outd_move_party(location destination,bool forced) {
  //					party.out_c[i].exists = false;
  		
  		ter = univ.out[real_dest.x][real_dest.y];
@@ -296,7 +327,7 @@ index fc7b63f1..481d7ab8 100644
  		if(univ.party.in_boat >= 0) {
  			if(!outd_is_blocked(real_dest) //&& !outd_is_special(real_dest)
  				// not in towns
-@@ -4141,6 +4165,19 @@ bool outd_move_party(location destination,bool forced) {
+@@ -4141,6 +4183,19 @@ bool outd_move_party(location destination,bool forced) {
  bool town_move_party(location destination,short forced) {
  	bool keep_going = true;
  	bool check_f = false;

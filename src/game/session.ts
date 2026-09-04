@@ -2053,7 +2053,14 @@ export class GameSession {
      */
     who: Player,
   ): Promise<{ canEnter: boolean; forced: boolean }> {
-    const town = this.univ.town;
+    // **The mode is the authority, not whether a town is loaded.**
+    // `check_special_terrain` switches on `mode` for its terrain lookup
+    // (boe.specials.cpp:166) and asks `is_out()` for the fields and webs
+    // (:277) — never "is there a town object". The two coincide today because
+    // this port clears `univ.town` on the way out of one, which the C++ never
+    // does; asking the mode is what the C++ asks, and it is what keeps this
+    // honest if that ever changes.
+    const town = this.isOutdoors ? null : this.univ.town;
     const inCombatMove = isCombat(this.mode);
     let canEnter = true;
     let forced = false;
@@ -2278,6 +2285,9 @@ export class GameSession {
   private async checkFields(
     where: Location, inCombatMove: boolean, who: Player,
   ): Promise<void> {
+    // `if(is_out()) return;` (boe.specials.cpp:524), which the C++ asks a
+    // second time here even though its one caller has already asked.
+    if (this.isOutdoors) return;
     const town = this.univ.town;
     if (!town) return;
     const pc = who;
@@ -2811,6 +2821,23 @@ export class GameSession {
     if (fledPcs.length > 0) {
       for (const pc of fledPcs) pc.mainStatus = MainStatus.ALIVE;
       if (this.univ.party.isAlive()) {
+        // **A rout is `end_town_mode`, not `end_combat`** (boe.actions.cpp:1455;
+        // the 1997 original does the same at ACTIONS.CPP:1446, so it is the
+        // spec rather than an OBoE drift), and every *other* way out of a
+        // fight runs `end_combat` first — which is the function that clears
+        // `combat_pos` and `parry` and hands `cur_pc` back. So in the C++ a
+        // routed party comes out of the fight still carrying it, on a
+        // `univ.town` that is never unloaded, and `handle_get_items` outdoors
+        // then rummages the arena it ran from.
+        //
+        // **This port models it as `end_combat` anyway, and that is a
+        // deliberate divergence.** Porting it faithfully was tried on
+        // 2026-09-03 and cost the corpus 40,048 draws and two files: keeping
+        // `univ.town` loaded outdoors is a state this port has never been in,
+        // and a great deal of code reads `univ.town !== null` as "we are in a
+        // town" where the C++ reads `is_out()`. Reaching the real behaviour
+        // means making the mode the authority everywhere first, which is its
+        // own job. See the entry in `PROGRESS.md` for the measurement.
         if (this.mode === GameMode.COMBAT) {
           if (this.whichCombatType === 0) this.exitArenaCombat();
           else {

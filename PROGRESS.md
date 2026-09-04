@@ -9939,3 +9939,46 @@ The M6 list below is kept for the history of what it covered:
   - The bucket named `monstPickTarget`, three hundred actions of drifted town
     downstream. Bucket names near, not at.
   - 1,099 tests green, `tsc` clean, `floating-promises` clean.
+
+- **A rout out of a fight is `end_town_mode`, not `end_combat` — and porting
+  that faithfully cost 40,048 draws, so it is written down instead (M8,
+  2026-09-03).** Corpus-neutral as committed (**1,151,145** either side). This
+  is a **negative result**, kept because it is expensive to rediscover and
+  because the next person to read `checkPartyDeath` will have the same idea.
+  - **The rule.** `handle_party_death` resets every FLED PC to ALIVE and, if
+    that brings the party back, ends the fight with `end_town_mode(0,
+    town_loc)` and nothing else (boe.actions.cpp:1455). The 1997 original does
+    the same (ACTIONS.CPP:1446), so it is the spec, not an OBoE drift. Every
+    *other* way out of a fight — the End button, a win, a wipe — runs
+    `end_combat` first, and `end_combat` is the function that clears
+    `combat_pos` and `parry` and hands `cur_pc` back to `store_current_pc`. A
+    rout runs none of it.
+  - **What that buys the C++**, and it is not cosmetic: `handle_get_items`
+    splits on `MODE_TOWN` against *everything else*, so outdoors it sweeps
+    `univ.current_pc().combat_pos` — and after a rout that is a real square in
+    the arena the party just ran from, on a `univ.town` the C++ never unloads.
+    Pressing **g** on the world map rummages the fight and charges a turn for
+    it. `cur_pc` is **6** the whole time, which `party[6]` resolves to PC 0
+    (party.cpp:1143).
+  - **Why it is not ported.** The behaviour needs `univ.town` to stay loaded
+    while the mode is OUTDOORS. This port has never been in that state, and a
+    great deal of code reads `univ.town !== null` as "we are in a town" where
+    the C++ reads `is_out()`. Implementing it moved
+    `VoDT_09-04-2025_09-41-10` from 22,019 draws to 22,633 and took the corpus
+    from 1,151,145 to **1,111,097**, with `VoDT_06-04-2025_15-56-37` dropping
+    13,764 → 6,554 and *stopping* in `seekParty`. **Draws matched is the
+    meter, and it said no.** The prerequisite is making the mode the authority
+    everywhere `univ.town` is used as one; that is its own job, and until it is
+    done this divergence is deliberate and marked in `checkPartyDeath`.
+  - **Kept from the attempt**, because both are right on their own and cost
+    nothing while `univ.town` is still cleared: `checkSpecialTerrain` derives
+    its town from the **mode** rather than from `univ.town`, and `checkFields`
+    carries the C++'s own `if(is_out()) return;` (boe.specials.cpp:524) — the
+    second of two such guards, since its one caller has already asked.
+  - **`BOE_TRACE_GET=1` / `DBGGET=1`** is the new instrument and the reason
+    this was findable at all: one `[getitem]` line per `handle_get_items` with
+    the arm taken, the square swept and `cur_pc`. The square outdoors is a
+    stale `combat_pos` that **nothing else in either trace prints**, so the
+    draw stream could only ever say "a turn happened there and not here".
+    Documented in `tools/cppharness/README.md` and in the patch.
+  - 1,099 tests green, `tsc` clean, `floating-promises` clean.

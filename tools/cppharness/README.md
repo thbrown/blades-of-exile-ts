@@ -257,6 +257,18 @@ stay byte-identical until — thousands of actions later — one of them raises 
 rule on its first run: fifteen items there against nine here, the six missing
 ones all six squares away on one square.
 
+**`BOE_TRACE_GET=1` (`DBGGET=1` here) prints one `[getitem]` line per
+`handle_get_items`** — `mode= town= cur_pc= combat_pos= town_loc= pcs=…` on the
+way in and `j=` on the way out — and it is the pair to `GI` above rather than a
+duplicate of it: `GI` prints the *pile*, this prints **which square was swept
+and why**. The split in `handle_get_items` is `MODE_TOWN` against *everything
+else* (boe.actions.cpp:1396), so outdoors it sweeps `univ.current_pc()
+.combat_pos`, and `cur_pc` there is routinely **6** — `party[6]` is `party[0]`
+(party.cpp:1143), and its `combat_pos` is a leftover from the last fight that
+nothing else in either trace prints. It named the rout divergence: `mode=0
+town=200 cur_pc=6 combat_pos=(20,23)` on one side against a cleared `(-1,-1)`
+on the other, on a square neither engine was anywhere near.
+
 **`BOE_TRACE_XP=1` prints every `award_xp` call and the state that decides
 whether it rolls**: `[xp] pc= amt= force= status= level=`. The function is
 silent when it refuses — a dead PC, a level over 49, more than 200 points

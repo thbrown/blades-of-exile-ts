@@ -1852,6 +1852,18 @@ export async function runReplay(
           const from = inFight
             ? session.univ.currentPc.combatPos : session.univ.party.townLoc;
           const { items } = session.reachableItems(from);
+          // `DBGGET=1` — which arm this took, the square it swept and how many
+          // items answered; the pair to the harness's `BOE_TRACE_GET=1`
+          // `[getitem]`. Worth having because the two arms differ only in the
+          // square, and outdoors that square is a stale `combat_pos` whose
+          // value neither engine prints anywhere else.
+          if (process.env.DBGGET) {
+            // eslint-disable-next-line no-console
+            console.log(`      [getitem] mode=${session.mode}`
+              + ` town=${session.univ.party.townNum}`
+              + ` cur_pc=${session.univ.curPc}`
+              + ` from=(${from.x},${from.y}) items=${items.length}`);
+          }
           // `get_item` only puts the screen up when there is something to put
           // on it, so with an empty square the `click_control`s that would have
           // answered it are simply not in the recording either.
