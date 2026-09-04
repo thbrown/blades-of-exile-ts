@@ -37,7 +37,7 @@ import {
   NO_ONE, endTownCombat, pcAttack, pickNextPc, setPcMoves, startTownCombat, takeAp,
 } from './combat';
 import {
-  combatRunMonst, doMonsterTurn, doMonsters, monstAdjacent, monsterAttack,
+  TRACE_MMOVE, combatRunMonst, doMonsterTurn, doMonsters, monstAdjacent, monsterAttack,
 } from './monsterTurn';
 import {
   adjacentEncounter, countWalls, createWandMonst, doOutdoorMonsters, outEncLevTot,
@@ -900,6 +900,21 @@ export class GameSession {
     let forced = specialForced;
     const ter = out.at(realDest.x, realDest.y);
     const terType = this.univ.terrainType(ter);
+    // `[outmove]` — the pair to the harness's `BOE_TRACE_OUTMOVE=1`, printed at
+    // the same point in `outd_move_party` (boe.actions.cpp:4045) and with the
+    // same fields. The one that answers questions is `ter=`: an outdoor step
+    // refused here and taken there, with no draws between them, is nearly
+    // always the two runs holding *different terrain* on the square rather than
+    // a movement rule. Without this the only evidence was "a turn happened
+    // there and not here", which names nothing.
+    if (TRACE_MMOVE) {
+      // eslint-disable-next-line no-console
+      console.log(`      [outmove] dest=(${destination.x},${destination.y})`
+        + ` real=(${realDest.x},${realDest.y})`
+        + ` corner=(${party.outdoorCorner.x},${party.outdoorCorner.y})`
+        + ` ter=${ter} blocked=${Number(this.outdIsBlocked(realDest))}`
+        + ` forced=${Number(forced)}`);
+    }
     const diagonal = realDest.x !== party.outLoc.x && realDest.y !== party.outLoc.y;
     /**
      * **Nothing.** The C++ shifts the window before it decides whether the step

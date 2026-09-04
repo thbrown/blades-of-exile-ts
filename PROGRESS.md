@@ -14,7 +14,7 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-03** that is
-  **1,151,147 matching draws, 41 of 87 files agreeing all the way**, 40 blocked
+  **1,183,528 matching draws, 41 of 87 files agreeing all the way**, 40 blocked
   by the oracle rather than by this port, and **6 rule buckets left in the
   queue** — every one of them a single file now. Add `--refresh` after a code change.
 - Two companion meters answer questions the draw stream cannot.
@@ -58,7 +58,7 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-03).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,151,147 matching
+`get_ran` streams together, rule by rule. It stands at **1,183,528 matching
 draws and 41 of 87 recordings agreeing all the way**, against 1,039,384 and 33
 at the start of 2026-09-02. Six rule buckets remain in the queue (see
 `diverge.mjs --all --stacks`), one file each; 40 of the 87 are blocked by the
@@ -10045,3 +10045,54 @@ The M6 list below is kept for the history of what it covered:
     ~90 minutes for one file. If someone does pick it up, instrument
     `get_num_response` first — the question is whether `numPanel.run()` reaches
     `handle_events` at all.
+
+- **An outdoor `CHANGE_TER` was landing 48 squares from where the C++ put it
+  (M8, 2026-09-04).** Corpus **1,151,147 → 1,183,528** — **+32,381 matching
+  draws** — with `ASR_20-05-2025_07-20-41` going from 20,002 to **57,265**
+  before it parts again. Two fixes in one slice; this is the second.
+  - **The rule.** `alter_space(i, j, ter)` (boe.locutils.cpp:587) branches on
+    `is_out()`, and its outdoor arm reads `i, j` as **sector-local**
+    coordinates: it runs them through `local_to_global` before writing the
+    96×96 window. This port wrote `univ.out.set(x, y, ter)` straight, so with
+    `i_w_c` at (1,1) a `CHANGE_TER` at sector (39,4) landed on window (39,4)
+    instead of (87,52).
+  - **And the C++ writes it twice** — `univ.out[global] = ter` *and*
+    `univ.out->terrain[i][j] = ter`, the sector's own grid. The second write is
+    the load-bearing one: `build_outdoors` re-stitches the whole window out of
+    `univ.scenario.outdoors` every time the party crosses a seam, so a change
+    held only in the window is undone by the next `shift_universe`. This port
+    kept it only in the window.
+  - **What it looked like from the game.** An ASR outdoor node opens a mountain
+    pass. Here the mountain stayed, so the party was refused at (87,52), and
+    from that refusal on the clock was one outdoor turn behind — ten age, which
+    is one wandering-monster roll every tenth turn, which is a different game.
+  - **The instrument that named it did not exist yet, and now does.** The
+    harness has printed `[outmove]` for the party's own step since 2026-08-21;
+    this port had no pair. Adding one (`MMOVE=1` in `outdMoveParty`, same
+    fields) turned the question into a one-line diff: **1,317 outdoor steps,
+    every square agreeing but one**, `ter=36 blocked=0` there against `ter=30
+    blocked=1` here. Diffing the `ter=` column of a whole recording is a map
+    comparison for free, and it is the first thing to reach for when two runs
+    disagree about whether a step happened.
+  - The second instrument is new too: `BOE_TRACE_ALTER` had only a *town* arm,
+    so the one call that mattered printed nothing on either side. Both arms
+    exist now (`ALTER=1` here, folded into `tools/cppharness/exile-wasm.patch`
+    there), and the C++'s prints the global square as well as the local one —
+    which is the whole bug in one line.
+  - 1,099 tests green, `tsc` clean, `floating-promises` clean.
+
+- **`new_party`, and the arm of it that does nothing (M8, 2026-09-04).**
+  The first of the slice's two fixes, and the reason the file got far enough to
+  find the second: `ASR_20-05-2025_07-20-41` stopped dead at action 3,373 of
+  5,400 with `no handler for 'new_party'`.
+  - `new_party` (boe.actions.cpp:3723) is File > New Game *during* a game. With
+    a party in memory it raises `restart-game`, whose controls are `okay` and
+    `cancel`, and **cancel makes the action a complete no-op** — it returns
+    before `advance_time`, so no turn and no draw. That is what this recording
+    does, 3,382 actions in.
+  - The confirmed arm drops to the startup screen and runs `start_new_game()`,
+    which is the flow `pick_a_scen` still needs; the driver stops with a reason
+    rather than carrying on with the old party. Marked `TODO(M8)`.
+  - **Re-derive the unhandled-action list from `grep "case '" src/replay/driver.ts`**
+    — the list in "Next steps" above named three actions and `new_party` was not
+    among them.

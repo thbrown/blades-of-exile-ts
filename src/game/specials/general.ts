@@ -4,6 +4,7 @@
  */
 
 import { SpecType } from '../../data/special';
+import { loc } from '../../core/location';
 import { TRACE_AGE } from '../../core/trace';
 import { TerSpec } from '../../data/terrain';
 import { interestingString } from '../../data/item';
@@ -441,7 +442,29 @@ export function alterSpace(univ: Universe, x: number, y: number, ter: number): v
       setUpLights((n) => univ.terrainType(n), town.record);
     }
   } else {
-    univ.out.set(x, y, ter);
+    // **Outdoors the coordinates are sector-local, not window coordinates**
+    // (boe.locutils.cpp:588): `alter_space` runs them through
+    // `local_to_global` before touching the 96×96 window, exactly as every
+    // other outdoor node's coordinates are. Writing them straight into the
+    // window put the change 48 squares away whenever `i_w_c` was 1 — an
+    // outdoor `CHANGE_TER` at sector (39,4) landed on window (39,4) here and
+    // on (87,52) there.
+    const global = univ.party.localToGlobal(loc(x, y));
+    if (TRACE_ALTER) {
+      // eslint-disable-next-line no-console
+      console.log(`      [alter] out (${x},${y}) global (${global.x},${global.y})`
+        + ` ${univ.out.at(global.x, global.y)} -> ${ter}`);
+    }
+    univ.out.set(global.x, global.y, ter);
+    // **And it is written twice.** The second write is to the *sector's own*
+    // terrain, which is what makes an outdoor terrain change survive a window
+    // rebuild: `build_outdoors` re-stitches the 96×96 window out of
+    // `univ.scenario.outdoors` every time the party crosses a seam, so a
+    // change held only in the window is undone by the next `shift_universe`.
+    // The C++ writes `univ.out->terrain[i][j]`, the sector the party is
+    // standing in, indexed by the same local coordinates.
+    const sector = univ.out.sector;
+    if (sector.terrain[x]?.[y] !== undefined) sector.terrain[x]![y] = ter;
   }
 }
 

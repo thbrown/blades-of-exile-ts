@@ -1235,6 +1235,34 @@ export async function runReplay(
           } else session.univ.addStringToBuf('Delete PC: Cancelled.');
           break;
         }
+        case 'new_party': {
+          // `new_party` (boe.actions.cpp:3723) — File > New Game *while a game
+          // is running*. With a party in memory it opens `restart-game`, a
+          // two-button confirm whose controls are `okay` and `cancel`, and
+          // **cancelling makes the whole action a no-op**: no turn, no draw,
+          // nothing touched. That is the arm the corpus exercises
+          // (`ASR_20-05-2025_07-20-41` presses it 3,382 actions in and backs
+          // out), and the one worth being exact about, because the C++ charges
+          // nothing for it either — `new_party` returns before `advance_time`.
+          const dlg = session.host;
+          if (!dlg) break;
+          const picked = await dlg.choice(
+            ['Starting over will discard any unsaved progress.',
+              'Are you sure you want to do this?'],
+            [{ name: 'okay', label: 'New Game' }, { name: 'cancel', label: 'Cancel' }],
+            '', 0, 0);
+          if (picked !== 0) break;
+          // TODO(M8): the confirmed arm drops to the startup screen and runs
+          // `start_new_game()`, which is the same flow `pick_a_scen` needs and
+          // which this driver does not have yet. Stopping is the honest answer
+          // — carrying on with the old party would make every action after this
+          // a different game.
+          result.unsupported['new_party (confirmed)'] =
+            (result.unsupported['new_party (confirmed)'] ?? 0) + 1;
+          result.error = "'new_party' was confirmed: the recording starts a fresh game here";
+          result.errorAt = at;
+          return result;
+        }
         case 'cancel_item_target':
           // Leaving an identify or recharge queue (boe.actions.cpp:2579). **It
           // costs a turn** — the C++'s comment is "Time passes because a spell

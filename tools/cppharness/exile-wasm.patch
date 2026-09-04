@@ -467,10 +467,18 @@ index 763a6cc7..e17f112c 100644
  		
  	itemDialog.setResult(false); // The result is set to true if the player steals something
 diff --git a/src/game/boe.locutils.cpp b/src/game/boe.locutils.cpp
-index 259a4d3f..59d2ef5b 100644
+index 259a4d3f..45613402 100644
 --- a/src/game/boe.locutils.cpp
 +++ b/src/game/boe.locutils.cpp
-@@ -592,6 +592,9 @@ void alter_space(short i,short j,ter_num_t ter) {
+@@ -588,10 +588,17 @@ void alter_space(short i,short j,ter_num_t ter) {
+ 	if(is_out()) {
+ 		location l(i,j);
+ 		l = local_to_global(l);
++		if(getenv("BOE_TRACE_ALTER"))
++			std::cout << "      [alter] out (" << i << "," << j << ") global ("
++				<< l.x << "," << l.y << ") " << int(univ.out[l.x][l.y])
++				<< " -> " << int(ter) << std::endl;
+ 		univ.out[l.x][l.y] = ter;
  		univ.out->terrain[i][j] = ter;
  	} else {
  		ter_num_t former = univ.town->terrain(i,j);

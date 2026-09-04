@@ -50,6 +50,12 @@ outdoor corner and `i_w_c`, since two windows that agree on every coordinate can
 still be stitched from different sectors. `BOE_TRACE_OUTMOVE=1` prints every
 square an outdoor group tries to step onto with the terrain it found there —
 that pair ("we say 8, it says 93") is how a map divergence gets named.
+It also prints `[outmove]` for the **party's** own steps, out of
+`outd_move_party`, and **that half now has a pair here**: `MMOVE=1` prints the
+same `dest= real= corner= ter= blocked= forced=` line from this port's
+`outdMoveParty`. Diffing the two `ter=` columns over a whole recording is a map
+comparison for free — 1,317 outdoor steps of `ASR_20-05-2025_07-20-41` agreed on
+every square but one, and that one square was the bug.
 `BOE_TRACE_ITEMS=1` (`ITEMS=1` here) prints all six packs as
 `index:variety/charges/type_flag`, which is what an item divergence looks like
 before it turns into a dialog one side raises and the other doesn't. It found
@@ -223,10 +229,17 @@ port said `Can't see target`" becomes one column instead of a hunt — it named
 both the rotated `place_party` formation and a door this port had not opened.
 
 **`BOE_TRACE_ALTER=1` prints every `alter_space`** (`ALTER=1` here):
-`town= (x,y) former -> ter`.
+`town= (x,y) former -> ter` in a town, and
+`out (x,y) global (X,Y) former -> ter` outdoors.
 Terrain a *game* has changed is state, it survives a town exit, and nothing in
 the draw stream can see it; a door open on one side and shut on the other is a
 line of sight that differs and a spell that is refused.
+The **outdoor** arm was added 2026-09-04 and paid for itself immediately: the
+coordinates there are *sector-local* and go through `local_to_global`, which
+this port was not doing, so one `CHANGE_TER` landed 48 squares from where the
+C++ put it and left a mountain standing in a pass the recording walked through.
+Pair it with `[outmove]`: `ter=` on the two sides is the cheapest way to see
+that the two runs are holding different ground.
 
 **`BOE_TRACE_PICKSP=1` prints the spell picker's caster memory**: `[picksp]
 enter type= stored= cur= forced=` at the top of `pick_spell`, and `[picksp]
