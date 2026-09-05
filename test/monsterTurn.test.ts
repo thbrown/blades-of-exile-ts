@@ -87,6 +87,32 @@ describe('a monster taking its turn', () => {
     expect(univ.party.pcs.some((pc) => pc.isAlive)).toBe(true);
   });
 
+  it('does nothing at all while debug mode is on', async () => {
+    // `if(univ.debug_mode) cur_monst->ap = 0;` (boe.combat.cpp:2142) — the
+    // fourth rule that reads the flag, after `damage_monst`'s instant kill,
+    // `kill_monst`'s skipped rewards and the movement override. Nothing moves
+    // and nothing rolls, which is what a tester walking through walls wants.
+    const { univ, session, monst } = combatWithOne();
+    monst.active = CreatureStatus.ALERTED;
+    const pc = univ.party.pcs[0]!;
+    monst.curLoc = loc(pc.combatPos.x + 1, pc.combatPos.y);
+    univ.debugMode = true;
+    const where = { ...monst.curLoc };
+    const drawsBefore = univ.rng.gameDraws;
+
+    for (let i = 0; i < 5; i++) {
+      monst.active = CreatureStatus.ALERTED;
+      await doMonsterTurn(session);
+    }
+
+    expect(monst.ap).toBe(0);
+    expect(monst.curLoc).toEqual(where);
+    expect(univ.party.pcs.every((p) => p.curHealth === 200)).toBe(true);
+    // And it is free: an alerted creature that never spends a point never
+    // reaches `monst_pick_target`, so the round costs no draws either.
+    expect(univ.rng.gameDraws).toBe(drawsBefore);
+  });
+
   it('attacks a PC once it is adjacent, and the PC feels it', async () => {
     const { univ, session, monst } = combatWithOne();
     monst.active = CreatureStatus.ALERTED;

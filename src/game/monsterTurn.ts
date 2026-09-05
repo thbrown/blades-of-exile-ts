@@ -1161,6 +1161,18 @@ function giveMonstersMoves(session: GameSession): void {
     if ((monst.status[Status.ASLEEP] ?? 0) > 0 || (monst.status[Status.PARALYZED] ?? 0) > 0) {
       monst.ap = 0;
     }
+    // **Debug mode freezes every creature** (boe.combat.cpp:2142) — a bare
+    // `if(univ.debug_mode) cur_monst->ap = 0;` right here, so nothing moves or
+    // attacks while the tester is walking through walls. It is the **fourth**
+    // rule that reads `debug_mode` rather than the three listed on
+    // `Universe.debugMode`: `damage_monst`'s instant kill, `kill_monst`'s
+    // skipped experience and treasure, the movement override — and this.
+    //
+    // It costs draws, so a recording that toggles debug mode diverges at the
+    // next monster round: `VoDT_04-05-memory-dump` turns it on at action 86 and
+    // off at 250, and for those 164 actions the C++'s creatures spend no action
+    // points and make no `monst_pick_target` rolls at all.
+    if (univ.debugMode) monst.ap = 0;
 
     // Summons run out.
     if (monst.isAlive) {

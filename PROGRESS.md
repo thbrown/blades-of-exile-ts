@@ -14,11 +14,10 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-03** that is
-  **1,194,292 matching draws, 43 of 87 files agreeing all the way**, 41 blocked
-  by the oracle rather than by this port, and **3 rule buckets left in the
-  queue** — every one of them a single file, and one of the three is really a
-  42nd oracle gap (`OneOfEverything`; see the entry at the bottom). **Two rules
-  files left.** Add `--refresh` after a code change.
+  **1,202,692 matching draws, 43 of 87 files agreeing all the way**, 42 blocked
+  by the oracle rather than by this port, and **2 rule buckets left in the
+  queue** — one of which is really a 43rd oracle gap (`OneOfEverything`; see the
+  entry at the bottom). **One rules file left: `AllMageSpells`.** Add `--refresh` after a code change.
 - Two companion meters answer questions the draw stream cannot.
   `node scripts/align-actions.mjs --all` asks whether the two **action**
   streams ever drift apart (they do not: 0 of 73), and
@@ -60,13 +59,13 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-03).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,194,292 matching
+`get_ran` streams together, rule by rule. It stands at **1,202,692 matching
 draws and 43 of 87 recordings agreeing all the way**, against 1,039,384 and 33
-at the start of 2026-09-02. Three rule buckets remain in the queue (see
-`diverge.mjs --all --stacks`), one file each; 41 of the 87 are blocked by the
-*oracle* rather than by this port and cannot be won at all — and one of the
-three remaining "rule" buckets, `OneOfEverything`, is really a 42nd oracle gap;
-see the entry at the bottom of this file. **Two rules files left.**
+at the start of 2026-09-02. Two rule buckets remain in the queue (see
+`diverge.mjs --all --stacks`), one file each; 42 of the 87 are blocked by the
+*oracle* rather than by this port and cannot be won at all — and one of the two
+remaining "rule" buckets, `OneOfEverything`, is really a 43rd oracle gap; see
+the entry at the bottom of this file. **One rules file left: `AllMageSpells`.**
 
 M8 is not only dice. Chasing the corpus has filled in real features it turned
 out to need — **creating a character** (`handle_new_pc` and its four dialogs),
@@ -10299,3 +10298,29 @@ The M6 list below is kept for the history of what it covered:
     Feodoric.
   - A test in `itemUse.test.ts` uses an empty row and checks both halves: the
     refusal is printed *and* the turn passes.
+
+- **Debug mode freezes every creature, and that is the *fourth* rule that reads
+  the flag (M8, 2026-09-04).** Corpus **1,194,292 → 1,202,692**, and
+  `VoDT_04-05-memory-dump` matches all **12,805** of the oracle's draws — from
+  4,405 — and moves into the oracle-blocked pile.
+  - `do_monster_turn` gives each alerted creature its action points and then, on
+    the next line but one, `if(univ.debug_mode) cur_monst->ap = 0;`
+    (boe.combat.cpp:2142). Nothing moves, nothing attacks, and nothing rolls: an
+    alerted creature that spends no point never reaches `monst_pick_target`, so
+    the whole round is **free of draws**.
+  - The comment on `Universe.debugMode` listed three rules that read the flag —
+    `damage_monst`'s instant kill, `kill_monst`'s skipped experience and
+    treasure, and the movement override with `ghost_mode`. This is the fourth,
+    and it is the one that costs draws by the hundred: `VoDT_04-05-memory-dump`
+    turns debug mode on at action 86 and off at 250, and for those 164 actions
+    the C++'s four Alien Beasts stand still while this port's rolled a target
+    and a random step apiece, every round.
+  - The instrument was `BOE_TRACE_RAN_STACK=4406` on the harness — one draw's
+    stack, which came back `process_fields ← combat_run_monst` where this port
+    was in `monstPickTarget`. Both sides had the same four creatures at the same
+    squares with the same health (`MONST=1` said so), so "the AI chose
+    differently" was already ruled out; the only thing left was that the C++'s
+    creatures had **no turn at all**.
+  - A test in `monsterTurn.test.ts` runs five rounds with the flag on and checks
+    all three consequences: no action points, no movement, no damage — and no
+    draws.
