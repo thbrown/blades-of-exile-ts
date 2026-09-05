@@ -25,7 +25,8 @@ import { Lighting } from '../data/town';
 import { getProtLevel, hasAbilEquip } from '../universe/inventory';
 import { Player } from '../universe/player';
 import { MainStatus, PartyStatus, Race, Status, Trait, statusInfo } from '../universe/skills';
-import { Party } from '../universe/party';
+import { MAX_FOOD, MAX_GOLD, Party } from '../universe/party';
+import { Universe } from '../universe/universe';
 import { damagePc, hitParty } from './damage';
 import { hasAbil } from './alchemy';
 import { drainPc } from './itemUse';
@@ -45,6 +46,24 @@ function partyMoveToZero(party: Party, which: PartyStatus): void {
   const v = party.partyStatus[which];
   if (v > 0) party.partyStatus[which] = v - 1;
   else if (v < 0) party.partyStatus[which] = v + 1;
+}
+
+/**
+ * `dump_gold` (boe.town.cpp:1156) — the C++'s own "mildly kludgy gold check".
+ * Both `increase_age` and `combat_run_monst` call it, so the ceiling is
+ * enforced once a turn wherever the party is rather than at every place that
+ * hands gold out. It lives here rather than beside the town code because those
+ * are its only two callers and one of them already imports this module.
+ */
+export function dumpGold(univ: Universe): void {
+  if (univ.party.gold > MAX_GOLD) {
+    univ.party.gold = MAX_GOLD;
+    univ.addStringToBuf('Excess gold dropped.');
+  }
+  if (univ.party.food > MAX_FOOD) {
+    univ.party.food = MAX_FOOD;
+    univ.addStringToBuf('Excess food dropped.');
+  }
 }
 
 /**
@@ -392,4 +411,10 @@ export async function increaseAgeEffects(session: GameSession): Promise<void> {
       pc.heal(j);
     }
   }
+
+  // `dump_gold(1)` (boe.actions.cpp:3612) — the last thing `increase_age` does
+  // before handing over to the timers. Its twin in `combat_run_monst` means the
+  // ceiling is enforced once a turn wherever the party is, rather than at every
+  // place that hands out gold.
+  dumpGold(univ);
 }

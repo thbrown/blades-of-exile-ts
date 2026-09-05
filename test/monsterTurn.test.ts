@@ -20,7 +20,9 @@ import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { Creature, CreatureStatus, assignCreature } from '../src/universe/creature';
 import { PartyPreset } from '../src/universe/player';
-import { MainStatus, Status, Trait } from '../src/universe/skills';
+import { MainStatus, PartyStatus, Status, Trait } from '../src/universe/skills';
+import { MAX_FOOD, MAX_GOLD } from '../src/universe/party';
+import { ItemAbil, ItemType, ItemUse, defaultItem } from '../src/data/item';
 import { Universe } from '../src/universe/universe';
 
 const opcodes = buildOpcodeTable(
@@ -565,6 +567,140 @@ describe('the round between rounds', () => {
     univ.party.age = 3;
     await combatRunMonst(session); // age becomes 4
     expect(pc.status[Status.BLESS_CURSE]).toBe(7);
+  });
+
+  /**
+   * `move_to_zero(univ.party.status[STEALTH])` sits *inside* the per-PC loop
+   * (boe.combat.cpp:1916), so a combat round spends six points of Stealth
+   * rather than one. Kept, and this is what would notice a tidy-up.
+   */
+  it('a combat round burns six points of Stealth, not one', async () => {
+    const { univ, session } = combatWithOne();
+    univ.party.partyStatus[PartyStatus.STEALTH] = 20;
+    univ.party.age = 3;
+    await combatRunMonst(session); // age becomes 4
+    expect(univ.party.partyStatus[PartyStatus.STEALTH]).toBe(14);
+  });
+
+  it('detect life, firewalk and the hostile counter tick every round', async () => {
+    const { univ, session } = combatWithOne();
+    univ.party.partyStatus[PartyStatus.DETECT_LIFE] = 5;
+    univ.party.partyStatus[PartyStatus.FIREWALK] = 3;
+    univ.party.hostilesPresent = 30;
+    await combatRunMonst(session);
+    expect(univ.party.partyStatus[PartyStatus.DETECT_LIFE]).toBe(4);
+    expect(univ.party.partyStatus[PartyStatus.FIREWALK]).toBe(2);
+    expect(univ.party.hostilesPresent).toBe(29);
+  });
+
+  /**
+   * `dump_gold(1)` — the ceiling is enforced once a round rather than at every
+   * place that hands gold out.
+   */
+  it('trims gold and food back to the ceiling', async () => {
+    const { univ, session } = combatWithOne();
+    univ.party.gold = MAX_GOLD + 500;
+    univ.party.food = MAX_FOOD + 500;
+    await combatRunMonst(session);
+    expect(univ.party.gold).toBe(MAX_GOLD);
+    expect(univ.party.food).toBe(MAX_FOOD);
+    expect(univ.transcript).toContain('Excess gold dropped.');
+    expect(univ.transcript).toContain('Excess food dropped.');
+  });
+
+  /**
+   * **A regeneration item heals in combat off `item_level`, not
+   * `abil_strength / 3`** — `increase_age`'s copy of this uses the other field
+   * — and there is no "only if hurt" guard, so the draw is spent either way.
+   */
+  it('a regeneration item heals every fourth round, off item_level', async () => {
+    const { univ, session } = combatWithOne();
+    const pc = univ.party.pcs[0]!;
+    pc.items[0] = {
+      ...defaultItem(), variety: ItemType.RING, name: 'Ring',
+      ability: ItemAbil.REGENERATE, abilStrength: 3, itemLevel: 8, weight: 0,
+    };
+    pc.equip[0] = true;
+    pc.curHealth = 10;
+    univ.party.age = 3;
+    await combatRunMonst(session);
+    expect(pc.curHealth).toBeGreaterThanOrEqual(10);
+    // The roll is `get_ran(1, 0, item_level + 1)`, so at most nine points.
+    expect(pc.curHealth).toBeLessThanOrEqual(19);
+  });
+
+  /**
+   * The per-PC half of OCCASIONAL_STATUS (boe.combat.cpp:1935) — a one in
+   * eleven per candidate item per round, and it walks the whole pack rather
+   * than what is worn.
+   */
+  it('an OCCASIONAL_STATUS item eventually fires, and says so', async () => {
+    const { univ, session } = combatWithOne();
+    const pc = univ.party.pcs[0]!;
+    pc.items[0] = {
+      ...defaultItem(), variety: ItemType.RING, name: 'Ring',
+      ability: ItemAbil.OCCASIONAL_STATUS, abilStrength: 4,
+      abilData: Status.BLESS_CURSE, weight: 0,
+    };
+    // Not equipped: the sweep does not care.
+    pc.equip[0] = false;
+    for (let i = 0; i < 200 && (pc.status[Status.BLESS_CURSE] ?? 0) === 0; i++) {
+      await combatRunMonst(session);
+    }
+    expect(pc.status[Status.BLESS_CURSE]).toBeGreaterThan(0);
+    expect(univ.transcript).toContain('An item blesses you!');
+  });
+
+  /**
+   * Two sign flips in a row: `abil_harms` negates, and a status that is
+   * *itself* negative negates again. So a HELP item carrying POISON cures and
+   * a HARM one poisons — the two cancel, and the item's use type is what a
+   * scenario actually steers with.
+   */
+  it.each([
+    [ItemUse.HELP_ONE, 'An item cures you!'],
+    [ItemUse.HARM_ONE, 'An item poisons you!'],
+  ])('a %i-use item carrying POISON says "%s"', async (use, line) => {
+    const { univ, session } = combatWithOne();
+    const pc = univ.party.pcs[0]!;
+    pc.items[0] = {
+      ...defaultItem(), variety: ItemType.RING, name: 'Ring',
+      ability: ItemAbil.OCCASIONAL_STATUS, abilStrength: 2,
+      abilData: Status.POISON, magicUseType: use, weight: 0,
+    };
+    pc.equip[0] = false;
+    for (let i = 0; i < 200 && !univ.transcript.includes(line); i++) {
+      // Kept topped up: the "cures" message only appears when there is poison
+      // to cure, and do_poison burns it off between rounds.
+      pc.status[Status.POISON] = 6;
+      await combatRunMonst(session);
+    }
+    expect(univ.transcript).toContain(line);
+  });
+
+  /**
+   * The POISONED_WEAPON arm looks for a poisonable weapon **anywhere in the
+   * pack**, not an equipped one — unlike `poison_weapon`, which insists. With
+   * none at all it `continue`s, so the roll is spent and nothing is applied.
+   */
+  it('a weapon-poisoning item finds an unequipped weapon', async () => {
+    const { univ, session } = combatWithOne();
+    const pc = univ.party.pcs[0]!;
+    pc.items[0] = {
+      ...defaultItem(), variety: ItemType.ONE_HANDED, name: 'Dagger', weight: 0,
+    };
+    pc.items[1] = {
+      ...defaultItem(), variety: ItemType.RING, name: 'Ring',
+      ability: ItemAbil.OCCASIONAL_STATUS, abilStrength: 3,
+      abilData: Status.POISONED_WEAPON, weight: 0,
+    };
+    pc.equip[0] = false;
+    pc.equip[1] = false;
+    for (let i = 0; i < 200 && pc.weapPoisoned === null; i++) {
+      await combatRunMonst(session);
+    }
+    expect(pc.weapPoisoned).toBe(pc.items[0]);
+    expect(univ.transcript).toContain('An item poisons your weapon!');
   });
 
   it('a party that runs out of moves gets a fresh round automatically', async () => {

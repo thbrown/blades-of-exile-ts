@@ -12,7 +12,7 @@ import { Skill, Status, Trait } from '../universe/skills';
 import { Universe } from '../universe/universe';
 
 /** is_poisonable_weap (boe.party.cpp:485) — melee weapons and ammunition. */
-function isPoisonableWeap(item: Item): boolean {
+export function isPoisonableWeap(item: Item): boolean {
   return item.variety === ItemType.ONE_HANDED || item.variety === ItemType.TWO_HANDED
     || item.variety === ItemType.ARROW || item.variety === ItemType.BOLTS;
 }

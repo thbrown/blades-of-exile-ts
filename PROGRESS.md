@@ -10895,3 +10895,41 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     carried a `TODO(M6)` for `combine_things`, which has been ported for two
     milestones. `grep -rn "TODO(M" src/` is only an honest inventory if the
     prose is kept honest too.
+
+- **A fight is not a cheaper turn than a walk (M6, 2026-09-05).**
+  `combat_run_monst`'s end-of-round upkeep (boe.combat.cpp:1874) was ported
+  down to the status decay and stopped there. Six pieces were missing, **three
+  of them dice**, which is why this went in as a corpus change rather than a
+  tidy-up.
+  - **The radiant-item glow** (:1888) — one `get_ran(1,1,10)` per round in any
+    town that is not normally lit. A fight in the dark spends a die the same
+    fight in daylight does not.
+  - **A regeneration item heals every fourth round, and the roll is
+    `get_ran(1,0,item_level + 1)`** — `increase_age`'s copy of the same item
+    rolls on `abil_strength / 3` instead, and there is no "only if hurt" guard
+    here, so the draw is spent on a PC at full health.
+  - **The per-PC half of `OCCASIONAL_STATUS`** (:1935): one `get_ran(1,0,10)`
+    per candidate item per round, and it walks the **whole pack** — an item
+    need not be equipped or even identified. The party-wide half was already
+    in `increase_age` and fires every five hundredth *turn*, which is a very
+    different rule for the same ability. Two sign flips apply in a row —
+    `abil_harms` negates, and a status that is itself negative negates again —
+    so a HELP item carrying POISON cures and a HARM one poisons. It calls
+    `apply_status` directly, with the C++'s note that an item you are wearing
+    bypasses your resistance to what it does.
+  - **`move_to_zero(party.status[STEALTH])` sits inside the per-PC loop**
+    (:1916), so a combat round burns six points of Stealth rather than one.
+    Kept, with a test that would notice a tidy-up.
+  - `DETECT_LIFE`, `FIREWALK` and `hostiles_present` were not decaying at all
+    in combat, so Firewalk cast in a fight outlasted it.
+  - **`dump_gold` (boe.town.cpp:1156) was not ported anywhere.** Both
+    `increase_age` and `combat_run_monst` call it, which is how the 30,000
+    ceiling is enforced — once a turn, rather than at each of the dozen places
+    that hand gold out. It lives in `increaseAge.ts` because those are its only
+    two callers and `monsterTurn.ts` already imports that module; putting it
+    the other way round would have made a cycle.
+  - And one asymmetry worth knowing: the light-level rules at the top of the
+    function are `if(which_combat_type == 1 && lighting == 2) light -= 9;` and
+    an **unguarded** `if(lighting == 3) light = 0;`. An outdoor fight in a dark
+    town's arena keeps its torch; a pitch-dark one snuffs it wherever you are.
+    This port had dropped the combat-type guard.

@@ -15,7 +15,9 @@ import { Creature, CreatureStatus } from '../universe/creature';
 import { Living, SpellNote, livingSound } from '../universe/living';
 import { MonstMelee } from '../data/monster';
 import { Player } from '../universe/player';
-import { MainStatus, PartyStatus, Race, Skill, Status, Trait, isHumanoid } from '../universe/skills';
+import {
+  MainStatus, PartyStatus, Race, Skill, Status, Trait, isHumanoid, statusInfo,
+} from '../universe/skills';
 import { Universe } from '../universe/universe';
 import { SpecCtx, SpecCtxType } from './specials/context';
 import {
@@ -31,13 +33,14 @@ import { drawTerrain2 } from './textBar';
 import { GameMode, isCombat, isTown } from './modes';
 import { damageMonst, damagePc, hitChance } from './damage';
 import { onHitTargetSpecial } from './weaponAbilities';
-import { ItemAbil } from '../data/item';
+import { ItemAbil, abilGroup, abilHarms } from '../data/item';
 import { FieldType } from '../data/fields';
-import { hasAbilEquip } from '../universe/inventory';
+import { getProtLevel, hasAbilEquip } from '../universe/inventory';
 import { animSettle, bookActionPause, focusOn } from './anim';
-import { doPoison, handleAcid, handleDisease } from './increaseAge';
+import { doPoison, dumpGold, handleAcid, handleDisease } from './increaseAge';
 import { monstInflictFields, processFields } from './processFields';
 import { specialIncreaseAge } from './specialIncreaseAge';
+import { isPoisonableWeap } from './poisonWeapon';
 import { pushThings } from './pushThings';
 import { monstCastMage, monstCastPriest } from './monsterSpells';
 import { placeSpellPattern } from './spellPatterns';
@@ -1771,11 +1774,15 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
 }
 
 /**
- * combat_run_monst (boe.combat.cpp:1867) — the monsters' turn plus the
+ * combat_run_monst (boe.combat.cpp:1874) — the monsters' turn plus the
  * end-of-round upkeep: the clock, the light burning down, and every timed
  * status ticking toward zero.
  *
- * TODO(M6): dump_gold and the OCCASIONAL_STATUS item effects.
+ * **A fight is not a cheaper turn than a walk.** Everything `increase_age`
+ * does once per outdoor step happens once per combat *round* too, and three
+ * pieces of it draw: the radiant-item glow, a regeneration item's heal, and
+ * each OCCASIONAL_STATUS item's one-in-eleven. Leaving them out kept the
+ * corpus honest only because nothing in it carries such an item.
  */
 export async function combatRunMonst(session: GameSession): Promise<void> {
   const univ = session.univ;
@@ -1787,8 +1794,35 @@ export async function combatRunMonst(session: GameSession): Promise<void> {
 
   univ.party.lightLevel = moveToZero(univ.party.lightLevel);
   const lighting = univ.townRecord?.lightingType ?? 0;
-  if (lighting === 2) univ.party.lightLevel = Math.max(0, univ.party.lightLevel - 9);
+  // **The `-9` is guarded on the combat type and the `= 0` is not** — an
+  // outdoor fight in a dark town's arena keeps its torch burning, a pitch-dark
+  // one snuffs it wherever you are. The C++'s asymmetry, kept.
+  if (session.whichCombatType === 1 && lighting === 2) {
+    univ.party.lightLevel = Math.max(0, univ.party.lightLevel - 9);
+  }
   if (lighting === 3) univ.party.lightLevel = 0;
+
+  // The radiant-item glow, the same one `increase_age` rolls (:1888). One
+  // `get_ran(1,1,10)` per round in any town that is not normally lit, so a
+  // fight in the dark spends a die the same fight in daylight does not.
+  if (isTown(session.mode) && lighting !== 0) {
+    let radiance = 0;
+    for (const pc of univ.party.pcs) radiance += getProtLevel(pc, ItemAbil.RADIANT);
+    if (radiance > 0 && univ.party.lightLevel < radiance
+      && univ.rng.getRan(1, 1, 10) < radiance) {
+      univ.addStringToBuf('One of your items is glowing softly!');
+      univ.party.lightLevel += radiance * 3;
+    }
+  }
+
+  const status = univ.party.partyStatus;
+  status[PartyStatus.DETECT_LIFE] = moveToZero(status[PartyStatus.DETECT_LIFE] ?? 0);
+  status[PartyStatus.FIREWALK] = moveToZero(status[PartyStatus.FIREWALK] ?? 0);
+  // "decrease monster present counter" — what keeps a friendly creature from
+  // going back to friendly the instant the last hostile falls.
+  univ.party.hostilesPresent = moveToZero(univ.party.hostilesPresent);
+
+  dumpGold(univ);
 
   univ.party.age++;
   // The long-lived statuses tick every fourth turn; the rest every turn.
@@ -1796,6 +1830,17 @@ export async function combatRunMonst(session: GameSession): Promise<void> {
     for (const pc of univ.party.pcs) {
       pc.status[Status.BLESS_CURSE] = moveToZero(pc.status[Status.BLESS_CURSE] ?? 0);
       pc.status[Status.HASTE_SLOW] = moveToZero(pc.status[Status.HASTE_SLOW] ?? 0);
+      // **Inside the per-PC loop**, so the party's stealth is decremented six
+      // times a round rather than once. Kept — it is why Stealth runs out in a
+      // fight six times faster than it does on the road.
+      status[PartyStatus.STEALTH] = moveToZero(status[PartyStatus.STEALTH] ?? 0);
+      // A regeneration item heals every fourth round, and **the roll is on the
+      // item's `item_level`, not its `abil_strength`** — `increase_age`'s copy
+      // of this uses the strength divided by three, and the two are simply
+      // different rules for the same item. There is no `cur_health <
+      // max_health` guard here either, so a PC at full health still draws.
+      const regen = hasAbilEquip(pc, ItemAbil.REGENERATE);
+      if (regen) pc.heal(univ.rng.getRan(1, 0, regen.item.itemLevel + 1));
     }
   }
   for (const pc of univ.party.pcs) {
@@ -1806,6 +1851,7 @@ export async function combatRunMonst(session: GameSession): Promise<void> {
     ]) {
       pc.status[which] = moveToZero(pc.status[which] ?? 0);
     }
+    occasionalStatus(univ, pc);
   }
   // combat_run_monst's own call (boe.combat.cpp:2018): the timers get their
   // round in a fight too, so a town timer keeps counting while you fight in it.
@@ -1823,4 +1869,107 @@ export async function combatRunMonst(session: GameSession): Promise<void> {
   // combat_run_monst's copy exists for the volleys a *monster* fires, and
   // nothing on the monster side opens one yet. `doCombatCast` is the only
   // caller so far. TODO(M6): open a volley around monst_fire_missile too.
+}
+
+/**
+ * The per-PC half of `OCCASIONAL_STATUS` (boe.combat.cpp:1935) — an item in
+ * the pack that does something to its owner now and then.
+ *
+ * The party-wide half lives in `increase_age` and fires every five hundredth
+ * *turn*; this one fires every combat round, one `get_ran(1,0,10)` per
+ * candidate item, so the number of them a party is carrying is part of the
+ * draw stream. Note it walks the whole pack — an item does not have to be
+ * equipped, or even identified.
+ *
+ * Two signs are applied in a row: `abil_harms` flips it, and a status that is
+ * *itself* negative flips it again, so a "harmful" item carrying POISON ends
+ * up curing. That is the C++'s arithmetic, and the messages below are written
+ * around it.
+ *
+ * **It calls `apply_status` directly**, with the C++'s note beside it: an item
+ * you are wearing bypasses any resistance you have to what it does.
+ */
+function occasionalStatus(univ: Universe, pc: Player): void {
+  for (const item of pc.items) {
+    if (item.ability !== ItemAbil.OCCASIONAL_STATUS) continue;
+    // The party-wide ones are handled elsewhere, in `increase_age`.
+    if (abilGroup(item)) continue;
+    if (univ.rng.getRan(1, 0, 10) !== 5) continue;
+    let howMuch = item.abilStrength;
+    if (abilHarms(item)) howMuch *= -1;
+    const which = item.abilData as Status;
+    if (statusInfo(which).isNegative) howMuch *= -1;
+    const say = (line: string): void => univ.addStringToBuf(line);
+    const had = (pc.status[which] ?? 0) > 0;
+    switch (which) {
+      // "Not valid in this context" — and note these `continue`, so the roll
+      // is spent but nothing happens.
+      case Status.MAIN: case Status.CHARM:
+        continue;
+      case Status.HASTE_SLOW:
+        say(howMuch > 0 ? 'An item hastes you!' : 'An item slows you!');
+        break;
+      case Status.BLESS_CURSE:
+        say(howMuch > 0 ? 'An item blesses you!' : 'An item curses you!');
+        break;
+      case Status.POISON:
+        if (howMuch > 0) say('An item poisons you!');
+        else if (had) say('An item cures you!');
+        break;
+      case Status.INVULNERABLE: case Status.MAGIC_RESISTANCE:
+      case Status.INVISIBLE: case Status.MARTYRS_SHIELD:
+        say(howMuch > 0 ? 'An item protects you!' : 'An item makes you vulnerable!');
+        break;
+      case Status.DISEASE:
+        if (howMuch > 0) say('An item diseases you!');
+        else if (had) say('An item cures you!');
+        break;
+      case Status.DUMB:
+        if (howMuch > 0) say('An item clouds your mind!');
+        else if (had) say('An item clears your mind!');
+        else say('An item enlightens you!');
+        break;
+      case Status.WEBS:
+        if (howMuch > 0) say('An item constricts you!');
+        else if (had) say('An item cleanses you!');
+        break;
+      case Status.ASLEEP:
+        if (howMuch > 0) say('An item knocks you out!');
+        else if (had) say('An item wakes you!');
+        else say('An item makes you restless!');
+        break;
+      case Status.PARALYZED:
+        if (howMuch > 0) say('An item paralyzes you!');
+        else if (had) say('An item restores your movement!');
+        break;
+      case Status.ACID:
+        if (howMuch > 0) say('An item covers you in acid!');
+        else if (had) say('An item neutralizes the acid!');
+        break;
+      case Status.FORCECAGE:
+        if (howMuch > 0) say('An item entraps you!');
+        // The only one that compares against the *size* of what is there
+        // rather than merely whether it is.
+        else if (-howMuch > (pc.status[Status.FORCECAGE] ?? 0)) say('An item frees you!');
+        else say('An item weakens the barrier!');
+        break;
+      case Status.POISONED_WEAPON:
+        if (howMuch > 0) {
+          if ((pc.status[Status.POISONED_WEAPON] ?? 0) <= 0) {
+            // The first weapon in the pack that *can* take poison, equipped or
+            // not — unlike `poison_weapon`, which insists on an equipped one.
+            const weap = pc.items.find(isPoisonableWeap);
+            // `else continue;` — no weapon means the roll is spent and the
+            // status is never applied.
+            if (!weap) continue;
+            pc.weapPoisoned = weap;
+            say('An item poisons your weapon!');
+          } else say('An item augments your weapon poison!');
+        } else say('An item clears the poison from your weapon!');
+        break;
+      default:
+        break;
+    }
+    pc.applyStatus(which, howMuch);
+  }
 }
