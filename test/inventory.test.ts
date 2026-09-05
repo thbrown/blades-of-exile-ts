@@ -16,6 +16,7 @@ import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import {
+  GiveEquip,
   GiveStatus,
   curWeight,
   equipItem,
@@ -28,7 +29,7 @@ import {
   unequipItem,
 } from '../src/universe/inventory';
 import { PartyPreset } from '../src/universe/player';
-import { MainStatus, Skill, Trait } from '../src/universe/skills';
+import { MainStatus, Skill, Status, Trait } from '../src/universe/skills';
 import { Universe } from '../src/universe/universe';
 
 const opcodes = buildOpcodeTable(
@@ -204,6 +205,137 @@ describe('giving items', () => {
     expect(giveItem(pc, party, item({ weight: 0 })).status).toBe(GiveStatus.NO_SPACE);
     pc.mainStatus = MainStatus.DEAD;
     expect(giveItem(pc, party, item({ weight: 0 })).status).toBe(GiveStatus.DEAD);
+  });
+});
+
+/**
+ * `give_item`'s equip block (pc.cpp:526) — only `GIVE_ITEM`'s `ex2c` ever asks
+ * for it, and it is the reason that node can hand a PC a sword they are
+ * already holding.
+ */
+describe('giving an item and wearing it', () => {
+  /** The slot the given item ended up in, since sort_items moves it. */
+  function findSlot(pc: { items: Item[] }, name: string): number {
+    return pc.items.findIndex((i) => i.name === name);
+  }
+
+  it('does not equip anything by default', async () => {
+    const session = newSession();
+    const { party } = session.univ;
+    const pc = party.pcs[0]!;
+    giveItem(pc, party, item({ name: 'Sword', variety: ItemType.ONE_HANDED, weight: 0 }));
+    expect(pc.equip[findSlot(pc, 'Sword')]).toBe(false);
+  });
+
+  it('SOFT wears it when a hand is free and gives up when none is', async () => {
+    const session = newSession();
+    const { party } = session.univ;
+    const pc = party.pcs[0]!;
+    giveItem(pc, party, item({ name: 'Sword', variety: ItemType.ONE_HANDED, weight: 0 }),
+      false, false, GiveEquip.SOFT);
+    expect(pc.equip[findSlot(pc, 'Sword')]).toBe(true);
+
+    giveItem(pc, party, item({ name: 'Axe', variety: ItemType.ONE_HANDED, weight: 0 }),
+      false, false, GiveEquip.SOFT);
+    expect(pc.equip[findSlot(pc, 'Axe')]).toBe(true);
+    // Both hands are full now, and SOFT will not take anything off.
+    giveItem(pc, party, item({ name: 'Mace', variety: ItemType.ONE_HANDED, weight: 0 }),
+      false, false, GiveEquip.SOFT);
+    expect(pc.equip[findSlot(pc, 'Mace')]).toBe(false);
+    expect(pc.equip[findSlot(pc, 'Sword')]).toBe(true);
+    expect(pc.equip[findSlot(pc, 'Axe')]).toBe(true);
+  });
+
+  it('TRY takes one hand free to make room', async () => {
+    const session = newSession();
+    const { party } = session.univ;
+    const pc = party.pcs[0]!;
+    for (const name of ['Sword', 'Axe']) {
+      giveItem(pc, party, item({ name, variety: ItemType.ONE_HANDED, weight: 0 }),
+        false, false, GiveEquip.SOFT);
+    }
+    giveItem(pc, party, item({ name: 'Mace', variety: ItemType.ONE_HANDED, weight: 0 }),
+      false, false, GiveEquip.TRY);
+    expect(pc.equip[findSlot(pc, 'Mace')]).toBe(true);
+    // Exactly one of the two came off — two hands, two things worn.
+    const worn = ['Sword', 'Axe'].filter((n) => pc.equip[findSlot(pc, n)]).length;
+    expect(worn).toBe(1);
+  });
+
+  it('…and a two-hander clears both hands', async () => {
+    const session = newSession();
+    const { party } = session.univ;
+    const pc = party.pcs[0]!;
+    giveItem(pc, party, item({ name: 'Sword', variety: ItemType.ONE_HANDED, weight: 0 }),
+      false, false, GiveEquip.SOFT);
+    giveItem(pc, party, item({ name: 'Shield', variety: ItemType.SHIELD, weight: 0 }),
+      false, false, GiveEquip.SOFT);
+    expect(pc.equip[findSlot(pc, 'Sword')]).toBe(true);
+    expect(pc.equip[findSlot(pc, 'Shield')]).toBe(true);
+    giveItem(pc, party, item({ name: 'Pike', variety: ItemType.TWO_HANDED, weight: 0 }),
+      false, false, GiveEquip.TRY);
+    expect(pc.equip[findSlot(pc, 'Pike')]).toBe(true);
+    expect(pc.equip[findSlot(pc, 'Sword')]).toBe(false);
+    expect(pc.equip[findSlot(pc, 'Shield')]).toBe(false);
+  });
+
+  it('TRY leaves a cursed item on, and FORCE tears it off', async () => {
+    const session = newSession();
+    const { party } = session.univ;
+    const pc = party.pcs[0]!;
+    for (const name of ['Sword', 'Axe']) {
+      giveItem(pc, party,
+        item({ name, variety: ItemType.ONE_HANDED, weight: 0, cursed: true }),
+        false, false, GiveEquip.SOFT);
+    }
+    giveItem(pc, party, item({ name: 'Mace', variety: ItemType.ONE_HANDED, weight: 0 }),
+      false, false, GiveEquip.TRY);
+    expect(pc.equip[findSlot(pc, 'Mace')]).toBe(false);
+
+    giveItem(pc, party, item({ name: 'Flail', variety: ItemType.ONE_HANDED, weight: 0 }),
+      false, false, GiveEquip.FORCE);
+    expect(pc.equip[findSlot(pc, 'Flail')]).toBe(true);
+  });
+
+  /**
+   * **The C++'s `else if(rem1 < INVENTORY_SIZE) rem1 = i;` can never fire** —
+   * `rem1` starts at `INVENTORY_SIZE` and only the HANDS branch lowers it — so
+   * for a missile weapon, its ammo or a second helmet, `_TRY` finds no victim
+   * and behaves exactly like `_SOFT`. Kept as written; this test is what would
+   * notice a silent "fix".
+   */
+  it('finds nothing to remove for a non-HANDS category, even under FORCE', async () => {
+    const session = newSession();
+    const { party } = session.univ;
+    const pc = party.pcs[0]!;
+    giveItem(pc, party, item({ name: 'Bow', variety: ItemType.BOW, weight: 0 }),
+      false, false, GiveEquip.SOFT);
+    expect(pc.equip[findSlot(pc, 'Bow')]).toBe(true);
+    giveItem(pc, party, item({ name: 'Crossbow', variety: ItemType.CROSSBOW, weight: 0 }),
+      false, false, GiveEquip.FORCE);
+    expect(pc.equip[findSlot(pc, 'Crossbow')]).toBe(false);
+    expect(pc.equip[findSlot(pc, 'Bow')]).toBe(true);
+  });
+
+  it('unequipping the poisoned weapon wipes the poison', async () => {
+    const session = newSession();
+    const { party } = session.univ;
+    const pc = party.pcs[0]!;
+    for (const name of ['Sword', 'Axe']) {
+      giveItem(pc, party, item({ name, variety: ItemType.ONE_HANDED, weight: 0 }),
+        false, false, GiveEquip.SOFT);
+    }
+    pc.weapPoisoned = pc.items[findSlot(pc, 'Sword')]!;
+    pc.status[Status.POISONED_WEAPON] = 5;
+    giveItem(pc, party, item({ name: 'Mace', variety: ItemType.ONE_HANDED, weight: 0 }),
+      false, false, GiveEquip.TRY);
+    // Whichever came off, the poison only clears if it was the poisoned one.
+    if (!pc.equip[findSlot(pc, 'Sword')]) {
+      expect(pc.weapPoisoned).toBe(null);
+      expect(pc.status[Status.POISONED_WEAPON]).toBe(0);
+    } else {
+      expect(pc.weapPoisoned).not.toBe(null);
+    }
   });
 });
 

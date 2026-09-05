@@ -13,7 +13,7 @@ import { SpecType } from '../../data/special';
 import { SKILL_MAX } from '../../data/shop';
 import { MAX_FOOD, MAX_GOLD } from '../../universe/party';
 import { Enchant, enchantWeapon } from '../../data/enchant';
-import { GiveStatus, giveItem } from '../../universe/inventory';
+import { GiveEquip, GiveStatus, giveItem } from '../../universe/inventory';
 import { Player } from '../../universe/player';
 import { MainStatus, Skill, Status } from '../../universe/skills';
 import { Universe } from '../../universe/universe';
@@ -341,18 +341,23 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       // `ex2b`: cursed and unsellable move together.
       if (spec.ex2b === 1) item.cursed = item.unsellable = true;
       else if (spec.ex2b === 0) item.cursed = item.unsellable = false;
-      // TODO(M9): `ex2c` picks between GIVE_EQUIP_SOFT / _TRY / _FORCE, which
-      // this port's `giveItem` does not model — it always behaves as SOFT.
+      // `ex2c` picks how hard `give_item` tries to *wear* what it hands over.
+      // A negative one leaves `equip_type` at 0 — don't equip at all — which
+      // is the only value every other caller in the game uses.
+      let equipType = GiveEquip.NONE;
+      if (spec.ex2c === 0) equipType = GiveEquip.SOFT;
+      else if (spec.ex2c === 1) equipType = GiveEquip.TRY;
+      else if (spec.ex2c >= 2) equipType = GiveEquip.FORCE;
 
       // **Every targeted PC gets one**, not the first with room: `pc_num == 6`
       // means all six, and the C++ loops over the whole party. `GIVE_ALLOW_OVERLOAD`
-      // rides along, so weight never refuses it.
+      // rides along, so weight never refuses it — and `GIVE_DO_PRINT` does
+      // *not*, so the "  Thissa gets a Bronze Sword." line a shop prints is
+      // silent here. The node's own message is what the player sees.
       let success = true;
       for (const pc of targets()) {
-        const result = giveItem(pc, party, { ...item }, false, true);
-        if (result.status === GiveStatus.OK) {
-          if (result.message) univ.addStringToBuf(result.message);
-        } else success = false;
+        const result = giveItem(pc, party, { ...item }, false, true, equipType);
+        if (result.status !== GiveStatus.OK) success = false;
       }
       // `if(!success) ctx.next_spec = spec.pic;` — the node's picture field is
       // a *jump* here, taken when anyone's pack was full.

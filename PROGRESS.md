@@ -10865,3 +10865,33 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     are found to disagree: they are two ports of the same C++ function.
   - `showError`'s modal is still a `TODO(M3)`; the invalid-pattern complaint
     goes to the message buffer meanwhile.
+
+- **`GIVE_ITEM`'s `ex2c`: a node can put what it hands over *on* (M9, done
+  2026-09-05).** The last `TODO(M9)` in `src/`, and the one thing the enchanting
+  commit left behind. Corpus-neutral (47 / 1,213,908 either side).
+  - `GIVE_EQUIP_SOFT` / `_TRY` / `_FORCE` are a bitmask where **`_FORCE` is
+    `_SOFT | _TRY`** (pc.hpp:38), which is why the C++ tests read
+    `equip_type != GIVE_EQUIP_SOFT` for "should I take something off?" and
+    `equip_type == GIVE_EQUIP_FORCE` for "may I take a *cursed* thing off?".
+    A negative `ex2c` leaves `equip_type` at 0 — don't equip at all, which is
+    what every other caller in the game passes.
+  - **`else if(rem1 < INVENTORY_SIZE) rem1 = i;` (pc.cpp:551) can never fire.**
+    `rem1` starts at `INVENTORY_SIZE` and only the `HANDS` branch above ever
+    lowers it, so for every other exclusion category — a missile weapon, its
+    ammo, a second helmet — no victim is ever found and `_TRY` behaves exactly
+    like `_SOFT`. The `==` it was surely meant to be would make it work. **Kept
+    as written**, with a test that would notice a silent fix, because a node
+    handing over a bow would otherwise start unequipping the old one.
+  - **`GIVE_DO_PRINT` is not in the flags GIVE_ITEM passes**, so `give_item`
+    prints nothing — the "  Thissa gets a Bronze Sword." line a shop shows is
+    silent for a node. This port was printing it; the node's own message is
+    what the player is supposed to see.
+  - Only the `HANDS` category ever fills both victim slots, because a
+    two-handed weapon has to clear a weapon *and* a shield. `rem1` is the
+    weapon side and `rem2` the shield side, and which one an item claims first
+    depends on what it is — a one-hander or two-hander takes `rem1`, a shield
+    takes `rem2`, and anything else takes whichever is still open.
+  - And a stale marker cleared while reading: `giveItem`'s docstring still
+    carried a `TODO(M6)` for `combine_things`, which has been ported for two
+    milestones. `grep -rn "TODO(M" src/` is only an honest inventory if the
+    prose is kept honest too.

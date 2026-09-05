@@ -10,7 +10,7 @@ import { Item, ItemAbil, ItemType, defaultItem } from '../data/item';
 import { ItemCat, variety } from '../data/itemVariety';
 import { Party } from './party';
 import { NUM_INVEN_SLOTS, Player } from './player';
-import { MainStatus, Race, Skill, Trait } from './skills';
+import { MainStatus, Race, Skill, Status, Trait } from './skills';
 
 export enum GiveStatus {
   OK = 'ok',
@@ -143,17 +143,38 @@ export interface GiveResult {
 }
 
 /**
+ * `GIVE_EQUIP_SOFT` / `_TRY` / `_FORCE` (pc.hpp:38) — whether `give_item` also
+ * *wears* what it hands over, and how hard it tries.
+ *
+ * The three are mutually exclusive, and `_FORCE` is `_SOFT | _TRY` — which is
+ * why the C++'s "should I take something off?" test reads
+ * `equip_type != GIVE_EQUIP_SOFT` and its "may I take a cursed thing off?"
+ * test reads `equip_type == GIVE_EQUIP_FORCE`.
+ *
+ * There is no 1997 counterpart: the extras on `GIVE_ITEM` are an Open Blades
+ * addition, so this is OBoE's rule with nothing to weigh it against.
+ */
+export enum GiveEquip {
+  /** Don't equip at all — the default, and what every caller but a node uses. */
+  NONE = 0,
+  /** Equip if it fits as-is; if a hand is full, leave it in the pack. */
+  SOFT = 4,
+  /** Take something off to make room, unless it is cursed. */
+  TRY = 8,
+  /** Take something off even if it is cursed. */
+  FORCE = 12,
+}
+
+/**
  * cPlayer::give_item. Gold, food, special items and quests go to the party
  * rather than a slot; everything else needs both spare capacity and a slot.
  *
  * With `checkOnly` (GIVE_CHECK_ONLY) nothing changes hands — the caller just
  * wants to know whether it could, which is how ok_to_buy tests a purchase.
- *
- * TODO(M6): combine_things stacks matching ammo/potions into one slot, which
- * lets a full pack still accept more arrows.
  */
 export function giveItem(
   pc: Player, party: Party, item: Item, checkOnly = false, allowOverload = false,
+  equipType: GiveEquip = GiveEquip.NONE,
 ): GiveResult {
   if (pc.mainStatus !== MainStatus.ALIVE)
     return { status: GiveStatus.DEAD, slot: -1, message: '' };
@@ -199,6 +220,8 @@ export function giveItem(
   // Taking an item clears the flags that only apply while it's on the floor.
   if (!checkOnly) {
     pc.items[slot] = { ...item, property: false, contained: false, held: false };
+    if (equipType !== GiveEquip.NONE && variety(item.variety).equipCount)
+      giveEquip(pc, slot, item, equipType);
     // `combine_things(); sort_items();` is give_item's last act (pc.cpp:579),
     // in that order — the merge first, so the sort never has to shuffle a pile
     // that is about to disappear.
@@ -207,6 +230,79 @@ export function giveItem(
   }
   const name = item.ident ? item.fullName : item.name;
   return { status: GiveStatus.OK, slot, message: `  ${pc.name} gets ${name}.` };
+}
+
+/**
+ * `give_item`'s equip block (pc.cpp:526) — put the new item on, and under
+ * `_TRY` or `_FORCE` take whatever is in the way off first.
+ *
+ * The search picks up to two victims. Only `HANDS` ever fills both, because a
+ * two-handed weapon has to clear a weapon *and* a shield; `rem1` is the weapon
+ * side and `rem2` the shield side, and which of the two a given item claims
+ * first depends on what it is.
+ *
+ * **The `else if(rem1 < INVENTORY_SIZE) rem1 = i;` at the tail of the loop can
+ * never fire.** `rem1` starts at `INVENTORY_SIZE`, and nothing outside the
+ * `HANDS` branch above ever lowers it, so for every other exclusion category —
+ * a missile weapon, its ammo, a second helmet — the test is false on every
+ * iteration and no victim is ever found. The `==` this was surely meant to be
+ * would make `_TRY` work for those too. Kept as written: a silent fix here
+ * would make a node that hands over a bow start unequipping the old one.
+ */
+function giveEquip(pc: Player, slot: number, item: Item, equipType: GiveEquip): void {
+  if (equipItem(pc, slot).ok) return;
+  if (equipType === GiveEquip.SOFT) return;
+
+  const info = variety(item.variety);
+  const exclude = info.exclusion;
+  let rem1 = NUM_INVEN_SLOTS;
+  let rem2 = NUM_INVEN_SLOTS;
+  for (let i = 0; i < NUM_INVEN_SLOTS; i++) {
+    if (i === slot || !pc.equip[i]) continue;
+    const other = pc.items[i]!;
+    if (variety(other.variety).exclusion !== exclude) continue;
+    // Two MISC items only collide when they are the *same* variety — two
+    // helmets, not a helmet and a pair of boots.
+    if (exclude === ItemCat.MISC && item.variety !== other.variety) continue;
+    if (exclude === ItemCat.HANDS) {
+      if (rem1 === NUM_INVEN_SLOTS) {
+        if (item.variety === ItemType.ONE_HANDED || item.variety === ItemType.TWO_HANDED
+          || rem2 < NUM_INVEN_SLOTS) rem1 = i;
+        if (rem1 < NUM_INVEN_SLOTS) continue;
+      }
+      if (rem2 === NUM_INVEN_SLOTS) {
+        if (item.variety === ItemType.SHIELD || item.variety === ItemType.SHIELD_2
+          || rem1 < NUM_INVEN_SLOTS) rem2 = i;
+      }
+    } else if (rem1 < NUM_INVEN_SLOTS) rem1 = i;
+  }
+
+  // A cursed item only comes off under `_FORCE`.
+  const canRem1 = rem1 < NUM_INVEN_SLOTS
+    && (!pc.items[rem1]!.cursed || equipType === GiveEquip.FORCE);
+  const canRem2 = rem2 < NUM_INVEN_SLOTS
+    && (!pc.items[rem2]!.cursed || equipType === GiveEquip.FORCE);
+  if (exclude === ItemCat.HANDS) {
+    if (info.numHands === 2 && canRem1 && canRem2) {
+      pc.equip[rem1] = false;
+      pc.equip[rem2] = false;
+    } else if (info.numHands === 1) {
+      if (canRem1) pc.equip[rem1] = false;
+      else if (canRem2) pc.equip[rem2] = false;
+    }
+    // Taking the poisoned weapon off wipes the poison with it. The C++
+    // compares slot numbers against `weap_poisoned.slot`; this port holds the
+    // item itself, so the comparison is by identity.
+    const poisoned = pc.weapPoisoned;
+    if (poisoned !== null
+      && ((pc.items[rem1] === poisoned && !pc.equip[rem1])
+        || (pc.items[rem2] === poisoned && !pc.equip[rem2]))) {
+      pc.status[Status.POISONED_WEAPON] = 0;
+      pc.weapPoisoned = null;
+    }
+  } else if (canRem1) pc.equip[rem1] = false;
+  // Whether or not anything came off, try once more.
+  equipItem(pc, slot);
 }
 
 /** Whether the party as a whole could take this item. */
@@ -230,8 +326,8 @@ export function partyCanTake(party: Party, item: Item): boolean {
  *
  * Two items stack when they share a **`type_flag`** and both are identified;
  * the flag is the scenario's "these are the same thing" key, so five piles of
- * twelve arrows become one of sixty. This was a `TODO(M6)` that outlived M6 by
- * two milestones, and leaving it out is not cosmetic: an unstacked pack is
+ * twelve arrows become one of sixty. This went in two milestones late, and
+ * leaving it out is not cosmetic: an unstacked pack is
  * *longer*, so every slot below the first stack sits one place further down,
  * and `has_type_equip` — which returns the **first equipped item** of a type —
  * can come back with a different weapon on each side.
