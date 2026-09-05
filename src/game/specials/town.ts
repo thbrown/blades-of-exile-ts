@@ -538,11 +538,20 @@ function fade(
 ): void {
   startBoomAnim();
   // `add_explosion(l, -1, 1, 1, 0, 0)` — no damage number, scattered, boom
-  // type 1. `do_explosion_anim(5, …)` names sound 5 outright.
+  // type 1.
   for (let i = 0; i < n; i++) {
     boomSpace({ x: at.x, y: at.y }, 1, -1, 0, univ.rng, { placeType: 1 });
   }
-  runBoomAnim(univ.rng, () => drawTerrain(session), 5);
+  // `do_explosion_anim(5, 1)` and then `(5, 2)`, and **neither names a sound**:
+  // the 5 is the definition's unnamed, unread first parameter, and the third —
+  // the real one — defaults to -1, so boom type 1 looks up file 10. This port
+  // was passing the 5 along and playing file 5.
+  //
+  // The two calls split the eleven frames between them, `t < 6` then `t >= 6`,
+  // and `special_draw == 2` skips the scatter rolls and the sound so only the
+  // first pays them. Eleven redraws and one set of rolls in total, which is
+  // what one `runBoomAnim` already spends.
+  runBoomAnim(univ.rng, () => drawTerrain(session));
 }
 
 /** handle_lever — the square becomes whatever it transforms into. */

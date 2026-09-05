@@ -61,8 +61,14 @@ export async function doShockwave(session: GameSession, target: { x: number; y: 
   // `handle_marked_damage()` (boe.combat.cpp:4293/4303). The volley was never
   // opened here, so every hit `damage_pc`/`damage_monst` collected was dropped
   // — and with it `do_explosion_anim`'s **eleven** `draw_terrain()`s, which in
-  // combat each spend the status bar's encumbrance roll. The sound is 5,
-  // passed rather than looked up from the boom type.
+  // combat each spend the status bar's encumbrance roll.
+  //
+  // **The 5 is not the sound.** The signature is
+  // `do_explosion_anim(short /*sound_num*/, short special_draw, short snd = -1)`
+  // — the first parameter is unnamed in the definition and never read, and only
+  // `run_a_boom` and `mondo_boom` pass a third. Everything else lets the sound
+  // come from the boom type. This port was passing the 5 through as `snd` and
+  // playing file 5 where the original plays 53.
   startBoomAnim();
   try {
   for (const pc of univ.party.pcs) {
@@ -79,7 +85,7 @@ export async function doShockwave(session: GameSession, target: { x: number; y: 
       univ.rng.getRan(2 + Math.trunc(d / 2), 1, 6), DamageType.UNBLOCKABLE, { session });
   }
   } finally {
-    runBoomAnim(univ.rng, () => drawTerrain(session), 5);
+    runBoomAnim(univ.rng, () => drawTerrain(session));
     await animSettle();
     await handleMarkedDamage(univ, session);
   }

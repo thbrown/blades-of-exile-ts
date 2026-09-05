@@ -4,7 +4,9 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { dist, loc } from '../src/core/location';
 import { GameRng } from '../src/core/rng';
 import { Attitude } from '../src/data/monster';
-import { MonstAbil, MonstMissile } from '../src/data/monsterAbility';
+import { MonstAbil, MonstGen, MonstMissile } from '../src/data/monsterAbility';
+import { monsterBasicAbil } from '../src/game/monsterAbilities';
+import { Boom, setBoomSink } from '../src/game/booms';
 import { Scenario } from '../src/data/scenario';
 import { animClear, animPending } from '../src/game/anim';
 import { NO_ONE } from '../src/game/combat';
@@ -541,6 +543,41 @@ describe('encounters in town mode', () => {
     // the creature spends on it.
     const announced = univ.transcript.filter((l) => l === `${monst.mon.name}:`).length;
     expect(announced).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * `monst_basic_abil`'s DAMAGE arm (boe.combat.cpp:3094) and `monst_breathe`
+ * (:3229) both wrap their damage in `start_missile_anim()` …
+ * `do_explosion_anim(5,0)` … `end_missile_anim()` … `handle_marked_damage()`.
+ * Without the volley `add_explosion` makes no roll and `do_explosion_anim`
+ * spends none of its eleven redraws, so a breath cost this port a dozen fewer
+ * draws than the oracle's.
+ */
+describe('a monster ability that explodes', () => {
+  it('collects its blast into a volley', async () => {
+    const { univ, session, monst } = combatWithOne();
+    const pc = univ.party.pcs[0]!;
+    pc.curHealth = pc.maxHealth = 300;
+    monst.curLoc = { x: pc.combatPos.x + 1, y: pc.combatPos.y };
+    const abil = {
+      gen: {
+        type: MonstGen.BREATH, strength: 4, extra: 2, pic: -1, odds: 1000,
+      },
+    } as never;
+
+    const booms: Boom[] = [];
+    setBoomSink((b) => { booms.push({ ...b }); });
+    try {
+      await monsterBasicAbil(session, monst, MonstAbil.DAMAGE, abil, pc);
+      await session.settled();
+    } finally {
+      setBoomSink(null);
+      animClear();
+    }
+    expect(pc.curHealth).toBeLessThan(300);
+    expect(booms.length).toBeGreaterThan(0);
+    expect(booms.every((b) => b.animated)).toBe(true);
   });
 });
 

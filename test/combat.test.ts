@@ -5,7 +5,9 @@ import { Direction, loc, locsEqual } from '../src/core/location';
 import { GameRng } from '../src/core/rng';
 import { FieldType } from '../src/data/fields';
 import { ItemAbil, ItemType } from '../src/data/item';
-import { Attitude } from '../src/data/monster';
+import { Attitude, DamageType } from '../src/data/monster';
+import { Boom, setBoomSink } from '../src/game/booms';
+import { animClear } from '../src/game/anim';
 import { Scenario } from '../src/data/scenario';
 import {
   NO_ONE, getWeapons, pcAttack, pickNextPc, placeParty, setPcMoves, takeAp, totalEncumbrance,
@@ -647,6 +649,46 @@ it('a slayer weapon adds its bonus only against the race it names', async () => 
     univ.party.pcs[0]!.ap = 4;
     expect(await session.attackAt(monst.curLoc)).toBe(true);
     expect(await session.attackAt(loc(1, 1))).toBe(false);
+  });
+});
+
+/**
+ * `pc_attack_weapon`'s EXPLODING_WEAPON arm (boe.combat.cpp:592) — a blast
+ * instead of a swing, and **inside a volley**: `start_missile_anim()` around
+ * the pattern, then `do_explosion_anim(5,0)`, `end_missile_anim()` and
+ * `handle_marked_damage()`.
+ */
+describe('an exploding weapon', () => {
+  it('collects its blast into a volley rather than showing hits one by one', async () => {
+    const { univ, session } = newGame();
+    const pc = univ.party.pcs[0]!;
+    pc.items.forEach((_, i) => { pc.equip[i] = false; });
+    pc.traits[Trait.PACIFIST] = false;
+    pc.items[0] = {
+      ...pc.items[0]!, variety: ItemType.ONE_HANDED, name: 'bomb',
+      itemLevel: 8, weapType: Skill.EDGED_WEAPONS,
+      ability: ItemAbil.EXPLODING_WEAPON, abilStrength: 3,
+      abilData: DamageType.FIRE,
+    };
+    pc.equip[0] = true;
+    pc.ap = 4;
+    const monst = hostileBeside(univ, session);
+    univ.curPc = 0;
+
+    const booms: Boom[] = [];
+    setBoomSink((b) => { booms.push({ ...b }); });
+    try {
+      await pcAttack(univ, 0, monst, session);
+      await session.settled();
+    } finally {
+      setBoomSink(null);
+      animClear();
+    }
+    expect(univ.transcript).toContain('  The weapon produces an explosion!');
+    expect(booms.length).toBeGreaterThan(0);
+    // `animated` is the volley's own explosion. A hit sprite from `boom_space`
+    // outside a volley is not — which is all this path used to produce.
+    expect(booms.every((b) => b.animated)).toBe(true);
   });
 });
 

@@ -23,7 +23,10 @@ import { SpellPat } from '../data/pattern';
 import { placeSpellPattern } from './spellPatterns';
 import { takeAp } from './combat';
 import { onHitItemAbility, onHitTargetSpecial } from './weaponAbilities';
-import { damageMonst, damagePc, hitChance } from './damage';
+import { damageMonst, damagePc, handleMarkedDamage, hitChance } from './damage';
+import { endBoomAnim, runBoomAnim, startBoomAnim } from './booms';
+import { animSettle } from './anim';
+import { drawTerrain } from './textBar';
 import { GameMode } from './modes';
 import type { GameSession } from './session';
 
@@ -303,10 +306,20 @@ export async function fireMissile(
     firer.voidSanctuary();
     univ.addStringToBuf('  The arrow explodes!');
     runAMissile(firer.combatPos, aim, 2, 1, 5, 0, 0, 100);
-    await placeSpellPattern(session, SpellPat.RADIUS_2, aim, {
-      damage: { type: ammo.abilData as DamageType, dice: ammo.abilStrength * 2 },
-      whoHit: univ.curPc,
-    });
+    // A volley, as in `pc_attack_weapon`'s exploding blade and for the same
+    // reason (boe.combat.cpp:1620).
+    startBoomAnim();
+    try {
+      await placeSpellPattern(session, SpellPat.RADIUS_2, aim, {
+        damage: { type: ammo.abilData as DamageType, dice: ammo.abilStrength * 2 },
+        whoHit: univ.curPc,
+      });
+    } finally {
+      runBoomAnim(univ.rng, () => drawTerrain(session));
+      endBoomAnim();
+      await animSettle();
+      await handleMarkedDamage(univ, session);
+    }
     return;
   }
 

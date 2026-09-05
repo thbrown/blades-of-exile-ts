@@ -18,7 +18,9 @@ import { Living, livingSound } from '../universe/living';
 import { NUM_INVEN_SLOTS, Player } from '../universe/player';
 import { MainStatus, Race, Skill, Status, Trait } from '../universe/skills';
 import { Universe } from '../universe/universe';
-import { damageMonst, damagePc, hitChance } from './damage';
+import { damageMonst, damagePc, handleMarkedDamage, hitChance } from './damage';
+import { endBoomAnim, runBoomAnim, startBoomAnim } from './booms';
+import { animSettle } from './anim';
 import { calcSpecDam } from './missiles';
 import { SpellPat } from '../data/pattern';
 import { placeSpellPattern } from './spellPatterns';
@@ -519,10 +521,23 @@ export async function pcAttackWeapon(
     univ.addStringToBuf('  The weapon produces an explosion!');
     livingSound(5);
     if (session) {
-      await placeSpellPattern(session, SpellPat.RADIUS_2, target.getLoc(), {
-        damage: { type: weap.abilData as DamageType, dice: weap.abilStrength * 2 },
-        whoHit: whoAtt,
-      });
+      // **A volley** (boe.combat.cpp:598): `start_missile_anim()` around the
+      // pattern, then `do_explosion_anim(5,0)`, `end_missile_anim()` and
+      // `handle_marked_damage()`. With no volley open `add_explosion` returns
+      // without rolling and `do_explosion_anim` without redrawing, so the
+      // blast was a dozen draws short of the oracle's.
+      startBoomAnim();
+      try {
+        await placeSpellPattern(session, SpellPat.RADIUS_2, target.getLoc(), {
+          damage: { type: weap.abilData as DamageType, dice: weap.abilStrength * 2 },
+          whoHit: whoAtt,
+        });
+      } finally {
+        runBoomAnim(univ.rng, () => drawTerrain(session));
+        endBoomAnim();
+        await animSettle();
+        await handleMarkedDamage(univ, session);
+      }
     }
     return;
   }

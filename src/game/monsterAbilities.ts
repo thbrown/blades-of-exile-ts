@@ -25,6 +25,8 @@ import { Living, SpellNote, livingSound } from '../universe/living';
 import { Player } from '../universe/player';
 import { MainStatus, Status } from '../universe/skills';
 import { animSettle } from './anim';
+import { endBoomAnim, runBoomAnim, startBoomAnim } from './booms';
+import { drawTerrain } from './textBar';
 import {
   damageMonst, damagePc, handleMarkedDamage, hitChance, petrifyMonst, petrifyPc,
 } from './damage';
@@ -252,10 +254,30 @@ export async function monstBreathe(
   let level = univ.rng.getRan(abil.gen.strength, 1, 8);
   if (!isCombat(session.mode)) level = Math.trunc(level / 3);
   await animSettle();
-  // `monsters_going` is true throughout `do_monster_turn`, so the blame for
-  // anything this kills is 7 ("a monster did it").
-  await hitSpace(session, targSpace, level, abil.gen.extra as DamageType, 1, 1, 7);
-  await handleMarkedDamage(univ, session);
+  // **The blast is a volley** (boe.combat.cpp:3229) — `start_missile_anim()`
+  // around the damage, then `do_explosion_anim(5,0)`, `end_missile_anim()` and
+  // `handle_marked_damage()`. Without the volley open, `add_explosion` returns
+  // at its second line and makes no `get_ran(1,0,2)`, and `do_explosion_anim`
+  // returns at *its* second line rather than spending eleven redraws. So a
+  // breath was costing this port a dozen fewer draws than the oracle's.
+  startBoomAnim();
+  try {
+    // `monsters_going` is true throughout `do_monster_turn`, so the blame for
+    // anything this kills is 7 ("a monster did it").
+    await hitSpace(session, targSpace, level, abil.gen.extra as DamageType, 1, 1, 7);
+  } finally {
+    // `do_explosion_anim(5,0)` — and **the 5 is the ignored first parameter**,
+    // not the sound: the signature is
+    // `do_explosion_anim(short /*sound_num*/, short special_draw, short snd = -1)`
+    // and only `run_a_boom` and `mondo_boom` ever pass a third. So the sound
+    // comes from the boom type, as it does everywhere else.
+    runBoomAnim(univ.rng, () => drawTerrain(session));
+    // `end_missile_anim()` right behind it, which `do_explosion_anim` has
+    // already done. Kept for the shape.
+    endBoomAnim();
+    await animSettle();
+    await handleMarkedDamage(univ, session);
+  }
 }
 
 /**
@@ -505,8 +527,19 @@ export async function monsterBasicAbil(
       let damType = abil.gen.extra as DamageType;
       // Nothing but assassination deals true SPECIAL damage.
       if (damType >= DamageType.SPECIAL) damType = DamageType.UNBLOCKABLE;
-      if (pcTarget) await damagePc(univ, pcTarget, dmg, damType, monst.mon.race);
-      else if (mTarget) await damageMonst(univ, mTarget, 7, dmg, damType, { session });
+      // A volley, as in `monst_breathe` above and for the same reason
+      // (boe.combat.cpp:3094): the hit's explosion is collected rather than
+      // shown, and `do_explosion_anim`'s eleven redraws are paid.
+      startBoomAnim();
+      try {
+        if (pcTarget) await damagePc(univ, pcTarget, dmg, damType, monst.mon.race);
+        else if (mTarget) await damageMonst(univ, mTarget, 7, dmg, damType, { session });
+      } finally {
+        runBoomAnim(univ.rng, () => drawTerrain(session));
+        endBoomAnim();
+        await animSettle();
+        await handleMarkedDamage(univ, session);
+      }
       break;
     }
 

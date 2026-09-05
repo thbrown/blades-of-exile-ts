@@ -10933,3 +10933,34 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     an **unguarded** `if(lighting == 3) light = 0;`. An outdoor fight in a dark
     town's arena keeps its torch; a pitch-dark one snuffs it wherever you are.
     This port had dropped the combat-type guard.
+
+- **Four explosions that were never in a volley (M6, 2026-09-05).** The pattern
+  `start_missile_anim(); <damage>; do_explosion_anim(5,0); end_missile_anim();
+  handle_marked_damage();` appears at nine places in boe.combat.cpp. Five were
+  ported (the two monster casts, `do_shockwave`, `do_combat_cast`, and
+  `teleport_party`'s fade); four were not:
+  - `pc_attack_weapon`'s **EXPLODING_WEAPON** blade (:592),
+  - `fire_missile`'s **exploding arrow** (:1620),
+  - `monst_basic_abil`'s **DAMAGE / DAMAGE2** arm (:3094),
+  - **`monst_breathe`** (:3229).
+  - **Why it is draws and not just pictures.** `add_explosion` returns at its
+    second line when `boom_anim_active` is false, so it makes no
+    `get_ran(1,0,2)`; `do_explosion_anim` returns at *its* second line for the
+    same reason, so none of its **eleven `draw_terrain()`s** happen — and in
+    combat every full redraw spends the status bar's encumbrance roll. What
+    this port did instead was `boom_space`'s own path, which is a hit sprite
+    with its own sound and *two* redraws. A single-target blast was therefore
+    running nine draws short.
+  - **`do_explosion_anim(5, 0)`'s 5 is not a sound.** The definition is
+    `void do_explosion_anim(short /*sound_num*/, short special_draw, short snd)`
+    — the first parameter is unnamed and never read, and `snd` defaults to -1.
+    Only `run_a_boom` and `mondo_boom` pass a third argument. This port had read
+    the 5 as the sound in two places (`do_shockwave` and `teleport_party`'s
+    fade) and was playing file 5 where the original plays 53 and 10. Audible,
+    not a draw.
+  - **And the fade's two calls split the eleven frames**, not double them:
+    `for(t = (special_draw == 2) ? 6 : 0; t < ((special_draw == 1) ? 6 : 11); t++)`,
+    so `(5,1)` draws six and `(5,2)` the other five. `special_draw == 2` also
+    skips the scatter rolls and the sound, and `special_draw == 1` skips the
+    clean-up that would clear `store_booms`, which is how the second call still
+    has something to draw. One `runBoomAnim` spends exactly what the pair does.
