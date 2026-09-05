@@ -5,6 +5,11 @@ import { Direction } from '../src/core/location';
 import { GameRng } from '../src/core/rng';
 import { Scenario } from '../src/data/scenario';
 import { Spell } from '../src/data/spell';
+import { SpellPat } from '../src/data/pattern';
+import { FieldType } from '../src/data/fields';
+import { GameMode } from '../src/game/modes';
+import { cancelTownTargeting, castTownSpell } from '../src/game/spellTarget';
+import { cancelSpellTargeting, doCombatCast } from '../src/game/spellCombatTarget';
 import { SpecType, SpecialNode, emptySpecialNode } from '../src/data/special';
 import { TerSpec } from '../src/data/terrain';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
@@ -793,6 +798,252 @@ describe('TOWN_LIFT_FOG', () => {
     expect(session.fogLifted).toBe(true);
     await run(1);
     expect(session.fogLifted).toBe(false);
+  });
+});
+
+/**
+ * `TOWN_START_TARGETING` (boe.specials.cpp:4295) — the node that hands the
+ * targeting cursor to the *player*, with `eSpell::NONE` in the air and its own
+ * `jumpto` standing in for the caster.
+ */
+describe('a node asking the player to pick a square', () => {
+  it('arms town targeting, with jumpto where the caster would be', async () => {
+    const { session, run } = withNodes({
+      0: { type: SpecType.TOWN_START_TARGETING, jumpto: 3, ex1a: SpellPat.RADIUS_2, ex2a: 4 },
+    });
+    await run(0);
+    expect(session.mode).toBe(GameMode.TOWN_TARGET);
+    expect(session.townTarget?.spell).toBe(Spell.NONE);
+    expect(session.townTarget?.whoCast).toBe(3);
+    expect(session.townTarget?.pattern).toBe(SpellPat.RADIUS_2);
+    expect(session.townTarget?.freebie).toBe(true);
+    expect(session.spellCaster).toBe(3);
+    expect(session.specTargetType).toBe(SpecCtxType.TOWN);
+    expect(session.specTargetFail).toBe(4);
+  });
+
+  /**
+   * `if(num == eSpell::NONE);` is an empty statement, so the second line a
+   * real spell prints — which key cancels it — is missing here.
+   */
+  it('says "Target spell." and nothing about a cancel key', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.TOWN_START_TARGETING, ex1a: SpellPat.SINGLE, jumpto: 3 },
+    });
+    await run(0);
+    expect(univ.transcript.at(-1)).toBe('  Target spell.');
+  });
+
+  it('refuses a pattern outside 0 - 7 and stays in town', async () => {
+    const { univ, session, run } = withNodes({
+      0: { type: SpecType.TOWN_START_TARGETING, jumpto: 3, ex1a: 8 },
+    });
+    await run(0);
+    expect(univ.transcript.at(-1)).toBe('  Error: Invalid spell pattern (0 - 7).');
+    expect(session.mode).toBe(GameMode.TOWN);
+  });
+
+  it('refuses a multi-square targeting out of combat', async () => {
+    const { univ, session, run } = withNodes({
+      0: { type: SpecType.TOWN_START_TARGETING, ex1a: SpellPat.SINGLE, jumpto: 3, ex1c: 4 },
+    });
+    await run(0);
+    expect(univ.transcript.at(-1)).toBe('  Target: Only in combat');
+    expect(session.mode).toBe(GameMode.TOWN);
+  });
+
+  /**
+   * `spec_target_options`: units from ex2b, tens from ex2c — and the tens are
+   * `if(>0) += 20; else if(==0) += 10;`, so a negative ex2c adds neither.
+   */
+  it.each([
+    [0, 0, 10],
+    [1, 0, 11],
+    [0, 1, 20],
+    [1, 5, 21],
+    [1, -1, 1],
+    [0, -1, 0],
+  ])('ex2b=%i ex2c=%i gives options %i', async (ex2b, ex2c, want) => {
+    const { session, run } = withNodes({
+      0: { type: SpecType.TOWN_START_TARGETING, ex1a: SpellPat.SINGLE, jumpto: 3, ex2b, ex2c },
+    });
+    await run(0);
+    expect(session.specTargetOptions).toBe(want);
+  });
+
+  it('runs jumpto when the square is picked, not a spell', async () => {
+    const { univ, session, run } = withNodes({
+      0: { type: SpecType.TOWN_START_TARGETING, ex1a: SpellPat.SINGLE, jumpto: 3, ex2a: 4 },
+      3: { type: SpecType.SET_SDF, sd1: 2, sd2: 2, ex1a: 77 },
+      4: { type: SpecType.SET_SDF, sd1: 2, sd2: 3, ex1a: 99 },
+    });
+    await run(0);
+    // A square the party can see: right next to it.
+    const at = { ...univ.party.townLoc, x: univ.party.townLoc.x + 1 };
+    await castTownSpell(session, at);
+    expect(univ.party.getSdf(2, 2)).toBe(77);
+    // It did not fail, so the failure node never ran.
+    await session.specials!.drainQueue();
+    expect(univ.party.getSdf(2, 3)).toBe(0);
+    expect(session.mode).toBe(GameMode.TOWN);
+  });
+
+  /**
+   * `bool failed = town_spell == eSpell::NONE && adjust > 4;` — in town the
+   * *only* way a node's targeting fails is a square the party cannot see. The
+   * node's own answer is read and thrown away.
+   */
+  it('queues the failure node for a square it cannot see', async () => {
+    const { univ, session, run } = withNodes({
+      0: { type: SpecType.TOWN_START_TARGETING, ex1a: SpellPat.SINGLE, jumpto: 3, ex2a: 4 },
+      3: { type: SpecType.SET_SDF, sd1: 2, sd2: 2, ex1a: 77 },
+      4: { type: SpecType.SET_SDF, sd1: 2, sd2: 3, ex1a: 99 },
+    });
+    await run(0);
+    // Far enough off that can_see_light gives up.
+    await castTownSpell(session, { x: univ.party.townLoc.x + 20, y: univ.party.townLoc.y });
+    expect(univ.transcript.at(-1)).toBe("  Can't see target.");
+    expect(univ.party.getSdf(2, 2)).toBe(0);
+    await session.specials!.drainQueue();
+    expect(univ.party.getSdf(2, 3)).toBe(99);
+  });
+
+  /**
+   * In combat it is the *spell* targeting that gets armed, taking its range
+   * from `ex1b` and its shape from `ex1a` — the two things a real spell would
+   * have read out of the spell table.
+   */
+  it('in combat, arms spell targeting and runs jumpto on the square', async () => {
+    const { univ, session, run } = withNodes({
+      0: { type: SpecType.TOWN_START_TARGETING, ex1a: SpellPat.SINGLE, ex1b: 6,
+        jumpto: 3, ex2a: 4 },
+      3: { type: SpecType.SET_SDF, sd1: 2, sd2: 2, ex1a: 77 },
+      4: { type: SpecType.SET_SDF, sd1: 2, sd2: 3, ex1a: 99 },
+    });
+    session.startCombat(univ.party.direction);
+    univ.curPc = 0;
+    univ.party.pcs[0]!.ap = 20;
+    await run(0);
+    expect(session.mode).toBe(GameMode.SPELL_TARGET);
+    expect(session.spellTargeting?.spell).toBe(Spell.NONE);
+    expect(session.spellTargeting?.range).toBe(6);
+    expect(session.spellTargeting?.fancy).toBeFalsy();
+
+    const at = { ...univ.currentPc.combatPos, x: univ.currentPc.combatPos.x + 1 };
+    await doCombatCast(session, at);
+    expect(univ.party.getSdf(2, 2)).toBe(77);
+    await session.specials!.drainQueue();
+    expect(univ.party.getSdf(2, 3)).toBe(0);
+  });
+
+  /** `ex1c > 1` in combat is the fancy path, and it is that many squares. */
+  it('takes ex1c squares when it is more than one', async () => {
+    const { univ, session, run } = withNodes({
+      0: { type: SpecType.TOWN_START_TARGETING, ex1a: SpellPat.SINGLE, ex1b: 6,
+        ex1c: 3, jumpto: 3 },
+      3: { type: SpecType.SET_SDF, sd1: 2, sd2: 2, ex1a: 77 },
+    });
+    session.startCombat(univ.party.direction);
+    univ.curPc = 0;
+    await run(0);
+    expect(session.mode).toBe(GameMode.FANCY_TARGET);
+    expect(session.spellTargeting?.targetsLeft).toBe(3);
+  });
+
+  /**
+   * `failed` starts true for a node's targeting and every refusal leaves it
+   * that way — the C++ chains them with `else if` and falls through to the
+   * `if(failed)` at the tail of the loop. A target out of range is one.
+   */
+  it('a refused combat target still queues the failure node', async () => {
+    const { univ, session, run } = withNodes({
+      0: { type: SpecType.TOWN_START_TARGETING, ex1a: SpellPat.SINGLE, ex1b: 1,
+        jumpto: 3, ex2a: 4 },
+      3: { type: SpecType.SET_SDF, sd1: 2, sd2: 2, ex1a: 77 },
+      4: { type: SpecType.SET_SDF, sd1: 2, sd2: 3, ex1a: 99 },
+    });
+    session.startCombat(univ.party.direction);
+    univ.curPc = 0;
+    univ.party.pcs[0]!.ap = 20;
+    await run(0);
+    const from = univ.currentPc.combatPos;
+    await doCombatCast(session, { ...from, x: from.x + 4 });
+    expect(univ.transcript.at(-1)).toBe('  Target out of range.');
+    expect(univ.party.getSdf(2, 2)).toBe(0);
+    await session.specials!.drainQueue();
+    expect(univ.party.getSdf(2, 3)).toBe(99);
+  });
+
+  /** `failed = r1` — the node's own answer is the last word in combat. */
+  it('a node that answers positive counts as a failure', async () => {
+    const { univ, session, run } = withNodes({
+      0: { type: SpecType.TOWN_START_TARGETING, ex1a: SpellPat.SINGLE, ex1b: 6,
+        jumpto: 3, ex2a: 4 },
+      3: { type: SpecType.CANT_ENTER, ex1a: 1 },
+      4: { type: SpecType.SET_SDF, sd1: 2, sd2: 3, ex1a: 99 },
+    });
+    session.startCombat(univ.party.direction);
+    univ.curPc = 0;
+    univ.party.pcs[0]!.ap = 20;
+    await run(0);
+    const from = univ.currentPc.combatPos;
+    await doCombatCast(session, { ...from, x: from.x + 1 });
+    await session.specials!.drainQueue();
+    expect(univ.party.getSdf(2, 3)).toBe(99);
+  });
+
+  /**
+   * `if(town_spell == eSpell::NONE) queue_special(…, spec_target_fail, …)` in
+   * *both* cancel arms of `handle_spellcast` (boe.actions.cpp:420, :439) —
+   * walking away from a node's targeting is a failure it gets told about, and
+   * a real spell's cancel queues nothing.
+   */
+  it('backing out of the targeting queues the failure node', async () => {
+    const { univ, session, run } = withNodes({
+      0: { type: SpecType.TOWN_START_TARGETING, ex1a: SpellPat.SINGLE, jumpto: 3, ex2a: 4 },
+      4: { type: SpecType.SET_SDF, sd1: 2, sd2: 3, ex1a: 99 },
+    });
+    await run(0);
+    cancelTownTargeting(session);
+    expect(session.mode).toBe(GameMode.TOWN);
+    await session.specials!.drainQueue();
+    expect(univ.party.getSdf(2, 3)).toBe(99);
+  });
+
+  it('…and in combat too', async () => {
+    const { univ, session, run } = withNodes({
+      0: { type: SpecType.TOWN_START_TARGETING, ex1a: SpellPat.SINGLE, ex1b: 6,
+        jumpto: 3, ex2a: 4 },
+      4: { type: SpecType.SET_SDF, sd1: 2, sd2: 3, ex1a: 99 },
+    });
+    session.startCombat(univ.party.direction);
+    univ.curPc = 0;
+    await run(0);
+    cancelSpellTargeting(session);
+    expect(session.mode).toBe(GameMode.COMBAT);
+    await session.specials!.drainQueue();
+    expect(univ.party.getSdf(2, 3)).toBe(99);
+  });
+
+  /**
+   * The tens digit at 1 — an `ex2c` of exactly 0 — refuses an antimagic
+   * square, which is the one refusal a real town spell can never hit, since
+   * nothing else ever writes `spec_target_options`.
+   */
+  it('refuses an antimagic square when ex2c is zero', async () => {
+    const { univ, session, run } = withNodes({
+      0: { type: SpecType.TOWN_START_TARGETING, ex1a: SpellPat.SINGLE, jumpto: 3, ex2a: 4, ex2c: 0 },
+      3: { type: SpecType.SET_SDF, sd1: 2, sd2: 2, ex1a: 77 },
+      4: { type: SpecType.SET_SDF, sd1: 2, sd2: 3, ex1a: 99 },
+    });
+    await run(0);
+    const at = { ...univ.party.townLoc, x: univ.party.townLoc.x + 1 };
+    univ.town!.setField(at.x, at.y, FieldType.FIELD_ANTIMAGIC, true);
+    await castTownSpell(session, at);
+    expect(univ.transcript.at(-1)).toBe('  Target in antimagic field.');
+    expect(univ.party.getSdf(2, 2)).toBe(0);
+    await session.specials!.drainQueue();
+    expect(univ.party.getSdf(2, 3)).toBe(99);
   });
 });
 

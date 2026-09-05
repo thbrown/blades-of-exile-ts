@@ -132,16 +132,29 @@ const NO_VOLLEY = new Set<Spell>([
 /** `start_spell_targeting` — go into targeting with `spell` in the air. */
 export function startSpellTargeting(
   session: GameSession, spell: Spell, freebie = false, itemSpellLevel = 1,
+  /**
+   * `spell_range` and `pat`, which are **only read for `eSpell::NONE`** — a
+   * special node's own targeting, where there is no spell to take a range or a
+   * shape from (boe.combat.cpp:4960 and its `case eSpell::NONE: // Do nothing
+   * - use the pat passed in`).
+   */
+  spellRange = 0, pat: SpellPat = SpellPat.SINGLE,
 ): void {
   const { univ } = session;
+  const none = spell === Spell.NONE;
   univ.addStringToBuf('  Target spell.');
-  univ.addStringToBuf(isMage(spell) ? "  (Hit 'm' to cancel.)" : "  (Hit 'p' to cancel.)");
+  // `if(num == eSpell::NONE);` — an empty statement, so a node's targeting
+  // says which key cancels it and nothing else does.
+  if (!none) {
+    univ.addStringToBuf(isMage(spell) ? "  (Hit 'm' to cancel.)" : "  (Hit 'p' to cancel.)");
+  }
   session.mode = GameMode.SPELL_TARGET;
   // `handle_target_mode(MODE_SPELL_TARGET, current_spell_range, num)`
   // (boe.combat.cpp:4961) — between the prompt and the pattern switch. The
   // range it locks on is the spell's own.
-  handleTargetMode(session, SPELLS[spell]?.range ?? 0, spell);
-  const pattern = patternFor(spell);
+  const range = none ? spellRange : (SPELLS[spell]?.range ?? 0);
+  handleTargetMode(session, range, spell);
+  const pattern = none ? pat : patternFor(spell);
   // The tail of `start_spell_targeting` (boe.combat.cpp:4958): a rotatable
   // pattern — PAT_WALL is the only one — says so and starts at rotation 0.
   if (pattern === SpellPat.WALL) {
@@ -152,7 +165,7 @@ export function startSpellTargeting(
     spell,
     freebie,
     pattern,
-    range: SPELLS[spell]?.range ?? 0,
+    range,
     itemSpellLevel,
     targets: [],
     targetsLeft: 0,
@@ -177,6 +190,7 @@ export function spellCastHitReturn(session: GameSession): void {
 /** Back out of targeting; nothing has been spent. */
 export function cancelSpellTargeting(session: GameSession): void {
   if (session.spellTargeting === null) return;
+  const spell = session.spellTargeting.spell;
   session.spellTargeting = null;
   session.mode = GameMode.COMBAT;
   // **The view snaps back to the caster** — `center =
@@ -187,6 +201,14 @@ export function cancelSpellTargeting(session: GameSession): void {
   // this runs. Note the MODE_TOWN_TARGET arm just above it does **not**
   // recentre — that asymmetry is the C++'s, not a slip here.
   session.center = { ...session.univ.currentPc.combatPos };
+  // `if(spell_being_cast == eSpell::NONE) queue_special(TARGET, …,
+  // spec_target_fail, …)` (boe.actions.cpp:439) — **backing out of a node's
+  // targeting is a failure**, and the scenario is told so. The square handed
+  // over is the caster's, not one the player picked.
+  if (spell === Spell.NONE) {
+    session.specials?.queueSpecial(SpecCtx.TARGET, session.specTargetType,
+      session.specTargetFail, session.univ.currentPc.combatPos);
+  }
 }
 /**
  * How many squares each `REFER_FANCY` spell collects
@@ -220,11 +242,16 @@ function fancyTargetCount(spell: Spell, level: number, bonus: number): number {
  */
 export function startFancySpellTargeting(
   session: GameSession, spell: Spell, freebie = false, itemSpellLevel = 1,
+  /** As above, all three read only for `eSpell::NONE`. */
+  spellRange = 0, pat: SpellPat = SpellPat.SINGLE, targets = 1,
 ): void {
   const { univ } = session;
   const caster = univ.currentPc;
+  const none = spell === Spell.NONE;
   univ.addStringToBuf('  Target spell.');
-  univ.addStringToBuf(isMage(spell) ? "  (Hit 'm' to cancel.)" : "  (Hit 'p' to cancel.)");
+  if (!none) {
+    univ.addStringToBuf(isMage(spell) ? "  (Hit 'm' to cancel.)" : "  (Hit 'p' to cancel.)");
+  }
   univ.addStringToBuf('  (Hit space to cast.)');
   const bonus = caster.statAdj(Skill.INTELLIGENCE);
   const level = freebie ? itemSpellLevel : caster.level;
@@ -233,17 +260,21 @@ export function startFancySpellTargeting(
   // calls it before it works out the bonus and level below, but neither of
   // those draws, so only the mode being FANCY by now matters — and it is,
   // because `handle_target_mode` is what sets it there.
-  handleTargetMode(session, SPELLS[spell]?.range ?? 0, spell);
+  const range = none ? spellRange : (SPELLS[spell]?.range ?? 0);
+  handleTargetMode(session, range, spell);
   session.spellTargeting = {
     spell,
     freebie,
     // Fancy targeting can't rotate a wall, so Spray Fields gets a plus and
-    // everything else a single square.
-    pattern: spell === Spell.SPRAY_FIELDS ? SpellPat.PLUS : SpellPat.SINGLE,
-    range: SPELLS[spell]?.range ?? 0,
+    // everything else a single square — except a node's own targeting, which
+    // keeps the shape it was given.
+    pattern: none ? pat : (spell === Spell.SPRAY_FIELDS ? SpellPat.PLUS : SpellPat.SINGLE),
+    range,
     itemSpellLevel,
     targets: [],
-    targetsLeft: fancyTargetCount(spell, level, bonus),
+    targetsLeft: none
+      ? Math.max(1, Math.min(8, targets))
+      : fancyTargetCount(spell, level, bonus),
     fancy: true,
   };
 }
@@ -425,8 +456,11 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
   if (!town) return;
   const caster = univ.currentPc;
   const spell = armed.spell;
+  // **Not `if (!info) return;`.** A special node's targeting casts
+  // `eSpell::NONE`, which has no table row at all, and the C++ only ever
+  // dereferences the row under `!freebie` — which a node's targeting never is.
   const info = SPELLS[spell];
-  if (!info) return;
+  if (!info && spell !== Spell.NONE) return;
   const freebie = armed.freebie;
 
   // Note `level` here is *not* the caster's level: it is a spell-power figure
@@ -438,7 +472,7 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
   } else {
     level = 1 + Math.trunc(caster.level / 2);
     bonus = caster.statAdj(Skill.INTELLIGENCE);
-    if ((info.level ?? 0) <= getProtLevel(caster, ItemAbil.MAGERY)) level++;
+    if ((info?.level ?? 0) <= getProtLevel(caster, ItemAbil.MAGERY)) level++;
     if (caster.traits[Trait.ANAMA] && isPriestSide(spell)) level++;
   }
 
@@ -520,7 +554,7 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
         caster.curSp -= session.sumMonstCost;
         costTaken = true;
       } else if (spell !== Spell.MINDDUEL) {
-        caster.curSp -= info.cost ?? 0;
+        caster.curSp -= info?.cost ?? 0;
         costTaken = true;
       }
     }
@@ -532,7 +566,15 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
         + ` to=(${at.x},${at.y}) adjust=${adjust} range=${armed.range}`
         + ` dist=${dist(caster.combatPos, at)} obsc=${session.sightObscurity(at.x, at.y)}`);
     }
-    const allowObstructed = spell === Spell.DISPEL_BARRIER;
+    // `if(spell_being_cast == DISPEL_BARRIER || (spell_being_cast == NONE &&
+    // spec_target_options % 10 == 1)) allow_obstructed = true;`
+    // (boe.combat.cpp:857). The C++ hoists both out of the loop; only the value
+    // matters. Its `allow_antimagic` twin below it reads
+    // `spec_target_options / 10 == 2` and assigns **false**, which is what the
+    // variable already held — so a node can never let a cast through an
+    // antimagic field in combat, however it sets its options.
+    const allowObstructed = spell === Spell.DISPEL_BARRIER
+      || (spell === Spell.NONE && session.specTargetOptions % 10 === 1);
     // `if(adjust <= 4 && !cast_spell_on_space(target, spell_being_cast))`
     // (boe.combat.cpp:930) — the square's own `IF_CONTEXT` node cancels this
     // target and the loop moves to the next one, after queueing the
@@ -543,46 +585,51 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
         SpecCtx.TARGET, session.specTargetType, session.specTargetFail, at);
       continue;
     }
+    // `bool failed = spell_being_cast == eSpell::NONE;` (boe.combat.cpp:934) —
+    // a node's targeting starts *failed*, and every one of the refusals below
+    // leaves it that way, because the C++ chains them with `else if` and falls
+    // through to `if(failed) queue_special(…, spec_target_fail)` at the tail
+    // of the loop (:1415). A real spell starts succeeded and never queues.
+    let failed = spell === Spell.NONE;
+    const rect = town.record.inTownRect;
     if (adjust > 4) {
       univ.addStringToBuf("  Can't see target.");
-      continue;
-    }
-    const rect = town.record.inTownRect;
-    if (at.x < rect.left || at.x > rect.right || at.y < rect.top || at.y > rect.bottom) {
+    } else if (at.x < rect.left || at.x > rect.right
+      || at.y < rect.top || at.y > rect.bottom) {
       univ.addStringToBuf('  Space not in town.');
-      continue;
-    }
-    if (dist(caster.combatPos, at) > armed.range) {
+    } else if (dist(caster.combatPos, at) > armed.range) {
       univ.addStringToBuf('  Target out of range.');
-      continue;
-    }
-    if (session.sightObscurity(at.x, at.y) === 5 && !allowObstructed) {
+    } else if (session.sightObscurity(at.x, at.y) === 5 && !allowObstructed) {
       univ.addStringToBuf('  Target space obstructed.');
-      continue;
-    }
-    if (town.hasField(at.x, at.y, FieldType.FIELD_ANTIMAGIC)) {
+    } else if (town.hasField(at.x, at.y, FieldType.FIELD_ANTIMAGIC)) {
       univ.addStringToBuf('  Target in antimagic field.');
-      continue;
-    }
+    } else {
+      failed = false;
+      // A targeted spell costs 5 AP, not the 6 an untargeted one pays.
+      if (!apTaken) {
+        if (!freebie) takeAp(univ, 5);
+        apTaken = true;
+        // `draw_terrain(2)` (boe.combat.cpp:955), and **mode 2 is not free**:
+        // it suppresses the working creature's own square and then falls through
+        // by setting `mode = 0` (boe.graphics.cpp:859), so it reaches
+        // `draw_text_bar` like any other full redraw. The early-out above it —
+        // `if(current_working_monster < 0) return;` — is what makes some mode-2
+        // redraws free, and here the caster is `univ.cur_pc` (:903), so this one
+        // is not.
+        drawTerrain(session);
+      }
 
-    // A targeted spell costs 5 AP, not the 6 an untargeted one pays.
-    if (!apTaken) {
-      if (!freebie) takeAp(univ, 5);
-      apTaken = true;
-      // `draw_terrain(2)` (boe.combat.cpp:955), and **mode 2 is not free**:
-      // it suppresses the working creature's own square and then falls through
-      // by setting `mode = 0` (boe.graphics.cpp:859), so it reaches
-      // `draw_text_bar` like any other full redraw. The early-out above it —
-      // `if(current_working_monster < 0) return;` — is what makes some mode-2
-      // redraws free, and here the caster is `univ.cur_pc` (:903), so this one
-      // is not.
-      drawTerrain(session);
+      const one = { pattern: armed.pattern, rot, level, bonus, who, rng, min,
+        deferred, missiles, shared, ashes, summon, failed };
+      await resolveOne(session, spell, at, i, one);
+      // Only the `eSpell::NONE` arm writes it back: `failed = r1`, the answer
+      // its node gave.
+      failed = one.failed;
     }
-
-    await resolveOne(session, spell, at, i, {
-      pattern: armed.pattern, rot, level, bonus, who, rng, min, deferred, missiles, shared, ashes,
-      summon,
-    });
+    if (failed) {
+      session.specials?.queueSpecial(
+        SpecCtx.TARGET, session.specTargetType, session.specTargetFail, at);
+    }
   }
 
   // The trailing do_missile_anim (boe.combat.cpp:1412): whatever is still
@@ -666,6 +713,8 @@ async function resolveOne(
     ashes: { at: Location | null };
     missiles: QueuedMissile[];
     shared: { sound: number };
+    /** `failed`, which only the NONE arm sets, from its node's answer. */
+    failed: boolean;
   },
 ): Promise<void> {
   const { univ } = session;
@@ -693,6 +742,21 @@ async function resolveOne(
   };
 
   switch (spell) {
+    // **Not a spell but a special node targeting** (boe.combat.cpp:1015). The
+    // node to run is in `spell_caster` — which `TOWN_START_TARGETING` set to
+    // its `jumpto`, not to a PC — and its answer becomes the cast's `failed`,
+    // which is what queues the targeting's failure node afterwards.
+    case Spell.NONE: {
+      // `failed = r1`, an assignment: the node's answer is the last word on
+      // whether the targeting failed. `r1` is zeroed before the call in the
+      // C++, where this port's `a` comes back -1 when a node never set it —
+      // so "positive" is the test, not "non-zero".
+      const r = await session.runSpecialRaw(
+        SpecCtx.TARGET, session.specTargetType, session.spellCaster, target);
+      ctx.failed = r.a > 0;
+      return;
+    }
+
     // --- fields ------------------------------------------------------------
     case Spell.GOO: case Spell.WEB: case Spell.GOO_BOMB:
       await field(FieldType.FIELD_WEB);

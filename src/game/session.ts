@@ -2008,13 +2008,19 @@ export class GameSession {
    * `TOWN_START_TARGETING` node came from, and which node to run when the
    * targeting is refused or intercepted.
    *
-   * TODO(M9): the opcode that sets them is not ported, so `specTargetFail` is
-   * always -1 and the interception below queues nothing. `castSpellOnSpace` is
-   * useful without it — a square can still cancel a spell — but a scenario that
-   * asks the *player* to pick a square cannot yet.
+   * Set by `TOWN_START_TARGETING` (boe.specials.cpp:4311) and read by the two
+   * casts when a target is refused or intercepted.
    */
   specTargetType: SpecCtxType = SpecCtxType.SCEN;
   specTargetFail = -1;
+
+  /**
+   * `spec_target_options` — **units** are "may target an obstructed square",
+   * **tens** are the antimagic rule: 1 refuses an antimagic square in town, 2
+   * is the combat arm's `allow_antimagic = false`, which is what it already
+   * was, so that half of the C++ does nothing at all. Kept as written.
+   */
+  specTargetOptions = 0;
 
   async runSpecialRaw(
     mode: SpecCtx, type: SpecCtxType, node: number, where: Location,

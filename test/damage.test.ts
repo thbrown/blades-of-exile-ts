@@ -503,6 +503,7 @@ describe('damaging terrain', () => {
     // valleydy has burning ground; if a future scenario swap removes it this
     // test would pass vacuously, so say so rather than quietly return.
     expect(found?.fire).toBe(true);
+    if (!found) return;
     session.startTownMode(found.town, FORCED_ENTRY);
     univ.party.pcs.forEach((pc) => {
       pc.maxHealth = 200;

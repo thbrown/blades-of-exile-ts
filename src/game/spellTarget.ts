@@ -95,8 +95,16 @@ export function startTownTargeting(
 /** Back out of targeting. Nothing has been spent, so nothing is refunded. */
 export function cancelTownTargeting(session: GameSession): void {
   if (session.townTarget === null) return;
+  const spell = session.townTarget.spell;
   session.townTarget = null;
   session.mode = GameMode.TOWN;
+  // `if(town_spell == eSpell::NONE) queue_special(…, spec_target_fail,
+  // univ.party.town_loc)` (boe.actions.cpp:420) — as in combat, walking away
+  // from a node's targeting is a failure it gets told about.
+  if (spell === Spell.NONE) {
+    session.specials?.queueSpecial(SpecCtx.TARGET, session.specTargetType,
+      session.specTargetFail, session.univ.party.townLoc);
+  }
 }
 
 /**
@@ -115,9 +123,13 @@ export async function castTownSpell(session: GameSession, where: Location): Prom
   const { univ } = session;
   const town = univ.town;
   if (!town) return;
+  // **`whoCast` is not always a PC.** `TOWN_START_TARGETING` puts its `jumpto`
+  // there — the node to run when the square is picked — so this only has to
+  // resolve for a real spell, and every use of it below is already behind
+  // `!freebie`, which a node's targeting never is.
   const pc = univ.party.pcs[target.whoCast];
-  if (!pc) return;
   const spell = target.spell;
+  if (!pc && spell !== Spell.NONE) return;
   const info = SPELLS[spell];
 
   // Note the comparisons are strict on all four sides, so the town's outermost
@@ -126,17 +138,23 @@ export async function castTownSpell(session: GameSession, where: Location): Prom
   if (where.x <= rect.left || where.x >= rect.right
     || where.y <= rect.top || where.y >= rect.bottom) {
     univ.addStringToBuf("  Can't target outside town.");
+    // Note this one *runs* the failure node rather than queueing it, unlike
+    // every other refusal below. Kept as written.
+    if (spell === Spell.NONE) {
+      await session.runSpecial(
+        SpecCtx.TARGET, session.specTargetType, session.specTargetFail, where);
+    }
     return;
   }
 
   const adjust = session.canSeeLight(univ.party.townLoc, where);
-  if (!target.freebie) pc.curSp -= info?.cost ?? 0;
+  if (!target.freebie && pc) pc.curSp -= info?.cost ?? 0;
 
-  const adj = target.freebie ? 1 : pc.statAdj(Skill.INTELLIGENCE);
-  let level = target.freebie ? target.itemSpellLevel : pc.level;
-  if (!target.freebie && (info?.level ?? 0) <= getProtLevel(pc, ItemAbil.MAGERY)
+  const adj = target.freebie || !pc ? 1 : pc.statAdj(Skill.INTELLIGENCE);
+  let level = target.freebie || !pc ? target.itemSpellLevel : pc.level;
+  if (!target.freebie && pc && (info?.level ?? 0) <= getProtLevel(pc, ItemAbil.MAGERY)
     && !isPriestSide(spell)) level++;
-  if (!target.freebie && pc.traits[Trait.ANAMA] && isPriestSide(spell)) level++;
+  if (!target.freebie && pc && pc.traits[Trait.ANAMA] && isPriestSide(spell)) level++;
 
   // `if(adjust <= 4 && !cast_spell_on_space(where, town_spell))` — the square's
   // own `IF_CONTEXT` node gets to cancel the spell, and the C++ then queues the
@@ -148,8 +166,31 @@ export async function castTownSpell(session: GameSession, where: Location): Prom
     return;
   }
 
+  // `if(spec_target_options / 10 == 1 && univ.town.is_antimagic(...))`
+  // (boe.party.cpp:1335) — a node's targeting can be told to refuse an
+  // antimagic square, and only a node's: a real town spell has
+  // `spec_target_options` at whatever the last node left, which is 0 for a
+  // game that has never run one.
+  if (Math.trunc(session.specTargetOptions / 10) === 1
+    && town.hasField(where.x, where.y, FieldType.FIELD_ANTIMAGIC)) {
+    univ.addStringToBuf('  Target in antimagic field.');
+    session.specials?.queueSpecial(
+      SpecCtx.TARGET, session.specTargetType, session.specTargetFail, where);
+    return;
+  }
+
+  // `bool failed = town_spell == eSpell::NONE && adjust > 4;`
+  // (boe.party.cpp:1339). Note the town arm is far narrower than combat's: the
+  // *only* way a node's targeting fails here is a square it cannot see. The
+  // node's own answer is read into `need_redraw` and thrown away.
+  const failed = spell === Spell.NONE && adjust > 4;
+
   if (adjust > 4) {
     univ.addStringToBuf("  Can't see target.");
+    if (failed) {
+      session.specials?.queueSpecial(
+        SpecCtx.TARGET, session.specTargetType, session.specTargetFail, where);
+    }
     return;
   }
 
@@ -157,6 +198,14 @@ export async function castTownSpell(session: GameSession, where: Location): Prom
   const terSpec = univ.terrainType(terrain);
 
   switch (spell) {
+    // **Not a spell but a special node targeting** (boe.party.cpp:1345). The
+    // node is in `spell_caster`, which `TOWN_START_TARGETING` set to its
+    // `jumpto`; unlike combat's arm, the town one does not read the answer.
+    case Spell.NONE:
+      await session.runSpecial(
+        SpecCtx.TARGET, session.specTargetType, session.spellCaster, where);
+      break;
+
     case Spell.SCRY_MONSTER:
     case Spell.CAPTURE_SOUL: {
       const monst = town.monsterAt(where);

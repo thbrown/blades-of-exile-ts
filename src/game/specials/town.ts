@@ -22,6 +22,10 @@ import { setTownAttitude } from '../townAttitude';
 import { placeMonster } from '../monsterPlace';
 import { SELECT_PC_CANCEL, SelectPcMode, runSelectPc } from '../selectPc';
 import { isCombat } from '../modes';
+import { Spell } from '../../data/spell';
+import { SpellPat } from '../../data/pattern';
+import { startFancySpellTargeting, startSpellTargeting } from '../spellCombatTarget';
+import { startTownTargeting } from '../spellTarget';
 import { createWandMonst } from '../wandering';
 import { handleMessage } from './vm';
 import { XML_BUTTONS, threeChoiceButtons } from './oneshot';
@@ -428,6 +432,56 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
       // (boe.specials.cpp:4170 against :2266).
       univ.party.startTimer(spec.ex1a, spec.ex1b, SpecCtxType.TOWN);
       break;
+
+    /**
+     * `TOWN_START_TARGETING` (boe.specials.cpp:4295) — **a node asking the
+     * player to pick a square.** It arms the same targeting the spells use,
+     * with `eSpell::NONE` in the air, and the click that lands runs the node
+     * this one names.
+     *
+     * The three arms are the C++'s: out of combat it is *town* targeting,
+     * whose `who_c` is the node to run (there is no caster); in combat a
+     * `ex1c > 1` means **fancy**, that many squares, and anything else is a
+     * single square.
+     */
+    case SpecType.TOWN_START_TARGETING: {
+      ctx.nextSpec = -1;
+      if (spec.ex1a < 0 || spec.ex1a > 7) {
+        // TODO(M3): `showError` is a modal, which needs dialogxml. The text
+        // goes to the message buffer meanwhile, so a broken scenario still
+        // says why nothing happened.
+        univ.addStringToBuf('  Error: Invalid spell pattern (0 - 7).');
+        break;
+      }
+      if (spec.ex1c > 1 && !isCombat(ctx.session.mode)) {
+        univ.addStringToBuf('  Target: Only in combat');
+        break;
+      }
+      const pat = spec.ex1a as SpellPat;
+      if (!isCombat(ctx.session.mode)) {
+        startTownTargeting(ctx.session, Spell.NONE, spec.jumpto, true, pat);
+      } else if (spec.ex1c > 1) {
+        startFancySpellTargeting(ctx.session, Spell.NONE, true, 1, spec.ex1b, pat, spec.ex1c);
+      } else {
+        startSpellTargeting(ctx.session, Spell.NONE, true, 1, spec.ex1b, pat);
+      }
+      // `spell_caster = spec.jumpto` — for a node's targeting this is not a PC
+      // at all but the node to run when the square is picked.
+      ctx.session.spellCaster = spec.jumpto;
+      ctx.session.specTargetType = ctx.curSpecType;
+      ctx.session.specTargetFail = spec.ex2a;
+      // `spec_target_options`: **units** are "may target an obstructed square",
+      // **tens** are the antimagic rule — 1 refuses an antimagic square in town,
+      // 2 is the combat arm's `allow_antimagic = false`, which is what it
+      // already was, so that half of the C++ does nothing at all.
+      //
+      // The tens digit is `if(ex2c > 0) += 20; else if(ex2c == 0) += 10;` —
+      // a *negative* `ex2c` adds neither, leaving the tens at 0 and turning
+      // the town antimagic refusal off as well. Kept as written.
+      ctx.session.specTargetOptions = (spec.ex2b > 0 ? 1 : 0)
+        + (spec.ex2c > 0 ? 20 : spec.ex2c === 0 ? 10 : 0);
+      break;
+    }
 
     default:
       // Combat effects, monster placement, spell patterns and party splitting

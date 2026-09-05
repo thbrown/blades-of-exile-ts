@@ -37,7 +37,7 @@ import { ItemWinMode, QUEST_COMPLETED_OFFSET } from './game/itemWindow';
 import { BASIC_BUTTON_KEYS } from './game/specials/oneshot';
 import { specItemUseable } from './data/quest';
 import { trappedMonsters } from './game/soulCrystal';
-import { castTownSpell, startTownTargeting } from './game/spellTarget';
+import { cancelTownTargeting, castTownSpell, startTownTargeting } from './game/spellTarget';
 import { CastDialog } from './dialogs/castDialog';
 import { forcedCast } from './game/spellRepeat';
 import { GetItemsDialog } from './dialogs/getItemsDialog';
@@ -1935,7 +1935,22 @@ async function main(): Promise<void> {
         case 'm': case 'M': case 'p': case 'P':
           // While a spell is in the air the same key cancels it, which is what
           // start_spell_targeting's "(Hit 'm' to cancel.)" refers to.
-          if (session.spellTargeting !== null) {
+          //
+          // **The test is the mode, not whether a spell is armed**
+          // (boe.actions.cpp:432). The two are the same question until
+          // something changes the mode behind the targeting's back — a debug
+          // key does exactly that — and the replay driver had this as a real
+          // bug before it was fixed there.
+          //
+          // The MODE_TOWN_TARGET arm (:412) belongs here too, and was missing:
+          // 'm' with a town spell in the air opened the picker again instead of
+          // backing out. Note only the combat arm recentres.
+          if (session.mode === GameMode.TOWN_TARGET) {
+            univ.addStringToBuf('  Cancelled.');
+            cancelTownTargeting(session);
+          } else if (session.mode === GameMode.SPELL_TARGET
+            || session.mode === GameMode.FANCY_TARGET) {
+            univ.addStringToBuf('  Cancelled.');
             cancelSpellTargeting(session);
             recentre();
           } else {

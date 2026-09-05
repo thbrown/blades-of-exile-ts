@@ -10813,3 +10813,55 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     `spec_target_options`, which is why the interception's `queue_special` has
     nothing to queue yet. `GameSession.specTargetType` and `specTargetFail`
     exist and are marked `TODO(M9)`.
+
+- **`TOWN_START_TARGETING`: a scenario asking the *player* to pick a square
+  (M6/M9, 2026-09-05).** The opcode named as missing one entry above is ported,
+  and with it the three globals the interception needed. Corpus-neutral
+  (47 / 1,213,908 either side) — no recording runs the node.
+  - **A cast with `eSpell::NONE` in the air.** The opcode arms the same
+    targeting a spell does — `start_town_targeting` out of combat,
+    `start_fancy_spell_targeting` when `ex1c > 1` in combat, `start_spell_targeting`
+    otherwise — and the click that lands runs `spec.jumpto` instead of a spell.
+    So `startSpellTargeting` / `startFancySpellTargeting` grew a range, a
+    pattern and a target count that are **read only for NONE**, which is what
+    the C++'s `case eSpell::NONE: // Do nothing - use the pat passed in` means.
+  - **`spell_caster` stops being a PC.** For a node's targeting it holds
+    `spec.jumpto`, and so does town targeting's `who_cast`. Every use of
+    `univ.party[who_cast]` in `cast_town_spell` is already behind `!freebie`,
+    which a node's targeting never is — but this port's `castTownSpell` opened
+    with `if (!pc) return;` and would have swallowed the whole thing. Same for
+    `doCombatCast`'s `if (!info) return;`: NONE has no row in the spell table
+    at all.
+  - **`failed` is not the same question in the two casts.** In combat
+    (boe.combat.cpp:934) it starts true for NONE, every one of the six refusals
+    leaves it true because they are chained with `else if` and fall through to
+    `if(failed) queue_special(…, spec_target_fail)` at the tail of the loop, and
+    the NONE arm then *assigns* the node's own answer over it. This port had
+    written the refusals as `continue`s, which skipped the tail — correct for a
+    real spell, silently wrong here. In town (boe.party.cpp:1339) it is only
+    `town_spell == NONE && adjust > 4`: a square the party cannot see is the
+    single way a town targeting fails, and the node's answer is read into
+    `need_redraw` and thrown away.
+  - **The out-of-town refusal *runs* the failure node rather than queueing it**
+    (boe.party.cpp:1311), alone among the refusals. Kept as written.
+  - **`spec_target_options` is two digits and the tens are lopsided.** Units
+    come from `ex2b` — may target an obstructed square. Tens are
+    `if(ex2c > 0) += 20; else if(ex2c == 0) += 10;`, so a **negative** `ex2c`
+    adds neither and leaves the tens at 0. And the two tens values do almost
+    nothing: 1 refuses an antimagic square *in town only*, and 2 sets combat's
+    `allow_antimagic = false`, which is the value the variable already held —
+    that half of the C++ has no effect at all, however a scenario sets it.
+  - **Backing out is a failure too.** Both cancel arms of `handle_spellcast`
+    end `if(… == eSpell::NONE) queue_special(TARGET, …, spec_target_fail, …)`
+    (boe.actions.cpp:420, :439), with the caster's square rather than one the
+    player picked. That went into `cancelTownTargeting` / `cancelSpellTargeting`
+    so both the UI and the replay driver get it.
+  - And while reading that function: **`main.ts` had the bug the replay driver
+    was fixed for one commit earlier** — its 'm'/'p' cancel tested
+    `spellTargeting !== null` rather than the mode — **and had no
+    `MODE_TOWN_TARGET` arm at all**, so 'm' with a town spell in the air
+    reopened the picker instead of backing out. Neither printed "  Cancelled."
+    Fixed the same way, and worth re-checking whenever the driver and the UI
+    are found to disagree: they are two ports of the same C++ function.
+  - `showError`'s modal is still a `TODO(M3)`; the invalid-pattern complaint
+    goes to the message buffer meanwhile.
