@@ -547,6 +547,31 @@ describe("boom_space's redraws", () => {
     expect(univ.rng.gameCalls).toBe(before);
   });
 
+  /**
+   * `damage_monst`'s "no damage" arm (boe.specials.cpp:1520) is a
+   * `draw_terrain(2)`, so it costs a die only when somebody is *acting*:
+   * `current_working_monster` is the PC in a swing and -1 in `process_fields`.
+   */
+  it("damage_monst's bounced blow redraws only while someone is acting", async () => {
+    const { univ, session, pc } = fighting();
+    const per = redrawCost(session);
+    expect(per).toBeGreaterThan(0);
+    const monst = univ.town!.monsters.find((m) => m.isAlive)!;
+    monst.mon.armor = 100;
+    monst.curLoc = { x: pc.combatPos.x + 1, y: pc.combatPos.y };
+
+    // Nobody acting: free, as a blade wall in `process_fields` is.
+    session.workingMonster = -1;
+    let before = univ.rng.gameCalls;
+    await damageMonst(univ, monst, 0, 1, DamageType.WEAPON, { session });
+    const idle = univ.rng.gameCalls - before;
+
+    session.workingMonster = 0;
+    before = univ.rng.gameCalls;
+    await damageMonst(univ, monst, 0, 1, DamageType.WEAPON, { session });
+    expect(univ.rng.gameCalls - before).toBe(idle + per);
+  });
+
   it('inside a volley it queues instead, and draws nothing', () => {
     const { univ, session, pc } = fighting();
     expect(redrawCost(session)).toBeGreaterThan(0);

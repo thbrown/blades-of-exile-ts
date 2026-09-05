@@ -2003,6 +2003,20 @@ export class GameSession {
   }
 
   /** Set by the host so a special that changes the world can repaint. */
+  /**
+   * `current_working_monster` (boe.main.cpp:183) — **0-5 for a PC, 100+i for a
+   * creature, -1 for nobody**, and the thing `draw_terrain(2)` returns at
+   * before it draws (boe.graphics.cpp:842). Every mode-2 redraw is therefore
+   * free or not depending on who is *acting*, which is why the flag has to
+   * exist here at all: `damage_monst`'s "no damage" redraw runs from a PC's
+   * swing (a die) and from a blade wall in `process_fields` (not one), and
+   * nothing else in the call tells them apart.
+   *
+   * Set and cleared in pairs at exactly the C++'s sites; `combat_posing_monster`
+   * moves with it there and is purely cosmetic, so it is not modelled.
+   */
+  workingMonster = -1;
+
   onRedraw: (() => void) | null = null;
 
   /**
@@ -4317,7 +4331,18 @@ export class GameSession {
       if ((monst.status[Status.ASLEEP] ?? 0) > 0) continue;
       if ((monst.status[Status.PARALYZED] ?? 0) > 0) continue;
       const was = this.univ.curPc;
-      await monsterAttack(this, monst, pc);
+      // `combat_posing_monster = current_working_monster = 100 + i`
+      // (boe.combat.cpp:310), cleared straight after (:312) — which is what
+      // makes `monster_attack`'s own `draw_terrain(2)` cost a die here.
+      this.workingMonster = 100 + town.monsters.indexOf(monst);
+      try {
+        await monsterAttack(this, monst, pc);
+      } finally {
+        this.workingMonster = -1;
+      }
+      // `draw_terrain(0)` (boe.combat.cpp:313), after the clear — mode 0 has no
+      // early-out, so the free-swing costs a redraw of its own.
+      drawTerrain(this);
       // `if(s1 != univ.cur_pc) return true;` — the swing killed them and the
       // turn has already moved on, so the move itself is abandoned.
       //

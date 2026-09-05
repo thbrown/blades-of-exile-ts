@@ -352,6 +352,13 @@ export async function pcAttack(
   }
 
   attacker.lastAttacked = target;
+  // `combat_posing_monster = current_working_monster = who_att`
+  // (boe.combat.cpp:402), cleared at the very end (:456). It is what makes
+  // every `draw_terrain(2)` inside a swing cost a die — including
+  // `damage_monst`'s "no damage" one, which the same function reaches for free
+  // from `process_fields`.
+  if (session) session.workingMonster = whoAtt;
+  try {
   const [weap1, weap2] = getWeapons(attacker);
 
   const attBless = minmax(-8, 8, attacker.status[Status.BLESS_CURSE] ?? 0);
@@ -423,6 +430,9 @@ export async function pcAttack(
     const shared = target.getSharedDmg(dealt, univ.rng);
     univ.addStringToBuf('  Shares damage!');
     await damagePc(univ, attacker, shared, DamageType.MAGIC, Race.UNKNOWN);
+  }
+  } finally {
+    if (session) session.workingMonster = -1;
   }
 }
 

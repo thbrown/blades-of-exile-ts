@@ -14,7 +14,7 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-05** that is
-  **1,212,554 matching draws, 46 of 87 files agreeing all the way**, 40 blocked
+  **1,213,892 matching draws, 46 of 87 files agreeing all the way**, 40 blocked
   by the oracle rather than by this port, and **one rule bucket left in the
   queue**: `AllMageSpells`, parting in `recordMonst`. Add `--refresh` after a code change.
 - Two companion meters answer questions the draw stream cannot.
@@ -58,7 +58,7 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-05).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,212,554 matching
+`get_ran` streams together, rule by rule. It stands at **1,213,892 matching
 draws and 46 of 87 recordings agreeing all the way**, against 1,039,384 and 33
 at the start of 2026-09-02. **One rule bucket remains** (see
 `diverge.mjs --all --stacks`), one file: `AllMageSpells`. 40 of the 87 are
@@ -10637,9 +10637,43 @@ The M6 list below is kept for the history of what it covered:
     the locked door, the boat bridge, `attack-friendly`, the instant-help boxes
     and this. `grep -n "session\.on[A-Z]" src/main.ts` against the same grep
     over `src/replay/driver.ts` is the list, and it is worth re-running whenever
-    a bucket lands on "this port cast nothing".
+    a bucket lands on "this port cast nothing". **Six are still one-sided as of
+    2026-09-05** — `onRedraw` (cosmetic, no dialog), `onPartyDeath` and
+    `onVictory` (the driver stops there anyway), and **`onTrain`, `onJobBank`
+    and `onShowMonster`, which are real modals and will be this bug again** the
+    first time a recording trains, takes a job or looks a creature up.
   - The instrument was **`CAST=1` against `BOE_TRACE_CAST=1`, read by action
     number rather than draw index** — which is how to use the oracle's half at
     all, since its `[cast] mage` line rolls `total_encumbrance` and moves its own
     stream. `401: [cast] spell=35` there against nothing here named the spell in
     one line.
+
+- **A fancy cast flies at 35 steps however few squares it collected, and three
+  more melee redraws (M8, 2026-09-05).** Corpus **1,212,554 → 1,213,892**, and
+  `AllMageSpells` matches **7,697 of the oracle's 7,713** — the last rules file
+  is 16 draws from done, and this port now runs it to the end.
+  - **`do_missile_anim((num_targets > 1) ? 35 : 60, …)`** (boe.combat.cpp:1419),
+    and `num_targets` is **1 or 8, never the number of squares collected**: the
+    targeted path leaves it at 1, the fancy path sets it to 8 up front (:888)
+    and walks the array. This port read `targets.length`, so a Venom Arrows that
+    ended up with one square flew sixty-one frames instead of thirty-six —
+    twenty-five encumbrance rolls too many.
+  - **Three `draw_terrain` calls around a melee blow that this port did not
+    make**, all found the same way — one redraw short, `RANSTACK` on both sides:
+    - `damage_monst`'s no-damage arm (boe.specials.cpp:1520): a WEAPON, UNDEAD
+      or DEMON blow that gets through nothing redraws and plays the clang.
+    - `monster_attack`'s per-attack tail (:2887), which runs on a **miss** as
+      well as a hit — this port `continue`d past both it and the "Misses." line.
+    - `pc_combat_move`'s free swing (:313), after the creature's opportunity
+      attack.
+  - **`current_working_monster` is modelled now** (`GameSession.workingMonster`),
+    because `damage_monst`'s redraw is `draw_terrain(2)` and the same function
+    is reached from a PC's swing (a die) and from a blade wall in
+    `process_fields` (not one). `drawTerrain2` in `textBar.ts` is the gate; the
+    flag is set and cleared in pairs at the C++'s own sites. Most mode-2 calls
+    in this port are inside something that has just set it and still call
+    `drawTerrain` directly, with a comment saying why.
+  - **What is left on `AllMageSpells`**: the C++ draws sixteen more at the very
+    end, two per outdoor step over its last three moves plus a ten-draw burst,
+    while this port is still in town. Its own `[ran]` stream matches for all
+    7,697 it makes.

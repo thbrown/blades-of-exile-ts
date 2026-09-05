@@ -22,6 +22,8 @@ import { getProtLevel, hasAbilEquip, takeItem } from '../universe/inventory';
 import { SpellNote, livingSound } from '../universe/living';
 import { MonstAbil } from '../data/monsterAbility';
 import { animSettle } from './anim';
+import { drawTerrain2 } from './textBar';
+import { isCombat } from './modes';
 import { boomAnimActive, boomSpace } from './booms';
 import { findClearSpot, placeMonster } from './monsterPlace';
 import { placeGlands, placeItem, placeTreasure } from './loot';
@@ -444,8 +446,19 @@ export async function damageMonst(
   }
 
   if (howMuch <= 0) {
-    victim.spellNote(SpellNote.UNDAMAGED);
-    if (ARMOUR_RESISTS.has(damType)) livingSound(2);
+    // `if(is_combat()) victim.spell_note(UNDAMAGED)` (boe.specials.cpp:1517) —
+    // a blow that bounces off says so only in a fight.
+    if (options.session && isCombat(options.session.mode)) {
+      victim.spellNote(SpellNote.UNDAMAGED);
+    }
+    // …and **a weapon that bounces redraws** (:1520), which in combat is a die.
+    // `draw_terrain(2)`, so it costs nothing unless somebody is acting: a PC's
+    // swing sets `current_working_monster`, a blade wall in `process_fields`
+    // does not. See `drawTerrain2`.
+    if (ARMOUR_RESISTS.has(damType)) {
+      if (options.session) drawTerrain2(options.session);
+      livingSound(2);
+    }
     return 0;
   }
 

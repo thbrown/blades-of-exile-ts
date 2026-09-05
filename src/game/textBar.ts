@@ -90,6 +90,22 @@ function drawTextBar(session: GameSession): void {
 }
 
 /**
+ * `draw_terrain(2)` — the mode the acting creature's own square is suppressed
+ * in, and **the one with an early-out**: `if(current_working_monster < 0)
+ * return;` (boe.graphics.cpp:842). Past that it sets `mode = 0` and falls
+ * through, so it costs exactly what a full redraw costs.
+ *
+ * Most of this port's mode-2 sites are inside something that has just set the
+ * flag, and call `drawTerrain` directly with a comment saying so. Use this one
+ * where the same code is reached both ways — `damageMonst`'s "no damage" arm is
+ * the case that needed it.
+ */
+export function drawTerrain2(session: GameSession): void {
+  if (session.workingMonster < 0) return;
+  drawTerrain(session);
+}
+
+/**
  * `do_missile_anim`'s frame loop, counted rather than drawn
  * (boe.newgraph.cpp:436). One `draw_terrain()` per step for `numSteps` steps,
  * **plus one more** for the camera swing — the recentre block redraws and then

@@ -576,8 +576,16 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
 
   // The trailing do_missile_anim (boe.combat.cpp:1412): whatever is still
   // queued flies now, faster when there's a volley of them than for one shot.
+  // `do_missile_anim((num_targets > 1) ? 35 : 60, …)` (boe.combat.cpp:1419) —
+  // and **`num_targets` is 1 or 8, never the number of squares collected**: the
+  // targeted path sets `spell_targets[0]` and leaves it at 1, the fancy path
+  // sets it to 8 up front (:888) and walks the array. So a fancy cast flies at
+  // 35 steps however few squares it ended up with. This port read
+  // `targets.length` and gave a one-square Venom Arrows sixty-one frames
+  // instead of thirty-six — twenty-five encumbrance rolls too many.
+  const numTargets = armed.fancy ? 8 : 1;
   await flyMissiles(session, missiles, caster.combatPos, shared.sound,
-    targets.length > 1 ? 35 : 60);
+    numTargets > 1 ? 35 : 60);
 
   // The held-back damage lands now, all of it at once. Still inside the volley,
   // so its explosions join the rest — as in the C++, where these `hit_space`

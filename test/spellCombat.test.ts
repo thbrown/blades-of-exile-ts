@@ -295,6 +295,37 @@ describe('combat_immed_mage_cast', () => {
     }
   });
 
+  /**
+   * `do_missile_anim((num_targets > 1) ? 35 : 60, …)` (boe.combat.cpp:1419),
+   * and **`num_targets` is 1 or 8, never the number of squares collected**: the
+   * targeted path leaves it at 1 and the fancy path sets it to 8 up front
+   * (:888). So a fancy cast flies at 35 steps however few squares it ended up
+   * with — reading `targets.length` instead gave a one-square Venom Arrows
+   * sixty-one frames rather than thirty-six.
+   */
+  it('a fancy cast with one square still flies the volley length', async () => {
+    const { s, pc } = inCombat();
+    pc.lastCastType = Skill.MAGE_SPELLS;
+    pc.lastCast[Skill.MAGE_SPELLS] = Spell.LIGHT;
+    const per = redrawCost(s);
+    expect(per).toBeGreaterThan(0);
+    expect(SPELLS[Spell.ARROWS_VENOM]?.refer).toBe(SpellRefer.FANCY);
+
+    pc.curSp = 500;
+    pc.ap = 20;
+    await combatCastSpell(s, Spell.ARROWS_VENOM);
+    expect(s.spellTargeting?.fancy).toBe(true);
+    // One square, then Space: `castCollected` fires with a list of one.
+    const at = { x: pc.combatPos.x + 1, y: pc.combatPos.y };
+    await placeTarget(s, at);
+    const before = s.univ.rng.gameCalls;
+    await castCollected(s);
+    // 35 frames plus the camera swing, not 60 plus one.
+    const frames = (s.univ.rng.gameCalls - before) / per;
+    expect(frames).toBeGreaterThanOrEqual(36);
+    expect(frames).toBeLessThan(50);
+  });
+
   it('Shockwave spares whoever stands on it and hurts everyone else', async () => {
     const { s, pc } = inCombat();
     const other = s.univ.party.pcs.find(

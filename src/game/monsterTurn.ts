@@ -27,6 +27,7 @@ import {
   abilityCost, monstBreathe, monstFireMissile, monsterBasicAbil, monsterSummon,
   pickMonsterAbility,
 } from './monsterAbilities';
+import { drawTerrain2 } from './textBar';
 import { GameMode, isCombat, isTown } from './modes';
 import { damageMonst, damagePc, hitChance } from './damage';
 import { onHitTargetSpecial } from './weaponAbilities';
@@ -886,8 +887,14 @@ export async function monsterAttack(
       r2 *= 2;
     }
 
-    if (r1 > hitChance(Math.trunc((monst.mon.skill + 4) / 2))) continue;
-
+    // `draw_terrain(2)` (boe.combat.cpp:2736), **between the damage roll and
+    // the hit check** — so it runs on a miss as well as a hit, once per attack
+    // in the creature's list. Its `current_working_monster` is the attacker,
+    // set by whichever of `pc_combat_move` and `do_monster_turn` called this,
+    // so it is never the free kind.
+    drawTerrain2(session);
+    const hit = r1 <= hitChance(Math.trunc((monst.mon.skill + 4) / 2));
+    if (hit) {
     let damType = DamageType.WEAPON;
     if (monst.mon.race === Race.UNDEAD || monst.mon.race === Race.SKELETAL) {
       damType = DamageType.UNDEAD;
@@ -916,7 +923,7 @@ export async function monsterAttack(
       // never spends, on the one blow in a fight where the two differ.
       if (storeHp - target.getHealth() <= 0) damaged = 0;
     }
-    if (damaged <= 0) continue;
+    if (damaged > 0) {
 
     // A shielded target passes some of it back to the attacker.
     if (target.isShielded(univ.rng)) {
@@ -949,6 +956,18 @@ export async function monsterAttack(
           univ, monst, monstTarget, trigger.special.extra1, 'melee', session);
       }
     }
+    }
+    } else {
+      univ.addStringToBuf('  Misses.');
+      livingSound(2);
+    }
+    // **The tail runs whether it hit or missed** (boe.combat.cpp:2887), and
+    // this port used to `continue` past it on both a miss and a blow that did
+    // no damage. It is another `draw_terrain(2)`: the C++ clears
+    // `combat_posing_monster` around it and leaves `current_working_monster`
+    // alone, so it draws.
+    drawTerrain2(session);
+    if (!target.isAlive) break;
   }
 }
 
@@ -1501,7 +1520,15 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
           // in this branch).
           if (who instanceof Player && monst.isFriendly) who = null;
           if (who && who.isAlive && monstAdjacent(monst, targSpace)) {
-            await monsterAttack(session, monst, who);
+            // `combat_posing_monster = current_working_monster = 100 + i` is
+            // set for the whole of `do_monster_turn` (boe.combat.cpp:2224) and
+            // cleared at its end (:2555).
+            session.workingMonster = 100 + (session.univ.town?.monsters.indexOf(monst) ?? -1);
+            try {
+              await monsterAttack(session, monst, who);
+            } finally {
+              session.workingMonster = -1;
+            }
             monst.ap = Math.max(0, monst.ap - 4);
             actedYet = true;
           }
