@@ -10,7 +10,7 @@ import { Attitude, DamageType } from '../src/data/monster';
 import {
   MonstAbil, MonstGen, MonstMissile, MonstSummon,
 } from '../src/data/monsterAbility';
-import { defaultItem } from '../src/data/item';
+import { ItemAbil, ItemType, defaultItem } from '../src/data/item';
 import {
   monstFireMissile, monsterBasicAbil, monsterSummon, pickMonsterAbility,
 } from '../src/game/monsterAbilities';
@@ -212,6 +212,50 @@ describe('ranged monster abilities', () => {
     pc.items.fill(defaultItem());
     pc.equip.fill(false);
     await monstFireMissile(s, m, MonstAbil.MISSILE, abil, pc);
+    expect(pc.curHealth).toBeLessThan(400);
+  });
+
+  /**
+   * `r1 += pc_target->get_prot_level(eItemAbil::EVASION)` (boe.combat.cpp:2960).
+   * A *higher* roll misses, so evasion is added to it.
+   */
+  it('an evasion item makes a fired missile miss', async () => {
+    const s = inTown();
+    const m = aLiveMonster(s);
+    const abil = m.mon.abil[MonstAbil.MISSILE]!;
+    abil.active = true;
+    abil.missile.type = MonstMissile.ARROW;
+    abil.missile.dice = 8;
+    abil.missile.sides = 7;
+    // A skill of 0 is a 20% chance; 100 points of evasion push every roll past
+    // it, so the shot cannot land.
+    abil.missile.skill = 0;
+    const pc = s.univ.party.pcs[0]!;
+    // Both on the board and next to each other: an off-map `combat_pos` makes
+    // `can_see_light` answer with a distance rather than an obscurity, which
+    // swamps every other term in the roll.
+    m.curLoc = { x: 10, y: 10 };
+    pc.combatPos = { x: 11, y: 10 };
+    pc.maxHealth = 400;
+    pc.curHealth = 400;
+    pc.parry = 0;
+    pc.items.fill(defaultItem());
+    pc.equip.fill(false);
+    pc.items[0] = {
+      ...defaultItem(), variety: ItemType.NON_USE_OBJECT,
+      ability: ItemAbil.EVASION, abilStrength: 100,
+    };
+    pc.equip[0] = true;
+    for (let i = 0; i < 30; i++) {
+      await monstFireMissile(s, m, MonstAbil.MISSILE, abil, pc);
+    }
+    expect(pc.curHealth).toBe(400);
+
+    // …and with the evasion gone the same thirty shots do land.
+    pc.equip[0] = false;
+    for (let i = 0; i < 30; i++) {
+      await monstFireMissile(s, m, MonstAbil.MISSILE, abil, pc);
+    }
     expect(pc.curHealth).toBeLessThan(400);
   });
 

@@ -817,7 +817,7 @@ Notes for M2 implementer:
 - [x] **M2 — Towns + full 605×430 shell**: town enter/exit ✅, UI chrome ✅, pregen party ✅, GameSession/Universe ✅, sound ✅, line-of-sight fog + lighting ✅, terrain trim + roads ✅, floor items ✅, inventory panel ✅, fields overlay ✅, **replay driver ✅ (2026-08-01)**
 - [ ] **M3 — Dialog toolkit + talk + shops**: talking ✅, minimal async modal dialog ✅, doors + look + signs ✅, item/equip model + inventory panel ✅, shops ✅, sell/identify/recharge ✅, training ✅, inns ✅, **item Use ✅ (2026-07-27)**, **enchanting ✅ (2026-09-05)**; full dialogxml still open
 - [x] **M4 — Specials interpreter (breadth-first)**: VM core (pointers, queueing, messages) + all seven opcode groups; triggers wired for movement, look, town entry/exit, use-space, call-special terrain and the two talk nodes. Opcodes needing combat/fields/timers/quests report themselves and wait for M5/M6.
-- [x] **M5 — Combat**: M5a ✅ (the iLiving seam, damage/status, combat mode, melee); M5b ✅ (monster turns, melee AI, town *and outdoor* encounters, the `uAbility` port, missiles on both sides, breath, summons, touch abilities, on-hit weapon abilities, **monster spellcasting**); M5c ✅ (spell patterns, `process_fields`, the 147-spell table, `pc_can_cast_spell`, town/combat/targeted/multi-target casting, and the real casting dialog). Remaining odds and ends: `record_monst` (Capture Soul/Simulacrum), `do_mindduel`, and the SPECIAL monster ability.
+- [x] **M5 — Combat**: M5a ✅ (the iLiving seam, damage/status, combat mode, melee); M5b ✅ (monster turns, melee AI, town *and outdoor* encounters, the `uAbility` port, missiles on both sides, breath, summons, touch abilities, on-hit weapon abilities, **monster spellcasting**); M5c ✅ (spell patterns, `process_fields`, the 147-spell table, `pc_can_cast_spell`, town/combat/targeted/multi-target casting, and the real casting dialog). Remaining odds and ends: the SPECIAL monster ability. (`record_monst` and `do_mindduel` have both landed since.)
 - [x] **M6 — Specials depth + party ops** (valleydy completable): quests, job
       banks, special items, the three timer kinds, item Use, boats/horses
       (2026-07-27), alchemy, traps and the job-bank dialog (2026-07-28), and
@@ -10743,3 +10743,30 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     (boe.town.cpp:434) — nothing in a town whose population you have just wiped
     out belongs to anyone any more, so the shelves are free to take. This port
     always copied the preset's own flag.
+
+- **Three ranged-attack `TODO(M5b)`s, closed (2026-09-05).** Corpus-neutral —
+  no recording in the corpus is shot at by a creature with any of them — but all
+  three are things a player meets.
+  - **EVASION**: `r1 += pc_target->get_prot_level(eItemAbil::EVASION)`
+    (boe.combat.cpp:2960), above the parry term. A *higher* roll misses, so
+    evasion adds to it; the item did nothing against arrows before.
+  - **The target's trigger fires on a shot**, hit or miss:
+    `HIT_CALL_SPECIAL` on a PC and `HIT_TRIGGER` on a creature, run as
+    `ATTACKED_RANGE` (:2978) — **outside** the hit/miss branch. A node that
+    blocks refunds the shooter **the ability's own `get_ap_cost`**, not the flat
+    3 a PC's bow gets back, so `onHitTargetSpecial` grew an override.
+  - **DRAIN_SP re-picks its target** when the one it was given has run dry
+    (:3011): the chooser guarantees the first target has spell points, and two
+    drains in one turn can empty them in between. Both loops are ported with
+    their quirks — the PC one rolls `get_ran(1,0,5)` **eight** times and takes
+    the first that works; the monster one rolls `get_ran(1,0,n)` where `n` is
+    the *number* of enemies (one past the end), indexes `univ.town.monst[j]`
+    **directly** rather than through the enemy list, and does not stop when it
+    finds one, so the last successful roll wins. The C++'s own comment calls it
+    "inefficient but I'm trying to mirror how PC retargeting happens above"; the
+    indexing looks like a slip and is kept, because the draws are the spec.
+  - **A note from writing the test.** `can_see_light` between a creature and a
+    PC whose `combat_pos` is `(-1,-1)` — which is every PC in town mode — comes
+    back as a *distance* (62 in the case at hand), not an obscurity, and swamps
+    every other term in a to-hit roll. Nothing in the game asks it that way, but
+    a test can, and it looks exactly like the rule under test being broken.

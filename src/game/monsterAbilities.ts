@@ -20,7 +20,7 @@ import { placeSpellPattern } from './spellPatterns';
 import { getSummonMonster, summonMonster } from './monsterPlace';
 import { ItemAbil } from '../data/item';
 import { Creature } from '../universe/creature';
-import { hasAbilEquip } from '../universe/inventory';
+import { getProtLevel, hasAbilEquip } from '../universe/inventory';
 import { Living, SpellNote, livingSound } from '../universe/living';
 import { Player } from '../universe/player';
 import { MainStatus, Status } from '../universe/skills';
@@ -32,6 +32,7 @@ import { drainPc } from './itemUse';
 import { webSpace } from './fieldEffects';
 import { isCombat } from './modes';
 import { hitSpace } from './processFields';
+import { onHitTargetSpecial } from './weaponAbilities';
 import { runAMissile } from './missileAnim';
 import type { GameSession } from './session';
 
@@ -271,7 +272,8 @@ export async function monstFireMissile(
   target: Living,
 ): Promise<void> {
   if (!target.isAlive) return;
-  const targSpace = target.getLoc();
+  // `targ_space` moves with `target`: the DRAIN_SP retarget below writes both.
+  let targSpace = target.getLoc();
   const source = monst.curLoc;
 
   if (key === MonstAbil.MISSILE) {
@@ -308,10 +310,56 @@ export async function monstFireMissile(
     return;
   }
 
-  // Everything else: announce how it arrives, then resolve it.
+  // **DRAIN_SP picks a *new* target if the one it was given has run dry**
+  // (boe.combat.cpp:3011). The ability chooser already made sure the first
+  // target had spell points; two drains in the same turn can empty them
+  // between the choosing and the firing, and the C++ re-rolls rather than
+  // waste the attack.
   //
-  // TODO(M5b): DRAIN_SP's retargeting, which looks for someone who still has
-  // spell points before the attack lands.
+  // Both loops are ported as written, quirks included. The PC one rolls
+  // `get_ran(1,0,5)` **eight** times and takes the first that can be drained;
+  // the monster one is worse — it rolls `get_ran(1,0,n)` where `n` is the
+  // number of enemies (so one past the end), indexes `univ.town.monst[j]`
+  // **directly** rather than through the enemy list, and does not `break` when
+  // it finds one, so the last successful roll wins. The C++'s own comment says
+  // it is "inefficient but I'm trying to mirror how PC retargeting happens
+  // above"; the indexing looks like a slip and is kept, because the draws are
+  // the spec.
+  if (key === MonstAbil.DRAIN_SP) {
+    const univ = session.univ;
+    const pcT = target instanceof Player ? target : null;
+    const mT = target instanceof Creature ? target : null;
+    if ((pcT !== null && pcT.curSp < 4) || (mT !== null && mT.mp < 4)) {
+      const reach = abil.gen.range;
+      let foundNew = false;
+      for (let i = 0; i < 8; i++) {
+        const j = univ.rng.getRan(1, 0, 5);
+        const pc = univ.party.pcs[j];
+        if (pc && canDrainPc(session, source, pc, reach)) {
+          target = pc;
+          targSpace = pc.combatPos;
+          foundNew = true;
+          break;
+        }
+      }
+      if (!foundNew) {
+        const enemies = listEnemyMonsters(session, monst);
+        if (enemies.length > 0) {
+          const all = univ.town?.monsters ?? [];
+          for (let i = 0; i < enemies.length + 2; i++) {
+            const j = univ.rng.getRan(1, 0, enemies.length);
+            const other = all[j];
+            if (other && canDrainMonst(session, source, other, reach)) {
+              target = other;
+              targSpace = other.curLoc;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Everything else: announce how it arrives, then resolve it.
   let snd = 0;
   let pathType = 0;
   switch (abil.gen.type) {
@@ -346,8 +394,6 @@ export async function monstFireMissile(
 
 /**
  * monst_fire_missile's MISSILE branch — the arrow, spear or spine itself.
- *
- * TODO(M5b): the target's HIT_CALL_SPECIAL item ability.
  */
 async function monstFireMissileProper(
   session: GameSession,
@@ -388,7 +434,9 @@ async function monstFireMissileProper(
     + 5 * targetBless
     - 5 * session.canSeeLight(monst.curLoc, targSpace);
   if (pcTarget) {
-    // TODO(M5b): the EVASION item ability adds to this too.
+    // `r1 += pc_target->get_prot_level(eItemAbil::EVASION)` (boe.combat.cpp:2960),
+    // above the parry term. A *higher* roll misses, so evasion adds.
+    r1 += getProtLevel(pcTarget, ItemAbil.EVASION);
     if (pcTarget.parry < 100) r1 += 5 * pcTarget.parry;
   }
 
@@ -402,6 +450,26 @@ async function monstFireMissileProper(
     }
   } else {
     target.spellNote(SpellNote.MISSES);
+  }
+
+  // **Outside the hit/miss branch** (boe.combat.cpp:2978): being *shot at* sets
+  // the target's trigger off whether or not the shot landed. The context is
+  // `ATTACKED_RANGE`, and a node that blocks refunds the creature the action
+  // points the shot cost — its own `get_ap_cost`, not the flat 3 a PC's bow
+  // gets back.
+  const refund = abilityApCost(MonstAbil.MISSILE, abil);
+  if (pcTarget) {
+    const specItem = hasAbilEquip(pcTarget, ItemAbil.HIT_CALL_SPECIAL);
+    if (specItem) {
+      onHitTargetSpecial(univ, monst, pcTarget, specItem.item.abilStrength,
+        'missile', session, refund);
+    }
+  } else if (mTarget) {
+    const trigger = mTarget.mon.abil[MonstAbil.HIT_TRIGGER];
+    if (trigger?.active) {
+      onHitTargetSpecial(univ, monst, mTarget, trigger.special.extra1,
+        'missile', session, refund);
+    }
   }
 }
 

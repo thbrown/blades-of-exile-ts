@@ -168,6 +168,13 @@ export function onHitTargetSpecial(
   node: number,
   source: HitSource,
   session?: GameSession,
+  /**
+   * What the attacker gets back when the node blocks. The C++ refunds the
+   * *action points the blow cost*, which for a PC is a constant per source and
+   * for a creature's ranged ability is `get_ap_cost` of the ability itself
+   * (boe.combat.cpp:2985).
+   */
+  apRefundOverride?: number,
 ): void {
   if (!session || node < 0) return;
   const where = target.getLoc();
@@ -176,7 +183,7 @@ export function onHitTargetSpecial(
   univ.party.forcePtr(22, where.y);
   univ.party.forcePtr(20, targetIndex(univ, target));
   const ctx = source === 'melee' ? SpecCtx.ATTACKED_MELEE : SpecCtx.ATTACKED_RANGE;
-  const apRefund = source === 'melee' ? 4 : 3;
+  const apRefund = apRefundOverride ?? (source === 'melee' ? 4 : 3);
   void session.runSpecial(ctx, SpecCtxType.SCEN, node, from)
     .then(({ blocked }) => { if (blocked) attacker.ap += apRefund; });
 }
