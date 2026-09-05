@@ -14,7 +14,7 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-05** that is
-  **1,205,666 matching draws, 46 of 87 files agreeing all the way**, 39 blocked
+  **1,205,855 matching draws, 46 of 87 files agreeing all the way**, 39 blocked
   by the oracle rather than by this port, and **2 rule buckets left in the
   queue** — one of which is really a 46th oracle gap (`OneOfEverything`; see the
   entry at the bottom). **One rules file left: `AllMageSpells`.** Add `--refresh` after a code change.
@@ -59,7 +59,7 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-05).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,205,666 matching
+`get_ran` streams together, rule by rule. It stands at **1,205,855 matching
 draws and 46 of 87 recordings agreeing all the way**, against 1,039,384 and 33
 at the start of 2026-09-02. Two rule buckets remain in the queue (see
 `diverge.mjs --all --stacks`), one file each; 39 of the 87 are blocked by the
@@ -10455,3 +10455,52 @@ The M6 list below is kept for the history of what it covered:
     one and its `[ran]` indices cannot be compared against a JS run at all. It
     cost an hour here, spent chasing a hundred-draw offset that did not exist.
     Read its `[cast] spell=` lines for their *order*, never for their indices.
+
+- **Pausing in town checks the fields too (M8, 2026-09-05).** Corpus
+  1,205,666 → (measured with the two below) and `AllMageSpells` 5,452 → 5,530.
+  - `handle_pause`'s **`else`** arm ends with
+    `check_fields(univ.party.town_loc, TOWN_MOVE, univ.party[0])`
+    (boe.actions.cpp:675) — the same call its combat arm makes at :627, with the
+    town context and PC 0 rather than the acting PC. This port had the combat
+    one and not the town one. Out of combat `check_fields` only *announces* the
+    wall, so it costs the party nothing; what it spends is dice, and pausing on
+    a wall of fire made two draws here that this port did not.
+
+- **Invulnerability does not wear off, and the unbraced `if` is the whole of
+  its expiry (M8, 2026-09-05).** Corpus **1,205,666 → 1,205,855**, and
+  `AllMageSpells` goes 5,530 → **5,641 of the oracle's 5,644** — three draws
+  from the end of the last rules file in the queue.
+  - `increase_age`'s "Protection, etc." block (boe.actions.cpp:3484) reads:
+
+        if(pc.status[INVULNERABLE] == 1 || abs(pc.status[MAGIC_RESISTANCE]) == 1
+           || pc.status[INVISIBLE] == 1 || pc.status[MARTYRS_SHIELD] == 1
+           || abs(pc.status[ASLEEP]) == 1 || pc.status[PARALYZED] == 1)
+        move_to_zero(pc.status[INVULNERABLE]);
+        move_to_zero(pc.status[MAGIC_RESISTANCE]);
+        …
+
+    There are **six** `move_to_zero` calls, and the `if` — which has no braces,
+    and is indented as though it governed the list — governs only the first. So
+    `INVULNERABLE` decays *only* on a turn when one of the six is down to its
+    last point, and otherwise never. The condition reads like the "an effect
+    wore off" print guard it plainly started life as.
+  - This port had the guard **and** an unconditional `move_to_zero(INVULNERABLE)`
+    under it, on the reading that the quirk was a *double* decay. That is an
+    invention, and it made Protection wear off in five turns rather than lasting
+    the rest of the game. In `AllMageSpells` it is the difference between a Wall
+    of Ice that hurts Jenneke and one that does not, nineteen turns after the
+    Protection was cast.
+  - **A player can see this**, so it is the original's rule that matters and not
+    only the dice: a Protection that outlasts the fight is a real effect, and
+    `DIVERGENCES.md`'s test is "would a player notice".
+  - **The instrument was new: `BOE_TRACE_DMG=1`**, one line per `damage_pc`
+    taken just before the invulnerability test. It is the answer to a shape the
+    draw stream is blind to by construction — *both runs roll the same damage
+    and one of them takes none of it*, because every reduction below that point
+    is state rather than dice. Six PCs, six identical rolls, five identical
+    healths, and one line reading `inv=8` against `inv=0`. See the harness
+    README.
+  - `PCS=1` had already narrowed it to "PC 0's health, and nothing else in the
+    party" — 22 against 18 at draw 5,226 — which is what made a one-PC state
+    difference worth an instrument rather than a rules read. **Print the state:
+    that is now five investigations in a row.**

@@ -280,9 +280,16 @@ export async function increaseAgeEffects(session: GameSession): Promise<void> {
   // during a combat round (`combat_run_monst`), which is why Resist Magic cast
   // in a fight was still up long after it, out on the road.
   //
-  // The `if` is the C++'s, brace-for-brace: it guards only the *first*
-  // `move_to_zero`, so on the turn any one of these six is about to expire,
-  // INVULNERABLE is decayed twice. Kept, quirk and all.
+  // The `if` is the C++'s, brace-for-brace, and **it is the whole of
+  // invulnerability's expiry**: the unbraced body is the *first* `move_to_zero`
+  // and nothing else, so INVULNERABLE decays only on a turn when one of the six
+  // is down to its last point — and otherwise never. The condition reads like
+  // the "an effect wore off" print guard it plainly started life as, sitting
+  // one line above a list it does not govern; kept, because a Protection that
+  // outlasts the fight is something a player can see. This port had a second,
+  // unconditional `move_to_zero(INVULNERABLE)` under it — an invention, and one
+  // that let a Wall of Ice hurt a PC the C++ made untouchable nineteen turns
+  // earlier.
   for (const pc of party.pcs) {
     const s = (which: Status): number => pc.status[which] ?? 0;
     if (s(Status.INVULNERABLE) === 1 || Math.abs(s(Status.MAGIC_RESISTANCE)) === 1
@@ -290,7 +297,6 @@ export async function increaseAgeEffects(session: GameSession): Promise<void> {
       || Math.abs(s(Status.ASLEEP)) === 1 || s(Status.PARALYZED) === 1) {
       moveToZero(pc, Status.INVULNERABLE);
     }
-    moveToZero(pc, Status.INVULNERABLE);
     moveToZero(pc, Status.MAGIC_RESISTANCE);
     moveToZero(pc, Status.INVISIBLE);
     moveToZero(pc, Status.MARTYRS_SHIELD);

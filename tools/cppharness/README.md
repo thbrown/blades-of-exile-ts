@@ -152,6 +152,17 @@ rewrite would never think to call anything — including, notably,
 There is no pair for it on this side; it answers the question "who is spending
 these `get_ran(1,0,70)`s", and the answer is usually a redraw.
 
+**`BOE_TRACE_DMG=1`** prints one `[dmg] <pc name> type= now= inv= mr= prot=
+full= luck= tough= hp=` line per `damage_pc`, taken just before the
+invulnerability test — i.e. after the armour, parry, toughness and luck
+reductions and before the four that halve. It answers the shape where **both
+runs roll the same damage and one of them takes none of it**: the draw streams
+are identical because every reduction below that point is state, not dice, so
+nothing in `diverge.mjs` can see it. There is no pair on this side; print the
+same fields from `damagePc` when you need one. It found the invulnerability
+decay (2026-09-05) in one line: `inv=8` there against `inv=0` here, with
+everything else in the row equal.
+
 **`BOE_TRACE_TOUCH=1` (`TOUCH=1` here)** prints one line per ability the
 `for(auto& abil : attacker->abil)` tail of `monster_attack` reaches — the
 attacker, the ability key, its odds and its delivery — **before** the odds

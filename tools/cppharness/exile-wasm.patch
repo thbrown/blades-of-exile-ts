@@ -770,7 +770,7 @@ index 937c63d0..2fe1109b 100644
  		univ.party.out_c[num].direction =
  		set_direction(univ.party.out_c[num].m_loc, dest);
 diff --git a/src/game/boe.party.cpp b/src/game/boe.party.cpp
-index 8736b7ee..62e18aab 100644
+index 8736b7ee..22004d41 100644
 --- a/src/game/boe.party.cpp
 +++ b/src/game/boe.party.cpp
 @@ -332,6 +332,14 @@ void award_xp(short pc_num,short amt,bool force) {
@@ -808,6 +808,25 @@ index 8736b7ee..62e18aab 100644
  	if(pc_casting == 6)
  		pc_casting = univ.cur_pc;
  	
+@@ -2605,6 +2619,18 @@ short damage_pc(cPlayer& which_pc,short how_much,eDamageType damage_type,eRace t
+ 			how_much = how_much / 2;
+ 	}
+ 	
++#ifdef BOE_NATIVE_REPLAY
++	if(getenv("BOE_TRACE_DMG"))
++		std::cout << "      [dmg] " << which_pc.name << " type=" << int(damage_type)
++			<< " now=" << how_much
++			<< " inv=" << which_pc.status[eStatus::INVULNERABLE]
++			<< " mr=" << which_pc.status[eStatus::MAGIC_RESISTANCE]
++			<< " prot=" << which_pc.get_prot_level(eItemAbil::DAMAGE_PROTECTION,int(damage_type))
++			<< " full=" << which_pc.get_prot_level(eItemAbil::FULL_PROTECTION)
++			<< " luck=" << which_pc.skill(eSkill::LUCK)
++			<< " tough=" << int(which_pc.traits[eTrait::TOUGHNESS])
++			<< " hp=" << which_pc.cur_health << std::endl;
++#endif
+ 	// invuln
+ 	if(damage_type != eDamageType::SPECIAL && which_pc.status[eStatus::INVULNERABLE] > 0)
+ 		how_much = 0;
 diff --git a/src/game/boe.specials.cpp b/src/game/boe.specials.cpp
 index 173702da..5fda187b 100644
 --- a/src/game/boe.specials.cpp

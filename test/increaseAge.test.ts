@@ -373,17 +373,29 @@ describe('the protections wearing off', () => {
   });
 
   /**
-   * The C++'s `if` has no braces, so it guards only the first `move_to_zero`
-   * — on the turn any of the six is about to expire, INVULNERABLE is decayed
-   * twice. Ported as written, and pinned here so it can't be "tidied".
+   * The C++'s `if` has no braces, so its body is the *first* `move_to_zero` and
+   * nothing else — which makes it the whole of invulnerability's expiry.
+   * Protection therefore lasts until one of the other five statuses is down to
+   * its last point, and otherwise does not run out at all. Ported as written,
+   * and pinned here so it can't be "tidied" back into a per-turn decay: that
+   * invention is what let a Wall of Ice hurt a PC the C++ had made untouchable
+   * nineteen turns earlier.
    */
-  it('decays invulnerability twice on the turn something else expires', async () => {
+  it('only decays invulnerability on the turn something else expires', async () => {
     const s = inTown();
     const pc = s.univ.party.pcs[0]!;
     pc.status[Status.INVULNERABLE] = 5;
-    pc.status[Status.INVISIBLE] = 1; // about to run out: the quirk's trigger
-    const at = s.univ.party.townLoc;
-    await s.moveTo({ x: at.x, y: at.y + 1 });
-    expect(pc.status[Status.INVULNERABLE]).toBe(3);
+    // Six turns of nothing else running out leave it untouched…
+    for (let i = 0; i < 6; i++) {
+      const at = s.univ.party.getLoc();
+      await s.moveTo({ x: at.x, y: at.y + (i % 2 ? 1 : -1) });
+    }
+    expect(pc.status[Status.INVULNERABLE]).toBe(5);
+    // …and one turn with a status on its last point spends a point of it.
+    pc.status[Status.INVISIBLE] = 1;
+    const at = s.univ.party.getLoc();
+    await s.moveTo({ x: at.x, y: at.y - 1 });
+    expect(pc.status[Status.INVISIBLE]).toBe(0);
+    expect(pc.status[Status.INVULNERABLE]).toBe(4);
   });
 });

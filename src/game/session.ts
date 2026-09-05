@@ -3748,6 +3748,15 @@ export class GameSession {
       pc.status[Status.WEBS] = Math.max(0, (pc.status[Status.WEBS] ?? 0) - 2);
     }
     this.pauseVehicles();
+    // **The town branch checks fields too**, and this port only had the combat
+    // one. `handle_pause` ends its `else` arm with
+    // `check_fields(univ.party.town_loc, TOWN_MOVE, univ.party[0])`
+    // (boe.actions.cpp:675) — the same call the combat arm makes at :627, with
+    // the town context and PC 0 rather than the acting one. Out of combat
+    // `check_fields` only announces the wall, so it costs the party nothing;
+    // what it does spend is **dice**, and pausing in a wall of fire made two
+    // draws here that this port did not.
+    await this.checkFields(this.univ.party.townLoc, false, this.univ.party.pcs[0]!);
     await this.afterPartyTurn();
   }
 
