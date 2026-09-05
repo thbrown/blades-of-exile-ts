@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { Direction } from '../src/core/location';
 import { GameRng } from '../src/core/rng';
 import { Scenario } from '../src/data/scenario';
+import { Spell } from '../src/data/spell';
 import { SpecType, SpecialNode, emptySpecialNode } from '../src/data/special';
 import { TerSpec } from '../src/data/terrain';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
@@ -792,5 +793,60 @@ describe('TOWN_LIFT_FOG', () => {
     expect(session.fogLifted).toBe(true);
     await run(1);
     expect(session.fogLifted).toBe(false);
+  });
+});
+
+/**
+ * `cast_spell_on_space` (boe.party.cpp:1473) — the square's own `IF_CONTEXT`
+ * node gets to cancel a spell aimed at it. The node-type test is the C++'s,
+ * and it is what keeps every other kind of square special from firing at a
+ * spell.
+ */
+describe('a square intercepting a spell cast on it', () => {
+  function squareWithNode(node: Partial<SpecialNode>) {
+    const { univ, session } = withNodes({ 0: node });
+    const where = { x: 5, y: 5 };
+    univ.town!.record.specialLocs = [{ ...where, spec: 0 }];
+    return { univ, session, where };
+  }
+
+  /**
+   * **`IF_CONTEXT` does not do the cancelling itself.** Outside the three
+   * movement contexts it only jumps (boe.specials.cpp's `if(ctx.which_mode <=
+   * eSpecCtx::COMBAT_MOVE)` guards the `*a` it sets), so a square that means to
+   * stop a spell branches to a `CANT_ENTER` and lets *that* answer.
+   */
+  it('an IF_CONTEXT that branches to a blocking node cancels the spell', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.IF_CONTEXT, ex1a: SpecCtx.TARGET, ex1c: 1 },
+      1: { type: SpecType.CANT_ENTER, ex1a: 1 },
+    });
+    const where = { x: 5, y: 5 };
+    univ.town!.record.specialLocs = [{ ...where, spec: 0 }];
+    expect(await session.castSpellOnSpace(where, Spell.LIGHT)).toBe(false);
+  });
+
+  it('…and one whose context does not match lets it through', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.IF_CONTEXT, ex1a: SpecCtx.TOWN_MOVE, ex1c: 1 },
+      1: { type: SpecType.CANT_ENTER, ex1a: 1 },
+    });
+    const where = { x: 5, y: 5 };
+    univ.town!.record.specialLocs = [{ ...where, spec: 0 }];
+    expect(await session.castSpellOnSpace(where, Spell.LIGHT)).toBe(true);
+  });
+
+  it('a node of any other type never fires at all', async () => {
+    const { session, where } = squareWithNode({ type: SpecType.DISPLAY_MSG, m1: 0 });
+    expect(await session.castSpellOnSpace(where, Spell.LIGHT)).toBe(true);
+  });
+
+  it('an empty square lets it through, and Sanctify says so', async () => {
+    const { univ, session } = squareWithNode({ type: SpecType.NONE });
+    univ.town!.record.specialLocs = [];
+    expect(await session.castSpellOnSpace({ x: 9, y: 9 }, Spell.LIGHT)).toBe(true);
+    expect(univ.transcript.at(-1)).not.toBe('  Nothing happens.');
+    expect(await session.castSpellOnSpace({ x: 9, y: 9 }, Spell.RITUAL_SANCTIFY)).toBe(true);
+    expect(univ.transcript.at(-1)).toBe('  Nothing happens.');
   });
 });

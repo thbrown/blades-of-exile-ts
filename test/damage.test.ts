@@ -20,7 +20,7 @@ import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { assignCreature, Creature, CreatureStatus } from '../src/universe/creature';
 import { PartyPreset, Player } from '../src/universe/player';
-import { MainStatus, Race, Skill, Status, Trait } from '../src/universe/skills';
+import { MainStatus, PartyStatus, Race, Skill, Status, Trait } from '../src/universe/skills';
 import { Universe } from '../src/universe/universe';
 
 const opcodes = buildOpcodeTable(
@@ -478,6 +478,41 @@ describe('damaging terrain', () => {
     await session.moveTo({ x: found.x, y: found.y });
     const hurt = univ.party.pcs.filter((pc) => pc.curHealth < 200).length;
     expect(hurt).toBeGreaterThan(0);
+  });
+
+  /**
+   * `if(univ.party.status[ePartyStatus::FIREWALK] > 0) { … r1 = -1; }`
+   * (boe.specials.cpp:342) — **and only for fire**: the C++'s own comment
+   * beside it says it would be nice to have the same for the other damaging
+   * terrains, and it does not.
+   */
+  it('firewalk makes burning ground harmless, and nothing else', async () => {
+    const { univ, session } = newGame();
+    let found: { town: number; x: number; y: number; fire: boolean } | null = null;
+    for (let t = 0; t < scen.towns.length && !found; t++) {
+      const town = scen.towns[t]!;
+      for (let x = 0; x < town.maxDim && !found; x++) {
+        for (let y = 0; y < town.maxDim; y++) {
+          const spec = scen.terTypes[town.terrain[x]![y]!]!;
+          if (spec.special !== TerSpec.DAMAGING) continue;
+          found = { town: t, x, y, fire: spec.flag3 === DamageType.FIRE };
+          break;
+        }
+      }
+    }
+    // valleydy has burning ground; if a future scenario swap removes it this
+    // test would pass vacuously, so say so rather than quietly return.
+    expect(found?.fire).toBe(true);
+    session.startTownMode(found.town, FORCED_ENTRY);
+    univ.party.pcs.forEach((pc) => {
+      pc.maxHealth = 200;
+      pc.curHealth = 200;
+      pc.items.forEach((_, i) => { pc.equip[i] = false; });
+    });
+    univ.party.partyStatus[PartyStatus.FIREWALK] = 5;
+    await session.moveTo({ x: found.x, y: found.y });
+    expect(univ.party.pcs.every((pc) => pc.curHealth === 200)).toBe(true);
+    expect(univ.transcript.join(' ')).toContain("It doesn't affect you.");
   });
 });
 

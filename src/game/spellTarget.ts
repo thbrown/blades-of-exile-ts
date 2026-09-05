@@ -23,6 +23,7 @@ import { TerSpec } from '../data/terrain';
 import { getProtLevel } from '../universe/inventory';
 import { livingSound } from '../universe/living';
 import { Skill, Trait } from '../universe/skills';
+import { SpecCtx } from './specials/context';
 import { unlockDoor } from './doors';
 import { breakForceCage } from './fieldEffects';
 import { GameMode } from './modes';
@@ -137,9 +138,15 @@ export async function castTownSpell(session: GameSession, where: Location): Prom
     && !isPriestSide(spell)) level++;
   if (!target.freebie && pc.traits[Trait.ANAMA] && isPriestSide(spell)) level++;
 
-  // TODO(M6): cast_spell_on_space — a TARGET-context special node on the
-  // square can intercept the spell and cancel it. eSpecCtx::TARGET isn't
-  // wired up yet, so nothing intercepts.
+  // `if(adjust <= 4 && !cast_spell_on_space(where, town_spell))` — the square's
+  // own `IF_CONTEXT` node gets to cancel the spell, and the C++ then queues the
+  // targeting's failure node (boe.party.cpp:1329). It is here, above the
+  // sight test, because a square you cannot see cannot intercept.
+  if (adjust <= 4 && !(await session.castSpellOnSpace(where, spell))) {
+    session.specials?.queueSpecial(
+      SpecCtx.TARGET, session.specTargetType, session.specTargetFail, where);
+    return;
+  }
 
   if (adjust > 4) {
     univ.addStringToBuf("  Can't see target.");

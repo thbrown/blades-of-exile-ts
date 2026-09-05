@@ -10788,3 +10788,28 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     file and seventy-four draws "lost". The rule from 2026-09-04 held: **a
     corpus regression is not real until the traces it comes from are complete.**
     Re-running the refresh to completion put it back at 47 / 1,213,908 exactly.
+
+- **Firewalk, the scorch mark, and a square's right to refuse a spell
+  (2026-09-05).** Three more `TODO(M6)`s, corpus-neutral (47 / 1,213,908 either
+  side).
+  - **Firewalk makes burning ground harmless** (boe.specials.cpp:342) — and
+    *only* burning ground; the C++ carries its own "would be nice to have
+    something similar for other damaging terrains" beside it. Note the damage is
+    set to **-1**, not 0, because the test below is `if(r1 < 0) break;` — a zero
+    would still run `hit_party` and spend its luck saves.
+  - **`set_ash`** (boe.combat.cpp:1439): the fire spells mark the middle of the
+    burn, and the call sits **outside** the `if(!hit_ashes_loc)` above it, so
+    the ground is scorched whether or not the extra explosion was needed.
+  - **`cast_spell_on_space`** (boe.party.cpp:1473) — the square gets a say. A
+    town special whose node is an `IF_CONTEXT` runs in the `TARGET` context when
+    a spell lands on its square, and a positive answer cancels the spell's
+    ordinary behaviour; both the town cast (:1329) and every target of a combat
+    cast (boe.combat.cpp:930) ask. **`IF_CONTEXT` does not do the cancelling
+    itself** — outside the three movement contexts it only jumps, so a square
+    that means to stop a spell branches to a `CANT_ENTER` and lets that answer.
+  - **What is still missing there, and it is named now**: `TOWN_START_TARGETING`
+    (boe.specials.cpp:4295), the opcode that lets a scenario ask the *player* to
+    pick a square. It sets `spec_target_type` / `spec_target_fail` /
+    `spec_target_options`, which is why the interception's `queue_special` has
+    nothing to queue yet. `GameSession.specTargetType` and `specTargetFail`
+    exist and are marked `TODO(M9)`.

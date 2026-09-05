@@ -31,6 +31,7 @@ import { takeAp } from './combat';
 import { boomType, damageMonst, damagePc, handleMarkedDamage, hitChance } from './damage';
 import { targetThere } from './missiles';
 import { GameMode } from './modes';
+import { SpecCtx } from './specials/context';
 import { handleTargetMode } from './targetMode';
 import { drawTerrain, missileAnimFrames } from './textBar';
 import { getSummonMonster, summonMonster } from './monsterPlace';
@@ -532,6 +533,16 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
         + ` dist=${dist(caster.combatPos, at)} obsc=${session.sightObscurity(at.x, at.y)}`);
     }
     const allowObstructed = spell === Spell.DISPEL_BARRIER;
+    // `if(adjust <= 4 && !cast_spell_on_space(target, spell_being_cast))`
+    // (boe.combat.cpp:930) — the square's own `IF_CONTEXT` node cancels this
+    // target and the loop moves to the next one, after queueing the
+    // targeting's failure node. Above the sight test, because a square you
+    // cannot see cannot intercept.
+    if (adjust <= 4 && !(await session.castSpellOnSpace(at, spell))) {
+      session.specials?.queueSpecial(
+        SpecCtx.TARGET, session.specTargetType, session.specTargetFail, at);
+      continue;
+    }
     if (adjust > 4) {
       univ.addStringToBuf("  Can't see target.");
       continue;
@@ -605,7 +616,10 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
       boomSpace(ashes.at, boomType(DamageType.FIRE), 0, 0, univ.rng,
         { xAdj: 1, uniqueRan: true });
     }
-    // TODO(M6): `set_ash` — the scorch mark the fire leaves on the ground.
+    // `univ.town.set_ash(ashes_loc.x, ashes_loc.y, true)` (boe.combat.cpp:1439)
+    // — and it is **outside** the `if(!hit_ashes_loc)` above, so the burn is
+    // marked whether or not the extra explosion was needed.
+    town.setField(ashes.at.x, ashes.at.y, FieldType.SFX_ASH, true);
   }
   } finally {
     // do_explosion_anim, then handle_marked_damage (boe.combat.cpp:1435/1439):

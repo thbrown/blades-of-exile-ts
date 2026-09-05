@@ -1972,6 +1972,50 @@ export class GameSession {
   }
 
   /** The same, but handing back the raw return slots (TALK uses them for strings). */
+  /**
+   * `cast_spell_on_space` (boe.party.cpp:1473) — **the square gets a say in
+   * whether a spell cast on it does anything.**
+   *
+   * A town special whose node is an `IF_CONTEXT` runs in the `TARGET` context
+   * when a spell lands on its square, and a non-zero `s1` cancels the spell's
+   * ordinary behaviour. The `IF_CONTEXT` test is the C++'s and it carries its
+   * own doubt beside it — "is there a way to skip this condition without
+   * breaking compatibility?" — because the node type is what keeps every
+   * *other* kind of square special from firing at a spell.
+   *
+   * Returns whether the spell should carry on.
+   */
+  async castSpellOnSpace(where: Location, spell: Spell): Promise<boolean> {
+    const town = this.univ.town;
+    if (!town) return true;
+    for (const spot of town.record.specialLocs) {
+      if (spot.x !== where.x || spot.y !== where.y) continue;
+      if (town.record.specials.get(spot.spec)?.type !== SpecType.IF_CONTEXT) return true;
+      const r = await this.runSpecialRaw(SpecCtx.TARGET, SpecCtxType.TOWN, spot.spec, where);
+      // The C++'s `s1` starts at **0** and the chain may never touch it; this
+      // port's `retA` starts at -1 for the same "nobody said" case, so both
+      // mean "carry on". Only a positive answer intercepts.
+      return r.a <= 0;
+    }
+    // Ritual of Sanctification is the one spell that says so when the square
+    // it was aimed at had nothing on it.
+    if (spell === Spell.RITUAL_SANCTIFY) this.univ.addStringToBuf('  Nothing happens.');
+    return true;
+  }
+
+  /**
+   * `spec_target_type` / `spec_target_fail` (boe.specials.cpp:4311) — where a
+   * `TOWN_START_TARGETING` node came from, and which node to run when the
+   * targeting is refused or intercepted.
+   *
+   * TODO(M9): the opcode that sets them is not ported, so `specTargetFail` is
+   * always -1 and the interception below queues nothing. `castSpellOnSpace` is
+   * useful without it — a square can still cancel a spell — but a scenario that
+   * asks the *player* to pick a square cannot yet.
+   */
+  specTargetType: SpecCtxType = SpecCtxType.SCEN;
+  specTargetFail = -1;
+
   async runSpecialRaw(
     mode: SpecCtx, type: SpecCtxType, node: number, where: Location,
   ): Promise<{ a: number; b: number }> {
@@ -2547,7 +2591,16 @@ export class GameSession {
     switch (damType) {
       case DamageType.FIRE:
         say("  It's hot!");
-        // TODO(M6): the firewalk party status makes fire terrain harmless.
+        // **Firewalk makes burning ground harmless** (boe.specials.cpp:342),
+        // and only burning ground: the C++ carries its own "would be nice to
+        // have something similar for other damaging terrains" beside it. The
+        // damage is set to **-1**, not 0, because the check below is `if(r1 <
+        // 0) break;` — a zero would still run `hit_party` and spend its luck
+        // saves.
+        if ((this.univ.party.partyStatus[PartyStatus.FIREWALK] ?? 0) > 0) {
+          say("  It doesn't affect you.");
+          amount = -1;
+        }
         break;
       case DamageType.COLD: say('  You feel cold!'); break;
       case DamageType.ACID: say('  It burns!'); break;
