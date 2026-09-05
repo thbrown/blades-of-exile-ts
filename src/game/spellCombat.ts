@@ -28,11 +28,14 @@ import { takeAp } from './combat';
 import { CastStatus, pcCanCastType, printCastStatus } from './spellCast';
 import { hasTrappedMonst } from './soulCrystal';
 import { damageMonst, damagePc, handleMarkedDamage } from './damage';
-import { runBoomAnim, startBoomAnim } from './booms';
+import { endBoomAnim, runBoomAnim, startBoomAnim } from './booms';
 import { animSettle } from './anim';
 import { placeSpellPattern } from './spellPatterns';
 import { doMageSpell, doPriestSpell } from './spellTown';
-import { startFancySpellTargeting, startSpellTargeting } from './spellCombatTarget';
+import { poisonWeapon } from './poisonWeapon';
+import {
+  QueuedMissile, addMissile, flyMissiles, startFancySpellTargeting, startSpellTargeting,
+} from './spellCombatTarget';
 import { SIGHT_BLOCKED } from '../core/sight';
 import { drawTerrain } from './textBar';
 import type { GameSession } from './session';
@@ -46,16 +49,6 @@ import type { GameSession } from './session';
  */
 const MAGE_AP = 6;
 const PRIEST_AP = 5;
-
-/**
- * `poison_weapon` — the Envenom effect. The C++ helper also prints and picks a
- * sound; only the status matters here.
- */
-function poisonWeapon(session: GameSession, pcNum: number, howMuch: number): void {
-  const pc = session.univ.party.pcs[pcNum];
-  if (!pc) return;
-  pc.status[Status.POISONED_WEAPON] = (pc.status[Status.POISONED_WEAPON] ?? 0) + howMuch;
-}
 
 /**
  * `do_shockwave` (boe.combat.cpp:4261) — unblockable damage to everything
@@ -117,6 +110,18 @@ export async function combatImmedMageCast(
   // `store_spell_target` — the PC the casting dialog aimed at.
   const target = univ.party.pcs[session.spellTarget] ?? caster;
 
+  // **Every immediate cast is a volley, even the ones that only bless.**
+  // `combat_immed_mage_cast` opens with `start_missile_anim()` and closes with
+  // `do_missile_anim` / `end_missile_anim` (boe.combat.cpp:4645, :4778) — so a
+  // Minor Haste throws a sparkle at the PC it hastes, and pays fifty frames of
+  // `draw_terrain` for the flight. In combat each of those spends the status
+  // bar's encumbrance roll, which is why leaving the animation out cost this
+  // port fifty-one draws per immediate cast. See `textBar.ts`.
+  const missiles: QueuedMissile[] = [];
+  let storeSound = 0;
+  let numOpp = 0;
+  startBoomAnim();
+
   switch (spellNum) {
     case Spell.SHOCKWAVE:
       spend();
@@ -132,7 +137,7 @@ export async function combatImmedMageCast(
       spend();
       livingSound(4);
       if (spellNum === Spell.ENVENOM) {
-        poisonWeapon(session, univ.party.pcs.indexOf(target), 3 + bonus);
+        poisonWeapon(univ, univ.party.pcs.indexOf(target), 3 + bonus, true);
         univ.addStringToBuf(`  ${target.name} receives venom.`);
       } else if (spellNum === Spell.STRENGTH) {
         // Strength is a *negative* curse — the same status, pushed the good way.
@@ -148,20 +153,26 @@ export async function combatImmedMageCast(
           ? -2 : -Math.max(2, Math.trunc(level / 2) + bonus));
         univ.addStringToBuf(`  ${target.name} hasted.`);
       }
+      addMissile(missiles, target.combatPos,
+        spellNum === Spell.ENVENOM ? 11 : spellNum === Spell.RESIST_MAGIC ? 15 : 8, 0);
       break;
     }
 
     case Spell.HASTE_MAJOR:
     case Spell.BLESS_MAJOR:
+      // The sound is *stored*, not played: `//play_sound(4);` is commented out
+      // in the C++ and the volley makes the noise instead.
+      storeSound = 25;
       spend();
       for (const pc of univ.party.pcs) {
         if (pc.mainStatus !== MainStatus.ALIVE) continue;
         pc.slow(-(spellNum === Spell.HASTE_MAJOR
           ? 1 + Math.trunc(level / 8) + bonus : 3 + bonus));
         if (spellNum === Spell.BLESS_MAJOR) {
-          poisonWeapon(session, univ.party.pcs.indexOf(pc), 2);
+          poisonWeapon(univ, univ.party.pcs.indexOf(pc), 2, true);
           pc.curse(-4);
-        }
+          addMissile(missiles, pc.combatPos, 14, 0);
+        } else addMissile(missiles, pc.combatPos, 8, 0);
       }
       univ.addStringToBuf(spellNum === Spell.HASTE_MAJOR
         ? '  Party hasted.' : '  Party blessed!');
@@ -172,7 +183,8 @@ export async function combatImmedMageCast(
     case Spell.PARALYSIS_MASS:
     case Spell.SLEEP_MASS: {
       spend();
-      livingSound(spellNum === Spell.FEAR_GROUP ? 54 : 25);
+      // Stored for the volley, not played here.
+      storeSound = spellNum === Spell.FEAR_GROUP ? 54 : 25;
       univ.addStringToBuf(
         spellNum === Spell.SLOW_GROUP ? '  Enemy slowed:'
           : spellNum === Spell.FEAR_GROUP ? '  Enemy scared:'
@@ -182,20 +194,28 @@ export async function combatImmedMageCast(
         if (!monst.isAlive || monst.isFriendly) continue;
         if (dist(caster.combatPos, monst.curLoc) > (info.range ?? 0)) continue;
         if (session.canSeeLight(caster.combatPos, monst.curLoc) >= SIGHT_BLOCKED) continue;
+        let mType = 0;
         switch (spellNum) {
           case Spell.FEAR_GROUP:
             monst.scare(univ.rng.getRan(Math.trunc(level / 3), 1, 8));
+            mType = 10;
             break;
           case Spell.SLOW_GROUP:
             monst.slow(5 + bonus);
+            mType = 8;
             break;
           case Spell.PARALYSIS_MASS:
             monst.sleep(Status.PARALYZED, 1000, 15, univ.rng);
+            mType = 15;
             break;
           default:
             monst.sleep(Status.ASLEEP, 8, 15, univ.rng);
+            mType = 15;
             break;
         }
+        numOpp++;
+        addMissile(missiles, monst.curLoc, mType, 0,
+          14 * (monst.xWidth - 1), 18 * (monst.yWidth - 1));
       }
       break;
     }
@@ -216,6 +236,13 @@ export async function combatImmedMageCast(
         `  Error: Mage spell ${spellName(spellNum)} not implemented for combat mode.`);
       break;
   }
+  // `if(num_opp < 10) do_missile_anim(...) else play_sound(store_sound);`
+  // — a spell that hit ten or more creatures skips the flight entirely and just
+  // makes the noise, so it pays no frames at all.
+  if (numOpp < 10) {
+    await flyMissiles(session, missiles, caster.combatPos, storeSound, numOpp < 5 ? 50 : 25);
+  } else if (storeSound > 0) livingSound(storeSound);
+  endBoomAnim();
 }
 
 /** `combat_immed_priest_cast` — the priest half of the same. */
@@ -235,13 +262,21 @@ export async function combatImmedPriestCast(
   const spend = (): void => { if (!freebie) caster.curSp -= info.cost ?? 0; };
   const target = univ.party.pcs[session.spellTarget] ?? caster;
 
+  // The same volley the mage half opens; see the note there.
+  const missiles: QueuedMissile[] = [];
+  let storeSound = 0;
+  let numOpp = 0;
+  startBoomAnim();
+
   switch (spellNum) {
     case Spell.BLESS_MINOR:
     case Spell.BLESS:
+      // Sound 4 is *stored* here, not played — the volley plays it.
+      storeSound = 4;
       spend();
-      livingSound(4);
       target.curse(-(spellNum === Spell.BLESS_MINOR
         ? 2 : Math.max(2, Math.trunc((level * 3) / 4) + 1 + bonus)));
+      addMissile(missiles, target.combatPos, 8, 0);
       break;
 
     case Spell.BLESS_PARTY:
@@ -249,8 +284,9 @@ export async function combatImmedPriestCast(
       for (const pc of univ.party.pcs) {
         if (pc.mainStatus !== MainStatus.ALIVE) continue;
         pc.curse(-Math.trunc(level / 3));
+        addMissile(missiles, pc.combatPos, 8, 0);
       }
-      livingSound(4);
+      storeSound = 4;
       break;
 
     case Spell.AVATAR:
@@ -263,16 +299,23 @@ export async function combatImmedPriestCast(
     case Spell.CHARM_MASS:
     case Spell.PESTILENCE:
       spend();
-      livingSound(24);
+      storeSound = 24;
       for (const monst of univ.town?.monsters ?? []) {
         if (!monst.isAlive || monst.isFriendly) continue;
         // Note: unlike the mage group spells, this one does *not* check line of
         // sight. The C++ has a TODO asking whether it should; kept as-is.
         if (dist(caster.combatPos, monst.curLoc) > (info.range ?? 0)) continue;
-        if (spellNum === Spell.CURSE_ALL) monst.curse(3 + bonus);
-        else if (spellNum === Spell.CHARM_MASS) {
+        let mType = 0;
+        if (spellNum === Spell.CURSE_ALL) {
+          monst.curse(3 + bonus);
+          mType = 8;
+        } else if (spellNum === Spell.CHARM_MASS) {
           monst.sleep(Status.CHARM, 0, 28 - bonus, univ.rng);
+          mType = 14;
         } else monst.disease(3 + bonus);
+        numOpp++;
+        addMissile(missiles, monst.curLoc, mType, 0,
+          14 * (monst.xWidth - 1), 18 * (monst.yWidth - 1));
       }
       break;
 
@@ -304,6 +347,10 @@ export async function combatImmedPriestCast(
         `  Error: Priest spell ${spellName(spellNum)} not implemented for combat mode.`);
       break;
   }
+  if (numOpp < 10) {
+    await flyMissiles(session, missiles, caster.combatPos, storeSound, numOpp < 5 ? 50 : 25);
+  } else if (storeSound > 0) livingSound(storeSound);
+  endBoomAnim();
 }
 
 /**

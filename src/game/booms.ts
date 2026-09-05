@@ -106,6 +106,35 @@ export function setBoomSink(fn: ((boom: Boom) => void) | null): void {
 }
 
 /**
+ * The screen work `boom_space` does before it draws its sprite — **and it is
+ * where a hit's dice come from.**
+ *
+ * A blast raised outside a volley calls `draw_terrain()` (boe.graphics.cpp:1512)
+ * and then, unless it is happening off screen in combat, `draw_terrain(0)`
+ * again (:1525). In combat each of those spends the status bar's encumbrance
+ * roll, so **every hit that is not part of a volley costs two draws** — which
+ * is what a Conflagration's per-square damage is paying for between one square
+ * and the next. Out of combat they cost nothing, which is why `fast_bang`
+ * (:1528, one draw rather than two in town) need not be modelled.
+ *
+ * A module-level hook for the same reason `living.ts` keeps `setLivingSound`:
+ * `boom_space` is a free function called from the bottom of the damage
+ * pipeline, with no session in reach.
+ */
+export interface BoomScreen {
+  /** `party_can_see(where) == 6` — nobody sees it, so nothing is drawn at all. */
+  hidden(where: Location): boolean;
+  /** The one or two `draw_terrain()`s above. */
+  redraw(where: Location): void;
+}
+
+let screen: BoomScreen | null = null;
+
+export function setBoomScreen(s: BoomScreen | null): void {
+  screen = s;
+}
+
+/**
  * `boom_anim_active` (boe.main.cpp:190) — true while a volley of missiles and
  * explosions is being assembled.
  *
@@ -129,6 +158,19 @@ export function boomAnimActive(): boolean {
 /** start_missile_anim (boe.newgraph.cpp:258) — open a volley. */
 export function startBoomAnim(): void {
   volleyOpen = true;
+  queued = [];
+}
+
+/**
+ * `end_missile_anim` (boe.newgraph.cpp:274) — close the volley **without**
+ * playing it. The C++ is one line, `boom_anim_active = false`, and it leaves
+ * `store_booms` where it lies; the next `start_missile_anim` clears them. So an
+ * explosion collected by a caster that ends this way is simply never drawn —
+ * which is what `combat_immed_mage_cast` and `combat_immed_priest_cast` do,
+ * neither of them calling `do_explosion_anim` at all.
+ */
+export function endBoomAnim(): void {
+  volleyOpen = false;
   queued = [];
 }
 
@@ -189,9 +231,18 @@ export const EXPLOSION_FRAMES = 11;
 export function boomSpace(
   where: Location, type: number, damage: number, soundType: number,
   rng?: GameRng,
-  options: { placeType?: number; xAdj?: number; yAdj?: number; uniqueRan?: boolean } = {},
+  options: {
+    placeType?: number; xAdj?: number; yAdj?: number; uniqueRan?: boolean;
+    /**
+     * `mode == 100` — draw it whether or not the party can see the square.
+     * `damage_monst` passes it for a creature the party *can* see
+     * (boe.specials.cpp:1553), because `party_can_see` asks about the square
+     * and a big creature is seen by any of the squares it stands on.
+     */
+    always?: boolean;
+  } = {},
 ): void {
-  const { placeType = 0, xAdj = 0, yAdj = 0, uniqueRan = false } = options;
+  const { placeType = 0, xAdj = 0, yAdj = 0, uniqueRan = false, always = false } = options;
   if (volleyOpen) {
     // add_explosion (boe.newgraph.cpp:320) drops a second explosion on a square
     // that already has one, but takes the larger damage number, and holds 30.
@@ -220,6 +271,10 @@ export function boomSpace(
     });
     return;
   }
+  // `if((mode != 100) && (party_can_see(where) == 6)) return;`
+  // (boe.graphics.cpp:1502) — above everything, the sound included. No caller
+  // in this port passes mode 100.
+  if (!always && screen?.hidden(where)) return;
   const file = soundType < 0 ? -soundType : (SOUND_LOOKUP[soundType] ?? 0);
   // The sound is raised here, as the C++ does, but the *host* decides when it
   // is actually heard — see the sink in main.ts. The C++ gets the timing for
@@ -227,6 +282,7 @@ export function boomSpace(
   // reached until the thing has landed.
   if (file > 0) livingSound(file);
   if (type < 0 || type > 6) return;
+  screen?.redraw(where);
   // A hit takes a slot of its own, because `boom_space` sleeps for its whole
   // length: a second blow in the same turn follows the first rather than
   // landing on top of it, and anything waiting on the timeline — the rest of

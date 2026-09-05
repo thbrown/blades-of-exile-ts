@@ -37,7 +37,7 @@ import { getSummonMonster, summonMonster } from './monsterPlace';
 import { Attitude } from '../data/monster';
 import { animSettle } from './anim';
 import { runAMissile } from './missileAnim';
-import { boomSpace, runBoomAnim, startBoomAnim } from './booms';
+import { boomAnimActive, boomSpace, runBoomAnim, startBoomAnim } from './booms';
 import { hitSpace } from './processFields';
 import { placeSpellPattern } from './spellPatterns';
 import { recordMonst } from './soulCrystal';
@@ -338,8 +338,22 @@ export async function castCollected(session: GameSession): Promise<void> {
  * the action points are each taken **once**, on the first target that gets as
  * far as resolving.
  */
+/**
+ * `CAST=1` — one line per target `do_combat_cast` weighs, the pair to the
+ * harness's `BOE_TRACE_CAST=1` (`[cast] spell= from= to= adjust= range= dist=
+ * obsc=`). Reach for it when two runs disagree about *which* spell landed
+ * where, which the draw stream cannot say on its own.
+ *
+ * **The oracle's half of this instrument moves its own draw stream.** The
+ * C++'s `[cast] mage` line prints `total_encumbrance(hit_chance)`, which
+ * *rolls* — so a `BOE_TRACE_CAST=1` trace is a hundred draws out of step with
+ * the cached one and cannot be compared against a JS run. Use it for the
+ * `[cast] spell=` lines and their ordering, never for draw indices.
+ */
+const TRACE_CAST = typeof process !== 'undefined' && Boolean(process.env?.CAST);
+
 /** One entry of `store_missiles` — what `add_missile` queues up. */
-interface QueuedMissile {
+export interface QueuedMissile {
   dest: Location;
   type: number;
   pathType: number;
@@ -353,7 +367,7 @@ interface QueuedMissile {
  * at a square that already has one is **dropped** (so a spell that hits the
  * same square twice only draws one), and the queue holds thirty.
  */
-function addMissile(
+export function addMissile(
   queue: QueuedMissile[], dest: Location, type: number, pathType = 1, xAdj = 0, yAdj = 0,
 ): void {
   if (queue.some((m) => m.dest.x === dest.x && m.dest.y === dest.y)) return;
@@ -366,12 +380,19 @@ function addMissile(
  * the same origin. `numSteps` is both the frame count and the arc divisor; the
  * C++ passes 35 for a volley and 60 for a single shot.
  */
-async function flyMissiles(
+export async function flyMissiles(
   session: GameSession,
   queue: QueuedMissile[], from: Location, sound: number, numSteps: number,
 ): Promise<void> {
-  const flew = queue.length > 0;
-  for (const m of queue) {
+  // `do_missile_anim`'s two early-outs, both before the first `draw_terrain`
+  // and so both *free* (boe.newgraph.cpp:358 and :379): nothing was queued at
+  // all, or everything queued was aimed at the square it was fired from —
+  // "eliminate missiles traveling 0 distance" — which leaves the target list
+  // empty. A volley that never flies pays no frames.
+  const flying = boomAnimActive()
+    ? queue.filter((m) => !locsEqual(m.dest, from)) : [];
+  const flew = flying.length > 0;
+  for (const m of flying) {
     runAMissile(from, m.dest, m.type, m.pathType, sound, m.xAdj, m.yAdj, numSteps);
   }
   queue.length = 0;
@@ -505,6 +526,11 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
 
     // --- the refusals, in the C++'s order ----------------------------------
     const adjust = session.canSeeLight(caster.combatPos, at);
+    if (TRACE_CAST) {
+      console.log(`      [cast] spell=${spell} from=(${caster.combatPos.x},${caster.combatPos.y})`
+        + ` to=(${at.x},${at.y}) adjust=${adjust} range=${armed.range}`
+        + ` dist=${dist(caster.combatPos, at)} obsc=${session.sightObscurity(at.x, at.y)}`);
+    }
     const allowObstructed = spell === Spell.DISPEL_BARRIER;
     if (adjust > 4) {
       univ.addStringToBuf("  Can't see target.");

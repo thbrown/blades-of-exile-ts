@@ -60,7 +60,7 @@ import {
   unequipItem,
 } from '../universe/inventory';
 import { MainStatus, PartyStatus, Race, Skill, Status, Trait } from '../universe/skills';
-import { boomSpace } from './booms';
+import { boomSpace, setBoomScreen } from './booms';
 import { ShopItemType } from '../data/shop';
 import { ShopState, handleSale, shopAllowsDead } from './shop';
 import { SpellStore, emptySpellStore } from './spellRepeat';
@@ -314,6 +314,19 @@ export class GameSession {
     // here for the same reason `Universe` installs `setPrintResult`: the C++
     // keeps the thing static, so the last session to be built owns it.
     setCentreSink((where) => { this.center = { ...where }; });
+    // `boom_space`'s own redraws — installed here, and static there, for the
+    // same reason. See `BoomScreen` in `booms.ts`.
+    setBoomScreen({
+      hidden: (where) => this.partyCanSee(where) === 6,
+      redraw: (where) => {
+        drawTerrain(this);
+        // `if(!point_onscreen(center,where) && is_combat()) { play_sound; return; }`
+        // (boe.graphics.cpp:1517) — a blast the camera is not looking at is
+        // heard and not drawn, so it pays one redraw rather than two.
+        if (isCombat(this.mode) && !pointOnScreen(this.center, where)) return;
+        drawTerrain(this);
+      },
+    });
   }
 
   /**

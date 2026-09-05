@@ -451,8 +451,14 @@ export async function damageMonst(
 
   if (doPrint) victim.damagedMsg(howMuch, 0);
   if (damType !== DamageType.MARKED) {
+    // `if(party_can_see_monst(...)) boom_space(…,100,…) else boom_space(…,
+    // overall_mode,…)` (boe.specials.cpp:1552). Mode 100 skips `party_can_see`,
+    // which asks about one square — and a creature two squares wide can be in
+    // view without its top-left corner being.
     boomSpace(victim.curLoc, boomType(damType), howMuch,
-      getSoundType(damType, options.soundType ?? -1), univ.rng, bigCreatureAdj(victim));
+      getSoundType(damType, options.soundType ?? -1), univ.rng,
+      { ...bigCreatureAdj(victim),
+        always: options.session ? options.session.partyCanSeeMonst(victim) : true });
     // The blast blocks here in the C++, so the health only comes off — and
     // the thing only dies — once it has played. See `damagePc`.
     await animSettle();

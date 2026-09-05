@@ -11,7 +11,9 @@ import {
   awardXp, damageMonst, damagePc, hitChance, hitParty, killMonst, killPc,
 } from '../src/game/damage';
 import { animClear, setAnimWaiter } from '../src/game/anim';
-import { setBoomSink } from '../src/game/booms';
+import { boomSpace, runBoomAnim, setBoomSink, startBoomAnim } from '../src/game/booms';
+import { drawTerrain } from '../src/game/textBar';
+import { Spell } from '../src/data/spell';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
@@ -480,6 +482,83 @@ describe('damaging terrain', () => {
 });
 
 /**
+ * `boom_space`'s own two `draw_terrain()`s (boe.graphics.cpp:1512 and :1525),
+ * which in combat are dice: one encumbrance roll each for the acting PC. They
+ * are what a Conflagration spends between one square it burns and the next,
+ * and this port used to spend nothing there at all.
+ */
+describe("boom_space's redraws", () => {
+  /** What one full redraw costs this party. See `src/game/textBar.ts`. */
+  function redrawCost(session: GameSession): number {
+    const before = session.univ.rng.gameCalls;
+    drawTerrain(session);
+    return session.univ.rng.gameCalls - before;
+  }
+
+  /** A fight with PC 0 acting and a recast hint, so the status bar rolls. */
+  function fighting(): { univ: Universe; session: GameSession; pc: Player } {
+    const { univ, session } = newGame();
+    session.startCombat(univ.party.direction);
+    univ.curPc = 0;
+    const pc = univ.party.pcs[0]!;
+    pc.lastCastType = Skill.MAGE_SPELLS;
+    pc.lastCast[Skill.MAGE_SPELLS] = Spell.LIGHT;
+    // …and one equipped awkward item, which is what `total_encumbrance`
+    // actually rolls for.
+    pc.items[0]!.variety = ItemType.ONE_HANDED;
+    pc.items[0]!.awkward = 1;
+    pc.equip[0] = true;
+    // `pc_can_cast_spell` refuses above the encumbrance roll for no skill and
+    // for no spell points, and a refusal makes no dice.
+    pc.skills[Skill.MAGE_SPELLS] = 5;
+    pc.curSp = 20;
+    return { univ, session, pc };
+  }
+
+  it('a hit on screen costs two redraws, one off screen costs one', () => {
+    const { univ, session, pc } = fighting();
+    const per = redrawCost(session);
+    expect(per).toBeGreaterThan(0);
+
+    let before = univ.rng.gameCalls;
+    boomSpace(pc.combatPos, 3, 5, 0, univ.rng);
+    expect(univ.rng.gameCalls - before).toBe(2 * per);
+
+    // Off screen in combat, `boom_space` plays the sound and returns after the
+    // first redraw — so a blast the camera is not looking at is half the price.
+    // "Off screen" is the *camera*, not the party: the PC standing on the
+    // square still sees it.
+    session.center = { x: pc.combatPos.x + 20, y: pc.combatPos.y };
+    expect(session.partyCanSee(pc.combatPos)).toBeLessThan(6);
+    before = univ.rng.gameCalls;
+    boomSpace(pc.combatPos, 3, 5, 0, univ.rng);
+    expect(univ.rng.gameCalls - before).toBe(per);
+  });
+
+  it('a hit nobody can see draws nothing at all', () => {
+    const { univ, session, pc } = fighting();
+    const per = redrawCost(session);
+    expect(per).toBeGreaterThan(0);
+    // `party_can_see(where) == 6` returns above everything (boe.graphics.cpp:1502).
+    const unseen = { x: pc.combatPos.x + 40, y: pc.combatPos.y + 40 };
+    expect(session.partyCanSee(unseen)).toBe(6);
+    const before = univ.rng.gameCalls;
+    boomSpace(unseen, 3, 5, 0, univ.rng);
+    expect(univ.rng.gameCalls).toBe(before);
+  });
+
+  it('inside a volley it queues instead, and draws nothing', () => {
+    const { univ, session, pc } = fighting();
+    expect(redrawCost(session)).toBeGreaterThan(0);
+    startBoomAnim();
+    const before = univ.rng.gameCalls;
+    boomSpace(pc.combatPos, 3, 5, 0, univ.rng);
+    expect(univ.rng.gameCalls).toBe(before);
+    runBoomAnim(univ.rng);
+  });
+});
+
+/**
  * The blast comes first, then what it did. `boom_space` sleeps for the whole
  * explosion and `damage_pc`/`damage_monst` only take the health off *after* it
  * returns (boe.party.cpp:2660-2686) — which is why these functions are async
@@ -521,6 +600,10 @@ describe('damage lands after its blast', () => {
   it('a monster dies after its blast, not during it', async () => {
     const { univ, session } = newGame();
     const monst = univ.town!.monsters.find((m) => m.isAlive)!;
+    // Next to the party, because `boom_space` draws nothing for a square
+    // `party_can_see` reports as unseen — and the rat this picks starts across
+    // the fort.
+    monst.curLoc = { x: univ.party.townLoc.x + 1, y: univ.party.townLoc.y };
     monst.mon.armor = 0;
     monst.mon.resist.fill(100);
     monst.maxHealth = 10;

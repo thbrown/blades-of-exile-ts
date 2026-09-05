@@ -222,6 +222,24 @@ export async function runReplay(
      * under` fell through to the driver's switch as if it were a move. The
      * boat then sat on the bridge and every step after it was one square out.
      */
+    /**
+     * **`attack-friendly.xml`, and the third hole of exactly this shape.**
+     * Swinging at a creature that hasn't turned on you yet asks first
+     * (boe.combat.cpp:242 → `pc_combat_move`), and only `main.ts` ever set the
+     * hook — so in a replay the swing was silently refused and the recording's
+     * `click_control cancel` fell out of the dialog and into the driver's own
+     * switch, where it bought a main-loop iteration of its own. That iteration
+     * is a `draw_terrain`, and in combat a `draw_terrain` is a die: one draw
+     * per prompt, which is all it takes to part the streams.
+     */
+    session.onConfirmAttackFriendly = async (): Promise<boolean> => {
+      if (!host) return false;
+      const picked = await host.choice(
+        ["This creature isn't hostile.", 'Attack anyway?'],
+        [{ name: 'cancel', label: 'Cancel' }, { name: 'attack', label: 'Attack' }],
+        '', 0, 0);
+      return picked === 1;
+    };
     session.onConfirmBoatBridge = async (): Promise<boolean> => {
       if (!host) return false;
       const picked = await host.choice(
@@ -765,6 +783,14 @@ export async function runReplay(
               session.univ.currentPc.lastCastType = type;
               break;
             }
+            // **The gate runs on the recast path too**, and this port skipped
+            // it there. `pc_can_cast_spell(current_pc, type)` is the *first*
+            // line of `combat_cast_mage_spell` (boe.combat.cpp:4554), above
+            // the `if(!spell_forced)` that chooses between the picker and the
+            // stored spell — so shift-M pays the encumbrance roll exactly as
+            // **m** does. One draw per recast, and a recording full of them
+            // drifts a draw at a time.
+            if (isCombat(session.mode) && !combatCastCheck(session, type)) break;
             const forced = forcedCast(session, type);
             if (forced === null) break;
             const { caster, spell } = forced;

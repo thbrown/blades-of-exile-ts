@@ -13,10 +13,10 @@
 
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
-  it by the rule each recording first parts on — as of **2026-09-03** that is
-  **1,202,832 matching draws, 43 of 87 files agreeing all the way**, 42 blocked
+  it by the rule each recording first parts on — as of **2026-09-05** that is
+  **1,205,666 matching draws, 46 of 87 files agreeing all the way**, 39 blocked
   by the oracle rather than by this port, and **2 rule buckets left in the
-  queue** — one of which is really a 43rd oracle gap (`OneOfEverything`; see the
+  queue** — one of which is really a 46th oracle gap (`OneOfEverything`; see the
   entry at the bottom). **One rules file left: `AllMageSpells`.** Add `--refresh` after a code change.
 - Two companion meters answer questions the draw stream cannot.
   `node scripts/align-actions.mjs --all` asks whether the two **action**
@@ -57,12 +57,12 @@
 
 ## Current state
 
-**M8, fidelity hardening, is the live milestone (2026-09-03).** M0–M7 are
+**M8, fidelity hardening, is the live milestone (2026-09-05).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,202,832 matching
-draws and 43 of 87 recordings agreeing all the way**, against 1,039,384 and 33
+`get_ran` streams together, rule by rule. It stands at **1,205,666 matching
+draws and 46 of 87 recordings agreeing all the way**, against 1,039,384 and 33
 at the start of 2026-09-02. Two rule buckets remain in the queue (see
-`diverge.mjs --all --stacks`), one file each; 42 of the 87 are blocked by the
+`diverge.mjs --all --stacks`), one file each; 39 of the 87 are blocked by the
 *oracle* rather than by this port and cannot be won at all — and one of the two
 remaining "rule" buckets, `OneOfEverything`, is really a 43rd oracle gap; see
 the entry at the bottom of this file. **One rules file left: `AllMageSpells`.**
@@ -10352,3 +10352,106 @@ The M6 list below is kept for the history of what it covered:
     `univ.cur_pc = which_pc` and `set_stat_window_for_pc`. `GameSession.switchPc`
     sets `center` there instead and calls nothing. That was not investigated —
     it may be handled elsewhere, or it may be the next thing this file needs.
+
+- **An immediate cast is an animation, and it was the whole of the redraw
+  bucket (M8, 2026-09-05).** Corpus **1,202,832 → 1,205,666**, and
+  `AllMageSpells` goes 2,618 → 5,452 of the oracle's 5,644. Four fixes in one
+  slice, all found by walking the same file forward; the old head of the queue,
+  "the redraw count", is gone with them.
+  - **`combat_immed_mage_cast` opens with `start_missile_anim()` and closes
+    with `do_missile_anim(50, caster.combat_pos, store_sound)`**
+    (boe.combat.cpp:4645 and :4778) — *whatever the spell did*. A Minor Haste
+    throws a sparkle at the PC it hastes, and the flight redraws the screen
+    **fifty-one times**: fifty frames plus the one the camera swing redoes. In
+    combat every one of those spends the status bar's encumbrance roll, so this
+    port was fifty-one draws light on every immediate cast, mage and priest
+    alike. `combat_immed_priest_cast` is the same shape (:4846, :4941).
+  - **It hid because all the draws are the same shape.** The whole region is
+    `get_ran(1,0,130)`, so a run that makes the *same number* of them in a
+    *different order* prints a byte-identical stream. `diverge.mjs` therefore
+    put the first divergence a hundred draws downstream, on the first
+    differently-shaped roll — a Flame's `get_ran(7,1,6)`, in a function
+    (`resolveOne`) that was innocent. **When a bucket lands on a damage roll
+    surrounded by encumbrance rolls, the bug is the redraw count, not the
+    damage.**
+  - The `add_missile` list and the `store_sound` deferral came with it: the
+    group spells stored 25 (or 54 for Fear) rather than playing it at once, and
+    Major Blessing's fourteen and the mass spells' per-creature sparkles are
+    queued now. `end_missile_anim` (`endBoomAnim`) closes the volley **without**
+    playing it, which is the C++: neither immediate caster calls
+    `do_explosion_anim`.
+  - `flyMissiles` gained `do_missile_anim`'s two early-outs, both *above* its
+    first `draw_terrain` and so both free — nothing queued, or everything
+    queued aimed at the square it was fired from ("eliminate missiles traveling
+    0 distance", boe.newgraph.cpp:365). Blessing yourself pays nothing.
+
+- **`boom_space` redraws twice, and that is what a spell pattern spends between
+  one square and the next (M8, 2026-09-05).** Same slice; the second of the
+  four.
+  - Outside a volley, `boom_space` calls `draw_terrain()` (boe.graphics.cpp:1512)
+    and then `draw_terrain(0)` again (:1525) before it draws its sprite. In
+    combat that is two encumbrance rolls **per hit**. A Conflagration that
+    burns a PC and a troglodyte therefore spends four draws this port was not
+    spending, interleaved between the damage rolls — which is exactly how it
+    looked in the trace.
+  - Two gates come with it and both matter. `if((mode != 100) &&
+    (party_can_see(where) == 6)) return;` (:1502) is above everything, the
+    sound included — **a blast nobody can see is not drawn and costs nothing**.
+    And `if(!point_onscreen(center,where) && is_combat())` (:1517) returns
+    *after* the first redraw, so a blast the camera is not looking at is half
+    the price. `damage_monst` passes mode 100 when `party_can_see_monst` says
+    the creature is visible (boe.specials.cpp:1553), because `party_can_see`
+    asks about one square and a two-wide creature can be in view without its
+    corner being.
+  - `fast_bang` (:1528, one redraw rather than two in town) is deliberately not
+    modelled: `draw_text_bar` makes no roll outside combat, so it cannot matter.
+  - The hook is module-level (`setBoomScreen`, installed by the `GameSession`
+    constructor beside `setCentreSink`) for the reason `living.ts` keeps
+    `setLivingSound`: `boom_space` is a free function at the bottom of the
+    damage pipeline with no session in reach. **A test that calls `boomSpace`
+    without a session must clear it** — it is left installed by whichever
+    session was built last, and two test files had to learn that.
+
+- **The recast shortcut pays the gate too (M8, 2026-09-05).** Third of the
+  four, and one draw per use.
+  - `pc_can_cast_spell(current_pc, type)` is the **first** line of
+    `combat_cast_mage_spell` (boe.combat.cpp:4554), above the `if(!spell_forced)`
+    that chooses between opening `pick_spell` and reading the stored spell. The
+    replay driver ran `combatCastCheck` only on the picker path, so shift-M made
+    one encumbrance roll fewer than **m** did.
+
+- **`attack-friendly.xml` was the third dialog the replay driver never
+  answered (M8, 2026-09-05).** Fourth of the four, and the same shape as the
+  locked door and the boat bridge before it.
+  - Only `main.ts` set `onConfirmAttackFriendly`, so in a replay swinging at a
+    peaceful creature was silently refused and the recording's `click_control
+    cancel` fell out of the dialog and into the driver's own switch — where it
+    bought a **main-loop iteration of its own**. That iteration is a
+    `draw_terrain`, and in combat a `draw_terrain` is a die. One draw per
+    prompt.
+  - The rule to carry: **a hook only `main.ts` sets is a driver bug waiting to
+    happen.** `grep -n "session.on[A-Z]" src/main.ts` against the same grep over
+    `src/replay/driver.ts` is the list, and it is worth re-running.
+
+- **`poison_weapon` had a stub sitting next to the real port (M8,
+  2026-09-05).** Found in the same walk.
+  - `spellCombat.ts` carried a four-line `poisonWeapon` that added the status
+    and rolled nothing, while `itemUse.ts` held the full port
+    (boe.party.cpp:450) — the `p_chance` table, the botch, the nick, the
+    `weap_poisoned` slot. Envenom and Major Blessing used the stub, so a cast
+    was one `get_ran(1,1,100)` short.
+  - It now lives in `src/game/poisonWeapon.ts` of its own, because `itemUse.ts`
+    imports `spellCombat.ts` and putting the call the other way round would
+    make a cycle. `itemUse.ts` re-exports it for its existing callers.
+
+- **A new instrument, `CAST=1` — and its oracle half is booby-trapped (M8,
+  2026-09-05).** One line per target `do_combat_cast` weighs: `[cast] spell=
+  from= to= adjust= range= dist= obsc=`, the pair to the harness's
+  `BOE_TRACE_CAST=1`. Use it when two runs disagree about *which* spell landed
+  where.
+  - **`BOE_TRACE_CAST=1` changes the C++'s own draw stream.** Its `[cast] mage`
+    line prints `total_encumbrance(hit_chance)` (boe.combat.cpp:4560), which
+    *rolls* — so that trace runs a hundred draws out of step with the cached
+    one and its `[ran]` indices cannot be compared against a JS run at all. It
+    cost an hour here, spent chasing a hundred-draw offset that did not exist.
+    Read its `[cast] spell=` lines for their *order*, never for their indices.

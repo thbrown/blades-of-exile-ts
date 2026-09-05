@@ -18,7 +18,7 @@ import {
   MISSILE_MS, Missile, runAMissile, setMissileSink,
 } from '../src/game/missileAnim';
 import {
-  Boom, boomMs, boomSpace, runBoomAnim, setBoomSink, startBoomAnim,
+  Boom, boomMs, boomSpace, runBoomAnim, setBoomScreen, setBoomSink, startBoomAnim,
 } from '../src/game/booms';
 import {
   FocusEvent, animBook, animClear, animPending, focusOn, setFocusSink,
@@ -204,6 +204,11 @@ describe('the animation timeline', () => {
     setMissileSink((m) => missiles.push(m));
     setBoomSink((b) => booms.push(b));
     setFocusSink((f) => focus.push(f));
+    // `boom_space` asks `party_can_see` before it draws anything, and the hook
+    // that answers is module-level and installed by whichever `GameSession` was
+    // built last — so a test that only wants the timeline has to take it out of
+    // the way, the same way it takes the sinks.
+    setBoomScreen(null);
     try {
       fn();
     } finally {

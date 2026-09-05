@@ -13,6 +13,8 @@ import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { GameMode } from '../src/game/modes';
 import { GameSession } from '../src/game/session';
+import { Missile, setMissileSink } from '../src/game/missileAnim';
+import { drawTerrain } from '../src/game/textBar';
 import { castableSpells } from '../src/game/spellCast';
 import { combatCastSpell, combatImmedMageCast, doShockwave } from '../src/game/spellCombat';
 import {
@@ -181,6 +183,18 @@ describe('the refer dispatcher', () => {
   });
 });
 
+/**
+ * What one `draw_terrain()` costs this party in dice, measured rather than
+ * assumed: `text_bar_text` asks `pc_can_cast_spell`, whose combat arm rolls
+ * `total_encumbrance` once or twice per equipped awkward item. See
+ * `src/game/textBar.ts`.
+ */
+function redrawCost(s: GameSession): number {
+  const before = s.univ.rng.gameCalls;
+  drawTerrain(s);
+  return s.univ.rng.gameCalls - before;
+}
+
 describe('combat_immed_mage_cast', () => {
   it('Strength and Haste push their statuses the good way', async () => {
     const { s, pc } = inCombat();
@@ -221,6 +235,64 @@ describe('combat_immed_mage_cast', () => {
     // a slowed monster goes *below* zero — `slow()` applies -howMuch.
     expect(near.status[Status.HASTE_SLOW]!).toBeLessThan(0);
     if (far) expect(far.status[Status.HASTE_SLOW] ?? 0).toBe(0);
+  });
+
+  /**
+   * `combat_immed_mage_cast` opens with `start_missile_anim()` and closes with
+   * `do_missile_anim(50, caster.combat_pos, store_sound)` (boe.combat.cpp:4645
+   * and :4778), whatever the spell did. Two things ride on that and both are
+   * checked here: the sparkle that flies at the PC being blessed, and the
+   * **fifty-one `draw_terrain`s** the flight pays for — in combat each one
+   * spends the acting PC's encumbrance roll, so leaving the animation out cost
+   * fifty-one draws per immediate cast and put every later roll in the wrong
+   * place.
+   */
+  it('an immediate cast flies a sparkle, and pays for the flight in dice', async () => {
+    const { s, pc } = inCombat();
+    // The status bar only spends a roll once the acting PC has cast something,
+    // and only for an equipped awkward item — so give it both.
+    pc.lastCastType = Skill.MAGE_SPELLS;
+    pc.lastCast[Skill.MAGE_SPELLS] = Spell.HASTE_MINOR;
+    const target = s.univ.party.pcs[1]!;
+    target.combatPos = { x: pc.combatPos.x + 2, y: pc.combatPos.y };
+    s.spellTarget = 1;
+    const perRedraw = redrawCost(s);
+    expect(perRedraw).toBeGreaterThan(0);
+    const missiles: Missile[] = [];
+    setMissileSink((m) => missiles.push(m));
+    try {
+      const before = s.univ.rng.gameCalls;
+      await combatImmedMageCast(s, 0, Spell.HASTE_MINOR);
+      expect(missiles.length).toBe(1);
+      expect(missiles[0]!.dest).toEqual(target.combatPos);
+      // Fifty frames plus the one the camera swing redoes.
+      expect(s.univ.rng.gameCalls - before).toBe(51 * perRedraw);
+    } finally {
+      setMissileSink(null);
+    }
+  });
+
+  /**
+   * The two early-outs at the top of `do_missile_anim` are *before* its first
+   * `draw_terrain`, so a volley that never flies is free: nothing queued
+   * (`have_missile`), or everything queued aimed at the square it was fired
+   * from — "eliminate missiles traveling 0 distance" (boe.newgraph.cpp:365).
+   */
+  it('a sparkle aimed at the caster does not fly, and costs nothing', async () => {
+    const { s, pc } = inCombat();
+    pc.lastCastType = Skill.MAGE_SPELLS;
+    pc.lastCast[Skill.MAGE_SPELLS] = Spell.HASTE_MINOR;
+    s.spellTarget = 0; // the caster blesses himself
+    const missiles: Missile[] = [];
+    setMissileSink((m) => missiles.push(m));
+    try {
+      const before = s.univ.rng.gameCalls;
+      await combatImmedMageCast(s, 0, Spell.HASTE_MINOR);
+      expect(missiles).toEqual([]);
+      expect(s.univ.rng.gameCalls).toBe(before);
+    } finally {
+      setMissileSink(null);
+    }
   });
 
   it('Shockwave spares whoever stands on it and hurts everyone else', async () => {

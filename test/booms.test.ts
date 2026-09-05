@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  Boom, boomSpace, runBoomAnim, setBoomSink, startBoomAnim,
+  Boom, boomSpace, runBoomAnim, setBoomScreen, setBoomSink, startBoomAnim,
 } from '../src/game/booms';
 import { GameRng } from '../src/core/rng';
 import { setLivingSound } from '../src/universe/living';
@@ -14,6 +14,10 @@ function capture(fn: () => void): { booms: Boom[]; sounds: number[] } {
   const sounds: number[] = [];
   setBoomSink((b) => booms.push(b));
   setLivingSound((n) => sounds.push(n));
+  // `boom_space` asks `party_can_see` before it draws, through a module-level
+  // hook installed by whichever `GameSession` was built last. These tests have
+  // no session, so take it out of the way rather than depend on that.
+  setBoomScreen(null);
   try {
     fn();
   } finally {
