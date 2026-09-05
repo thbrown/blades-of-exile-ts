@@ -14,10 +14,11 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-03** that is
-  **1,192,780 matching draws, 42 of 87 files agreeing all the way**, 41 blocked
-  by the oracle rather than by this port, and **4 rule buckets left in the
-  queue** — every one of them a single file, and one of the four is really a
-  42nd oracle gap (`OneOfEverything`; see the entry at the bottom). Add `--refresh` after a code change.
+  **1,194,292 matching draws, 43 of 87 files agreeing all the way**, 41 blocked
+  by the oracle rather than by this port, and **3 rule buckets left in the
+  queue** — every one of them a single file, and one of the three is really a
+  42nd oracle gap (`OneOfEverything`; see the entry at the bottom). **Two rules
+  files left.** Add `--refresh` after a code change.
 - Two companion meters answer questions the draw stream cannot.
   `node scripts/align-actions.mjs --all` asks whether the two **action**
   streams ever drift apart (they do not: 0 of 73), and
@@ -59,13 +60,13 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-03).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,192,780 matching
-draws and 42 of 87 recordings agreeing all the way**, against 1,039,384 and 33
-at the start of 2026-09-02. Four rule buckets remain in the queue (see
+`get_ran` streams together, rule by rule. It stands at **1,194,292 matching
+draws and 43 of 87 recordings agreeing all the way**, against 1,039,384 and 33
+at the start of 2026-09-02. Three rule buckets remain in the queue (see
 `diverge.mjs --all --stacks`), one file each; 41 of the 87 are blocked by the
-*oracle* rather than by this port and cannot be won at all — and one of the four
-remaining "rule" buckets, `OneOfEverything`, is really a 42nd oracle gap; see
-the entry at the bottom of this file. **Three rules files left.**
+*oracle* rather than by this port and cannot be won at all — and one of the
+three remaining "rule" buckets, `OneOfEverything`, is really a 42nd oracle gap;
+see the entry at the bottom of this file. **Two rules files left.**
 
 M8 is not only dice. Chasing the corpus has filled in real features it turned
 out to need — **creating a character** (`handle_new_pc` and its four dialogs),
@@ -10275,3 +10276,26 @@ The M6 list below is kept for the history of what it covered:
     all of it: `combat_pos` and `parry` survive, `univ.departedTown` is the
     arena, an item on the square the PC stood on is in reach from the world
     map, and taking it leaves the floor empty.
+
+- **Using an empty inventory row costs three action points (M8, 2026-09-04).**
+  Corpus **1,192,780 → 1,194,292**, and `ASR_10-05-2025_09-08-20` matches all
+  **11,793** of the oracle's draws — another whole file, from 10,281.
+  - `use_item` (boe.specials.cpp:587) has **no** empty-slot test. It reads the
+    blank `cItem` out of the pack, `can_use()` says false, so it prints "Use:
+    Can't use this item.", takes no charge and falls through its switch on
+    `abil = NONE` doing nothing. And then `handle_use_item`'s tail
+    (boe.actions.cpp:1108) spends `take_ap(3)` and sets `did_something`
+    **whatever `use_item` did**.
+  - This port returned at `if (!item || item.variety === NO_ITEM) return;`,
+    which skipped the tail with it — the same shape as the `handle_parry` and
+    `handle_target_space` entries above, and the third time this week that a
+    guard invented here has cost a turn. **`handle_*` functions in this codebase
+    charge unconditionally; the tests live in their callers.**
+  - **What it looked like.** Feodoric has three items and the recording uses row
+    **3**. The C++ charged him three of his four points, so his next use took
+    him to zero and `combat_next_step` moved on to Kat; here he kept all four,
+    used row 2 instead, and was still holding the turn. One PC behind for the
+    rest of the fight, and the spell the recording meant for Kat was cast by
+    Feodoric.
+  - A test in `itemUse.test.ts` uses an empty row and checks both halves: the
+    refusal is printed *and* the turn passes.

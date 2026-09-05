@@ -185,7 +185,15 @@ export async function useItem(
   const pc = party.pcs[pcNum];
   if (!pc) return;
   const item = pc.items[slot];
-  if (!item || item.variety === ItemType.NO_ITEM) return;
+  // **An empty slot is not an early return.** `use_item` (boe.specials.cpp:587)
+  // has no such test: `can_use()` on a blank slot is false, so it says "Use:
+  // Can't use this item.", takes no charge and falls through the switch on
+  // `abil = NONE` doing nothing — and `handle_use_item`'s tail
+  // (boe.actions.cpp:1108) then spends the three action points and the turn
+  // regardless. Returning here left the acting PC holding points the C++ had
+  // spent: `ASR_10-05-2025_09-08-20` uses an empty row 3, and from there the
+  // C++ was on Kat while this port was still on Feodoric.
+  if (!item) return;
 
   const say = (line: string): void => univ.addStringToBuf(line);
   const sound = (which: number): void => host?.sound(which);

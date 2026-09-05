@@ -152,6 +152,19 @@ describe('the refusals', () => {
     expect(blade.charges).toBe(2);
   });
 
+  it('an empty row still says so, and still spends the turn', async () => {
+    // `use_item` has no empty-slot test — `can_use()` on a blank slot is false,
+    // so it refuses like any other unusable item — and `handle_use_item`'s tail
+    // spends the three action points and the turn either way
+    // (boe.actions.cpp:1108). Returning early left the acting PC holding points
+    // the C++ had already spent.
+    const s = inTown();
+    const before = s.univ.party.age;
+    await useItem(s, WHO, 5);          // nothing in row 5
+    expect(s.univ.transcript.some((l) => l.includes("Can't use this item"))).toBe(true);
+    expect(s.univ.party.age).toBe(before + 1);
+  });
+
   it('refuses a town-only item while outdoors', async () => {
     const s = inTown();
     s.endTownMode(s.univ.party.townLoc);
