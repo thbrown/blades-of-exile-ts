@@ -638,15 +638,15 @@ export function killMonst(
  * — but the scenario's original is preferred, since `set_town_attitude` and the
  * like mutate the copy.
  *
- * TODO(M5b): numbers >= 10000 index `party.summons`, which arrives with the
- * summoning abilities.
+ * **A number of 10000 or more indexes `party.summons`** — the creatures a
+ * scenario's summoning abilities added at run time, which have no entry in
+ * `scen_monsters` at all.
  */
 function monsterDef(univ: Universe, monst: Creature): Monster {
-  if (monst.number < 10000) {
-    const def = univ.scenario.scenMonsters[monst.number];
-    if (def) return def;
-  }
-  return monst.mon;
+  const def = monst.number >= 10000
+    ? univ.party.summons[monst.number - 10000]
+    : univ.scenario.scenMonsters[monst.number];
+  return def ?? monst.mon;
 }
 
 /** The dying sound, which depends on what kind of thing it was. */

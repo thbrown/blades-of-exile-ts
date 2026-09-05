@@ -817,7 +817,7 @@ Notes for M2 implementer:
 - [x] **M2 — Towns + full 605×430 shell**: town enter/exit ✅, UI chrome ✅, pregen party ✅, GameSession/Universe ✅, sound ✅, line-of-sight fog + lighting ✅, terrain trim + roads ✅, floor items ✅, inventory panel ✅, fields overlay ✅, **replay driver ✅ (2026-08-01)**
 - [ ] **M3 — Dialog toolkit + talk + shops**: talking ✅, minimal async modal dialog ✅, doors + look + signs ✅, item/equip model + inventory panel ✅, shops ✅, sell/identify/recharge ✅, training ✅, inns ✅, **item Use ✅ (2026-07-27)**, **enchanting ✅ (2026-09-05)**; full dialogxml still open
 - [x] **M4 — Specials interpreter (breadth-first)**: VM core (pointers, queueing, messages) + all seven opcode groups; triggers wired for movement, look, town entry/exit, use-space, call-special terrain and the two talk nodes. Opcodes needing combat/fields/timers/quests report themselves and wait for M5/M6.
-- [x] **M5 — Combat**: M5a ✅ (the iLiving seam, damage/status, combat mode, melee); M5b ✅ (monster turns, melee AI, town *and outdoor* encounters, the `uAbility` port, missiles on both sides, breath, summons, touch abilities, on-hit weapon abilities, **monster spellcasting**); M5c ✅ (spell patterns, `process_fields`, the 147-spell table, `pc_can_cast_spell`, town/combat/targeted/multi-target casting, and the real casting dialog). Remaining odds and ends: the SPECIAL monster ability. (`record_monst` and `do_mindduel` have both landed since.)
+- [x] **M5 — Combat**: M5a ✅ (the iLiving seam, damage/status, combat mode, melee); M5b ✅ (monster turns, melee AI, town *and outdoor* encounters, the `uAbility` port, missiles on both sides, breath, summons, touch abilities, on-hit weapon abilities, **monster spellcasting**); M5c ✅ (spell patterns, `process_fields`, the 147-spell table, `pc_can_cast_spell`, town/combat/targeted/multi-target casting, and the real casting dialog). Remaining odds and ends: none — `record_monst`, `do_mindduel` and the SPECIAL monster ability have all landed since (checked 2026-09-05).
 - [x] **M6 — Specials depth + party ops** (valleydy completable): quests, job
       banks, special items, the three timer kinds, item Use, boats/horses
       (2026-07-27), alchemy, traps and the job-bank dialog (2026-07-28), and
@@ -10770,3 +10770,21 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     back as a *distance* (62 in the case at hand), not an obscurity, and swamps
     every other term in a to-hit roll. Nothing in the game asks it that way, but
     a test can, and it looks exactly like the rule under test being broken.
+
+- **Detect Life on the automap, and `place_glands`' summoned monsters
+  (2026-09-05).** Two more `TODO`s off the list, both corpus-neutral.
+  - `draw_map` puts **every living creature on the map as a green square ringed
+    in blue** while `DETECT_LIFE` is up (boe.town.cpp:1561) — in town only, and
+    only on squares the party has already explored. The status has worked since
+    M5c; nothing drew it.
+  - `place_glands` looks its monster up by *number*, and **a number of 10000 or
+    more indexes `party.summons`** rather than `scen_monsters` — the creatures a
+    scenario's summoning abilities add at run time, which have no scenario entry
+    at all. This port fell back to the creature's own copy for those, which is
+    close but not the same record.
+  - **And a false regression to remember.** A `--refresh` killed by a
+    ten-minute timeout leaves half the corpus with truncated traces, and the
+    next `diverge.mjs --all` reads that as 46 files and 1,213,834 draws — one
+    file and seventy-four draws "lost". The rule from 2026-09-04 held: **a
+    corpus regression is not real until the traces it comes from are complete.**
+    Re-running the refresh to completion put it back at 47 / 1,213,908 exactly.

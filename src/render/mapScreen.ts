@@ -13,6 +13,7 @@
  * tiles, the black backing, the road stubs, the markers — is verbatim.
  */
 
+import { PartyStatus } from '../universe/skills';
 import { GameMode } from '../game/modes';
 import { GameSession } from '../game/session';
 import { Colours } from './colours';
@@ -194,8 +195,20 @@ export class MapScreen {
     // conversation or a shop is up.
     if (session.mode === GameMode.COMBAT) return;
     if (session.talk || session.shop) return;
-    // TODO(M5c): DETECT_LIFE puts every living monster on the map as a green
-    // dot. The party status effect it reads doesn't exist yet.
+    // **Detect Life puts every creature on the map** (boe.town.cpp:1561): in
+    // town only, on squares the party has already explored, as a green square
+    // ringed in blue. Drawn before the party's own red marker, so a creature
+    // standing on the party is covered by it.
+    if (session.inTown && (univ.party.partyStatus[PartyStatus.DETECT_LIFE] ?? 0) > 0) {
+      for (const monst of univ.town?.monsters ?? []) {
+        if (!monst.isAlive) continue;
+        const at = monst.curLoc;
+        if (!univ.town?.isExplored(at.x, at.y)) continue;
+        if (at.x < view.left || at.x >= view.right) continue;
+        if (at.y < view.top || at.y >= view.bottom) continue;
+        this.marker(view, at.x, at.y, Colours.GREEN, Colours.BLUE);
+      }
+    }
     const where = session.inTown ? univ.party.townLoc : univ.party.locInSec;
     if (where.x < view.left || where.x >= view.right) return;
     if (where.y < view.top || where.y >= view.bottom) return;
