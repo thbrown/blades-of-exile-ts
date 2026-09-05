@@ -26,6 +26,7 @@ import {
 } from '../src/game/wandering';
 import { PartyPreset } from '../src/universe/player';
 import { MainStatus } from '../src/universe/skills';
+import { ItemType, defaultItem } from '../src/data/item';
 import { Universe } from '../src/universe/universe';
 
 const opcodes = buildOpcodeTable(
@@ -203,6 +204,52 @@ describe('the arena', () => {
     expect(s.arena).toBeNull();
     expect(s.univ.party.outLoc).toEqual(where);
   });
+
+  /**
+   * `handle_party_death`'s rout arm (boe.actions.cpp:1453) runs
+   * `end_town_mode`, "End combat." and `handle_wandering_specials(2)` — and
+   * **not** `end_combat`. What survives is the point: `combat_pos`, `parry`,
+   * and a `univ.town` the C++ never unloads, which is what lets
+   * `handle_get_items` outdoors rummage the arena the party ran from.
+   */
+  it('a rout keeps the arena reachable, and the squares the party stood on',
+    async () => {
+      const s = await outdoors();
+      const where = { ...s.univ.party.outLoc };
+      startOutdoorCombat(s, aGroup(), where, 0);
+      const arena = s.univ.town!;
+      const stood = { ...s.univ.party.pcs[0]!.combatPos };
+      expect(stood.x).toBeGreaterThan(0);
+      s.univ.party.pcs[0]!.parry = 42;
+
+      // Everyone runs: `is_alive()` is false, but every PC is FLED rather than
+      // dead, so this is a rout and not a wipe.
+      for (const pc of s.univ.party.pcs) pc.mainStatus = MainStatus.FLED;
+      s.checkGameOver();
+
+      expect(s.mode).toBe(GameMode.OUTDOORS);
+      expect(s.univ.party.pcs[0]!.mainStatus).toBe(MainStatus.ALIVE);
+      // `end_combat` did not run, so neither of these was cleared.
+      expect(s.univ.party.pcs[0]!.combatPos).toEqual(stood);
+      expect(s.univ.party.pcs[0]!.parry).toBe(42);
+      // And the arena is still reachable, where an ordinary exit drops it.
+      expect(s.univ.town).toBeNull();
+      expect(s.univ.departedTown).toBe(arena);
+
+      // The rummage the C++ allows: an item left on the square the PC stood on
+      // is still in reach from the world map — and **taking it has to empty the
+      // floor**. `takeItem` returned early on a null `univ.town`, so the pile
+      // looked taken (the screen closed) and was still there the next time,
+      // which is a `get_item` answering 1 where the C++ answered 0 and a turn
+      // charged on one side only.
+      arena.items.push({ ...defaultItem(), variety: ItemType.POTION, itemLoc: stood, value: 20 });
+      const found = s.reachableItems(stood);
+      expect(found.items.length).toBeGreaterThan(0);
+      const taken = found.items[found.items.length - 1]!;
+      s.takeItem(taken, 0);
+      expect(s.univ.party.pcs[0]!.items.some((i) => i.variety === ItemType.POTION)).toBe(true);
+      expect(s.reachableItems(stood).items).not.toContain(taken);
+    });
 
   /**
    * pc_combat_move (boe.combat.cpp:242): terrain 90 is the arena's border

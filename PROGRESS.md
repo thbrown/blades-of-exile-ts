@@ -14,9 +14,10 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-03** that is
-  **1,188,534 matching draws, 42 of 87 files agreeing all the way**, 40 blocked
-  by the oracle rather than by this port, and **5 rule buckets left in the
-  queue** — every one of them a single file now. Add `--refresh` after a code change.
+  **1,192,780 matching draws, 42 of 87 files agreeing all the way**, 41 blocked
+  by the oracle rather than by this port, and **4 rule buckets left in the
+  queue** — every one of them a single file, and one of the four is really a
+  42nd oracle gap (`OneOfEverything`; see the entry at the bottom). Add `--refresh` after a code change.
 - Two companion meters answer questions the draw stream cannot.
   `node scripts/align-actions.mjs --all` asks whether the two **action**
   streams ever drift apart (they do not: 0 of 73), and
@@ -58,13 +59,13 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-03).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,188,534 matching
+`get_ran` streams together, rule by rule. It stands at **1,192,780 matching
 draws and 42 of 87 recordings agreeing all the way**, against 1,039,384 and 33
-at the start of 2026-09-02. Five rule buckets remain in the queue (see
-`diverge.mjs --all --stacks`), one file each; 40 of the 87 are blocked by the
-*oracle* rather than by this port and cannot be won at all — and one of the five
-remaining "rule" buckets, `OneOfEverything`, is really a 41st oracle gap; see
-the entry at the bottom of this file.
+at the start of 2026-09-02. Four rule buckets remain in the queue (see
+`diverge.mjs --all --stacks`), one file each; 41 of the 87 are blocked by the
+*oracle* rather than by this port and cannot be won at all — and one of the four
+remaining "rule" buckets, `OneOfEverything`, is really a 42nd oracle gap; see
+the entry at the bottom of this file. **Three rules files left.**
 
 M8 is not only dice. Chasing the corpus has filled in real features it turned
 out to need — **creating a character** (`handle_new_pc` and its four dialogs),
@@ -10249,3 +10250,28 @@ The M6 list below is kept for the history of what it covered:
     end;`) and retries a trace without it, on the same three-attempt loop as the
     timeout. **The rule to carry: a corpus regression is not real until the
     trace it comes from ends with that line.**
+
+- **`takeItem` had the same blind spot as `reachableItems`, and it finished the
+  file (M8, 2026-09-04).** Corpus **1,188,534 → 1,192,780**;
+  `VoDT_09-04-2025_09-41-10` matches **all 26,937** of the oracle's draws and
+  moves out of the rules queue into the oracle-blocked pile. From 22,616 at the
+  start of the day to done, in four fixes.
+  - `GameSession.takeItem` opens `const town = this.univ.town; if (!town)
+    return '';`. Outdoors that is null, so the item was never given to the PC
+    and never blanked on the floor — while `GetItemsPick.take` spliced it out
+    of its *local* list anyway, because the "did it actually leave?" check also
+    read `univ.town` and so was skipped. The screen therefore looked like it
+    worked: four rows taken, four rows gone.
+  - The next rummage of the same square found the same four items. In the C++
+    `get_item` returned **0** there (its town item vector had gone 23 → 19) and
+    charged no turn; here it returned 1 and charged one. Both engines then had
+    a different idea of what turn it was, for the rest of the recording.
+  - Both places take `this.univ.town ?? this.univ.departedTown` now. That is
+    three call sites on the same fallback — `getNode`, `reachableItems`,
+    `takeItem` — which is the honest size of "the C++ never unloads
+    `univ.town`". If a fourth turns up, consider making the accessor explicit
+    rather than repeating the `??`.
+  - A test in `wandering.test.ts` builds an arena fight, routs it, and checks
+    all of it: `combat_pos` and `parry` survive, `univ.departedTown` is the
+    arena, an item on the square the PC stood on is in reach from the world
+    map, and taking it leaves the floor empty.

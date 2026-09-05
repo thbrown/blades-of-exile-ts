@@ -1812,7 +1812,13 @@ export class GameSession {
    * be printed; an empty string means nothing happened.
    */
   takeItem(item: Item, pcNum: number): string {
-    const town = this.univ.town;
+    // `departedTown` for the same reason `reachableItems` needs it: outdoors
+    // the C++ is still holding the town it last loaded, and after a rout the
+    // pile being rummaged is a real one in the arena the party ran from. Taking
+    // from it has to blank the entry there too, or the same four items are
+    // still on the floor next time and `get_item` answers 1 where the C++
+    // answers 0 — which is a turn charged on one side and not the other.
+    const town = this.univ.town ?? this.univ.departedTown;
     if (!town) return '';
     const pc = this.univ.party.pcs[pcNum];
     if (!pc) return '';

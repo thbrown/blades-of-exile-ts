@@ -221,7 +221,7 @@ export class GetItemsPick {
     // whether the item actually left the floor — it splices it out of the town
     // on success and leaves it there on a refusal.
     const message = this.session.takeItem(item, this.who);
-    const town = this.session.univ.town;
+    const town = this.session.univ.town ?? this.session.univ.departedTown;
     if (town && town.items.includes(item)) {
       item.property = wasProperty;
       this.prompt = message || "It's too heavy to carry.";
