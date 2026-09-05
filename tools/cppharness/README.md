@@ -152,6 +152,14 @@ rewrite would never think to call anything — including, notably,
 There is no pair for it on this side; it answers the question "who is spending
 these `get_ran(1,0,70)`s", and the answer is usually a redraw.
 
+**`BOE_TRACE_DLG=1`** prints one `[dlg] enter <dialog> replaying= notToast=
+next=` line whenever `cDialog::handle_events` is entered. It answers one
+question and it is a good one: **did the dialog open at all?** An `[orphan]`
+line says the recording had a dialog action and no dialog was up, and that has
+two very different causes — this build raised a *different* dialog, or it raised
+*none*. `get_num_response` was the second (see below), and the absence of a
+`[dlg]` line is what said so.
+
 **`BOE_TRACE_DMG=1`** prints one `[dmg] <pc name> type= now= inv= mr= prot=
 full= luck= tough= hp=` line per `damage_pc`, taken just before the
 invulnerability test — i.e. after the armour, parry, toughness and luck

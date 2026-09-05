@@ -14,10 +14,9 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-05** that is
-  **1,205,855 matching draws, 46 of 87 files agreeing all the way**, 39 blocked
-  by the oracle rather than by this port, and **2 rule buckets left in the
-  queue** — one of which is really a 46th oracle gap (`OneOfEverything`; see the
-  entry at the bottom). **One rules file left: `AllMageSpells`.** Add `--refresh` after a code change.
+  **1,206,841 matching draws, 46 of 87 files agreeing all the way**, 40 blocked
+  by the oracle rather than by this port, and **one rule bucket left in the
+  queue**: `AllMageSpells`, parting in `recordMonst`. Add `--refresh` after a code change.
 - Two companion meters answer questions the draw stream cannot.
   `node scripts/align-actions.mjs --all` asks whether the two **action**
   streams ever drift apart (they do not: 0 of 73), and
@@ -59,13 +58,12 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-05).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,205,855 matching
+`get_ran` streams together, rule by rule. It stands at **1,206,841 matching
 draws and 46 of 87 recordings agreeing all the way**, against 1,039,384 and 33
-at the start of 2026-09-02. Two rule buckets remain in the queue (see
-`diverge.mjs --all --stacks`), one file each; 39 of the 87 are blocked by the
-*oracle* rather than by this port and cannot be won at all — and one of the two
-remaining "rule" buckets, `OneOfEverything`, is really a 43rd oracle gap; see
-the entry at the bottom of this file. **One rules file left: `AllMageSpells`.**
+at the start of 2026-09-02. **One rule bucket remains** (see
+`diverge.mjs --all --stacks`), one file: `AllMageSpells`. 40 of the 87 are
+blocked by the *oracle* rather than by this port and cannot be won until the
+harness grows the feature they need.
 
 M8 is not only dice. Chasing the corpus has filled in real features it turned
 out to need — **creating a character** (`handle_new_pc` and its four dialogs),
@@ -10504,3 +10502,45 @@ The M6 list below is kept for the history of what it covered:
     party" — 22 against 18 at draw 5,226 — which is what made a one-PC state
     difference worth an instrument rather than a rules read. **Print the state:
     that is now five investigations in a row.**
+
+- **The harness's `get_num_response` never opened a dialog, and it was the last
+  thing in the rules queue (M8, 2026-09-05).** Corpus
+  **1,205,855 → 1,206,841**, and the queue is down to **one file**.
+  **`OneOfEverything`'s negative result of 2026-09-03 is now solved** — the
+  entry above that says "not chased further; instrument `get_num_response`
+  first" was right about where to look, and wrong that it would be hard.
+  - **What it was.** `strchoice.cpp` is not in the web build's source list;
+    `web/web_stubs.cpp:1171` supplies `get_num_response` instead, as a
+    `window.prompt` through `EM_ASM_INT` — which `shim/emscripten.h` no-ops. So
+    under the harness the function returned its default **without opening a
+    dialog at all**, and every action the recording held for it fell out to
+    `replay_action` as an `[orphan]`. `debug_enter_town` always entered town 0
+    and `debug_give_item` always gave item 0.
+  - `cDialog::handle_events` was innocent: it has had `field_focus`,
+    `field_input`, `handleTab` and `field_selection` branches all along. The
+    dialog was never constructed.
+  - **The new `BOE_TRACE_DLG=1` is what said so** — `[dlg] enter <name>` on
+    every `handle_events`, and no line for `get-num`. "Did the dialog open at
+    all?" is the question an `[orphan]` line cannot answer, and it separates
+    *this build raised a different dialog* from *this build raised none*.
+  - The stub now walks the recorded actions itself under `BOE_NATIVE_REPLAY`:
+    `field_focus`/`field_input` type into the number, then `okay`, `cancel`,
+    `extra-led`, or `choose` — whose own `left`/`right`/`ledN`/`done` work the
+    `cStringChoice` page. It is the C++ half of `numberFromDialog` in
+    `src/replay/driver.ts` and is meant to stay the same shape.
+  - **The web stub's parameter names are wrong and the call has to go by
+    position.** `strchoice.hpp:93` is `(min, max, prompt, choice_names,
+    cancel_value, initial_value, extra_led, led_output)`; the stub calls those
+    `def`, `help` and `cancelled`. `debug_give_item` passes `last_debug_item` as
+    the initial value, so getting that one wrong silently types into the wrong
+    default.
+  - **What it cost, and why that is still progress.** `AllMageSpells` had been
+    matching 5,641 of the oracle's 5,644 draws — against an oracle that was
+    giving item 0 and entering Fort Talrus. The oracle now runs **7,713** draws
+    and the two part at 647, in `recordMonst`. That is a real divergence this
+    port has always had and the corpus could not see. `OneOfEverything` moved
+    the other way, out of the rules queue and into the oracle-blocked pile: its
+    oracle now reaches 13,809 draws and stops on `pick-scenario`.
+  - **A rule for the harness, and it is the same one as for the port:** a stub
+    that returns a *plausible* answer is worse than one that refuses. This one
+    returned 0 for eight months.

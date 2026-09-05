@@ -1,5 +1,5 @@
 diff --git a/src/dialogxml/dialogs/dialog.cpp b/src/dialogxml/dialogs/dialog.cpp
-index 8b72d7fb..53b1d580 100644
+index 8b72d7fb..83bb0be0 100644
 --- a/src/dialogxml/dialogs/dialog.cpp
 +++ b/src/dialogxml/dialogs/dialog.cpp
 @@ -12,6 +12,7 @@
@@ -10,7 +10,7 @@ index 8b72d7fb..53b1d580 100644
  #include "dialog.hpp"
  #include "gfx/tiling.hpp" // for bg
  #include "fileio/resmgr/res_dialog.hpp"
-@@ -614,6 +615,14 @@ void cDialog::runWithHelp(short help1, short help2, bool help_forced) {
+@@ -614,10 +615,23 @@ void cDialog::runWithHelp(short help1, short help2, bool help_forced) {
  }
  
  // This method is a main event event loop of the dialog.
@@ -25,7 +25,17 @@ index 8b72d7fb..53b1d580 100644
  void cDialog::handle_events() {
  	sf::Event currentEvent;
  	cFramerateLimiter fps_limiter;
-@@ -627,7 +636,32 @@ void cDialog::handle_events() {
+-
++#ifdef BOE_NATIVE_REPLAY
++	if(getenv("BOE_TRACE_DLG"))
++		std::cout << "    [dlg] enter " << fname << " replaying=" << int(replaying)
++			<< " notToast=" << int(dialogNotToast)
++			<< " next=" << (has_next_action() ? next_action_type() : std::string("(none)")) << std::endl;
++#endif
+ 	while(dialogNotToast) {
+ 		if(replaying && fname != "confirm-interrupt-replay" && check_for_interrupt("confirm-interrupt-replay")){
+ 			replaying = false;
+@@ -627,7 +641,32 @@ void cDialog::handle_events() {
  			auto info = info_from_action(next_action);
  			if(info["id"].empty()) continue;
  			eKeyMod mods = static_cast<eKeyMod>(std::stoi(info["mods"]));
@@ -58,7 +68,7 @@ index 8b72d7fb..53b1d580 100644
  		}else if(replaying && has_next_action("field_input")){
  			Element& next_action = pop_next_action();
  			cKey key = key_from_action(next_action);
-@@ -653,10 +687,92 @@ void cDialog::handle_events() {
+@@ -653,10 +692,92 @@ void cDialog::handle_events() {
  			// The error is recorded for debugging only. It should be triggered by replaying the actions.
  			pop_next_action();
  		}else if(replaying && has_next_action()){
@@ -1339,7 +1349,7 @@ index c490c81b..0e43d445 100644
  	short burden = free_weight();
  	if(burden < 0) total += burden / -10;
 diff --git a/web/web_stubs.cpp b/web/web_stubs.cpp
-index 595f29c2..53d484e4 100644
+index 595f29c2..734b554e 100644
 --- a/web/web_stubs.cpp
 +++ b/web/web_stubs.cpp
 @@ -200,6 +200,7 @@ namespace legacy {
@@ -1416,7 +1426,101 @@ index 595f29c2..53d484e4 100644
  
  // Tiling pattern storage
  struct TesselData {
-@@ -1193,12 +1209,24 @@ unsigned int getMenubarHeight() { return 0; }
+@@ -1152,7 +1168,93 @@ void hideMenuBar() {
+ // Dialog functions
+ // once_dialog is now provided by src/dialogxml/dialogs/3choice.cpp
+ 
++#ifdef BOE_NATIVE_REPLAY
++// Declared by hand rather than by including `tools/replay.hpp`, which drags in
++// `boe.newgraph.hpp` and collides with the dummy `word_rect_t` this file
++// defines further down.
++extern bool replaying;
++extern bool has_next_action(std::string type);
++extern ticpp::Element& pop_next_action(std::string expected_action_type);
++extern std::map<std::string,std::string> info_from_action(ticpp::Element& action);
++extern cKey key_from_action(ticpp::Element& action);
++
++// **The `get-num` dialog, answered from the recording.**
++//
++// The web build replaces `get_num_response` (strchoice.cpp:323) with a
++// `window.prompt`, and `shim/emscripten.h` no-ops `EM_ASM_INT` — so under the
++// harness it returned its default without ever pumping an action, and the
++// dialog actions the recording holds for it fell through to `replay_action` as
++// `[orphan]`s. `debug_enter_town` therefore always entered town 0, which is why
++// `long/OneOfEverything.xml` and the tail of `long/AllMageSpells.xml` were
++// simulating a different town from the one the recording chose.
++//
++// This walks the same actions the real dialog would, in the same order:
++// `field_focus`/`field_input` type into the number field, and then clicks —
++// `okay` accepts, `cancel` returns the cancel value, `extra-led` toggles the
++// LED, and `choose` opens `cStringChoice`, whose own clicks are `left`/`right`
++// to page, `ledN` to pick within the page, and `done`/`cancel` to leave.
++// `PER_PAGE` is `cStringChoice::per_page` (strchoice.hpp:31).
++//
++// It is the C++ half of `numberFromDialog` in `src/replay/driver.ts`, and the
++// two are meant to stay the same shape.
++static int replay_get_num_response(short min, short max, std::vector<std::string> opts,
++	std::optional<short> cancel_value, short initial_value, bool* led_output) {
++	const int PER_PAGE = 40;
++	int value = initial_value;
++	std::string text = std::to_string(initial_value);
++	size_t caret = text.size();
++	while(has_next_action("field_focus") || has_next_action("field_input")) {
++		if(has_next_action("field_focus")) { pop_next_action(""); caret = text.size(); continue; }
++		cKey key = key_from_action(pop_next_action(""));
++		if(key.spec) {
++			if(key.k == key_left) { if(caret > 0) caret--; }
++			else if(key.k == key_right) { if(caret < text.size()) caret++; }
++			else if(key.k == key_bsp) { if(caret > 0) { text.erase(caret - 1, 1); caret--; } }
++		} else {
++			text.insert(caret, 1, char(key.c));
++			caret++;
++		}
++	}
++	try { value = std::stoi(text); } catch(...) { value = initial_value; }
++	for(;;) {
++		if(!has_next_action("click_control")) return value;
++		auto info = info_from_action(pop_next_action(""));
++		std::string id = info["id"];
++		if(id == "okay") return value;
++		if(id == "cancel") return cancel_value ? *cancel_value : value;
++		if(id == "extra-led") { if(led_output) *led_output = !*led_output; continue; }
++		if(id != "choose") continue;
++		int last = opts.empty() ? 0 : int((opts.size() - 1) / PER_PAGE);
++		int cur = (value >= 0 && value < int(opts.size())) ? value : 0;
++		int page = cur / PER_PAGE;
++		for(;;) {
++			if(!has_next_action("click_control")) break;
++			auto inner = info_from_action(pop_next_action(""))["id"];
++			if(inner == "done") { value = cur; break; }
++			if(inner == "cancel") break;
++			if(inner == "left") { page = (page == 0) ? last : page - 1; continue; }
++			if(inner == "right") { page = (page == last) ? 0 : page + 1; continue; }
++			if(inner.compare(0, 3, "led") == 0 && inner.size() > 3) {
++				cur = page * PER_PAGE + std::stoi(inner.substr(3)) - 1;
++				continue;
++			}
++			// `strings` is the LED group itself; anything else is not modelled.
++		}
++	}
++	return value;
++}
++#endif
++
+ int get_num_response(short min, short max, std::string prompt, std::vector<std::string> opts, std::optional<short> def, short help, std::string, bool* cancelled) {
++#ifdef BOE_NATIVE_REPLAY
++	// **The web stub's parameter names are wrong**, and the call has to go by
++	// position: `strchoice.hpp:93` declares
++	// `(min, max, prompt, choice_names, cancel_value, initial_value, extra_led,
++	// led_output)`, so `def` here is the *cancel* value, `help` the *initial*
++	// value and `cancelled` the LED's state.
++	if(replaying)
++		return replay_get_num_response(min, max, opts, def, help, cancelled);
++#endif
+ 	// JavaScript fallback for numeric input dialog (Boost-free alternative)
+ 	int result = EM_ASM_INT({
+ 		var promptText = UTF8ToString($0);
+@@ -1193,12 +1295,24 @@ unsigned int getMenubarHeight() { return 0; }
  
  // Global variables
  tessel_ref_t bw_pats[128];
@@ -1441,7 +1545,7 @@ index 595f29c2..53d484e4 100644
  
  // Additional functions and classes
  struct word_rect_t {};
-@@ -1206,8 +1234,12 @@ class cItem;
+@@ -1206,8 +1320,12 @@ class cItem;
  class cCreature;
  class cScenario;
  
@@ -1454,7 +1558,7 @@ index 595f29c2..53d484e4 100644
  // display_pc and display_alchemy now provided by src/pcedit/pc.editors.cpp
  // menu_activate now provided by web/boe.menus.wasm.cpp
  
-@@ -1317,7 +1349,9 @@ fs::path nav_get_rsrc(std::initializer_list<std::string> exts) { return ""; }
+@@ -1317,7 +1435,9 @@ fs::path nav_get_rsrc(std::initializer_list<std::string> exts) { return ""; }
  void nav_put_rsrc(std::initializer_list<std::string> exts, fs::path def) {}
  
  // Replay and action functions
@@ -1464,7 +1568,7 @@ index 595f29c2..53d484e4 100644
  // edit_stuff_done now provided by src/pcedit/pc.editors.cpp
  
  // REMOVED PREFERENCE STUBS - use real implementations from prefs.cpp
-@@ -1395,13 +1429,26 @@ void init_directories(const char* exec_path) {
+@@ -1395,13 +1515,26 @@ void init_directories(const char* exec_path) {
  
  	// Set progDir to root so progDir/data resolves to /data
  	progDir = "/";
@@ -1491,7 +1595,7 @@ index 595f29c2..53d484e4 100644
  	// Create VFS directories so fs::create_directories() calls don't fail
  	EM_ASM({
  		try { FS.mkdir('/temp'); } catch(e) {}
-@@ -1419,10 +1466,18 @@ void init_directories(const char* exec_path) {
+@@ -1419,10 +1552,18 @@ void init_directories(const char* exec_path) {
  }
  
  // Additional replay and logging functions
@@ -1510,7 +1614,7 @@ index 595f29c2..53d484e4 100644
  
  // Window and cursor
  bool check_window_moved(sf::RenderWindow& win, int& x, int& y, std::string pref) {
-@@ -1459,7 +1514,9 @@ std::string cUndoList::redoName() const { return ""; }
+@@ -1459,7 +1600,9 @@ std::string cUndoList::redoName() const { return ""; }
  void cUndoList::add(action_ptr what) {}
  size_t cUndoList::maxUndoSize = 50;
  
@@ -1520,7 +1624,7 @@ index 595f29c2..53d484e4 100644
  
  // Button widget
  // Note: eControlType is now defined in control.hpp
-@@ -1468,7 +1525,9 @@ enum class eBtnType {};
+@@ -1468,7 +1611,9 @@ enum class eBtnType {};
  // Note: cButton is now implemented in dialogxml/widgets/button.cpp
  
  // Additional replay functions
@@ -1530,7 +1634,7 @@ index 595f29c2..53d484e4 100644
  
  // Documentation
  void launchDocs(std::string page) {}
-@@ -1508,14 +1567,18 @@ bool pollEvent(sf::Window* window, sf::Event& event) {
+@@ -1508,14 +1653,18 @@ bool pollEvent(sf::Window* window, sf::Event& event) {
  }
  
  // Key from action
@@ -1549,7 +1653,7 @@ index 595f29c2..53d484e4 100644
  
  // Note: Cursor class is now defined in cursors.hpp (included via res_cursor.hpp)
  // Cursor constructor implementation for web build
-@@ -1607,6 +1670,15 @@ void wasm_cast_spell(int type, int spellId) {
+@@ -1607,6 +1756,15 @@ void wasm_cast_spell(int type, int spellId) {
  } // extern "C" for menu bar exports
  
  // zlib functions (gzstream needs these)
@@ -1565,7 +1669,7 @@ index 595f29c2..53d484e4 100644
  extern "C" {
  	void* gzopen(const char* path, const char* mode) {
  		return nullptr;
-@@ -1624,3 +1696,4 @@ extern "C" {
+@@ -1624,3 +1782,4 @@ extern "C" {
  		return 0;
  	}
  }
