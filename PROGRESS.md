@@ -14,7 +14,7 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-05** that is
-  **1,212,465 matching draws, 46 of 87 files agreeing all the way**, 40 blocked
+  **1,212,554 matching draws, 46 of 87 files agreeing all the way**, 40 blocked
   by the oracle rather than by this port, and **one rule bucket left in the
   queue**: `AllMageSpells`, parting in `recordMonst`. Add `--refresh` after a code change.
 - Two companion meters answer questions the draw stream cannot.
@@ -58,7 +58,7 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-05).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,212,465 matching
+`get_ran` streams together, rule by rule. It stands at **1,212,554 matching
 draws and 46 of 87 recordings agreeing all the way**, against 1,039,384 and 33
 at the start of 2026-09-02. **One rule bucket remains** (see
 `diverge.mjs --all --stacks`), one file: `AllMageSpells`. 40 of the 87 are
@@ -10623,3 +10623,23 @@ The M6 list below is kept for the history of what it covered:
     comparison. `[mmove]` then put the consequence on one line — the same square
     tried, `ok` here and `no` there — and that pair, a state trace plus
     `[mmove]`, is now the standard way through this shape.
+
+- **`soul-crystal.xml` was the fifth dialog the replay driver never answered
+  (M8, 2026-09-05).** Corpus **1,212,465 → 1,212,554**; `AllMageSpells`
+  6,271 → 6,360.
+  - `pick_trapped_monst` (boe.party.cpp:2465) is a `cChoiceDlog` over `cancel`
+    and `pick1`-`pick4`, and its answer is `imprisoned_monst[result[4] - '1']`
+    — the *slot*, not the monster. Simulacrum is its only caller. Without the
+    hook it read 0, cast nothing, and the recording's `pick4` fell out into the
+    driver's own switch. The C++ spends **fifty-six draws** on that one cast — a
+    summon and its missile animation — against this port's two.
+  - **The running tally of `session.on*` hooks only `main.ts` set is now five**:
+    the locked door, the boat bridge, `attack-friendly`, the instant-help boxes
+    and this. `grep -n "session\.on[A-Z]" src/main.ts` against the same grep
+    over `src/replay/driver.ts` is the list, and it is worth re-running whenever
+    a bucket lands on "this port cast nothing".
+  - The instrument was **`CAST=1` against `BOE_TRACE_CAST=1`, read by action
+    number rather than draw index** — which is how to use the oracle's half at
+    all, since its `[cast] mage` line rolls `total_encumbrance` and moves its own
+    stream. `401: [cast] spell=35` there against nothing here named the spell in
+    one line.

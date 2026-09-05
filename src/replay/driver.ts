@@ -241,6 +241,28 @@ export async function runReplay(
         '', 0, 0);
       return picked === 1;
     };
+    /**
+     * **`soul-crystal.xml`, and the fifth hole of this shape.**
+     * `pick_trapped_monst` (boe.party.cpp:2465) is a `cChoiceDlog` over
+     * `cancel` and `pick1`-`pick4`, and its answer is
+     * `imprisoned_monst[result[4] - '1']` — the *slot*, not the monster.
+     * Simulacrum is the only caller, and without the hook it read 0, cast
+     * nothing, and left the recording's `pick4` to fall out into the driver's
+     * own switch. `AllMageSpells` casts it at action 401 and the C++ spends
+     * **fifty-six draws** there — a whole summon and its missile animation —
+     * against this port's two.
+     *
+     * Note the C++ does not check that the slot it was handed is occupied: the
+     * empty buttons are *hidden*, which a player cannot click and a recording
+     * never does.
+     */
+    session.onPickTrappedMonst = async (): Promise<number> => {
+      const id = popClick(source, 'the soul crystal', () => { result.answered++; });
+      if (id === 'cancel') return 0;
+      const slot = /^pick(\d)$/.exec(id);
+      if (!slot) return 0;
+      return session.univ.party.imprisonedMonst[Number(slot[1]) - 1] ?? 0;
+    };
     session.onConfirmBoatBridge = async (): Promise<boolean> => {
       if (!host) return false;
       const picked = await host.choice(
