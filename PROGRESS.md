@@ -815,7 +815,7 @@ Notes for M2 implementer:
 - [x] **M0 — Skeleton**: Vite+TS(strict)+Vitest scaffold; `core/` (mt19937 rng, location) with tests; assets copied to `public/data`; tile-grid demo page
 - [x] **M1 — Scenario loads, outdoor walkabout**: XML/.map/.spec parsers, terrain view, outdoor movement (gzip+tar for packed .boes deferred to file-upload work; items/monsters XML land with M2)
 - [x] **M2 — Towns + full 605×430 shell**: town enter/exit ✅, UI chrome ✅, pregen party ✅, GameSession/Universe ✅, sound ✅, line-of-sight fog + lighting ✅, terrain trim + roads ✅, floor items ✅, inventory panel ✅, fields overlay ✅, **replay driver ✅ (2026-08-01)**
-- [ ] **M3 — Dialog toolkit + talk + shops**: talking ✅, minimal async modal dialog ✅, doors + look + signs ✅, item/equip model + inventory panel ✅, shops ✅, sell/identify/recharge ✅, training ✅, inns ✅, **item Use ✅ (2026-07-27)**; enchanting and full dialogxml still open
+- [ ] **M3 — Dialog toolkit + talk + shops**: talking ✅, minimal async modal dialog ✅, doors + look + signs ✅, item/equip model + inventory panel ✅, shops ✅, sell/identify/recharge ✅, training ✅, inns ✅, **item Use ✅ (2026-07-27)**, **enchanting ✅ (2026-09-05)**; full dialogxml still open
 - [x] **M4 — Specials interpreter (breadth-first)**: VM core (pointers, queueing, messages) + all seven opcode groups; triggers wired for movement, look, town entry/exit, use-space, call-special terrain and the two talk nodes. Opcodes needing combat/fields/timers/quests report themselves and wait for M5/M6.
 - [x] **M5 — Combat**: M5a ✅ (the iLiving seam, damage/status, combat mode, melee); M5b ✅ (monster turns, melee AI, town *and outdoor* encounters, the `uAbility` port, missiles on both sides, breath, summons, touch abilities, on-hit weapon abilities, **monster spellcasting**); M5c ✅ (spell patterns, `process_fields`, the 147-spell table, `pc_can_cast_spell`, town/combat/targeted/multi-target casting, and the real casting dialog). Remaining odds and ends: `record_monst` (Capture Soul/Simulacrum), `do_mindduel`, and the SPECIAL monster ability.
 - [x] **M6 — Specials depth + party ops** (valleydy completable): quests, job
@@ -828,10 +828,12 @@ Notes for M2 implementer:
       tarball, the whole `.exg` round trip, the IndexedDB slots, the File menu,
       the autosave and the startup screen. Open: preferences for the autosave
       triggers, and the legacy v1 save format (an M8 stretch)
-- [ ] **M8 — Fidelity hardening** (replay golden masters): begun 2026-08-02 —
-      the startup preamble, the survey tool, and the first three of the C++'s
-      own replays running end to end. Next: `handle_spellcast` (blocks 41 of
-      the 97), then captured end states.
+- [ ] **M8 — Fidelity hardening** (replay golden masters): begun 2026-08-02,
+      and **the rules queue emptied 2026-09-05** — 1,213,908 matching draws and
+      47 of 87 recordings agreeing all the way, with every remaining file
+      blocked by the oracle or unstartable. What is left is harness work (the
+      fourteen `party-death` stops are the biggest lump) and captured end
+      states.
 
 ## Milestones (Part 2: Exile 3)
 
@@ -10713,3 +10715,31 @@ group as `diverge.mjs --all --stacks` lists them; the two biggest are:
   the C++, not a divergence.
 
 Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
+
+- **Enchanting, and two places that were quietly wrong because it was missing
+  (M8/M3, 2026-09-05).** `enchant.cpp`'s whole table is ported —
+  `src/data/enchant.ts` — and with it the last named gap in M3 apart from
+  dialogxml. Corpus-neutral: no recording enchants anything.
+  - `cEnchant` is eight entries with a suffix, an `aug_cost`, a bonus, an
+    optional ability and charges. **`aug_cost` is not a price**:
+    `adjust_value(v) = max(aug_cost * 100, v * (5 + aug_cost))`, which is both
+    what the smith charges and what the item is worth afterwards. A +2 on a
+    hundred-gold sword costs 1,200; on a four-gold knife it costs 700.
+  - **`PLUS_FOUR` is 7, not 3** — the table grew by appending — and
+    `GIVE_ITEM`'s range test is `spec.ex1b <= 6`, so a special node **cannot
+    hand out a +4**. Ported as written.
+  - **A preset item's `ability` field is an `eEnchant`, not an `eItemAbil`**
+    (town.hpp, used at boe.town.cpp:415). This port assigned it straight to
+    `item.ability`, so a floor item a scenario marked "+3" was laid down with
+    `eItemAbil` 2 — POISONED_WEAPON — instead. It is `enchant_weapon`, and only
+    for the two weapon varieties.
+  - **`GIVE_ITEM` ignored five of its six extras.** It now applies the
+    enchantment, the charge count, the identified/revealed and cursed flags, and
+    — the one a player would notice — gives the item to **every** targeted PC
+    rather than the first with room, jumping to `spec.pic` if anyone's pack was
+    full. `ex2c`'s equip mode is still a `TODO(M9)`: this port's `giveItem` has
+    no equip modes and behaves as GIVE_EQUIP_SOFT.
+  - **And the massacre rule**: `if(town_toast) item.property = false;`
+    (boe.town.cpp:434) — nothing in a town whose population you have just wiped
+    out belongs to anyone any more, so the shelves are free to take. This port
+    always copied the preset's own flag.

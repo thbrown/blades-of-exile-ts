@@ -12,6 +12,7 @@
 import { SpecType } from '../../data/special';
 import { SKILL_MAX } from '../../data/shop';
 import { MAX_FOOD, MAX_GOLD } from '../../universe/party';
+import { Enchant, enchantWeapon } from '../../data/enchant';
 import { GiveStatus, giveItem } from '../../universe/inventory';
 import { Player } from '../../universe/player';
 import { MainStatus, Skill, Status } from '../../universe/skills';
@@ -318,20 +319,44 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       break;
 
     case SpecType.GIVE_ITEM: {
+      // `if(pc_num >= 100) break;` (boe.specials.cpp:3352) — a node aimed at a
+      // creature gives nothing.
       if (monsterTarget) break;
-      const item = univ.scenario.scenItems[spec.ex1a];
-      if (!item) break;
-      let given = false;
+      const template = univ.scenario.scenItems[spec.ex1a];
+      if (!template) break;
+      const item = { ...template };
+      // **The node's six extras are six edits to the item**, and this port made
+      // none of them: it handed over the scenario's copy unchanged.
+      //
+      // `ex1b` is an `eEnchant`, so a node can hand out a +2 sword without the
+      // scenario carrying one. The range test is the C++'s and is **one short**
+      // — `<= 6` stops at BLESSED and can never reach PLUS_FOUR, which is 7
+      // because the table grew by appending. Kept.
+      if (spec.ex1b >= 0 && spec.ex1b <= 6) enchantWeapon(item, spec.ex1b as Enchant);
+      if (item.charges > 0 && spec.ex1c >= 0) item.charges = spec.ex1c;
+      // `ex2a`: 0 unidentified, 1 identified, 2 identified *and* revealed.
+      if (spec.ex2a === 1 || spec.ex2a === 2) item.ident = true;
+      else if (spec.ex2a === 0) item.ident = false;
+      if (spec.ex2a === 2) item.concealed = false;
+      // `ex2b`: cursed and unsellable move together.
+      if (spec.ex2b === 1) item.cursed = item.unsellable = true;
+      else if (spec.ex2b === 0) item.cursed = item.unsellable = false;
+      // TODO(M9): `ex2c` picks between GIVE_EQUIP_SOFT / _TRY / _FORCE, which
+      // this port's `giveItem` does not model — it always behaves as SOFT.
+
+      // **Every targeted PC gets one**, not the first with room: `pc_num == 6`
+      // means all six, and the C++ loops over the whole party. `GIVE_ALLOW_OVERLOAD`
+      // rides along, so weight never refuses it.
+      let success = true;
       for (const pc of targets()) {
-        if (pc.mainStatus !== MainStatus.ALIVE) continue;
-        const result = giveItem(pc, party, { ...item });
+        const result = giveItem(pc, party, { ...item }, false, true);
         if (result.status === GiveStatus.OK) {
           if (result.message) univ.addStringToBuf(result.message);
-          given = true;
-          break;
-        }
+        } else success = false;
       }
-      if (!given) univ.addStringToBuf("  Your party can't carry any more.");
+      // `if(!success) ctx.next_spec = spec.pic;` — the node's picture field is
+      // a *jump* here, taken when anyone's pack was full.
+      if (!success) ctx.nextSpec = spec.pic;
       ctx.redraw = true;
       break;
     }

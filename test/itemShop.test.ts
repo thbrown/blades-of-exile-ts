@@ -6,6 +6,8 @@ import { ItemAbil, ItemType, defaultItem } from '../src/data/item';
 import { Scenario } from '../src/data/scenario';
 import { TalkNodeType } from '../src/data/talking';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
+import { Enchant } from '../src/data/enchant';
+import { Spell } from '../src/data/spell';
 import { ItemShopMode, handleItemShopAction, specPrice } from '../src/game/itemShop';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
@@ -104,10 +106,24 @@ describe('which items a service applies to', () => {
     expect(specPrice(wand, pc, 0)).toBeNull();
   });
 
-  it('enchants only plain, identified melee weapons', async () => {
+  /**
+   * **The node's `cost` is the enchantment's *number*, not a price**
+   * (boe.dlgutil.cpp:1048 puts `extra1` in `shop_identify_cost`, and
+   * `place_item_button` reads it back as an `eEnchant`). The price comes out of
+   * `adjust_value`: `max(aug_cost * 100, value * (5 + aug_cost))`.
+   */
+  it('enchants only plain, identified melee weapons, at the table price', async () => {
     const { pc } = withItem(SWORD);
-    const ench = { mode: ItemShopMode.ENCHANT, cost: 200, rechargeLimit: 0, rechargeAmount: 0 };
-    expect(specPrice(ench, pc, 0)).toBe(200);
+    const ench = {
+      mode: ItemShopMode.ENCHANT, cost: Enchant.PLUS_TWO, rechargeLimit: 0, rechargeAmount: 0,
+    };
+    // +2 is aug_cost 7, so max(700, 100 * 12) = 1200.
+    expect(specPrice(ench, pc, 0)).toBe(1200);
+    // …and the floor bites on a cheap weapon: max(700, 4 * 12) = 700.
+    pc.items[0]!.value = 4;
+    expect(specPrice(ench, pc, 0)).toBe(700);
+    pc.items[0]!.value = 100;
+
     pc.items[0]!.magic = true;
     expect(specPrice(ench, pc, 0)).toBeNull();
     pc.items[0]!.magic = false;
@@ -165,6 +181,56 @@ describe('using a service', () => {
     expect(handleItemShopAction(univ, state, 0, 0)).toBe('done');
     expect(pc.items[0]!.charges).toBe(6);
     expect(univ.party.gold).toBe(470);
+  });
+
+  /**
+   * `cItem::enchant_weapon` (item.cpp:374). The bonus, the value, the name in
+   * brackets — and for the two ability-bearing enchantments, the ability and
+   * its charges.
+   */
+  it('enchanting marks the weapon, renames it and charges the table price', async () => {
+    const { univ, pc } = withItem(SWORD);
+    univ.party.gold = 5000;
+    const state = {
+      mode: ItemShopMode.ENCHANT, cost: Enchant.PLUS_TWO, rechargeLimit: 0, rechargeAmount: 0,
+    };
+    expect(handleItemShopAction(univ, state, 0, 0)).toBe('done');
+    expect(univ.party.gold).toBe(5000 - 1200);
+    const it0 = pc.items[0]!;
+    expect(it0.bonus).toBe(2);
+    expect(it0.magic).toBe(true);
+    expect(it0.enchanted).toBe(true);
+    expect(it0.fullName).toBe('Sword (+2)');
+    expect(it0.value).toBe(1200);
+    expect(univ.transcript.at(-1)).toBe('Your item is now enchanted.');
+  });
+
+  it('Shoot Flame hangs a spell and eight charges on it', async () => {
+    const { univ, pc } = withItem(SWORD);
+    univ.party.gold = 5000;
+    const state = {
+      mode: ItemShopMode.ENCHANT, cost: Enchant.SHOOT_FLAME, rechargeLimit: 0, rechargeAmount: 0,
+    };
+    expect(handleItemShopAction(univ, state, 0, 0)).toBe('done');
+    const it0 = pc.items[0]!;
+    expect(it0.ability).toBe(ItemAbil.CAST_SPELL);
+    expect(it0.abilData).toBe(Spell.FLAME);
+    expect(it0.charges).toBe(8);
+    expect(it0.maxCharges).toBe(8);
+    expect(it0.rechargeable).toBe(true);
+    expect(it0.bonus).toBe(0);
+    expect(it0.fullName).toBe('Sword (F)');
+  });
+
+  it('and refuses when the gold is short', async () => {
+    const { univ, pc } = withItem(SWORD);
+    univ.party.gold = 10;
+    const state = {
+      mode: ItemShopMode.ENCHANT, cost: Enchant.PLUS_ONE, rechargeLimit: 0, rechargeAmount: 0,
+    };
+    expect(handleItemShopAction(univ, state, 0, 0)).toBe('refused');
+    expect(pc.items[0]!.magic).toBe(false);
+    expect(univ.transcript.at(-1)).toContain("don't have the gold");
   });
 
   it('refuses an item the service does not apply to', async () => {

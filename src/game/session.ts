@@ -60,6 +60,7 @@ import {
   unequipItem,
 } from '../universe/inventory';
 import { MainStatus, PartyStatus, Race, Skill, Status, Trait } from '../universe/skills';
+import { Enchant, enchantWeapon } from '../data/enchant';
 import { boomSpace, setBoomScreen } from './booms';
 import { ShopItemType } from '../data/shop';
 import { ShopState, handleSale, shopAllowsDead } from './shop';
@@ -4455,7 +4456,7 @@ export class GameSession {
     }
     const townToast = this.thrashTown(town, noThrash);
     this.clearDoorFields(town);
-    this.placePresetItems(town);
+    this.placePresetItems(town, townToast);
     this.sweepTown(town);
     // boe.town.cpp:450, right after the sweeps: the markers of everything this
     // party has already finished here are gone before the town is drawn once.
@@ -5190,7 +5191,7 @@ export class GameSession {
    * which is the order the get-items screen builds its rows in and therefore
    * the order a recording's `itemN-key` names.
    */
-  private placePresetItems(town: CurTown): void {
+  private placePresetItems(town: CurTown, townToast: boolean): void {
     const townNum = this.univ.party.townNum;
     town.items = this.univ.scenario.storeItemRects.has(townNum)
       ? (this.univ.party.storedItems.get(townNum) ?? []).map((it) => ({ ...it }))
@@ -5212,13 +5213,26 @@ export class GameSession {
       if (town.record.itemTaken[i] && !preset.alwaysThere) continue;
 
       const item: Item = { ...template, itemLoc: { ...preset.loc } };
-      if (preset.ability >= 0) item.ability = preset.ability;
+      // **`preset.ability` is an `eEnchant`, not an `eItemAbil`**
+      // (boe.town.cpp:415, and the field is declared `eEnchant ability` in
+      // town.hpp). This port assigned it straight to `item.ability`, so a
+      // preset marked "+3" laid down an item with `eItemAbil` 2 —
+      // POISONED_WEAPON — on the floor. It is `enchant_weapon`, and only for
+      // the two weapon varieties.
+      if (preset.ability >= 0
+        && (item.variety === ItemType.ONE_HANDED || item.variety === ItemType.TWO_HANDED)) {
+        enchantWeapon(item, preset.ability as Enchant);
+      }
       if (preset.charges > 0) {
         if (item.charges > 0) item.charges = preset.charges;
         else if (item.variety === ItemType.GOLD || item.variety === ItemType.FOOD)
           item.itemLevel = preset.charges;
       }
-      item.property = preset.property;
+      // `if(town_toast) item.property = false; else item.property =
+      // preset.property;` (boe.town.cpp:434) — **nothing in a town whose
+      // population you have just wiped out belongs to anyone any more**, so a
+      // massacre makes the shelves free to take.
+      item.property = townToast ? false : preset.property;
       item.contained = preset.contained;
       // **`held` needs the crate to actually be there** (boe.town.cpp:440):
       // `if(item.contained && (is_barrel(x,y) || is_crate(x,y))) item.held =

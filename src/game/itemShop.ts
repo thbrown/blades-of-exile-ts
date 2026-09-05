@@ -9,6 +9,7 @@
  */
 
 import { Item, ItemAbil, ItemType } from '../data/item';
+import { Enchant, adjustValue, enchantWeapon } from '../data/enchant';
 import { variety } from '../data/itemVariety';
 import { SoundPlayer } from '../platform/sound';
 import { combineThings, takeItem } from '../universe/inventory';
@@ -87,9 +88,12 @@ export function specPrice(state: ItemShopState, pc: Player, slot: number): numbe
     case ItemShopMode.ENCHANT:
       if (item.variety !== ItemType.ONE_HANDED && item.variety !== ItemType.TWO_HANDED) return null;
       if (!item.ident || item.ability !== ItemAbil.NONE || item.magic) return null;
-      // TODO(M5): eEnchant::adjust_value scales with the enchantment; until the
-      // enchantment table lands the node's own cost stands in.
-      return state.cost;
+      // `val_to_place = (*eEnchant(shop_identify_cost)).adjust_value(item.value)`
+      // (boe.text.cpp:447) — **the node's `extra1` is the enchantment's number,
+      // not a price**, and the price comes out of the table. A smith who does
+      // +1 charges four hundred gold for a worthless knife and nine times the
+      // value of a good sword.
+      return adjustValue(state.cost as Enchant, item.value);
     default:
       return null;
   }
@@ -167,9 +171,14 @@ export function handleItemShopAction(
       return 'done';
 
     case ItemShopMode.ENCHANT:
-      // TODO(M5): enchant_weapon needs the enchantment table.
-      say('(Enchanting is not implemented yet)');
-      return 'unsupported';
+      if (!takeGold(price)) {
+        say("Enchant: You don't have the gold.");
+        return 'refused';
+      }
+      sound?.play(51);
+      say('Your item is now enchanted.');
+      enchantWeapon(item, state.cost as Enchant);
+      return 'done';
 
     default:
       return 'refused';
