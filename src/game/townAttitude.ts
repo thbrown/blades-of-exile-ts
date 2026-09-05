@@ -5,6 +5,7 @@
  * the MAKE_TOWN_HOSTILE special, and swinging at someone who wasn't hostile.
  */
 
+import { toShort } from '../core/location';
 import { Attitude } from '../data/monster';
 import { CreatureStatus } from '../universe/creature';
 import { Status } from '../universe/skills';
@@ -53,7 +54,13 @@ export function setTownAttitude(
     monst.mobile = true;
     if (univ.scenario.scenMonsters[monst.number]?.guard) {
       monst.active = CreatureStatus.ALERTED;
-      monst.health *= 3;
+      // **A `short`** (creature.hpp:31), and this is the multiply that
+      // overflows it: anger the same town six times and 140 becomes 34,020,
+      // which stores as -31,516. `AllMageSpells` does exactly that, and the
+      // sign then flips `guts += health / 20` in
+      // `monst_check_one_special_terrain` — the guard that walked into a web
+      // here would not go near it there.
+      monst.health = toShort(monst.health * 3);
       monst.status[Status.HASTE_SLOW] = 8;
       monst.status[Status.BLESS_CURSE] = 8;
     }

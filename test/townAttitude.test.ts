@@ -123,6 +123,27 @@ describe('setTownAttitude', () => {
     }
   });
 
+  /**
+   * `cCreature::health` is a `short` (creature.hpp:31), and this multiply is
+   * the one that overflows it: anger the same town six times and 140 becomes
+   * 34,020, which stores as -31,516. `AllMageSpells` does exactly that, and the
+   * sign then flips `guts += health / 20` in `monst_check_one_special_terrain`
+   * — the guard that walked into a web here would not go near it there.
+   */
+  it('and the tripling wraps, because health is a short', async () => {
+    const { univ, session } = newGame();
+    const monst = friendlyBeside(univ, session);
+    monst.mon.guard = true;
+    scen.scenMonsters[monst.number]!.guard = true;
+    monst.health = 11340;
+    try {
+      setTownAttitude(session, 0, -1, Attitude.HOSTILE_A);
+      expect(monst.health).toBe(-31516);
+    } finally {
+      scen.scenMonsters[monst.number]!.guard = false;
+    }
+  });
+
   it('an arena fight has no town population to turn', async () => {
     const { univ, session } = newGame();
     friendlyBeside(univ, session);

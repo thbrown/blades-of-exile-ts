@@ -14,7 +14,7 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-05** that is
-  **1,211,570 matching draws, 46 of 87 files agreeing all the way**, 40 blocked
+  **1,212,465 matching draws, 46 of 87 files agreeing all the way**, 40 blocked
   by the oracle rather than by this port, and **one rule bucket left in the
   queue**: `AllMageSpells`, parting in `recordMonst`. Add `--refresh` after a code change.
 - Two companion meters answer questions the draw stream cannot.
@@ -58,7 +58,7 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-05).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,211,570 matching
+`get_ran` streams together, rule by rule. It stands at **1,212,465 matching
 draws and 46 of 87 recordings agreeing all the way**, against 1,039,384 and 33
 at the start of 2026-09-02. **One rule bucket remains** (see
 `diverge.mjs --all --stacks`), one file: `AllMageSpells`. 40 of the 87 are
@@ -10598,3 +10598,28 @@ The M6 list below is kept for the history of what it covered:
     named it. The draw stream could not see it: every draw either side is a
     `get_ran(1,0,130)`, so a run that makes the same *number* of them in a
     different order prints a byte-identical trace.
+
+- **A creature's health is a `short`, and a town angered six times overflows it
+  (M8, 2026-09-05).** Corpus **1,211,570 → 1,212,465**; `AllMageSpells`
+  5,376 → 6,271.
+  - `make_town_hostile`'s guard power-up is `univ.town.monst[i].health *= 3`
+    (boe.items.cpp:345), and `cCreature::health` is a **`short`**
+    (creature.hpp:31). `AllMageSpells` angers the same town six times: 140 →
+    420 → 1,260 → 3,780 → 11,340 → **34,020**, which stores as **-31,516**.
+  - **The sign is what matters, not the size.**
+    `monst_check_one_special_terrain` computes
+    `guts = get_ran(1,1,level/2); guts += health / 20;` and refuses a step into
+    a web at `guts < 3`. With the wrap, guts is -1,570 and the guard will not go
+    near it; without it, +1,705 and the guard walks in, gets webbed, and every
+    later turn is a different town.
+  - `core/location.ts` gains `toShort`. It is the first place this port has
+    needed C++ integer width to be *visible*, and there will be others: half the
+    game's numbers are `short`, and the ones that get multiplied are the ones to
+    watch.
+  - **The instrument was `MONST=1`'s health column**, read as a *sequence*: 140,
+    420, 1260, 3780, 11340, then -31516 there against 34020 here. The draw
+    streams agreed for another thousand draws after the two engines' creatures
+    had different health, because health only reaches the dice through a
+    comparison. `[mmove]` then put the consequence on one line — the same square
+    tried, `ok` here and `no` there — and that pair, a state trace plus
+    `[mmove]`, is now the standard way through this shape.

@@ -8,7 +8,7 @@
  * the copy, and the scenario's definition stays pristine.
  */
 
-import { Direction, Location, minmax, percent } from '../core/location';
+import { Direction, Location, minmax, percent, toShort } from '../core/location';
 import { GameRng } from '../core/rng';
 import { Attitude, DamageType, Monster, MonstTime, defaultMonster } from '../data/monster';
 import { MonstAbil } from '../data/monsterAbility';
@@ -393,8 +393,11 @@ export function assignCreature(
   c.specialOnTalk = preset.specialOnTalk;
   c.specialOnKill = preset.specialOnKill;
   // The monster's own `health` is its maximum; easy mode halves it and the
-  // difficulty adjustment multiplies it, in that order.
-  c.mon.health = Math.trunc(c.mon.health / (easy ? 2 : 1)) * difficultyAdjust;
+  // difficulty adjustment multiplies it, in that order — **and the product is
+  // stored in a `short`**, so a high enough difficulty wraps it negative. See
+  // `toShort`: that wrap is load-bearing, because `guts += health / 20` reads
+  // the sign.
+  c.mon.health = toShort(Math.trunc(c.mon.health / (easy ? 2 : 1)) * difficultyAdjust);
   c.maxHealth = c.mon.health;
   c.health = c.maxHealth;
   c.ap = 0;

@@ -125,6 +125,22 @@ export class Rect {
   }
 }
 
+/**
+ * A C++ `short`, which is what half the game's numbers actually are — and
+ * `cMonster::health` and `cCreature::health` are two of them (monster.hpp:31,
+ * creature.hpp:31).
+ *
+ * **It is not pedantry.** `AllMageSpells` turns the difficulty up until a
+ * creature's health is 140 × 3⁵ = 34,020, and in the C++ that stores as
+ * **-31,516**. Every rule that divides by it then flips sign: the one that
+ * mattered was `monst_check_one_special_terrain`'s `guts += health / 20`, which
+ * went from +1,701 to -1,575 and turned "walks into the web" into "will not
+ * go near it".
+ */
+export function toShort(n: number): number {
+  return (n << 16) >> 16;
+}
+
 export function minmax(min: number, max: number, k: number): number {
   return Math.max(min, Math.min(max, k));
 }
