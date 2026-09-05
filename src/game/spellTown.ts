@@ -23,7 +23,7 @@ import { Spell, SPELLS, spellName } from '../data/spell';
 import { ItemAbil, ItemType } from '../data/item';
 import { FieldType } from '../data/fields';
 import { Skill, MainStatus, PartyStatus, Status, Trait } from '../universe/skills';
-import { getProtLevel, hasAbilEquip } from '../universe/inventory';
+import { getProtLevel, hasAbil, hasAbilEquip } from '../universe/inventory';
 import { livingSound, SpellNote } from '../universe/living';
 import { Player } from '../universe/player';
 import { crumbleWall } from './fieldEffects';
@@ -229,7 +229,12 @@ export function doMageSpell(
     }
 
     case Spell.MAGIC_MAP: {
-      const sapphire = hasAbilEquip(pc, ItemAbil.SAPPHIRE);
+      // **`has_abil`, not `has_abil_equip`** (boe.party.cpp:802): the sapphire
+      // is spent, not worn, so one in the bottom of the pack works — and a
+      // recording that maps with an unequipped one desyncs on the *turn*, since
+      // a refused cast spends no spell points and `handle_spellcast`'s town arm
+      // sets `did_something` only when some PC's did change.
+      const sapphire = hasAbil(pc, ItemAbil.SAPPHIRE);
       if (!sapphire && !freebie) {
         univ.addStringToBuf(`  ${pc.name} needs a sapphire.`);
       } else if (univ.townRecord?.defyScrying || univ.townRecord?.defyMapping) {

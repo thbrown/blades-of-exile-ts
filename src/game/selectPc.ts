@@ -22,7 +22,7 @@ import { ItemAbil, ItemType } from '../data/item';
 import { MainStatus, Skill } from '../universe/skills';
 import { Player } from '../universe/player';
 import { Universe } from '../universe/universe';
-import { hasAbilEquip } from '../universe/inventory';
+import { hasAbil, hasAbilEquip } from '../universe/inventory';
 
 /** `eSelectPC` (boe.items.hpp:39), verbatim and in order. */
 export enum SelectPcMode {
@@ -166,8 +166,8 @@ export function selectPcOptions(
           break;
         case SelectPcMode.ONLY_CAN_LOCKPICK: {
           if (pc.mainStatus !== MainStatus.ALIVE) { canPick = false; break; }
-          const carried = pc.items.some(
-            (it) => it.variety !== ItemType.NO_ITEM && it.ability === ItemAbil.LOCKPICKS);
+          // `has_abil` (boe.items.cpp:992), which also wants a charge left.
+          const carried = hasAbil(pc, ItemAbil.LOCKPICKS);
           if (!carried) { canPick = false; extra = 'no picks'; break; }
           const equipped = hasAbilEquip(pc, ItemAbil.LOCKPICKS);
           if (!equipped) { canPick = false; extra = 'picks not equipped'; break; }

@@ -10,7 +10,7 @@ import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { assignCreature, Creature, CHARM_ODDS } from '../src/universe/creature';
-import { Living, SpellNote, setPrintResult } from '../src/universe/living';
+import { Living, SpellNote, setGiveHelp, setPrintResult } from '../src/universe/living';
 import { PartyPreset, Player } from '../src/universe/player';
 import { MainStatus, Race, Skill, Status, Trait, statusInfo } from '../src/universe/skills';
 import { Universe } from '../src/universe/universe';
@@ -324,6 +324,58 @@ describe('a PC taking effects', () => {
     pc.status[Status.MARTYRS_SHIELD] = 4;
     expect(pc.isShielded()).toBe(true);
     expect(pc.getSharedDmg(10, univ.rng)).toBe(10);
+  });
+});
+
+/**
+ * `give_help` (strdlog.cpp:182) — the instant-help box a status effect raises
+ * the first time it happens to you. It matters here because it is **modal**:
+ * in a replay it eats the recording's next click, and a click let through
+ * instead becomes a main-loop iteration of its own, which in combat is a
+ * `draw_terrain` and therefore a die.
+ */
+describe('the instant-help boxes the status effects raise', () => {
+  function withHelp(fn: (pc: Player, univ: Universe) => void): number[] {
+    const { univ } = newGame();
+    const seen: number[] = [];
+    setGiveHelp((h1) => seen.push(h1));
+    try {
+      fn(univ.party.pcs[0]!, univ);
+    } finally {
+      setGiveHelp(null);
+    }
+    return seen;
+  }
+
+  it('web, poison, disease, dumbfound, slow and sleep each raise their own', () => {
+    expect(withHelp((pc) => { pc.web(4); })).toEqual([31]);
+    expect(withHelp((pc, univ) => { pc.poison(3, univ.rng); })).toEqual([33]);
+    expect(withHelp((pc, univ) => { pc.disease(9, univ.rng); })).toEqual([29]);
+    expect(withHelp((pc, univ) => { pc.dumbfound(20, univ.rng); })).toEqual([28]);
+    expect(withHelp((pc) => { pc.slow(4); })).toEqual([35]);
+    // A *high* `adjust` is what lands it: `r1 = get_ran(1,1,100) + adjust`, and
+    // anything under 30 is shrugged off.
+    expect(withHelp((pc, univ) => {
+      pc.traits[Trait.HIGHLY_ALERT] = false;
+      pc.sleep(Status.ASLEEP, 50, 100, univ.rng);
+    })).toEqual([30]);
+    expect(withHelp((pc, univ) => { pc.sleep(Status.PARALYZED, 50, 100, univ.rng); }))
+      .toEqual([32]);
+  });
+
+  it('a blessing raises none, and a curse raises 59', () => {
+    // The C++'s second arm is `else if(how_much > 0)` under the first
+    // `if(how_much > 0)` — dead code, so help 34 can never fire.
+    expect(withHelp((pc) => { pc.curse(-3); })).toEqual([]);
+    expect(withHelp((pc) => { pc.curse(3); })).toEqual([59]);
+  });
+
+  it('a saving throw that shrugs the effect off raises nothing', () => {
+    // `disease` prints "saved." and returns above the `give_help`.
+    expect(withHelp((pc, univ) => {
+      pc.level = 50;
+      pc.disease(1, univ.rng);
+    })).toEqual([]);
   });
 });
 

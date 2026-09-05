@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { GameRng } from '../src/core/rng';
 import { FieldType } from '../src/data/fields';
+import { ItemAbil, ItemType } from '../src/data/item';
 import { Scenario } from '../src/data/scenario';
 import { SPELLS, Spell } from '../src/data/spell';
 import { loadScenario } from '../src/fileio/loadScenario';
@@ -93,6 +94,41 @@ describe('do_mage_spell', () => {
     const sp = pc.curSp;
     doMageSpell(s, 0, Spell.LIGHT, true);
     expect(s.univ.party.lightLevel).toBe(50);
+    expect(pc.curSp).toBe(sp);
+  });
+
+  /**
+   * `has_abil`, not `has_abil_equip` (boe.party.cpp:802). The sapphire is
+   * *spent*, not worn, so one in the bottom of the pack works — and getting
+   * this wrong costs a turn as well as the spell, since `handle_spellcast`'s
+   * town arm sets `did_something` only when some PC's spell points changed.
+   */
+  it('Magic Map spends a sapphire that is only carried, not worn', async () => {
+    const s = inTown();
+    const pc = caster(s);
+    pc.items[5] = {
+      ...pc.items[5]!, variety: ItemType.NON_USE_OBJECT,
+      ability: ItemAbil.SAPPHIRE, charges: 2,
+    };
+    pc.equip[5] = false;
+    const sp = pc.curSp;
+    doMageSpell(s, 0, Spell.MAGIC_MAP);
+    expect(s.univ.transcript.at(-1)).toContain('sapphire dissolves');
+    expect(pc.items[5]!.charges).toBe(1);
+    expect(pc.curSp).toBe(sp - (SPELLS[Spell.MAGIC_MAP]!.cost ?? 0));
+  });
+
+  it('…and refuses when the only sapphire has no charges left', async () => {
+    const s = inTown();
+    const pc = caster(s);
+    pc.items[5] = {
+      ...pc.items[5]!, variety: ItemType.NON_USE_OBJECT,
+      ability: ItemAbil.SAPPHIRE, charges: 0,
+    };
+    pc.equip[5] = false;
+    const sp = pc.curSp;
+    doMageSpell(s, 0, Spell.MAGIC_MAP);
+    expect(s.univ.transcript.at(-1)).toContain('needs a sapphire');
     expect(pc.curSp).toBe(sp);
   });
 

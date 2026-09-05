@@ -152,6 +152,16 @@ rewrite would never think to call anything — including, notably,
 There is no pair for it on this side; it answers the question "who is spending
 these `get_ran(1,0,70)`s", and the answer is usually a redraw.
 
+**`BOE_TRACE_BAR=1`** prints one `[bar] <pc name> type= last= skill= sp=` line at
+the top of `text_bar_text`'s recast-hint block, i.e. **once per redraw that is
+about to decide whether to spend an encumbrance roll**. The name column alone
+answers "which PC was the bar drawn for", which is the question behind every
+redraw-count divergence; the rest of the row is the state
+`pc_can_cast_spell` will refuse on, so a run that draws where the other does not
+shows *why* on the same line. Pair it with a `[bar]`-printing `drawTextBar` on
+this side and diff the name sequences: the first place they part is the redraw
+that is missing (2026-09-05, `handle_switch_pc`).
+
 **`BOE_TRACE_DLG=1`** prints one `[dlg] enter <dialog> replaying= notToast=
 next=` line whenever `cDialog::handle_events` is entered. It answers one
 question and it is a good one: **did the dialog open at all?** An `[orphan]`

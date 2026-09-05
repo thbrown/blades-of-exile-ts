@@ -439,6 +439,26 @@ index 1a26a2a7..81f8b25a 100644
  		if(status == NO_CAST_ENCUMBERED){
  			// Oops, trying to cast a mage spell while encumbered takes your AP!
  			take_ap(6);
+diff --git a/src/game/boe.graphics.cpp b/src/game/boe.graphics.cpp
+index c791a955..502b4a40 100644
+--- a/src/game/boe.graphics.cpp
++++ b/src/game/boe.graphics.cpp
+@@ -699,6 +699,15 @@ std::pair<std::string, std::string> text_bar_text() {
+ 		// There's not enough space to print 2 hints for dual-casters,
+ 		// so just handle the last type cast.
+ 		eSkill type = current_pc.last_cast_type;
++#ifdef BOE_NATIVE_REPLAY
++		if(getenv("BOE_TRACE_BAR"))
++			std::cout << "      [bar] " << current_pc.name << " type=" << int(type)
++				<< " last=" << (type == eSkill::MAGE_SPELLS || type == eSkill::PRIEST_SPELLS
++					? int(current_pc.last_cast[type]) : -99)
++				<< " skill=" << (type == eSkill::MAGE_SPELLS || type == eSkill::PRIEST_SPELLS
++					? current_pc.skill(type) : -99)
++				<< " sp=" << current_pc.cur_sp << std::endl;
++#endif
+ 		std::string hint_prefix = "";
+ 		std::ostringstream hint_out;
+ 		switch(type){
 diff --git a/src/game/boe.items.cpp b/src/game/boe.items.cpp
 index 763a6cc7..e17f112c 100644
 --- a/src/game/boe.items.cpp

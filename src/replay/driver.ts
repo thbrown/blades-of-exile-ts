@@ -26,6 +26,7 @@ import { ItemWinMode, ItemWindow } from '../game/itemWindow';
 import { takeAp } from '../game/combat';
 import { awardPartyXp, killPc } from '../game/damage';
 import { GiveStatus, giveItem } from '../universe/inventory';
+import { setGiveHelp } from '../universe/living';
 import { MainStatus, PartyStatus, isDeadStatus } from '../universe/skills';
 import { hasFeatureFlag, setFeatureFlags } from '../game/featureFlags';
 import { TOWN_NUM_OUTDOORS } from '../universe/party';
@@ -324,12 +325,41 @@ export async function runReplay(
   let lastDebugItem = 0;
   const receivedHelp = new Set<number>();
   let showInstantHelp = true;
+  // **Seeded up front, not from the switch below.** `load_prefs` is one of the
+  // `STARTUP_ACTIONS` `replayStartup` consumes, so the driver's own arm for it
+  // is unreachable and the set stayed empty — which made every one of these
+  // boxes look unseen and pop a click the recording never spent. The block is
+  // one `key = value` per line; only the two the help mechanism reads are
+  // taken, the rest are display and sound.
+  {
+    const prefs = replay.actions.find((a) => a.type === 'load_prefs')?.text ?? '';
+    showInstantHelp = !/^ShowInstantHelp\s*=\s*false/m.test(prefs);
+    const got = /^ReceivedHelp\s*=\s*\[([^\]]*)\]/m.exec(prefs);
+    for (const n of (got?.[1] ?? '').trim().split(/\s+/)) {
+      if (n !== '') receivedHelp.add(Number(n));
+    }
+  }
   const giveHelp = (help1: number, help2: number): void => {
     if (!showInstantHelp || receivedHelp.has(help1)) return;
     receivedHelp.add(help1);
     if (help2 !== -1) receivedHelp.add(help2);
+    // **A help box the recording never answered is dismissed, not fatal.** It
+    // is a `1str-title` — a `cStrDlog`, one way out — and the harness's own
+    // dismissable set has it for exactly this reason: the box is raised by a
+    // *preference*, and a recording made on a machine whose `ReceivedHelp`
+    // differed by one id simply has no click here. `AllMageSpells` orphans help
+    // 59 and 53; the C++ prints `[orphan] dialog '1str-title' … dismissing it`
+    // and carries on. What must **not** happen is letting the click through as
+    // a game action, which is the bug this whole mechanism exists to fix.
+    if (!source.hasNext('click_control')) return;
     popClick(source, `the instant-help box for ${help1}`, () => { result.answered++; });
   };
+  // **And the status effects raise it too**, from the bottom of the pipeline
+  // (`cPlayer::web` and its five neighbours, pc.cpp:158-332). Without this the
+  // recording's click for the box fell through to the driver's own switch and
+  // bought a main-loop iteration — a `draw_terrain`, and in combat a die. One
+  // Web on the party is five `web()` calls and one box.
+  setGiveHelp(giveHelp);
 
   /**
    * `get_num_response` (strchoice.cpp:323) — the "type a number, or pick from a
@@ -943,19 +973,11 @@ export async function runReplay(
           // the actions" (boe.main.cpp:1120) — so a replay that reaches it
           // without having crashed simply ends.
           break;
-        case 'load_prefs': {
-          // The block is one `key = value` per line. Only the two the help
-          // mechanism reads are taken; the rest are display and sound.
-          const prefs = action.text;
-          showInstantHelp = !/^ShowInstantHelp\s*=\s*false/m.test(prefs);
-          const got = /^ReceivedHelp\s*=\s*\[([^\]]*)\]/m.exec(prefs);
-          if (got) {
-            for (const n of (got[1] ?? '').trim().split(/\s+/)) {
-              if (n !== '') receivedHelp.add(Number(n));
-            }
-          }
+        case 'load_prefs':
+          // Read up front instead — it is a `STARTUP_ACTIONS` member, so
+          // `replayStartup` has already consumed it and this arm never runs.
+          // See `readHelpPrefs` above.
           break;
-        }
         case 'feature_flags':
         case 'srand':
         case 'scenario':

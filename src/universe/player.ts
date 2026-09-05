@@ -10,7 +10,7 @@ import { GameRng } from '../core/rng';
 import { Item, ItemAbil, ItemPreset, defaultItem, presetItem } from '../data/item';
 import { Spell } from '../data/spell';
 import { getProtLevel, hasAbilEquip } from './inventory';
-import { Living, SpellNote, livingSound, printResult } from './living';
+import { Living, SpellNote, giveHelp, livingSound, printResult } from './living';
 import { Party } from './party';
 import {
   MainStatus, NUM_SKILLS, NUM_STATUSES, NUM_TRAITS, Race, Skill, Status, Trait,
@@ -298,6 +298,8 @@ export class Player extends Living {
       this.applyStatus(Status.POISON, howMuch);
       printResult(`  ${this.name} poisoned.`);
       livingSound(17);
+      // Outside the `give_help_enabled` guard in the C++, as `web` is.
+      giveHelp(33);
     }
   }
 
@@ -316,6 +318,7 @@ export class Player extends Living {
     this.applyStatus(Status.DISEASE, howMuch);
     printResult(`  ${this.name} diseased.`);
     livingSound(66);
+    giveHelp(29);
   }
 
   /** cPlayer::curse (pc.cpp:147) — a negative amount blesses instead. */
@@ -328,6 +331,10 @@ export class Player extends Living {
     this.applyStatus(Status.BLESS_CURSE, -howMuch);
     if (howMuch < 0) printResult(`  ${this.name} blessed.`);
     else if (howMuch > 0) printResult(`  ${this.name} cursed.`);
+    // The C++'s second arm is `else if(how_much > 0)` under the first
+    // `if(how_much > 0)` — dead code, so help 34 can never fire. Kept as
+    // written (pc.cpp:158).
+    if (howMuch > 0) giveHelp(59);
   }
 
   /** cPlayer::slow (pc.cpp:267) — a negative amount hastes. */
@@ -340,6 +347,7 @@ export class Player extends Living {
     this.applyStatus(Status.HASTE_SLOW, -howMuch);
     if (howMuch < 0) printResult(`  ${this.name} hasted.`);
     else if (howMuch > 0) printResult(`  ${this.name} slowed.`);
+    giveHelp(35);
   }
 
   /** cPlayer::web (pc.cpp:282). */
@@ -352,6 +360,7 @@ export class Player extends Living {
     this.applyStatus(Status.WEBS, howMuch);
     printResult(`  ${this.name} webbed.`);
     livingSound(17);
+    giveHelp(31);
   }
 
   /** cPlayer::acid (pc.cpp:293) — protection is all-or-nothing here. */
@@ -385,6 +394,7 @@ export class Player extends Living {
     this.applyStatus(Status.DUMB, howMuch);
     printResult(`  ${this.name} dumbfounded.`);
     livingSound(67);
+    giveHelp(28);
   }
 
   /** cPlayer::scare (pc.cpp:118) — not a thing for PCs in the original either. */
@@ -435,6 +445,9 @@ export class Player extends Living {
     livingSound(whatType === Status.ASLEEP ? 96 : 90);
     // A cage holds you in place but doesn't cost you the turn.
     if (whatType !== Status.FORCECAGE) this.ap = 0;
+    if (whatType === Status.ASLEEP) giveHelp(30);
+    else if (whatType === Status.PARALYZED) giveHelp(32);
+    else if (whatType === Status.FORCECAGE) giveHelp(46);
   }
 
   /** cPlayer::avatar (pc.cpp:90) — the works, all at once. */

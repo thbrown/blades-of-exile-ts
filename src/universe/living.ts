@@ -133,6 +133,33 @@ export function printResult(line: string): void {
  */
 let soundSink: ((which: number) => void) | null = null;
 
+/**
+ * `give_help` (strdlog.cpp:182) — the instant-help box a status effect raises
+ * the first time it happens to you.
+ *
+ * A module-level hook for the reason the two above are: `cPlayer::web` and its
+ * neighbours call it from the bottom of the status pipeline, with no session in
+ * reach. **It matters to the dice**, which is why it is here at all: the box is
+ * modal, so in a replay it eats the recording's next click — and a click this
+ * port lets through instead becomes a main-loop iteration of its own, which in
+ * combat is a `draw_terrain` and therefore a die. Same shape as the
+ * `attack-friendly` hole; see `textBar.ts`.
+ *
+ * `cPlayer::give_help_enabled` is not modelled: the C++ sets it true once at
+ * startup (boe.main.cpp:1299) and never clears it, so its only effect is on the
+ * scenario editor. Note `web` and `poison` call `give_help` *outside* the
+ * guard anyway.
+ */
+let helpHook: ((help1: number, help2: number) => void) | null = null;
+
+export function setGiveHelp(fn: ((help1: number, help2: number) => void) | null): void {
+  helpHook = fn;
+}
+
+export function giveHelp(help1: number, help2 = 0): void {
+  helpHook?.(help1, help2);
+}
+
 export function setLivingSound(fn: ((which: number) => void) | null): void {
   soundSink = fn;
 }

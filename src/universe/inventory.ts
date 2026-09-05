@@ -349,6 +349,28 @@ export function hasAbilEquip(
 }
 
 /**
+ * cPlayer::has_abil (pc.cpp:807) — the first item in the pack with an ability
+ * and a charge left. Unlike `hasAbilEquip` it doesn't care whether the item is
+ * worn, which is what makes a plant in the bottom of the pack an ingredient.
+ *
+ * **Which of the two a caller wants is a rule, not a detail.** Magic Map asks
+ * `has_abil` for its sapphire (boe.party.cpp:802) and so works out of the pack;
+ * this port asked `has_abil_equip` and refused a sapphire nobody was wearing.
+ * Read the C++ before picking one.
+ */
+export function hasAbil(pc: Player, abil: ItemAbil, dat = -1): { slot: number; item: Item } | null {
+  for (let i = 0; i < NUM_INVEN_SLOTS; i++) {
+    const item = pc.items[i]!;
+    if (item.variety === ItemType.NO_ITEM) continue;
+    if (item.ability !== abil) continue;
+    if (item.charges === 0) continue;
+    if (dat >= 0 && dat !== item.abilData) continue;
+    return { slot: i, item };
+  }
+  return null;
+}
+
+/**
  * cPlayer::get_prot_level (pc.cpp:...) — the *summed* strength of every
  * equipped item with this ability. Two rings of protection stack; the status
  * methods divide the total down before subtracting it from an effect.

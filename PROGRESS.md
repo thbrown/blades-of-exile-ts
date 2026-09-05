@@ -14,7 +14,7 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-05** that is
-  **1,206,841 matching draws, 46 of 87 files agreeing all the way**, 40 blocked
+  **1,211,570 matching draws, 46 of 87 files agreeing all the way**, 40 blocked
   by the oracle rather than by this port, and **one rule bucket left in the
   queue**: `AllMageSpells`, parting in `recordMonst`. Add `--refresh` after a code change.
 - Two companion meters answer questions the draw stream cannot.
@@ -58,7 +58,7 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-05).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,206,841 matching
+`get_ran` streams together, rule by rule. It stands at **1,211,570 matching
 draws and 46 of 87 recordings agreeing all the way**, against 1,039,384 and 33
 at the start of 2026-09-02. **One rule bucket remains** (see
 `diverge.mjs --all --stacks`), one file: `AllMageSpells`. 40 of the 87 are
@@ -10544,3 +10544,57 @@ The M6 list below is kept for the history of what it covered:
   - **A rule for the harness, and it is the same one as for the port:** a stub
     that returns a *plausible* answer is worse than one that refuses. This one
     returned 0 for eight months.
+
+- **Magic Map's sapphire is carried, not worn (M8, 2026-09-05).**
+  `AllMageSpells` 647 → 4,503.
+  - `do_mage_spell`'s MAGIC_MAP arm asks `has_abil(SAPPHIRE)` (boe.party.cpp:802)
+    — the whole pack, gated on a charge left — and this port asked
+    `has_abil_equip`, the *equipped* one. A sapphire in the bottom of the pack
+    was refused.
+  - **The cost was a turn, not just a spell.** `handle_spellcast`'s town arm
+    sets `did_something` only when some PC's spell points changed
+    (boe.actions.cpp:401), so a refused cast charges nothing — the two clocks
+    parted there and everything after it was a different turn.
+  - `hasAbil` had been sitting in `alchemy.ts` since M6, a full port of the
+    right function, unused by anyone else. It now lives beside `hasAbilEquip`
+    in `universe/inventory.ts` with a note saying **which of the two a caller
+    wants is a rule, not a detail** — read the C++ before picking one.
+    `select_pc`'s ONLY_CAN_LOCKPICK arm was the other caller getting it wrong;
+    it wanted the charge test too.
+
+- **The status effects raise instant-help boxes, and a box eats a click (M8,
+  2026-09-05).** Corpus **1,206,841 → 1,211,570**; `AllMageSpells` 4,503 →
+  5,376.
+  - `cPlayer::web`, `poison`, `disease`, `dumbfound`, `slow`, `curse` and
+    `sleep` each end with a `give_help(n, 0)` (pc.cpp:158-332). It is modal, so
+    in a replay it consumes the recording's next click — and a click this port
+    let through became a **main-loop iteration of its own**, which in combat is
+    a `draw_terrain` and therefore a die. One Web on the party is five `web()`
+    calls and one box.
+  - This is the **fourth** hole of that shape after the locked door, the boat
+    bridge and `attack-friendly`, and the first that is not a `session.on*`
+    hook: it comes from the bottom of the status pipeline, so it is a
+    module-level `setGiveHelp` beside `setLivingSound` in `living.ts`. The live
+    UI does not install it yet — no help text is ported — which is a
+    `TODO(M9)`.
+  - **`receivedHelp` was never seeded, and that is why the mechanism looked
+    fine.** `load_prefs` is a `STARTUP_ACTIONS` member, so `replayStartup`
+    consumes it and the driver's own `case 'load_prefs'` is unreachable: the set
+    stayed empty, every box looked unseen, and `handle_new_pc`'s
+    `give_help(56,0)` only worked because 56 happened to be absent from those
+    recordings too. It is read from `replay.actions` up front now.
+  - **A help box the recording never answered is dismissed, not fatal.** It is a
+    `1str-title` — a `cStrDlog` with one way out — and the harness's own
+    dismissable set has it for the same reason: the box is raised by a
+    *preference*, so a recording made where `ReceivedHelp` differed by one id
+    simply has no click for it. `AllMageSpells` orphans 53 and 59 and the C++
+    prints `[orphan] dialog '1str-title' … dismissing it`. What must not happen
+    is letting the click through as a game action.
+  - **`BOE_TRACE_BAR=1` is the new instrument**, and it is the one that found
+    the redraw: one line per redraw that is about to weigh the recast hint, with
+    the PC's name on it. Diffing the two name sequences put the missing redraw
+    on a single line — `Adrianna, Adrianna, Feodoric` there against
+    `Adrianna, Adrianna, Adrianna, Feodoric` here — and from there the stack
+    named it. The draw stream could not see it: every draw either side is a
+    `get_ran(1,0,130)`, so a run that makes the same *number* of them in a
+    different order prints a byte-identical trace.

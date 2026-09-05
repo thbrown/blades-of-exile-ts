@@ -9,29 +9,17 @@
 
 import { Alchemy, AlchemyRecipe, alchemyCharges, alchemyFailChance, alchemyName, alchemyPotion, canMakeAlchemy, alchemyRecipe } from '../data/alchemy';
 import { Item, ItemAbil, ItemType } from '../data/item';
-import { GiveStatus, giveItem, removeCharge } from '../universe/inventory';
+import { GiveStatus, giveItem, hasAbil, removeCharge } from '../universe/inventory';
+
+// Re-exported for the callers that found it here first; `has_abil` is a
+// `cPlayer` method and now lives beside `hasAbilEquip` in `universe/inventory`.
+export { hasAbil };
 import { NUM_INVEN_SLOTS, Player } from '../universe/player';
 import { Skill } from '../universe/skills';
 import { Universe } from '../universe/universe';
 import { placeItem } from './loot';
 import type { GameSession } from './session';
 
-/**
- * cPlayer::has_abil (pc.cpp:807) — the first item in the pack with an ability
- * and a charge left. Unlike `hasAbilEquip` it doesn't care whether the item is
- * worn, which is what makes a plant in the bottom of the pack an ingredient.
- */
-export function hasAbil(pc: Player, abil: ItemAbil, dat = -1): { slot: number; item: Item } | null {
-  for (let i = 0; i < NUM_INVEN_SLOTS; i++) {
-    const item = pc.items[i]!;
-    if (item.variety === ItemType.NO_ITEM) continue;
-    if (item.ability !== abil) continue;
-    if (item.charges === 0) continue;
-    if (dat >= 0 && dat !== item.abilData) continue;
-    return { slot: i, item };
-  }
-  return null;
-}
 
 /** cPlayer::has_space (pc.cpp:732) — the first empty slot, or -1. */
 export function hasSpace(pc: Player): number {
