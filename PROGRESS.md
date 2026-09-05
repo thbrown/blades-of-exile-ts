@@ -14,9 +14,10 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-05** that is
-  **1,213,892 matching draws, 46 of 87 files agreeing all the way**, 40 blocked
-  by the oracle rather than by this port, and **one rule bucket left in the
-  queue**: `AllMageSpells`, parting in `recordMonst`. Add `--refresh` after a code change.
+  **1,213,908 matching draws, 47 of 87 files agreeing all the way**, and
+  **the rules queue is empty**: the tool prints no bucket section, because all
+  forty of the files that still part do so on a *harness* gap or a recording
+  this port cannot start. See "What M8 has left" at the bottom. Add `--refresh` after a code change.
 - Two companion meters answer questions the draw stream cannot.
   `node scripts/align-actions.mjs --all` asks whether the two **action**
   streams ever drift apart (they do not: 0 of 73), and
@@ -58,12 +59,11 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-05).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,213,892 matching
-draws and 46 of 87 recordings agreeing all the way**, against 1,039,384 and 33
-at the start of 2026-09-02. **One rule bucket remains** (see
-`diverge.mjs --all --stacks`), one file: `AllMageSpells`. 40 of the 87 are
-blocked by the *oracle* rather than by this port and cannot be won until the
-harness grows the feature they need.
+`get_ran` streams together, rule by rule. It stands at **1,213,908 matching
+draws and 47 of 87 recordings agreeing all the way**, against 1,039,384 and 33
+at the start of 2026-09-02. **No rule bucket remains**: `diverge.mjs --all
+--stacks` prints none, and all 40 of the files that still part do so on a
+*harness* gap or a recording this port cannot start.
 
 M8 is not only dice. Chasing the corpus has filled in real features it turned
 out to need — **creating a character** (`handle_new_pc` and its four dialogs),
@@ -10677,3 +10677,39 @@ The M6 list below is kept for the history of what it covered:
     end, two per outdoor step over its last three moves plus a ten-draw burst,
     while this port is still in town. Its own `[ran]` stream matches for all
     7,697 it makes.
+
+- **The rules queue is empty (M8, 2026-09-05).** Corpus
+  **1,213,892 → 1,213,908**, **47 of 87 files agreeing all the way**, and
+  `diverge.mjs --all --stacks` now prints **no bucket section at all**: every
+  one of the forty files that still parts does so on a *harness* gap or a
+  recording this port cannot start. `AllMageSpells` agrees on **all 7,713** of
+  the oracle's draws.
+  - The last sixteen draws were a **one-line condition in the replay driver**.
+    `handle_spellcast`'s cancel arm is `overall_mode == MODE_TOWN_TARGET` and
+    `MODE_SPELL_TARGET || MODE_FANCY_TARGET` (boe.actions.cpp:412, :430); this
+    port tested `session.spellTargeting !== null` instead. `spell_targets` and
+    `num_targets_left` are globals the C++ never clears, so a fancy cast
+    abandoned by `debug_leave_town` leaves them set and the next
+    `handle_spellcast` *outdoors* opens the picker like any other — while this
+    port read it as a cancel and ran `cancelSpellTargeting`, which puts the mode
+    back to **COMBAT**. Outdoors, at the end of the file, with every later move
+    refused.
+  - **The rule: port the C++'s condition, not its intent.** "Is a spell armed?"
+    and "is the mode a targeting mode?" are the same question until something
+    changes the mode behind the spell's back, and a debug key is exactly that.
+
+### What M8 has left
+
+The corpus can go no further without harness work. The forty blocked files
+group as `diverge.mjs --all --stacks` lists them; the two biggest are:
+
+- **14 files: the party dies here and the recording's did not.** The harness
+  stops on `party-death` deliberately (dialog.cpp's note: dismissing it does not
+  put the party back). Whether this is the *oracle's* rules differing from the
+  build that made the recording, or something both engines get wrong, has not
+  been established — that is the next question worth asking, and `PCS=1` on both
+  sides is how to ask it.
+- **4 files: `Tried to access out-of-range element` in the oracle.** A crash in
+  the C++, not a divergence.
+
+Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.

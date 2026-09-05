@@ -803,7 +803,20 @@ export async function runReplay(
           // In a targeting mode it is a **cancel** — `handle_spellcast`'s
           // MODE_TOWN_TARGET / MODE_SPELL_TARGET arms print "  Cancelled." and
           // go back, with no dialog at all (boe.actions.cpp:412, :442).
-          if (session.townTarget !== null || session.spellTargeting !== null) {
+          //
+          // **The test is the mode, not the armed spell.** The C++'s arms are
+          // `overall_mode == MODE_TOWN_TARGET` and
+          // `MODE_SPELL_TARGET || MODE_FANCY_TARGET`; `spell_targets` and
+          // `num_targets_left` are globals it never clears, so a *fancy* cast
+          // abandoned by `debug_leave_town` leaves them set and the next
+          // `handle_spellcast` outdoors opens the picker like any other.
+          // Testing `session.spellTargeting !== null` instead read that as a
+          // cancel and ran `cancelSpellTargeting`, which puts the mode back to
+          // **COMBAT** — outdoors, at the end of `AllMageSpells`, with every
+          // later move then refused.
+          if (session.mode === GameMode.TOWN_TARGET
+            || session.mode === GameMode.SPELL_TARGET
+            || session.mode === GameMode.FANCY_TARGET) {
             session.univ.addStringToBuf('  Cancelled.');
             if (session.townTarget !== null) cancelTownTargeting(session);
             else cancelSpellTargeting(session);
