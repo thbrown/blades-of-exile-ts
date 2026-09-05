@@ -14,7 +14,7 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-03** that is
-  **1,202,692 matching draws, 43 of 87 files agreeing all the way**, 42 blocked
+  **1,202,832 matching draws, 43 of 87 files agreeing all the way**, 42 blocked
   by the oracle rather than by this port, and **2 rule buckets left in the
   queue** — one of which is really a 43rd oracle gap (`OneOfEverything`; see the
   entry at the bottom). **One rules file left: `AllMageSpells`.** Add `--refresh` after a code change.
@@ -59,7 +59,7 @@
 
 **M8, fidelity hardening, is the live milestone (2026-09-03).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
-`get_ran` streams together, rule by rule. It stands at **1,202,692 matching
+`get_ran` streams together, rule by rule. It stands at **1,202,832 matching
 draws and 43 of 87 recordings agreeing all the way**, against 1,039,384 and 33
 at the start of 2026-09-02. Two rule buckets remain in the queue (see
 `diverge.mjs --all --stacks`), one file each; 42 of the 87 are blocked by the
@@ -10324,3 +10324,31 @@ The M6 list below is kept for the history of what it covered:
   - A test in `monsterTurn.test.ts` runs five rounds with the flag on and checks
     all three consequences: no action points, no movement, no damage — and no
     draws.
+
+- **And a fifth debug-mode rule, in the same round as the fourth (M8,
+  2026-09-04).** Corpus **1,202,692 → 1,202,832**; `AllMageSpells` goes
+  2,477 → 2,618 draws. Small, and it is the last rules file in the queue.
+  - `handle_switch_pc`'s combat arm opens `if(univ.debug_mode && pc.ap <= 0)
+    pc.ap = 4;` (boe.actions.cpp:1021) — a spent PC is handed four fresh points
+    rather than refused, which is how a tester walks a whole party through a
+    fight. Its neighbour is `do_monster_turn`'s `ap = 0` (the entry above):
+    with debug mode on, the party gets unlimited turns and the monsters get
+    none.
+  - So the tally on `Universe.debugMode` is now **five**: `damage_monst`'s
+    instant kill, `kill_monst`'s skipped experience and treasure, the
+    `ghost_mode` movement override, `do_monster_turn`'s freeze, and this. It is
+    worth grepping `univ.debug_mode` in the C++ before assuming there is not a
+    sixth.
+  - **What is left on that file, and it is the old head of the queue.**
+    `AllMageSpells` now parts on the **redraw count**: the C++ makes six more
+    `get_ran(1,0,130)` encumbrance rolls than this port around a combat cast,
+    and one fewer damage roll — its Flame finds nothing on the square where
+    this port's hits. See `textBar.ts` and the "five redraw sites" note in the
+    driver; the rolls come from `text_bar_text` asking `pc_can_cast_spell`
+    which of "Recast X" and "Cannot recast" to print, once per equipped awkward
+    item, and only once the acting PC has cast anything.
+  - **A loose end worth checking next**: `handle_switch_pc`'s combat arm also
+    calls `combat_next_step()` (boe.actions.cpp:1027), between
+    `univ.cur_pc = which_pc` and `set_stat_window_for_pc`. `GameSession.switchPc`
+    sets `center` there instead and calls nothing. That was not investigated —
+    it may be handled elsewhere, or it may be the next thing this file needs.

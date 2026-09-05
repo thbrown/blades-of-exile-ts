@@ -3829,6 +3829,15 @@ export class GameSession {
       return;
     }
     if (isCombat(this.mode)) {
+      // **Debug mode hands a spent PC four fresh points** rather than refusing
+      // the switch (boe.actions.cpp:1021), which is how a tester walks a whole
+      // party through a fight one PC at a time. The **fifth** rule that reads
+      // the flag, and the second in a fight — its neighbour is
+      // `do_monster_turn`'s `ap = 0`, which freezes the other side of the same
+      // round. `AllMageSpells` casts every mage spell in the book this way:
+      // debug mode on at action 69, and from there every `handle_switch_pc` to
+      // an exhausted PC is a refusal here and a free turn there.
+      if (this.univ.debugMode && pc.ap <= 0) pc.ap = 4;
       if (pc.ap > 0) {
         // `draw_terrain()` (boe.actions.cpp:1041), and it is **before**
         // `univ.cur_pc = which_pc` — so the recast hint it pays for is the

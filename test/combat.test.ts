@@ -729,6 +729,28 @@ describe('placement, parry and holding a turn', () => {
     expect(univ.transcript).toContain('Parry.');
   });
 
+  it('debug mode hands a spent PC four fresh points instead of refusing',
+    async () => {
+      // `if(univ.debug_mode && pc.ap <= 0) pc.ap = 4;` (boe.actions.cpp:1021) —
+      // the fifth rule that reads the flag, and the second inside a fight: its
+      // neighbour is `do_monster_turn`'s `ap = 0`, which freezes the other
+      // side of the same round.
+      const { univ, session } = newGame();
+      hostileBeside(univ, session);
+      session.startCombat(univ.party.direction);
+      const other = univ.party.pcs[1]!;
+      other.ap = 0;
+
+      session.switchPc(1);
+      expect(univ.curPc).not.toBe(1);
+      expect(univ.transcript.at(-1)).toBe('Set active: PC has no APs.');
+
+      univ.debugMode = true;
+      session.switchPc(1);
+      expect(univ.curPc).toBe(1);
+      expect(other.ap).toBe(4);
+    });
+
   it('parry has no guards: it works out of combat, and on a PC with no points',
     async () => {
       // `handle_parry` (boe.actions.cpp:529) tests neither the mode nor the
