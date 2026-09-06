@@ -1098,7 +1098,10 @@ export class Screen {
     const { univ } = session;
     // Targeting modes (FIRING/THROWING) are combat modes too — the party is
     // still six figures on the map, so this asks `isCombat`, not `== COMBAT`.
-    if (isCombat(session.mode)) {
+    // `cartoonHappening` (boe.specials.cpp:59) puts the party at six real
+    // `combat_pos`es outside combat too, for a scripted scene — same figures,
+    // same draw.
+    if (isCombat(session.mode) || session.cartoonHappening) {
       this.drawCombatParty(session);
       return;
     }

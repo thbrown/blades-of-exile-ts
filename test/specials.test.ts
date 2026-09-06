@@ -1205,6 +1205,125 @@ describe('a node that poses a creature', () => {
 });
 
 /**
+ * `TOWN_RELOCATE_CREATURE` (boe.specials.cpp:4372) — moves a PC or a creature,
+ * absolutely or by an offset, and starts a "cartoon" when it is a PC.
+ */
+describe('a node that relocates a creature', () => {
+  function placeMonst(univ: Universe, where: { x: number; y: number }): Creature {
+    const monst = assignCreature(0, {
+      number: 1, startAttitude: Attitude.HOSTILE_A, startLoc: where,
+      mobility: 1, timeFlag: 0, timeCode: 0, monsterTime: 0, spec1: -1, spec2: -1,
+      specEncCode: 0, personality: -1, facialPic: -1, specialOnTalk: -1, specialOnKill: -1,
+    } as never, univ.scenario.scenMonsters[1]!);
+    univ.town!.monsters.length = 0;
+    univ.town!.monsters.push(monst);
+    return monst;
+  }
+
+  it('refuses a mode outside 0 - 5', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_RELOCATE_CREATURE, ex2a: 0, ex2b: 6 },
+    });
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, { x: 20, y: 20 });
+    expect(univ.transcript.at(-1)).toBe('  Error: Invalid positioning mode (0-5).');
+  });
+
+  it('mode 0 sets a PC combat_pos absolutely, and starts a cartoon', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_RELOCATE_CREATURE, ex2a: 2, ex2b: 0 },
+    });
+    expect(session.cartoonHappening).toBe(false);
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, { x: 20, y: 20 });
+    expect(univ.party.pcs[2]!.combatPos).toEqual({ x: 20, y: 20 });
+    expect(session.cartoonHappening).toBe(true);
+  });
+
+  /**
+   * Mode 2 negates x, mode 4 negates y, mode 3 negates both.
+   *
+   * **`start_cartoon` runs before the offset is added, not after** — so the
+   * first relocation of a scene resets every PC to `town_loc` even if the
+   * test (or a scenario) had just set one somewhere else. Node 0 (mode 0,
+   * absolute) plants a known base for each PC and starts the cartoon; nodes
+   * 1-2 then add to that base with the cartoon already running, so their
+   * `start_cartoon` call is a no-op — the same order a scripted scene relies
+   * on to keep several PCs from snapping back between steps.
+   */
+  it('modes 2 - 4 add an offset with the sign flips', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_RELOCATE_CREATURE, ex2a: 0, ex2b: 0 },
+      1: { type: SpecType.TOWN_RELOCATE_CREATURE, ex2a: 1, ex2b: 0 },
+      2: { type: SpecType.TOWN_RELOCATE_CREATURE, ex2a: 0, ex2b: 2 },
+      3: { type: SpecType.TOWN_RELOCATE_CREATURE, ex2a: 1, ex2b: 4 },
+    });
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, { x: 10, y: 10 });
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 1, { x: 10, y: 10 });
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 2, { x: 3, y: 4 });
+    expect(univ.party.pcs[0]!.combatPos).toEqual({ x: 7, y: 14 });
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 3, { x: 3, y: 4 });
+    expect(univ.party.pcs[1]!.combatPos).toEqual({ x: 13, y: 6 });
+  });
+
+  it('moves a creature by 100 + slot, absolutely', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_RELOCATE_CREATURE, ex2a: 100, ex2b: 0 },
+    });
+    const monst = placeMonst(univ, { x: 5, y: 5 });
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, { x: 9, y: 9 });
+    expect(monst.curLoc).toEqual({ x: 9, y: 9 });
+    // A creature moving does not start a cartoon — that is a PC-only effect.
+    expect(session.cartoonHappening).toBe(false);
+  });
+
+  it('refuses a target that is neither a PC nor a creature', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_RELOCATE_CREATURE, ex2a: 50, ex2b: 0 },
+    });
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, { x: 20, y: 20 });
+    expect(univ.transcript.at(-1)).toBe('  Error: Invalid positioning target!');
+    expect(session.cartoonHappening).toBe(false);
+  });
+
+  it('-1 falls back to the default target (the whole party out of combat)', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_RELOCATE_CREATURE, ex2a: -1, ex2b: 0 },
+    });
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, { x: 20, y: 20 });
+    // TARGET_PARTY (6) is neither i<6 nor i>=100, so this is the "invalid
+    // target" arm — the default is nobody to relocate, same as the C++.
+    expect(univ.transcript.at(-1)).toBe('  Error: Invalid positioning target!');
+  });
+
+  it('mode 5 drops a creature on the nearest square it can stand on', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_RELOCATE_CREATURE, ex2a: 100, ex2b: 5 },
+    });
+    const target = { x: 8, y: 8 };
+    const monst = placeMonst(univ, { x: 15, y: 15 });
+    // A second, blocking creature sits on the target square, so the search
+    // has to step off it onto a free neighbour.
+    const blocker = assignCreature(1, {
+      number: 1, startAttitude: Attitude.HOSTILE_A, startLoc: target,
+      mobility: 1, timeFlag: 0, timeCode: 0, monsterTime: 0, spec1: -1, spec2: -1,
+      specEncCode: 0, personality: -1, facialPic: -1, specialOnTalk: -1, specialOnKill: -1,
+    } as never, univ.scenario.scenMonsters[1]!);
+    univ.town!.monsters.push(blocker);
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, target);
+    expect(monst.curLoc).not.toEqual(target);
+  });
+
+  it('ex2c pauses the timeline by that many ms', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_RELOCATE_CREATURE, ex2a: 0, ex2b: 0, ex2c: 50 },
+    });
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, { x: 20, y: 20 });
+    // Headless: animSettle resolves at once with no waiter installed, so this
+    // is really just confirming the node runs to completion with ex2c set.
+    expect(univ.party.pcs[0]!.combatPos).toEqual({ x: 20, y: 20 });
+  });
+});
+
+/**
  * The three nodes that make a noise and a picture and change nothing:
  * `TOWN_SFX_BURST` (boe.specials.cpp:3934), `TOWN_BOOM_SPACE` (:4260) and
  * `TOWN_RUN_MISSILE` (:4249).

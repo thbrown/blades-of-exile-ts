@@ -189,6 +189,32 @@ export class GameSession {
    * SPECIAL ability, and which ones `check_if_monst_seen` announces.
    */
   fogLifted = false;
+
+  /**
+   * `cartoon_happening` (boe.specials.cpp:59) — set by `start_cartoon`
+   * (:110) whenever a scripted node moves a PC around by `combat_pos` outside
+   * combat, so the party briefly renders as six figures the way it does in a
+   * fight. Reset at the same point `fogLifted` is (`afterPartyTurn`'s
+   * finally) — the C++ clears both at the tail of `advance_time`, which runs
+   * on every action, so the port's one town-turn hook keeps them together for
+   * the same reason.
+   */
+  cartoonHappening = false;
+
+  /**
+   * `start_cartoon` (boe.specials.cpp:110) — the first node in a scripted
+   * sequence scatters the party onto its own square (so a scene starting from
+   * one figure has somewhere for the other five to spread out from);
+   * anything after that leaves `combat_pos` alone. A no-op in combat, since
+   * the party already has real `combat_pos`es there.
+   */
+  startCartoon(): void {
+    if (!this.cartoonHappening && !isCombat(this.mode)) {
+      for (const pc of this.univ.party.pcs) pc.combatPos = loc(this.univ.party.townLoc.x, this.univ.party.townLoc.y);
+    }
+    this.cartoonHappening = true;
+  }
+
   /**
    * combat_active_pc — the PC in the middle of a multi-step action (firing,
    * casting). 6 means nobody, and then everyone acts in turn as normal.
@@ -617,6 +643,13 @@ export class GameSession {
       // linger one action longer. Every node that can raise it fires from a
       // move, a look or a use, all of which come through here.
       this.fogLifted = false;
+      // `cartoon_happening` (boe.actions.cpp:1941) — cleared the same way, and
+      // blanking `combat_pos` back to (-1,-1) outside combat is what makes the
+      // party draw as one figure again next turn.
+      if (this.cartoonHappening && !isCombat(this.mode)) {
+        for (const pc of this.univ.party.pcs) pc.combatPos = loc(-1, -1);
+      }
+      this.cartoonHappening = false;
     }
   }
 

@@ -11011,11 +11011,10 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
   - All three refuse to fire from a conversation, for the same reason
     `TOWN_HIT_SPACE` does: `l` in the TALK context is wherever the party last
     was.
-  - **What is left in the TOWN category**: `TOWN_MONST_ATTACK` (since landed,
-    below) and `TOWN_RELOCATE_CREATURE`, which needs **`cartoon_happening`**,
-    the flag that lets a scripted scene move PCs around by their `combat_pos`
-    outside combat. `TOWN_SPELL_PAT_FIELD` and `TOWN_SPELL_PAT_BOOM` needed
-    **`current_pat`**, ported below.
+  - **What was left in the TOWN category** at the time of this sweep:
+    `TOWN_MONST_ATTACK`, `TOWN_SPELL_PAT_FIELD`/`TOWN_SPELL_PAT_BOOM` (needed
+    `current_pat`) and `TOWN_RELOCATE_CREATURE` (needed `cartoon_happening`).
+    All four are ported now — see below; TOWN is complete.
   - **The sweep that found these** is worth repeating whenever a category feels
     finished: walk `CATEGORY_RANGES` from `specials/context.ts`, list every
     `SpecType` in each range, and subtract the ones any file mentions as
@@ -11120,3 +11119,36 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
   - **`CATEGORY_RANGES` now has four opcodes left unported in the whole
     game**: `CREATE_NEW_PC` and `STORE_PC` in AFFECT, `TOWN_RELOCATE_CREATURE`
     in TOWN, and nothing else.
+
+- **`cartoon_happening` and `TOWN_RELOCATE_CREATURE`, the last TOWN opcode
+  (M6, 2026-09-06).** Corpus-neutral: nothing in either draws. `cartoon_happening` (boe.specials.cpp:59) is a
+  one-turn flag: a scripted node moves a PC by `combat_pos` outside combat, and
+  while it's set the party draws as six figures the way it does in a fight
+  (`GameSession.cartoonHappening`, checked in `drawPartySymbol` alongside
+  `isCombat`). `start_cartoon` (:110) is `GameSession.startCartoon()` — the
+  *first* relocation in a scene scatters every PC onto the party's own square
+  first, so the others have somewhere to spread out from; a later call in the
+  same scene is a no-op, which is what lets several PCs be moved one at a time
+  without snapping back between steps. Reset alongside `fogLifted` in
+  `afterPartyTurn`'s finally, for the same TODO(M8) reason that reset is
+  already there: the C++ clears both at the tail of `advance_time`, which runs
+  on every action, and this port has one town-turn hook standing in for that.
+  - `TOWN_RELOCATE_CREATURE` (:4372) itself takes a target (`ex2a`, -1 for
+    `defaultTarget` — this category never reads `SELECT_TARGET`'s
+    `ctx.curTarget`), a positioning mode (`ex2b`: 0 absolute, 1 a plain
+    offset, 2-4 an offset with `l.x`/`l.y` negated, 5 "nearest free square"),
+    and a pause in ms (`ex2c`), which this port books on the shared animation
+    timeline (`animBook`/`animSettle`) rather than a real blocking sleep.
+  - **Mode 5's search has a ported bug**: the C++ marks the square it just
+    left as checked, not the neighbour it's about to enqueue
+    (`checked.insert(cur_check)`, not `insert(next)`), so the same neighbour
+    can be pushed onto the queue more than once from different directions.
+    It still terminates (100 tries cap) and still finds a real free square,
+    just inefficiently — kept exactly, not de-duplicated.
+  - Mode 5 only does anything for a creature (`i >= 100`); for a PC it quietly
+    becomes mode 0 with the original location untouched, same as the C++.
+  - `redraw_screen(REFRESH_TERRAIN)` here is mode 1 — no `draw_text_bar`, so a
+    free repaint via `session.onRedraw?.()`, the same call `TOWN_MONST_ATTACK`
+    uses and for the same reason.
+  - **`CATEGORY_RANGES` has two opcodes left unported in the whole game**:
+    `CREATE_NEW_PC` and `STORE_PC`, both in AFFECT. TOWN is done.

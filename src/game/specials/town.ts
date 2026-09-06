@@ -14,7 +14,9 @@ import { TerSpec } from '../../data/terrain';
 import { CreatureStatus } from '../../universe/creature';
 import { Status } from '../../universe/skills';
 import { Universe } from '../../universe/universe';
-import { SpecCtx, SpecCtxType, SpecialCtx, TARGET_PARTY, targetIndexAt } from './context';
+import {
+  SpecCtx, SpecCtxType, SpecialCtx, TARGET_PARTY, defaultTarget, targetIndexAt,
+} from './context';
 import { drawTerrain } from '../textBar';
 import type { GameSession } from '../session';
 import { alterSpace, reportUnsupported } from './general';
@@ -36,8 +38,9 @@ import { FieldType } from '../../data/fields';
 import { runAMissile } from '../missileAnim';
 import { hitSpace } from '../processFields';
 import { handleMarkedDamage, radiusDamage } from '../damage';
-import { animSettle } from '../anim';
+import { animBook, animSettle } from '../anim';
 import { DamageType } from '../../data/monster';
+import { Location } from '../../core/location';
 
 /** The three contexts that mean "the party is walking somewhere". */
 function isMoveMode(mode: SpecCtx): boolean {
@@ -690,12 +693,101 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
       break;
     }
 
+    /**
+     * `TOWN_RELOCATE_CREATURE` (boe.specials.cpp:4372) — moves a PC or a
+     * creature, absolutely or by an offset, and can drop a monster onto the
+     * nearest free square instead of a fixed one.
+     *
+     * `spec.ex2a` names who: -1 means "the usual default target"
+     * (`defaultTarget`, not `SELECT_TARGET`'s choice — this category never
+     * reads `ctx.curTarget`), otherwise a PC slot 0-5 or `100 + creature`.
+     *
+     * `spec.ex2b` is the positioning mode: 0 absolute, 1 a plain offset, 2-4
+     * an offset with `l.x`/`l.y` (or both) negated, 5 "nearest free square",
+     * which only means anything for a creature and folds back to 0 once
+     * resolved.
+     */
+    case SpecType.TOWN_RELOCATE_CREATURE: {
+      if (spec.ex2b > 5) {
+        univ.addStringToBuf('  Error: Invalid positioning mode (0-5).');
+        break;
+      }
+      let mode = spec.ex2b;
+      let l: Location = { ...ctx.specLoc };
+      const i = spec.ex2a < 0
+        ? defaultTarget(univ, ctx.session, ctx.whichMode, ctx.specLoc)
+        : spec.ex2a;
+      if (mode === 5) {
+        mode = 0;
+        if (i >= 100 && town) {
+          const monst = town.monsters[i - 100];
+          if (monst) {
+            // `std::set<location> checked` / `std::queue<location> to_check`
+            // (boe.specials.cpp:4380) — a spiral search for the nearest square
+            // the creature fits on. **The C++ marks `cur_check` as checked,
+            // not `next`**, so a square already queued from one neighbour can
+            // be queued again from another; ported with the same duplicate
+            // pushes rather than deduplicating properly, since a scenario
+            // relying on where this lands was tested against the bug.
+            const checked = new Set<string>();
+            const toCheck: Location[] = [];
+            let curCheck: Location = l;
+            for (let tries = 0; tries < 100
+              && !ctx.session.monstCanBeAt(monst, curCheck); tries++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                  if (dx === 0 && dy === 0) continue;
+                  const next = { x: l.x + dx, y: l.y + dy };
+                  if (!town.isOnMap(next.x, next.y)) continue;
+                  if (!checked.has(`${next.x},${next.y}`)) toCheck.push(next);
+                  checked.add(`${curCheck.x},${curCheck.y}`);
+                }
+              }
+              const found = toCheck.shift();
+              if (!found) break;
+              curCheck = found;
+            }
+            if (ctx.session.monstCanBeAt(monst, curCheck)) l = curCheck;
+          }
+        }
+      }
+      if (mode > 1) {
+        if (mode <= 3) l = { ...l, x: -l.x };
+        if (mode >= 3) l = { ...l, y: -l.y };
+      }
+      if (i < 6) {
+        ctx.session.startCartoon();
+        const pc = univ.party.pcs[i];
+        if (pc) {
+          pc.combatPos = mode === 0
+            ? { ...l }
+            : { x: pc.combatPos.x + l.x, y: pc.combatPos.y + l.y };
+        }
+      } else if (i >= 100 && town) {
+        const monst = town.monsters[i - 100];
+        if (monst) {
+          monst.curLoc = mode === 0
+            ? { ...l }
+            : { x: monst.curLoc.x + l.x, y: monst.curLoc.y + l.y };
+        }
+      } else {
+        univ.addStringToBuf('  Error: Invalid positioning target!');
+        break;
+      }
+      // `redraw_screen(REFRESH_TERRAIN)` is mode 1 — free, same as
+      // `TOWN_MONST_ATTACK`'s above — so this has to run synchronously rather
+      // than through `drawTerrain`, which would spend a die that was never
+      // there.
+      ctx.session.onRedraw?.();
+      if (spec.ex2c > 0) {
+        animBook(spec.ex2c);
+        await animSettle();
+      }
+      ctx.redraw = true;
+      break;
+    }
+
     default:
-      // What is left in this category, as of 2026-09-06:
-      // TOWN_RELOCATE_CREATURE, which needs `cartoon_happening` — the flag
-      // that lets a scripted scene move PCs around by their `combat_pos`
-      // outside combat. The list is worth keeping honest: the same sweep over
-      // `CATEGORY_RANGES` that produced it will produce the next one.
       reportUnsupported(univ, spec.type);
       break;
   }
