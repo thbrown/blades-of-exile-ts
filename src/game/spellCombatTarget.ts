@@ -18,7 +18,7 @@
 import { Location, dist, loc, locsEqual } from '../core/location';
 import { FieldType } from '../data/fields';
 import { DamageType } from '../data/monster';
-import { SpellPat, WALL_ROTATIONS } from '../data/pattern';
+import { SpellPat, WALL_ROTATIONS, getBuiltinPattern } from '../data/pattern';
 import { Spell, SPELLS, isMage, isPriestSide, spellName } from '../data/spell';
 import { ItemAbil } from '../data/item';
 import { SIGHT_BLOCKED } from '../core/sight';
@@ -160,7 +160,9 @@ export function startSpellTargeting(
   if (pattern === SpellPat.WALL) {
     univ.addStringToBuf('  (Hit space to rotate.)');
     session.forceWallPosition = 0;
-  }
+    // `current_pat = pattern.patterns[0]` (boe.combat.cpp:4996).
+    session.currentPat = getBuiltinPattern(SpellPat.WALL, 0);
+  } else session.currentPat = getBuiltinPattern(pattern);
   session.spellTargeting = {
     spell,
     freebie,
@@ -185,6 +187,8 @@ export function startSpellTargeting(
 export function spellCastHitReturn(session: GameSession): void {
   if (session.forceWallPosition >= 10) return;
   session.forceWallPosition = (session.forceWallPosition + 1) % WALL_ROTATIONS;
+  // `current_pat = pat.patterns[force_wall_position]` (boe.combat.cpp:5082).
+  session.currentPat = getBuiltinPattern(SpellPat.WALL, session.forceWallPosition);
 }
 
 /** Back out of targeting; nothing has been spent. */
@@ -277,6 +281,12 @@ export function startFancySpellTargeting(
       : fancyTargetCount(spell, level, bonus),
     fancy: true,
   };
+  // `current_pat` (boe.combat.cpp:5062) — and **fancy targeting cannot rotate
+  // a wall**, so PAT_WALL is silently swapped for a single square, with the
+  // C++'s own "TODO: Some sort of error message" beside it.
+  const shape = session.spellTargeting.pattern;
+  session.currentPat = getBuiltinPattern(
+    shape === SpellPat.WALL ? SpellPat.SINGLE : shape);
 }
 
 /**

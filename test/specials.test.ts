@@ -6,6 +6,7 @@ import { GameRng } from '../src/core/rng';
 import { Scenario } from '../src/data/scenario';
 import { Spell } from '../src/data/spell';
 import { SpellPat } from '../src/data/pattern';
+import { startTownTargeting } from '../src/game/spellTarget';
 import { FieldType } from '../src/data/fields';
 import { GameMode } from '../src/game/modes';
 import { cancelTownTargeting, castTownSpell } from '../src/game/spellTarget';
@@ -1053,6 +1054,108 @@ describe('the AFFECT nodes that act on the party', () => {
     expect(univ.party.partyStatus[PartyStatus.STEALTH]).toBe(250);
     await run(1);
     expect(univ.party.partyStatus[PartyStatus.STEALTH]).toBe(0);
+  });
+});
+
+/**
+ * `TOWN_SPELL_PAT_FIELD` (boe.specials.cpp:4321) and `TOWN_SPELL_PAT_BOOM`
+ * (:4344) — stamp a spell shape on the map, as a field or as damage.
+ */
+describe('a node that stamps a spell pattern', () => {
+  it('lays a field in the named shape', async () => {
+    const { univ, session } = withNodes({
+      // ex1c 4 is PAT_RADIUS_2; ex2a 2 is a field type in range.
+      0: { type: SpecType.TOWN_SPELL_PAT_FIELD, ex1c: SpellPat.RADIUS_2, ex2a: 2 },
+    });
+    const at = { x: 20, y: 20 };
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, at);
+    // Something was written around the centre, in a shape wider than one tile.
+    const town = univ.town!;
+    let cells = 0;
+    for (let dx = -3; dx <= 3; dx++)
+      for (let dy = -3; dy <= 3; dy++)
+        if (town.hasField(at.x + dx, at.y + dy, 2 as FieldType)) cells++;
+    expect(cells).toBeGreaterThan(1);
+  });
+
+  it('refuses a pattern outside -1 - 14 and a field type out of range', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_SPELL_PAT_FIELD, ex1c: 15, ex2a: 2 },
+      1: { type: SpecType.TOWN_SPELL_PAT_FIELD, ex1c: SpellPat.SINGLE, ex2a: 9 },
+    });
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, { x: 20, y: 20 });
+    expect(univ.transcript.at(-1)).toBe('  Error: Invalid spell pattern (-1 - 14).');
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 1, { x: 20, y: 20 });
+    expect(univ.transcript.at(-1)).toBe('  Error: Invalid field type (see docs).');
+  });
+
+  /**
+   * **`ex1c` 7-14 are `PAT_WALL`'s eight rotations**, which is why the range
+   * check stops at 14 — and why `PAT_PROT`, which is 15, can never get past it.
+   */
+  it('7 - 14 are the wall rotations, and they differ from each other', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_SPELL_PAT_FIELD, ex1c: 7, ex2a: 2 },
+      1: { type: SpecType.TOWN_SPELL_PAT_FIELD, ex1c: 9, ex2a: 2 },
+    });
+    const town = univ.town!;
+    const shape = (node: number, at: { x: number; y: number }) => {
+      const cells: string[] = [];
+      for (let dx = -4; dx <= 4; dx++)
+        for (let dy = -4; dy <= 4; dy++)
+          if (town.hasField(at.x + dx, at.y + dy, 2 as FieldType)) cells.push(`${dx},${dy}`);
+      return cells.join(' ');
+    };
+    const a = { x: 20, y: 20 };
+    const b = { x: 30, y: 30 };
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, a);
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 1, b);
+    expect(shape(0, a)).not.toBe('');
+    expect(shape(1, b)).not.toBe(shape(0, a));
+  });
+
+  /** `PAT_CURRENT` (-1) is the grid the last targeting settled on. */
+  it('-1 uses the pattern the last targeting left behind', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_SPELL_PAT_FIELD, ex1c: SpellPat.CURRENT, ex2a: 2 },
+    });
+    // Arm a town targeting with a radius-2 shape, then let the node use it.
+    startTownTargeting(session, Spell.NONE, 0, true, SpellPat.RADIUS_2);
+    const at = { x: 20, y: 20 };
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, at);
+    const town = univ.town!;
+    let cells = 0;
+    for (let dx = -3; dx <= 3; dx++)
+      for (let dy = -3; dy <= 3; dy++)
+        if (town.hasField(at.x + dx, at.y + dy, 2 as FieldType)) cells++;
+    expect(cells).toBeGreaterThan(1);
+  });
+
+  /** The boom arm hurts, and `ex2c` decides whether it opens a volley. */
+  it('BOOM damages the shape, and ex2c collects the blasts', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_SPELL_PAT_BOOM, ex1c: SpellPat.RADIUS_2,
+        ex2a: 5, ex2b: 4, ex2c: 1 },
+    });
+    univ.party.pcs.forEach((pc) => { pc.maxHealth = 200; pc.curHealth = 200; });
+    const booms: Boom[] = [];
+    setBoomSink((b) => { booms.push({ ...b }); });
+    try {
+      await session.runSpecialRaw(
+        SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, univ.party.townLoc);
+      await session.settled();
+    } finally { setBoomSink(null); animClear(); }
+    expect(univ.party.pcs.some((pc) => pc.curHealth < 200)).toBe(true);
+    expect(booms.length).toBeGreaterThan(0);
+    expect(booms.every((b) => b.animated)).toBe(true);
+  });
+
+  it('…and refuses a damage type outside 0 - 7', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_SPELL_PAT_BOOM, ex1c: SpellPat.SINGLE, ex2a: 8 },
+    });
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, { x: 20, y: 20 });
+    expect(univ.transcript.at(-1)).toBe('  Error: Invalid damage type (0 - 7).');
   });
 });
 

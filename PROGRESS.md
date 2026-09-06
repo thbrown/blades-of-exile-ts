@@ -11011,13 +11011,11 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
   - All three refuse to fire from a conversation, for the same reason
     `TOWN_HIT_SPACE` does: `l` in the TALK context is wherever the party last
     was.
-  - **What is left in the TOWN category**: `TOWN_MONST_ATTACK`,
-    `TOWN_SPELL_PAT_FIELD`, `TOWN_SPELL_PAT_BOOM` and
-    `TOWN_RELOCATE_CREATURE`. The two pattern ones need **`current_pat`** — a
-    C++ global holding the shape of the last cast, which this port keeps
-    per-targeting instead — and `TOWN_RELOCATE_CREATURE` needs
-    **`cartoon_happening`**, the flag that lets a scripted scene move PCs
-    around by their `combat_pos` outside combat. Neither exists here yet.
+  - **What is left in the TOWN category**: `TOWN_MONST_ATTACK` (since landed,
+    below) and `TOWN_RELOCATE_CREATURE`, which needs **`cartoon_happening`**,
+    the flag that lets a scripted scene move PCs around by their `combat_pos`
+    outside combat. `TOWN_SPELL_PAT_FIELD` and `TOWN_SPELL_PAT_BOOM` needed
+    **`current_pat`**, ported below.
   - **The sweep that found these** is worth repeating whenever a category feels
     finished: walk `CATEGORY_RANGES` from `specials/context.ts`, list every
     `SpecType` in each range, and subtract the ones any file mentions as
@@ -11094,3 +11092,31 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     (boe.graphics.cpp:1081) — so calling this port's `drawTerrain` there would
     have invented a die. `session.onRedraw?.()` is the repaint with no cost,
     and it has to be synchronous because the pose is put back on the next line.
+
+- **`current_pat` and the last two TOWN opcodes it was blocking (M6,
+  2026-09-06).** `TOWN_SPELL_PAT_FIELD` (boe.specials.cpp:4321) and
+  `TOWN_SPELL_PAT_BOOM` (:4344) stamp a spell's shape onto the map, either as
+  a field or as damage, and both can ask for "whatever the last targeting
+  used" via `PAT_CURRENT` (-1). `GameSession.currentPat` is that C++ global,
+  written at the same seven sites the original writes it — the three
+  `start_*_targeting` tails, `spell_cast_hit_return`'s wall rotation, and
+  `load_missile`'s four throw/fire arms — so it costs no draws of its own.
+  - **The opcode's own range check makes two of its branches dead.** `ex1c`
+    is checked against -1..14, but `PAT_PROT` is 15 — so the "was it already
+    the protective circle" arm can only ever be reached by leaving `ex1c` at
+    -1 with a protective circle already in the air. Ported with the dead arm
+    intact, because a scenario is validated against what the code does, not
+    what it meant to do.
+  - `ex1c` 7-14 select `PAT_WALL`'s eight rotations by index, which is why the
+    range check stops at 14 rather than at `PAT_WALL` (7) itself.
+  - The BOOM arm's volley (`ex2c != 0`) needed the same close as every other
+    blast: `runBoomAnim` → `endBoomAnim` → `animSettle` → `handleMarkedDamage`
+    — missed on the first pass, which left the damage marked but never
+    applied to health (caught by the new test, not the corpus: a town-mode
+    boom draws no dice of its own).
+  - Fancy (multi-square) targeting silently swaps `PAT_WALL` for a single
+    square rather than rotate it, matching the C++'s own "TODO: Some sort of
+    error message" at that call site.
+  - **`CATEGORY_RANGES` now has four opcodes left unported in the whole
+    game**: `CREATE_NEW_PC` and `STORE_PC` in AFFECT, `TOWN_RELOCATE_CREATURE`
+    in TOWN, and nothing else.

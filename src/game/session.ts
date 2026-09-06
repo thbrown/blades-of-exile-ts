@@ -86,6 +86,7 @@ import { ONCE_DONE } from './specials/oneshot';
 import { Spell } from '../data/spell';
 import { castSpell } from './spellTown';
 import { handleTargetMode } from './targetMode';
+import { EffectPattern, SpellPat, getBuiltinPattern } from '../data/pattern';
 import { drawTerrain } from './textBar';
 
 /** d_string (boe.combat.cpp:70) — the direction names the transcript prints. */
@@ -2084,6 +2085,20 @@ export class GameSession {
    * discrepancy is written down rather than papered over.
    */
   posingMonster = -1;
+
+  /**
+   * `current_pat` (boe.combat.cpp:45) — the **resolved grid** the last
+   * targeting settled on, rotation and all. `PAT_CURRENT` (-1) is how a
+   * special node asks for it.
+   *
+   * The C++'s casts read this where this port reads the enum on
+   * `spellTargeting` / `townTarget` plus `forceWallPosition`; the two are kept
+   * in step by writing this at the same seven places the C++ writes it — the
+   * three `start_*_targeting` tails, `spell_cast_hit_return`'s rotation, and
+   * the four throw/fire arms. Nothing but the two `TOWN_SPELL_PAT_*` opcodes
+   * reads it here, so it costs no draws.
+   */
+  currentPat: EffectPattern = getBuiltinPattern(SpellPat.SINGLE);
 
   onRedraw: (() => void) | null = null;
 
@@ -4101,6 +4116,12 @@ export class GameSession {
     }
     this.missile = loaded;
     this.mode = loaded.mode;
+    // `current_pat` — all four of `load_missile`'s arms end the same way
+    // (boe.combat.cpp:1490, :1508, :1520, :1532): an exploding missile aims a
+    // radius-2 blast, anything else a single square.
+    this.currentPat = getBuiltinPattern(
+      this.univ.currentPc.items[loaded.ammoSlot]?.ability === ItemAbil.EXPLODING_WEAPON
+        ? SpellPat.RADIUS_2 : SpellPat.SINGLE);
     // `handle_target_mode` (boe.combat.cpp:1488, :1504, :1516, :1528) — the
     // target lock scrolls the view onto the enemies, and its redraw spends an
     // encumbrance roll. A missile passes `eSpell::NONE`, so the spell table's

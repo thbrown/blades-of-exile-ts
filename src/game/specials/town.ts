@@ -29,10 +29,14 @@ import { startTownTargeting } from '../spellTarget';
 import { createWandMonst } from '../wandering';
 import { handleMessage } from './vm';
 import { XML_BUTTONS, threeChoiceButtons } from './oneshot';
-import { boomSpace, runBoomAnim, startBoomAnim } from '../booms';
+import { boomSpace, endBoomAnim, runBoomAnim, startBoomAnim } from '../booms';
+import { EffectPattern, getBuiltinPattern } from '../../data/pattern';
+import { placeSpellPattern } from '../spellPatterns';
+import { FieldType } from '../../data/fields';
 import { runAMissile } from '../missileAnim';
 import { hitSpace } from '../processFields';
-import { radiusDamage } from '../damage';
+import { handleMarkedDamage, radiusDamage } from '../damage';
+import { animSettle } from '../anim';
 import { DamageType } from '../../data/monster';
 
 /** The three contexts that mean "the party is walking somewhere". */
@@ -247,6 +251,81 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
       // the pose is put back on the very next line.
       ctx.session.onRedraw?.();
       ctx.session.posingMonster = was;
+      break;
+    }
+
+    /**
+     * `TOWN_SPELL_PAT_FIELD` (boe.specials.cpp:4321) and
+     * `TOWN_SPELL_PAT_BOOM` (:4344) — stamp a spell shape on the map, either
+     * as a field or as damage.
+     *
+     * `ex1c` is the shape: **-1 is `PAT_CURRENT`**, the grid the last targeting
+     * settled on; 0-6 are the plain builtins; 7-14 are `PAT_WALL`'s eight
+     * rotations, which is why the range check stops at 14.
+     *
+     * **And that range check makes two branches dead.** `PAT_PROT` is 15, so
+     * `ex1c == PAT_PROT` is rejected before either the "use Protective
+     * Circle's own effect" test or the `else if(spec.ex1c == PAT_PROT)` arm can
+     * see it. The only way to reach the default effect is `ex2a == -1` with
+     * `ex1c == -1` *and* the current pattern already being the protective
+     * circle — i.e. straight after casting one. Ported as written, dead arms
+     * included, because they are what a scenario is validated against.
+     */
+    case SpecType.TOWN_SPELL_PAT_FIELD:
+    case SpecType.TOWN_SPELL_PAT_BOOM: {
+      const isBoom = spec.type === SpecType.TOWN_SPELL_PAT_BOOM;
+      if (spec.ex1c < -1 || spec.ex1c > 14) {
+        univ.addStringToBuf('  Error: Invalid spell pattern (-1 - 14).');
+        break;
+      }
+      // `ex2a == -1` with the protective circle in the air means "leave the
+      // pattern's own codes alone", and skips the type check below.
+      const protDefault = spec.ex2a === -1
+        && spec.ex1c === SpellPat.CURRENT
+        && samePattern(ctx.session.currentPat, getBuiltinPattern(SpellPat.PROT));
+      if (!protDefault) {
+        if (isBoom) {
+          if (spec.ex2a < 0 || spec.ex2a > 7) {
+            univ.addStringToBuf('  Error: Invalid damage type (0 - 7).');
+            break;
+          }
+        } else if ((spec.ex2a < 1 || spec.ex2a === 9 || spec.ex2a > 24)
+          && spec.ex2a !== 32 && spec.ex2a !== 33) {
+          univ.addStringToBuf('  Error: Invalid field type (see docs).');
+          break;
+        }
+      }
+      // Resolved to a grid rather than left as an enum, because `PAT_CURRENT`
+      // is already one and the wall rotations have to be indexed anyway.
+      const pat: EffectPattern = spec.ex1c === SpellPat.CURRENT
+        ? ctx.session.currentPat
+        : spec.ex1c < SpellPat.WALL
+          ? getBuiltinPattern(spec.ex1c as SpellPat)
+          : getBuiltinPattern(SpellPat.WALL, spec.ex1c - SpellPat.WALL);
+      // `if(spec.ex2c) start_missile_anim();` — the boom arm only, and its
+      // `do_explosion_anim(0, 0)` is the one call site in the game that passes
+      // a *zero* as the unread first parameter. The sound still comes from the
+      // boom type, since no third argument is given.
+      const volley = isBoom && spec.ex2c !== 0;
+      if (volley) startBoomAnim();
+      try {
+        // `place_spell_pattern(pat, l, 6)` with no type is "use the codes the
+        // grid already holds"; `whoHit` is 6, the party.
+        await placeSpellPattern(ctx.session, pat, ctx.specLoc, {
+          whoHit: 6,
+          ...(spec.ex2a === -1 ? {}
+            : isBoom
+              ? { damage: { type: spec.ex2a as DamageType, dice: spec.ex2b } }
+              : { field: spec.ex2a as FieldType }),
+        });
+      } finally {
+        if (volley) {
+          runBoomAnim(univ.rng, () => drawTerrain(ctx.session));
+          endBoomAnim();
+          await animSettle();
+          await handleMarkedDamage(univ, ctx.session);
+        }
+      }
       break;
     }
 
@@ -613,12 +692,10 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
 
     default:
       // What is left in this category, as of 2026-09-06:
-      // TOWN_SPELL_PAT_FIELD, TOWN_SPELL_PAT_BOOM and TOWN_RELOCATE_CREATURE.
-      // The two pattern ones need `current_pat` — a C++ global holding the
-      // shape of the last cast, which this port keeps per-targeting instead —
-      // and RELOCATE_CREATURE needs `cartoon_happening`. The list is worth
-      // keeping honest: the same sweep over `CATEGORY_RANGES` that produced it
-      // will produce the next one.
+      // TOWN_RELOCATE_CREATURE, which needs `cartoon_happening` — the flag
+      // that lets a scripted scene move PCs around by their `combat_pos`
+      // outside combat. The list is worth keeping honest: the same sweep over
+      // `CATEGORY_RANGES` that produced it will produce the next one.
       reportUnsupported(univ, spec.type);
       break;
   }
@@ -705,4 +782,12 @@ function transformSpace(univ: Universe, ctx: SpecialCtx): void {
   const to = univ.scenario.terTypes[ter]?.transToWhat ?? -1;
   if (to >= 0) alterSpace(univ, x, y, to);
   ctx.redraw = true;
+}
+
+/** Two effect grids cell for cell — the C++ compares `current_pat` by value. */
+function samePattern(a: EffectPattern, b: EffectPattern): boolean {
+  for (let i = 0; i < 9; i++)
+    for (let j = 0; j < 9; j++)
+      if ((a[i]?.[j] ?? 0) !== (b[i]?.[j] ?? 0)) return false;
+  return true;
 }

@@ -17,7 +17,7 @@ import { Location, dist } from '../core/location';
 import { SIGHT_BLOCKED, canSee } from '../core/sight';
 import { FieldType } from '../data/fields';
 import { ItemAbil } from '../data/item';
-import { SpellPat } from '../data/pattern';
+import { SpellPat, getBuiltinPattern } from '../data/pattern';
 import { Spell, SPELLS, isPriestSide, spellName } from '../data/spell';
 import { TerSpec } from '../data/terrain';
 import { getProtLevel } from '../universe/inventory';
@@ -90,6 +90,8 @@ export function startTownTargeting(
     itemSpellLevel,
     range: TOWN_SPELL_RANGE,
   };
+  // `current_pat` (boe.party.cpp:2290), with the same silent WALL → SINGLE.
+  session.currentPat = getBuiltinPattern(session.townTarget.pattern);
 }
 
 /** Back out of targeting. Nothing has been spent, so nothing is refunded. */
