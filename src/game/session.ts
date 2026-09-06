@@ -2068,6 +2068,23 @@ export class GameSession {
    */
   workingMonster = -1;
 
+  /**
+   * `combat_posing_monster` (boe.main.cpp:183) — who is drawn in their **attack
+   * sprite** this frame. Same encoding as `workingMonster`: 0-5 a PC,
+   * 100 + slot a creature, -1 nobody.
+   *
+   * **The C++ assigns the two together at every one of its fifteen sites** —
+   * `combat_posing_monster = current_working_monster = X` — and only
+   * `TOWN_START_TARGETING`'s neighbour `TOWN_MONST_ATTACK` ever moves one
+   * without the other. They are two fields here anyway, because this port sets
+   * `workingMonster` at only the four sites where a redraw's *cost* depends on
+   * it, and those placements are what the corpus proved. Widening it to the
+   * C++'s full extent would change the draw stream on nothing but a guess;
+   * widening the pose costs nothing, so the pose gets the real extent and the
+   * discrepancy is written down rather than papered over.
+   */
+  posingMonster = -1;
+
   onRedraw: (() => void) | null = null;
 
   /**
@@ -4394,11 +4411,11 @@ export class GameSession {
       // `combat_posing_monster = current_working_monster = 100 + i`
       // (boe.combat.cpp:310), cleared straight after (:312) — which is what
       // makes `monster_attack`'s own `draw_terrain(2)` cost a die here.
-      this.workingMonster = 100 + town.monsters.indexOf(monst);
+      this.workingMonster = this.posingMonster = 100 + town.monsters.indexOf(monst);
       try {
         await monsterAttack(this, monst, pc);
       } finally {
-        this.workingMonster = -1;
+        this.workingMonster = this.posingMonster = -1;
       }
       // `draw_terrain(0)` (boe.combat.cpp:313), after the clear — mode 0 has no
       // early-out, so the free-swing costs a redraw of its own.

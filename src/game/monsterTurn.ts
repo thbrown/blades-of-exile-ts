@@ -1252,6 +1252,14 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
       const monst = town.monsters[i]!;
       if (!univ.party.pcs.some((pc) => pc.isAlive)) return;
 
+      // `combat_posing_monster = current_working_monster = 100 + i`
+      // (boe.combat.cpp:2224), cleared at :2555 — so a creature is drawn in
+      // its attack sprite for **its whole turn**, not just while it swings.
+      // Only the pose is set here; see `posingMonster` on GameSession for why
+      // `workingMonster` keeps its narrower placement.
+      session.posingMonster = 100 + i;
+      try {
+
       // A monster that can't reach anything shouldn't spin forever: the C++
       // relies on take_m_ap always firing, so the guard is a safety net for the
       // cases this port hasn't filled in yet.
@@ -1631,7 +1639,13 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
             if ((pc.status[Status.INVISIBLE] ?? 0) !== 0) continue;
             if (pc.traits[Trait.PACIFIST]) continue;
             pcAdj[k] = false;
+            // `combat_posing_monster = k; pc_attack(...); combat_posing_monster
+            // = 100 + i;` (boe.combat.cpp:2514) — the *PC* poses for its free
+            // swing, and the creature takes the pose back afterwards.
+            // `pcAttack` clears it to -1 on the way out, so the restore has to
+            // be here rather than implicit.
             await pcAttack(univ, k, monst, session);
+            session.posingMonster = 100 + i;
           }
         }
 
@@ -1662,6 +1676,13 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
         if (futzing > 1) monst.ap = 0;
       }
       monst.ap = 0;
+      } finally {
+        // `combat_posing_monster = current_working_monster = -1`
+        // (boe.combat.cpp:2555) — the creature drops its attack sprite before
+        // the "redraw monster after it goes" beat below, which is why that
+        // redraw shows it standing.
+        session.posingMonster = -1;
+      }
     }
 
     // --- "Begin monster time stuff loop" (boe.combat.cpp:2553) --------------

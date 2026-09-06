@@ -1057,6 +1057,51 @@ describe('the AFFECT nodes that act on the party', () => {
 });
 
 /**
+ * `TOWN_MONST_ATTACK` (boe.specials.cpp:4266) — one frame of somebody's attack
+ * sprite, and nothing else. It sets `combat_posing_monster`, redraws, and puts
+ * the old value back.
+ */
+describe('a node that poses a creature', () => {
+  it('poses whoever is on the square and puts the pose back', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_MONST_ATTACK },
+    });
+    const where = { x: 5, y: 5 };
+    const monst = assignCreature(0, {
+      number: 1, startAttitude: Attitude.HOSTILE_A, startLoc: where,
+      mobility: 1, timeFlag: 0, timeCode: 0, monsterTime: 0, spec1: -1, spec2: -1,
+      specEncCode: 0, personality: -1, facialPic: -1, specialOnTalk: -1, specialOnKill: -1,
+    } as never, univ.scenario.scenMonsters[1]!);
+    univ.town!.monsters.length = 0;
+    univ.town!.monsters.push(monst);
+
+    // The pose is only up during the node's own redraw, so watch the redraw.
+    const seen: number[] = [];
+    session.onRedraw = () => { seen.push(session.posingMonster); };
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, where);
+    expect(seen).toContain(100);
+    expect(session.posingMonster).toBe(-1);
+  });
+
+  /** `l.y < 0` means "ex1a names them"; a slot past the end draws nothing. */
+  it('takes ex1a when the location is negative, and refuses one out of range', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_MONST_ATTACK, ex1a: 2 },
+      1: { type: SpecType.TOWN_MONST_ATTACK, ex1a: 100 },
+    });
+    univ.town!.monsters.length = 0;
+    const seen: number[] = [];
+    session.onRedraw = () => { seen.push(session.posingMonster); };
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, { x: 5, y: -1 });
+    expect(seen).toContain(2);
+
+    seen.length = 0;
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 1, { x: 5, y: -1 });
+    expect(seen).toEqual([]);
+  });
+});
+
+/**
  * The three nodes that make a noise and a picture and change nothing:
  * `TOWN_SFX_BURST` (boe.specials.cpp:3934), `TOWN_BOOM_SPACE` (:4260) and
  * `TOWN_RUN_MISSILE` (:4249).

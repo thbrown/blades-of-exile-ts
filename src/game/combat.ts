@@ -359,7 +359,7 @@ export async function pcAttack(
   // every `draw_terrain(2)` inside a swing cost a die — including
   // `damage_monst`'s "no damage" one, which the same function reaches for free
   // from `process_fields`.
-  if (session) session.workingMonster = whoAtt;
+  if (session) session.workingMonster = session.posingMonster = whoAtt;
   try {
   const [weap1, weap2] = getWeapons(attacker);
 
@@ -434,7 +434,7 @@ export async function pcAttack(
     await damagePc(univ, attacker, shared, DamageType.MAGIC, Race.UNKNOWN);
   }
   } finally {
-    if (session) session.workingMonster = -1;
+    if (session) session.workingMonster = session.posingMonster = -1;
   }
 }
 

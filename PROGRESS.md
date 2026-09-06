@@ -11059,3 +11059,38 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
   - `monsterAt(univ, target)` in `affect.ts` is the `pc_num >= 100` half of
     `get_target_i` — `univ.town.monst[i - 100]` — and returning null for a PC
     target *is* the `if(pc_num < 100) break;` those four opcodes open with.
+
+- **The attack pose, which this port had never drawn (M5b/M6, 2026-09-06).**
+  `combat_posing_monster` (boe.main.cpp:183) says who is shown in their attack
+  sprite, and `draw_combat_pc`'s third argument and `pic_mode += 10` are how it
+  reaches the screen. `screen.ts` had a comment admitting the gap — "the PC
+  whose turn it is gets a highlight ring, which is the port's stand-in for the
+  original's animated pose". The ring stays; the pose is real now.
+  - **The two layouts move it differently, which is why it is worth a test.** A
+    creature (and a PC borrowing a monster graphic) adds **10 to the mode**,
+    which `monsterGraphic` turns into four columns along the sheet. A pcs-sheet
+    graphic instead offsets the source rect by **(0, 288)** — eight rows of 36
+    — because its attack poses are a second block below the standing ones.
+  - **`combat_posing_monster` and `current_working_monster` are assigned
+    together at every one of the C++'s fifteen sites**, and only
+    `TOWN_MONST_ATTACK` ever moves one without the other. They are still two
+    fields here: this port sets `workingMonster` at only the four sites where a
+    redraw's *cost* depends on it, and those placements are what the corpus
+    proved. Widening it to the C++'s full extent would change the draw stream
+    on nothing but a guess, so the pose got the real extent — a creature poses
+    for its **whole turn** (:2224 to :2555), not just while it swings — and the
+    discrepancy is written down rather than papered over. If a future bucket
+    ever lands on a missing mode-2 redraw inside a monster's turn, this note is
+    where to start.
+  - A PC's free swing at a fleeing creature poses the **PC** and then hands the
+    pose back to the creature (:2514) — and since `pcAttack` clears to -1 on
+    the way out, the restore has to be explicit.
+  - **`TOWN_MONST_ATTACK` (:4266) is ported now**, which is what the pose was
+    blocking. It sets the pose, redraws, and puts the old value back. Who poses
+    is `l` unless `l.y` is negative, in which case `ex1a` names them; a
+    `get_target_i` of 6 becomes -1, i.e. nobody.
+  - **And its redraw is free.** `redraw_screen(REFRESH_TERRAIN)` is
+    `draw_terrain(1)`, and **only mode 0 reaches `draw_text_bar`**
+    (boe.graphics.cpp:1081) — so calling this port's `drawTerrain` there would
+    have invented a die. `session.onRedraw?.()` is the repaint with no cost,
+    and it has to be synchronous because the pose is put back on the next line.

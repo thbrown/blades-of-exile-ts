@@ -926,11 +926,15 @@ export class Screen {
       const { w, h } = monsterDims(monst.pictureNum);
       if (q + w <= 0 || row + h <= 0 || q >= TER_VIEW_TILES || row >= TER_VIEW_TILES) continue;
       const facingRight = monst.direction >= Direction.S;
+      const posing = session.posingMonster === 100 + town.monsters.indexOf(monst);
       for (let part = 0; part < w * h; part++) {
         const px = q + (part % w);
         const py = row + Math.floor(part / w);
         if (px < 0 || py < 0 || px >= TER_VIEW_TILES || py >= TER_VIEW_TILES) continue;
-        const g = monsterGraphic(monst.pictureNum, facingRight ? 1 : 0, part);
+        // `pic_mode += (combat_posing_monster == i + 100) ? 10 : 0`
+        // (boe.graphutil.cpp:200) — the creature's attack sprite, four columns
+        // along the monst sheet.
+        const g = monsterGraphic(monst.pictureNum, (facingRight ? 1 : 0) + (posing ? 10 : 0), part);
         if (!g) continue;
         const img = this.store.get(g.sheetName);
         if (!img) continue;
@@ -957,7 +961,9 @@ export class Screen {
       const row = TER_VIEW_CENTER + pc.combatPos.y - session.center.y;
       if (q < 0 || row < 0 || q >= TER_VIEW_TILES || row >= TER_VIEW_TILES) continue;
       const pos = terrainSpotPos(q, row);
-      const g = pcGraphic(pc.whichGraphic, pc.direction);
+      // `draw_combat_pc(pc, center, combat_posing_monster == get_target_i(pc))`
+      // — a PC's index is its own slot number, so the comparison is direct.
+      const g = pcGraphic(pc.whichGraphic, pc.direction, session.posingMonster === i);
       const img = g && this.store.get(g.sheetName);
       if (g && img) {
         this.ctx.drawImage(

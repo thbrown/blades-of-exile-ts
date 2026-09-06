@@ -14,7 +14,7 @@ import { TerSpec } from '../../data/terrain';
 import { CreatureStatus } from '../../universe/creature';
 import { Status } from '../../universe/skills';
 import { Universe } from '../../universe/universe';
-import { SpecCtx, SpecCtxType, SpecialCtx } from './context';
+import { SpecCtx, SpecCtxType, SpecialCtx, TARGET_PARTY, targetIndexAt } from './context';
 import { drawTerrain } from '../textBar';
 import type { GameSession } from '../session';
 import { alterSpace, reportUnsupported } from './general';
@@ -212,6 +212,41 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
       const xAdj = there ? 14 * there.xWidth - 1 : 0;
       const yAdj = there ? 18 * there.yWidth - 1 : 0;
       runAMissile(ctx.specLoc, dest, spec.pic, spec.ex1c, spec.ex2c, xAdj, yAdj, 100);
+      break;
+    }
+
+    /**
+     * `TOWN_MONST_ATTACK` (boe.specials.cpp:4266) — draw somebody in their
+     * attack sprite for one frame. It changes nothing: it sets
+     * `combat_posing_monster`, redraws, and puts it back. The C++ carries its
+     * own "TODO: I'm not certain if this will work." over it.
+     *
+     * **Who poses is `l`, unless `l.y` is negative**, in which case `ex1a`
+     * names them outright. A `get_target_i` of 6 — the whole party — becomes
+     * -1, i.e. nobody, and a target out of range restores the old value and
+     * gives up without drawing.
+     */
+    case SpecType.TOWN_MONST_ATTACK: {
+      if (ctx.whichMode === SpecCtx.TALK) break;
+      const was = ctx.session.posingMonster;
+      let who = spec.ex1a;
+      if (ctx.specLoc.y >= 0) {
+        who = targetIndexAt(univ, ctx.specLoc, false) ?? TARGET_PARTY;
+        if (who === TARGET_PARTY) who = -1;
+      }
+      const monsters = town?.monsters.length ?? 0;
+      if (who < 0 || who - 100 >= monsters) {
+        ctx.session.posingMonster = was;
+        break;
+      }
+      ctx.session.posingMonster = who;
+      // `redraw_screen(REFRESH_TERRAIN)` is `draw_terrain(1)`, and **mode 1
+      // does not reach `draw_text_bar`** — only mode 0 does
+      // (boe.graphics.cpp:1081). So this repaint is free, and calling
+      // `drawTerrain` here would invent a die. It has to be synchronous, since
+      // the pose is put back on the very next line.
+      ctx.session.onRedraw?.();
+      ctx.session.posingMonster = was;
       break;
     }
 
@@ -577,7 +612,7 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
     }
 
     default:
-      // What is left in this category, as of 2026-09-06: TOWN_MONST_ATTACK,
+      // What is left in this category, as of 2026-09-06:
       // TOWN_SPELL_PAT_FIELD, TOWN_SPELL_PAT_BOOM and TOWN_RELOCATE_CREATURE.
       // The two pattern ones need `current_pat` — a C++ global holding the
       // shape of the last cast, which this port keeps per-targeting instead —

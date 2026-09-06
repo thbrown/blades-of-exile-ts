@@ -231,7 +231,7 @@ export const TARGET_PARTY = 6;
  * The PC half comes first in `target_there` (universe.cpp:1152), so a square
  * holding both answers with the PC unless `monstOnly` says otherwise.
  */
-function targetIndexAt(univ: Universe, where: Location, monstOnly: boolean): number | null {
+export function targetIndexAt(univ: Universe, where: Location, monstOnly: boolean): number | null {
   if (!monstOnly) {
     const pc = univ.party.pcs.findIndex(
       (p) => p.isAlive && locsEqual(p.getLoc(), where));
