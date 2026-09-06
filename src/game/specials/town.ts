@@ -30,6 +30,9 @@ import { createWandMonst } from '../wandering';
 import { handleMessage } from './vm';
 import { XML_BUTTONS, threeChoiceButtons } from './oneshot';
 import { boomSpace, runBoomAnim, startBoomAnim } from '../booms';
+import { hitSpace } from '../processFields';
+import { radiusDamage } from '../damage';
+import { DamageType } from '../../data/monster';
 
 /** The three contexts that mean "the party is walking somewhere". */
 function isMoveMode(mode: SpecCtx): boolean {
@@ -119,6 +122,36 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
 
     case SpecType.TOWN_SET_CENTER:
       ctx.host.moveParty(at);
+      ctx.redraw = true;
+      break;
+
+    /**
+     * `TOWN_HIT_SPACE` (boe.specials.cpp:3910) and `TOWN_EXPLODE_SPACE`
+     * (:3916) — one square, or a radius of them.
+     *
+     * Both refuse to fire from a conversation: a node reached through TALK has
+     * no square to aim at (`l` is wherever the party last was), so blowing it
+     * up mid-sentence would be arbitrary.
+     *
+     * `TOWN_EXPLODE_SPACE`'s radius is in **`spec.pic`**, not one of the extras
+     * — the picture field standing in for a number, as it does for the jump on
+     * `GIVE_ITEM`.
+     */
+    case SpecType.TOWN_HIT_SPACE:
+      if (ctx.whichMode === SpecCtx.TALK) break;
+      // **`l`, not `ex1a`/`ex1b`** — the square the node was *run at*, which
+      // for a terrain special is the one the party stepped on. Most of the
+      // opcodes around this one name their square in the extras; these two do
+      // not, which is why they refuse to fire from a conversation.
+      await hitSpace(
+        ctx.session, ctx.specLoc, spec.ex2a, spec.ex2b as DamageType, 1, 1, univ.curPc);
+      ctx.redraw = true;
+      break;
+
+    case SpecType.TOWN_EXPLODE_SPACE:
+      if (ctx.whichMode === SpecCtx.TALK) break;
+      await radiusDamage(
+        ctx.session, ctx.specLoc, spec.pic, spec.ex2a, spec.ex2b as DamageType);
       ctx.redraw = true;
       break;
 
@@ -484,8 +517,12 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
     }
 
     default:
-      // Combat effects, monster placement, spell patterns and party splitting
-      // all wait on M5.
+      // What is left in this category, as of 2026-09-06: TOWN_RUN_MISSILE,
+      // TOWN_MONST_ATTACK, TOWN_BOOM_SPACE, TOWN_SFX_BURST,
+      // TOWN_SPELL_PAT_FIELD, TOWN_SPELL_PAT_BOOM and
+      // TOWN_RELOCATE_CREATURE. The list is worth keeping honest — the same
+      // sweep over `CATEGORY_RANGES` that produced it will produce the next
+      // one.
       reportUnsupported(univ, spec.type);
       break;
   }

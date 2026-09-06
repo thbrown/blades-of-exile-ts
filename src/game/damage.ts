@@ -12,7 +12,8 @@
  * type are computed here and handed to the host, but nothing draws them yet.
  */
 
-import { Location } from '../core/location';
+import { Location, dist } from '../core/location';
+import { SIGHT_BLOCKED } from '../core/sight';
 import { FieldType } from '../data/fields';
 import { ItemAbil, ItemType } from '../data/item';
 import { variety } from '../data/itemVariety';
@@ -22,9 +23,9 @@ import { getProtLevel, hasAbilEquip, takeItem } from '../universe/inventory';
 import { SpellNote, livingSound } from '../universe/living';
 import { MonstAbil } from '../data/monsterAbility';
 import { animSettle } from './anim';
-import { drawTerrain2 } from './textBar';
-import { isCombat } from './modes';
-import { boomAnimActive, boomSpace } from './booms';
+import { drawTerrain, drawTerrain2 } from './textBar';
+import { isCombat, isTown } from './modes';
+import { boomAnimActive, boomSpace, endBoomAnim, runBoomAnim, startBoomAnim } from './booms';
 import { findClearSpot, placeMonster } from './monsterPlace';
 import { placeGlands, placeItem, placeTreasure } from './loot';
 import { NUM_INVEN_SLOTS, Player } from '../universe/player';
@@ -790,6 +791,67 @@ export async function handleMarkedDamage(
       monst.markedDamage = 0;
       await damageMonst(univ, monst, univ.curPc, marked, DamageType.MARKED, { session });
     }
+  }
+}
+
+/**
+ * `radius_damage` (boe.combat.cpp:4308) — the only thing `TOWN_EXPLODE_SPACE`
+ * does: everything within `radius` of a square takes `dam`, whatever is
+ * between them.
+ *
+ * **The town branch has no volley**, with the C++'s own "TODO: Why no booms in
+ * town mode?" over it, so out of combat the hits show one at a time as
+ * `boom_space` sprites and the eleven redraws are never spent. Kept.
+ *
+ * **And in town the PC test measures from `party.town_loc`, not from the PC**
+ * (:4312) — outside combat the party is one square, so the loop's `pc` is only
+ * used to check that it is alive. Every living PC is hit or none is. The combat
+ * branch below reads each PC's own `combat_pos`, as you would expect.
+ *
+ * The `dist(...) > 0` on both branches means **the square itself is spared**:
+ * a creature standing exactly on the blast takes nothing.
+ */
+export async function radiusDamage(
+  session: GameSession, target: Location, radius: number,
+  dam: number, damType: DamageType,
+): Promise<void> {
+  const univ = session.univ;
+  const monsters = univ.town?.monsters ?? [];
+  const hitMonsters = async (from: (m: Creature) => number): Promise<void> => {
+    for (const monst of monsters) {
+      if (!monst.isAlive) continue;
+      const d = from(monst);
+      if (d <= 0 || d > radius) continue;
+      if (session.canSeeLight(target, monst.curLoc) >= SIGHT_BLOCKED) continue;
+      await damageMonst(univ, monst, univ.curPc, dam, damType, { session });
+    }
+  };
+
+  if (isTown(session.mode)) {
+    const partyDist = dist(target, univ.party.townLoc);
+    for (const pc of univ.party.pcs) {
+      if (pc.mainStatus !== MainStatus.ALIVE) continue;
+      if (partyDist <= 0 || partyDist > radius) continue;
+      await damagePc(univ, pc, dam, damType, Race.UNKNOWN);
+    }
+    await hitMonsters((m) => dist(target, m.curLoc));
+    return;
+  }
+
+  startBoomAnim();
+  try {
+    for (const pc of univ.party.pcs) {
+      if (pc.mainStatus !== MainStatus.ALIVE) continue;
+      const d = dist(target, pc.combatPos);
+      if (d <= 0 || d > radius) continue;
+      await damagePc(univ, pc, dam, damType, Race.UNKNOWN);
+    }
+    await hitMonsters((m) => dist(target, m.curLoc));
+  } finally {
+    runBoomAnim(univ.rng, () => drawTerrain(session));
+    endBoomAnim();
+    await animSettle();
+    await handleMarkedDamage(univ, session);
   }
 }
 

@@ -10964,3 +10964,28 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     skips the scatter rolls and the sound, and `special_draw == 1` skips the
     clean-up that would clear `store_booms`, which is how the second call still
     has something to draw. One `runBoomAnim` spends exactly what the pair does.
+
+- **Two opcodes that blow squares up (M6, 2026-09-06).** `TOWN_HIT_SPACE`
+  (boe.specials.cpp:3910) and `TOWN_EXPLODE_SPACE` (:3916) were both falling
+  through to `default:` — a scenario's trap or landmine did nothing at all.
+  - **They aim at `l`, the square the node was run at**, not at `ex1a`/`ex1b`.
+    Nearly every opcode around them names its square in the extras, and
+    `townSpec`'s shared `at` is built from those two fields, so the obvious
+    port is silently wrong: it hits wherever the node's coordinates happen to
+    point. It is why both refuse to fire from a conversation — in the TALK
+    context `l` is wherever the party last was, so blowing it up mid-sentence
+    would be arbitrary.
+  - `TOWN_EXPLODE_SPACE`'s **radius is in `spec.pic`**, the picture field
+    standing in for a number, as it does for `GIVE_ITEM`'s jump.
+  - `radius_damage` (boe.combat.cpp:4308) is now in `damage.ts`, and it is two
+    functions in a trench coat. **The town branch has no volley at all** —
+    with the C++'s own "TODO: Why no booms in town mode?" over it — so out of
+    combat the hits show one at a time as `boom_space` sprites and none of
+    `do_explosion_anim`'s eleven redraws are spent.
+  - **And in town the PC test measures from `party.town_loc`, not from the
+    PC** (:4312): outside combat the party occupies one square, so the loop's
+    `pc` is used only to check that it is alive, and every living PC is hit or
+    none is. The combat branch reads each PC's own `combat_pos`.
+  - `dist(...) > 0` on both branches means **the centre square is spared**.
+    Standing exactly on the blast is the safest place to be — the same shape
+    `do_shockwave` has, and kept.

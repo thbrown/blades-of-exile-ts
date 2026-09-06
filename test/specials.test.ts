@@ -22,6 +22,8 @@ import { PartyPreset } from '../src/universe/player';
 import { MainStatus, Status } from '../src/universe/skills';
 import { killMonst } from '../src/game/damage';
 import { Universe } from '../src/universe/universe';
+import { Attitude, DamageType } from '../src/data/monster';
+import { Creature, assignCreature } from '../src/universe/creature';
 
 const opcodes = buildOpcodeTable(
   readFileSync(new URL('../public/data/strings/specials-opcodes.txt', import.meta.url), 'utf8'),
@@ -798,6 +800,87 @@ describe('TOWN_LIFT_FOG', () => {
     expect(session.fogLifted).toBe(true);
     await run(1);
     expect(session.fogLifted).toBe(false);
+  });
+});
+
+/**
+ * `TOWN_HIT_SPACE` (boe.specials.cpp:3910) and `TOWN_EXPLODE_SPACE` (:3916) —
+ * a node that hurts what is standing on a square, or near it.
+ */
+describe('a node that damages a square', () => {
+  /** A hostile creature two squares east of the party, at full health. */
+  function monstNear(univ: Universe, session: GameSession, dx: number): Creature {
+    const town = univ.town!;
+    const where = { x: univ.party.townLoc.x + dx, y: univ.party.townLoc.y };
+    const monst = assignCreature(0, {
+      number: 1, startAttitude: Attitude.HOSTILE_A, startLoc: where,
+      mobility: 1, timeFlag: 0, timeCode: 0, monsterTime: 0, spec1: -1, spec2: -1,
+      specEncCode: 0, personality: -1, facialPic: -1, specialOnTalk: -1, specialOnKill: -1,
+    } as never, univ.scenario.scenMonsters[1]!);
+    monst.health = monst.maxHealth = 500;
+    town.monsters.push(monst);
+    session.updateExplored(univ.party.townLoc);
+    return monst;
+  }
+
+  it('HIT_SPACE hurts what stands on the square it is run at', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_HIT_SPACE, ex2a: 30, ex2b: DamageType.UNBLOCKABLE },
+    });
+    const monst = monstNear(univ, session, 2);
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, monst.curLoc);
+    expect(monst.health).toBeLessThan(500);
+    expect(univ.transcript.at(-1)).toContain('takes 30');
+  });
+
+  /** `if(ctx.which_mode == eSpecCtx::TALK) break;` — both of them. */
+  it('…and does nothing at all from a conversation', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_HIT_SPACE, ex2a: 30, ex2b: DamageType.UNBLOCKABLE },
+    });
+    const monst = monstNear(univ, session, 2);
+    await session.runSpecialRaw(SpecCtx.TALK, SpecCtxType.TOWN, 0, monst.curLoc);
+    expect(monst.health).toBe(500);
+  });
+
+  /**
+   * **The radius is `spec.pic`**, the picture field standing in for a number,
+   * and `dist(...) > 0` spares the square itself.
+   */
+  it('EXPLODE_SPACE takes its radius from pic and spares the centre', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_EXPLODE_SPACE, pic: 3, ex2a: 30,
+        ex2b: DamageType.UNBLOCKABLE },
+    });
+    const near = monstNear(univ, session, 2);
+    const far = monstNear(univ, session, 6);
+    const centre = { x: near.curLoc.x - 2, y: near.curLoc.y };
+    const onIt = monstNear(univ, session, 0);
+    onIt.curLoc = { ...centre };
+
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, centre);
+    expect(near.health).toBeLessThan(500);
+    expect(far.health).toBe(500);
+    // Standing exactly on it is the safest place to be.
+    expect(onIt.health).toBe(500);
+  });
+
+  /**
+   * **In town the PC test measures from `party.town_loc`, not from the PC**
+   * (boe.combat.cpp:4312) — outside combat the party is one square, so every
+   * living PC is hit or none is.
+   */
+  it('EXPLODE_SPACE hits the whole party or none of it', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_EXPLODE_SPACE, pic: 3, ex2a: 20,
+        ex2b: DamageType.UNBLOCKABLE },
+    });
+    univ.party.pcs.forEach((pc) => { pc.maxHealth = 200; pc.curHealth = 200; });
+    const at = { x: univ.party.townLoc.x + 2, y: univ.party.townLoc.y };
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, at);
+    const alive = univ.party.pcs.filter((pc) => pc.mainStatus === MainStatus.ALIVE);
+    expect(alive.length).toBeGreaterThan(0);
+    expect(alive.every((pc) => pc.curHealth < 200)).toBe(true);
   });
 });
 
