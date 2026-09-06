@@ -30,6 +30,7 @@ import { createWandMonst } from '../wandering';
 import { handleMessage } from './vm';
 import { XML_BUTTONS, threeChoiceButtons } from './oneshot';
 import { boomSpace, runBoomAnim, startBoomAnim } from '../booms';
+import { runAMissile } from '../missileAnim';
 import { hitSpace } from '../processFields';
 import { radiusDamage } from '../damage';
 import { DamageType } from '../../data/monster';
@@ -154,6 +155,65 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
         ctx.session, ctx.specLoc, spec.pic, spec.ex2a, spec.ex2b as DamageType);
       ctx.redraw = true;
       break;
+
+    /**
+     * `TOWN_SFX_BURST` (boe.specials.cpp:3934) — an explosion with no damage
+     * behind it, for a scenario that wants a bang. `ex2b == 1` is
+     * `mondo_boom`: **twelve** scattered explosions on the one square rather
+     * than one, which is what a big detonation looks like.
+     *
+     * Both are `run_a_boom`/`mondo_boom`, so both open a volley of their own
+     * and pass `spec.ex2c` as the sound — those two are the *only* callers in
+     * the game that give `do_explosion_anim` a third argument.
+     */
+    case SpecType.TOWN_SFX_BURST: {
+      if (ctx.whichMode === SpecCtx.TALK) break;
+      startBoomAnim();
+      const n = spec.ex2b === 1 ? 12 : 1;
+      for (let i = 0; i < n; i++) {
+        // `add_explosion(l, -1, place_type, type, 0, 0)` — `mondo_boom`
+        // scatters (place_type 1), `run_a_boom` does not (0).
+        boomSpace(ctx.specLoc, spec.ex2a, -1, 0, univ.rng,
+          { placeType: spec.ex2b === 1 ? 1 : 0 });
+      }
+      runBoomAnim(univ.rng, () => drawTerrain(ctx.session), spec.ex2c);
+      break;
+    }
+
+    /**
+     * `TOWN_BOOM_SPACE` (:4260) — a single hit sprite with a damage number
+     * over it and no damage under it. **Mode 100**, so it is drawn even on a
+     * square the party cannot see, and the sound is `-ex2c`, i.e. the file
+     * number outright rather than an index into `sound_lookup`.
+     *
+     * The C++ carries its own "TODO: This should work, but does it need a bit
+     * of extra logic?" over it.
+     */
+    case SpecType.TOWN_BOOM_SPACE:
+      if (ctx.whichMode === SpecCtx.TALK) break;
+      boomSpace(ctx.specLoc, spec.ex2a, spec.ex2b, -spec.ex2c, univ.rng, { always: true });
+      break;
+
+    /**
+     * `TOWN_RUN_MISSILE` (:4249) — fly a projectile from this square to
+     * another, purely for show.
+     *
+     * The destination is `ex2a`/`ex2b`, and **if a creature is standing there
+     * the missile is aimed at its middle**: `14 * x_width - 1` and
+     * `18 * y_width - 1`. Note that is not the `14 * (x_width - 1)` used
+     * everywhere else — for a one-square creature it is **13, not 0**, so
+     * every missile fired at a creature lands half a tile down and right of
+     * one fired at bare ground. Kept as written.
+     */
+    case SpecType.TOWN_RUN_MISSILE: {
+      if (ctx.whichMode === SpecCtx.TALK) break;
+      const dest = { x: spec.ex2a, y: spec.ex2b };
+      const there = town?.monsterAt(dest);
+      const xAdj = there ? 14 * there.xWidth - 1 : 0;
+      const yAdj = there ? 18 * there.yWidth - 1 : 0;
+      runAMissile(ctx.specLoc, dest, spec.pic, spec.ex1c, spec.ex2c, xAdj, yAdj, 100);
+      break;
+    }
 
     case SpecType.TOWN_LOCK_SPACE:
     case SpecType.TOWN_UNLOCK_SPACE: {
@@ -517,12 +577,13 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
     }
 
     default:
-      // What is left in this category, as of 2026-09-06: TOWN_RUN_MISSILE,
-      // TOWN_MONST_ATTACK, TOWN_BOOM_SPACE, TOWN_SFX_BURST,
-      // TOWN_SPELL_PAT_FIELD, TOWN_SPELL_PAT_BOOM and
-      // TOWN_RELOCATE_CREATURE. The list is worth keeping honest — the same
-      // sweep over `CATEGORY_RANGES` that produced it will produce the next
-      // one.
+      // What is left in this category, as of 2026-09-06: TOWN_MONST_ATTACK,
+      // TOWN_SPELL_PAT_FIELD, TOWN_SPELL_PAT_BOOM and TOWN_RELOCATE_CREATURE.
+      // The two pattern ones need `current_pat` — a C++ global holding the
+      // shape of the last cast, which this port keeps per-targeting instead —
+      // and RELOCATE_CREATURE needs `cartoon_happening`. The list is worth
+      // keeping honest: the same sweep over `CATEGORY_RANGES` that produced it
+      // will produce the next one.
       reportUnsupported(univ, spec.type);
       break;
   }

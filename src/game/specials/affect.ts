@@ -15,7 +15,10 @@ import { MAX_FOOD, MAX_GOLD } from '../../universe/party';
 import { Enchant, enchantWeapon } from '../../data/enchant';
 import { GiveEquip, GiveStatus, giveItem } from '../../universe/inventory';
 import { Player } from '../../universe/player';
-import { MainStatus, Skill, Status } from '../../universe/skills';
+import { MainStatus, PartyStatus, Skill, Status, Trait } from '../../universe/skills';
+import { Creature } from '../../universe/creature';
+import { isCombat } from '../modes';
+import { recordMonst } from '../soulCrystal';
 import { Universe } from '../../universe/universe';
 import { drainPc, poisonWeapon } from '../itemUse';
 import { DamageType } from '../../data/monster';
@@ -26,6 +29,17 @@ import { SpecialCtx, TARGET_PARTY, defaultTarget } from './context';
 import { SELECT_PC_CANCEL, SelectPcMode, runSelectPc } from '../selectPc';
 import { reportUnsupported } from './general';
 import { handleMessage } from './vm';
+
+/**
+ * The creature a `pc_num` of 100 or more names — `univ.town.monst[i - 100]`,
+ * which is how the AFFECT opcodes that act on a monster reach one. Returns
+ * null for a PC target, which is the `if(pc_num < 100) break;` those opcodes
+ * open with.
+ */
+function monsterAt(univ: Universe, target: number): Creature | null {
+  if (target < 100) return null;
+  return univ.town?.monsters[target - 100] ?? null;
+}
 
 function clamp(lo: number, hi: number, v: number): number {
   return Math.max(lo, Math.min(hi, v));
@@ -285,6 +299,159 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       break;
     }
 
+    /**
+     * `AFFECT_TRAITS` (boe.specials.cpp:3254) — **`traits[ex1a] = !ex1b`**, so
+     * a zero `ex1b` *gives* the trait and anything else takes it away. The
+     * same inversion `AFFECT_MAGE_SPELL` below uses, and the same one a reader
+     * gets backwards.
+     */
+    case SpecType.AFFECT_TRAITS: {
+      if (monsterTarget) break;
+      if (spec.ex1a < 0 || spec.ex1a > 16) {
+        // TODO(M3): `showError` is a modal; the buffer says it meanwhile.
+        univ.addStringToBuf('Trait is out of range (0 - 16).');
+        break;
+      }
+      for (const pc of targets()) pc.traits[spec.ex1a as Trait] = !spec.ex1b;
+      break;
+    }
+
+    /**
+     * `AFFECT_AP` (:3264) — action points, **in combat only**, and floored at
+     * zero rather than allowed negative.
+     *
+     * Note it does not go through `targets()`: the C++ tests `pc_num == 6` for
+     * the whole party and otherwise uses `pc` directly, so a target of 100 or
+     * more — a monster — reaches `pc.ap` on something that is not a PC. This
+     * port reads the same shape but keeps a creature out of it, since `ap`
+     * here belongs to `Player`.
+     */
+    case SpecType.AFFECT_AP: {
+      if (!isCombat(ctx.session.mode)) break;
+      if (monsterTarget) break;
+      for (const pc of targets()) {
+        pc.ap += spec.ex1b ? spec.ex1a : -spec.ex1a;
+        if (pc.ap < 0) pc.ap = 0;
+      }
+      break;
+    }
+
+    /**
+     * `AFFECT_MORALE` (:3155) — **`pc.scare(...)`, and `cPlayer::scare` does
+     * nothing** (pc.cpp:118). So aimed at a PC this node is a no-op, and it is
+     * only a node at all because the same `pc` reference can be a creature.
+     * Note there is no `pc_num` guard on it either way.
+     *
+     * `ex1b != 0` *raises* morale here, which is the opposite of `signed`'s
+     * convention everywhere else in this switch.
+     */
+    case SpecType.AFFECT_MORALE: {
+      const monst = monsterAt(univ, target);
+      if (monst) monst.scare(spec.ex1a * (spec.ex1b !== 0 ? 1 : -1));
+      break;
+    }
+
+    /**
+     * `AFFECT_PARTY_STATUS` (:3242) — **and it is written wrong in the C++.**
+     * It reads the current value out of `status[ex2a]`, adds or subtracts, and
+     * then always writes the result back to **`status[STEALTH]`**. So a node
+     * that means to grant Flight reads Flight's counter and stores it as
+     * Stealth, and Flight never changes.
+     *
+     * Kept, because a scenario that ships with this node has been tested
+     * against the behaviour and not the intent. The boat and horse refusals
+     * above it print their line and then fall through to do the wrong thing
+     * anyway, which is the C++'s `else if` chain ending without a `break`.
+     */
+    case SpecType.AFFECT_PARTY_STATUS: {
+      if (spec.ex2a < 0 || spec.ex2a > 3) break;
+      if (spec.ex1b === 0 && spec.ex2a === 1) {
+        if (party.inBoat >= 0) univ.addStringToBuf("  Can't fly when on a boat.");
+        else if (party.inHorse >= 0) univ.addStringToBuf("  Can't fly when on a horse.");
+      }
+      const was = party.partyStatus[spec.ex2a as PartyStatus] ?? 0;
+      const now = clamp(0, 250, spec.ex1b === 0 ? was + spec.ex1a : was - spec.ex1a);
+      party.partyStatus[PartyStatus.STEALTH] = now;
+      break;
+    }
+
+    /**
+     * `AFFECT_SOUL_CRYSTAL` (:3233) — a **monster-targeted** node. `ex1a == 0`
+     * records the creature into a crystal (`ex1b` forces it over a full set);
+     * anything else frees every crystal holding that creature's species.
+     */
+    case SpecType.AFFECT_SOUL_CRYSTAL: {
+      const monst = monsterAt(univ, target);
+      if (!monst) break;
+      if (spec.ex1a === 0) recordMonst(univ, monst, spec.ex1b !== 0);
+      else {
+        party.imprisonedMonst = party.imprisonedMonst.map(
+          (n) => (n === monst.number ? 0 : n));
+      }
+      break;
+    }
+
+    /** `AFFECT_MONST_TARG` (:3346) — who a creature is going for. */
+    case SpecType.AFFECT_MONST_TARG: {
+      const monst = monsterAt(univ, target);
+      // The C++ carries its own "TODO: Verify this actually works! It's
+      // possible the monster ignores this and just recalculates its target
+      // each turn." — `monst_pick_target` does exactly that whenever the
+      // creature has no reason to keep the one it has.
+      if (monst) monst.target = spec.ex1a;
+      break;
+    }
+
+    /**
+     * `AFFECT_MONST_ATT` (:3158) — shift one of a creature's three attacks.
+     * `ex1b` is dice and `ex1c` sides; `ex2a` non-zero subtracts instead.
+     */
+    case SpecType.AFFECT_MONST_ATT: {
+      const monst = monsterAt(univ, target);
+      if (!monst) break;
+      if (spec.ex1a < 0 || spec.ex1a > 2) {
+        univ.addStringToBuf('Invalid monster attack (0-2).');
+        break;
+      }
+      const attack = monst.mon.attacks[spec.ex1a];
+      if (!attack) break;
+      const sign = spec.ex2a === 0 ? 1 : -1;
+      attack.dice += sign * spec.ex1b;
+      attack.sides += sign * spec.ex1c;
+      break;
+    }
+
+    /**
+     * `AFFECT_MONST_STAT` (:3172) — one of seven numbers on a creature, by
+     * index. **`ex1b > 0` negates**, and the C++ does it by reusing `pc_num`
+     * as scratch ("Blah, let's hackily reuse pc_num...").
+     *
+     * Stat 0 is `m_health`, the creature's *maximum*, not its current — so a
+     * node that "heals" this way raises the ceiling and leaves the wound.
+     */
+    case SpecType.AFFECT_MONST_STAT: {
+      const monst = monsterAt(univ, target);
+      if (!monst) break;
+      if (spec.ex2a < 0 || spec.ex2a > 7) {
+        univ.addStringToBuf('Invalid monster stat (0-7).');
+        break;
+      }
+      const by = spec.ex1b > 0 ? -spec.ex1a : spec.ex1a;
+      switch (spec.ex2a) {
+        case 0: monst.maxHealth += by; break;
+        case 1: monst.maxMp += by; break;
+        case 2: monst.mon.armor += by; break;
+        case 3: monst.mon.skill += by; break;
+        case 4: monst.mon.speed += by; break;
+        case 5: monst.mon.mu += by; break;
+        case 6: monst.mon.cl += by; break;
+        // 7 passes the range check and has no arm. The C++'s switch is the
+        // same shape; kept.
+        default: break;
+      }
+      break;
+    }
+
     case SpecType.AFFECT_MAGE_SPELL:
     case SpecType.AFFECT_PRIEST_SPELL: {
       if (monsterTarget) break;
@@ -375,8 +542,11 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       break;
 
     default:
-      // Damage, monster manipulation, soul crystals, party status effects and
-      // PC creation all need combat or systems from later milestones.
+      // What is left in this category, as of 2026-09-06: `CREATE_NEW_PC` and
+      // `STORE_PC`, which need the character-creation screens (the `TODO(M8)`
+      // in createPc.ts) and the stored-PC roster. Everything else in the
+      // AFFECT range is ported. The sweep that says so walks `CATEGORY_RANGES`
+      // in `context.ts` and subtracts every `SpecType.NAME` any file mentions.
       reportUnsupported(univ, spec.type);
       break;
   }

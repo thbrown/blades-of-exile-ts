@@ -10989,3 +10989,73 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
   - `dist(...) > 0` on both branches means **the centre square is spared**.
     Standing exactly on the blast is the safest place to be — the same shape
     `do_shockwave` has, and kept.
+
+- **Three nodes that are only a special effect (M6, 2026-09-06).**
+  `TOWN_SFX_BURST` (boe.specials.cpp:3934), `TOWN_BOOM_SPACE` (:4260) and
+  `TOWN_RUN_MISSILE` (:4249) — a bang, a damage number and a projectile, none
+  of which touch anybody's health. Corpus-neutral.
+  - **`ex2b == 1` on SFX_BURST is `mondo_boom`: twelve scattered explosions on
+    the one square**, not one. `run_a_boom` and `mondo_boom` are also the only
+    two callers in the whole game that pass `do_explosion_anim` a **third**
+    argument, which is the one that actually names a sound — the `5` every
+    other call site passes first is unnamed in the definition and never read.
+  - `TOWN_BOOM_SPACE` is `boom_space(l, 100, ex2a, ex2b, -ex2c)`: **mode 100**
+    draws it on a square the party cannot see, and the negative sound is the
+    file number outright rather than an index into `sound_lookup`.
+  - **`TOWN_RUN_MISSILE` aims at a creature's middle with `14 * x_width - 1`,
+    not the `14 * (x_width - 1)` used everywhere else.** For a one-square
+    creature that is **13, not 0**, so a missile fired at a creature lands half
+    a tile down and right of one fired at bare ground. Kept, with a test that
+    pins the 13 and the 17 — it is exactly the kind of off-by-one a reader
+    would "fix" on sight.
+  - All three refuse to fire from a conversation, for the same reason
+    `TOWN_HIT_SPACE` does: `l` in the TALK context is wherever the party last
+    was.
+  - **What is left in the TOWN category**: `TOWN_MONST_ATTACK`,
+    `TOWN_SPELL_PAT_FIELD`, `TOWN_SPELL_PAT_BOOM` and
+    `TOWN_RELOCATE_CREATURE`. The two pattern ones need **`current_pat`** — a
+    C++ global holding the shape of the last cast, which this port keeps
+    per-targeting instead — and `TOWN_RELOCATE_CREATURE` needs
+    **`cartoon_happening`**, the flag that lets a scripted scene move PCs
+    around by their `combat_pos` outside combat. Neither exists here yet.
+  - **The sweep that found these** is worth repeating whenever a category feels
+    finished: walk `CATEGORY_RANGES` from `specials/context.ts`, list every
+    `SpecType` in each range, and subtract the ones any file mentions as
+    `SpecType.NAME`. As of today it leaves 10 in AFFECT (`AFFECT_TRAITS`,
+    `AFFECT_AP`, `AFFECT_MORALE`, `AFFECT_SOUL_CRYSTAL`, `AFFECT_MONST_TARG`,
+    `AFFECT_MONST_ATT`, `AFFECT_MONST_STAT`, `AFFECT_PARTY_STATUS`,
+    `CREATE_NEW_PC`, `STORE_PC`) and 4 in TOWN. GENERAL, ONCE, IF_THEN, RECT
+    and OUTDOOR are complete.
+
+- **Seven AFFECT nodes that were falling through to `default:` (M6,
+  2026-09-06).** `AFFECT_TRAITS`, `AFFECT_AP`, `AFFECT_MORALE`,
+  `AFFECT_SOUL_CRYSTAL`, `AFFECT_MONST_TARG`, `AFFECT_MONST_ATT` and
+  `AFFECT_MONST_STAT` (boe.specials.cpp:3155-3350). With these and the town
+  batch above, **`CATEGORY_RANGES` has six opcodes left unported in the whole
+  game**: `CREATE_NEW_PC` and `STORE_PC` in AFFECT, and `TOWN_MONST_ATTACK`,
+  `TOWN_SPELL_PAT_FIELD`, `TOWN_SPELL_PAT_BOOM` and `TOWN_RELOCATE_CREATURE`
+  in TOWN. Corpus-neutral: none of them draws.
+  - **`AFFECT_PARTY_STATUS` is written wrong in the C++ and is kept wrong.**
+    It reads the current value out of `status[ex2a]`, adds or subtracts, and
+    then writes the result back to **`status[STEALTH]`** unconditionally
+    (:3248-3252). A node meaning to grant Flight reads Flight's counter and
+    stores it as Stealth, and Flight never changes. Kept, because a scenario
+    shipping this node was tested against the behaviour and not the intent.
+    Its boat/horse refusals print their line and then fall through and do it
+    anyway — an `else if` chain with no `break`.
+  - **`traits[ex1a] = !ex1b`**: a *zero* `ex1b` gives the trait and anything
+    else takes it away. The same inversion `AFFECT_MAGE_SPELL` uses, and the
+    same one a reader gets backwards.
+  - **`AFFECT_MORALE` calls `pc.scare(...)`, and `cPlayer::scare` does nothing**
+    (pc.cpp:118). Aimed at a PC the node is a no-op; it exists because the same
+    reference can be a creature. There is no `pc_num` guard either way.
+  - **`AFFECT_MONST_STAT`'s stat 0 is `m_health`, the creature's *maximum***,
+    not its current — so a node that "heals" this way raises the ceiling and
+    leaves the wound. Its `ex2a` range check admits 7, which has no arm.
+  - **`AFFECT_AP`'s default target in combat is `univ.cur_pc`**, not the party,
+    so an AP node with no `SELECT_TARGET` in front of it moves the acting PC's
+    points and nobody else's. Worth remembering for the whole AFFECT category:
+    `defaultTarget` is a single PC in combat and the party out of it.
+  - `monsterAt(univ, target)` in `affect.ts` is the `pc_num >= 100` half of
+    `get_target_i` — `univ.town.monst[i - 100]` — and returning null for a PC
+    target *is* the `if(pc_num < 100) break;` those four opcodes open with.

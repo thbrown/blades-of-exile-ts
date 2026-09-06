@@ -19,11 +19,14 @@ import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { PartyPreset } from '../src/universe/player';
-import { MainStatus, Status } from '../src/universe/skills';
+import { MainStatus, PartyStatus, Status, Trait } from '../src/universe/skills';
 import { killMonst } from '../src/game/damage';
 import { Universe } from '../src/universe/universe';
 import { Attitude, DamageType } from '../src/data/monster';
 import { Creature, assignCreature } from '../src/universe/creature';
+import { Boom, setBoomSink } from '../src/game/booms';
+import { Missile, setMissileSink } from '../src/game/missileAnim';
+import { animClear } from '../src/game/anim';
 
 const opcodes = buildOpcodeTable(
   readFileSync(new URL('../public/data/strings/specials-opcodes.txt', import.meta.url), 'utf8'),
@@ -881,6 +884,285 @@ describe('a node that damages a square', () => {
     const alive = univ.party.pcs.filter((pc) => pc.mainStatus === MainStatus.ALIVE);
     expect(alive.length).toBeGreaterThan(0);
     expect(alive.every((pc) => pc.curHealth < 200)).toBe(true);
+  });
+});
+
+/**
+ * The AFFECT opcodes that were falling through to `default:` — seven of them,
+ * four aimed at a creature rather than a PC.
+ */
+describe('the AFFECT nodes that act on a creature', () => {
+  /** A creature at (5,5), and a context that makes it the node's target. */
+  function withMonst(nodes: Record<number, Partial<SpecialNode>>) {
+    const w = withNodes(nodes);
+    const where = { x: 5, y: 5 };
+    const monst = assignCreature(0, {
+      number: 1, startAttitude: Attitude.HOSTILE_A, startLoc: where,
+      mobility: 1, timeFlag: 0, timeCode: 0, monsterTime: 0, spec1: -1, spec2: -1,
+      specEncCode: 0, personality: -1, facialPic: -1, specialOnTalk: -1, specialOnKill: -1,
+    } as never, {
+      ...w.univ.scenario.scenMonsters[1]!,
+      resist: [...w.univ.scenario.scenMonsters[1]!.resist],
+      attacks: [{ dice: 3, sides: 6, type: 0 }],
+    });
+    w.univ.town!.monsters.length = 0;
+    w.univ.town!.monsters.push(monst);
+    // `SEE_MONST` resolves the target to the creature on the trigger square.
+    const fire = (node = 0) =>
+      w.session.runSpecialRaw(SpecCtx.SEE_MONST, SpecCtxType.TOWN, node, where);
+    return { ...w, monst, fire };
+  }
+
+  it('MONST_STAT moves one of seven numbers, and ex1b negates', async () => {
+    const { monst, fire } = withMonst({
+      0: { type: SpecType.AFFECT_MONST_STAT, ex1a: 5, ex1b: 0, ex2a: 2 },
+      1: { type: SpecType.AFFECT_MONST_STAT, ex1a: 5, ex1b: 1, ex2a: 2 },
+    });
+    const armor = monst.mon.armor;
+    await fire(0);
+    expect(monst.mon.armor).toBe(armor + 5);
+    await fire(1);
+    expect(monst.mon.armor).toBe(armor);
+  });
+
+  /** Stat 0 is `m_health`, the *maximum* — so it raises the ceiling. */
+  it('…and stat 0 is the maximum, not the current health', async () => {
+    const { monst, fire } = withMonst({
+      0: { type: SpecType.AFFECT_MONST_STAT, ex1a: 20, ex1b: 0, ex2a: 0 },
+    });
+    monst.maxHealth = 100;
+    monst.health = 40;
+    await fire();
+    expect(monst.maxHealth).toBe(120);
+    expect(monst.health).toBe(40);
+  });
+
+  it('MONST_ATT shifts an attack, and ex2a subtracts', async () => {
+    const { monst, fire } = withMonst({
+      0: { type: SpecType.AFFECT_MONST_ATT, ex1a: 0, ex1b: 2, ex1c: 3, ex2a: 0 },
+      1: { type: SpecType.AFFECT_MONST_ATT, ex1a: 0, ex1b: 2, ex1c: 3, ex2a: 1 },
+    });
+    await fire(0);
+    expect(monst.mon.attacks[0]).toEqual({ dice: 5, sides: 9, type: 0 });
+    await fire(1);
+    expect(monst.mon.attacks[0]).toEqual({ dice: 3, sides: 6, type: 0 });
+  });
+
+  it('MONST_TARG sets who the creature is going for', async () => {
+    const { monst, fire } = withMonst({
+      0: { type: SpecType.AFFECT_MONST_TARG, ex1a: 3 },
+    });
+    await fire();
+    expect(monst.target).toBe(3);
+  });
+
+  it('SOUL_CRYSTAL records the creature, and ex1a frees it again', async () => {
+    const { univ, monst, fire } = withMonst({
+      0: { type: SpecType.AFFECT_SOUL_CRYSTAL, ex1a: 0, ex1b: 1 },
+      1: { type: SpecType.AFFECT_SOUL_CRYSTAL, ex1a: 1 },
+    });
+    await fire(0);
+    expect(univ.party.imprisonedMonst).toContain(monst.number);
+    await fire(1);
+    expect(univ.party.imprisonedMonst).not.toContain(monst.number);
+  });
+
+  /** `cPlayer::scare` does nothing, so MORALE only ever reaches a creature. */
+  it('MORALE frightens a creature, and ex1b raises instead', async () => {
+    const { monst, fire } = withMonst({
+      0: { type: SpecType.AFFECT_MORALE, ex1a: 10, ex1b: 0 },
+      1: { type: SpecType.AFFECT_MORALE, ex1a: 10, ex1b: 1 },
+    });
+    monst.morale = 50;
+    await fire(0);
+    expect(monst.morale).toBe(60);
+    await fire(1);
+    expect(monst.morale).toBe(50);
+  });
+});
+
+describe('the AFFECT nodes that act on the party', () => {
+  /** `traits[ex1a] = !ex1b`, so a zero ex1b *gives* the trait. */
+  it('TRAITS gives on zero and takes away on anything else', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.AFFECT_TRAITS, ex1a: Trait.NIMBLE, ex1b: 0 },
+      1: { type: SpecType.AFFECT_TRAITS, ex1a: Trait.NIMBLE, ex1b: 1 },
+    });
+    await run(0);
+    expect(univ.party.pcs.every((pc) => pc.traits[Trait.NIMBLE])).toBe(true);
+    await run(1);
+    expect(univ.party.pcs.some((pc) => pc.traits[Trait.NIMBLE])).toBe(false);
+  });
+
+  it('…and refuses an index outside 0 - 16', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.AFFECT_TRAITS, ex1a: 17, ex1b: 0 },
+    });
+    await run(0);
+    expect(univ.transcript.at(-1)).toBe('Trait is out of range (0 - 16).');
+  });
+
+  /**
+   * `if(!is_combat()) break;` — and in combat the node's default target is
+   * `univ.cur_pc`, not the party, so an AP node with no `SELECT_TARGET` in
+   * front of it moves the *acting* PC's points and nobody else's.
+   */
+  it('AP does nothing out of combat and floors at zero in it', async () => {
+    const { univ, session, run } = withNodes({
+      0: { type: SpecType.AFFECT_AP, ex1a: 3, ex1b: 1 },
+      1: { type: SpecType.AFFECT_AP, ex1a: 99, ex1b: 0 },
+    });
+    univ.party.pcs.forEach((pc) => { pc.ap = 4; });
+    await run(0);
+    expect(univ.party.pcs.every((pc) => pc.ap === 4)).toBe(true);
+
+    session.startCombat(univ.party.direction);
+    univ.curPc = 0;
+    univ.party.pcs.forEach((pc) => { pc.ap = 4; });
+    await run(0);
+    expect(univ.party.pcs[0]!.ap).toBe(7);
+    expect(univ.party.pcs[1]!.ap).toBe(4);
+    await run(1);
+    expect(univ.party.pcs[0]!.ap).toBe(0);
+  });
+
+  /**
+   * **The C++ reads `status[ex2a]` and always writes `status[STEALTH]`**
+   * (boe.specials.cpp:3248-3252), so a node meaning to grant Flight reads
+   * Flight's counter and stores it as Stealth. Kept.
+   */
+  it('PARTY_STATUS reads one counter and writes Stealth', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.AFFECT_PARTY_STATUS, ex1a: 30, ex1b: 0, ex2a: 1 },
+    });
+    univ.party.partyStatus[PartyStatus.STEALTH] = 0;
+    univ.party.partyStatus[1 as PartyStatus] = 10;
+    await run(0);
+    // 10 + 30, and it lands on Stealth rather than on status 1.
+    expect(univ.party.partyStatus[PartyStatus.STEALTH]).toBe(40);
+    expect(univ.party.partyStatus[1 as PartyStatus]).toBe(10);
+  });
+
+  it('…and clamps to 0 - 250', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.AFFECT_PARTY_STATUS, ex1a: 250, ex1b: 0, ex2a: 0 },
+      1: { type: SpecType.AFFECT_PARTY_STATUS, ex1a: 250, ex1b: 1, ex2a: 0 },
+    });
+    univ.party.partyStatus[PartyStatus.STEALTH] = 100;
+    await run(0);
+    expect(univ.party.partyStatus[PartyStatus.STEALTH]).toBe(250);
+    await run(1);
+    expect(univ.party.partyStatus[PartyStatus.STEALTH]).toBe(0);
+  });
+});
+
+/**
+ * The three nodes that make a noise and a picture and change nothing:
+ * `TOWN_SFX_BURST` (boe.specials.cpp:3934), `TOWN_BOOM_SPACE` (:4260) and
+ * `TOWN_RUN_MISSILE` (:4249).
+ */
+describe('a node that is only a special effect', () => {
+  function capture(): { booms: Boom[]; missiles: Missile[]; done: () => void } {
+    const booms: Boom[] = [];
+    const missiles: Missile[] = [];
+    setBoomSink((b) => { booms.push({ ...b }); });
+    setMissileSink((m) => { missiles.push({ ...m }); });
+    return { booms, missiles, done: () => {
+      setBoomSink(null); setMissileSink(null); animClear();
+    } };
+  }
+
+  /** `ex2b == 1` is `mondo_boom`: twelve scattered explosions, not one. */
+  it.each([[0, 1], [1, 12]])('SFX_BURST with ex2b=%i draws %i explosions', async (ex2b, n) => {
+    const { session } = withNodes({
+      0: { type: SpecType.TOWN_SFX_BURST, ex2a: 2, ex2b, ex2c: 5 },
+    });
+    const cap = capture();
+    try {
+      await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, { x: 5, y: 5 });
+      await session.settled();
+    } finally { cap.done(); }
+    expect(cap.booms.length).toBe(n);
+    expect(cap.booms.every((b) => b.animated)).toBe(true);
+  });
+
+  it('…and nothing at all from a conversation', async () => {
+    const { session } = withNodes({
+      0: { type: SpecType.TOWN_SFX_BURST, ex2a: 2, ex2b: 1, ex2c: 5 },
+    });
+    const cap = capture();
+    try {
+      await session.runSpecialRaw(SpecCtx.TALK, SpecCtxType.TOWN, 0, { x: 5, y: 5 });
+      await session.settled();
+    } finally { cap.done(); }
+    expect(cap.booms.length).toBe(0);
+  });
+
+  /**
+   * `boom_space(l, 100, ex2a, ex2b, -ex2c)` — mode 100 draws it on a square
+   * the party cannot see, and the negative sound is the file number outright
+   * rather than an index into `sound_lookup`.
+   */
+  it('BOOM_SPACE shows a damage number and takes no health off', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_BOOM_SPACE, ex2a: 1, ex2b: 42, ex2c: 70 },
+    });
+    const before = univ.party.pcs.map((pc) => pc.curHealth);
+    const cap = capture();
+    try {
+      await session.runSpecialRaw(
+        SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, univ.party.townLoc);
+      await session.settled();
+    } finally { cap.done(); }
+    expect(cap.booms.length).toBe(1);
+    expect(cap.booms[0]!.damage).toBe(42);
+    expect(cap.booms[0]!.sound).toBe(70);
+    // Not `animated`: outside a volley this is a hit sprite.
+    expect(cap.booms[0]!.animated).toBe(false);
+    expect(univ.party.pcs.map((pc) => pc.curHealth)).toEqual(before);
+  });
+
+  /**
+   * `TOWN_RUN_MISSILE` aims at a creature's middle with **`14 * x_width - 1`**,
+   * not the `14 * (x_width - 1)` used everywhere else — so a one-square
+   * creature gets 13, not 0, and a missile fired at a creature lands half a
+   * tile down and right of one fired at bare ground. Kept.
+   */
+  it('RUN_MISSILE offsets by 13 when a creature is standing there', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_RUN_MISSILE, pic: 0, ex1c: 0, ex2c: 0 },
+    });
+    const from = { x: univ.party.townLoc.x, y: univ.party.townLoc.y };
+    const dest = { x: from.x + 3, y: from.y };
+    const node = univ.town!.record.specials.get(0)!;
+    node.ex2a = dest.x;
+    node.ex2b = dest.y;
+
+    const cap = capture();
+    try {
+      await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, from);
+      await session.settled();
+    } finally { cap.done(); }
+    expect(cap.missiles.length).toBe(1);
+    const bare = cap.missiles[0]!;
+
+    // Now put a creature on the destination and fire again.
+    const monst = assignCreature(0, {
+      number: 1, startAttitude: Attitude.HOSTILE_A, startLoc: dest,
+      mobility: 1, timeFlag: 0, timeCode: 0, monsterTime: 0, spec1: -1, spec2: -1,
+      specEncCode: 0, personality: -1, facialPic: -1, specialOnTalk: -1, specialOnKill: -1,
+    } as never, univ.scenario.scenMonsters[1]!);
+    univ.town!.monsters.push(monst);
+    expect(monst.xWidth).toBe(1);
+
+    const cap2 = capture();
+    try {
+      await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, from);
+      await session.settled();
+    } finally { cap2.done(); }
+    expect(cap2.missiles.length).toBe(1);
+    expect(cap2.missiles[0]!.xAdj).toBe(bare.xAdj + 13);
+    expect(cap2.missiles[0]!.yAdj).toBe(bare.yAdj + 17);
   });
 });
 
