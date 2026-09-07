@@ -533,11 +533,26 @@ if (!ALL) {
     }
     return [...m].sort((a, b) => b[1].length - a[1].length);
   };
+  /**
+   * Did this port match **every** draw the oracle made before it stopped?
+   *
+   * That is the difference between "the oracle fell over and we have wrung the
+   * file dry" and "the oracle stopped somewhere we had already gone wrong".
+   * A `short` split where *this port* is the longer stream means the C++'s
+   * draws are a strict prefix of ours — every one of them agreed — so the file
+   * holds no more signal until the harness can go further. Worth printing on
+   * every run rather than rediscovering by hand: without it a bucket of
+   * fourteen files looks like fourteen open questions.
+   */
+  const isPrefix = (r) => r.cmp.kind === 'short' && r.cmp.longer === 'this port';
   const report = (title, entries) => {
     if (entries.length === 0) return;
     console.log(`\n${title}`);
     for (const [sig, list] of entries) {
-      console.log(`  ${String(list.length).padStart(4)} files  ${sig}`);
+      const full = list.filter((f) => isPrefix(rows.find((r) => r.rel === f))).length;
+      const note = full === list.length ? '  [all draws matched first]'
+        : full > 0 ? `  [${full}/${list.length} matched all draws first]` : '';
+      console.log(`  ${String(list.length).padStart(4)} files  ${sig}${note}`);
       for (const f of list.slice(0, 4)) console.log(`               ${f}`);
       if (list.length > 4) console.log(`               … and ${list.length - 4} more`);
     }
@@ -548,8 +563,16 @@ if (!ALL) {
     bucketise((r) => !isRule(r.cmp) && r.cmp.kind !== 'match'));
 
   const clean = rows.filter((r) => r.cmp.kind === 'match').length;
-  const blocked = rows.filter((r) => !isRule(r.cmp) && r.cmp.kind !== 'match').length;
+  const blockedRows = rows.filter((r) => !isRule(r.cmp) && r.cmp.kind !== 'match');
   const drawn = rows.reduce((n, r) => n + r.matched, 0);
   console.log(`\n${clean} of ${rows.length} agree all the way; ${drawn} draws matched; `
-    + `${blocked} blocked outside the rules`);
+    + `${blockedRows.length} blocked outside the rules`);
+  // Of the blocked ones, the ones that agreed all the way to the stop are
+  // finished rather than pending: nothing is left in them to find.
+  const wrung = blockedRows.filter(isPrefix);
+  if (wrung.length > 0) {
+    const n = wrung.reduce((s, r) => s + r.matched, 0);
+    console.log(`  …of which ${wrung.length} matched every draw the oracle made `
+      + `(${n} of them) before it stopped — no signal left in those.`);
+  }
 }

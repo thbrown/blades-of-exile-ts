@@ -20,11 +20,16 @@
  */
 
 import { Direction, dist, Location } from '../core/location';
+import { ItemPreset, presetItem } from '../data/item';
+import { DamageType } from '../data/monster';
+import { CreatureStatus } from '../universe/creature';
 import { GameRng } from '../core/rng';
 import { Spell } from '../data/spell';
 import { ItemWinMode, ItemWindow } from '../game/itemWindow';
 import { takeAp } from '../game/combat';
-import { awardPartyXp, killPc } from '../game/damage';
+import { setUpCombat, startOutdoorCombat } from '../game/outCombat';
+import { countWalls } from '../game/wandering';
+import { awardPartyXp, damageMonst, killPc } from '../game/damage';
 import { GiveStatus, giveItem } from '../universe/inventory';
 import { setGiveHelp } from '../universe/living';
 import { MainStatus, PartyStatus, isDeadStatus } from '../universe/skills';
@@ -33,13 +38,13 @@ import { TOWN_NUM_OUTDOORS } from '../universe/party';
 import { GetItemsPick } from '../game/getItems';
 import { SpecCtx, SpecCtxType } from '../game/specials/context';
 import { ShopItemType } from '../data/shop';
-import { alchemyChoices, makePotion } from '../game/alchemy';
+import { alchemyChoices, hasSpace, makePotion } from '../game/alchemy';
 import { potionSlot } from '../dialogs/pickPotionDialog';
 import { useItem } from '../game/itemUse';
-import { GameMode, isCombat } from '../game/modes';
+import { GameMode, isCombat, isOut } from '../game/modes';
 import { drawTerrain } from '../game/textBar';
 import { dropItemAt, handleDropItem, handleGiveItem } from '../game/giveDrop';
-import { GameSession } from '../game/session';
+import { FORCED_ENTRY, GameSession } from '../game/session';
 import { SpellPick } from '../game/spellPick';
 import { combatCastCheck, combatCastSpell } from '../game/spellCombat';
 import { cancelSpellTargeting, doCombatCast, placeTarget, spellCastHitReturn } from '../game/spellCombatTarget';
@@ -1529,6 +1534,126 @@ export async function runReplay(
             : univ.party.direction === Direction.S ? 0
               : univ.party.direction < Direction.S ? 3 : 1;
           session.startTownMode(value, dir, true);
+          break;
+        }
+        case 'debug_fight_encounter': {
+          // boe.actions.cpp:2150 — `%` fights one of the sector's four
+          // wandering encounters, `^` one of its four special ones, and the
+          // action's text is which (`true` = wandering).
+          //
+          // **It is not `initiate_outdoor_combat`**: there is no pre-encounter
+          // special, no "monsters fled" level check and no `exists = false` on
+          // the group, so the same encounter can be fought over and over. It
+          // goes straight to `start_outdoor_combat` and `set_up_combat`.
+          const { univ } = session;
+          if (!isOut(session.mode)) {
+            univ.addStringToBuf('Debug outdoor encounter: You have to be');
+            univ.addStringToBuf('outdoors!');
+            break;
+          }
+          const wandering = action.text.trim() === 'true';
+          // `get_num_response(0, 3, prompt, {}, -1)` (strchoice.hpp:93) —
+          // min 0, max 3, an empty list so `choose` offers nothing, and **-1
+          // as the *cancel* value, not the initial one**: `initial_value`
+          // defaults to 0, so a recording that opens the box and clicks okay
+          // without typing fights encounter 0. `popNumResponse` already
+          // returns null for the cancel, so there is no -1 to test for.
+          const value = await popNumResponse(
+            source, 'the debug encounter number', 0, () => { result.answered++; }, 0);
+          if (value === null) break;
+          const sector = univ.out.sectorAt(univ.party.outLoc);
+          const encounter = wandering ? sector.wandering[value] : sector.specialEnc[value];
+          if (encounter === undefined) break;
+          startOutdoorCombat(
+            session, encounter, univ.party.outLoc, countWalls(univ, univ.party.outLoc));
+          setUpCombat(session);
+          break;
+        }
+        case 'debug_kill': {
+          // boe.actions.cpp:2291 — `K`, "kill everything". **Two passes over
+          // the same list, not one**: in combat every living hostile is marked
+          // `DEAD` outright first, and then *separately* anything hostile
+          // within 10 of the party takes 1000 `SPECIAL` damage. A creature
+          // caught by both is marked and then damaged, and `damage_monst`
+          // draws — so the order and the range test are part of the stream.
+          const { univ } = session;
+          for (const monst of univ.town?.monsters ?? []) {
+            if (isCombat(session.mode) && monst.isAlive && !monst.isFriendly) {
+              monst.active = CreatureStatus.DEAD;
+            }
+            if (monst.isAlive && !monst.isFriendly
+              && dist(monst.curLoc, univ.party.townLoc) <= 10) {
+              await damageMonst(univ, monst, 7, 1000, DamageType.SPECIAL, { session });
+            }
+          }
+          univ.addStringToBuf('Debug: Kill things.');
+          break;
+        }
+        case 'debug_overburden': {
+          // boe.actions.cpp:2216 — `Y`, fill the current PC's pack with
+          // 300-weight junk until `give_item` refuses. `GIVE_ALLOW_OVERLOAD`
+          // means weight never refuses, so what stops the loop is running out
+          // of *slots*.
+          const { univ } = session;
+          const pc = univ.currentPc;
+          while (giveItem(pc, univ.party, presetItem(ItemPreset.DEBUG_HEAVY),
+            false, true).status === GiveStatus.OK) { /* until the pack is full */ }
+          univ.addStringToBuf(hasSpace(pc) >= 0
+            ? `Debug: failed to fill ${pc.name}'s inventory.`
+            : `Debug: filled ${pc.name}'s inventory.`);
+          break;
+        }
+        case 'debug_return_to_start': {
+          // boe.actions.cpp:2499 — `R`, back to the scenario's start town.
+          // Refused from a boat or a horse, and note it does **all three** of
+          // force-enter, start-town-mode and position-party, so the party is
+          // put back outdoors at the start sector as well as into the town.
+          const { univ } = session;
+          if (univ.party.inBoat >= 0) {
+            univ.addStringToBuf('  Not while in boat.');
+            break;
+          }
+          if (univ.party.inHorse >= 0) {
+            univ.addStringToBuf('  Not while on horse.');
+            break;
+          }
+          const scen = univ.scenario;
+          session.forceTownEntry(scen.startTown, scen.townStart);
+          session.startTownMode(scen.startTown, FORCED_ENTRY);
+          session.positionParty(scen.outdoorStart.x, scen.outdoorStart.y,
+            scen.sectorStart.x, scen.sectorStart.y);
+          univ.party.townLoc = { ...scen.townStart };
+          session.center = { ...scen.townStart };
+          univ.addStringToBuf('Debug:  You return to the start.');
+          break;
+        }
+        case 'debug_kill_party': {
+          // boe.actions.cpp:2309 — `X`. **Two behaviours behind a feature
+          // flag.** `V2` asks how (Dead/Dust/Stone) and who, and a `pc` of 7
+          // from `select_pc`'s "all" button kills everyone; the old one is a
+          // yes/no box that kills the whole party as **ABSENT**, which is not
+          // one of the three deaths V2 offers.
+          const { univ } = session;
+          if (hasFeatureFlag('debug-kill-party', 'V2')) {
+            // TODO(M8): the V2 arm is a `cStringChoice` for the death kind and
+            // then a `select_pc`. No recording in the corpus takes it — the
+            // one file that uses this key predates the flag and answers the
+            // yes/no box — so its control names would be a guess, and a guess
+            // that silently mis-answers a dialog is worse than saying so.
+            throw new Error("replay: debug_kill_party's V2 arm is not ported");
+          }
+          // `cChoiceDlog("kill-party-confirm", {"yes","no"})`.
+          const answer = popClick(source, 'the debug kill-party confirm',
+            () => { result.answered++; });
+          if (answer !== 'yes') break;
+          // **ABSENT, not DEAD** — the old arm wipes the party out of
+          // existence rather than leaving six bodies, which is not one of the
+          // three deaths the V2 arm offers.
+          for (const pc of univ.party.pcs) {
+            if (pc.isAlive) killPc(univ, pc, MainStatus.ABSENT);
+          }
+          univ.addStringToBuf('Debug: Kill the party.');
+          await session.afterPartyTurn();
           break;
         }
         case 'debug_ghost_mode':

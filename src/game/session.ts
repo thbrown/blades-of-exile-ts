@@ -42,7 +42,7 @@ import {
 import {
   adjacentEncounter, countWalls, createWandMonst, doOutdoorMonsters, outEncLevTot,
 } from './wandering';
-import { startOutdoorCombat } from './outCombat';
+import { setUpCombat, startOutdoorCombat } from './outCombat';
 import { increaseAgeEffects } from './increaseAge';
 import { processFields, syncForceCages } from './processFields';
 import type { TownTarget } from './spellTarget';
@@ -783,6 +783,9 @@ export class GameSession {
     }
 
     startOutdoorCombat(this, encounter, univ.party.outLoc, countWalls(univ, univ.party.outLoc));
+    // `set_up_combat()` (boe.actions.cpp:2111) — `initiate_outdoor_combat`'s
+    // last line, and the same call `debug_fight_encounter` makes.
+    setUpCombat(this);
     this.onRedraw?.();
     return true;
   }

@@ -16,7 +16,9 @@ import { TerObstruct } from '../data/terrain';
 import { CurTown } from '../universe/curTown';
 import { Creature, CreatureStatus, assignCreature } from '../universe/creature';
 import { defaultTownperson } from '../data/town';
-import { Status } from '../universe/skills';
+import { MainStatus, Status } from '../universe/skills';
+import { ItemType } from '../data/item';
+import { placeItem } from './loot';
 import { Universe } from '../universe/universe';
 import { GameMode } from './modes';
 import { NO_ONE, pickNextPc, setPcMoves, HOR_VERT_PLACE } from './combat';
@@ -340,6 +342,44 @@ export function startOutdoorCombat(
   setPcMoves(univ);
   pickNextPc(univ, session.combatActivePc);
   session.center = { ...univ.currentPc.combatPos };
+}
+
+/**
+ * `set_up_combat` (boe.actions.cpp:2079) — run after `start_outdoor_combat` by
+ * both of its callers, `initiate_outdoor_combat` and `debug_fight_encounter`.
+ *
+ * **Only the item sweep lives here.** The rest of the C++ function — the mode
+ * and the camera — is already the tail of `startOutdoorCombat` above, because
+ * this port folds them into the one place that knows the arena is built. Doing
+ * them twice would be harmless (neither draws) but would leave two answers to
+ * "where does combat mode get set".
+ *
+ * The sweep drops a **dead** PC's pack on the floor, so a fight the party
+ * arrives at with a corpse in it starts with that corpse's kit lying about.
+ * `place_item` makes no `get_ran` call, so this is corpus-neutral — which is
+ * why it went unnoticed until `debug_fight_encounter` needed the same
+ * function.
+ *
+ * **`to_place` is the last *living* PC seen so far**, not the dead one's own
+ * square: the C++'s loop is an `if/else` over the marching order, so a dead
+ * PC's items land wherever the nearest living PC ahead of them stands — and if
+ * PC 0 is the dead one, on the default-constructed `location`, which is (0,0),
+ * the arena's top-left corner. Ported as written.
+ */
+export function setUpCombat(session: GameSession): void {
+  const { univ } = session;
+  let toPlace = loc(0, 0);
+  for (const pc of univ.party.pcs) {
+    if (pc.mainStatus === MainStatus.ALIVE) {
+      toPlace = { ...pc.combatPos };
+      continue;
+    }
+    for (const item of pc.items) {
+      if (item.variety === ItemType.NO_ITEM) continue;
+      placeItem(univ, item, toPlace);
+      item.variety = ItemType.NO_ITEM;
+    }
+  }
 }
 
 function blockage(univ: Universe, town: Town, where: Location): number {

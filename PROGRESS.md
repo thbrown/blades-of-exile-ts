@@ -13,19 +13,26 @@
 
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
-  it by the rule each recording first parts on — as of **2026-09-05** that is
-  **1,213,908 matching draws, 47 of 87 files agreeing all the way**, and
+  it by the rule each recording first parts on — as of **2026-09-06** that is
+  **1,221,737 matching draws, 48 of 87 files agreeing all the way**, and
   **the rules queue is empty**: the tool prints no bucket section, because all
-  forty of the files that still part do so on a *harness* gap or a recording
-  this port cannot start. See "What M8 has left" at the bottom. Add `--refresh` after a code change.
+  thirty-nine of the files that still part do so on a *harness* gap or a
+  recording this port cannot start. See "What M8 has left" at the bottom. Add
+  `--refresh` after a code change.
+  - **Of those 39, twenty-four are finished rather than pending**: the C++'s
+    draws are a strict *prefix* of this port's — every one of the 501,602 they
+    made agreed — and then the oracle stopped. The summary line says so on
+    every run now (`[all draws matched first]` against a bucket). There is
+    nothing left to find in them without harness work.
 - Two companion meters answer questions the draw stream cannot.
   `node scripts/align-actions.mjs --all` asks whether the two **action**
   streams ever drift apart (they do not: 0 of 73), and
   `--clocks` asks whether the two **clocks** do — a turn one side charges and
   the other does not spends no draws at all, so it is invisible to
-  `diverge.mjs` and upstream of wherever it points. **Two** files part on their
-  clocks today, down from six, and four of the biggest wins of 2026-09-02/03
-  were found that way.
+  `diverge.mjs` and upstream of wherever it points. **Both are clean as of
+  2026-09-06**: 0 of 73 drift and **0** files part on their clocks, down from
+  six and then two. Four of the biggest wins of 2026-09-02/03 were found that
+  way.
 - Keys follow the original's `handle_keystroke` (boe.actions.cpp:2772):
   arrows/keypad move, **f** fight (and end a fight), **e** end combat,
   **Space** pause one turn (stand ready in combat), **w** the *long* wait — up
@@ -10702,17 +10709,20 @@ The M6 list below is kept for the history of what it covered:
 
 ### What M8 has left
 
-The corpus can go no further without harness work. The forty blocked files
-group as `diverge.mjs --all --stacks` lists them; the two biggest are:
+The corpus can go no further without harness work. The thirty-nine blocked
+files group as `diverge.mjs --all --stacks` lists them; the two biggest are:
 
 - **14 files: the party dies here and the recording's did not.** The harness
   stops on `party-death` deliberately (dialog.cpp's note: dismissing it does not
-  put the party back). Whether this is the *oracle's* rules differing from the
-  build that made the recording, or something both engines get wrong, has not
-  been established — that is the next question worth asking, and `PCS=1` on both
-  sides is how to ask it.
+  put the party back). **Answered, 2026-09-06 — and the answer is "neither".**
+  In all fourteen the C++'s draw stream is a strict *prefix* of this port's:
+  every draw the oracle made agreed, right up to the death, and then it
+  stopped. The two engines do not differ from each other at all; both differ
+  from the build that made the recording. So there is no port bug hiding in
+  this bucket, and `PCS=1` was not needed in the end — the prefix property is
+  the whole proof, and `diverge.mjs` now prints it.
 - **4 files: `Tried to access out-of-range element` in the oracle.** A crash in
-  the C++, not a divergence.
+  the C++, not a divergence — and these are prefix files too, so likewise dry.
 
 Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
 
@@ -11225,3 +11235,60 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     pause instead, which is what the player sees in the original. `verify-screen`
     now has a `TOWN_PLACE_LABEL` step (`11d-label`) so this cannot regress
     silently again.
+
+- **The party-death bucket, closed — and `OneOfEverything`, which was hiding a
+  real gap behind it (M8, 2026-09-06).** The corpus moved to **1,221,737
+  matching draws and 48 of 87 files agreeing all the way**, and both companion
+  meters are now clean (0 action drift, **0** clock drift, down from two).
+  - **The question this file had been asking for a week has a boring answer.**
+    "The party dies here and the recording's did not" was 14 of the 40 blocked
+    files, and the open note asked whether the *oracle* differed from the
+    recording's build or whether both engines were wrong. Neither: in all
+    fourteen the C++'s draws are a strict **prefix** of this port's — every one
+    agreed, up to and including the death — and then the oracle stopped. The
+    two engines are identical; the recording's build is the outlier.
+  - **That property is worth printing, not rediscovering.** `diverge.mjs` now
+    marks a blocked bucket `[all draws matched first]` when every file in it is
+    a prefix, and the summary line says how many of the blocked files are
+    finished rather than pending. It is **24 of 39, 501,602 draws**: two thirds
+    of what looked like a backlog is already wrung dry. Without that line a
+    bucket of fourteen files reads as fourteen open questions.
+  - **`OneOfEverything` was the one blocked file with real signal in it**, and
+    the same prefix test is what isolated it: it was the only file where this
+    port stopped *before* the oracle with draws already on the board (5,980 of
+    the C++'s 13,809). Everything else in that shape had zero draws here — a
+    recording this port never started. It now **agrees on all 13,809**, 63
+    actions to 240.
+  - What it needed was **`debug_fight_encounter`** (boe.actions.cpp:2150), the
+    `%`/`^` debug keys that fight one of a sector's four wandering or four
+    special encounters. It is *not* `initiate_outdoor_combat`: no pre-encounter
+    special, no "monsters fled" level check and no `exists = false`, so the
+    same encounter can be fought repeatedly. **The bug that made the first cut
+    silently do nothing** was reading `get_num_response(0, 3, prompt, {}, -1)`'s
+    `-1` as the initial field value; it is the *cancel* value, and
+    `initial_value` defaults to **0** (strchoice.hpp:93). With no digits typed
+    the recording therefore fights encounter 0, where this port had been
+    bailing out.
+  - **`set_up_combat` (boe.actions.cpp:2079) was missing entirely**, from the
+    ordinary outdoor-encounter path as well. Its one part this port did not
+    already do is the item sweep: a **dead** PC's pack is emptied onto the
+    floor as the arena is built. `place_item` makes no `get_ran` call, so it is
+    corpus-neutral, which is exactly why nothing had noticed. Note `to_place`
+    is the last *living* PC seen so far, not the dead one's square — an
+    `if/else` over the marching order — so a dead PC 0's kit lands on the
+    default-constructed `location`, (0,0), in the arena's corner. Ported as
+    written.
+  - Three more debug keys came with it: **`debug_kill`** (`K`, and its two
+    passes over the creature list are separate — mark every hostile `DEAD` in
+    combat, *then* deal 1000 `SPECIAL` to anything hostile within 10, which
+    draws), **`debug_overburden`** (`Y`, fill the pack with 300-weight junk
+    until the *slots* run out, since `GIVE_ALLOW_OVERLOAD` means weight never
+    refuses) and **`debug_return_to_start`** (`R`, refused from a boat or a
+    horse, and it force-enters the start town *and* repositions the party
+    outdoors at the start sector).
+  - **`debug_kill_party`'s two arms**, and only one is ported. The old one is a
+    yes/no box that kills everyone as **`ABSENT`** — not one of the three
+    deaths the `V2` arm offers — and that is the arm the corpus exercises. The
+    `V2` arm behind `has_feature_flag("debug-kill-party", "V2")` throws
+    `not ported` rather than guessing its dialog's control names: a guess that
+    silently mis-answers a dialog is worse than a stop that says so.
