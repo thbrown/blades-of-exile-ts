@@ -14,11 +14,18 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-06** that is
-  **1,221,737 matching draws, 48 of 87 files agreeing all the way**, and
-  **the rules queue is empty**: the tool prints no bucket section, because all
-  thirty-nine of the files that still part do so on a *harness* gap or a
-  recording this port cannot start. See "What M8 has left" at the bottom. Add
-  `--refresh` after a code change.
+  **1,227,791 matching draws, 49 of 87 files agreeing all the way**, and
+  thirty-seven blocked on a *harness* gap or a recording this port cannot
+  start. See "What M8 has left" at the bottom. Add `--refresh` after a code
+  change.
+  - **The rules queue has one entry again**, after months empty:
+    `handle_target_space @ get_ran(10,1,6)` in `long/ZKR-5-16-12-18.xml`. It is
+    new signal, not a regression — that file could not be *started* until the
+    preamble learned about `toggle_debug_mode`, and running it exposed a real
+    divergence in `handleMarkedDamage` under `doCombatCast`: a spell that hits
+    several targets, where the C++ rolls another `10d6` for the next victim and
+    this port makes a `get_ran(1,0,1)` instead. **That is the next thing to
+    chase.**
   - **Of those 39, twenty-four are finished rather than pending**: the C++'s
     draws are a strict *prefix* of this port's — every one of the 501,602 they
     made agreed — and then the oracle stopped. The summary line says so on
@@ -11292,3 +11299,34 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     `V2` arm behind `has_feature_flag("debug-kill-party", "V2")` throws
     `not ported` rather than guessing its dialog's control names: a guess that
     silently mis-answers a dialog is worse than a stop that says so.
+
+- **`toggle_debug_mode` at the splash screen, which was hiding two files (M8,
+  2026-09-06).** **1,227,791 matching draws, 49 of 87 agreeing, 37 blocked.**
+  - The preamble scanner walks the leading run of `STARTUP_ACTIONS` looking for
+    `load_party`, and **stops at the first action not in the set**.
+    `toggle_debug_mode` was not in it, so two recordings that press shift-D at
+    the splash screen — before any game exists, which the C++ allows because
+    the key is registered `startup_safe` (boe.actions.cpp:2725) — stopped the
+    scan one action short of the load and were reported as "nothing says which
+    game the recording was playing". They had `load_party` all along, eight and
+    ten actions in.
+  - **It is remembered, not swallowed.** `univ.debug_mode` is a plain global
+    the save does not carry, so shift-D at the splash screen is still in force
+    after the load, and it is not cosmetic: `damage_monst` sets the victim's
+    health to -1 outright, and `kill_monst` skips the experience, the glands
+    and the treasure (boe.specials.cpp:1532, :1628, :1643). All three draw.
+    `ReplayStartLoad` carries a `debugMode` the corpus runner applies after
+    `resumeLoadedGame`.
+  - `long/ZKR-5-16.xml` now **agrees on all 432 draws**.
+  - `long/ZKR-5-16-12-18.xml` runs 418 actions and **parts at draw 5,623** —
+    the first entry in the rules queue for months. The C++ rolls a third
+    `get_ran(10,1,6)` for the next victim of a multi-target spell; this port
+    makes a `get_ran(1,0,1)` and stops. The stack is `handleMarkedDamage` ←
+    `doCombatCast`. Newly *visible*, not newly broken: the file was never
+    started before.
+  - **What is left that this port refuses to start** is now only two shapes,
+    both needing the scenario picker: `debug_launch_scen` (the `@`/`#`
+    quick-launch keys — `short/ItemDupe.xml`), and a genuine new party built
+    from `pick_a_scen` (`short/talking-map-blackout.xml`,
+    `long/VoDT_28-03-2025_10-45-32.xml`). Two more reach `load_party` but the
+    save inside is a party with no scenario, which is the same picker work.
