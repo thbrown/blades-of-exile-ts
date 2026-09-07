@@ -21,6 +21,7 @@ import { isCombat } from '../modes';
 import { recordMonst } from '../soulCrystal';
 import { Universe } from '../../universe/universe';
 import { drainPc, poisonWeapon } from '../itemUse';
+import { newPc } from '../createPc';
 import { DamageType } from '../../data/monster';
 import { Race } from '../../universe/skills';
 import { awardXp, hitParty } from '../damage';
@@ -541,12 +542,128 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       }
       break;
 
+    /**
+     * `CREATE_NEW_PC` (boe.specials.cpp:3292) — a whole character out of the
+     * node's own numbers: no dialogs, no `finish_create`, so no racial
+     * adjustments and none of the two start items `create_pc` hands out.
+     *
+     * `ex1a`/`ex1b` are health and spell points (both current *and* maximum),
+     * `ex1c` the race, `ex2a`/`ex2b`/`ex2c` strength, dexterity and
+     * intelligence, `pic` the portrait and `m3` the name string. Everything
+     * else is `new_pc`'s blank: level 1, 65 skill points, the thirty basic
+     * spells on both lists.
+     *
+     * **`pictype` is a jump, not a picture** — the field standing in for a
+     * number the way `GIVE_ITEM`'s `pic` does — taken when the party is full.
+     */
+    case SpecType.CREATE_NEW_PC: {
+      if (spec.ex1c < 0 || spec.ex1c > 19) {
+        univ.addStringToBuf('Race out of range (0 - 19).');
+        break;
+      }
+      const spot = party.freeSpace();
+      if (spot === 6) {
+        univ.addStringToBuf('No room for new PC.');
+        ctx.nextSpec = spec.pictype;
+        checkMess = false;
+        break;
+      }
+      const name = univ.getStr(ctx.curSpecType, spec.m3);
+      const pc = newPc(univ, spot);
+      pc.name = name ?? '';
+      pc.whichGraphic = spec.pic;
+      pc.curHealth = pc.maxHealth = spec.ex1a;
+      pc.curSp = pc.maxSp = spec.ex1b;
+      pc.race = spec.ex1c as Race;
+      pc.skills[Skill.STRENGTH] = spec.ex2a;
+      pc.skills[Skill.DEXTERITY] = spec.ex2b;
+      pc.skills[Skill.INTELLIGENCE] = spec.ex2c;
+      ctx.curTarget = spot;
+      // **The SDF gets `unique_id - 1000`, not the id itself** — the ids start
+      // at 1000 (`nextPcId`), and an SDF cell is a byte, so this is what an
+      // `UNSTORE_PC` later reads back and adds the 1000 to.
+      if (party.sdLegit(spec.sd1, spec.sd2))
+        party.setSdf(spec.sd1, spec.sd2, pc.uniqueId - 1000);
+      break;
+    }
+
+    /**
+     * `STORE_PC` (boe.specials.cpp:3318) — take a character out of the party
+     * and keep them, with their items and levels, until an `UNSTORE_PC` asks
+     * for them back.
+     *
+     * **The slot is not emptied.** It gets a blank `new_pc`, and `new_pc` ends
+     * by setting `ALIVE` (party.cpp:354) — so a stored character leaves a
+     * nameless level-1 stranger with 6 health standing in the party, and
+     * `freeSpace` will *not* reuse the slot, because it only counts `ABSENT`.
+     * A full party therefore cannot unstore anyone it just stored; the round
+     * trip needs a slot that was never filled. Kept, bug and all: a scenario
+     * shipping this node was tested against the behaviour.
+     *
+     * **`ex1a == 1` records and does not store**: the UID goes into the SDF
+     * and the PC stays where they are. That is how a scenario notes *which*
+     * character it is about to act on before deciding.
+     *
+     * A monster or whole-party target does nothing at all — the C++'s
+     * `dynamic_cast<cPlayer*>` simply fails.
+     */
+    case SpecType.STORE_PC: {
+      if (target < 0 || target >= 6) break;
+      const pc = party.pcs[target];
+      if (!pc) break;
+      if (party.sdLegit(spec.sd1, spec.sd2))
+        party.setSdf(spec.sd1, spec.sd2, pc.uniqueId - 1000);
+      if (spec.ex1a === 1) break;
+      // `main_status += SPLIT` — the stored PC is "left behind" in the same
+      // sense a split party's stragglers are, which is what `pc_present` and
+      // the party-death check read.
+      pc.mainStatus += MainStatus.SPLIT;
+      // `remove_pc` nulls the PC's back-pointer before moving them out
+      // (party.cpp:345), which is what keeps `getLoc` from resolving a
+      // location for somebody who is not in the party any more.
+      pc.party = null;
+      univ.storedPcs.set(pc.uniqueId, pc);
+      newPc(univ, target);
+      break;
+    }
+
+    /**
+     * `UNSTORE_PC` (boe.specials.cpp:3328) — the other half. `ex1a` names the
+     * PC by `uniqueId`, and **a value under 1000 has 1000 added to it**, so a
+     * node can pass either the raw id or the `id - 1000` that `STORE_PC` wrote
+     * into the SDF. `ex1b` is the jump taken when the party is full.
+     */
+    case SpecType.UNSTORE_PC: {
+      const uid = spec.ex1a < 1000 ? spec.ex1a + 1000 : spec.ex1a;
+      const stored = univ.storedPcs.get(uid);
+      if (!stored) {
+        univ.addStringToBuf('Scenario tried to unstore a nonexistent PC!');
+        break;
+      }
+      const spot = party.freeSpace();
+      if (spot === 6) {
+        univ.addStringToBuf('No room for PC.');
+        ctx.nextSpec = spec.ex1b;
+        checkMess = false;
+        break;
+      }
+      // `replace_pc` — the stored PC goes back into the party object, which is
+      // what `getLoc` needs to fall back to the party's square.
+      stored.party = party;
+      party.pcs[spot] = stored;
+      ctx.curTarget = spot;
+      stored.mainStatus -= MainStatus.SPLIT;
+      univ.storedPcs.delete(uid);
+      break;
+    }
+
     default:
-      // What is left in this category, as of 2026-09-06: `CREATE_NEW_PC` and
-      // `STORE_PC`, which need the character-creation screens (the `TODO(M8)`
-      // in createPc.ts) and the stored-PC roster. Everything else in the
-      // AFFECT range is ported. The sweep that says so walks `CATEGORY_RANGES`
-      // in `context.ts` and subtracts every `SpecType.NAME` any file mentions.
+      // Nothing is left in this category as of 2026-09-06: the whole AFFECT
+      // range is ported. The sweep that says so walks `CATEGORY_RANGES` in
+      // `context.ts` and subtracts every `SpecType.NAME` any file mentions —
+      // **and note its blind spot**: a range's own endpoints are written there
+      // as `SpecType.NAME`, so `UNSTORE_PC` looked ported for months on the
+      // strength of being the end of the AFFECT range and nothing else.
       reportUnsupported(univ, spec.type);
       break;
   }

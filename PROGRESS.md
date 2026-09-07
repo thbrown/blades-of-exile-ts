@@ -11014,11 +11014,17 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
   - **What was left in the TOWN category** at the time of this sweep:
     `TOWN_MONST_ATTACK`, `TOWN_SPELL_PAT_FIELD`/`TOWN_SPELL_PAT_BOOM` (needed
     `current_pat`) and `TOWN_RELOCATE_CREATURE` (needed `cartoon_happening`).
-    All four are ported now — see below; TOWN is complete.
+    All four are ported now — see below. (It also missed `TOWN_PLACE_LABEL`,
+    for the reason the next bullet gives; TOWN is complete as of the last entry
+    in this log, not this one.)
   - **The sweep that found these** is worth repeating whenever a category feels
     finished: walk `CATEGORY_RANGES` from `specials/context.ts`, list every
     `SpecType` in each range, and subtract the ones any file mentions as
-    `SpecType.NAME`. As of today it leaves 10 in AFFECT (`AFFECT_TRAITS`,
+    `SpecType.NAME`. **Match `case SpecType.NAME:`, not a bare mention** — as
+    written here it under-reports, because `CATEGORY_RANGES` names each range's
+    two endpoints and so vouches for them itself; that hid `UNSTORE_PC` and
+    `TOWN_PLACE_LABEL`. See the last entry in this log. As of that
+    day it left 10 in AFFECT (`AFFECT_TRAITS`,
     `AFFECT_AP`, `AFFECT_MORALE`, `AFFECT_SOUL_CRYSTAL`, `AFFECT_MONST_TARG`,
     `AFFECT_MONST_ATT`, `AFFECT_MONST_STAT`, `AFFECT_PARTY_STATUS`,
     `CREATE_NEW_PC`, `STORE_PC`) and 4 in TOWN. GENERAL, ONCE, IF_THEN, RECT
@@ -11151,4 +11157,71 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     free repaint via `session.onRedraw?.()`, the same call `TOWN_MONST_ATTACK`
     uses and for the same reason.
   - **`CATEGORY_RANGES` has two opcodes left unported in the whole game**:
-    `CREATE_NEW_PC` and `STORE_PC`, both in AFFECT. TOWN is done.
+    `CREATE_NEW_PC` and `STORE_PC`, both in AFFECT. TOWN is done. *(Wrong on
+    both counts — see the entry below. The sweep that produced this number has
+    a blind spot at the category endpoints.)*
+
+- **The last four opcodes, and the sweep that had been lying about them (M6,
+  2026-09-06).** `CREATE_NEW_PC`, `STORE_PC`, `UNSTORE_PC` and
+  `TOWN_PLACE_LABEL`. **`CATEGORY_RANGES` now has nothing unported left in the
+  whole game** — the only names the sweep still returns are `UNUSED13`-`16`,
+  which are holes in the C++'s own enum with no arm there either.
+  - **Fix the sweep before trusting it again.** It walked `CATEGORY_RANGES` and
+    subtracted every `SpecType.NAME` *mentioned anywhere in `src/`* — but each
+    range is written in `context.ts` as its two endpoints, so
+    `SpecType.UNSTORE_PC` and `SpecType.TOWN_PLACE_LABEL` were "mentioned" by
+    the very table being swept and looked implemented for months. Match
+    `case SpecType.NAME:` instead of a bare mention, and the two of them show
+    up immediately. That is how the count went 2 → 4 rather than 2 → 0.
+    It is **`node scripts/opcode-sweep.mjs`** now rather than a hand-rolled
+    grep — it parses both the ranges and the enum so it cannot go stale, skips
+    the `UNUSED*` holes, and exits non-zero if anything real is missing. It is
+    in CLAUDE.md's check list.
+  - **None of these three PC opcodes exists in the 1997 original** — no hits
+    for any of them in `../boe-source-1997` — so OBoE is the whole spec here
+    and `DIVERGENCES.md` has nothing to arbitrate.
+  - `CREATE_NEW_PC` builds a character straight out of the node's numbers: no
+    dialogs, no `finish_create`, so **no racial adjustments and none of the two
+    starting items** a hand-made PC gets. `pictype` is a jump taken when the
+    party is full, the picture field standing in for a number as `GIVE_ITEM`'s
+    `pic` does.
+  - **`STORE_PC` does not empty the slot.** It puts a blank `new_pc` there, and
+    `new_pc` ends by setting `ALIVE` (party.cpp:354) — so storing a character
+    leaves a nameless level-1 stranger with 6 health standing in the party, and
+    `free_space` will not reuse the slot, because it counts only `ABSENT`. A
+    full party therefore **cannot unstore anyone it just stored**; the round
+    trip needs a slot that was never filled. Kept, and pinned by a test.
+  - `UNSTORE_PC`'s `ex1a` **adds 1000 to anything under 1000**, so a node can
+    name a PC either by raw `unique_id` or by the `id - 1000` that `STORE_PC`
+    and `CREATE_NEW_PC` write into an SDF cell (which is a byte, hence the
+    offset).
+  - **Stored PCs do not survive a save, and that is OBoE's behaviour, not a gap
+    here.** `save_party` writes `save/stored_pcs.txt` plus a `pc~<uid>.txt`
+    each (fileio_party.cpp:568), and `load_party` reads each one into a fresh
+    `cPlayer` and then **drops it without ever inserting it into the map**
+    (:409-418) — a leak and a loss in one line. So `univ.storedPcs` is
+    runtime-only here too; inventing a save format for it would diverge from
+    the only implementation that runs.
+  - **A real bug this work uncovered:** `nextPcId` was never advanced past the
+    preset PCs. The C++'s preset constructor claims `slot + 1000` and then
+    pushes the counter past it (pc.cpp:1037), leaving 1006; this port left it
+    at 1000, so the first `newPc` handed out **1000 again** and collided with
+    slot 0. Invisible until `STORE_PC` keyed a map by `uniqueId`. Fixed in the
+    `Universe` constructor. `createPc.test.ts` had been *setting* `nextPcId =
+    1006` by hand, which is what hid it — that line is now an assertion.
+  - `TOWN_PLACE_LABEL` hangs a caption on a square (`m1` the string, `ex2a`
+    centres it on the tile, **`ex2b` a delay in *seconds*** — not the
+    milliseconds `TOWN_RELOCATE_CREATURE` takes). A negative `l.y` makes the
+    location name somebody instead: `l.x` under 6 a PC, 6 the party, 100-plus a
+    creature. **The PC arm is the only place outside combat that reads
+    `cartoonHappening`**, which the previous commit had just added.
+  - **Who clears `posted_labels` is a deliberate divergence, and only a
+    screenshot found it.** The C++ empties the list inside `draw_terrain`
+    (boe.graphics.cpp:1072) and gets away with it because `sf::sleep` *blocks*:
+    the frame it drew stays up for the whole pause. Here the wait is
+    asynchronous and the animation loop keeps painting through it, so clearing
+    on draw made every caption flash for one frame and vanish — the unit tests
+    passed and the screen was empty. The node clears at the end of its own
+    pause instead, which is what the player sees in the original. `verify-screen`
+    now has a `TOWN_PLACE_LABEL` step (`11d-label`) so this cannot regress
+    silently again.

@@ -439,6 +439,17 @@ export class Party {
     return this.pcs.reduce((sum, pc) => sum + (pc.isAlive ? pc.level : 0), 0);
   }
 
+  /**
+   * `cParty::free_space` (party.cpp:364) — the first slot nobody is in, or
+   * **6** for a full party. `ABSENT` is the only status that counts as empty:
+   * a dead PC, or one left behind by a split, still holds their place.
+   */
+  freeSpace(): number {
+    for (let i = 0; i < 6; i++)
+      if (this.pcs[i]?.mainStatus === MainStatus.ABSENT) return i;
+    return 6;
+  }
+
   /** cParty::swap_pcs (party.cpp:379) — trade two places in the marching order. */
   swapPcs(a: number, b: number): void {
     if (a < 0 || b < 0 || a >= this.pcs.length || b >= this.pcs.length) return;

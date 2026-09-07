@@ -13,14 +13,14 @@ import { cancelTownTargeting, castTownSpell } from '../src/game/spellTarget';
 import { cancelSpellTargeting, doCombatCast } from '../src/game/spellCombatTarget';
 import { SpecType, SpecialNode, emptySpecialNode } from '../src/data/special';
 import { TerSpec } from '../src/data/terrain';
-import { FORCED_ENTRY, GameSession } from '../src/game/session';
+import { FORCED_ENTRY, GameSession, PostedLabel } from '../src/game/session';
 import { ChoiceButton, SpecCtx, SpecCtxType, SpecialHost } from '../src/game/specials/context';
 import { ONCE_DONE } from '../src/game/specials/oneshot';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { PartyPreset } from '../src/universe/player';
-import { MainStatus, PartyStatus, Status, Trait } from '../src/universe/skills';
+import { MainStatus, PartyStatus, Race, Skill, Status, Trait } from '../src/universe/skills';
 import { killMonst } from '../src/game/damage';
 import { Universe } from '../src/universe/universe';
 import { Attitude, DamageType } from '../src/data/monster';
@@ -1058,6 +1058,142 @@ describe('the AFFECT nodes that act on the party', () => {
 });
 
 /**
+ * `CREATE_NEW_PC` (boe.specials.cpp:3292), `STORE_PC` (:3318) and
+ * `UNSTORE_PC` (:3328) — the party roster changing under a scenario's hand.
+ */
+describe('the AFFECT nodes that add and remove characters', () => {
+  /** Empty a slot so `free_space` has somewhere to put a new arrival. */
+  function emptySlot(univ: Universe, which: number): void {
+    univ.party.pcs[which]!.mainStatus = MainStatus.ABSENT;
+  }
+
+  it('CREATE_NEW_PC builds a PC out of the node\'s own numbers', async () => {
+    const { univ, run } = withNodes({
+      0: {
+        type: SpecType.CREATE_NEW_PC, m3: 0, pic: 7,
+        ex1a: 40, ex1b: 12, ex1c: Race.NEPHIL,
+        ex2a: 8, ex2b: 9, ex2c: 10, sd1: 3, sd2: 4,
+      },
+    });
+    emptySlot(univ, 4);
+    await run(0);
+    const pc = univ.party.pcs[4]!;
+    expect(pc.name).toBe('first string');
+    expect(pc.whichGraphic).toBe(7);
+    expect([pc.curHealth, pc.maxHealth]).toEqual([40, 40]);
+    expect([pc.curSp, pc.maxSp]).toEqual([12, 12]);
+    expect(pc.race).toBe(Race.NEPHIL);
+    expect(pc.skills[Skill.STRENGTH]).toBe(8);
+    expect(pc.skills[Skill.DEXTERITY]).toBe(9);
+    expect(pc.skills[Skill.INTELLIGENCE]).toBe(10);
+    // `new_pc`'s blank underneath: level 1 and the full 65 skill points, since
+    // the node runs none of `create_pc`'s dialogs and no `finish_create`.
+    expect(pc.level).toBe(1);
+    expect(pc.skillPts).toBe(65);
+    // The six preset PCs took 1000-1005, so the new one is 1006 — and the SDF
+    // gets that minus 1000.
+    expect(pc.uniqueId).toBe(1006);
+    expect(univ.party.getSdf(3, 4)).toBe(6);
+  });
+
+  it('…and refuses a race outside 0 - 19', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.CREATE_NEW_PC, ex1c: 20 },
+    });
+    emptySlot(univ, 4);
+    await run(0);
+    expect(univ.transcript.at(-1)).toBe('Race out of range (0 - 19).');
+    expect(univ.party.pcs[4]!.mainStatus).toBe(MainStatus.ABSENT);
+  });
+
+  /** **`pictype` is a jump here**, not a picture — taken when nobody can fit. */
+  it('…and jumps to pictype when the party is full', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.CREATE_NEW_PC, ex1c: Race.HUMAN, pictype: 1 },
+      1: { type: SpecType.SET_SDF, sd1: 6, sd2: 0, ex1a: 99 },
+    });
+    await run(0);
+    expect(univ.transcript).toContain('No room for new PC.');
+    expect(univ.party.getSdf(6, 0)).toBe(99);
+  });
+
+  it('STORE_PC takes a PC out of the party and UNSTORE_PC brings them back', async () => {
+    const { univ, host, run } = withNodes({
+      0: { type: SpecType.SELECT_TARGET, ex1a: 0, jumpto: 1 },
+      1: { type: SpecType.STORE_PC, sd1: 2, sd2: 2 },
+      2: { type: SpecType.UNSTORE_PC, ex1a: 2 },
+    });
+    const stored = univ.party.pcs[2]!;
+    stored.name = 'Taken Away';
+    host.pcAnswer = 2;
+
+    await run(0);
+    // **The slot is not emptied — it gets a blank `new_pc`, and `new_pc` ends
+    // by setting ALIVE** (party.cpp:354). So storing a character leaves a
+    // nameless level-1 stranger with 6 health standing in the party, and
+    // `free_space` will not reuse the slot because it only counts ABSENT.
+    // Kept: it is what a scenario shipping STORE_PC was tested against.
+    expect(univ.party.pcs[2]!.name).toBe('');
+    expect(univ.party.pcs[2]!.mainStatus).toBe(MainStatus.ALIVE);
+    expect(univ.party.pcs[2]!.maxHealth).toBe(6);
+    expect(univ.party.freeSpace()).toBe(6);
+    expect(univ.storedPcs.get(1002)).toBe(stored);
+    // `main_status += SPLIT` — stored is a kind of left-behind.
+    expect(stored.mainStatus).toBe(MainStatus.SPLIT_ALIVE);
+    // And the SDF holds `unique_id - 1000`.
+    expect(univ.party.getSdf(2, 2)).toBe(2);
+
+    // **And so a full party cannot take them back**: `free_space` finds
+    // nothing, because the blank left in slot 2 is ALIVE. A scenario doing
+    // this round trip needs a slot that was genuinely never filled.
+    await run(2);
+    expect(univ.transcript).toContain('No room for PC.');
+    expect(univ.storedPcs.size).toBe(1);
+
+    // Give it one, and the same node works. `ex1a` under 1000 has 1000 added,
+    // so 2 names uniqueId 1002.
+    emptySlot(univ, 5);
+    await run(2);
+    expect(univ.party.pcs[5]).toBe(stored);
+    expect(stored.mainStatus).toBe(MainStatus.ALIVE);
+    expect(stored.party).toBe(univ.party);
+    expect(univ.storedPcs.size).toBe(0);
+  });
+
+  /** `if(spec.ex1a == 1) break;` — record the id, leave the PC where they are. */
+  it('STORE_PC with ex1a 1 only writes the id to the SDF', async () => {
+    const { univ, host, run } = withNodes({
+      0: { type: SpecType.SELECT_TARGET, ex1a: 0, jumpto: 1 },
+      1: { type: SpecType.STORE_PC, ex1a: 1, sd1: 2, sd2: 3 },
+    });
+    host.pcAnswer = 3;
+    await run(0);
+    expect(univ.party.getSdf(2, 3)).toBe(3);
+    expect(univ.storedPcs.size).toBe(0);
+    expect(univ.party.pcs[3]!.mainStatus).toBe(MainStatus.ALIVE);
+  });
+
+  it('UNSTORE_PC complains about a PC that was never stored', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.UNSTORE_PC, ex1a: 1042 },
+    });
+    await run(0);
+    expect(univ.transcript.at(-1)).toBe('Scenario tried to unstore a nonexistent PC!');
+  });
+
+  /** A whole-party or monster target is not a `cPlayer`, so nothing happens. */
+  it('STORE_PC does nothing when the target is the whole party', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.STORE_PC, sd1: 2, sd2: 4 },
+    });
+    // No SELECT_TARGET, and out of combat the default target is the party (6).
+    await run(0);
+    expect(univ.storedPcs.size).toBe(0);
+    expect(univ.party.getSdf(2, 4)).toBe(0);
+  });
+});
+
+/**
  * `TOWN_SPELL_PAT_FIELD` (boe.specials.cpp:4321) and `TOWN_SPELL_PAT_BOOM`
  * (:4344) — stamp a spell shape on the map, as a field or as damage.
  */
@@ -1320,6 +1456,117 @@ describe('a node that relocates a creature', () => {
     // Headless: animSettle resolves at once with no waiter installed, so this
     // is really just confirming the node runs to completion with ex2c set.
     expect(univ.party.pcs[0]!.combatPos).toEqual({ x: 20, y: 20 });
+  });
+});
+
+/**
+ * `TOWN_PLACE_LABEL` (boe.specials.cpp:4433) — a floating caption on a square
+ * for the length of one pause, and the last opcode in the TOWN category.
+ */
+describe('a node that hangs a label on the map', () => {
+  function placeMonst(univ: Universe, where: { x: number; y: number }): Creature {
+    const monst = assignCreature(0, {
+      number: 1, startAttitude: Attitude.HOSTILE_A, startLoc: where,
+      mobility: 1, timeFlag: 0, timeCode: 0, monsterTime: 0, spec1: -1, spec2: -1,
+      specEncCode: 0, personality: -1, facialPic: -1, specialOnTalk: -1, specialOnKill: -1,
+    } as never, univ.scenario.scenMonsters[1]!);
+    univ.town!.monsters.length = 0;
+    univ.town!.monsters.push(monst);
+    return monst;
+  }
+
+  /**
+   * The node clears the list at the end of its own pause, so a caption has to
+   * be read from inside the redraw it triggers — which is also the only moment
+   * the C++ would have drawn it.
+   */
+  function labelsDrawnBy(
+    session: GameSession, run: () => Promise<unknown>,
+  ): Promise<PostedLabel[]> {
+    const seen: PostedLabel[] = [];
+    const was = session.onRedraw;
+    session.onRedraw = () => {
+      for (const l of session.postedLabels) seen.push({ ...l });
+      was?.();
+    };
+    return run().then(() => { session.onRedraw = was; return seen; });
+  }
+
+  it('hangs a caption on the square, and clears it after the pause', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_PLACE_LABEL, m1: 0, ex2a: 1 },
+    });
+    const drawn = await labelsDrawnBy(session, () =>
+      session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, { x: 12, y: 13 }));
+    expect(drawn).toHaveLength(1);
+    expect(drawn[0]!.text).toBe('first string');
+    expect(drawn[0]!.at).toEqual({ x: 12, y: 13 });
+    expect(drawn[0]!.centred).toBe(true);
+    // …and it is gone once the node is done, so the next frame has no caption.
+    expect(session.postedLabels).toHaveLength(0);
+    // The node prints nothing and asks for no message box.
+    expect(univ.transcript.at(-1)).toBe('You enter Fort Talrus.');
+  });
+
+  /** `l.y < 0` names somebody instead: `l.x` < 6 a PC, 6 the party, 100+ a creature. */
+  it('…and a negative y labels a target rather than a square', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_PLACE_LABEL, m1: 0 },
+      1: { type: SpecType.TOWN_PLACE_LABEL, m1: 0 },
+      2: { type: SpecType.TOWN_PLACE_LABEL, m1: 0 },
+    });
+    const monst = placeMonst(univ, { x: 7, y: 9 });
+    // 6 is the party: its own square, out of combat.
+    let drawn = await labelsDrawnBy(session, () =>
+      session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, { x: 6, y: -1 }));
+    expect(drawn.at(-1)!.at).toEqual(univ.party.townLoc);
+    // 100 + slot is a creature.
+    drawn = await labelsDrawnBy(session, () =>
+      session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 1, { x: 100, y: -1 }));
+    expect(drawn.at(-1)!.at).toEqual(monst.curLoc);
+    // A PC out of combat with no cartoon running is the party's square too.
+    drawn = await labelsDrawnBy(session, () =>
+      session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 2, { x: 1, y: -1 }));
+    expect(drawn.at(-1)!.at).toEqual(univ.party.townLoc);
+  });
+
+  /**
+   * The one place outside combat that reads `cartoonHappening`: mid-scene a PC
+   * has a real `combat_pos`, so labelling them points at where they are
+   * standing rather than at the party's square.
+   */
+  it('…and during a cartoon a PC label follows their combat_pos', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_RELOCATE_CREATURE, ex2a: 1, ex2b: 0 },
+      1: { type: SpecType.TOWN_PLACE_LABEL, m1: 0 },
+    });
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, { x: 18, y: 19 });
+    expect(session.cartoonHappening).toBe(true);
+    const drawn = await labelsDrawnBy(session, () =>
+      session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 1, { x: 1, y: -1 }));
+    expect(drawn.at(-1)!.at).toEqual({ x: 18, y: 19 });
+  });
+
+  it('…and refuses a target that names nobody', async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.TOWN_PLACE_LABEL, m1: 0 },
+    });
+    await session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, { x: 50, y: -1 });
+    expect(univ.transcript.at(-1)).toBe('  Error: Invalid label target!');
+    expect(session.postedLabels).toHaveLength(0);
+  });
+
+  /** **`ex2b` is a delay in seconds here**, not the ms RELOCATE_CREATURE takes. */
+  it('ex2b holds the caption up for that many seconds', async () => {
+    const { session } = withNodes({
+      0: { type: SpecType.TOWN_PLACE_LABEL, m1: 0, ex2b: 2 },
+    });
+    const drawn = await labelsDrawnBy(session, () =>
+      session.runSpecialRaw(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, 0, { x: 12, y: 13 }));
+    // Headless: animSettle resolves at once with no waiter installed, so this
+    // confirms the node runs to completion with ex2b set rather than the wait.
+    expect(drawn).toHaveLength(1);
+    expect(session.postedLabels).toHaveLength(0);
   });
 });
 

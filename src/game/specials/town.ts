@@ -787,6 +787,63 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
       break;
     }
 
+    /**
+     * `TOWN_PLACE_LABEL` (boe.specials.cpp:4433) — a floating caption on a
+     * square, for the length of one pause. `m1` is the string, `ex2a` centres
+     * it over the square rather than above it, and **`ex2b` is a delay in
+     * *seconds***, not the milliseconds `TOWN_RELOCATE_CREATURE` takes.
+     *
+     * **A negative `l.y` means the location names somebody instead**: `l.x`
+     * under 6 is a PC, 6 the party, 100-plus a creature, and a negative `l.x`
+     * asks for the default target first. The PC arm is the one place outside
+     * combat that reads `cartoonHappening` — mid-scene a PC has a real
+     * `combat_pos` to label, and otherwise the party's own square stands in
+     * for all six.
+     */
+    case SpecType.TOWN_PLACE_LABEL: {
+      checkMess = false;
+      let l: Location = { ...ctx.specLoc };
+      if (l.y < 0) {
+        let who = l.x;
+        if (who < 0) who = defaultTarget(univ, ctx.session, ctx.whichMode, ctx.specLoc);
+        if (who < 6) {
+          const pc = univ.party.pcs[who];
+          l = isCombat(ctx.session.mode) || ctx.session.cartoonHappening
+            ? { ...(pc?.combatPos ?? univ.party.townLoc) }
+            : { ...univ.party.townLoc };
+        } else if (who === TARGET_PARTY) {
+          l = { ...univ.party.townLoc };
+        } else if (who >= 100 && who - 100 < (town?.monsters.length ?? 0)) {
+          l = { ...town!.monsters[who - 100]!.curLoc };
+        } else {
+          univ.addStringToBuf('  Error: Invalid label target!');
+          break;
+        }
+      }
+      // `univ.get_strs(strs[0], strs[1], type, spec.m1, spec.m1)` — **both
+      // halves are `m1`**, and only the first is used.
+      const text = univ.getStr(ctx.curSpecType, spec.m1);
+      ctx.session.postedLabels.push({
+        text: text ?? '',
+        at: l,
+        centred: spec.ex2a !== 0,
+        center: { ...ctx.session.center },
+      });
+      ctx.session.onRedraw?.();
+      // The C++ clears the list inside `draw_terrain` and relies on its
+      // `sf::sleep` blocking to keep the drawn frame up for the pause
+      // (boe.graphics.cpp:1072). Nothing blocks here, so the clear lives at
+      // the end of the wait instead — see `drawPostedLabels`. With `ex2b` 0
+      // that is still the very next thing, so the caption gets its one frame
+      // and no more, exactly as there.
+      if (spec.ex2b > 0) {
+        animBook(spec.ex2b * 1000);
+        await animSettle();
+      }
+      ctx.session.postedLabels = [];
+      break;
+    }
+
     default:
       reportUnsupported(univ, spec.type);
       break;

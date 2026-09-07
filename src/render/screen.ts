@@ -77,8 +77,12 @@ import { TalkScreen } from './talkScreen';
 import { ShopScreen } from './shopScreen';
 import { Trim, TrimMasks } from './trim';
 import {
-  drawString, drawStringCentre, drawStringEllipsis, drawStringRight, measureString, wrapLines,
+  TextStyle, drawString, drawStringCentre, drawStringEllipsis, drawStringRight,
+  measureString, wrapLines,
 } from './text';
+
+/** `TextStyle` for a posted label — FONT_PLAIN at the port's default size. */
+const LABEL_SIZE = 12;
 
 /**
  * `bw_pats[3]` — the 50% dither `apply_unseen_mask` shades unexplored ground
@@ -320,6 +324,9 @@ export class Screen {
     if (town) this.drawTownMonsters(session);
     if (!town) this.drawOutdoorGroups(session);
     this.drawPartySymbol(session);
+    // Posted labels sit between the party and the masks (boe.graphics.cpp:1068),
+    // clipped to the terrain view, and the list is emptied by drawing it.
+    this.drawPostedLabels(session);
     // `apply_unseen_mask` comes after everything drawn into the terrain gworld
     // (boe.graphics.cpp:1067), so it shades the monsters and the party too.
     this.applyUnseenMask(session, maxDim, maxDimY);
@@ -1092,6 +1099,81 @@ export class Screen {
         img, 1 + 18 * col, 1 + 18 * m.type, 16, 16, px - 7, py - 7, 16, 16);
     }
     this.ctx.restore();
+  }
+
+  /**
+   * `place_text_label` (boe.text.cpp:1181) plus `draw_text_label` (:1204) —
+   * the geometry is the C++'s, done here because measuring the string needs a
+   * canvas. `session.center` as it stood when the node posted comes along in
+   * the label for the same reason the C++ can use the global: the redraw
+   * follows on the next line.
+   *
+   * **Who clears the list is a deliberate divergence.** The C++ empties it
+   * here, in the draw (boe.graphics.cpp:1072), and gets away with it because
+   * `TOWN_PLACE_LABEL`'s `sf::sleep` *blocks*: the frame it just drew stays on
+   * screen for the whole pause, so "one repaint" and "the length of the pause"
+   * are the same thing there. Here the wait is asynchronous and the animation
+   * loop keeps painting through it, so clearing on draw made every caption
+   * flash for a single frame and vanish. The node clears instead, at the end
+   * of its own pause — which is what the player sees in the original.
+   */
+  private drawPostedLabels(session: GameSession): void {
+    const labels = session.postedLabels;
+    if (labels.length === 0) return;
+    const style: TextStyle = { font: 'plain', size: LABEL_SIZE };
+    const origin = terrainSpotPos(0, 0);
+    this.ctx.save();
+    // `clip_rect(terrain_screen_gworld(), {13, 13, 337, 265})` — the 9x9 view
+    // exactly (252 x 324), so a caption near the edge is cut off, not spilled
+    // over the panels.
+    this.ctx.beginPath();
+    this.ctx.rect(origin.x, origin.y, TER_VIEW_TILES * TILE_W, TER_VIEW_TILES * TILE_H);
+    this.ctx.clip();
+    for (const label of labels) {
+      const w = measureString(this.ctx, label.text, style);
+      const h = LABEL_SIZE;
+      let x = (label.at.x - (label.center.x - TER_VIEW_CENTER)) * TILE_W + TILE_W / 2
+        - Math.trunc(w / 2);
+      let y = (label.at.y - (label.center.y - TER_VIEW_CENTER)) * TILE_H;
+      if (label.centred) y += TILE_H / 2;
+      // A label on the top row would sit off the screen, so it drops a whole
+      // tile instead of rising by its own height.
+      if (y === 0) y = TILE_H;
+      else y -= h;
+      // `text_rect.offset(-min(at.x,0), -min(at.y,0))` — "if it's longer, make
+      // it off-centre to keep it onscreen".
+      x -= Math.min(x, 0);
+      y -= Math.min(y, 0);
+      const left = origin.x + x;
+      const top = origin.y + y;
+      // `draw_text_label`'s four passes: a rounded box growing 7px around the
+      // text, then insetting 2px a time with the alpha rising by half each
+      // pass — a soft-edged plaque rather than one flat panel.
+      let alpha = 42;
+      let box = { left: left - 7, top: top - 7 - 2, right: left + w + 7, bottom: top + h + 7 - 2 };
+      for (let i = 0; i <= 3; i++) {
+        this.ctx.fillStyle = `rgba(64, 64, 64, ${alpha / 255})`;
+        this.fillRoundRect(box, 7);
+        box = { left: box.left + 2, top: box.top + 2, right: box.right - 2, bottom: box.bottom - 2 };
+        alpha = Math.trunc(alpha * 1.5);
+      }
+      drawString(this.ctx, { left, top: top - 5, right: left + w, bottom: top + h - 5 },
+        label.text, { ...style, colour: Colours.WHITE });
+    }
+    this.ctx.restore();
+  }
+
+  /** `fill_roundrect` — a filled rectangle with `r`-radius corners. */
+  private fillRoundRect(rect: UiRect, r: number): void {
+    const { left, top, right, bottom } = rect;
+    this.ctx.beginPath();
+    this.ctx.moveTo(left + r, top);
+    this.ctx.arcTo(right, top, right, bottom, r);
+    this.ctx.arcTo(right, bottom, left, bottom, r);
+    this.ctx.arcTo(left, bottom, left, top, r);
+    this.ctx.arcTo(left, top, right, top, r);
+    this.ctx.closePath();
+    this.ctx.fill();
   }
 
   private drawPartySymbol(session: GameSession): void {

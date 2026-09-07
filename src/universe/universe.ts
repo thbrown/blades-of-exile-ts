@@ -87,6 +87,24 @@ export class Universe {
    */
   nodeStepThrough = false;
 
+  /**
+   * `cUniverse::stored_pcs` (universe.hpp:218) — PCs a `STORE_PC` node has
+   * taken out of the party, keyed by `uniqueId`, waiting for an `UNSTORE_PC`
+   * to put them back. A scenario uses it to take a character away for a
+   * chapter and hand them back later with their items and levels intact.
+   *
+   * **Not saved, and that is the C++'s own behaviour rather than a gap here.**
+   * `save_party` writes `save/stored_pcs.txt` and a `save/pc~<uid>.txt` per
+   * stored PC (fileio_party.cpp:568), but `load_party` reads each one into a
+   * fresh `cPlayer` and then drops it on the floor without ever inserting it
+   * into the map (:409-418) — a leak and a loss in one. So in OBoE a stored
+   * PC does not survive a save/load either, and an `UNSTORE_PC` afterwards
+   * gives "Scenario tried to unstore a nonexistent PC!". Kept, because the
+   * alternative is inventing a save format for something the reference
+   * implementation cannot read back.
+   */
+  storedPcs = new Map<number, Player>();
+
   constructor(
     readonly scenario: Scenario,
     readonly rng: GameRng,
@@ -96,6 +114,13 @@ export class Universe {
       const pc = makePresetPlayer(preset, i);
       pc.party = this.party;
       this.party.pcs.push(pc);
+      // `party.next_pc_id = max(unique_id + 1, party.next_pc_id)` (pc.cpp:1037)
+      // — the preset constructor claims `slot + 1000` and then pushes the
+      // counter past it, so the six starting PCs leave it at 1006. Without
+      // this the first `newPc` handed out **1000 again**, colliding with slot
+      // 0: `storedPcs` is keyed by `uniqueId`, so two PCs sharing one id means
+      // storing the second loses the first.
+      this.party.nextPcId = Math.max(pc.uniqueId + 1, this.party.nextPcId);
     }
     // iLiving's status effects print through a static hook in the C++; point it
     // at this Universe's transcript. Constructing a second Universe steals it,

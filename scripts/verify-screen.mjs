@@ -437,6 +437,47 @@ const specials = await page.evaluate(async () => {
 });
 console.log('SPECIALS:', JSON.stringify(specials));
 
+// 2b-6. TOWN_PLACE_LABEL (204): a caption hung on the map. Worth a real frame
+//       rather than only a unit test — the first cut of this drew nothing at
+//       all on screen, because clearing the list inside the draw (as the C++
+//       does, where its sleep blocks) meant the animation loop wiped every
+//       caption a frame later. Only a screenshot showed it.
+const labels = await page.evaluate(async () => {
+  const s = window.__session;
+  const saved = s.univ.town.record.specials;
+  const savedStrs = s.univ.town.record.specStrs;
+  const node = (over) => ({
+    type: 0, sd1: -1, sd2: -1, m1: -1, m2: -1, m3: -1, pic: -1, pictype: 4,
+    ex1a: -1, ex1b: -1, ex1c: -1, ex2a: -1, ex2b: -1, ex2c: -1, jumpto: -1, ...over,
+  });
+  s.univ.town.record.specStrs = ['Commander Terrance'];
+  const at = { ...s.univ.party.townLoc };
+  // ex2a centres it on the square; ex2b 0 so the gate does not wait a second.
+  s.univ.town.record.specials = new Map([
+    [0, node({ type: 204, m1: 0, ex2a: 1, ex2b: 0 })],
+  ]);
+  // The node clears the list at the end of its own pause, so read the posted
+  // caption from inside a redraw rather than after the call returns.
+  let drawn = null;
+  const wasRedraw = s.onRedraw;
+  s.onRedraw = () => {
+    if (s.postedLabels.length > 0) drawn = { ...s.postedLabels[0] };
+    wasRedraw?.();
+  };
+  await s.runSpecialRaw(1, 2, 0, at);
+  s.onRedraw = wasRedraw;
+  const after = s.postedLabels.length;
+  // Put one back by hand so the screenshot below has something to show.
+  s.postedLabels.push({ text: 'Commander Terrance', at, centred: true, center: { ...s.center } });
+  window.__redraw();
+  s.univ.town.record.specials = saved;
+  s.univ.town.record.specStrs = savedStrs;
+  return { drawn, clearedAfter: after };
+});
+await shot('11d-label');
+await page.evaluate(() => { window.__session.postedLabels = []; window.__redraw(); });
+console.log('LABEL:', JSON.stringify(labels));
+
 // 2c. Doors: an unlocked one opens on contact; a locked one raises the prompt,
 //     and its Bash shortcut goes through the dialog host.
 const doors = await page.evaluate(async () => {

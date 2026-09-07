@@ -142,6 +142,20 @@ export function pointOnScreen(center: Location, check: Location): boolean {
   return Math.abs(center.x - check.x) <= 4 && Math.abs(center.y - check.y) <= 4;
 }
 
+/**
+ * One entry of `posted_labels` (boe.text.cpp:1179) — a caption a
+ * `TOWN_PLACE_LABEL` node has hung on a square for a single frame. `centred`
+ * is the node's `ex2a`, which drops the text half a tile so it sits over the
+ * square rather than above it.
+ */
+export interface PostedLabel {
+  text: string;
+  at: Location;
+  centred: boolean;
+  /** `center` as it stood when the node posted this, for the same arithmetic. */
+  center: Location;
+}
+
 export class GameSession {
   mode: GameMode = GameMode.OUTDOORS;
   /** The tile the view is centered on; equals the party position in town. */
@@ -2118,6 +2132,21 @@ export class GameSession {
    * discrepancy is written down rather than papered over.
    */
   posingMonster = -1;
+
+  /**
+   * `posted_labels` (boe.text.cpp:1179) — floating captions a
+   * `TOWN_PLACE_LABEL` node has put on the map.
+   *
+   * **They last exactly one frame.** `draw_terrain` draws the list and then
+   * clears it (boe.graphics.cpp:1069-1072), which is why the node redraws and
+   * then sleeps: the caption is visible for the length of that sleep and gone
+   * on the next repaint. Nothing persists them, so nothing saves them.
+   *
+   * The pixel rect is worked out at draw time rather than post time, because
+   * measuring the string needs a canvas; `center` is carried along so the
+   * arithmetic still uses the view the node saw, as `place_text_label` does.
+   */
+  postedLabels: PostedLabel[] = [];
 
   /**
    * `current_pat` (boe.combat.cpp:45) — the **resolved grid** the last

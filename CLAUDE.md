@@ -44,6 +44,7 @@ and **read `DIVERGENCES.md` before assuming which C++ is right.**
 npx vitest run          # all tests, headless, no browser needed
 npx tsc --noEmit        # strict, with noUncheckedIndexedAccess
 node scripts/floating-promises.mjs   # async calls nobody waits for
+node scripts/opcode-sweep.mjs        # special-node opcodes with no case arm
 npx vite --port 5199    # then, in another shell:
 node scripts/verify-screen.mjs   # drives the real UI in Chromium, screenshots it
 ```
@@ -53,6 +54,13 @@ is part of the spec**, and a dropped promise breaks the order while leaving
 every individual answer correct — so the tests pass, the game looks right, and
 the replay corpus reports a divergence in whatever function happened to be
 holding the RNG. Write `void f()` where you mean it.
+
+`opcode-sweep.mjs` answers "is this opcode category actually finished?" — it
+expands `CATEGORY_RANGES` and reports every `SpecType` with no `case` arm. It
+exits 0 today, and it counts **case labels rather than mentions** on purpose:
+the hand-rolled version that matched bare `SpecType.NAME` was fooled for months
+by `CATEGORY_RANGES` naming its own range endpoints, which hid two real
+opcodes.
 
 `verify-screen.mjs` is the end-to-end gate — it exercises every milestone's
 demo path and fails on any console error. `SHOTS_DIR=...` chooses where the

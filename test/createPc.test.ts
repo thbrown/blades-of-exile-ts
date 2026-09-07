@@ -50,9 +50,16 @@ describe('new_pc', () => {
     expect(pc.mainStatus).toBe(MainStatus.ALIVE);
   });
 
+  /**
+   * The six preset PCs claim 1000-1005 and push the counter past them
+   * (pc.cpp:1037), so a new character is 1006 without the test arranging it.
+   * This used to set `nextPcId` by hand, which hid a real bug: the port never
+   * advanced the counter, so the first `newPc` handed out 1000 again and
+   * collided with slot 0 — invisible until `STORE_PC` keyed a map by it.
+   */
   it('takes the next id and moves the party on', () => {
     const s = inTown();
-    s.univ.party.nextPcId = 1006;
+    expect(s.univ.party.nextPcId).toBe(1006);
     expect(newPc(s.univ, 5).uniqueId).toBe(1006);
     expect(s.univ.party.nextPcId).toBe(1007);
   });
