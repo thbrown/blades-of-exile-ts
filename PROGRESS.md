@@ -13,31 +13,28 @@
 
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
-  it by the rule each recording first parts on — as of **2026-09-06** that is
-  **1,227,791 matching draws, 49 of 87 files agreeing all the way**, and
+  it by the rule each recording first parts on — as of **2026-09-13** that is
+  **1,228,026 matching draws, 50 of 87 files agreeing all the way**, and
   thirty-seven blocked on a *harness* gap or a recording this port cannot
   start. See "What M8 has left" at the bottom. Add `--refresh` after a code
   change.
-  - **The rules queue has one entry again**, after months empty:
-    `handle_target_space @ get_ran(10,1,6)` in `long/ZKR-5-16-12-18.xml`. It is
-    new signal, not a regression — that file could not be *started* until the
-    preamble learned about `toggle_debug_mode`, and running it exposed a real
-    divergence in `handleMarkedDamage` under `doCombatCast`: a spell that hits
-    several targets, where the C++ rolls another `10d6` for the next victim and
-    this port makes a `get_ran(1,0,1)` instead. **That is the next thing to
-    chase.**
-  - **Of those 39, twenty-four are finished rather than pending**: the C++'s
+  - **The rules queue is empty again.** Its one entry —
+    `handle_target_space @ get_ran(10,1,6)` in `long/ZKR-5-16-12-18.xml` — was
+    closed 2026-09-13, and it was not a combat rule at all: **loading a game
+    drops debug mode**, and this port was keeping it. See the entry at the
+    bottom.
+  - **Of those 37, twenty-four are finished rather than pending**: the C++'s
     draws are a strict *prefix* of this port's — every one of the 501,602 they
     made agreed — and then the oracle stopped. The summary line says so on
     every run now (`[all draws matched first]` against a bucket). There is
     nothing left to find in them without harness work.
 - Two companion meters answer questions the draw stream cannot.
   `node scripts/align-actions.mjs --all` asks whether the two **action**
-  streams ever drift apart (they do not: 0 of 73), and
+  streams ever drift apart (they do not: 0 of 75), and
   `--clocks` asks whether the two **clocks** do — a turn one side charges and
   the other does not spends no draws at all, so it is invisible to
   `diverge.mjs` and upstream of wherever it points. **Both are clean as of
-  2026-09-06**: 0 of 73 drift and **0** files part on their clocks, down from
+  2026-09-13**: 0 of 75 drift and **0** files part on their clocks, down from
   six and then two. Four of the biggest wins of 2026-09-02/03 were found that
   way.
 - Keys follow the original's `handle_keystroke` (boe.actions.cpp:2772):
@@ -10716,7 +10713,7 @@ The M6 list below is kept for the history of what it covered:
 
 ### What M8 has left
 
-The corpus can go no further without harness work. The thirty-nine blocked
+The corpus can go no further without harness work. The thirty-seven blocked
 files group as `diverge.mjs --all --stacks` lists them; the two biggest are:
 
 - **14 files: the party dies here and the recording's did not.** The harness
@@ -11310,9 +11307,12 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     scan one action short of the load and were reported as "nothing says which
     game the recording was playing". They had `load_party` all along, eight and
     ten actions in.
-  - **It is remembered, not swallowed.** `univ.debug_mode` is a plain global
-    the save does not carry, so shift-D at the splash screen is still in force
-    after the load, and it is not cosmetic: `damage_monst` sets the victim's
+  - **It is remembered, not swallowed.** *(Wrong — see the entry at the bottom
+    of this file. The `load_party` that follows undoes the toggle, because the
+    C++'s loader swaps a scratch `cUniverse` over the real one and takes
+    `debug_mode` back to false with it. The rest of this bullet, on what the
+    flag does when it really is on, stands.)* `univ.debug_mode` is a plain
+    global the save does not carry, and it is not cosmetic: `damage_monst` sets the victim's
     health to -1 outright, and `kill_monst` skips the experience, the glands
     and the treasure (boe.specials.cpp:1532, :1628, :1643). All three draw.
     `ReplayStartLoad` carries a `debugMode` the corpus runner applies after
@@ -11330,3 +11330,44 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     from `pick_a_scen` (`short/talking-map-blackout.xml`,
     `long/VoDT_28-03-2025_10-45-32.xml`). Two more reach `load_party` but the
     save inside is a party with no scenario, which is the same picker work.
+
+- **Loading a game drops debug mode, and the whole "multi-target spell" bucket
+  was that (M8, 2026-09-13).** **1,228,026 matching draws, 50 of 87 agreeing,
+  37 blocked.** `long/ZKR-5-16-12-18.xml` now agrees on **all 5,857**, and the
+  rules queue is empty again.
+  - **The bucket named a combat rule and the bug was in the save loader.** The
+    stack said `handleMarkedDamage` ← `doCombatCast`: the C++ rolled a third
+    `get_ran(10,1,6)` for the next victim of a Fireball and this port made a
+    `get_ran(1,0,1)`. Both engines had in fact rolled *identical* damage for
+    all three targets — 25, 27, 35, halved by the same saving throws to 12, 13
+    and 17. The extra draw was `kill_monst`'s death rattle: two Spiny Worms on
+    **100 hit points** died here and lived there. `BOE_TRACE_MONST=1` /
+    `MONST=1` printed `h100` on both sides one action earlier, which is what
+    made "it should not have died" the question instead of "it rolled the
+    wrong number".
+  - `damage_monst`'s `if(univ.debug_mode) victim.health = -1;` was doing it,
+    and this port had debug mode **on** because the recording presses shift-D
+    at the splash screen. Last week's commit reasoned that `univ.debug_mode` is
+    not saved, so the toggle survives the `load_party` that follows. It does
+    not. **`real_univ = std::move(univ)`** at the end of both loaders
+    (fileio_party.cpp:348 and :559) is `cUniverse::operator=`, which `swap`s
+    *every* member — including `debug_mode`, `ghost_mode`, `node_step_through`
+    and `stored_pcs` (universe.cpp:1007-1016). The scratch universe the loader
+    read into has the defaults, so the load hands them to the running game.
+    `put_party_in_scen` clears the same three by hand (boe.party.cpp:122), the
+    other way into a game, which is a good sign the swap here is meant rather
+    than incidental.
+  - The fix is in `freshenForLoad` (`saveIo.ts`), which already existed to do
+    exactly this job — "everything the save does not mention goes back to its
+    default, because that is what `load_party_v2` gets for free" — and had only
+    ever been applied to the Party and the PCs. The Universe's own scalars
+    needed it too. `ReplayStartLoad.debugMode` is gone: the preamble still
+    *skips* `toggle_debug_mode`, but nothing carries it across the load.
+  - **A note on reading a comment that was written from the C++ rather than
+    against it.** The claim that debug mode survives a load was inferred from
+    "the save does not carry it", which is true, and from nothing else. The
+    move-assignment is three files away from `load_party` and it is where the
+    behaviour lives. When a flag is "a plain global" in a C++ that has a
+    `swap(cUniverse&, cUniverse&)`, read the swap.
+  - Two more files run to the end for the companion meters as a side effect
+    (`align-actions.mjs` is 0 of **75** now, was 0 of 73), and both stay clean.

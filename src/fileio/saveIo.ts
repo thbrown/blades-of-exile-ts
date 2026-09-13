@@ -1416,6 +1416,28 @@ function freshenForLoad(univ: Universe): void {
   }
   univ.curPc = 0;
   univ.town = null;
+  // **Loading a game drops debug mode**, and that is the move-assignment
+  // above doing it rather than any line of `load_party`: `real_univ =
+  // std::move(univ)` (fileio_party.cpp:348 and :559) runs
+  // `cUniverse::operator=`, which `swap`s *every* member including
+  // `debug_mode`, `ghost_mode` and `node_step_through`
+  // (universe.cpp:1007-1016). The scratch universe's defaults are false, so
+  // they land on the real one. `put_party_in_scen` clears the same three by
+  // hand (boe.party.cpp:122) — the other way into a game — which is a good
+  // hint the swap here is meant, not incidental.
+  //
+  // It is not cosmetic: `damage_monst` takes a victim's health to -1 outright
+  // in debug mode. A recording that presses shift-D at the splash screen and
+  // then loads a save — `long/ZKR-5-16-12-18.xml` — would otherwise kill two
+  // Spiny Worms here that the C++ leaves standing on 88 hit points.
+  univ.debugMode = false;
+  univ.ghostMode = false;
+  univ.nodeStepThrough = false;
+  // Stored PCs go the same way, and the C++ loses them twice over: the swap
+  // drops the running game's map, and `load_party_v2` reads each
+  // `save/pc~<uid>.txt` into a fresh `cPlayer` and then never inserts it
+  // (fileio_party.cpp:409-418).
+  univ.storedPcs.clear();
 }
 
 /**

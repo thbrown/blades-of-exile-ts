@@ -122,10 +122,6 @@ async function play(path: string): Promise<Row> {
   seedLoadedReplay(univ.rng, replay);
   applySave(start.save, univ);
   session.resumeLoadedGame();
-  // `univ.debug_mode` is a global the save does not carry, so a shift-D
-  // pressed at the splash screen is still on after the load — and it changes
-  // what `damage_monst` and `kill_monst` draw.
-  univ.debugMode = start.debugMode;
   const startedAt = { ...univ.party.getLoc() };
 
   const total = replay.actions.length - start.consumed;

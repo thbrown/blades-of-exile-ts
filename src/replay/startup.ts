@@ -46,7 +46,12 @@ export const STARTUP_ACTIONS: ReadonlySet<string> = new Set([
   // (boe.actions.cpp:2725), so a recording can press shift-D at the splash
   // screen — before any game exists — and two of them do, which stopped the
   // preamble dead one action short of the `load_party` it was looking for.
-  // It is not merely skipped: see `debugMode` below.
+  //
+  // And it really is *only* skipped: the `load_party` that follows it undoes
+  // it. See `freshenForLoad` — the C++'s load swaps a scratch `cUniverse` over
+  // the real one, taking `debug_mode` back to false with it. So nothing here
+  // needs to carry the flag across; an earlier version of this file did, and
+  // it killed monsters the C++ left standing.
   'toggle_debug_mode',
 ]);
 
@@ -60,20 +65,6 @@ export interface ReplayStartLoad {
   scenarioId: string;
   /** How many leading actions the preamble accounts for. */
   consumed: number;
-  /**
-   * Whether the preamble left **debug mode on**.
-   *
-   * `univ.debug_mode` is a plain global in the C++ and is **not saved**, so a
-   * shift-D pressed at the splash screen is still in force after the load —
-   * and it is not cosmetic: `damage_monst` sets the victim's health to -1
-   * outright and `kill_monst` skips the experience, the glands and the
-   * treasure (boe.specials.cpp:1532, :1628, :1643). All three draw. Swallowing
-   * the toggle as startup and starting with it off would put the stream out of
-   * step the first time the party hit anything.
-   *
-   * Counted rather than latched, because the toggle is a toggle.
-   */
-  debugMode: boolean;
 }
 
 export interface ReplayStartUnsupported {
@@ -92,13 +83,11 @@ export function replayStartup(replay: Replay): ReplayStart {
   let at = 0;
   let load: ReplayAction | null = null;
   let sawScenList = false;
-  let debugMode = false;
   while (at < replay.actions.length) {
     const action = replay.actions[at]!;
     if (!STARTUP_ACTIONS.has(action.type)) break;
     if (action.type === 'load_party') load = action;
     if (action.type === 'build_scen_headers') sawScenList = true;
-    if (action.type === 'toggle_debug_mode') debugMode = !debugMode;
     at++;
     // A `load_party` ends the preamble: everything after it is the game.
     // Without this the run of `click_control`s that a chain of dialogs opens
@@ -138,7 +127,6 @@ export function replayStartup(replay: Replay): ReplayStart {
     scenarioFile,
     scenarioId: scenarioDirOf(scenarioFile),
     consumed: at,
-    debugMode,
   };
 }
 

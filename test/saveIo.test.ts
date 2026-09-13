@@ -10,7 +10,7 @@ import { QuestStatus } from '../src/data/quest';
 import { Scenario } from '../src/data/scenario';
 import { loadScenario } from '../src/fileio/loadScenario';
 import {
-  loadSave, openSave, readSavePreview, saveGame, serialiseSave, writeMonster,
+  applySave, loadSave, openSave, readSavePreview, saveGame, serialiseSave, writeMonster,
 } from '../src/fileio/saveIo';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
@@ -349,6 +349,31 @@ describe('.exg round trip', () => {
     } finally {
       record.monstersKilled = 0;
     }
+  });
+
+  /**
+   * `real_univ = std::move(univ)` at the end of both loaders
+   * (fileio_party.cpp:348, :559) runs `cUniverse::operator=`, which `swap`s
+   * every member — so the scratch universe's `false` lands on `debug_mode`,
+   * `ghost_mode` and `node_step_through`, and the running game's stored PCs
+   * are swapped away with it.
+   *
+   * Three of those four are rules, not conveniences: `damage_monst` takes a
+   * victim's health to -1 in debug mode, and `kill_monst` then skips the
+   * experience, the glands and the treasure. `long/ZKR-5-16-12-18.xml` is the
+   * recording that proved it — shift-D at the splash screen, then Load Game,
+   * and two Spiny Worms that the C++ leaves standing on 88 hit points.
+   */
+  it('drops debug mode, ghost mode and the stored PCs, as the C++ swap does', () => {
+    univ.debugMode = true;
+    univ.ghostMode = true;
+    univ.nodeStepThrough = true;
+    univ.storedPcs.set(1234, univ.party.pcs[0]!);
+    applySave(saveGame(univ), univ);
+    expect(univ.debugMode).toBe(false);
+    expect(univ.ghostMode).toBe(false);
+    expect(univ.nodeStepThrough).toBe(false);
+    expect(univ.storedPcs.size).toBe(0);
   });
 
   it('survives a second round trip byte for byte', () => {
