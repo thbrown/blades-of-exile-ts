@@ -8,7 +8,8 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  SUPPORTED_FEATURES, currentFeatureFlags, hasFeatureFlag, resetFeatureFlags, setFeatureFlags,
+  SUPPORTED_FEATURES, currentFeatureFlags, hasFeatureFlag, resetFeatureFlags,
+  scenarioFeatureGap, setFeatureFlags,
 } from '../src/game/featureFlags';
 import { parseReplay, writeReplay } from '../src/replay/format';
 import { parseXmlDoc } from '../src/fileio/xml';
@@ -112,5 +113,33 @@ describe('the flag block in a replay file', () => {
   it('reports a missing block as null', async () => {
     const replay = parseReplay(await parseXmlDoc('<actions><move>(1,1)</move></actions>', 'r.xml'));
     expect(replay.featureFlags).toBeNull();
+  });
+});
+
+/**
+ * `put_party_in_scen`'s gate (boe.party.cpp:188). It asks `has_feature_flag`,
+ * so it reads the set **in force** — which during a replay is the recording's,
+ * not this build's, and that is the whole reason the C++ refuses to launch
+ * Za-Khazi in `short/bad-item-graphic.xml`.
+ */
+describe('the gate a scenario has to pass to be played at all', () => {
+  it('passes a scenario whose features this build has', () => {
+    expect(scenarioFeatureGap({ 'conveyor-belts': 'V2' })).toBeNull();
+    expect(scenarioFeatureGap({})).toBeNull();
+  });
+
+  it('refuses one the set in force does not cover, however capable the build is', () => {
+    // The build supports conveyor-belts V2 (see SUPPORTED_FEATURES) — but a
+    // recording that does not mention the flag turns it off.
+    setFeatureFlags({ 'target-lock': ['V1'] });
+    expect(scenarioFeatureGap({ 'conveyor-belts': 'V2' }))
+      .toMatch(/conveyor-belts should support 'V2'/);
+  });
+
+  it('names the first flag it cannot supply, in the C++\'s wording', () => {
+    resetFeatureFlags();
+    expect(scenarioFeatureGap({ 'made-up-feature': 'V9' }))
+      .toBe('This scenario requires a feature that is not supported in your version '
+        + "of Blades of Exile: made-up-feature should support 'V9'");
   });
 });

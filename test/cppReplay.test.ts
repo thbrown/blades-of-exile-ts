@@ -177,7 +177,11 @@ async function play(file: string): Promise<RunOutcome> {
   // The startup half runs before the session exists, because that is when the
   // C++ answers it: the splash screen, the file picker and the save it chose.
   const start = replayStartup(replay);
-  if (start.kind !== 'load') throw new Error(`${file}: ${start.why}`);
+  // Every file in this curated set opens by loading a save; a `debug_launch_scen`
+  // recording is the corpus runner's business.
+  if (start.kind !== 'load') {
+    throw new Error(`${file}: ${start.kind === 'new' ? 'starts a new game' : start.why}`);
+  }
 
   const scen = await loadScen(start.scenarioId);
   // **Seeded after `startNewGame`, not before** — see `seedLoadedReplay`. The

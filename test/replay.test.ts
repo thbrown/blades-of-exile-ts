@@ -15,6 +15,7 @@ import {
 import { NO_TARGET } from '../src/game/spellPick';
 import { rngForReplay, runReplay } from '../src/replay/driver';
 import { ReplayRecorder } from '../src/replay/recorder';
+import { replayStartup } from '../src/replay/startup';
 import { PartyPreset } from '../src/universe/player';
 import { Universe } from '../src/universe/universe';
 
@@ -356,5 +357,45 @@ describe('a targeted square with nothing armed, in combat', () => {
     await session.settled();
 
     expect(univ.curPc).not.toBe(spent);
+  });
+});
+
+/**
+ * The preamble reader. Two shapes reach a game: a `load_party` carrying the
+ * whole `.exg`, and `debug_launch_scen` — the `@`/`#` keys at the splash
+ * screen, which `start_new_game(true)` the default party straight into a named
+ * scenario (boe.actions.cpp:2698).
+ */
+describe('the startup half of a recording', () => {
+  const preamble = (...actions: { type: string; text?: string }[]) => ({
+    seed: 12345, scenario: null, featureFlags: null,
+    actions: actions.map((a) => ({ type: a.type, text: a.text ?? '', info: {} })),
+  });
+
+  it('reads a debug_launch_scen preamble as a new game on the scenario it names', () => {
+    const start = replayStartup(preamble(
+      { type: 'load_prefs' },
+      { type: 'srand' },
+      // shift-D at the splash screen, which the `debug_launch_scen` that
+      // follows undoes along with everything else `put_party_in_scen` resets.
+      { type: 'toggle_debug_mode' },
+      { type: 'debug_launch_scen', text: 'valleydy.boes' },
+      { type: 'move' },
+    ));
+    expect(start.kind).toBe('new');
+    if (start.kind !== 'new') return;
+    expect(start.scenarioFile).toBe('valleydy.boes');
+    expect(start.scenarioId).toBe('valleydy');
+    // Four actions of preamble: the launch ends it, the `move` is the game.
+    expect(start.consumed).toBe(4);
+  });
+
+  it('still refuses the scenario-picker shape, which needs pick_a_scen', () => {
+    const start = replayStartup(preamble(
+      { type: 'srand' },
+      { type: 'build_scen_headers' },
+      { type: 'click_control' },
+    ));
+    expect(start.kind).toBe('unsupported');
   });
 });

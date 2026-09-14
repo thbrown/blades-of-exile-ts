@@ -64,6 +64,32 @@ export function hasFeatureFlag(flag: string, version: string): boolean {
 }
 
 /**
+ * `put_party_in_scen`'s gate (boe.party.cpp:188) — **"make sure the game build
+ * supports all the scenario's features"**. A scenario declares what it needs in
+ * its `<feature-flags>` block, and a build that cannot produce one of those
+ * versions shows an error and refuses to start the game at all.
+ *
+ * It asks `has_feature_flag`, so it reads the set **in force**, not
+ * `SUPPORTED_FEATURES`. That distinction is the whole point during a replay: a
+ * recording's block replaces the build's set, and a flag it does not mention is
+ * off however capable this build is. `short/bad-item-graphic.xml` is the case —
+ * it launches Za-Khazi, which needs `conveyor-belts V2`, under a recorded set
+ * that never mentions conveyor belts, and the C++ refuses the launch and plays
+ * on with no game at all.
+ *
+ * Returns the C++'s own message, or null when the scenario can be played.
+ */
+export function scenarioFeatureGap(flags: Record<string, string>): string | null {
+  for (const [flag, version] of Object.entries(flags)) {
+    if (!hasFeatureFlag(flag, version)) {
+      return 'This scenario requires a feature that is not supported in your version '
+        + `of Blades of Exile: ${flag} should support '${version}'`;
+    }
+  }
+  return null;
+}
+
+/**
  * `replay_feature_flags` (boe.main.cpp:1087) — install a recording's set, in
  * place of this build's.
  *

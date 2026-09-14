@@ -279,6 +279,13 @@ function align(a, b) {
  *    was consumed at two different rates. That is the driver bug this tool is
  *    for.
  */
+const STARTUP_TYPES = new Set([
+  'load_prefs', 'feature_flags', 'srand', 'scenario', 'change_fps',
+  'pick_preferences', 'startup_button_click', 'fancy_file_picker',
+  'build_scen_headers', 'click_control', 'load_party',
+  'toggle_debug_mode', 'debug_launch_scen',
+]);
+
 function hunks(script) {
   const out = [];
   for (let i = 0; i < script.length;) {
@@ -299,7 +306,14 @@ function hunks(script) {
       // block: a recording that loads a save and then opens the file picker
       // again has two startup hunks with a match between them, and the second
       // is no more a bug than the first.
-      startup: run.every((s) => (s.cpp ?? s.js).draws === 0),
+      // …with one exception the draw test cannot see: `debug_launch_scen`
+      // *does* draw — `put_party_in_scen` rolls every random shop's stock, 2,860
+      // numbers of it in `short/ItemDupe.xml` — while still being an action this
+      // port consumes before the driver counts. So a **leading** hunk made only
+      // of startup action types counts too. Keep this list in step with
+      // `STARTUP_ACTIONS` in `src/replay/startup.ts`.
+      startup: run.every((s) => (s.cpp ?? s.js).draws === 0)
+        || (!matchedBefore && run.every((s) => s.op === '-' && STARTUP_TYPES.has(s.cpp.type))),
       tail: !matchedAfter,
       dels: run.filter((s) => s.op === '-').length,
       adds: run.filter((s) => s.op === '+').length,

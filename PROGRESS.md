@@ -14,8 +14,8 @@
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-13** that is
-  **1,228,026 matching draws, 50 of 87 files agreeing all the way**, and
-  thirty-seven blocked on a *harness* gap or a recording this port cannot
+  **1,231,440 matching draws, 51 of 87 files agreeing all the way**, and
+  thirty-six blocked on a *harness* gap or a recording this port cannot
   start. See "What M8 has left" at the bottom. Add `--refresh` after a code
   change.
   - **The rules queue is empty again.** Its one entry —
@@ -23,18 +23,18 @@
     closed 2026-09-13, and it was not a combat rule at all: **loading a game
     drops debug mode**, and this port was keeping it. See the entry at the
     bottom.
-  - **Of those 37, twenty-four are finished rather than pending**: the C++'s
+  - **Of those 36, twenty-four are finished rather than pending**: the C++'s
     draws are a strict *prefix* of this port's — every one of the 501,602 they
     made agreed — and then the oracle stopped. The summary line says so on
     every run now (`[all draws matched first]` against a bucket). There is
     nothing left to find in them without harness work.
 - Two companion meters answer questions the draw stream cannot.
   `node scripts/align-actions.mjs --all` asks whether the two **action**
-  streams ever drift apart (they do not: 0 of 75), and
+  streams ever drift apart (they do not: 0 of 76), and
   `--clocks` asks whether the two **clocks** do — a turn one side charges and
   the other does not spends no draws at all, so it is invisible to
   `diverge.mjs` and upstream of wherever it points. **Both are clean as of
-  2026-09-13**: 0 of 75 drift and **0** files part on their clocks, down from
+  2026-09-13**: 0 of 76 drift and **0** files part on their clocks, down from
   six and then two. Four of the biggest wins of 2026-09-02/03 were found that
   way.
 - Keys follow the original's `handle_keystroke` (boe.actions.cpp:2772):
@@ -10713,7 +10713,7 @@ The M6 list below is kept for the history of what it covered:
 
 ### What M8 has left
 
-The corpus can go no further without harness work. The thirty-seven blocked
+The corpus can go no further without harness work. The thirty-six blocked
 files group as `diverge.mjs --all --stacks` lists them; the two biggest are:
 
 - **14 files: the party dies here and the recording's did not.** The harness
@@ -11330,6 +11330,8 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     from `pick_a_scen` (`short/talking-map-blackout.xml`,
     `long/VoDT_28-03-2025_10-45-32.xml`). Two more reach `load_party` but the
     save inside is a party with no scenario, which is the same picker work.
+    *(`debug_launch_scen` needed no picker at all and landed 2026-09-13 — see
+    the entry at the bottom. The rest of this stands.)*
 
 - **Loading a game drops debug mode, and the whole "multi-target spell" bucket
   was that (M8, 2026-09-13).** **1,228,026 matching draws, 50 of 87 agreeing,
@@ -11371,3 +11373,59 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     `swap(cUniverse&, cUniverse&)`, read the swap.
   - Two more files run to the end for the companion meters as a side effect
     (`align-actions.mjs` is 0 of **75** now, was 0 of 73), and both stay clean.
+
+- **`debug_launch_scen`: a recording that starts a game instead of loading one
+  (M8, 2026-09-13).** **1,231,440 matching draws, 51 of 87 agreeing, 36
+  blocked.** `short/ItemDupe.xml` agrees on **all 3,414** — on the first try,
+  which is worth saying: nothing in `start_new_game` or `put_party_in_scen` had
+  to be fixed, only *run in the right order*.
+  - **It needed no scenario picker.** The note above listed it with
+    `pick_a_scen` as "the startup shape this port cannot begin", and that was
+    wrong: `debug_launch_scen` (boe.actions.cpp:2698) carries the scenario's
+    name in the action, and does `start_new_game(true)` on the default party
+    followed by `put_party_in_scen(name, true)`. Both halves were already
+    ported. `replayStartup` grew a third result, `ReplayStartNew`.
+  - **The whole of it was the seeding order.** A recording that loads a save is
+    seeded *after* `startNewGame`, because the C++ never starts a game for it
+    (`seedLoadedReplay`). Here it does, with the stream already seeded, so
+    every draw belongs to the recording — and **the seed has to go in before
+    the `Universe` is even constructed**, because that constructor is this
+    port's `enter_scenario` and `refresh_store_items` inside it is 2,860 of the
+    first 2,861 draws.
+  - **`put_party_in_scen`'s `force` argument turns off two things**, and this
+    port was doing both unconditionally: the intro dialogs, which it has none
+    of, and `run_special(STARTUP, …, init_spec)` (boe.party.cpp:230). Now
+    `startNewGame(force)`.
+  - **The town's entry node does not fire at scenario start either**, and that
+    is a divergence this port had regardless of replays.
+    `handle_town_specials` only *queues* the chain (boe.town.cpp:689), and
+    `put_party_in_scen` empties the queue right after `start_town_mode` with
+    its own comment: "preserve legacy behaviour of not calling the enter town
+    node at scenario start". This port runs the chain rather than queueing it,
+    so the only place to say it is `startTownMode`, whose `debugEnter`
+    parameter is now `skipEntrySpecial` and has two callers with two reasons.
+  - **The one thing it did expose was a real missing rule**, and only because
+    the file that exposed it could suddenly start:
+    `short/bad-item-graphic.xml` launches Za-Khazi and the C++ **refuses** —
+    `put_party_in_scen`'s feature gate (boe.party.cpp:188) — then plays on with
+    no game and launches Valley of Dying Things instead twenty actions later.
+    This port launched Za-Khazi, and the divergence read as
+    `pull_item_of_type`: `get_ran(1,0,393)` against `get_ran(1,0,388)`, which
+    is two engines sampling item lists of 394 and 389 entries. Two different
+    scenarios, not two different parsers.
+    - **The gate asks `has_feature_flag`, so it reads the set in force**, not
+      the build's. This build *does* support `conveyor-belts V2`; the
+      recording's flag block never mentions conveyor belts, and a flag a
+      recording does not mention is off. That is the same rule the top of
+      `featureFlags.ts` is about, biting somewhere new.
+    - **And it belongs to `put_party_in_scen` alone.** `load_party` does not go
+      through it — it loads and calls `finish_load_party` — so a *saved* game in
+      a scenario whose flags the recording does not cover is loaded anyway.
+      Gating both shapes cost fourteen files that run to the end, every
+      Za-Khazi recording among them, and the corpus said so immediately:
+      39/87 and 1,071,706 draws against 51 and 1,231,440.
+  - **`align-actions.mjs` had a matching assumption to fix.** It calls a
+    leading hunk of unmatched actions "the startup prefix" when every action in
+    it drew nothing — and `debug_launch_scen` draws 2,860. A leading hunk of
+    known startup *types* now counts too, which is why the drift meter reads
+    0 of 76 rather than 1.

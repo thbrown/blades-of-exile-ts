@@ -376,7 +376,7 @@ export class GameSession {
    * scenario's start town, with the outdoor start position standing by for
    * when the party walks out.
    */
-  startNewGame(): void {
+  startNewGame(force = false): void {
     // "Everyone gets a weapon" (boe.actions.cpp:3789). In the C++ this is the
     // tail of `start_new_game`, which runs once party building is over and
     // before a scenario is even chosen — the `cPlayer(PARTY_DEFAULT, slot)`
@@ -393,10 +393,19 @@ export class GameSession {
     // which for valleydy is the north gate rather than the guest quarters
     // the scenario opens in (boe.party.cpp:211).
     this.forceTownEntry(this.univ.scenario.startTown, this.univ.scenario.townStart);
-    this.startTownMode(this.univ.scenario.startTown, FORCED_ENTRY);
-    // put_party_in_scen runs the scenario's on-init node last (boe.party.cpp:238).
-    void this.runSpecial(
-      SpecCtx.STARTUP, SpecCtxType.SCEN, this.univ.scenario.initSpec, loc(0, 0));
+    // The town's entry node does **not** fire at scenario start: the C++ queues
+    // it in `handle_town_specials` and then empties the queue (boe.party.cpp:216,
+    // "preserve legacy behaviour of not calling the enter town node at scenario
+    // start"). See `startTownMode`'s `skipEntrySpecial`.
+    this.startTownMode(this.univ.scenario.startTown, FORCED_ENTRY, true);
+    // put_party_in_scen runs the scenario's on-init node last (boe.party.cpp:238)
+    // — **and only when it was not forced** (:230). A `debug_launch_scen` or a
+    // load straight from the startup screen passes `force`, and skips the intro
+    // dialogs and the init node with it.
+    if (!force) {
+      void this.runSpecial(
+        SpecCtx.STARTUP, SpecCtxType.SCEN, this.univ.scenario.initSpec, loc(0, 0));
+    }
   }
 
   /**
@@ -4535,7 +4544,19 @@ export class GameSession {
     return true;
   }
 
-  startTownMode(townNum: number, entryDir: number, debugEnter = false): void {
+  /**
+   * `skipEntrySpecial` covers the two places the town's `spec_on_entry` must
+   * not fire. The debug Enter Town key is one — `if(!debug_enter)
+   * handle_town_specials(...)` (boe.town.cpp:356), which drops the party in
+   * without waking the place up. **Scenario start is the other**, and the C++
+   * spells it differently: `handle_town_specials` only *queues* the node
+   * (boe.town.cpp:689), and `put_party_in_scen` then empties the queue behind
+   * `start_town_mode` with its own comment — "preserve legacy behaviour of not
+   * calling the enter town node at scenario start" (boe.party.cpp:216). Same
+   * effect, and this port runs the chain rather than queueing it, so the only
+   * place to say it is here.
+   */
+  startTownMode(townNum: number, entryDir: number, skipEntrySpecial = false): void {
     if (this.univ.scenario.towns[townNum] === undefined) {
       this.univ.addStringToBuf('The scenario tried to put you into a town that does not exist.');
       return;
@@ -4660,7 +4681,7 @@ export class GameSession {
     // `if(!debug_enter) handle_town_specials(...)` (boe.town.cpp:356) — the
     // debug Enter Town key drops the party in without waking the place up.
     const entryNode = townToast ? record.specOnEntryIfDead : record.specOnEntry;
-    if (entryNode >= 0 && !debugEnter)
+    if (entryNode >= 0 && !skipEntrySpecial)
       void this.runSpecial(
         SpecCtx.ENTER_TOWN, SpecCtxType.TOWN, entryNode, this.univ.party.townLoc);
 

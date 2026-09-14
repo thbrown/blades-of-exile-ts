@@ -48,6 +48,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { describe, it } from 'vitest';
+import { scenarioFeatureGap, setFeatureFlags } from '../src/game/featureFlags';
 import { GameMode } from '../src/game/modes';
 import { GameSession } from '../src/game/session';
 import { applySave, readSavePreview } from '../src/fileio/saveIo';
@@ -109,19 +110,53 @@ async function play(path: string): Promise<Row> {
 
   const replay = parseReplay(await parseXmlDoc(readFileSync(path, 'utf8'), name));
   const start = replayStartup(replay);
-  if (start.kind !== 'load') return { ...base, why: start.why };
+  if (start.kind === 'unsupported') return { ...base, why: start.why };
 
   const scen = await loadScenario(new FsSource(join(SCENARIOS, start.scenarioId)), opcodes);
-  // **Seeded after `startNewGame`, not before** — see `seedLoadedReplay`. The
-  // C++ never starts a game for a recording that loads a save, so the draws
-  // that setup makes are this port's alone and would put the stream thousands
-  // of numbers out of step.
-  const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
+  if (start.kind === 'new') {
+    // **The recording's flag set has to be in force before the gate below**, and
+    // `runReplay` installs it too late for that — the C++ replays
+    // `feature_flags` as an action, well before the `debug_launch_scen` that
+    // reads it. Installing it twice is harmless.
+    setFeatureFlags(replay.featureFlags ?? {});
+    // `put_party_in_scen`'s feature gate (boe.party.cpp:188). The C++ shows an
+    // error and **returns**, leaving the recording with no game to act on, and
+    // then plays on — `short/bad-item-graphic.xml` launches Za-Khazi under a
+    // recorded flag set that never mentions conveyor belts, is refused, and
+    // eventually launches Valley of Dying Things instead. Running the refused
+    // scenario here instead reads as a rules divergence in `pull_item_of_type`,
+    // because the two engines are sampling different item lists.
+    //
+    // **Only on this path.** `load_party` does not go through
+    // `put_party_in_scen` at all — it loads and calls `finish_load_party` — so
+    // a saved game in a scenario whose flags the recording's set does not cover
+    // is loaded anyway. Gating both shapes skipped fourteen files that run to
+    // the end, every Za-Khazi recording among them.
+    const gap = scenarioFeatureGap(scen.featureFlags);
+    if (gap !== null) return { ...base, why: gap };
+  }
+  const rng = new GameRng();
+  // `debug_launch_scen`: the C++ *does* start a game here, with the stream
+  // already seeded, so every draw `start_new_game` and `put_party_in_scen` make
+  // belongs to the recording. **Seeded before the `Universe` is built**, not
+  // just before `startNewGame` — the constructor is this port's
+  // `enter_scenario`, and `refresh_store_items` inside it is the bulk of those
+  // draws (2,900 of the first 2,901 in `short/ItemDupe.xml`).
+  if (start.kind === 'new') seedLoadedReplay(rng, replay);
+  const univ = new Universe(scen, rng, PartyPreset.DEFAULT);
   const session = new GameSession(univ);
-  session.startNewGame();
-  seedLoadedReplay(univ.rng, replay);
-  applySave(start.save, univ);
-  session.resumeLoadedGame();
+  if (start.kind === 'new') {
+    session.startNewGame(true);
+  } else {
+    // **Seeded after `startNewGame`, not before** — see `seedLoadedReplay`. The
+    // C++ never starts a game for a recording that loads a save, so the draws
+    // that setup makes are this port's alone and would put the stream thousands
+    // of numbers out of step.
+    session.startNewGame();
+    seedLoadedReplay(univ.rng, replay);
+    applySave(start.save, univ);
+    session.resumeLoadedGame();
+  }
   const startedAt = { ...univ.party.getLoc() };
 
   const total = replay.actions.length - start.consumed;

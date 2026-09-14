@@ -53,6 +53,12 @@ export const STARTUP_ACTIONS: ReadonlySet<string> = new Set([
   // needs to carry the flag across; an earlier version of this file did, and
   // it killed monsters the C++ left standing.
   'toggle_debug_mode',
+  // **`debug_launch_scen` is the other way a recording begins.** The `@`/`#`
+  // keys at the splash screen, which `start_new_game(true)` the default party
+  // and `put_party_in_scen(name, true)` it straight into a named scenario
+  // (boe.actions.cpp:2698). It ends the preamble the way `load_party` does —
+  // see `ReplayStartNew`.
+  'debug_launch_scen',
 ]);
 
 export interface ReplayStartLoad {
@@ -67,13 +73,34 @@ export interface ReplayStartLoad {
   consumed: number;
 }
 
+/**
+ * A recording that begins with **no save at all**: `debug_launch_scen` builds
+ * the default party and drops it into the scenario it names.
+ *
+ * The difference from `ReplayStartLoad` that matters to the caller is the
+ * **seeding order**. A recording that loads a save needs `seedLoadedReplay` —
+ * the C++ never starts a game for it, so `startNewGame`'s draws are this
+ * port's alone and must happen before the seed. Here the C++ *does* start one,
+ * with the stream already seeded, so every draw `start_new_game` and
+ * `put_party_in_scen` make is part of the recording: seed first, then start.
+ */
+export interface ReplayStartNew {
+  kind: 'new';
+  /** The scenario the debug key named — `valleydy.boes`. */
+  scenarioFile: string;
+  /** …and the directory it was unpacked into. */
+  scenarioId: string;
+  /** How many leading actions the preamble accounts for. */
+  consumed: number;
+}
+
 export interface ReplayStartUnsupported {
   kind: 'unsupported';
   why: string;
   consumed: number;
 }
 
-export type ReplayStart = ReplayStartLoad | ReplayStartUnsupported;
+export type ReplayStart = ReplayStartLoad | ReplayStartNew | ReplayStartUnsupported;
 
 /**
  * Read the preamble. Consumes the leading run of startup actions and reports
@@ -82,17 +109,29 @@ export type ReplayStart = ReplayStartLoad | ReplayStartUnsupported;
 export function replayStartup(replay: Replay): ReplayStart {
   let at = 0;
   let load: ReplayAction | null = null;
+  let launch: ReplayAction | null = null;
   let sawScenList = false;
   while (at < replay.actions.length) {
     const action = replay.actions[at]!;
     if (!STARTUP_ACTIONS.has(action.type)) break;
     if (action.type === 'load_party') load = action;
+    if (action.type === 'debug_launch_scen') launch = action;
     if (action.type === 'build_scen_headers') sawScenList = true;
     at++;
     // A `load_party` ends the preamble: everything after it is the game.
     // Without this the run of `click_control`s that a chain of dialogs opens
     // right after the load would be swallowed as startup.
-    if (load !== null) break;
+    if (load !== null || launch !== null) break;
+  }
+
+  if (launch !== null) {
+    const scenarioFile = launch.text.trim();
+    return {
+      kind: 'new',
+      scenarioFile,
+      scenarioId: scenarioDirOf(scenarioFile),
+      consumed: at,
+    };
   }
 
   if (load === null) {
