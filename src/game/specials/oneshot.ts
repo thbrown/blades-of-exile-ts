@@ -10,7 +10,9 @@
 
 import { SpecType } from '../../data/special';
 import { Universe } from '../../universe/universe';
-import { GiveStatus, giveItem } from '../../universe/inventory';
+import { GiveStatus, combineThings, giveItem, sortItems } from '../../universe/inventory';
+import { printResult } from '../../universe/living';
+import { ItemType } from '../../data/item';
 import { MainStatus } from '../../universe/skills';
 import { ChoiceButton, SpecCtxType, SpecialCtx } from './context';
 import { SpecialsEngine, handleMessage } from './vm';
@@ -103,10 +105,36 @@ function messageRun(univ: Universe, ctx: SpecialCtx, first: number): string[] {
 }
 
 /**
- * forced_give — hand an item to whoever can take it, ignoring the usual
- * "who do you want it to go to?" prompt. Returns false when nobody can.
+ * `cParty::forced_give` (party.cpp:596) — the item goes into the **first empty
+ * slot of the first living PC**, whatever it weighs. Nothing is refused for
+ * weight and nothing is said when nobody has room; on success it prints
+ * "  Name gets Item." and tidies the pack (`combine_things`, `sort_items`).
+ *
+ * Kept as written: the loop is over `pc.items`, which includes the scratch
+ * slot `give_item` uses for pre-stacking, so a PC with a full pack can still
+ * take one this way, into that slot.
  */
-function forcedGive(univ: Universe, itemIndex: number): boolean {
+export function forcedGive(univ: Universe, itemIndex: number): boolean {
+  const item = univ.scenario.scenItems[itemIndex];
+  if (!item) return false;
+  for (const pc of univ.party.pcs) {
+    for (let i = 0; i < pc.items.length; i++) {
+      if (pc.mainStatus !== MainStatus.ALIVE || pc.items[i]!.variety !== ItemType.NO_ITEM) continue;
+      pc.items[i] = { ...item };
+      printResult(`  ${pc.name} gets ${item.ident ? item.fullName : item.name}.`);
+      combineThings(pc);
+      sortItems(pc);
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * `cParty::give_item(item, true)` (party.cpp:586) — each PC in turn tries an
+ * ordinary give, weight and all. ONCE_GIVE_ITEM_DIALOG's "Take" uses this one.
+ */
+function partyGiveItem(univ: Universe, itemIndex: number): boolean {
   const item = univ.scenario.scenItems[itemIndex];
   if (!item) return false;
   for (const pc of univ.party.pcs) {
@@ -218,7 +246,7 @@ export async function oneshotSpec(
         ctx.nextSpec = -1;
         break;
       }
-      if (spec.ex1a >= 0 && !forcedGive(univ, spec.ex1a)) {
+      if (spec.ex1a >= 0 && !partyGiveItem(univ, spec.ex1a)) {
         setSd = false;
         ctx.nextSpec = -1;
         break;

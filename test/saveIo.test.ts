@@ -231,6 +231,9 @@ describe('.exg round trip', () => {
     rat.health = 2;
     rat.curLoc = { x: 9, y: 9 };
     rat.status[Status.POISON] = 2;
+    // Turned hostile since it was placed: the save keeps both attitudes.
+    rat.startAttitude = 0;
+    rat.attitude = 2;
     town.monstHostile = true;
     town.items.push({ ...presetItem(ItemPreset.KNIFE), itemLoc: { x: 8, y: 8 } });
     // On the square the party is standing on, because `setField` enforces the
@@ -246,6 +249,8 @@ describe('.exg round trip', () => {
     expect(back.town!.monstHostile).toBe(true);
     const backRat = back.town!.monsters.find((m) => m.curLoc.x === 9 && m.curLoc.y === 9)!;
     expect(backRat.health).toBe(2);
+    expect(backRat.attitude).toBe(2);
+    expect(backRat.startAttitude).toBe(0);
     // Only living creatures are written; the gaps between them come back dead
     // rather than as blank creatures standing in the town.
     expect(back.town!.monsters.filter((m) => m.isAlive).length)

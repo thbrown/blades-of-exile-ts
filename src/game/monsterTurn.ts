@@ -1883,10 +1883,12 @@ export async function combatRunMonst(session: GameSession): Promise<void> {
   if (univ.party.age % 2 === 0) await doPoison(session);
   if (univ.party.age % 3 === 0) handleDisease(session);
   await handleAcid(session);
-  // `handle_marked_damage` is ported (game/damage.ts) but is not called here:
-  // combat_run_monst's copy exists for the volleys a *monster* fires, and
-  // nothing on the monster side opens one yet. `doCombatCast` is the only
-  // caller so far. TODO(M6): open a volley around monst_fire_missile too.
+  // No `handle_marked_damage` here, and none is missing: the C++'s
+  // `combat_run_monst` has no volley of its own. Every `start_missile_anim` /
+  // `handle_marked_damage` pair in boe.combat.cpp is a site this port has —
+  // the weapon and arrow explosions, `monst_basic_abil`'s DAMAGE arm (the
+  // only one `monst_fire_missile` reaches), breath, both monster casts,
+  // `do_shockwave` and `radius_damage` (checked 2026-09-23).
 }
 
 /**

@@ -16,6 +16,7 @@ import { doRest } from '../rest';
 import { SpecCtx, SpecCtxType, SpecialCtx } from './context';
 import { SpecialsEngine, handleMessage, setSdf } from './vm';
 import { setUpLights } from '../lighting';
+import { forcedGive } from './oneshot';
 
 export async function generalSpec(
   univ: Universe, ctx: SpecialCtx, engine: SpecialsEngine,
@@ -389,8 +390,16 @@ export async function generalSpec(
     }
 
     case SpecType.FORCED_GIVE:
+      // `forced_give` (boe.specials.cpp:2350): out-of-range items do nothing,
+      // and nobody with a free slot jumps to `ex1b`.
+      checkMess = true;
+      if (spec.ex1a < 0 || spec.ex1a >= univ.scenario.scenItems.length) break;
+      if (!forcedGive(univ, spec.ex1a) && spec.ex1b >= 0) ctx.nextSpec = spec.ex1b;
+      break;
+
     case SpecType.SET_CAMP_FLAG:
-      // TODO(M6): quests and campaign flags.
+      // Campaign flags carry state between scenarios, which this port does
+      // not keep (out of scope for Part 1). Reported rather than faked.
       reportUnsupported(univ, spec.type);
       break;
 

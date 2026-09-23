@@ -157,6 +157,22 @@ export interface PostedLabel {
   center: Location;
 }
 
+/** What `do_look` calls each field and decal (boe.text.cpp:760), in its order. */
+const LOOK_FIELD_NAMES: [FieldType, string][] = [
+  [FieldType.FIELD_WEB, 'Web'], [FieldType.OBJECT_CRATE, 'Crate'],
+  [FieldType.OBJECT_BARREL, 'Barrel'], [FieldType.OBJECT_BLOCK, 'Stone Block'],
+  [FieldType.BARRIER_FIRE, 'Magic Barrier'], [FieldType.BARRIER_FORCE, 'Magic Barrier'],
+  [FieldType.FIELD_QUICKFIRE, 'Quickfire'], [FieldType.WALL_FIRE, 'Wall of Fire'],
+  [FieldType.WALL_FORCE, 'Wall of Force'], [FieldType.FIELD_ANTIMAGIC, 'Antimagic Field'],
+  [FieldType.CLOUD_STINK, 'Stinking Cloud'], [FieldType.CLOUD_SLEEP, 'Sleep Cloud'],
+  [FieldType.WALL_ICE, 'Ice Wall'], [FieldType.WALL_BLADES, 'Blade Wall'],
+  [FieldType.BARRIER_CAGE, 'Force Cage'],
+  [FieldType.SFX_SMALL_BLOOD, 'Blood stain'], [FieldType.SFX_MEDIUM_BLOOD, 'Blood stain'],
+  [FieldType.SFX_LARGE_BLOOD, 'Blood stain'], [FieldType.SFX_SMALL_SLIME, 'Smears of slime'],
+  [FieldType.SFX_LARGE_SLIME, 'Smears of slime'], [FieldType.SFX_ASH, 'Ashes'],
+  [FieldType.SFX_BONES, 'Bones'], [FieldType.SFX_RUBBLE, 'Rubble'],
+];
+
 export class GameSession {
   mode: GameMode = GameMode.OUTDOORS;
   /** The tile the view is centered on; equals the party position in town. */
@@ -389,6 +405,9 @@ export class GameSession {
       if (pc.mainStatus === MainStatus.ALIVE) pc.finishCreate();
     }
     this.univ.addStringToBuf(`Welcome to ${this.univ.scenario.title}.`);
+    // `put_party_in_scen`: `build_outdoors(); erase_out_specials();`
+    // (boe.party.cpp:207) before the party is put in its start town.
+    this.eraseOutSpecials();
     // The forced square is the point of entry_dir 9: without it the party
     // lands on whichever town entrance `startLocs` happens to list first,
     // which for valleydy is the north gate rather than the guest quarters
@@ -502,9 +521,10 @@ export class GameSession {
       if (group.mLoc.x < 0 || group.mLoc.y < 0 || group.mLoc.x > 95 || group.mLoc.y > 95)
         group.exists = false;
     }
-    // TODO(M8): erase_out_specials (boe.town.cpp:1277) runs next — it clears
-    // the map spot of any outdoor special whose SDF is complete, and swaps a
-    // town entrance the party can't find yet for its flag1 terrain.
+    // `finish_load_party` then calls `erase_out_specials` (boe.fileio.cpp:97)
+    // — and `build_outdoors` has already called it once, which changes
+    // nothing a second time.
+    this.eraseOutSpecials();
   }
 
   private get preModes(): PreModes {
@@ -1010,6 +1030,13 @@ export class GameSession {
     if (destination.x > 90 && party.outdoorCorner.x < scenario.outWidth - 1) out.shift(1, 0);
     if (destination.y < 6 && party.outdoorCorner.y > 0) out.shift(0, -1);
     else if (destination.y > 90 && party.outdoorCorner.y < scenario.outHeight - 1) out.shift(0, 1);
+    // Every shift ends in `build_outdoors`, and `build_outdoors` ends in
+    // `erase_out_specials` (boe.fileio.cpp:272): a rebuilt window starts
+    // from the scenario's own terrain, so the hidden towns and finished
+    // specials have to be taken out of it again.
+    if (party.outdoorCorner.x !== storeCorner.x || party.outdoorCorner.y !== storeCorner.y) {
+      this.eraseOutSpecials();
+    }
 
     const realDest = loc(party.outLoc.x + offset.x, party.outLoc.y + offset.y);
 
@@ -1640,8 +1667,6 @@ export class GameSession {
    * do_look (boe.text.cpp:695) — describe a space into the transcript and
    * return its terrain, or -1 when the party can't see it.
    *
-   * TODO(M4/M5): fields, blood/ash/bones decals, boats and horses also get
-   * listed here once those exist.
    */
   lookAt(where: Location): number {
     // The C++ records this one as an info map, not a bare value
@@ -1668,7 +1693,16 @@ export class GameSession {
     }
 
     univ.addStringToBuf('You see...');
-    if (where.x === from.x && where.y === from.y) univ.addStringToBuf('    Your party');
+    const inFight = isCombat(this.mode);
+    // Out of combat the party is one square; in combat it is six figures,
+    // each named if lit and in the acting PC's sight (boe.text.cpp:703).
+    if (!inFight && where.x === from.x && where.y === from.y) univ.addStringToBuf('    Your party');
+    if (inFight) {
+      for (const pc of univ.party.pcs) {
+        if (pc.mainStatus !== MainStatus.ALIVE || !locsEqual(pc.combatPos, where)) continue;
+        if (isLit && this.canSeeLight(from, where) < 5) univ.addStringToBuf(`    ${pc.name}`);
+      }
+    }
 
     if (town) {
       for (const monst of town.monsters) {
@@ -1683,6 +1717,13 @@ export class GameSession {
         univ.addStringToBuf(`    ${wounded}${name}${monst.isFriendly ? ' (F)' : ' (H)'}`);
       }
       if (town.isRoad(where.x, where.y)) univ.addStringToBuf('    Track');
+      if (this.townVehicleAt(univ.party.boats, where)) univ.addStringToBuf('    Boat');
+      if (this.townVehicleAt(univ.party.horses, where)) univ.addStringToBuf('    Horse');
+      // Fields and decals, in `do_look`'s order (boe.text.cpp:760). The two
+      // barriers share a name, and so do the three bloodstains and two slimes.
+      for (const [field, name] of LOOK_FIELD_NAMES) {
+        if (town.hasField(where.x, where.y, field)) univ.addStringToBuf(`    ${name}`);
+      }
 
       // Items: gold and food are lumped together, and a big pile is summarised.
       let gold = false;
@@ -1707,7 +1748,17 @@ export class GameSession {
         }
       if (town.specialSpots[where.x]?.[where.y]) univ.addStringToBuf('    Special Encounter');
     } else {
+      // A wandering group on the square is named by its first monster.
+      for (const group of univ.party.outC) {
+        if (!group.exists || !locsEqual(group.mLoc, where)) continue;
+        const first = group.whatMonst.monst.find((m) => m !== 0);
+        if (first !== undefined) {
+          univ.addStringToBuf(`    ${univ.scenario.scenMonsters[first]?.name ?? 'creature'}`);
+        }
+      }
       if (univ.out.isRoad(where.x, where.y)) univ.addStringToBuf('    Road');
+      if (this.outVehicleAt(univ.party.boats, where)) univ.addStringToBuf('    Boat');
+      if (this.outVehicleAt(univ.party.horses, where)) univ.addStringToBuf('    Horse');
       if (univ.out.isSpot(where.x, where.y)) univ.addStringToBuf('    Special Encounter');
     }
 
@@ -2128,6 +2179,11 @@ export class GameSession {
    * moves with it there and is purely cosmetic, so it is not modelled.
    */
   workingMonster = -1;
+  /**
+   * The status bar's right-hand hint — "M: Recast Fireball" — as the last
+   * `draw_text_bar` worked it out (`textBar.ts`). Empty outside combat.
+   */
+  recastHint = '';
 
   /**
    * `combat_posing_monster` (boe.main.cpp:183) — who is drawn in their **attack
@@ -3197,6 +3253,8 @@ export class GameSession {
       return false;
     }
     this.univ.out.positionParty(outX, outY, pcX, pcY);
+    // `build_outdoors`' tail, as above.
+    this.eraseOutSpecials();
     if (this.isOutdoors) {
       this.center = { ...this.univ.party.outLoc };
       this.updateExplored(this.univ.party.outLoc);
@@ -3513,9 +3571,9 @@ export class GameSession {
   }
 
   /** Buy the entry on a given screen row — what a click on the list means. */
-  buyShopRow(row: number): void {
+  async buyShopRow(row: number): Promise<void> {
     const target = this.shop?.rowEntry(row);
-    if (target) this.buyShopItem(target.index);
+    if (target) await this.buyShopItem(target.index);
   }
 
   /**
@@ -3525,10 +3583,21 @@ export class GameSession {
    * C++ works in (`active_shop.getItem(i)`) and what a replay records, while
    * the row a player clicked depends on where the scrollbar happens to sit.
    */
-  buyShopItem(index: number): void {
+  async buyShopItem(index: number): Promise<void> {
     const state = this.shop;
     if (!state) return;
-    handleSale(this.univ, state, index, this.sound);
+    if (handleSale(this.univ, state, index, this.sound) === 'special') {
+      // A shop entry that is a scenario node: it runs in the SHOPPING context,
+      // and only a node that doesn't refuse (`s1 <= 0`) is paid for and taken
+      // off the shelf (boe.dlgutil.cpp:461).
+      const entry = state.shop.getItem(index);
+      const { blocked } = await this.runSpecial(
+        SpecCtx.SHOPPING, SpecCtxType.SCEN, entry.item.itemLevel, loc(0, 0));
+      if (!blocked) {
+        this.univ.party.gold -= state.cost(entry);
+        state.shop.takeOne(index);
+      }
+    }
     this.recordShopStock(state);
     // A healer whose list just emptied moves on to the next PC who needs help
     // — `if(shop_array.empty()) start_shop_mode_other_pc(true, true);`
@@ -5720,6 +5789,9 @@ export class GameSession {
       applyExit(2, loc(toReturn.x, toReturn.y + 1), loc(0, -1));
 
     this.mode = GameMode.OUTDOORS;
+    // `end_town_mode`'s `erase_out_specials()` (boe.town.cpp:668), right after
+    // the mode changes back.
+    this.eraseOutSpecials();
     this.univ.addStringToBuf(`You leave ${town.record.name}.`);
     this.univ.departedTown = town;
     this.univ.town = null;

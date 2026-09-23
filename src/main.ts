@@ -87,6 +87,7 @@ import { FetchSource } from './fileio/source';
 import { InputRouter } from './platform/input';
 import { Snd, SoundPlayer } from './platform/sound';
 import { loadCustomSheets } from './render/customPics';
+import { changeCursor, cursorCss } from './platform/cursors';
 import { giveHelp, setGiveHelp, setLivingSound } from './universe/living';
 import { killPc } from './game/damage';
 import { BOE_HEIGHT, BOE_WIDTH, ToolbarButton } from './render/layout';
@@ -313,9 +314,18 @@ async function main(): Promise<void> {
   // — the panel's list and scroll limit are set before it is first drawn.
   screen.itemWindow.setStatWindowForPc(univ, 0);
 
+  // Where the pointer is on the canvas, for `change_cursor`; null off it.
+  let pointer: { x: number; y: number } | null = null;
+  let shownCursor = '';
   const redraw = (): void => {
     screen.draw(session);
     dialogs.draw();
+    const css = cursorCss(changeCursor(session.mode, pointer?.x ?? null, pointer?.y ?? null,
+      dialogs.active !== null));
+    if (css !== shownCursor) {
+      canvas.style.cursor = css;
+      shownCursor = css;
+    }
   };
   const dialogs = new DialogHost(ctx, store, () => redraw());
   // Exposed now rather than with the other handles at the end of `main`:
@@ -1490,7 +1500,7 @@ async function main(): Promise<void> {
     } else if (hit.part === 'scroll') {
       shop.scrollBy(hit.delta);
     } else if (hit.part === 'buy') {
-      session.buyShopRow(hit.row);
+      void session.buyShopRow(hit.row).then(() => redraw());
     } else {
       const info = shopItemInfo(shop, hit.row);
       if (info && !dialogs.active)
@@ -2016,7 +2026,14 @@ async function main(): Promise<void> {
     // only while something is actually being aimed, or every mouse twitch
     // redraws the whole 605x430 screen for nothing.
     onHover: (x, y) => {
+      pointer = { x, y };
       if (!isAiming()) {
+        // The cursor follows the pointer even when nothing else on screen does.
+        const css = cursorCss(changeCursor(session.mode, x, y, dialogs.active !== null));
+        if (css !== shownCursor) {
+          canvas.style.cursor = css;
+          shownCursor = css;
+        }
         if (screen.hover !== null) {
           screen.hover = null;
           redraw();
@@ -2027,6 +2044,7 @@ async function main(): Promise<void> {
       redraw();
     },
     onHoverEnd: () => {
+      pointer = null;
       if (screen.hover === null) return;
       screen.hover = null;
       redraw();

@@ -32,6 +32,8 @@ import { hasAbil } from './alchemy';
 import { drainPc } from './itemUse';
 import { increaseLight } from './spellTown';
 import { GameMode } from './modes';
+import { blocksMove } from '../data/terrain';
+import { endBoomAnim } from './booms';
 import type { GameSession } from './session';
 
 /** move_to_zero — step a status one notch toward 0, from either side. */
@@ -55,6 +57,16 @@ function partyMoveToZero(party: Party, which: PartyStatus): void {
  * hands gold out. It lives here rather than beside the town code because those
  * are its only two callers and one of them already imports this module.
  */
+/**
+ * `slay_party(mode)` (boe.party.cpp:2523) — every living PC takes `mode` at
+ * once, with no saving throw and no life-saving item. It also stops any hit
+ * animation (`boom_anim_active = false`, this port's `endBoomAnim`).
+ */
+export function slayParty(party: Party, mode: MainStatus): void {
+  endBoomAnim();
+  for (const pc of party.pcs) if (pc.mainStatus === MainStatus.ALIVE) pc.mainStatus = mode;
+}
+
 export function dumpGold(univ: Universe): void {
   if (univ.party.gold > MAX_GOLD) {
     univ.party.gold = MAX_GOLD;
@@ -219,9 +231,7 @@ export async function increaseAgeEffects(session: GameSession): Promise<void> {
 
   // --- The party's own spell effects wearing off ----------------------------
   // increase_age's first block (boe.actions.cpp:3379): each is a countdown, and
-  // each says so on the turn it runs out. FLIGHT's "you plummet to your deaths"
-  // is not ported — flight over impassable ground needs the terrain check the
-  // C++ does against the *outdoor* map. TODO(M6).
+  // each says so on the turn it runs out.
   //
   // **This sits here, not at the end of the function, because the block below
   // it draws.** It used to be last, with a note saying the reordering was safe
@@ -243,7 +253,17 @@ export async function increaseAgeEffects(session: GameSession): Promise<void> {
     univ.addStringToBuf('You are starting to descend.');
   }
   if (party.partyStatus[PartyStatus.FLIGHT] === 1) {
-    univ.addStringToBuf('  You land safely.');
+    // Landing is checked against the **outdoor** map at `out_loc`, whatever
+    // mode the party is in (boe.actions.cpp:3428): come down on something
+    // that blocks movement — deep water, a mountain — and the whole party
+    // dies (`slay_party(DEAD)`).
+    const under = univ.out.at(party.outLoc.x, party.outLoc.y);
+    if (blocksMove(univ.terrainType(under))) {
+      univ.addStringToBuf('  You plummet to your deaths.');
+      slayParty(party, MainStatus.DEAD);
+    } else {
+      univ.addStringToBuf('  You land safely.');
+    }
   }
   partyMoveToZero(party, PartyStatus.FLIGHT);
 

@@ -383,9 +383,7 @@ export function writeCreature(page: TagPage, c: Creature): void {
   page.add('MONSTER', c.number);
   page.add('ALERT', c.active === CreatureStatus.ALERTED);
   page.add('ATTITUDE', writeEnumTag(attitudeStrs, c.attitude, 'docile'));
-  // TODO(M7): cCreature::start_attitude isn't modelled here, so the creature's
-  // current attitude stands in for it; nothing reads it back.
-  page.add('STARTATT', writeEnumTag(attitudeStrs, c.attitude, 'docile'));
+  page.add('STARTATT', writeEnumTag(attitudeStrs, c.startAttitude, 'docile'));
   putLoc(page, 'STARTLOC', c.startLoc);
   putLoc(page, 'LOCATION', c.curLoc);
   page.add('MOBILITY', c.mobile ? 1 : 0);
@@ -423,6 +421,10 @@ export function readCreature(page: TagPage, c: Creature): void {
   c.number = page.first('MONSTER')?.int(0) ?? 0;
   const alert = page.first('ALERT')?.bool(0) ?? false;
   c.attitude = readEnumTagOrNumber(attitudeStrs, page.first('ATTITUDE')?.str(0) ?? '', 0);
+  // An older save with no STARTATT keeps the current attitude for it.
+  const startAtt = page.first('STARTATT')?.str(0);
+  c.startAttitude = startAtt === undefined
+    ? c.attitude : readEnumTagOrNumber(attitudeStrs, startAtt, 0);
   takeLoc(page, 'STARTLOC', c.startLoc);
   takeLoc(page, 'LOCATION', c.curLoc);
   c.mobile = (page.first('MOBILITY')?.int(0) ?? 1) !== 0;
@@ -611,7 +613,6 @@ export function writeParty(file: TagFile, party: Party, scenarioId: string): voi
   page.add('GOLD', party.gold);
   page.add('FOOD', party.food);
   page.add('NEXTID', party.nextPcId);
-  // TODO(M7): hostiles_present isn't modelled here.
   page.add('EASY', party.easyMode);
   page.add('LESSWM', party.lessWm);
   for (let i = 0; i < party.stuffDone.length; i++) {

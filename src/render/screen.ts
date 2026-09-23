@@ -16,7 +16,7 @@ import { GameSession } from '../game/session';
 import { GameMode, isCombat, isScrollable } from '../game/modes';
 import { Boom } from '../game/booms';
 import { Missile, getMissileDirection } from '../game/missileAnim';
-import { MAIN_STATUS_LABEL, MainStatus, Status } from '../universe/skills';
+import { MAIN_STATUS_LABEL, MainStatus, PartyStatus, Status } from '../universe/skills';
 import { statIconRect, statusIconFor } from '../data/statusIcons';
 import { Player } from '../universe/player';
 import { Colours } from './colours';
@@ -180,6 +180,12 @@ export function canDrawTerrainSpot(
  * TODO(M6): the right-hand half — the "hit m to recast <spell>" hint, and the
  * party status icons it replaces.
  */
+/** The party statuses' icons (`choose_status_effect`'s `pstatus_pics`). */
+const PARTY_STATUS_ICON: Record<PartyStatus, number> = {
+  [PartyStatus.STEALTH]: 26, [PartyStatus.FLIGHT]: 23,
+  [PartyStatus.DETECT_LIFE]: 24, [PartyStatus.FIREWALK]: 25,
+};
+
 export function statusBarText(session: GameSession): string {
   const { univ } = session;
   if (!isCombat(session.mode)) return session.locationName();
@@ -1253,12 +1259,23 @@ export class Screen {
       size: 12,
       colour: Colours.WHITE,
     });
-    const day = session.univ.party.calcDay();
-    drawStringRight(this.ctx, inner, `Day ${day}`, {
-      font: 'bold',
-      size: 12,
-      colour: Colours.WHITE,
-    });
+    // `put_text_bar` (boe.graphics.cpp:773): the recast hint on the right in
+    // combat; otherwise, while the monsters aren't going, the party's own
+    // status icons, laid right to left 15 pixels apart.
+    const hint = isCombat(session.mode) ? session.recastHint : '';
+    if (hint) {
+      drawStringRight(this.ctx, inner, hint, { font: 'bold', size: 12, colour: Colours.WHITE });
+    } else if (!session.monstersGoing) {
+      const icons = this.store.get('staticons');
+      let left = inner.right - 15;
+      for (const which of [PartyStatus.STEALTH, PartyStatus.FLIGHT,
+        PartyStatus.DETECT_LIFE, PartyStatus.FIREWALK]) {
+        if ((session.univ.party.partyStatus[which] ?? 0) <= 0) continue;
+        const src = statIconRect(PARTY_STATUS_ICON[which]);
+        if (icons) this.ctx.drawImage(icons, src.left, src.top, 12, 12, left, inner.top + 1, 12, 12);
+        left -= 15;
+      }
+    }
   }
 
   // ---------------------------------------------------------------- PC stats

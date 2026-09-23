@@ -49,9 +49,9 @@
  * nothing: it never enters the `if(mode == 0)` block at the end.
  */
 
-import { Spell } from '../data/spell';
+import { SPELLS, Spell, spellName } from '../data/spell';
 import { Skill } from '../universe/skills';
-import { pcCanCastType } from './spellCast';
+import { CastStatus, pcCanCastType } from './spellCast';
 import { GameMode, isCombat } from './modes';
 import type { GameSession } from './session';
 
@@ -75,6 +75,9 @@ export function drawTerrain(session: GameSession): void {
  */
 function drawTextBar(session: GameSession): void {
   const univ = session.univ;
+  // The hint is kept for the screen to draw: it is computed *here*, where the
+  // C++ computes it, so drawing it never rolls a second time.
+  session.recastHint = '';
   if (!isCombat(session.mode) || univ.curPc >= 6 || session.monstersGoing) return;
   const pc = univ.currentPc;
   const type: Skill = pc.lastCastType;
@@ -82,11 +85,18 @@ function drawTextBar(session: GameSession): void {
   // other expected value is `eSkill::INVALID` — and an empty prefix skips the
   // whole block.
   if (type !== Skill.MAGE_SPELLS && type !== Skill.PRIEST_SPELLS) return;
+  const prefix = type === Skill.MAGE_SPELLS ? 'M' : 'P';
+  const spell = pc.lastCast[type] ?? Spell.NONE;
   // "No spell to recast" costs nothing.
-  if ((pc.lastCast[type] ?? Spell.NONE) === Spell.NONE) return;
+  if (spell === Spell.NONE) {
+    session.recastHint = `${prefix}: No spell to recast`;
+    return;
+  }
   // `pc_can_cast_spell(current_pc, type) == CAST_OK && spell.cost <= get_magic()`
   // — the left side always runs, and it is the side that draws.
-  pcCanCastType(session, pc, type);
+  const ok = pcCanCastType(session, pc, type) === CastStatus.OK
+    && (SPELLS[spell]?.cost ?? 0) <= pc.getMagic();
+  session.recastHint = ok ? `${prefix}: Recast ${spellName(spell)}` : `${prefix}: Cannot recast`;
 }
 
 /**

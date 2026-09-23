@@ -206,7 +206,12 @@ export class ShopState {
   }
 }
 
-export type SaleResult = 'bought' | 'refused' | 'unsupported';
+/**
+ * `'special'` is a CALL_SPECIAL entry the party can afford: the caller runs
+ * its node (async here, as every special is) and charges only if the node
+ * didn't refuse.
+ */
+export type SaleResult = 'bought' | 'refused' | 'unsupported' | 'special';
 
 /**
  * handle_sale (boe.dlgutil.cpp:333) — buy the entry at `index`. Messages go to
@@ -315,10 +320,13 @@ export function handleSale(
     }
 
     case ShopItemType.CALL_SPECIAL:
-      // TODO(M4): run_special(SHOPPING, ...) decides whether the sale goes
-      // through; until the specials VM exists nothing can be bought here.
-      say('(Shop services that run a special are not implemented yet)');
-      return 'unsupported';
+      // `run_special(SHOPPING, SCEN, item_level, …)` decides whether the sale
+      // goes through (boe.dlgutil.cpp:456) — `GameSession.buyShopItem` runs it.
+      if (univ.party.gold < cost) {
+        say('Not enough gold.');
+        return 'refused';
+      }
+      return 'special';
 
     default: {
       // Every healing service.

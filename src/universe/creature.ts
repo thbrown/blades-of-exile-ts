@@ -46,6 +46,12 @@ export class Creature extends Living {
   mon: Monster = defaultMonster();
   active: CreatureStatus = CreatureStatus.IDLE;
   attitude: Attitude = Attitude.DOCILE;
+  /**
+   * `cTownperson::start_attitude` — what `cPopulation::assign` resets the
+   * attitude to (population.cpp:73). Nothing in play reads it back, but the
+   * save carries it as `STARTATT`, apart from the current attitude.
+   */
+  startAttitude: Attitude = Attitude.DOCILE;
   startLoc: Location = { x: 0, y: 0 };
   curLoc: Location = { x: 0, y: 0 };
   health = 0;
@@ -379,6 +385,7 @@ export function assignCreature(
   c.number = preset.number;
   c.mon = copyMonster(template);
   c.attitude = preset.startAttitude;
+  c.startAttitude = preset.startAttitude;
   c.startLoc = { ...preset.startLoc };
   c.curLoc = { ...preset.startLoc };
   c.mobile = preset.mobility !== 0;

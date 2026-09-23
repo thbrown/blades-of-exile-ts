@@ -11680,3 +11680,65 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
   - **Noted, not chased**: one `verify-screen.mjs` run stalled after ATTACK
     FRIENDLY with nothing new in that stretch; three runs either side of it
     passed. If it recurs, the parry step's `await s.pause()` is where it sat.
+
+- **Cursors and the status bar's right-hand half (M8, 2026-09-23).**
+  Corpus-neutral: **51 / 1,231,440**.
+  - **The cursor is the original's** (`platform/cursors.ts`,
+    `get_mode_cursor` / `change_cursor` / `get_cur_direction`). Over the
+    terrain grid in the three ordinary modes it is an arrow pointing where a
+    click would move the party — chosen by *angle* from the grid's centre in
+    45° slices, as the C++ does, not by square — or the hourglass over the
+    party's own square; a targeting, look, talk, use, bash or drop mode shows
+    its own cursor; off the grid, or with a dialog up, the sword. The images
+    are `data/cursors/*.gif`, with the hotspots read out of each GIF's
+    `Hotspot(x,y)` comment.
+  - **The bar's right-hand half follows OBoE**: the "M: Recast Fireball" /
+    "Cannot recast" / "No spell to recast" hint in combat, and otherwise the
+    party's four status icons (Stealth, Flight, Detect Life, Firewalk; 26,
+    23, 24, 25) right to left. The 1997 original printed those four as black
+    words instead; the port's UI chrome is OBoE's throughout — its menus,
+    dialogs and `textbar.png`, and the M/P recast keys the hint is about.
+  - **The hint rolls dice, and only once.** `text_bar_text` calls
+    `pc_can_cast_spell`, which rolls encumbrance; `game/textBar.ts` already
+    paid that roll at every place the C++ redraws the terrain. It now keeps
+    the text it worked out on `session.recastHint`, and the screen draws
+    that — drawing never asks again.
+  - The "Day N" this port had on the right of the bar is gone: the C++ shows
+    the day only in the party-stats panel, which the port already does.
+
+- **Engine gaps a player meets (M6/M8, 2026-09-23).** Corpus-neutral:
+  **51 / 1,231,440**, 0 of 76 drift, 0 clocks.
+  - **`erase_out_specials` runs everywhere the C++ runs it.** It existed,
+    but only at the tail of a special chain. `build_outdoors` ends with it, so
+    every rebuild of the 96×96 window needs it — a window shift, a
+    `position_party`, a load — and `end_town_mode` and `put_party_in_scen`
+    call it too. Without it, a town the scenario had hidden came back the
+    moment the window slid, and a finished outdoor special's marker returned.
+  - **`forced_give` puts the item in the first empty slot of the first
+    living PC, whatever it weighs** (party.cpp:596), prints "  X gets Y.",
+    and says nothing when nobody has room. This port's helper went through
+    the ordinary give, refused on weight and printed "Your party can't carry
+    any more." — so ONCE_GIVE_ITEM could fail where the original never does.
+    Kept as written: the C++'s loop reaches the pack's scratch slot, so a PC
+    with a full pack can still take one there. ONCE_GIVE_ITEM_DIALOG's "Take"
+    really is `cParty::give_item`, weight and all, and keeps the old helper.
+  - **FORCED_GIVE** (the node) is in. SET_CAMP_FLAG stays reported —
+    campaign state is out of scope.
+  - **A shop entry that is a scenario node works** (`handle_sale`'s
+    CALL_SPECIAL): the node runs in the SHOPPING context, and only if it
+    doesn't refuse is the party charged and the entry taken off the shelf.
+    `buyShopItem` is async for it.
+  - **Flight ending over something you can't stand on kills the party**
+    ("  You plummet to your deaths.", `slay_party(DEAD)`), checked against
+    the *outdoor* map at `out_loc` whatever the mode, as the C++ does.
+  - **`do_look` lists everything it should**: the PCs on a square in combat
+    (and "Your party" only outside it), an outdoor wandering group by its
+    first monster, boats and horses in town and out, and every field and
+    decal in the C++'s order — web, crate, barrel, barriers, walls, clouds,
+    blood, slime, ash, bones, rubble.
+  - **A creature's starting attitude is saved** (`STARTATT`) apart from its
+    current one; the port was writing the current attitude twice.
+    `HOSTILES` was already saved — that marker was stale.
+  - **The monster-volley marker was a misreading**: the C++'s
+    `combat_run_monst` has no `handle_marked_damage`, and every volley site
+    in boe.combat.cpp is already ported.

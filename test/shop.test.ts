@@ -239,7 +239,7 @@ describe('shop mode', () => {
       univ.party.gold = 30000;
       expect(session.startShopMode(which, 2, 'Limited')).toBe(true);
       expect(session.shop!.visible).toEqual([0, 1]);
-      session.buyShopRow(0);
+      await session.buyShopRow(0);
       session.endShopMode();
 
       // Re-entering, the one-off is gone and the infinite entry remains.

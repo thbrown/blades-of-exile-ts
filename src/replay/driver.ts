@@ -1804,7 +1804,7 @@ export async function runReplay(
           // **An absolute index into the shop**, not a screen row — the row a
           // player clicked depends on where the scrollbar sits, and the C++
           // works in `active_shop.getItem(i)`.
-          session.buyShopItem(numberFromAction(action));
+          await session.buyShopItem(numberFromAction(action));
           break;
         case 'handle_item_shop_action':
           // Selling, identifying or recharging one of your *own* items, at a
