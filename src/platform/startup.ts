@@ -158,7 +158,8 @@ function aboutSection(): HTMLElement {
   const p2 = el('p');
   p2.append(
     'This is a from-scratch port of the game to the browser: the original rules, screen and art, with nothing to '
-    + 'install. ',
+    + 'install. It was built with heavy use of AI: most of the code was written by Claude, directed by a person, '
+    + 'and checked against the original game by automated tests. ',
     link(REPO_URL, 'Source on GitHub'),
   );
   about.append(p1, p2);
