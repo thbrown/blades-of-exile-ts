@@ -18,6 +18,8 @@
  * verifier use.
  */
 
+import { LibraryEntry } from '../fileio/libraryCatalog';
+
 export interface StartupScenario {
   id: string;
   title: string;
@@ -40,6 +42,19 @@ export interface StartupChoice {
   scenarioId: string;
   /** Set when the player picked a saved game rather than a fresh start. */
   slot?: string;
+}
+
+/**
+ * The online scenario library (`catalog.json` in the bucket). A card installs
+ * its scenario on first click and then starts it.
+ */
+export interface StartupLibrary {
+  entries: LibraryEntry[];
+  /** Resolve a catalog-relative path (a preview, a download). */
+  url: (path: string) => string;
+  /** Ids already installed, which start at once. */
+  installed: ReadonlySet<string>;
+  install: (entry: LibraryEntry) => Promise<void>;
 }
 
 /** Install every scenario among some files; throws with a reason if there are none. */
@@ -96,6 +111,7 @@ export function showStartupScreen(
   saves: readonly StartupSave[],
   /** Absent when there's nowhere to keep a scenario (no IndexedDB). */
   importScenarios?: ImportScenarios,
+  library?: StartupLibrary,
 ): Promise<StartupChoice> {
   return new Promise((resolve) => {
     const root = el('div', 'startup');
@@ -213,9 +229,102 @@ export function showStartupScreen(
       root.append(add, problem);
     }
 
+    if (library !== undefined && library.entries.length > 0) {
+      root.append(librarySection(library, (id) => { choose({ scenarioId: id }); }));
+    }
+
     host.append(root);
     // So Enter or a stray keypress doesn't fall through to nothing, and the
     // screen is reachable by keyboard alone.
     (root.querySelector('button') as HTMLElement | null)?.focus();
   });
+}
+
+const TABLE_LABELS: Record<LibraryEntry['table'], string> = {
+  solid: 'Solid adventures',
+  first_efforts: 'First efforts',
+  untried: 'Untried',
+};
+
+/**
+ * The library: a filter box, Spiderweb's three lists as toggles, and a card
+ * per scenario. Reviewed-best first, as the archive's own lists read.
+ */
+function librarySection(library: StartupLibrary, start: (id: string) => void): HTMLElement {
+  const section = el('section', 'startup-library');
+  const head = el('div', 'startup-library-head');
+  head.append(el('h2', undefined, `Scenario library (${library.entries.length})`));
+  const filter = document.createElement('input');
+  filter.type = 'search';
+  filter.placeholder = 'Search titles and descriptions';
+  filter.className = 'startup-filter';
+  head.append(filter);
+  const tables = new Set<LibraryEntry['table']>(['solid', 'first_efforts', 'untried']);
+  const chips = el('div', 'startup-chips');
+  for (const [table, label] of Object.entries(TABLE_LABELS) as [LibraryEntry['table'], string][]) {
+    const chip = el('button', 'startup-chip on', label);
+    chip.addEventListener('click', () => {
+      if (tables.has(table)) tables.delete(table); else tables.add(table);
+      chip.classList.toggle('on', tables.has(table));
+      render();
+    });
+    chips.append(chip);
+  }
+  head.append(chips);
+  section.append(head);
+  section.append(el('p', 'startup-credit',
+    'Community scenarios from Spiderweb Software\u2019s archive. Each belongs to its author; '
+    + 'the card links to its listing.'));
+
+  const list = el('div', 'startup-list startup-cards');
+  section.append(list);
+  const sorted = [...library.entries].sort((a, b) => (b.review ?? 0) - (a.review ?? 0) || a.title.localeCompare(b.title));
+  const cards = new Map<string, HTMLElement>();
+  for (const entry of sorted) {
+    const card = el('button', 'startup-choice startup-card');
+    card.dataset['library'] = entry.id;
+    card.append(pictureElement({
+      id: entry.id, title: entry.title, blurb: entry.blurb, icon: entry.icon,
+      ...(entry.preview ? { preview: library.url(entry.preview) } : {}),
+    }));
+    const words = el('span', 'startup-words');
+    words.append(el('strong', undefined, entry.title));
+    const facts = [entry.category, entry.difficulty, entry.contentRating,
+      entry.review !== null ? `\u2605 ${entry.review.toFixed(1)}` : 'unreviewed'].filter((f) => f !== '');
+    words.append(el('span', 'startup-facts', facts.join(' \u00b7 ')));
+    words.append(el('small', undefined, entry.description || entry.blurb));
+    const state = el('span', 'startup-state', library.installed.has(entry.id) ? 'Installed' : '');
+    words.append(state);
+    const credit = document.createElement('a');
+    credit.href = entry.source;
+    credit.target = '_blank';
+    credit.rel = 'noopener';
+    credit.textContent = `Listed as \u201c${entry.listedAs}\u201d`;
+    credit.className = 'startup-source';
+    credit.addEventListener('click', (e) => { e.stopPropagation(); });
+    words.append(credit);
+    card.append(words);
+    card.addEventListener('click', () => {
+      if (library.installed.has(entry.id)) { start(entry.id); return; }
+      if (card.classList.contains('busy')) return;
+      card.classList.add('busy');
+      state.textContent = `Downloading ${Math.max(1, Math.round(entry.fileBytes / 1024))} KB\u2026`;
+      library.install(entry).then(() => { start(entry.id); }).catch((err: unknown) => {
+        card.classList.remove('busy');
+        state.textContent = `Couldn\u2019t install: ${err instanceof Error ? err.message : String(err)}`;
+      });
+    });
+    cards.set(entry.id, card);
+    list.append(card);
+  }
+
+  const render = (): void => {
+    const q = filter.value.trim().toLowerCase();
+    for (const entry of sorted) {
+      const text = `${entry.title} ${entry.listedAs} ${entry.description} ${entry.blurb} ${entry.category}`.toLowerCase();
+      cards.get(entry.id)!.hidden = !tables.has(entry.table) || (q !== '' && !text.includes(q));
+    }
+  };
+  filter.addEventListener('input', render);
+  return section;
 }

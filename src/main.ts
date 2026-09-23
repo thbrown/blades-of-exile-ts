@@ -86,7 +86,8 @@ import {
   setAutosaveSink,
 } from './game/autosave';
 import { MENU_SEPARATOR, MenuItem, installMenuBar } from './platform/menu';
-import { StartupScenario, showStartupScreen } from './platform/startup';
+import { StartupLibrary, StartupScenario, showStartupScreen } from './platform/startup';
+import { LibraryCatalog, libraryUrl } from './fileio/libraryCatalog';
 import {
   InstalledScenario, getInstalledScenario, installScenario, listInstalledScenarios,
   scenarioStoreAvailable, setScenarioPreview,
@@ -166,6 +167,40 @@ async function importScenarioFiles(files: { name: string; data: Uint8Array }[]):
   return added;
 }
 
+/**
+ * Where the scenario library's `catalog.json` lives: the bucket in a
+ * production build (`VITE_LIBRARY_URL`), else `/library/`, which the dev
+ * server fills from `library/dist` (vite.config.ts).
+ */
+const LIBRARY_URL: string = (import.meta.env['VITE_LIBRARY_URL'] as string | undefined)
+  ?? `${import.meta.env.BASE_URL}library/catalog.json`;
+
+/** The library for the startup screen; null if there's no catalog to read. */
+async function loadLibrary(installed: Set<string>): Promise<StartupLibrary | null> {
+  try {
+    const resp = await fetch(LIBRARY_URL);
+    if (!resp.ok) return null;
+    const catalog = await resp.json() as LibraryCatalog;
+    return {
+      entries: catalog.scenarios.filter((e) => !BUNDLED_SCENARIOS.includes(e.id)),
+      url: (path) => libraryUrl(LIBRARY_URL, path),
+      installed,
+      install: async (entry) => {
+        const download = await fetch(libraryUrl(LIBRARY_URL, entry.file));
+        if (!download.ok) throw new Error(`download failed (${download.status})`);
+        const data = new Uint8Array(await download.arrayBuffer());
+        const pkg = identifyScenarioFiles([{ name: entry.file, data }])
+          .find((p) => p.fileName === entry.package);
+        if (pkg === undefined) throw new Error(`${entry.package} isn't in the download`);
+        await installScenario(pkg);
+        installed.add(pkg.id);
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** An installed scenario as the startup screen lists it. */
 function startupEntry(scen: InstalledScenario): StartupScenario {
   return {
@@ -231,9 +266,14 @@ async function main(): Promise<void> {
     }));
     // The player's own library follows the bundled four.
     const headersAll: StartupScenario[] = headers;
+    const installedIds = new Set<string>();
     if (scenarioStoreAvailable()) {
-      for (const scen of await listInstalledScenarios()) headersAll.push(startupEntry(scen));
+      for (const scen of await listInstalledScenarios()) {
+        headersAll.push(startupEntry(scen));
+        installedIds.add(scen.id);
+      }
     }
+    const library = scenarioStoreAvailable() ? await loadLibrary(installedIds) : null;
     const saves = saveStoreAvailable() ? await listSaves() : [];
     const choice = await showStartupScreen(
       document.getElementById('startup-host')!,
@@ -249,6 +289,7 @@ async function main(): Promise<void> {
           + ` (${new Date(slot.savedAt).toLocaleString()})`,
       })),
       scenarioStoreAvailable() ? importScenarioFiles : undefined,
+      library ?? undefined,
     );
     name = choice.scenarioId;
     openSlot = choice.slot ?? null;

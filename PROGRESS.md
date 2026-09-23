@@ -11897,5 +11897,34 @@ pipeline and catalog.
   therefore does nothing here and something in the C++. Changing it needs a
   corpus run.
 
-**Next: step 5, the publish pipeline and catalog** (GCP bucket, `catalog.json`
-built from the archive's list pages, previews rendered by Playwright).
+**Step 5, the library, is built (2026-09-23) but not yet published.**
+
+- `scripts/build-library.ts` (`npx vite-node …`) turns `library/` into
+  `library/dist/`. It writes `catalog.json` (`fileio/libraryCatalog.ts`: title,
+  icon, Spiderweb's category, difficulty, content rating, review, description,
+  listing link), copies each download *as published* into `files/`, and
+  links `previews/`. A scenario is only listed if it loads and survives the
+  smoke steps: **168 are listed**. Skipped: `areni.sit` (StuffIt),
+  `cursetwo.zip` and `SEVEPLAG.zip` (gone from Spiderweb's server), and
+  `busywork` (bundled). Author emails from the listing are left out.
+- `node scripts/scenario-previews.mjs --library` installs each one by clicking
+  its card in Chromium, opens it, and crops the start. **All 168 rendered**,
+  which doubles as a browser smoke test. Rebuild the catalog afterwards.
+- The startup screen's **Scenario library** section reads `VITE_LIBRARY_URL`
+  (default `/library/catalog.json`, which the dev server serves from
+  `library/dist`, vite.config.ts). It has search, Spiderweb's three lists as
+  toggles, and best-reviewed first. A card downloads, installs and starts its
+  scenario.
+- `scripts/publish-library.sh <bucket> [origin]` creates the bucket with
+  uniform access, grants **public read only** (`allUsers` objectViewer), sets
+  CORS, and rsyncs. It hasn't been run: it needs `gcloud auth login`. After
+  it, build with `VITE_LIBRARY_URL=https://storage.googleapis.com/<bucket>/catalog.json`.
+
+**Open (library):**
+- `masks.exs` ("Masks v. 1.0.3", rated 4.7) is listed but reads as garbage
+  in both engines: monster names like "te", level 0. Its size table also
+  overruns the file. It's probably a format variant neither loader knows.
+  Worth a look before publishing, or leave it out.
+- The previews are 49 MB in total with the zips, which is fine for a bucket.
+- The smoke test is shallow (no dialog-driven specials). Real play is the
+  next test.

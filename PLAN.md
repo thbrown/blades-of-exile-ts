@@ -155,7 +155,8 @@ ever executed. The rule is "no chia mining on the bucket".
    (`load_spec_graphics_v1`), converted into the sheet layout. Mac `.meg` (a
    PICT inside a resource fork) only if the archive shows scenarios that
    ship no `.bmp`.
-5. **Publish pipeline and catalog.** An offline Node tool: zip → `.exs` →
+5. **Publish pipeline and catalog — built 2026-09-23, not yet published** (needs
+   the user's GCP login; see PROGRESS.md). An offline Node tool: zip → `.exs` →
    `.boes`, smoke-tested, then uploaded to the bucket with a `catalog.json`
    (id, title, author, blurb, category, difficulty, content rating, size,
    credit/source URL). The bucket is public-read with CORS for the site's
