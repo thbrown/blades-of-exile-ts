@@ -7,9 +7,6 @@
  *
  * Both damage functions return the damage actually dealt (0 for none), which is
  * what the C++'s `short` return means at every call site.
- *
- * TODO(M5): `boom_space` / `add_explosion` — the hit animation and its sound
- * type are computed here and handed to the host, but nothing draws them yet.
  */
 
 import { Location, dist } from '../core/location';

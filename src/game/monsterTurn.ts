@@ -448,7 +448,7 @@ export function monstPickTarget(session: GameSession, monst: Creature): number {
  * **`monst_inflict_fields` is the reason this chain is async.** A creature that
  * steps into a wall of fire is burned by it there and then (boe.monster.cpp:748
  * and :821), and the damage rolls its dice before it checks whether the
- * creature is immune — so leaving it out, as the `TODO(M5b)` here used to, took
+ * creature is immune — so leaving it out, as a milestone marker here used to, took
  * a `get_ran` out of the stream on every step into a field. Damage can kill,
  * killing can fire a script, and a script can raise a dialog, so the whole
  * movement chain from `doMonsters` down had to become async to await it. Every
@@ -827,9 +827,6 @@ function monstSoundType(attacker: Creature, attack: Attack): number {
  * to three attacks from its `attacks` list. Note the to-hit is indexed by
  * `(skill + 4) / 2` rather than by a weapon skill, and that a difficulty
  * adjustment multiplies the damage done to a PC but not to another monster.
- *
- * TODO(M5b): the TOUCH abilities that fire on a landed hit — stun, petrify,
- * drain, steal — need the uAbility port.
  */
 export async function monsterAttack(
   session: GameSession,

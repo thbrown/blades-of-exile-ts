@@ -127,7 +127,7 @@ export async function bashDoor(
     univ.addStringToBuf("  Didn't work.");
     // A failed bash hurts: 1d4, unblockable — and it goes through the **real**
     // `damage_pc` (boe.town.cpp:1218), which this used to short-circuit into a
-    // subtraction with a `TODO(M5)` on it. M5 has been closed since July, and
+    // subtraction with an M5 marker on it. M5 has been closed since July, and
     // the shortcut was not just missing the death and the animation: even for
     // `SPECIAL` damage `damage_pc` rolls the party's luck, so the bash was one
     // `get_ran(1,1,100)` short every time it failed.

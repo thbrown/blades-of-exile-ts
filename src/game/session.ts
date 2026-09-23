@@ -5455,7 +5455,7 @@ export class GameSession {
    * creature is about walking into something nasty — is
    * `get_ran(1, 1, level / 2)` for anything that isn't mindless, on **every
    * attempted step**, whether or not there is anything nasty on the square.
-   * Leaving the whole function out (it was `TODO(M5b)`) took that draw out of
+   * Leaving the whole function out (it was marked for M5b) took that draw out of
    * the stream on every monster move, which is most of the draws a town turn
    * makes. Note the zero-width shortcut carries the weight here: a creature of
    * level 2 or 3 gives `get_ran(1,1,1)`, which returns without touching the

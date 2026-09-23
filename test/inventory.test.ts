@@ -26,6 +26,7 @@ import {
   itemWeight,
   maxWeight,
   sortItems,
+  takeItem,
   unequipItem,
 } from '../src/universe/inventory';
 import { PartyPreset } from '../src/universe/player';
@@ -336,6 +337,27 @@ describe('giving an item and wearing it', () => {
     } else {
       expect(pc.weapPoisoned).not.toBe(null);
     }
+  });
+});
+
+describe('taking an item out of the pack', () => {
+  it('loses the poison when the poisoned weapon goes (pc.cpp:922)', () => {
+    const session = newSession();
+    const pc = session.univ.party.pcs[0]!;
+    const knife = item({ variety: ItemType.ONE_HANDED, name: 'knife' });
+    const other = item();
+    pc.items[0] = other;
+    pc.items[1] = knife;
+    pc.weapPoisoned = knife;
+    pc.status[Status.POISONED_WEAPON] = 4;
+    // Emptying a slot *above* it only shifts it; the poison stays with it.
+    takeItem(pc, 0);
+    expect(pc.items[0]).toBe(knife);
+    expect(pc.weapPoisoned).toBe(knife);
+    expect(pc.status[Status.POISONED_WEAPON]).toBe(4);
+    takeItem(pc, 0);
+    expect(pc.weapPoisoned).toBeNull();
+    expect(pc.status[Status.POISONED_WEAPON]).toBe(0);
   });
 });
 

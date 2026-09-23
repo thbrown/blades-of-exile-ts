@@ -29,8 +29,8 @@ import { Town } from '../data/town';
 /**
  * Terrain with a light radius lights the tiles around it permanently.
  *
- * **The line-of-sight test is not optional**, and leaving it out (a
- * `TODO(M4)` that outlived M4 by four milestones) made every brazier shine
+ * **The line-of-sight test is not optional**, and leaving it out (an M4 marker
+ * that outlived M4 by four milestones) made every brazier shine
  * through the walls of its own room.
  *
  * Two details that matter: the obscurity function is `light_obscurity`

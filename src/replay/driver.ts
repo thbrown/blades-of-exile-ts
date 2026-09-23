@@ -16,7 +16,7 @@
  *   - **Nothing is skipped silently.** An action this port has no handler for
  *     is counted and reported by name, so `runReplay`'s result is an honest
  *     statement of what was and wasn't exercised — the same discipline as the
- *     `TODO(Mn)` markers.
+ *     milestone `TODO` markers.
  */
 
 import { Direction, dist, Location } from '../core/location';
@@ -777,7 +777,7 @@ export async function runReplay(
             //
             // **And it does it in combat too**, where `did_something` reaches
             // `combat_next_step` rather than `do_monsters` — which is what
-            // hands the turn to the next PC. This was a `TODO(M8)` on the
+            // hands the turn to the next PC. This was an M8 marker on the
             // reasoning that nothing had been shown to need it;
             // `VoDT-5-11` needs it. Lenny arms a missile with 0 action points,
             // the shot never fires, and the C++'s `pick_next_pc` moves on to

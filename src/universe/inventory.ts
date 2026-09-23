@@ -9,6 +9,7 @@ import { makeJob } from '../data/quest';
 import { Item, ItemAbil, ItemType, defaultItem } from '../data/item';
 import { ItemCat, variety } from '../data/itemVariety';
 import { Party } from './party';
+import { printResult } from './living';
 import { NUM_INVEN_SLOTS, Player } from './player';
 import { MainStatus, Race, Skill, Status, Trait } from './skills';
 
@@ -488,8 +489,9 @@ export function getProtLevel(pc: Player, abil: ItemAbil, dat = -1): number {
  * everything below the slot shifts up, which is why the inventory list always
  * reads as a contiguous run.
  *
- * TODO(M5): a poisoned weapon loses its poison here, and the poisoned-slot
- * index shifts with the rest.
+ * Taking the poisoned weapon loses the poison (pc.cpp:922). The C++ also
+ * shifts `weap_poisoned.slot` down with the rest; this port holds the item
+ * itself, so there is nothing to shift.
  */
 export function takeItem(pc: Player, slot: number): void {
   // The scratch slot is not part of the pack, so emptying it shifts nothing
@@ -498,6 +500,12 @@ export function takeItem(pc: Player, slot: number): void {
   if (slot === NUM_INVEN_SLOTS) {
     pc.items[NUM_INVEN_SLOTS] = defaultItem();
     return;
+  }
+  if (pc.weapPoisoned !== null && pc.weapPoisoned === pc.items[slot]
+    && (pc.status[Status.POISONED_WEAPON] ?? 0) > 0) {
+    printResult('  Poison lost.');
+    pc.status[Status.POISONED_WEAPON] = 0;
+    pc.weapPoisoned = null;
   }
   for (let i = slot; i < NUM_INVEN_SLOTS - 1; i++) {
     pc.items[i] = pc.items[i + 1]!;

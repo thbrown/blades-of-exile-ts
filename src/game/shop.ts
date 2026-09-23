@@ -15,6 +15,7 @@ import { alchemyRecipe } from '../data/alchemy';
 import {
   SKILL_MAX, Shop, ShopItem, ShopItemType, ShopPrompt, ShopType, shopItemCost,
 } from '../data/shop';
+import { SPELLS, spellFromNum } from '../data/spell';
 import { getStr } from '../data/strings';
 import { SoundPlayer, Snd } from '../platform/sound';
 import { GiveStatus, giveItem } from '../universe/inventory';
@@ -190,11 +191,12 @@ export class ShopState {
       }
       case ShopItemType.MAGE_SPELL:
       case ShopItemType.PRIEST_SPELL: {
-        const table = entry.type === ShopItemType.MAGE_SPELL ? 'mage-spells' : 'priest-spells';
-        // TODO(M5): cSpell knows the real level and SP cost; the strings file
-        // only gives us the spell's own blurb until the spell table lands.
-        const blurb = getStr(table, entry.item.itemLevel * 2 + 2);
-        return blurb;
+        // OBoE's line (boe.newgraph.cpp:832). The 1997 original leaves it
+        // blank, as it does for alchemy; this follows OBoE for both, the same
+        // as the alchemy arm above.
+        const skill = entry.type === ShopItemType.MAGE_SPELL ? Skill.MAGE_SPELLS : Skill.PRIEST_SPELLS;
+        const info = SPELLS[spellFromNum(skill, entry.item.itemLevel)];
+        return `Level: ${info?.level ?? 0}    SP: ${info?.cost ?? 0}`;
       }
       case ShopItemType.SKILL:
         return 'Increase skill by 1';

@@ -11465,3 +11465,29 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
   - `TalkState.lastUnsupported` has no node type left to report; the
     `default` arm stays for data outside the enum.
 
+
+- **Finishing Part 1: the plan, and a stale-TODO sweep (2026-09-22).** The
+  corpus has gone as far as it can on its own, so what is left of Part 1 is
+  player-facing: the last dialog widgets, the party editor, the rest of the
+  menu bar, the toolbar, custom scenario graphics, cursors, a few engine gaps
+  a player meets, and a preferences dialog, in that order. The legacy `.exs`
+  importer and cross-scenario campaign state are **out of scope** by the
+  user's decision. Part 2 (Exile 3) goes to a fresh agent once this is done.
+  Corpus-neutral: 51 / 1,231,440 either side.
+  - **Six `TODO(M…)` markers described work that had already landed**, which
+    is the thing that makes the grep a dishonest inventory: `spellTown.ts`
+    (town targeting exists), `damage.ts` (`booms.ts` draws the hit),
+    `monsterTurn.ts` (the touch abilities), and three pieces of prose that
+    *mentioned* an old marker and so matched the grep themselves. Reworded so
+    they don't.
+  - **A shop's spell line follows OBoE**: "Level: N    SP: N"
+    (boe.newgraph.cpp:832). The 1997 original leaves it blank, for alchemy
+    too; the alchemy line already followed OBoE, so the spell one now does as
+    well. It was showing the spell's description blurb, which neither does.
+  - **Taking the poisoned weapon out of the pack loses the poison**
+    (`cPlayer::take_item`, pc.cpp:922), with "  Poison lost." This port's
+    `takeItem` kept it, so the poison waited on `weapPoisoned` for an item that
+    had gone. There's nothing to shift, because this port holds the item rather
+    than its slot.
+  - **Not stale, and added to the plan**: `lookAt` still doesn't list fields,
+    decals, boats or horses (`do_look`, boe.text.cpp:695).

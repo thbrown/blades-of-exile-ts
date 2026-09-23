@@ -13,10 +13,9 @@
  * `adj` is the caster's intelligence bonus (1 for a freebie) and `level` their
  * level, both of which most of the dice roll off.
  *
- * Spells that need a square picked hand off to `start_town_targeting`, which
- * is a targeting mode this port doesn't have yet — those arms report
- * themselves and are marked TODO(M5c), in the same style the specials
- * interpreter uses for opcodes waiting on a later milestone.
+ * Spells that need a square picked hand off to `start_town_targeting`
+ * (`spellTarget.ts`), and the click that lands finishes them in
+ * `castTownSpell`.
  */
 
 import { Spell, SPELLS, spellName } from '../data/spell';
