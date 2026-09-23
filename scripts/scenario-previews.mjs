@@ -40,7 +40,7 @@ for (const id of ids) {
   try {
     if (library) {
       await page.goto(BASE);
-      const card = `.startup-library [data-library="${id}"]`;
+      const card = `.startup [data-library="${id}"]`;
       await page.waitForSelector(card, { timeout: 20000 });
       await page.click(card);
       // Installed once the party editor comes up.

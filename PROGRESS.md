@@ -11920,6 +11920,38 @@ pipeline and catalog.
   CORS, and rsyncs. It hasn't been run: it needs `gcloud auth login`. After
   it, build with `VITE_LIBRARY_URL=https://storage.googleapis.com/<bucket>/catalog.json`.
 
+**The library ships inside the site for now (2026-09-23)**, decided with the
+user. It moves to the bucket once the scenario editor is ported.
+- `npm run build` copies `library/dist` into `docs/library/` (the
+  `embedLibrary` plugin in vite.config.ts), which is where the game looks by
+  default. Building with `VITE_LIBRARY_URL` set skips the copy, and that's the
+  whole switch-over; ids don't change, so installs and saves carry across.
+- The zips are **trimmed** (`build-library.ts`): the `.exs`, the `.bmp` and
+  the author's documents only. That's 26 MB of zips instead of 38 MB, and
+  36 MB with previews. Anything that *is* a scenario is kept whatever its
+  name: two archive copies are `x.exs 1` (Finder duplicates).
+- Removing a scenario means rewriting git history now, not just deleting it
+  from a bucket.
+- Test the built site with `docs/` mounted at `/exile-js/` on a plain static
+  server. `vite preview` serves from `/` and 404s every asset.
+
+**Startup screen, reworked (2026-09-23).** There's an About section
+(Wikipedia and GitHub links) and one list under "Start a new game":
+Official (badged, first), Added by you, then the library by review. The
+toggles cover all five groups, and search ignores punctuation ("zakhazi" finds
+"The Za-Khazi Run"). The library shows difficulty as Easy / Moderate / Hard /
+Very Hard (the top end of Spiderweb's wording, which stays in a tooltip) and
+ratings as "Rated PG".
+- Gotcha: `.startup-choice { display: flex }` beat the browser's own
+  `[hidden]` rule, so the first filter hid nothing on screen while the
+  attribute test passed. `.startup [hidden]` is now `!important`. **Check
+  what's visible (`offsetParent`), not the attribute.**
+- Two listing rows merge difficulty and rating ("Medium R"); the parser
+  splits them and realigns the row.
+- Wikipedia says the 1997 source was released under the **Common Public
+  License**, but the table at the top of DIVERGENCES.md says GPL v2. Not
+  resolved.
+
 **Open (library):**
 - `masks.exs` ("Masks v. 1.0.3", rated 4.7) is listed but reads as garbage
   in both engines: monster names like "te", level 0. Its size table also

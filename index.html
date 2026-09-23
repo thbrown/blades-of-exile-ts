@@ -281,18 +281,52 @@
         gap: 3px;
         padding: 9px 12px 11px;
       }
-      .startup-library {
-        margin-top: 28px;
-        border-top: 1px solid #3a3a3a;
+      /* Author rules like `.startup-choice { display: flex }` beat the
+         browser's own [hidden] rule, which is how the filter once hid nothing. */
+      .startup [hidden] {
+        display: none !important;
       }
-      .startup-library-head {
+      .startup-about {
+        margin: 10px 0 4px;
+        padding: 12px 16px;
+        background: #1c1c1c;
+        border: 1px solid #383838;
+        border-radius: 4px;
+        font-size: 13px;
+        line-height: 1.5;
+        color: #bbb;
+        max-width: 60rem;
+      }
+      .startup-about p {
+        margin: 0;
+      }
+      .startup-about p + p {
+        margin-top: 6px;
+      }
+      .startup-about a,
+      .startup-source {
+        color: #8fa8cd;
+      }
+      .startup-sub {
+        margin: -4px 0 12px;
+        font-size: 13px;
+        color: #999;
+      }
+      .startup-controls {
         display: flex;
         flex-wrap: wrap;
-        align-items: baseline;
-        gap: 12px;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
       }
-      .startup-library-head h2 {
-        margin-right: auto;
+      .startup-shown {
+        font-size: 12px;
+        color: #888;
+        margin-left: auto;
+      }
+      .startup-empty {
+        color: #999;
+        font-size: 13px;
       }
       .startup-filter {
         font: inherit;
@@ -306,6 +340,7 @@
       }
       .startup-chips {
         display: flex;
+        flex-wrap: wrap;
         gap: 6px;
       }
       .startup-chip {
@@ -322,6 +357,26 @@
         background: #3a3a55;
         border-color: #6a8fc7;
         color: #ddd;
+      }
+      .startup-badge {
+        position: absolute;
+        left: 6px;
+        top: 6px;
+        padding: 2px 8px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .startup-badge.official {
+        background: #6b5418;
+        color: #f3dc98;
+      }
+      .startup-badge.added {
+        background: #23425f;
+        color: #b9d5f0;
       }
       .startup-credit {
         margin: 6px 0 12px;

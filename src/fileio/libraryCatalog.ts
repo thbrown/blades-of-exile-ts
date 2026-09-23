@@ -17,7 +17,11 @@ export interface LibraryEntry {
   /** Which of Spiderweb's three lists it's on. */
   table: 'solid' | 'untried' | 'first_efforts';
   category: string;
-  difficulty: string;
+  /** Spiderweb's wording mapped onto four levels; '' if it gave none. */
+  difficulty: 'Easy' | 'Moderate' | 'Hard' | 'Very Hard' | '';
+  /** The wording as listed ("Medium/ High", "Beginner (Very Low)"). */
+  difficultyListed: string;
+  /** G, PG, PG-13, R or NC-17; '' when the listing has none. */
   contentRating: string;
   description: string;
   /** The listing's average user review, 1-5; null when unreviewed. */

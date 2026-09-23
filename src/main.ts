@@ -265,32 +265,33 @@ async function main(): Promise<void> {
       }
     }));
     // The player's own library follows the bundled four.
-    const headersAll: StartupScenario[] = headers;
+    const added: StartupScenario[] = [];
     const installedIds = new Set<string>();
     if (scenarioStoreAvailable()) {
       for (const scen of await listInstalledScenarios()) {
-        headersAll.push(startupEntry(scen));
+        added.push(startupEntry(scen));
         installedIds.add(scen.id);
       }
     }
     const library = scenarioStoreAvailable() ? await loadLibrary(installedIds) : null;
     const saves = saveStoreAvailable() ? await listSaves() : [];
-    const choice = await showStartupScreen(
-      document.getElementById('startup-host')!,
-      headers,
-      saves.map((slot) => ({
+    const titleOf = (id: string): string | undefined =>
+      headers.find((h) => h.id === id)?.title ?? added.find((h) => h.id === id)?.title;
+    const choice = await showStartupScreen(document.getElementById('startup-host')!, {
+      official: headers,
+      added,
+      saves: saves.map((slot) => ({
         slot: slot.name,
         scenarioId: slot.preview.scenarioId,
         // The scenario's title if it is one of the bundled four, else its id —
         // a save can name a scenario that isn't installed, which is the case
         // the C++ shows "could not be found" for.
-        label: `${headers.find((h) => h.id === slot.preview.scenarioId)?.title
-          ?? slot.preview.scenarioId} — day ${Math.floor(slot.preview.age / 3700) + 1}`
+        label: `${titleOf(slot.preview.scenarioId) ?? slot.preview.scenarioId} — day ${Math.floor(slot.preview.age / 3700) + 1}`
           + ` (${new Date(slot.savedAt).toLocaleString()})`,
       })),
-      scenarioStoreAvailable() ? importScenarioFiles : undefined,
-      library ?? undefined,
-    );
+      ...(scenarioStoreAvailable() ? { importScenarios: importScenarioFiles } : {}),
+      ...(library ? { library } : {}),
+    });
     name = choice.scenarioId;
     openSlot = choice.slot ?? null;
     document.body.classList.remove('starting');

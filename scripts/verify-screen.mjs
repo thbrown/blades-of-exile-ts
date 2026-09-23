@@ -37,8 +37,9 @@ await page.goto(process.argv[2] ?? 'http://localhost:5199/?pace=1');
 await page.waitForSelector('.startup .startup-choice', { timeout: 20000 });
 // The scenarios and saves, not the "Add a scenario…" button beside them.
 const startupChoices = await page.evaluate(() =>
-  [...document.querySelectorAll('.startup .startup-choice:not(.startup-add):not(.startup-library *) strong')]
-    .filter((e) => !e.closest('.startup-library')).map((e) => e.textContent));
+  // The official scenarios: the badged cards, by title.
+  [...document.querySelectorAll('.startup-card:has(.startup-badge.official) strong')]
+    .map((e) => e.textContent));
 const startupCanAdd = await page.evaluate(() => document.querySelector('.startup .startup-add') !== null);
 await page.screenshot({ path: `${SHOTS}/00-startup.png` });
 const valley = page.locator('.startup .startup-choice', { hasText: 'Valley of Dying Things' });
