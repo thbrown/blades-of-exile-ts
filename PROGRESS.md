@@ -11742,3 +11742,30 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
   - **The monster-volley marker was a misreading**: the C++'s
     `combat_run_monst` has no `handle_marked_damage`, and every volley site
     in boe.combat.cpp is already ported.
+
+- **Preferences (M7/M8, 2026-09-23).** Corpus-neutral: **51 / 1,231,440**.
+  File › Preferences… is `pick_preferences` on preferences.xml, with the
+  autosave details page and "reset instant help" opening on top of it.
+  Stored in `localStorage` under the C++'s own names (`PlaySounds`,
+  `GameSpeed`, `TargetLock`, `ShowInstantHelp`, `Autosave`,
+  `Autosave_<reason>`, `Autosave_Max`) and applied at startup.
+  - **Only what a browser can honour is shown.** Window alignment, the two
+    scale groups, the in-game file browser, the splash screen and
+    directional-key scrolling are removed, and the block they took at the top
+    is closed up: OBoE's definition is taller than the 605×430 canvas.
+  - **Game speed sets the play-tested pace knob** (Fast 0.6, Medium 1 —
+    the shipped pace — Slow 1.5, Quite Slow 2.2) rather than the C++'s
+    individual pauses; neither draws a die. `?pace=` still wins.
+  - **`TargetLock` gates `handle_target_mode`** as the C++ does
+    (`has_feature_flag("target-lock","V1") && get_bool_pref("TargetLock",
+    true)`); replays never set it and keep the default.
+  - "Make game easier" and "Fewer wandering monsters" are the *party's*
+    settings once a game is running (boe.dlgutil.cpp:1408); OBoE's
+    `EasyMode` preference is only ever displayed, never applied, so this
+    port doesn't store one.
+  - **Two toolkit bugs the dialog found.** An LED with no handler closed the
+    dialog, as a handler-less button does here; in the C++ it only toggles.
+    And the LEDs inside a `<group>` were never placed by their anchors —
+    `resolvePositions` walked the top level only. LEDs are also sized with
+    their label now (`cLed::getPreferredSize`, estimated at parse time), and
+    where two controls' rects overlap the topmost wins the click.

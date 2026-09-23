@@ -2880,6 +2880,32 @@ const custom = await page.evaluate(async () => {
 await page.waitForTimeout(200);
 await shot('02n-custom-graphics');
 console.log('CUSTOM GRAPHICS:', JSON.stringify(custom));
+
+// File › Preferences: the real preferences.xml, the desktop-only groups
+// hidden, and a change kept in the saved preferences on OK.
+await clickMenu('File', 'Preferences');
+const prefs = await page.evaluate(() => {
+  const d = window.__dialogs.active;
+  return d && d.def ? {
+    speed: d.getLed('med'), displayHidden: !d.isVisible('display'), easier: d.getLed('easier'),
+  } : null;
+});
+await shot('02o-preferences');
+{
+  const r = await page.evaluate(() => {
+    const d = window.__dialogs.active;
+    return d.screenRect(d.def.byName.get('lesswm'));
+  });
+  const at = await canvasPoint(r.left + 3, r.top + 3);
+  await page.mouse.click(at.x, at.y);
+  await page.waitForTimeout(150);
+  prefs.ledAfterClick = await page.evaluate(() => window.__dialogs.active?.getLed?.('lesswm') ?? null);
+}
+await page.keyboard.press('Enter');
+await page.waitForTimeout(200);
+prefs.lessWm = await page.evaluate(() => window.__univ.party.lessWm);
+prefs.closed = await page.evaluate(() => window.__dialogs.active === null);
+console.log('PREFERENCES:', JSON.stringify(prefs));
 await shot('02i-word-of-recall');
 
 // The two endings. `handle_death` on the real party-death.xml: wipe the party
@@ -3117,6 +3143,8 @@ const ok =
   menus.stats[0] === 'PARTY STATS:' && menus.aboutMage === 'Instant Help' &&
   menus.castLists.some((n) => n > 3) &&
   custom.sheet !== null && custom.barrelPic === 1006 &&
+  prefs !== null && prefs.speed === 'red' && prefs.displayHidden === true &&
+  prefs.ledAfterClick === 'red' && prefs.lessWm === true && prefs.closed === true &&
   fields.typed === true && fields.fieldError === 'Error' &&
   fields.numAnswer === 75 && fields.textAnswer === 'hello' &&
   errors.length === 0;

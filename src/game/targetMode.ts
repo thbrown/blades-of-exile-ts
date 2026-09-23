@@ -97,10 +97,23 @@ export function closestPoint(points: readonly Location[], anchor: Location): Loc
  * enemy leaves the view alone. Note the C++ `return`s in that case, so nothing
  * below it runs and no redraw happens.
  */
+/**
+ * The `TargetLock` preference (on by default). A module hook, like the other
+ * preferences the rules read, so replays — which never set it — keep the
+ * default.
+ */
+let targetLockPref = true;
+
+export function setTargetLockPref(on: boolean): void {
+  targetLockPref = on;
+}
+
 export function handleTargetMode(
   session: GameSession, range: number, spell: Spell = Spell.NONE,
 ): void {
-  if (!hasFeatureFlag('target-lock', 'V1')) return;
+  // `has_feature_flag("target-lock", "V1") && get_bool_pref("TargetLock", true)`
+  // (boe.newgraph.cpp:1106).
+  if (!hasFeatureFlag('target-lock', 'V1') || !targetLockPref) return;
   if (spell !== Spell.NONE && !(SPELLS[spell]?.targetLock ?? false)) return;
 
   const { univ } = session;

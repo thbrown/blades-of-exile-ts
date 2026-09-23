@@ -374,7 +374,13 @@ function setNaturalSize(control: DialogControl): void {
     const size = pictNaturalSize(control.type, control.num, control.size === 'large');
     if (size) ({ w, h } = size);
   } else if (control.kind === 'led') {
-    w = Math.max(w, 14);
+    // `cLed::getPreferredSize` (led.cpp:171): the lamp, four pixels, and the
+    // label at 10pt. There is no canvas to measure with at parse time, so the
+    // label is estimated at 6.5px a character, which is what this port's LED
+    // font comes to — it only has to be right enough for a control anchored
+    // `pos` on this one to clear it.
+    const label = control.label.trim();
+    w = Math.max(w, label ? 18 + Math.round(label.length * 6.5) : 14);
     h = Math.max(h, 10);
   } else {
     return;
@@ -408,12 +414,20 @@ function resolvePositions(controls: DialogControl[]): void {
     if (c.name) byName.set(c.name, c);
     if (c.kind === 'group') for (const led of c.leds) if (led.name) byName.set(led.name, led);
   }
-  controls.forEach((control, i) => {
+  // A group's LEDs are placed like any other control, in document order —
+  // this used to walk the top level only, so an LED anchored on a heading
+  // (preferences.xml's game speeds) stayed at its raw offset from (0, 0).
+  const flat: DialogControl[] = [];
+  for (const c of controls) {
+    flat.push(c);
+    if (c.kind === 'group') flat.push(...c.leds);
+  }
+  flat.forEach((control, i) => {
     if (!control.anchor && !control.relAnchor) return;
     const anchor = control.relAnchor === 'prev'
-      ? controls[i - 1]
+      ? flat[i - 1]
       : control.relAnchor === 'next'
-        ? controls[i + 1]
+        ? flat[i + 1]
         : byName.get(control.anchor ?? '');
     if (!anchor) return;
     const [hMode = 'abs', vMode = hMode] = control.relative;

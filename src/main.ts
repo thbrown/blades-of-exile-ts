@@ -50,7 +50,11 @@ import {
   skillInfoDialog, spellInfoDialog, tipOfDayDialog,
 } from './dialogs/libraryDialogs';
 import { setErrorSink } from './game/showError';
-import { appendIarrayPref, getBoolPref, iarrayPrefContains, setPref } from './platform/prefs';
+import {
+  appendIarrayPref, clearPref, getBoolPref, getIntPref, iarrayPrefContains, readAutosavePrefs, setPref,
+} from './platform/prefs';
+import { GAME_SPEED_PACE, PREFERENCES_DIALOG_DEFS, preferencesDialog } from './dialogs/preferencesDialog';
+import { setTargetLockPref } from './game/targetMode';
 import { notesRefusal } from './game/notes';
 import { ItemWinMode, QUEST_COMPLETED_OFFSET } from './game/itemWindow';
 import { BASIC_BUTTON_KEYS } from './game/specials/oneshot';
@@ -77,7 +81,10 @@ import { applySave, readSavePreview, saveGame } from './fileio/saveIo';
 import {
   SaveSlot, exportSave, getSave, importSave, listSaves, putSave, saveStoreAvailable,
 } from './platform/saveStore';
-import { AutosaveReason, getAutosavePrefs, setAutosaveSink } from './game/autosave';
+import {
+  AUTOSAVE_TRIGGER_DEFAULTS, AutosaveReason, MAX_AUTOSAVE_DEFAULT, getAutosavePrefs, setAutosavePrefs,
+  setAutosaveSink,
+} from './game/autosave';
 import { MENU_SEPARATOR, MenuItem, installMenuBar } from './platform/menu';
 import { showStartupScreen } from './platform/startup';
 import { readScenarioFromXml } from './fileio/scenarioXml';
@@ -247,7 +254,7 @@ async function main(): Promise<void> {
   const dialogNames = ['pc-info', 'quest-info', 'get-items', 'item-info', 'many-str', 'monster-info', 'job-board',
     'pick-potion', 'party-death', 'steal-item', ...STR_DIALOG_DEFS, ...NOTES_DIALOG_DEFS,
     ...INPUT_DIALOG_DEFS, ...PICT_CHOICE_DIALOG_DEFS, ...SPEND_XP_DIALOG_DEFS,
-    ...PARTY_EDITOR_DIALOG_DEFS, ...LIBRARY_DIALOG_DEFS];
+    ...PARTY_EDITOR_DIALOG_DEFS, ...LIBRARY_DIALOG_DEFS, ...PREFERENCES_DIALOG_DEFS];
   addTotal(1 /* opcodes */ + STRING_TABLES.length + dialogNames.length + sheets.length
     + (document.fonts ? 4 : 0) + 1 /* scenario.xml */);
 
@@ -341,6 +348,53 @@ async function main(): Promise<void> {
     void dialogs.runNested(errorDialog(ctx, store, str1, str2, warning)).then(() => redraw());
   };
   setErrorSink(showErrorBox);
+
+  // The player's preferences, as `init_prefs` reads them. `?pace=` on the URL
+  // still wins over the saved game speed, which is what the verifier uses.
+  const applyPrefs = (): void => {
+    sound.enabled = getBoolPref('PlaySounds', true);
+    if (new URLSearchParams(window.location.search).get('pace') === null) {
+      setCombatPace(GAME_SPEED_PACE[getIntPref('GameSpeed', 1)] ?? 1);
+    }
+    setTargetLockPref(getBoolPref('TargetLock', true));
+    const reasons = Object.keys(AUTOSAVE_TRIGGER_DEFAULTS);
+    setAutosavePrefs(readAutosavePrefs(reasons, AUTOSAVE_TRIGGER_DEFAULTS, MAX_AUTOSAVE_DEFAULT));
+  };
+  applyPrefs();
+
+  /** File › Preferences — `pick_preferences`. */
+  const preferencesFlow = async (): Promise<void> => {
+    const auto = getAutosavePrefs();
+    const next = await preferencesDialog(ctx, store, {
+      playSounds: getBoolPref('PlaySounds', true),
+      gameSpeed: getIntPref('GameSpeed', 1),
+      targetLock: getBoolPref('TargetLock', true),
+      showInstantHelp: getBoolPref('ShowInstantHelp', true),
+      autosave: auto,
+      easyMode: univ.party.easyMode,
+      lessWm: univ.party.lessWm,
+    }, {
+      nest: (screen) => dialogs.runNested(screen),
+      resetHelp: () => clearPref('ReceivedHelp'),
+    });
+    if (next) {
+      setPref('PlaySounds', next.playSounds);
+      setPref('GameSpeed', next.gameSpeed);
+      setPref('TargetLock', next.targetLock);
+      setPref('ShowInstantHelp', next.showInstantHelp);
+      setPref('Autosave', next.autosave.enabled);
+      setPref('Autosave_Max', next.autosave.max);
+      for (const [reason, on] of Object.entries(next.autosave.triggers)) {
+        setPref(`Autosave_${reason}`, on);
+      }
+      // A game is running, so these two are the party's, not preferences
+      // (boe.dlgutil.cpp:1408).
+      univ.party.easyMode = next.easyMode;
+      univ.party.lessWm = next.lessWm;
+      applyPrefs();
+    }
+    redraw();
+  };
 
   /**
    * `give_help` (strdlog.cpp:182) — the "Instant Help" box, shown once per
@@ -2448,6 +2502,8 @@ async function main(): Promise<void> {
           },
           enabled: () => canSaveNow() === null,
         },
+        MENU_SEPARATOR,
+        { label: 'Preferences…', action: () => { void preferencesFlow(); } },
       ],
     }, {
       // The original's Options menu (boe.menus.hpp's OPTIONS_*).

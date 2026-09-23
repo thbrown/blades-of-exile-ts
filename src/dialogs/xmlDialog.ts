@@ -601,7 +601,9 @@ export class XmlDialog implements ModalScreen {
       this.setLed(name, this.getLed(name) === 'off' ? 'red' : 'off');
     }
     const handler = this.handlers.get(name);
-    if (!handler) return name;
+    // An LED with no handler just toggles — it never closes the dialog, as a
+    // button with none does here. (preferences.xml's LEDs rely on it.)
+    if (!handler) return control?.kind === 'led' ? null : name;
     return handler(this) === 'close' ? name : null;
   }
 
@@ -621,7 +623,9 @@ export class XmlDialog implements ModalScreen {
   }
 
   private controlAt(x: number, y: number): DialogControl | null {
-    for (const control of this.clickable()) {
+    // Topmost first: where two controls' rects overlap — an LED's measured
+    // label reaching the next one's lamp — the one drawn last, on top, wins.
+    for (const control of this.clickable().reverse()) {
       if (!control.name || this.hidden.has(control.name)) continue;
       const r = this.screenRect(control);
       if (x >= r.left && x < r.right && y >= r.top && y < r.bottom) return control;

@@ -73,6 +73,18 @@ export function clearPref(name: string): void {
   save();
 }
 
+/**
+ * The autosave preferences as the C++ stores them: `Autosave`,
+ * `Autosave_<reason>` and `Autosave_Max`.
+ */
+export function readAutosavePrefs(
+  reasons: readonly string[], defaults: Record<string, boolean>, maxDefault: number,
+): { enabled: boolean; triggers: Record<string, boolean>; max: number } {
+  const triggers: Record<string, boolean> = {};
+  for (const r of reasons) triggers[r] = getBoolPref(`Autosave_${r}`, defaults[r] ?? true);
+  return { enabled: getBoolPref('Autosave', true), triggers, max: getIntPref('Autosave_Max', maxDefault) };
+}
+
 /** Tests only: drop the in-memory copy so the next read goes back to storage. */
 export function resetPrefsCache(): void {
   cache = null;
