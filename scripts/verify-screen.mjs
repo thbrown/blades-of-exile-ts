@@ -212,6 +212,13 @@ const talkKeys = await page.evaluate(async () => {
 });
 console.log('TALK KEY j:', JSON.stringify(talkKeys));
 await shot('01b-talking');
+// 'r' records the job reply in the conversation journal (TALK_RECORD).
+await press('r');
+await page.waitForTimeout(150);
+const talkRecorded = await page.evaluate(() => {
+  const s = window.__session;
+  return { notes: s.univ.party.talkSave.length, str1: s.talk?.str1 };
+});
 const talkClosed = await page.evaluate(async () => {
   const s = window.__session;
   s.chooseTalkNode(-14); // Done
@@ -219,6 +226,27 @@ const talkClosed = await page.evaluate(async () => {
   return { talking: !!s.talk, inTown: s.inTown };
 });
 console.log('TALK CLOSED:', JSON.stringify(talkClosed));
+
+// 2b-1a. Options > Talk Notes, through the real menu bar, shows what 'r' kept.
+await page.click('#game-menu-bar .menu-item:nth-child(2)');
+await page.click('#game-menu-bar .menu-item:nth-child(2) .dropdown li:nth-child(1)');
+await page.waitForTimeout(250);
+const talkNotes = await page.evaluate(() => {
+  const d = window.__dialogs.active;
+  return d && d.def
+    ? { who: d.getText('who'), loc: d.getText('loc'), str1: d.getText('str1'), left: d.isVisible('left') }
+    : null;
+});
+await shot('01b1-talk-notes');
+await press('Escape');
+await page.waitForTimeout(200);
+const talkNotesClosed = await page.evaluate(() => window.__dialogs.active === null);
+console.log('TALK NOTES:', JSON.stringify({ talkRecorded, talkNotes, talkNotesClosed }));
+if (talkRecorded.notes !== 1) throw new Error('Record did not add a talk note');
+if (!talkNotes || talkNotes.str1 !== talkRecorded.str1 || talkNotes.who === '' || talkNotes.left) {
+  throw new Error(`talk-notes.xml did not fill: ${JSON.stringify(talkNotes)}`);
+}
+if (!talkNotesClosed) throw new Error('talk notes did not close on Escape');
 
 // 2b-2. Shopping: open the first shop with stock, buy with its letter key, and
 //       leave with Escape.

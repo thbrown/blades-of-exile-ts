@@ -33,6 +33,8 @@ import { monsterInfoDialog } from './dialogs/monsterInfoDialog';
 import { jobBoardDialog } from './dialogs/jobBoardDialog';
 import { pickPotionDialog, potionSlot } from './dialogs/pickPotionDialog';
 import { questInfoDialog } from './dialogs/questInfoDialog';
+import { NOTES_DIALOG_DEFS, adventureNotesDialog, talkNotesDialog } from './dialogs/notesDialogs';
+import { notesRefusal } from './game/notes';
 import { ItemWinMode, QUEST_COMPLETED_OFFSET } from './game/itemWindow';
 import { BASIC_BUTTON_KEYS } from './game/specials/oneshot';
 import { specItemUseable } from './data/quest';
@@ -220,7 +222,7 @@ async function main(): Promise<void> {
   ];
   for (let i = 1; i <= 11; i++) sheets.push(`monst${i}`);
   const dialogNames = ['pc-info', 'quest-info', 'get-items', 'item-info', 'many-str', 'monster-info', 'job-board',
-    'pick-potion', 'party-death', 'steal-item', ...STR_DIALOG_DEFS];
+    'pick-potion', 'party-death', 'steal-item', ...STR_DIALOG_DEFS, ...NOTES_DIALOG_DEFS];
   addTotal(1 /* opcodes */ + STRING_TABLES.length + dialogNames.length + sheets.length
     + (document.fonts ? 4 : 0) + 1 /* scenario.xml */);
 
@@ -735,6 +737,25 @@ async function main(): Promise<void> {
     if (session.mode !== GameMode.TOWN && session.mode !== GameMode.OUTDOORS)
       return "Save: Finish what you're doing first.";
     return null;
+  };
+
+  /**
+   * `talk_notes` / `adventure_notes` (boe.infodlg.cpp:594/530), off the Options
+   * menu. An empty journal, or talk notes asked for mid-conversation, is one
+   * line in the message buffer rather than a dialog.
+   */
+  const notesFlow = async (which: 'talk' | 'encounter'): Promise<void> => {
+    if (dialogs.active) return;
+    const refusal = notesRefusal(univ, session.mode, which);
+    if (refusal !== null) {
+      univ.addStringToBuf(refusal);
+      redraw();
+      return;
+    }
+    await dialogs.runScreen(which === 'talk'
+      ? talkNotesDialog(ctx, store, univ)
+      : adventureNotesDialog(ctx, store, univ));
+    redraw();
   };
 
   const saveGameFlow = async (): Promise<void> => {
@@ -2173,6 +2194,14 @@ async function main(): Promise<void> {
           },
           enabled: () => canSaveNow() === null,
         },
+      ],
+    }, {
+      // The original's Options menu (boe.menus.hpp's OPTIONS_*); the PC
+      // management half of it is still to come.
+      label: 'Options',
+      items: [
+        { label: 'Talk Notes', action: () => { void notesFlow('talk'); } },
+        { label: 'Encounter Notes', action: () => { void notesFlow('encounter'); } },
       ],
     }]);
   }

@@ -15,6 +15,7 @@ import { Universe } from '../universe/universe';
 import { Creature, CreatureStatus } from '../universe/creature';
 import { ItemShopMode } from './itemShop';
 import { receiveQuest } from './jobBank';
+import { giveHelp, livingSound } from '../universe/living';
 
 /** Pseudo-node ids for the fixed buttons (boe.newgraph.hpp:31). */
 export enum TalkAction {
@@ -266,10 +267,20 @@ export class TalkState {
         target = this.scanForResponse('sell');
         if (target < 0) return this.dunno();
         break;
-      case TalkAction.RECORD:
-        // TODO(M6): conversation notes need the party's talk_save journal.
-        this.univ.addStringToBuf('Conversation notes are not implemented yet.');
+      case TalkAction.RECORD: {
+        // TALK_RECORD (boe.dlgutil.cpp:886). The speaker is the personality's
+        // own title, but the place is the town the party is *standing in* —
+        // `univ.town->name`, not the town the personality belongs to — so a
+        // speaker a special node summoned from elsewhere is filed here.
+        const { party } = this.univ;
+        if (party.saveTalk(this.person?.title ?? '', this.univ.town?.record.name ?? '',
+          this.str1, this.str2, this.univ.scenario.id)) {
+          giveHelp(57, 0);
+          livingSound(0);
+          this.univ.addStringToBuf('Added to conversation notes.');
+        } else this.univ.addStringToBuf('This is already saved.');
         return 'ok';
+      }
       case TalkAction.DONE:
         return 'done';
       case TalkAction.BACK:
@@ -502,9 +513,41 @@ export class TalkState {
         this.endForced = true;
         break;
       }
+      case TalkNodeType.BUY_SHIP:
+      case TalkNodeType.BUY_HORSE: {
+        // a is the price, and b is the first vehicle on sale. **This follows
+        // the 1997 original (DLGUTILS.CPP:906), not OBoE** — DIVERGENCES.md
+        // #5. The original walks `b..b+c` *inclusive*, which is one more than
+        // its own editor's "Total number of boats sold" promises; that is kept
+        // as written. OBoE (boe.dlgutil.cpp:1088) searches `[b, b+c)` but then
+        // tests the result against `boats.end()` rather than the end of that
+        // range, so once the range is sold out it takes the party's gold and
+        // "sells" `boats[b+c]` — which is already the party's, or not for sale
+        // — instead of saying there are none left.
+        const ship = node.type === TalkNodeType.BUY_SHIP;
+        if (party.gold < a) {
+          useSecond();
+          break;
+        }
+        const fleet = ship ? party.boats : party.horses;
+        let sold = false;
+        for (let i = b; i <= b + c; i++) {
+          const vehicle = i >= 0 ? fleet[i] : undefined;
+          if (vehicle?.property) {
+            party.gold -= a;
+            vehicle.property = false;
+            sold = true;
+            break;
+          }
+        }
+        if (!sold) {
+          str1 = ship ? 'There are no boats left.' : 'There are no horses left.';
+          this.canRecord = false;
+        }
+        str2 = '';
+        break;
+      }
       default:
-        // What's left: BUY_SHIP and BUY_HORSE, which need a vehicle to hand
-        // over at a price. TODO(M6).
         this.lastUnsupported = node.type;
         break;
     }

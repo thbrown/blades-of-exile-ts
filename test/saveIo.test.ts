@@ -198,6 +198,14 @@ describe('.exg round trip', () => {
     ]);
   });
 
+  it('restores the conversation journal, blank second string and all', () => {
+    univ.party.saveTalk('Guard', 'Fort Talrus', 'Move along, "friend".', '', 'valleydy');
+    univ.party.saveTalk('Mayor', 'Fort Talrus', 'The rats are back.', 'Kill them.', 'valleydy');
+    const text = serialiseSave(univ).text('save/party.txt');
+    expect(text).toContain('TALKNOTE\n');
+    expect(roundTrip(univ).party.talkSave).toEqual(univ.party.talkSave);
+  });
+
   it('loses which soul-crystal slot a monster was in, as the C++ does', () => {
     // cParty::readFrom reads the slot number and then stores into the *loop
     // counter* instead (party.cpp:993), so a crystal whose earlier slots are

@@ -48,6 +48,22 @@ export interface EncNote {
 }
 
 /**
+ * `cParty::cConvers` (party.hpp:71, formerly `talk_save_type`) — one saved
+ * reply. The original kept string *numbers* and a personality id and looked
+ * the text up again on display (INFODLGS.CPP:1074); OBoE keeps the text.
+ */
+export interface TalkNote {
+  /** The speaker's title — `people[i].title`, without the colon. */
+  whoSaid: string;
+  /** The name of the town the party was in. */
+  inTown: string;
+  str1: string;
+  str2: string;
+  /** `cParty::scen_name` at the time, which this port calls `scenario.id`. */
+  inScen: string;
+}
+
+/**
  * `cPopulation` (universe/population.hpp) — one town's creature list, kept by
  * the party after it leaves so that the town's dead stay dead. `whichTown` is
  * 200 for an empty slot, which is the same "not a town" sentinel as
@@ -271,6 +287,29 @@ export class Party {
       (n) => n.type === type && n.theStr === what && n.where === where);
     if (already) return false;
     this.specialNotes.push({ type, theStr: what, where });
+    return true;
+  }
+
+  /**
+   * `cParty::talk_save` — the conversation journal, which is what the Record
+   * word in a conversation writes to and Options > Talk Notes reads.
+   */
+  talkSave: TalkNote[] = [];
+
+  /**
+   * `cParty::save_talk` (party.cpp:384) — note one reply, refusing an exact
+   * duplicate. `operator==` (:1256) compares all five fields, so the same words
+   * from the same speaker in another scenario are a separate note.
+   *
+   * The 1997 original (DLGUTILS.CPP:621) keeps 120 slots and says "No more room
+   * in talking journal." when they are full; OBoE's vector has no limit a
+   * player can reach, and nor does this.
+   */
+  saveTalk(whoSaid: string, inTown: string, str1: string, str2: string, inScen: string): boolean {
+    const already = this.talkSave.some((n) => n.whoSaid === whoSaid && n.inTown === inTown
+      && n.str1 === str1 && n.str2 === str2 && n.inScen === inScen);
+    if (already) return false;
+    this.talkSave.push({ whoSaid, inTown, str1, str2, inScen });
     return true;
   }
 

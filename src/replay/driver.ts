@@ -61,6 +61,7 @@ import {
 import { makeReplayHost, popClick, typeInto } from './host';
 import { PcGraphicPick, RaceAbilPick, SpendXp, XpMode, newPc, pcNameOk } from '../game/createPc';
 import { STARTUP_ACTIONS, decodeReplayFile } from './startup';
+import { EncounterNotesPager, TalkNotesPager, notesRefusal } from '../game/notes';
 
 /**
  * `easter_egg_messages` (boe.actions.cpp:2588). Recorded, its comment says,
@@ -307,7 +308,7 @@ export async function runReplay(
    * `left`/`right` and delete entries with `del` — so it takes the `done` that
    * closes them rather than the first click that arrives.
    */
-  let notesDialog = false;
+  let notesDialog: TalkNotesPager | EncounterNotesPager | null = null;
   /**
    * The preferences dialog (`pick_preferences`, boe.dlgutil.cpp:1463), open
    * mid-run. It is modal and stays up across many clicks, and **two of its
@@ -446,7 +447,7 @@ export async function runReplay(
     const at = source.position;
     const action = source.pop();
     const inModal = picking !== null || getting !== null
-      || helpDialog || notesDialog || prefsDialog !== null;
+      || helpDialog || notesDialog !== null || prefsDialog !== null;
     if (!inModal) session.needRedraw = REDRAWS.has(action.type);
     try {
       // **An abandoned spell picker is a *cancelled* one.** The C++'s picker is
@@ -895,30 +896,22 @@ export async function runReplay(
           helpDialog = true;
           break;
         case 'adventure_notes':
-          // `adventure_notes` (boe.infodlg.cpp:530). **The dialog only opens
-          // when there is something in it**: an empty journal prints one line
-          // and returns, so no clicks follow and nothing must be swallowed.
-          if (session.univ.party.specialNotes.length === 0) {
-            session.univ.addStringToBuf('Nothing in your journal.');
+        case 'talk_notes': {
+          // `adventure_notes` / `talk_notes` (boe.infodlg.cpp:530/:594). **The
+          // dialog only opens when there is something in it** — and talk notes
+          // not mid-conversation either: a refusal prints one line and returns,
+          // so no clicks follow and nothing must be swallowed.
+          const kind = action.type === 'talk_notes' ? 'talk' : 'encounter';
+          const refusal = notesRefusal(session.univ, session.mode, kind);
+          if (refusal !== null) {
+            session.univ.addStringToBuf(refusal);
             break;
           }
-          notesDialog = true;
+          notesDialog = kind === 'talk'
+            ? new TalkNotesPager(session.univ.party.talkSave)
+            : new EncounterNotesPager(session.univ.party.specialNotes);
           break;
-        case 'talk_notes':
-          // `talk_notes` (:594). Same shape, plus a refusal while a
-          // conversation is on screen.
-          if (session.mode === GameMode.TALKING) {
-            session.univ.addStringToBuf("Talking notes: Can't read while talking.");
-            break;
-          }
-          // TODO(M8): `univ.party.talk_save` — the conversation journal — is
-          // not modelled here, so this port cannot tell an empty one from a
-          // full one and always assumes the dialog opened. That is the safe
-          // way round: a modal that swallows its own clicks costs nothing if
-          // it was never really up, while missing one feeds the dialog's
-          // buttons to the game as if they were moves.
-          notesDialog = true;
-          break;
+        }
         case 'pick_preferences':
           prefsDialog = {
             easy: session.univ.party.easyMode,
@@ -951,7 +944,7 @@ export async function runReplay(
           // The journal pages under `left`/`right` and deletes under `del`;
           // only `done` closes it (`attachClickHandlers`, boe.infodlg.cpp:615).
           if (notesDialog) {
-            if (id === 'done' || id === 'cancel') notesDialog = false;
+            if (id === 'cancel' || notesDialog.click(id)) notesDialog = null;
             break;
           }
           options.onClick?.(id, Number(action.info.mods ?? '0'));
@@ -1958,7 +1951,7 @@ export async function runReplay(
       // still up now?" reproduces that exactly: the opening action and every
       // click inside are skipped, and the closing one fires.
       const modalUp = picking !== null || getting !== null
-        || helpDialog || notesDialog || prefsDialog !== null;
+        || helpDialog || notesDialog !== null || prefsDialog !== null;
       if (!modalUp) {
         // `advance_time`'s tail: `if(need_redraw) draw_terrain();`
         // (boe.actions.cpp:1931), which runs *before* the main loop's redraw

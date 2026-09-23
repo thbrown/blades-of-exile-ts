@@ -162,6 +162,39 @@ Its twin, `PACIFIST`, *is* covered by a feature flag
 function. That asymmetry is a good example of the flag mechanism being
 incomplete rather than wrong.
 
+### 5. Buying a boat or a horse when none is left
+
+**DECIDED: follow the original.** `src/game/talk.ts`, `BUY_SHIP`/`BUY_HORSE`.
+The Mac half is identical (`dialogutils.c:917`).
+
+```c
+/* 1997, DLGUTILS.CPP:906 */                  // OBoE, boe.dlgutil.cpp:1088
+for (i = b; i <= b + c; i++)                  b = minmax(0, boats.size() - 1, b);
+  if ((i >= 0) && (i < 30) &&                 c = minmax(0, boats.size() - b, c);
+      (party.boats[i].property == TRUE)) {    auto iter = find_if(boats.begin() + b,
+    party.gold -= a; …property = FALSE;           boats.begin() + b + c, …property);
+    i = 1000; }                               if(iter != boats.end()) {
+if (i < 1000) "There are no boats left."          gold -= a; iter->property = false;
+```
+
+OBoE searches `[b, b+c)` but tests the result against `boats.end()` rather
+than against the end of *that range*. When the range is sold out, `find_if`
+returns `boats.begin() + b + c`, which is not `end()` unless the range happens
+to finish the list — so the party **pays for a boat and gets nothing**
+(`boats[b+c]` is marked the party's, and it either already was or was never
+for sale), and never hears "There are no boats left." A player can tell.
+
+The original walks `b..b+c` **inclusive**, one more vehicle than its own
+editor's "Total number of boats sold" promises (`Scen Ed/STRINGS.RC:12144`) —
+and the shipped scenarios were written against that, not against the label.
+Stealth's horse trader (town 1, Bearden) is `buy-horse 400 0 2`, and the town
+has exactly **three** horses for sale, 0-2. Under the original each purchase
+takes the next of the three and the fourth hears "There are no horses left."
+Under OBoE the third purchase *also* works, but only through the bug —
+`find_if` misses and returns `begin()+2`, which is horse 2 — and every
+purchase after that takes 400 gold and hands over nothing. Neither version
+draws, so the corpus cannot see the choice.
+
 ---
 
 ## Agreements worth recording

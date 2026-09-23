@@ -45,7 +45,8 @@
   **L** pick a lock, **1-6** whose pack shows, **9** the special items and
   **0** the quests,
   **a** the automap (drag it by its window), **A** alchemy (in town),
-  **File > Open Game** (or **Ctrl+O**) loads and **Ctrl+S** saves; opening the
+  **File > Open Game** (or **Ctrl+O**) loads and **Ctrl+S** saves,
+  **Options > Talk Notes / Encounter Notes** open the two journals; opening the
   page with no `?scenario=` shows the startup screen,
   **m**/**p** spells (**M**/**P** recast the last one), **s** shoot (in combat: arms the
   missile, then click a square; **s** or Escape cancels). Keys for things not
@@ -112,7 +113,7 @@ M2 landed so far:
 - **Shops (M3e)**: `data/shop.ts` (cShop/cShopItem verbatim, `cost_mult` prices, the two preset shops), `data/treasure.ts` (return_treasure / pull_item_of_type, RNG call order preserved), `data/strings.ts` (get_str against `data/strings/*.txt`, loaded before the scenario because shop stock names itself synchronously), `fileio/scenarioXml.ts` (`readShopFromXml` + the store-items rects), `game/shop.ts` (`ShopState` = set_up_shop_array + handle_sale), `render/shopScreen.ts` (draw_shop_graphics with init_shopping_rects geometry). A SHOP talk node opens it; keys **a**-**h** buy, arrows scroll, Escape leaves. `Universe.refreshStoreItems` rolls random-shop stock; `party.storeLimitedStock` remembers what's been bought out.
 - **Shop services on your own goods (M3f)**: `game/itemShop.ts` ports place_item_button's eligibility/price rules and handle_item_shop_action — selling (half value), identifying, recharging (a free recharge can melt the item), enchanting (stubbed on M5's table). A SELL/IDENTIFY/RECHARGE talk node switches the inventory panel into a prompt where each eligible item grows a priced button. Note `inventory.ts`'s `takeItem` now compacts the pack the way `cPlayer::take_item` does.
 - **Training and inns (M3g)**: `game/training.ts` holds spend_xp's mode-1 rules (skill-point *and* gold costs, caps, no refunding a level the PC walked in with, the Anama curse); `game/rest.ts` ports do_rest for the INN node. The training dialog is a two-column list rather than the original's stepper grid — marked `TODO(M3)` pending stepper widgets.
-- **Talking (M3a)**: `game/talk.ts` (`TalkState`) ports start_talk_mode/handle_talk_node/reset_talk_words/scan_for_response; `render/talkScreen.ts` ports place_talk_str/place_talk_face. Press T (or the TALK toolbar button) then a direction. Keyword matching is first-4-chars case-insensitive, and nodes are filtered to the personality (or -2 = anyone in town). Node types implemented: REGULAR, DEP_ON_SDF, SET_SDF, DEP_ON_TIME(_AND_EVENT), DEP_ON_TOWN, BUY_INFO, BUY_SDF, BUY_SPEC_ITEM, BUY_TOWN_LOC, END_FORCE/FIGHT/ALARM/DIE, SHOP, INN, TRAINING, SELL_WEAPONS/ARMOR/ITEMS, IDENTIFY, ENCHANT, RECHARGE, JOB_BANK, RECEIVE_QUEST, CALL_TOWN_SPEC, CALL_SCEN_SPEC. Still unimplemented (and saying so in the transcript rather than failing silently): BUY_SHIP, BUY_HORSE.
+- **Talking (M3a)**: `game/talk.ts` (`TalkState`) ports start_talk_mode/handle_talk_node/reset_talk_words/scan_for_response; `render/talkScreen.ts` ports place_talk_str/place_talk_face. Press T (or the TALK toolbar button) then a direction. Keyword matching is first-4-chars case-insensitive, and nodes are filtered to the personality (or -2 = anyone in town). Node types implemented: REGULAR, DEP_ON_SDF, SET_SDF, DEP_ON_TIME(_AND_EVENT), DEP_ON_TOWN, BUY_INFO, BUY_SDF, BUY_SPEC_ITEM, BUY_TOWN_LOC, END_FORCE/FIGHT/ALARM/DIE, SHOP, INN, TRAINING, SELL_WEAPONS/ARMOR/ITEMS, IDENTIFY, ENCHANT, RECHARGE, JOB_BANK, RECEIVE_QUEST, CALL_TOWN_SPEC, CALL_SCEN_SPEC, and (2026-09-22) BUY_SHIP, BUY_HORSE — every node type. The Record word saves the reply to the conversation journal.
 
 Notes for M2 implementer:
 - The window is **605×430** (`global.hpp:30`), not 800×600 — the earlier plan text was wrong. index.html scales the canvas ×2 in CSS.
@@ -11429,3 +11430,38 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     it drew nothing — and `debug_launch_scen` draws 2,860. A leading hunk of
     known startup *types* now counts too, which is why the drift meter reads
     0 of 76 rather than 1.
+
+- **The conversation journal, both journal dialogs, and the last two talk
+  nodes (M3/M6, 2026-09-22).** Corpus-neutral: **1,231,440 matching draws, 51
+  of 87**, and both companion meters still 0 — re-run with `--refresh` to
+  completion.
+  - **`talk_save` is modelled** (`Party.talkSave`, `cParty::save_talk`), and
+    the Record word in a conversation writes to it. What is filed is the
+    speaker's *title*, the reply on screen, and **the town the party is
+    standing in** — `univ.town->name`, not the personality's own town — so a
+    speaker a node summoned from elsewhere is filed here. A duplicate is
+    refused *before* `give_help(57)`, so the help box (which eats a replay
+    click) only comes up for a note that was really added. Saved as OBoE's
+    `TALKNOTE` pages, round-tripped in `saveIo.test.ts`.
+  - **An Options menu**, holding Talk Notes and Encounter Notes — the
+    original's route to both journals (`eMenu::OPTIONS_*`). Neither was
+    reachable in this port before, although encounter notes have been
+    recorded since M4. Both dialogs run on the real XML.
+  - **The paging rules live in `game/notes.ts`**, shared by the dialogs and
+    the replay driver — which had been swallowing every journal click,
+    `del` included, and *assuming* the talk journal was non-empty. It now
+    deletes what the recording deletes and knows when the journal is empty.
+    Two C++ quirks kept: `store_num_i` is never updated by an encounter-note
+    delete, so the arrows still reach a page the deletions emptied; and the
+    talk journal leaves its arrows up when a delete takes it down to one
+    page.
+  - **BUY_SHIP / BUY_HORSE follow the 1997 original, not OBoE** —
+    `DIVERGENCES.md` #5, the first entry decided *for* the original. OBoE
+    tests `find_if`'s result against `boats.end()` instead of the end of the
+    range, so once the range is sold out it charges and hands over nothing.
+    The original walks `b..b+c` *inclusive*, one past its own editor's
+    "Total number of boats sold" — and Stealth's horse trader (`buy-horse
+    400 0 2`, three horses for sale) was written against exactly that.
+  - `TalkState.lastUnsupported` has no node type left to report; the
+    `default` arm stays for data outside the enum.
+

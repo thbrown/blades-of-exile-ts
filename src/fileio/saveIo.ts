@@ -14,7 +14,7 @@
  * does rather than because the format was changed:
  *
  *   - Fields cParty has and this port doesn't are simply absent from the file:
- *     the journal, conversation notes, stored PCs and their items, campaign
+ *     the journal, stored PCs and their items, campaign
  *     flags, the split party, `hostiles_present`, `less_wm`, the save-slot
  *     number and the per-town creature save slots. A save written here loads in
  *     the C++ build with those at their defaults, and one written there loses
@@ -762,6 +762,15 @@ export function writeParty(file: TagFile, party: Party, scenarioId: string): voi
     notePage.add('ENCNOTE', writeEnumTag(encNoteTypes, note.type, 'SCEN'), note.where, '');
     notePage.add('STRING', note.theStr);
   }
+  // TALKNOTE is an empty tag that only names the page (party.cpp:904).
+  for (const note of party.talkSave) {
+    const notePage = file.add();
+    notePage.add('TALKNOTE');
+    notePage.add('WHO', note.whoSaid);
+    notePage.add('WHERE', note.inTown, note.inScen);
+    notePage.add('STRING', note.str1);
+    notePage.add('STRING', note.str2);
+  }
 }
 
 /** The party's scenario name, which the loader needs before anything else. */
@@ -963,6 +972,15 @@ export function readParty(file: TagFile, party: Party): void {
         type: readEnumTagOrNumber(encNoteTypes, tag.str(0), 0),
         where: tag.str(1),
         theStr: page.first('STRING')?.str(0) ?? '',
+      });
+    } else if (page.firstKey() === 'TALKNOTE') {
+      const [first, second] = page.list('STRING');
+      party.talkSave.push({
+        whoSaid: page.first('WHO')?.str(0) ?? '',
+        inTown: page.first('WHERE')?.str(0) ?? '',
+        inScen: page.first('WHERE')?.str(1) ?? '',
+        str1: first?.str(0) ?? '',
+        str2: second?.str(0) ?? '',
       });
     }
   }
