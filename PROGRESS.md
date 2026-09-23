@@ -11553,3 +11553,49 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
   - **Still missing**: Alt-click for a skill's description — `ModalScreen`
     has no modifier keys yet. `cStringChoice` is not needed by anything in
     scope (the V2 debug-kill and `get_num_response`'s choice list).
+
+- **The party editor and character creation (M3/M8, 2026-09-22).**
+  Corpus-neutral: **51 / 1,231,440**.
+  - **A new game builds its party first.** Choosing a scenario to start
+    fresh on the startup screen now runs `start_new_game(false)`:
+    new-party.xml, then `edit_party` on edit-party.xml over the default party,
+    and only then `put_party_in_scen`. Cancelling, or leaving nobody, goes
+    back to the startup screen ("if no PCs left, forget it"). `?scenario=`
+    and a saved game still skip it. Behind the editor is `draw_startup`'s
+    picture on black, not a world the party isn't in yet.
+  - **Moving `startNewGame` after the editor changes one visible thing, and
+    it is the C++'s**: the start town's `try_auto_save("EnterTown")` now runs
+    with the autosave sink installed, and prints "Autosave: Make a manual save
+    first." — which is what the original prints when you cancel the save-as
+    it offers straight after party creation (`do_save(true)`). This port
+    doesn't offer that save; its saves are named slots on the File menu.
+  - **`create_pc`'s four dialogs** (`dialogs/partyEditor.ts`):
+    `pick_race_abil` on pick-race-abil.xml (edit, display-only, and
+    everything-but-race modes; a click always explains itself in the info box
+    even when it can't change anything; the XP-per-level number is the PC's
+    own `get_tnl`, read once — it does not follow the LEDs, as in the C++),
+    `spend_xp` in creation mode, `pick_pc_graphic` on `cPictChoice` with
+    Cancel hidden, and `pick_pc_name` ("Cannot be empty." / "Must begin with
+    a letter."). A PC made while building the party is finished with the
+    rest; one added to a party already playing is finished at once.
+  - **Options** gained Change PC Graphic, Rename PC, Add a New PC (town only,
+    a town with a tavern) and Delete PC (`kill_pc(ABSENT)` after
+    delete-pc-confirm.xml). **File › New Game** is `new_party`: restart-game.xml,
+    then back to the startup screen. The pc-info dialog's Race & Traits
+    button opens the traits page read-only.
+  - **Dialog layout: the C++ sizes a control when it parses it**, and
+    relative positioning measures from those sizes. `setBtnType` gives a
+    button its art's size and `cPict::recalcRect` a picture its kind's
+    (28×36, 36×36, 32×32…). This port measured the rect as written, where a
+    `<pict>` with only `top`/`left` is zero-high — so every row of
+    edit-party.xml, each anchored on the picture above, collapsed onto the
+    first. `setNaturalSize` now runs before `resolvePositions`.
+  - A picture's frame is `FRM_SOLID` — one dark line (pict.cpp:144) — not
+    the inset frame framed text uses. Invisible before only because the
+    zero-size rect made it a dot.
+  - `trait` buttons label themselves "Race|& Traits" (`initPreset`), and a
+    button's `|` is a line break with the block lifted to stay centred.
+  - `XmlDialog.setEscapeButton`, as `cDialog::setEscapeButton`.
+  - `verify-screen.mjs` now builds its party: deletes PC 6 and makes "Zed"
+    through all four dialogs by mouse and keyboard, including the empty-name
+    refusal. Menu items are picked by label rather than position.

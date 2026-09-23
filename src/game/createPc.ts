@@ -19,8 +19,8 @@
  *   finish_create()         → racial adjustments and the two start items
  * ```
  *
- * TODO(M8): the player-facing screens. Nothing but the replay driver reaches
- * this yet, so the game still has no way to add a PC by hand.
+ * The screens are `dialogs/partyEditor.ts`; the replay driver drives the same
+ * rules by control name.
  */
 
 import { skillNames } from '../data/enumTags';

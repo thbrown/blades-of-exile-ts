@@ -42,11 +42,86 @@ const valley = page.locator('.startup .startup-choice', { hasText: 'Valley of Dy
 await valley.first().click();
 console.log('STARTUP:', JSON.stringify(startupChoices));
 
+const shot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png`, clip: { x: 12, y: 12, width: 1210, height: 860 } });
+
+// A new game from the startup screen builds its party first: new-party.xml,
+// then the party editor on the default party. Delete PC 6, and make a new one
+// through all four of create_pc's dialogs, by mouse and keyboard.
+const dlgPoint = async (name) => {
+  const r = await page.evaluate((n) => {
+    const d = window.__dialogs.active;
+    const c = d && d.def && d.def.byName.get(n);
+    return c ? d.screenRect(c) : null;
+  }, name);
+  if (!r) throw new Error(`no control "${name}" in the dialog up`);
+  return page.evaluate(({ x, y }) => {
+    const c = document.querySelector('canvas');
+    const b = c.getBoundingClientRect();
+    return { x: b.left + (x + 0.5) * (b.width / c.width), y: b.top + (y + 0.5) * (b.height / c.height) };
+  }, { x: (r.left + r.right) / 2 - 0.5, y: (r.top + r.bottom) / 2 - 0.5 });
+};
+const clickControl = async (name) => {
+  const at = await dlgPoint(name);
+  await page.mouse.click(at.x, at.y);
+  await page.waitForTimeout(150);
+};
+const dialogHas = (name) => page.evaluate((n) => {
+  const d = window.__dialogs?.active;
+  return !!(d && d.def && d.def.byName.has(n));
+}, name);
+await page.waitForFunction(() => window.__dialogs?.active?.def?.byName.has('okay'), { timeout: 30000 });
+await page.keyboard.press('Enter'); // new-party.xml: Create
+await page.waitForTimeout(200);
+const editorUp = await dialogHas('delete6');
+const partyBefore = await page.evaluate(() => {
+  const d = window.__dialogs.active;
+  return [1, 2, 3, 4, 5, 6].map((n) => d.getText(`name${n}`));
+});
+await clickControl('delete6');
+await page.keyboard.press('y'); // delete-pc-confirm.xml
+await page.waitForTimeout(150);
+const emptied = await page.evaluate(() => window.__dialogs.active.getText('name6'));
+await clickControl('delete6'); // now "Create"
+const raceUp = await dialogHas('race1');
+await clickControl('race2'); // Nephilim
+await clickControl('good1'); // Toughness
+await shot('00c-race-traits');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(150);
+const xpUp = await dialogHas('hp-p');
+await clickControl('str-p');
+await page.keyboard.press('k');
+await page.waitForTimeout(150);
+const pictUp = await dialogHas('led1');
+await clickControl('led3');
+await shot('00d-pc-graphic');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(150);
+const nameUp = await dialogHas('name') && !(await dialogHas('delete6'));
+await page.keyboard.press('Enter'); // empty: refused
+await page.waitForTimeout(100);
+const nameError = await page.evaluate(() => window.__dialogs.active.getText('error'));
+await page.keyboard.type('Zed');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(200);
+const partyAfter = await page.evaluate(() => {
+  const d = window.__dialogs.active;
+  return [1, 2, 3, 4, 5, 6].map((n) => d.getText(`name${n}`));
+});
+await shot('00e-edit-party');
+await page.keyboard.press('Enter'); // Done
+const built = { editorUp, partyBefore, emptied, raceUp, xpUp, pictUp, nameUp, nameError, partyAfter };
+
 await page.waitForFunction(() => window.__session !== undefined, { timeout: 30000 });
 await page.waitForTimeout(600);
+built.zed = await page.evaluate(() => {
+  const pc = window.__univ.party.pcs[5];
+  return { name: pc.name, race: pc.race, pic: pc.whichGraphic, status: pc.mainStatus,
+    tough: pc.traits[0], str: pc.skills[0], items: pc.items.filter((i) => i.variety !== 0).length };
+});
+console.log('PARTY BUILT:', JSON.stringify(built));
 const startupGone = await page.evaluate(() => document.querySelector('.startup') === null);
 
-const shot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png`, clip: { x: 12, y: 12, width: 1210, height: 860 } });
 
 /**
  * Wait until the game will accept input again. The monsters' half of a round
@@ -177,8 +252,9 @@ console.log('START:', JSON.stringify(start));
 if (start.gear[0] !== 'Knife*/Buckler*' || start.gear[1] !== 'Spear*/Helm*'
   || start.gear[2] !== 'Bow*/Arrows*')
   throw new Error(`the party started without its gear: ${start.gear.join(' ')}`);
-// The three casters' bonus spell points: three per level of either skill.
-if (start.sp[3] !== 29 || start.sp[5] !== 30)
+// The casters' bonus spell points: three per level of either skill. (The
+// third caster, PC 6, was replaced by Zed in the party editor above.)
+if (start.sp[3] !== 29 || start.sp[4] !== 29)
   throw new Error(`bonus spell points missing: ${start.sp.join(',')}`);
 
 // 2b. Talk to a townsperson: the talk screen replaces the left column, the
@@ -238,7 +314,7 @@ console.log('TALK CLOSED:', JSON.stringify(talkClosed));
 
 // 2b-1a. Options > Talk Notes, through the real menu bar, shows what 'r' kept.
 await page.click('#game-menu-bar .menu-item:nth-child(2)');
-await page.click('#game-menu-bar .menu-item:nth-child(2) .dropdown li:nth-child(1)');
+await page.locator('#game-menu-bar .menu-item:nth-child(2) .dropdown li', { hasText: 'Talk Notes' }).click();
 await page.waitForTimeout(250);
 const talkNotes = await page.evaluate(() => {
   const d = window.__dialogs.active;
@@ -2950,6 +3026,11 @@ const ok =
   deathReasked !== null && deathReasked.back === true && deathReasked.alive === false &&
   // …and Quit lands on the startup screen, where handle_victory goes too.
   deathQuit === true &&
+  built.editorUp === true && built.partyBefore[5] !== 'Empty.' && built.emptied === 'Empty.' &&
+  built.raceUp && built.xpUp && built.pictUp && built.nameUp &&
+  built.nameError === 'Cannot be empty.' && built.partyAfter[5] === 'Zed' &&
+  built.zed.name === 'Zed' && built.zed.race === 1 && built.zed.pic === 2 &&
+  built.zed.status === 1 && built.zed.tough === true && built.zed.items > 0 &&
   fields.typed === true && fields.fieldError === 'Error' &&
   fields.numAnswer === 75 && fields.textAnswer === 'hello' &&
   errors.length === 0;

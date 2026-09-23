@@ -284,6 +284,10 @@ export function readDialogDef(root: Element): DialogDef {
     const control = parseControl(el);
     if (control) controls.push(control);
   }
+  for (const control of controls) {
+    setNaturalSize(control);
+    if (control.kind === 'group') control.leds.forEach(setNaturalSize);
+  }
   resolvePositions(controls);
   const byName = new Map<string, DialogControl>();
   for (const control of controls) {
@@ -298,6 +302,72 @@ export function readDialogDef(root: Element): DialogDef {
     controls,
     byName,
   };
+}
+
+/** Each button type's artwork size (`cButton::btnRects`, button.cpp:247). */
+export const BUTTON_SIZE: Record<ButtonType, { w: number; h: number }> = {
+  small: { w: 23, h: 23 }, regular: { w: 63, h: 23 }, done: { w: 63, h: 23 },
+  left: { w: 63, h: 23 }, right: { w: 63, h: 23 }, up: { w: 63, h: 23 }, down: { w: 63, h: 23 },
+  large: { w: 102, h: 23 }, help: { w: 16, h: 13 }, tiny: { w: 14, h: 10 },
+  tall: { w: 63, h: 40 }, trait: { w: 63, h: 40 }, push: { w: 30, h: 30 },
+};
+
+/**
+ * `cPict::recalcRect` (pict.cpp:551) — a picture is the size of its kind,
+ * whatever the file says. `null` leaves the rect as written: a blank fill and
+ * a full-size picture take the file's size.
+ */
+export function pictNaturalSize(
+  type: PictType, num: number, large: boolean,
+): { w: number; h: number } | null {
+  switch (type) {
+    case 'ter': case 'teranim': case 'monst': case 'item': case 'pc': case 'field': case 'boom':
+      return { w: 28, h: 36 };
+    case 'dlog': return large ? { w: 72, h: 72 } : { w: 36, h: 36 };
+    case 'scen': return large ? { w: 64, h: 64 } : { w: 32, h: 32 };
+    case 'talk': return { w: 32, h: 32 };
+    case 'missile': return { w: 18, h: 18 };
+    case 'map': return { w: 24, h: 24 };
+    case 'status': return { w: 12, h: 12 };
+    case 'btn':
+      if (num <= 1) return { w: 12, h: 12 };
+      if (num <= 5) return { w: 14, h: 12 };
+      if (num <= 9) return { w: 30, h: 12 };
+      return { w: 35, h: 15 };
+    default: return null;
+  }
+}
+
+/**
+ * The sizes the C++ settles when it *parses* a control — `setBtnType` writes
+ * the button art's size into the frame, `cPict::setPict` the picture's, and an
+ * LED is at least its lamp. Relative positioning measures from these, so they
+ * have to be in place before `resolvePositions`: measured as written, an
+ * `<pict>` with only a `top` and `left` is a zero-height anchor, and every row
+ * of edit-party.xml hung off the one above it collapsed onto it.
+ *
+ * A labelled button (regular, large, done) may be stretched wider or taller
+ * than its art; every other kind is exactly its art.
+ */
+function setNaturalSize(control: DialogControl): void {
+  const { rect } = control;
+  let w = rect.right - rect.left;
+  let h = rect.bottom - rect.top;
+  if (control.kind === 'button') {
+    const art = BUTTON_SIZE[control.type];
+    const stretch = control.type === 'regular' || control.type === 'large' || control.type === 'done';
+    w = stretch ? Math.max(w, art.w) : art.w;
+    h = stretch ? Math.max(h, art.h) : art.h;
+  } else if (control.kind === 'pict') {
+    const size = pictNaturalSize(control.type, control.num, control.size === 'large');
+    if (size) ({ w, h } = size);
+  } else if (control.kind === 'led') {
+    w = Math.max(w, 14);
+    h = Math.max(h, 10);
+  } else {
+    return;
+  }
+  control.rect = { top: rect.top, left: rect.left, bottom: rect.top + h, right: rect.left + w };
 }
 
 /**

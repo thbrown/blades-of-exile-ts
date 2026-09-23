@@ -221,9 +221,24 @@ export class Screen {
     this.mapScreen = new MapScreen(ctx, store);
   }
 
+  /**
+   * `MODE_STARTUP` while a new party is being built: `draw_startup`'s top
+   * picture on black rather than a game that has not begun (boe.graphics.cpp:288).
+   * The startup screen's buttons are this port's DOM page, not drawn here.
+   */
+  startupBackdrop = false;
+
   draw(session: GameSession): void {
     const { ctx } = this;
     ctx.imageSmoothingEnabled = false;
+    if (this.startupBackdrop) {
+      ctx.fillStyle = Colours.BLACK;
+      ctx.fillRect(0, 0, BOE_WIDTH, BOE_HEIGHT);
+      const art = this.store.get('startup');
+      // startup_from[0] = {0,0,274,602}, drawn at startup_top (top 7).
+      if (art) ctx.drawImage(art, 0, 0, 602, 274, 1, 7, 602, 274);
+      return;
+    }
     this.putBackground(session);
     // Talking and shopping replace the whole left column, so the terrain view,
     // status bar and toolbar are skipped (redraw_screen's MODE_TALKING branch).

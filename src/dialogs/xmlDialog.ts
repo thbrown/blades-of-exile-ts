@@ -22,7 +22,7 @@ import { drawString, drawStringCentre, measureString, wrapLines } from '../rende
 import { tilePattern } from '../render/tiling';
 import {
   ButtonControl, ButtonType, DialogControl, DialogDef, FieldControl, FieldType, FontSpec,
-  KEY_PLACEHOLDER, LedControl, LedState, PictControl, PictType, TextControl,
+  KEY_PLACEHOLDER, LedControl, LedState, PictControl, PictType, TextControl, pictNaturalSize,
 } from './dialogXml';
 import { ModalScreen } from './dialog';
 import { drawPictAt } from './pict';
@@ -59,6 +59,8 @@ const BUTTON_ART: Record<ButtonType, {
 
 /** `basic_buttons` (basicbtns.cpp:19) — a `done` button labels itself. */
 const DONE_LABEL = 'Done';
+/** `cButton::initPreset` (button.cpp:328) — and so does a `trait` button. */
+const TRAIT_LABEL = 'Race|& Traits';
 
 /** cLed::ledRects (led.cpp:18): three states across, pressed below. */
 const LED_W = 14;
@@ -399,6 +401,14 @@ export class XmlDialog implements ModalScreen {
     return named ? COLOURS[named] ?? named : DEF_TEXT;
   }
 
+  /** `cDialog::setEscapeButton` — which button Escape presses, over the definition's. */
+  setEscapeButton(name: string): this {
+    this.escBtn = name;
+    return this;
+  }
+
+  private escBtn: string | undefined;
+
   attachHandler(name: string, fn: (dlg: XmlDialog) => DialogAction): this {
     this.handlers.set(name, fn);
     return this;
@@ -563,7 +573,8 @@ export class XmlDialog implements ModalScreen {
       if (key !== 'Escape' && key !== 'Enter' && key !== 'Return'
         && this.fieldKey(this.focus, key)) return null;
     }
-    if (key === 'Escape' && this.def.escBtn) return this.activate(this.def.escBtn);
+    const esc = this.escBtn ?? this.def.escBtn;
+    if (key === 'Escape' && esc) return this.activate(esc);
     if ((key === 'Enter' || key === 'Return') && this.def.defBtn) {
       return this.activate(this.def.defBtn);
     }
@@ -781,7 +792,8 @@ export class XmlDialog implements ModalScreen {
       this.ctx.fillRect(rect.left, rect.top, width(rect), height(rect));
     }
     const label = this.fillKey(control, this.getText(control.name)
-      || (control.type === 'done' ? DONE_LABEL : control.label));
+      || (control.type === 'done' ? DONE_LABEL
+        : control.type === 'trait' ? TRAIT_LABEL : control.label));
     if (!label) return;
     // The face text is black and centred, at 12pt unless the button says
     // otherwise (a tiny button is 9, a push button 10).
@@ -795,8 +807,14 @@ export class XmlDialog implements ModalScreen {
           { font: 'bold', size }, control.name).colour });
       return;
     }
-    drawStringCentre(this.ctx, { ...rect, top: rect.top + Math.floor((height(rect) - size) / 2) },
-      label, style);
+    // `|` is a forced line break, and the block is lifted half a line for each
+    // extra line so it stays centred (button.cpp:93).
+    const lines = label.split('|');
+    let top = rect.top + Math.floor((height(rect) - size) / 2) - Math.trunc(size / 2) * (lines.length - 1);
+    for (const line of lines) {
+      drawStringCentre(this.ctx, { ...rect, top }, line, style);
+      top += size;
+    }
   }
 
   private drawLed(control: LedControl): void {
@@ -829,11 +847,20 @@ export class XmlDialog implements ModalScreen {
    * in the file is a position, not a scale.
    */
   private drawPict(control: PictControl): void {
-    const rect = this.screenRect(control);
+    const at = this.screenRect(control);
     const num = this.picNum.get(control.name) ?? control.num;
     const type = this.picType.get(control.name) ?? control.type;
-    drawPictAt(this.ctx, this.store, type, num, rect.left, rect.top, control.size === 'large');
-    if (control.framed) this.drawFrame(rect);
+    const large = control.size === 'large';
+    drawPictAt(this.ctx, this.store, type, num, at.left, at.top, large);
+    if (!control.framed) return;
+    // A picture's frame is `FRM_SOLID` (pict.cpp:144) — one dark line two
+    // pixels out, round the picture as it now is rather than as it was read.
+    const size = pictNaturalSize(type, num, large);
+    const rect = size ? { ...at, right: at.left + size.w, bottom: at.top + size.h } : at;
+    const { ctx } = this;
+    ctx.strokeStyle = FRAME_DARK;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(rect.left - 2 + 0.5, rect.top - 2 + 0.5, width(rect) + 3, height(rect) + 3);
   }
 
   /**

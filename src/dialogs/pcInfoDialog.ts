@@ -112,11 +112,11 @@ function boostFor(pc: Player, skill: number): number {
 /**
  * Build the dialog. `pc-info.xml`'s Done closes it; the arrows step to the
  * next *living* PC and refill it in place, which is why they hold the dialog
- * open. The three "see" buttons open dialogs this port hasn't converted yet
- * and say so.
+ * open.
  */
 export function pcInfoDialog(
   ctx: CanvasRenderingContext2D, store: SheetStore, univ: Universe, pcNum: number,
+  onSee?: (what: PcInfoSee, pc: number) => void,
 ): XmlDialog {
   const dlg = new XmlDialog(ctx, store, getDialogDef('pc-info'));
   let which = pcNum;
@@ -137,13 +137,16 @@ export function pcInfoDialog(
   };
   dlg.attachHandler('left', step(-1));
   dlg.attachHandler('right', step(1));
-  // TODO(M7): display_pc's spell lists, pick_race_abil's traits page and
-  // display_alchemy's help text are three more dialogs to convert.
-  for (const name of ['seemage', 'seepriest', 'trait', 'seealch']) {
+  // The four "see" buttons open dialogs of their own on top of this one:
+  // `display_pc` for either spell list, `pick_race_abil` in display mode, and
+  // `display_alchemy` (boe.infodlg.cpp's `display_pc_info_event_filter`).
+  for (const name of ['seemage', 'seepriest', 'trait', 'seealch'] as const) {
     dlg.attachHandler(name, () => {
-      univ.addStringToBuf(`(${name} needs its own dialog yet)`);
+      onSee?.(name, which);
       return 'stay';
     });
   }
   return dlg;
 }
+
+export type PcInfoSee = 'seemage' | 'seepriest' | 'trait' | 'seealch';

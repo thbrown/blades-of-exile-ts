@@ -117,7 +117,9 @@ describe('parsing the shipped definitions', () => {
     if (take?.kind === 'button') {
       expect(take.type).toBe('regular');
       expect(take.label).toBe('Take');
-      expect(take.rect).toEqual({ top: 78, left: 426, bottom: 78, right: 426 });
+      // Written with only a top and left; the button's art gives it its size,
+      // as `setBtnType` does at parse time.
+      expect(take.rect).toEqual({ top: 78, left: 426, bottom: 101, right: 489 });
     }
     const job = def.byName.get('job1');
     expect(job?.kind).toBe('text');

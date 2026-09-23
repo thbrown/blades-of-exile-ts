@@ -40,6 +40,10 @@ import {
 import { setFieldErrorSink } from './dialogs/xmlDialog';
 import { PICT_CHOICE_DIALOG_DEFS } from './dialogs/pictChoiceDialog';
 import { SPEND_XP_DIALOG_DEFS, spendXpDialog } from './dialogs/spendXpDialog';
+import {
+  PARTY_EDITOR_DIALOG_DEFS, PartyEditorHost, confirmDeletePc, createPc, pickPcGraphic,
+  pickPcName, pickRaceAbil, startNewParty,
+} from './dialogs/partyEditor';
 import { XpMode } from './game/createPc';
 import { setErrorSink } from './game/showError';
 import { appendIarrayPref, getBoolPref, iarrayPrefContains } from './platform/prefs';
@@ -53,7 +57,7 @@ import { CastDialog } from './dialogs/castDialog';
 import { forcedCast } from './game/spellRepeat';
 import { GetItemsDialog } from './dialogs/getItemsDialog';
 import { placeSpellPattern } from './game/spellPatterns';
-import { GameMode, isCombat, isOut, isScrollable } from './game/modes';
+import { GameMode, isCombat, isOut, isScrollable, isTown } from './game/modes';
 import { Boom, setBoomSink } from './game/booms';
 import { FocusEvent, animPending, setAnimWaiter, setFocusSink } from './game/anim';
 import { Missile, setMissileSink } from './game/missileAnim';
@@ -78,7 +82,8 @@ import { TOWN_NUM_OUTDOORS } from './universe/party';
 import { FetchSource } from './fileio/source';
 import { InputRouter } from './platform/input';
 import { Snd, SoundPlayer } from './platform/sound';
-import { setGiveHelp, setLivingSound } from './universe/living';
+import { giveHelp, setGiveHelp, setLivingSound } from './universe/living';
+import { killPc } from './game/damage';
 import { BOE_HEIGHT, BOE_WIDTH, ToolbarButton } from './render/layout';
 
 import { CHROME_SHEETS, Screen } from './render/screen';
@@ -227,11 +232,14 @@ async function main(): Promise<void> {
     // its own falls back to (the scenario's own icon); `bigscenpics` is the
     // -lg variant, and `staticons` is PIC_STATUS.
     'scenpics', 'bigscenpics',
+    // draw_startup's picture, behind the party editor at the start of a game.
+    'startup',
   ];
   for (let i = 1; i <= 11; i++) sheets.push(`monst${i}`);
   const dialogNames = ['pc-info', 'quest-info', 'get-items', 'item-info', 'many-str', 'monster-info', 'job-board',
     'pick-potion', 'party-death', 'steal-item', ...STR_DIALOG_DEFS, ...NOTES_DIALOG_DEFS,
-    ...INPUT_DIALOG_DEFS, ...PICT_CHOICE_DIALOG_DEFS, ...SPEND_XP_DIALOG_DEFS];
+    ...INPUT_DIALOG_DEFS, ...PICT_CHOICE_DIALOG_DEFS, ...SPEND_XP_DIALOG_DEFS,
+    ...PARTY_EDITOR_DIALOG_DEFS];
   addTotal(1 /* opcodes */ + STRING_TABLES.length + dialogNames.length + sheets.length
     + (document.fonts ? 4 : 0) + 1 /* scenario.xml */);
 
@@ -285,7 +293,12 @@ async function main(): Promise<void> {
   // Transcript lines wait for their slot too, for the same reason: the C++
   // repaints the pane after the animation, not during it.
   univ.transcriptClock = animAt;
-  session.startNewGame();
+  // A new game chosen on the startup screen builds its party first — the
+  // C++'s `start_new_game`, which runs before a scenario is entered — so
+  // `startNewGame` (put_party_in_scen) waits for the editor, further down.
+  // A direct `?scenario=` link and a saved game skip the editor.
+  const buildParty = scenarioFromQuery() === null && openSlot === null;
+  if (!buildParty) session.startNewGame();
   const screen = new Screen(ctx, store);
   // `set_stat_window(ITEM_WIN_PC1)` from create_pc_graphics (boe.party.cpp:226)
   // — the panel's list and scroll limit are set before it is first drawn.
@@ -296,6 +309,9 @@ async function main(): Promise<void> {
     dialogs.draw();
   };
   const dialogs = new DialogHost(ctx, store, () => redraw());
+  // Exposed now rather than with the other handles at the end of `main`:
+  // a new party is built in dialogs before the game has even started.
+  Object.assign(window as unknown as Record<string, unknown>, { __dialogs: dialogs, __univ: univ });
 
   /**
    * `showError` / `showWarning` — for the game rules (`game/showError.ts`)
@@ -401,6 +417,79 @@ async function main(): Promise<void> {
       redraw,
     });
     return (await dialogs.runNested(dlg)) === 'keep';
+  };
+
+  const partyHost: PartyEditorHost = {
+    ctx, store, univ,
+    nest: (screen) => dialogs.runNested(screen),
+    spendXp: (who, mode) => spendXpFlow(who, mode),
+    redraw: () => redraw(),
+  };
+
+  /** Options › Change PC Graphic — `handle_new_pc_graphic` (boe.actions.cpp:4408). */
+  const newPcGraphicFlow = async (): Promise<void> => {
+    const choice = await selectPc(SelectPcMode.ANY, 'New graphic for who?');
+    if (choice < 6) await pickPcGraphic(partyHost, choice, 1);
+    redraw();
+  };
+
+  /** Options › Rename PC — `handle_rename_pc` (boe.actions.cpp:4418). */
+  const renamePcFlow = async (): Promise<void> => {
+    const choice = await selectPc(SelectPcMode.ANY, 'Rename who?');
+    if (choice < 6) await pickPcName(partyHost, choice);
+    redraw();
+  };
+
+  /**
+   * Options › Add a New PC — `handle_new_pc` (boe.actions.cpp:3698). Town
+   * only, and only in a town with a tavern.
+   */
+  const newPcFlow = async (): Promise<void> => {
+    if (!isTown(session.mode)) {
+      univ.addStringToBuf('Add PC: Town mode only.');
+    } else if (univ.party.freeSpace() === 6) {
+      univ.addStringToBuf('Add PC: You already have 6 PCs.');
+    } else if (univ.town?.record.hasTavern) {
+      giveHelp(56, 0);
+      await createPc(partyHost, 6, false);
+    } else {
+      univ.addStringToBuf(
+        'Add PC: You cannot add new characters in this town. Try in the town you started in.');
+    }
+    screen.itemWindow.setStatWindowForPc(univ, univ.curPc);
+    redraw();
+  };
+
+  /** Options › Delete PC — `handle_drop_pc` (boe.actions.cpp:3674). */
+  const dropPcFlow = async (): Promise<void> => {
+    if (!session.primeTime) {
+      univ.addStringToBuf('Delete PC: Finish what you are doing first.');
+    } else if (isCombat(session.mode)) {
+      univ.addStringToBuf('Delete PC: Not in combat.');
+    } else {
+      const choice = await selectPc(SelectPcMode.ANY, 'Delete who?');
+      if (choice < 6) {
+        if (await confirmDeletePc(partyHost)) {
+          univ.addStringToBuf('Delete PC: OK.');
+          killPc(univ, univ.party.pcs[choice]!, MainStatus.ABSENT);
+        } else {
+          univ.addStringToBuf('Delete PC: Cancelled.');
+        }
+      }
+    }
+    redraw();
+  };
+
+  /**
+   * File › New Game — `new_party` (boe.actions.cpp:3723): restart-game.xml,
+   * then back to the startup screen, where a new party is built. The startup
+   * screen is a page of its own here, so "back to it" is a navigation.
+   */
+  const newPartyFlow = async (): Promise<void> => {
+    const confirm = new XmlDialog(ctx, store, getDialogDef('restart-game'));
+    confirm.setText('warning', confirm.getText('warning').replace('{{action}}', 'Starting over'));
+    if ((await dialogs.runNested(confirm)) === 'cancel') return;
+    window.location.href = import.meta.env.BASE_URL;
   };
 
   /** `get_num_of_items` (boe.items.cpp:667) — how many out of a stack. */
@@ -1003,7 +1092,10 @@ async function main(): Promise<void> {
    */
   const showPcInfo = (which: number): void => {
     if (dialogs.active) return;
-    void dialogs.runScreen(pcInfoDialog(ctx, store, univ, which)).then(() => redraw());
+    void dialogs.runScreen(pcInfoDialog(ctx, store, univ, which, (what, pc) => {
+      if (what === 'trait') void pickRaceAbil(partyHost, univ.party.pcs[pc]!, 1);
+      else univ.addStringToBuf(`(${what} needs its own dialog yet)`);
+    })).then(() => redraw());
   };
 
   /** `print_cast_status` (boe.party.cpp) — why a PC can't cast, in words. */
@@ -2128,6 +2220,21 @@ async function main(): Promise<void> {
     return new Promise<void>((resolve) => { setTimeout(resolve, ms); });
   });
 
+  if (buildParty) {
+    hideLoadingUi();
+    screen.startupBackdrop = true;
+    redraw();
+    if (!(await startNewParty(partyHost))) {
+      // Cancelled, or nobody left: "if no PCs left, forget it" — back to the
+      // startup screen with no party in memory.
+      window.location.href = import.meta.env.BASE_URL;
+      return;
+    }
+    screen.startupBackdrop = false;
+    session.startNewGame();
+    screen.itemWindow.setStatWindowForPc(univ, univ.curPc);
+  }
+
   // A saved game chosen on the startup screen (or parked by a cross-scenario
   // load) is applied now that the world it belongs to is in place. It runs over
   // the new game `startNewGame` just began, which is exactly what
@@ -2163,13 +2270,7 @@ async function main(): Promise<void> {
       items: [
         {
           label: 'New Game',
-          action: () => {
-            // A reload *is* a new game, and is the one way to get a genuinely
-            // clean Universe without rebuilding every reference into it.
-            if (window.confirm('Start a new game? Anything unsaved will be lost.')) {
-              window.location.reload();
-            }
-          },
+          action: () => { void newPartyFlow(); },
         },
         {
           label: 'Open Game…',
@@ -2198,10 +2299,14 @@ async function main(): Promise<void> {
         },
       ],
     }, {
-      // The original's Options menu (boe.menus.hpp's OPTIONS_*); the PC
-      // management half of it is still to come.
+      // The original's Options menu (boe.menus.hpp's OPTIONS_*).
       label: 'Options',
       items: [
+        { label: 'Change PC Graphic…', action: () => { void newPcGraphicFlow(); } },
+        { label: 'Rename PC…', action: () => { void renamePcFlow(); } },
+        { label: 'Add a New PC…', action: () => { void newPcFlow(); } },
+        { label: 'Delete PC…', action: () => { void dropPcFlow(); } },
+        MENU_SEPARATOR,
         { label: 'Talk Notes', action: () => { void notesFlow('talk'); } },
         { label: 'Encounter Notes', action: () => { void notesFlow('encounter'); } },
       ],
