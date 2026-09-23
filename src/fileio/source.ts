@@ -1,7 +1,7 @@
 /**
  * ScenarioSource — where scenario files come from. One abstraction covers
- * bundled unpacked scenarios (fetch), uploaded .boes tarballs (in-memory,
- * later), and test fixtures (fs).
+ * bundled unpacked scenarios (fetch), installed .boes packages (in memory —
+ * `PackedSource`), and test fixtures (fs).
  */
 
 export interface ScenarioSource {

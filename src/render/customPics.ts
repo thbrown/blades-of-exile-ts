@@ -15,6 +15,7 @@
 
 import { Rect } from '../core/location';
 import { Scenario } from '../data/scenario';
+import { ScenarioSource } from '../fileio/source';
 import { SheetStore, calcRect } from './sheets';
 
 export interface CustomGraphic {
@@ -77,13 +78,13 @@ export function customSheetCount(scen: Scenario): number {
  * the registry, so one scenario's pictures never show in the next.
  */
 export async function loadCustomSheets(
-  store: SheetStore, scen: Scenario, baseUrl: string,
+  store: SheetStore, scen: Scenario, src: ScenarioSource,
 ): Promise<void> {
   const count = customSheetCount(scen);
   const sizes: { w: number; h: number }[] = [];
   for (let i = 0; i < count; i++) {
     try {
-      const img = await store.load(customSheetName(i), baseUrl, `sheet${i}`);
+      const img = await store.loadBytes(customSheetName(i), await src.getBinary(`graphics/sheet${i}.png`));
       sizes.push({ w: img.width, h: img.height });
     } catch {
       break;

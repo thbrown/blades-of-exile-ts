@@ -70,8 +70,10 @@
 ## Current state
 
 **Part 1 is finished (2026-09-23)**: M0–M8 are closed, and the player needs
-nothing that says "not implemented yet". See "Handoff to Part 2" at the very
-bottom for where the Exile 3 work starts. The history below is kept as it was.
+nothing that says "not implemented yet". **Part 1b, the scenario library, is
+the live work** (community scenarios from a GCP bucket; see `PLAN.md` and
+"Part 1b" at the very bottom), and comes before Part 2. "Handoff to Part 2" at
+the bottom says where the Exile 3 work starts. The history below is kept as it was.
 
 **M8, fidelity hardening, was the live milestone (2026-09-05).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
@@ -11811,3 +11813,42 @@ needs to know:
   replay corpus (`node scripts/diverge.mjs --all --refresh`) only covers the
   four BoE scenarios, but anything touching the engine should still leave it
   at 51 / 1,231,440.
+
+## Part 1b: the scenario library — started 2026-09-23
+
+The plan is in `PLAN.md` ("Part 1b"): community scenarios from Spiderweb's
+archive, converted and served from a GCP bucket. The steps are `.boes` loading,
+a smoke harness, the legacy `.exs` importer, `.bmp` graphics, then the publish
+pipeline and catalog.
+
+**Step 1, packed `.boes` loading, is done (2026-09-23).**
+- `fileio/packedSource.ts`: `PackedSource` opens a `.boes` in memory, gzipped
+  or bare tar, with every path under `scenario/` (`load_scenario_v2`'s
+  `is_packed` branch). `scenarioIdFromFileName` makes the id that saves and
+  `?scenario=` use.
+- `platform/scenarioStore.ts`: installed packages live in IndexedDB. It is a
+  **separate database** (`exile-js-scenarios`), so the save store needed no
+  schema upgrade. Title and teaser are stored beside the bytes, so the startup
+  screen lists them without unpacking.
+- The startup screen has **"Add a scenario…"**. An id that matches a bundled
+  scenario is refused rather than shadowed. `main.ts` fetches a bundled id file
+  by file and takes anything else from the store, so `?scenario=<installed-id>`
+  and a save in an installed scenario both work after a reload.
+- `loadCustomSheets` now reads `graphics/sheetN.png` through the
+  `ScenarioSource` (`SheetStore.loadBytes`), so a package's own graphics come
+  with it.
+- `scripts/pack-boes.mjs <dir> [out.boes]` packs an unpacked tree.
+- Tests: `test/packedSource.test.ts` checks that valleydy packed and loaded
+  deep-equals valleydy loaded unpacked. It also opens two real OBoE-written
+  packages, now in `test/fixtures/boes/` (copied from
+  `exile-wasm/test/replays/scenarios/`).
+
+**Gotchas (2026-09-23):**
+- A new game from the startup screen shows the party editor *before*
+  `window.__session` exists, so an automated check of a fresh start should wait
+  for the editor's dialog, as `verify-screen.mjs` does, not for `__session`.
+- `verify-screen.mjs` counts startup buttons. "Add a scenario…" has the
+  `startup-choice` class too, plus `startup-add`, which the count excludes.
+
+**Next: step 2, the smoke harness**, then the `.exs` importer against the 1997
+files.

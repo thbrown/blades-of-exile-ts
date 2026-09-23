@@ -48,6 +48,12 @@ export function showStartupScreen(
   host: HTMLElement,
   scenarios: readonly StartupScenario[],
   saves: readonly StartupSave[],
+  /**
+   * Ask for a scenario file and install it; resolves null if the picker was
+   * dismissed and throws with a reason if the file isn't a scenario. Absent
+   * when there's nowhere to keep one (no IndexedDB).
+   */
+  importScenario?: () => Promise<StartupScenario | null>,
 ): Promise<StartupChoice> {
   return new Promise((resolve) => {
     const root = el('div', 'startup');
@@ -77,14 +83,41 @@ export function showStartupScreen(
 
     root.append(el('h2', undefined, 'Start a new game'));
     const list = el('div', 'startup-list');
-    for (const scen of scenarios) {
+    const scenarioButton = (scen: StartupScenario): HTMLElement => {
       const button = el('button', 'startup-choice');
       button.append(el('strong', undefined, scen.title));
       if (scen.blurb !== '') button.append(el('small', undefined, scen.blurb));
       button.addEventListener('click', () => { choose({ scenarioId: scen.id }); });
-      list.append(button);
-    }
+      return button;
+    };
+    for (const scen of scenarios) list.append(scenarioButton(scen));
     root.append(list);
+
+    if (importScenario !== undefined) {
+      const add = el('button', 'startup-choice startup-add');
+      add.append(el('strong', undefined, 'Add a scenario…'));
+      add.append(el('small', undefined, 'A packed .boes file from Open Blades of Exile'));
+      const problem = el('p', 'startup-problem');
+      problem.hidden = true;
+      add.addEventListener('click', () => {
+        problem.hidden = true;
+        importScenario().then((scen) => {
+          if (scen === null) return;
+          // Installing an id that's already listed replaces it.
+          for (const b of list.querySelectorAll<HTMLElement>('[data-id]')) {
+            if (b.dataset['id'] === scen.id) b.remove();
+          }
+          const button = scenarioButton(scen);
+          button.dataset['id'] = scen.id;
+          list.append(button);
+          button.focus();
+        }).catch((err: unknown) => {
+          problem.textContent = `That file couldn't be added: ${err instanceof Error ? err.message : String(err)}`;
+          problem.hidden = false;
+        });
+      });
+      root.append(add, problem);
+    }
 
     host.append(root);
     // So Enter or a stray keypress doesn't fall through to nothing, and the

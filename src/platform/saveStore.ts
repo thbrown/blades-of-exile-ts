@@ -11,6 +11,7 @@
  */
 
 import { SavePreview, readSavePreview } from '../fileio/saveIo';
+import { pickLocalFile } from './pickFile';
 
 const DB_NAME = 'exile-js';
 const DB_VERSION = 1;
@@ -110,36 +111,8 @@ export function exportSave(name: string, data: Uint8Array): void {
   setTimeout(() => { URL.revokeObjectURL(url); }, 1000);
 }
 
-/**
- * Ask for an `.exg` from the local disk. Resolves null if the picker is
- * dismissed — which, since browsers fire no event for that, is detected by the
- * window regaining focus with nothing chosen.
- */
-export function importSave(): Promise<{ name: string; data: Uint8Array } | null> {
-  return new Promise((resolve) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.exg,application/octet-stream';
-    let settled = false;
-    const finish = (value: { name: string; data: Uint8Array } | null): void => {
-      if (settled) return;
-      settled = true;
-      resolve(value);
-    };
-    input.onchange = () => {
-      const file = input.files?.[0];
-      if (file === undefined) {
-        finish(null);
-        return;
-      }
-      void file.arrayBuffer().then((buf) => {
-        finish({ name: file.name.replace(/\.exg$/i, ''), data: new Uint8Array(buf) });
-      });
-    };
-    window.addEventListener('focus', () => {
-      // Give the change event a moment to arrive first.
-      setTimeout(() => { finish(null); }, 500);
-    }, { once: true });
-    input.click();
-  });
+/** Ask for an `.exg` from the local disk; null if the picker is dismissed. */
+export async function importSave(): Promise<{ name: string; data: Uint8Array } | null> {
+  const picked = await pickLocalFile('.exg,application/octet-stream');
+  return picked === null ? null : { name: picked.fileName.replace(/\.exg$/i, ''), data: picked.data };
 }

@@ -52,6 +52,15 @@ export class SheetStore {
     return bmp;
   }
 
+  /** Keep already-fetched PNG bytes as `name` — a packed scenario's own sheets. */
+  async loadBytes(name: string, png: Uint8Array): Promise<ImageBitmap> {
+    const existing = this.images.get(name);
+    if (existing) return existing;
+    const bmp = await createImageBitmap(new Blob([png as BlobPart], { type: 'image/png' }));
+    this.images.set(name, bmp);
+    return bmp;
+  }
+
   get(name: string): ImageBitmap | undefined {
     return this.images.get(name);
   }

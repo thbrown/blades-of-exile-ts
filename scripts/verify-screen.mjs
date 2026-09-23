@@ -35,12 +35,14 @@ await page.goto(process.argv[2] ?? 'http://localhost:5199/?pace=1');
 // works: the four bundled scenarios are offered by their real titles, and
 // clicking one starts the game.
 await page.waitForSelector('.startup .startup-choice', { timeout: 20000 });
+// The scenarios and saves, not the "Add a scenario…" button beside them.
 const startupChoices = await page.evaluate(() =>
-  [...document.querySelectorAll('.startup .startup-choice strong')].map((e) => e.textContent));
+  [...document.querySelectorAll('.startup .startup-choice:not(.startup-add) strong')].map((e) => e.textContent));
+const startupCanAdd = await page.evaluate(() => document.querySelector('.startup .startup-add') !== null);
 await page.screenshot({ path: `${SHOTS}/00-startup.png` });
 const valley = page.locator('.startup .startup-choice', { hasText: 'Valley of Dying Things' });
 await valley.first().click();
-console.log('STARTUP:', JSON.stringify(startupChoices));
+console.log('STARTUP:', JSON.stringify(startupChoices), 'canAdd:', startupCanAdd);
 
 const shot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png`, clip: { x: 12, y: 12, width: 1210, height: 860 } });
 
@@ -3118,6 +3120,7 @@ const ok =
   // the whole path — menu, picker, load — is driven for real.
   // The startup screen names all four bundled scenarios and gets out of the way.
   startupChoices.length === 4 &&
+  startupCanAdd &&
   startupChoices.includes('Valley of Dying Things') &&
   startupGone === true &&
   // …and comes back offering the saved game, which resumes into its own world.

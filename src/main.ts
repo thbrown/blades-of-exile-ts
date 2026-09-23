@@ -86,11 +86,16 @@ import {
   setAutosaveSink,
 } from './game/autosave';
 import { MENU_SEPARATOR, MenuItem, installMenuBar } from './platform/menu';
-import { showStartupScreen } from './platform/startup';
+import { StartupScenario, showStartupScreen } from './platform/startup';
+import { pickLocalFile } from './platform/pickFile';
+import {
+  getInstalledScenario, installScenario, listInstalledScenarios, scenarioStoreAvailable,
+} from './platform/scenarioStore';
+import { scenarioIdFromFileName } from './fileio/packedSource';
 import { readScenarioFromXml } from './fileio/scenarioXml';
 import { parseXmlDoc } from './fileio/xml';
 import { TOWN_NUM_OUTDOORS } from './universe/party';
-import { FetchSource } from './fileio/source';
+import { FetchSource, ScenarioSource } from './fileio/source';
 import { InputRouter } from './platform/input';
 import { Snd, SoundPlayer } from './platform/sound';
 import { loadCustomSheets } from './render/customPics';
@@ -136,6 +141,22 @@ const BUNDLED_SCENARIOS = ['valleydy', 'stealth', 'zakhazi', 'busywork'];
  * and the page reopened on the right scenario, which `main` then notices.
  */
 const PENDING_SAVE_KEY = 'exile-js.pendingSave';
+
+/**
+ * The startup screen's "Add a scenario…": pick a `.boes` and install it under
+ * an id taken from its file name. A bundled id is refused rather than shadowed,
+ * since the bundled copy is what would load.
+ */
+async function importScenarioFile(): Promise<StartupScenario | null> {
+  const picked = await pickLocalFile('.boes');
+  if (picked === null) return null;
+  const id = scenarioIdFromFileName(picked.fileName);
+  if (BUNDLED_SCENARIOS.includes(id)) {
+    throw new Error(`"${id}" is already one of the bundled scenarios`);
+  }
+  const scen = await installScenario(id, picked.data);
+  return { id: scen.id, title: scen.title, blurb: scen.blurb };
+}
 
 /**
  * `?pace=` overrides the combat animation speed: 1 is normal, larger is slow
@@ -188,6 +209,12 @@ async function main(): Promise<void> {
         return { id, title: id, blurb: '' };
       }
     }));
+    // The player's own library follows the bundled four.
+    if (scenarioStoreAvailable()) {
+      for (const scen of await listInstalledScenarios()) {
+        headers.push({ id: scen.id, title: scen.title, blurb: scen.blurb });
+      }
+    }
     const saves = saveStoreAvailable() ? await listSaves() : [];
     const choice = await showStartupScreen(
       document.getElementById('startup-host')!,
@@ -202,6 +229,7 @@ async function main(): Promise<void> {
           ?? slot.preview.scenarioId} — day ${Math.floor(slot.preview.age / 3700) + 1}`
           + ` (${new Date(slot.savedAt).toLocaleString()})`,
       })),
+      scenarioStoreAvailable() ? importScenarioFile : undefined,
     );
     name = choice.scenarioId;
     openSlot = choice.slot ?? null;
@@ -279,15 +307,24 @@ async function main(): Promise<void> {
     loadStringTables(fetchText),
     loadDialogDefs(fetchText, dialogNames),
   ]);
-  const scen = await loadScenario(
-    new FetchSource(`${import.meta.env.BASE_URL}scenarios/${name}/`, tick),
-    opcodes,
-    addTotal,
-  );
+  // A bundled scenario is fetched file by file; anything else is a package
+  // the player installed, already whole in IndexedDB.
+  const bundledUrl = `${import.meta.env.BASE_URL}scenarios/${name}/`;
+  let scenSource: ScenarioSource;
+  if (BUNDLED_SCENARIOS.includes(name)) {
+    scenSource = new FetchSource(bundledUrl, tick);
+  } else {
+    const installed = scenarioStoreAvailable() ? await getInstalledScenario(name) : null;
+    if (installed === null) throw new Error(`the scenario "${name}" isn't installed`);
+    scenSource = installed;
+  }
+  const scen = await loadScenario(scenSource, opcodes, addTotal);
 
   await Promise.all([sheetsReady, fontsReady]);
-  // The scenario's own graphics — `load_spec_graphics_v2`.
-  await loadCustomSheets(store, scen, `${import.meta.env.BASE_URL}scenarios/${name}/graphics/`);
+  // The scenario's own graphics — `load_spec_graphics_v2`. Not ticked: how
+  // many sheets there are is only known now, after the bar was sized.
+  await loadCustomSheets(
+    store, scen, scenSource instanceof FetchSource ? new FetchSource(bundledUrl) : scenSource);
 
   const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
   const session = new GameSession(univ);

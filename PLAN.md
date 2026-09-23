@@ -105,6 +105,63 @@ Effort weighting: M5 ≈ 30%, M4+M6 ≈ 30%, M1–M3 ≈ 30%, rest ≈ 10%.
 - `web/events.js`, `web/savemanager.js`, `web/menu.js`, `web/filedialog.js` — liftable browser-layer code
 - `test/files/`, `test/replays/`, `src/tools/replay.cpp` — test fixtures and replay format
 
+# Part 1b: The scenario library (before Part 2)
+
+## Context
+
+Part 1 plays the four bundled scenarios. The goal here is to play the
+**community scenarios**, served from a cloud bucket to anyone who opens the
+page. The source is Spiderweb's archive,
+https://www.spiderwebsoftware.com/blades/scen_list.html (surveyed 2026-09-23):
+about 158 scenarios across three tables (`scen_stuff/solid.html`,
+`untried.html`, `first_efforts.html`). Every download sits in one flat
+directory, `http://www.spiderwebsoftware.com/ftp/user_scen/`, and almost all are
+`.zip` files (one is `.sit`). Each zip holds the scenario as a **legacy `.exs`**
+and, when it has custom graphics, `<name>.bmp` (Windows) and `<name>.meg` (Mac
+resource fork). Each table row lists category, size, difficulty, content
+rating (G/PG/R), description, review score and author. There is no level
+range, platform or date. The pages say nothing about redistribution, so
+**hosting needs author credit and a way for authors to ask for removal**.
+Another archive, "Alexandria" (http://www.personal.psu.edu/bxb11/boe/alexandria/),
+is linked as "nearly all Blades scenarios"; it has not been looked at yet.
+
+**Decisions made with user:** storage is a **GCP bucket**. The scenario editor
+port, and letting people upload their own scenarios to the bucket, come
+**after Part 2**, because Exile 3 may need editor features the original lacks.
+When uploads do come, **the bucket must never be publicly writable**: uploads go
+through signed, size-limited, content-checked requests, and nothing uploaded is
+ever executed. The rule is "no chia mining on the bucket".
+
+## Steps
+
+1. **Packed `.boes` loading — done 2026-09-23.** `fileio/packedSource.ts`
+   reads a package from memory, `platform/scenarioStore.ts` keeps installed
+   packages in IndexedDB, and the startup screen has "Add a scenario…".
+   `scripts/pack-boes.mjs` packs an unpacked tree.
+2. **Headless smoke harness** (`scripts/scenario-smoke.mjs`). For each
+   scenario: load every town and sector, parse every node, run `on-init`,
+   enter the start town, and fail on any throw. Old scenarios will use
+   opcode combinations the bundled four never hit.
+3. **Legacy `.exs` importer** (`src/fileio/legacy/`, shared by the browser and
+   Node). Port `oldstructs.hpp`, `porting.cpp` (byte order: Mac files are flag
+   bytes 10/20/30/40 and big-endian, Windows files are 20/40/60/80 and
+   little-endian) and the `import_legacy` family. **The oracle is already on
+   disk**: `../boe-source-1997/*/` has VALLEYDY/STEALTH/ZAKHAZI.EXS in *both*
+   byte orders, and `public/scenarios/` has OBoE's conversion of the same three.
+   Import and deep-compare. Also audit OBoE's `is_legacy` switches in the
+   engine (about 16 sites).
+4. **Custom graphics.** Windows `.bmp`, with white made transparent
+   (`load_spec_graphics_v1`), converted into the sheet layout. Mac `.meg` (a
+   PICT inside a resource fork) only if the archive shows scenarios that
+   ship no `.bmp`.
+5. **Publish pipeline and catalog.** An offline Node tool: zip → `.exs` →
+   `.boes`, smoke-tested, then uploaded to the bucket with a `catalog.json`
+   (id, title, author, blurb, category, difficulty, content rating, size,
+   credit/source URL). The bucket is public-read with CORS for the site's
+   origin, and write access is only for the publishing credentials. The
+   startup screen lists the catalog and downloads a scenario into the step 1
+   store on demand.
+
 # Part 2: Playing Exile 3 in exile-js
 
 ## Context
