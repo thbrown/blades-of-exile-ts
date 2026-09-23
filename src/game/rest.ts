@@ -37,6 +37,13 @@ export function doRest(
   const ageBefore = univ.party.age;
   univ.party.age += length;
   if (TRACE_AGE) console.log(`      [age] do_rest +${length} -> ${univ.party.age}`);
+  // A legacy scenario rests the old way: heal, restore, nothing else
+  // (boe.actions.cpp:3315) — no disease, no clearing of spell effects.
+  if (univ.scenario.isLegacy) {
+    univ.party.healAll(hpRestore);
+    univ.party.restoreSpAll(spRestore);
+    return;
+  }
 
   // "If some players diseased, allow it to progress a bit" — three bouts'
   // worth, each a `get_ran(1,1,10)` and a `get_ran(1,0,7)` per sufferer.

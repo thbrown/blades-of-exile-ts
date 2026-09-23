@@ -17,6 +17,7 @@ import { Rect } from '../core/location';
 import { Scenario } from '../data/scenario';
 import { ScenarioSource } from '../fileio/source';
 import { SheetStore, calcRect } from './sheets';
+import { Rgba } from '../fileio/legacy/bmp';
 
 export interface CustomGraphic {
   sheetName: string;
@@ -85,6 +86,30 @@ export async function loadCustomSheets(
   for (let i = 0; i < count; i++) {
     try {
       const img = await store.loadBytes(customSheetName(i), await src.getBinary(`graphics/sheet${i}.png`));
+      sizes.push({ w: img.width, h: img.height });
+    } catch {
+      break;
+    }
+  }
+  setCustomSheets(sizes);
+}
+
+/**
+ * Install sheets a package brought with it: PNG bytes from a `.boes`, or the
+ * pixels cut from a legacy `.bmp` (`legacySheets`). Same registry as
+ * `loadCustomSheets`, so a scenario with none clears the last one's.
+ */
+export async function installCustomSheets(
+  store: SheetStore, sheets: { png?: Uint8Array; rgba?: Rgba }[],
+): Promise<void> {
+  const sizes: { w: number; h: number }[] = [];
+  for (let i = 0; i < sheets.length; i++) {
+    const sheet = sheets[i]!;
+    try {
+      const img = sheet.png
+        ? await store.loadBytes(customSheetName(i), sheet.png)
+        : store.put(customSheetName(i), await createImageBitmap(
+          new ImageData(sheet.rgba!.data as Uint8ClampedArray<ArrayBuffer>, sheet.rgba!.width, sheet.rgba!.height)));
       sizes.push({ w: img.width, h: img.height });
     } catch {
       break;

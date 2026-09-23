@@ -305,10 +305,9 @@ export function doMageSpell(
       const allIdent = univ.party.pcs.every(
         (p) => p.items.every((it) => it.variety === ItemType.NO_ITEM || it.ident));
       if (!freebie && !allIdent) pc.curSp -= info.cost ?? 0;
-      // `!univ.scenario.is_legacy && is_town() && !all_identified` — legacy is
-      // always false for the XML format this port reads (see
-      // `specials/context.ts`), so the gate is the town and the work left.
-      if (session.inTown && !allIdent) {
+      // `!univ.scenario.is_legacy && is_town() && !all_identified` — a legacy
+      // scenario keeps the old spell, which identifies everything at once.
+      if (!univ.scenario.isLegacy && session.inTown && !allIdent) {
         univ.addStringToBuf('Select items to identify. Press Space');
         univ.addStringToBuf('   when done.');
         session.startItemTarget(ItemShopMode.IDENTIFY);

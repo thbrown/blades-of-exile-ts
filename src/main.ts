@@ -87,18 +87,20 @@ import {
 } from './game/autosave';
 import { MENU_SEPARATOR, MenuItem, installMenuBar } from './platform/menu';
 import { StartupScenario, showStartupScreen } from './platform/startup';
-import { pickLocalFile } from './platform/pickFile';
 import {
-  getInstalledScenario, installScenario, listInstalledScenarios, scenarioStoreAvailable,
+  InstalledScenario, getInstalledScenario, installScenario, listInstalledScenarios,
+  scenarioStoreAvailable, setScenarioPreview,
 } from './platform/scenarioStore';
-import { scenarioIdFromFileName } from './fileio/packedSource';
+import { LoadedPackage, identifyScenarioFiles, loadScenarioPackage } from './fileio/scenarioPackage';
+import { Scenario } from './data/scenario';
 import { readScenarioFromXml } from './fileio/scenarioXml';
 import { parseXmlDoc } from './fileio/xml';
 import { TOWN_NUM_OUTDOORS } from './universe/party';
-import { FetchSource, ScenarioSource } from './fileio/source';
+import { FetchSource } from './fileio/source';
 import { InputRouter } from './platform/input';
 import { Snd, SoundPlayer } from './platform/sound';
-import { loadCustomSheets } from './render/customPics';
+import { installCustomSheets, loadCustomSheets } from './render/customPics';
+import { captureTerrainView } from './render/preview';
 import { changeCursor, cursorCss } from './platform/cursors';
 import { giveHelp, setGiveHelp, setLivingSound } from './universe/living';
 import { killPc } from './game/damage';
@@ -143,19 +145,33 @@ const BUNDLED_SCENARIOS = ['valleydy', 'stealth', 'zakhazi', 'busywork'];
 const PENDING_SAVE_KEY = 'exile-js.pendingSave';
 
 /**
- * The startup screen's "Add a scenario…": pick a `.boes` and install it under
- * an id taken from its file name. A bundled id is refused rather than shadowed,
- * since the bundled copy is what would load.
+ * The startup screen's "Add a scenario…" and drag-and-drop: install every
+ * scenario among the files — a `.boes`, an `.exs` with or without its `.bmp`,
+ * or a zip of those. A bundled id is refused rather than shadowed, since the
+ * bundled copy is what would load.
  */
-async function importScenarioFile(): Promise<StartupScenario | null> {
-  const picked = await pickLocalFile('.boes');
-  if (picked === null) return null;
-  const id = scenarioIdFromFileName(picked.fileName);
-  if (BUNDLED_SCENARIOS.includes(id)) {
-    throw new Error(`"${id}" is already one of the bundled scenarios`);
+async function importScenarioFiles(files: { name: string; data: Uint8Array }[]): Promise<StartupScenario[]> {
+  const found = identifyScenarioFiles(files);
+  if (found.length === 0) {
+    throw new Error('no Blades of Exile scenario (.exs or .boes) in '
+      + (files.length === 1 ? files[0]!.name : `those ${files.length} files`));
   }
-  const scen = await installScenario(id, picked.data);
-  return { id: scen.id, title: scen.title, blurb: scen.blurb };
+  const added: StartupScenario[] = [];
+  for (const pkg of found) {
+    if (BUNDLED_SCENARIOS.includes(pkg.id)) {
+      throw new Error(`"${pkg.id}" is already one of the bundled scenarios`);
+    }
+    added.push(startupEntry(await installScenario(pkg)));
+  }
+  return added;
+}
+
+/** An installed scenario as the startup screen lists it. */
+function startupEntry(scen: InstalledScenario): StartupScenario {
+  return {
+    id: scen.id, title: scen.title, blurb: scen.blurb, icon: scen.introPic,
+    ...(scen.preview ? { preview: URL.createObjectURL(new Blob([scen.preview as BlobPart], { type: 'image/png' })) } : {}),
+  };
 }
 
 /**
@@ -202,7 +218,11 @@ async function main(): Promise<void> {
       try {
         const url = `${import.meta.env.BASE_URL}scenarios/${id}/scenario.xml`;
         const hdr = readScenarioFromXml(await parseXmlDoc(await (await fetch(url)).text(), url));
-        return { id, title: hdr.title, blurb: hdr.teasers.find((t) => t !== '') ?? '' };
+        return {
+          id, title: hdr.title, blurb: hdr.teasers.find((t) => t !== '') ?? '', icon: hdr.introPic,
+          // Made by scripts/scenario-previews.mjs; the card drops it if missing.
+          preview: `${import.meta.env.BASE_URL}scenarios/${id}/preview.png`,
+        };
       } catch {
         // A scenario that won't even parse its header is still offered by id,
         // so the screen never comes up empty because of one bad directory.
@@ -210,10 +230,9 @@ async function main(): Promise<void> {
       }
     }));
     // The player's own library follows the bundled four.
+    const headersAll: StartupScenario[] = headers;
     if (scenarioStoreAvailable()) {
-      for (const scen of await listInstalledScenarios()) {
-        headers.push({ id: scen.id, title: scen.title, blurb: scen.blurb });
-      }
+      for (const scen of await listInstalledScenarios()) headersAll.push(startupEntry(scen));
     }
     const saves = saveStoreAvailable() ? await listSaves() : [];
     const choice = await showStartupScreen(
@@ -229,7 +248,7 @@ async function main(): Promise<void> {
           ?? slot.preview.scenarioId} — day ${Math.floor(slot.preview.age / 3700) + 1}`
           + ` (${new Date(slot.savedAt).toLocaleString()})`,
       })),
-      scenarioStoreAvailable() ? importScenarioFile : undefined,
+      scenarioStoreAvailable() ? importScenarioFiles : undefined,
     );
     name = choice.scenarioId;
     openSlot = choice.slot ?? null;
@@ -310,21 +329,28 @@ async function main(): Promise<void> {
   // A bundled scenario is fetched file by file; anything else is a package
   // the player installed, already whole in IndexedDB.
   const bundledUrl = `${import.meta.env.BASE_URL}scenarios/${name}/`;
-  let scenSource: ScenarioSource;
-  if (BUNDLED_SCENARIOS.includes(name)) {
-    scenSource = new FetchSource(bundledUrl, tick);
+  const isBundled = BUNDLED_SCENARIOS.includes(name);
+  let scen: Scenario;
+  let packageSheets: LoadedPackage['sheets'] = [];
+  let installedPreview = true;
+  if (isBundled) {
+    scen = await loadScenario(new FetchSource(bundledUrl, tick), opcodes, addTotal);
   } else {
     const installed = scenarioStoreAvailable() ? await getInstalledScenario(name) : null;
     if (installed === null) throw new Error(`the scenario "${name}" isn't installed`);
-    scenSource = installed;
+    const loaded = await loadScenarioPackage(installed, opcodes, addTotal);
+    scen = loaded.scenario;
+    packageSheets = loaded.sheets;
+    for (const w of loaded.warnings) console.warn(`${name}: ${w}`);
+    installedPreview = (await listInstalledScenarios()).find((s) => s.id === name)?.preview !== undefined;
   }
-  const scen = await loadScenario(scenSource, opcodes, addTotal);
 
   await Promise.all([sheetsReady, fontsReady]);
-  // The scenario's own graphics — `load_spec_graphics_v2`. Not ticked: how
-  // many sheets there are is only known now, after the bar was sized.
-  await loadCustomSheets(
-    store, scen, scenSource instanceof FetchSource ? new FetchSource(bundledUrl) : scenSource);
+  // The scenario's own graphics — `load_spec_graphics_v2`, or the legacy
+  // `.bmp` cut into sheets. Not ticked: how many sheets there are is only
+  // known now, after the bar was sized.
+  if (isBundled) await loadCustomSheets(store, scen, new FetchSource(bundledUrl));
+  else await installCustomSheets(store, packageSheets);
 
   const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
   const session = new GameSession(univ);
@@ -2497,6 +2523,12 @@ async function main(): Promise<void> {
   hideLoadingUi();
   setStatus();
   redraw();
+  // An installed scenario's first fresh start leaves behind a picture of where
+  // it begins, for the startup screen. Taken now, before anything the
+  // scenario opens with can put a dialog over it.
+  if (!isBundled && !installedPreview && openSlot === null && scenarioStoreAvailable()) {
+    void captureTerrainView(canvas).then((png) => (png ? setScenarioPreview(name, png) : undefined));
+  }
   setInterval(() => {
     screen.animFrame++;
     redraw();

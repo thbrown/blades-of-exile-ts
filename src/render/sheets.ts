@@ -61,6 +61,12 @@ export class SheetStore {
     return bmp;
   }
 
+  /** Keep an already-decoded image as `name`; returns it. */
+  put(name: string, bmp: ImageBitmap): ImageBitmap {
+    this.images.set(name, bmp);
+    return bmp;
+  }
+
   get(name: string): ImageBitmap | undefined {
     return this.images.get(name);
   }

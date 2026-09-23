@@ -370,6 +370,8 @@ export async function ifThenSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
     }
 
     case SpecType.IF_CONTEXT:
+      // The old block nodes this replaces printed their message (boe.specials.cpp:3820).
+      if (univ.scenario.isLegacy) checkMess = true;
       if (ctx.whichMode === (spec.ex1a as SpecCtx)) {
         // For the three movement contexts this also decides whether to block.
         if (ctx.whichMode <= SpecCtx.COMBAT_MOVE) {

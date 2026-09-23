@@ -283,6 +283,8 @@ export function defaultTarget(
       case SpecCtx.KILL_MONST: case SpecCtx.SEE_MONST: case SpecCtx.MONST_SPEC_ABIL:
       case SpecCtx.ATTACKED_MELEE: case SpecCtx.ATTACKING_MELEE:
       case SpecCtx.ATTACKED_RANGE: case SpecCtx.ATTACKING_RANGE:
+        // A legacy scenario always meant the party (boe.specials.cpp:4771).
+        if (univ.scenario.isLegacy) return TARGET_PARTY;
         // "The monster/PC on the trigger space is the target" — either kind.
         return targetIndexAt(univ, where, false) ?? TARGET_PARTY;
       case SpecCtx.TARGET: case SpecCtx.USE_SPACE: case SpecCtx.HAIL:
@@ -292,8 +294,8 @@ export function defaultTarget(
         break;
     }
   }
-  // `is_legacy` is always false for the XML format this port reads.
-  if (isCombat(session.mode)) return univ.curPc;
+  // "originally, it always defaulted to whole party" — hence the legacy flag.
+  if (isCombat(session.mode) && !univ.scenario.isLegacy) return univ.curPc;
   if (!univ.party.isSplit()) return TARGET_PARTY;
   // `cParty::pc_present()` (party.cpp:1230): the single present member, or the
   // party when none or more than one is. Note the C++ exempts AFFECT_DEADNESS

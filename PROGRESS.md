@@ -11850,5 +11850,52 @@ pipeline and catalog.
 - `verify-screen.mjs` counts startup buttons. "Add a scenario…" has the
   `startup-choice` class too, plus `startup-add`, which the count excludes.
 
-**Next: step 2, the smoke harness**, then the `.exs` importer against the 1997
-files.
+**Steps 2–4 are done too (2026-09-23): legacy scenarios play.**
+
+- **`.exs` importer** (`src/fileio/legacy/`): `structs.ts` reads the
+  `oldstructs.hpp` records in the file's byte order, `convert.ts` is the
+  `import_legacy` family, and `loadLegacy.ts` is `load_scenario_v1`. It builds
+  what OBoE builds when it plays an `.exs` directly (C++ shapes: 50 special
+  locs with `LOC_UNUSED`, 20 timers, 3 attacks), with `isLegacy` set.
+- **The oracle is the C++ itself.** `tools/cppharness/scendump.cpp` is a
+  `BOE_DUMP_SCEN` mode of the harness binary (run it with `dump-scen.sh <file>`)
+  that prints the loaded `cScenario` as JSON with this port's field names.
+  `test/legacyImport.test.ts` diffs the two: **171/171 match** (3 originals
+  always, plus the 168 archive files with `LEGACY_ARCHIVE=1`). The exceptions
+  are in DIVERGENCES.md #6.
+- **`is_legacy`'s six engine gates** are ported: resting (heal only), Identify
+  (instant), boats not tripping specials, IF_CONTEXT printing its message, and
+  the two special-target defaults.
+- **Packages** (`fileio/scenarioPackage.ts`): `identifyScenarioFiles` takes a
+  `.boes`, an `.exs` (+ `.bmp`), or a zip of those, and `loadScenarioPackage`
+  loads either kind. Custom graphics: `legacy/bmp.ts` (8/24-bit, which is
+  everything the archive uses) and `legacy/legacySheets.ts` (cut into 280×360
+  sheets, white transparent).
+- **Startup screen**: cards with a picture. The picture is where a new game
+  starts, or the scenario's `scenpics` icon when there is none. "Add a
+  scenario…" takes several files, and files can be dropped anywhere on the
+  screen. The bundled four ship `preview.png` (`scripts/scenario-previews.mjs`
+  renders them in Chromium). An installed scenario captures its own preview on
+  its first fresh start (`render/preview.ts`).
+- `scripts/fetch-archive.mjs` downloads the archive into `library/`
+  (gitignored). `test/archiveSmoke.test.ts` (`LEGACY_ARCHIVE=1`) loads all 156
+  zips, starts a game, walks, and enters every town: all pass.
+
+**Gotchas (2026-09-23, legacy):**
+- **The bundled four are not an oracle for the importer.** OBoE's developers
+  re-saved them and kept editing (item descriptions, merged shops, rewritten
+  dialogue, repainted terrain). The C++ dump is the oracle.
+- `vector2d` stores row by row (`w * y + x`), so `for(out : scenario.outdoors)`
+  walks y-outer. The inline shops ported from sector specials get numbered in
+  that order. Walking x-outer mis-numbered one shop in Stealth.
+- `ePicType`: `PIC_TER` is 1 and `PIC_MONST` is 3, not 0 and 1.
+- The terrain-conversion tables were generated from `terrain.cpp` by script.
+  A hand transcription dropped entries, and the test caught it.
+- `0 - x`, not `-x`: negating 0 gives `-0`, which `Object.is` tells apart.
+- Latent, not fixed: the XML reader keeps only the attacks a monster lists,
+  while the C++ always has three. `AFFECT_MONST_ATT` on a missing attack
+  therefore does nothing here and something in the C++. Changing it needs a
+  corpus run.
+
+**Next: step 5, the publish pipeline and catalog** (GCP bucket, `catalog.json`
+built from the archive's list pages, previews rendered by Playwright).

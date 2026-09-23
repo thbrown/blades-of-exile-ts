@@ -138,19 +138,20 @@ ever executed. The rule is "no chia mining on the bucket".
    reads a package from memory, `platform/scenarioStore.ts` keeps installed
    packages in IndexedDB, and the startup screen has "Add a scenario…".
    `scripts/pack-boes.mjs` packs an unpacked tree.
-2. **Headless smoke harness** (`scripts/scenario-smoke.mjs`). For each
-   scenario: load every town and sector, parse every node, run `on-init`,
-   enter the start town, and fail on any throw. Old scenarios will use
-   opcode combinations the bundled four never hit.
-3. **Legacy `.exs` importer** (`src/fileio/legacy/`, shared by the browser and
-   Node). Port `oldstructs.hpp`, `porting.cpp` (byte order: Mac files are flag
+2. **Headless smoke harness — done 2026-09-23** (`test/archiveSmoke.test.ts`,
+   `LEGACY_ARCHIVE=1`). Every archive scenario loads, starts a new game, takes
+   a few steps and enters every town. It's shallow: specials that need a host
+   (dialogs) don't run headless.
+3. **Legacy `.exs` importer — done 2026-09-23** (`src/fileio/legacy/`, shared
+   by the browser and Node). It matches the C++ field for field on all 171
+   legacy files (`test/legacyImport.test.ts`; see DIVERGENCES.md). Port `oldstructs.hpp`, `porting.cpp` (byte order: Mac files are flag
    bytes 10/20/30/40 and big-endian, Windows files are 20/40/60/80 and
    little-endian) and the `import_legacy` family. **The oracle is already on
    disk**: `../boe-source-1997/*/` has VALLEYDY/STEALTH/ZAKHAZI.EXS in *both*
    byte orders, and `public/scenarios/` has OBoE's conversion of the same three.
    Import and deep-compare. Also audit OBoE's `is_legacy` switches in the
    engine (about 16 sites).
-4. **Custom graphics.** Windows `.bmp`, with white made transparent
+4. **Custom graphics — `.bmp` done 2026-09-23.** Windows `.bmp`, with white made transparent
    (`load_spec_graphics_v1`), converted into the sheet layout. Mac `.meg` (a
    PICT inside a resource fork) only if the archive shows scenarios that
    ship no `.bmp`.

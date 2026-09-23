@@ -2479,10 +2479,10 @@ export class GameSession {
           || terType.special === TerSpec.CHANGE_WHEN_STEP_ON
           || terType.special === TerSpec.CALL_SPECIAL
           || forceAllowed
-          // A boat sailing over water still trips the square it sails onto.
-          // The C++ gates this on `!univ.scenario.is_legacy`; this port reads
-          // only the XML format, where that flag is always false.
-          || (this.univ.party.inBoat >= 0 && terType.boatOver);
+          // A boat sailing over water still trips the square it sails onto —
+          // except in a legacy scenario: "Boats never triggered specials in
+          // the old BoE" (town_import.tpp).
+          || (!this.univ.scenario.isLegacy && this.univ.party.inBoat >= 0 && terType.boatOver);
         if (runIt) {
           const r = await this.runSpecial(
             SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, special, where);

@@ -195,6 +195,49 @@ Under OBoE the third purchase *also* works, but only through the bug —
 purchase after that takes 400 gold and hands over nothing. Neither version
 draws, so the corpus cannot see the choice.
 
+
+### 6. Legacy `.exs` import (2026-09-23)
+
+**DECIDED: match OBoE's in-memory import exactly, with one exception.** The
+importer (`src/fileio/legacy/`) is held field for field against the C++
+loading the same file (`tools/cppharness/dump-scen.sh`,
+`test/legacyImport.test.ts`), over all 171 legacy files available: the three
+1997 Mac originals and the whole community archive. OBoE's `import_legacy`
+conversions are what every legacy scenario has been played with for a decade,
+and there's nothing in the 1997 game to compare them with. It never converted
+anything, since it read the structs natively.
+
+- **Byte order (the exception): read every field natively.** OBoE reads the
+  raw bytes and then byte-swaps a hand-picked list of fields
+  (`porting.cpp`). This port reads every multi-byte field in the file's own
+  order, which is what the 1997 game did on the platform that wrote the file.
+  Where OBoE's list misses a field (a scenario monster's `status[15]`, for
+  one), it reads a foreign-endian file wrong. None of those fields feeds
+  anything the game uses, so the oracle can't tell the difference.
+- **Garbage stays OBoE's garbage.** A negative attack in a corrupt file wraps
+  to 65,000-odd dice in OBoE's `unsigned short` (`masks.exs`, whose monster
+  block is unreadable in both). Kept, because the oracle is only exact if
+  it's kept.
+- **`char[]` names run on to the first NUL**, past the field's end, because
+  `std::string(field)` reads that way. The 1997 game printed them the same
+  way, so this is an agreement, not a divergence.
+- **Where the C++ reads uninitialised memory, this port doesn't try.** There
+  are three places: the type of a preset field the old game didn't have
+  (`cField temp` is never initialised; nothing places such a field either
+  way), `cost_adj` on the five junk shops and the healer (`cShop(eShopPreset)`
+  never sets it; 0 here, the normal price), and the first strings of a town
+  whose record lies past the end of its file (`Shadow.exs`). The test
+  excludes each of them by name.
+- **Old custom graphics are cut every 360 rows.** OBoE's editor converts an
+  old `.bmp` sheet by stepping 280 rows (`convert_sheets`), which misplaces
+  every sheet after the first. The game never calls that function; it indexes
+  the whole picture (`find_graphic` with `is_old`), and 360-row sheets index
+  identically.
+- **The copies in the 1997 *Windows* code release don't load in either
+  engine.** Their size tables fall 1.5–3.8 KB short of the file. The
+  Windows-made scenarios in the archive (48) all have exact tables, so this
+  is a quirk of those three files, not of the platform.
+
 ---
 
 ## Agreements worth recording

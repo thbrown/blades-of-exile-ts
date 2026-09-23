@@ -227,6 +227,67 @@
         color: #999;
         line-height: 1.35;
       }
+      .startup-cards {
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      }
+      .startup-card {
+        padding: 0;
+        gap: 0;
+        overflow: hidden;
+      }
+      .startup-picture {
+        position: relative;
+        display: block;
+        width: 100%;
+        aspect-ratio: 279 / 200;
+        background: #111;
+        overflow: hidden;
+      }
+      .startup-picture img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center 40%;
+        image-rendering: pixelated;
+        display: block;
+      }
+      .startup-picture .startup-icon {
+        position: absolute;
+        right: 6px;
+        bottom: 6px;
+        box-shadow: 0 0 0 1px #000, 0 1px 4px rgba(0, 0, 0, 0.6);
+      }
+      .startup-picture.icon-only {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(circle at center, #2e2a22, #141210);
+      }
+      .startup-picture.icon-only .startup-icon {
+        position: static;
+        box-shadow: none;
+      }
+      .startup-icon {
+        display: inline-block;
+        width: 64px;
+        height: 64px;
+        /* scenpics is 160×224; doubled, as the game canvas is */
+        background-size: 320px 448px;
+        image-rendering: pixelated;
+      }
+      .startup-words {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding: 9px 12px 11px;
+      }
+      .startup.dropping {
+        outline: 2px dashed #6a8fc7;
+        outline-offset: -10px;
+      }
+      .startup.busy {
+        cursor: progress;
+      }
       .startup-add {
         margin-top: 8px;
         border-style: dashed;
