@@ -10,6 +10,7 @@ import { ShopItemType } from '../data/shop';
 import { Colours } from './colours';
 import { ITEM_BTN_ICONS, UiRect, height, width } from './layout';
 import { itemGraphic } from './itemPics';
+import { drawPictAt } from '../dialogs/pict';
 import { Scrollbar } from './scrollbar';
 import { SheetStore } from './sheets';
 import { TextStyle, drawString, drawStringEllipsis, drawStringRight } from './text';
@@ -168,7 +169,11 @@ export class ShopScreen {
     const dest = this.at(FACE_RECT);
     const portraits = this.store.get('talkportraits');
     const pic = Math.max(0, state.shop.face);
-    if (!portraits || pic >= 1000) return;
+    if (pic >= 1000) {
+      drawPictAt(this.ctx, this.store, 'talk', pic, dest.left, dest.top);
+      return;
+    }
+    if (!portraits) return;
     // drawPresetTalk (pict.cpp:896): 32x32 cells, ten to a row.
     this.ctx.drawImage(
       portraits, (pic % 10) * 32, Math.floor(pic / 10) * 32, 32, 32,

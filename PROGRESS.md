@@ -11655,3 +11655,28 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     "can't fight out here yet".
   - "Combat!" and sound 18 moved into `startCombat` itself, so both routes
     have them. Neither draws.
+
+- **A scenario's own graphics (M6/M8, 2026-09-23).** Render-only;
+  corpus-neutral by construction. `render/customPics.ts` is `spec_scen_g`:
+  `find_graphic(n)` is sheet `n / 100`, cell `n % 100`, and a sheet or cell
+  that isn't there draws blank. Every `>= 1000` early return now asks it —
+  terrain (and 2000+, the four-frame animated kind), items (whole cell, no
+  tiny-icon inset), monsters (part, then `w*h` for the other facing, then
+  `2*w*h` for the attack pose, sized from the *monster's* width and height
+  since a custom picture has no `m_pic_index` entry), PCs, the automap (a
+  map picture is one of nine 12×12 squares in its cell), and talk, scenario
+  and dialog portraits (two half-cells side by side, `drawCustomTalk`).
+  valleydy's barrels, filth, light poles and glowing portcullis, and the
+  custom monsters in all three scenarios that ship a `sheet0.png`, had been
+  drawing nothing.
+  - **How many sheets** comes from the data, not the directory: the C++
+    counts `graphics/sheet*` in the package, the web copy is unpacked and
+    can't be listed, and probing for one that isn't there is a failed request
+    the console reports. `customSheetCount` takes the highest custom picture
+    any terrain, monster or item uses.
+  - A special item's "info" box is `put_spec_item_info`'s `cStrDlog` with the
+    scenario's intro picture (PIC_SCEN) — that marker was never about custom
+    graphics.
+  - **Noted, not chased**: one `verify-screen.mjs` run stalled after ATTACK
+    FRIENDLY with nothing new in that stretch; three runs either side of it
+    passed. If it recurs, the parry step's `await s.pause()` is where it sat.

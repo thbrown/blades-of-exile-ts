@@ -35,10 +35,17 @@ export function findGraphic(pic: number): SheetPos {
 export class SheetStore {
   private images = new Map<string, ImageBitmap>();
 
-  async load(name: string, baseUrl = `${import.meta.env.BASE_URL}data/graphics/`): Promise<ImageBitmap> {
+  /**
+   * Load `<baseUrl><file>.png` and keep it as `name`. `file` defaults to the
+   * name; a scenario's own `sheet0` is kept under a name of its own so it can
+   * never be mistaken for one of the game's sheets.
+   */
+  async load(
+    name: string, baseUrl = `${import.meta.env.BASE_URL}data/graphics/`, file = name,
+  ): Promise<ImageBitmap> {
     const existing = this.images.get(name);
     if (existing) return existing;
-    const resp = await fetch(`${baseUrl}${name}.png`);
+    const resp = await fetch(`${baseUrl}${file}.png`);
     if (!resp.ok) throw new Error(`failed to load sheet ${name}: ${resp.status}`);
     const bmp = await createImageBitmap(await resp.blob());
     this.images.set(name, bmp);

@@ -86,6 +86,7 @@ import { TOWN_NUM_OUTDOORS } from './universe/party';
 import { FetchSource } from './fileio/source';
 import { InputRouter } from './platform/input';
 import { Snd, SoundPlayer } from './platform/sound';
+import { loadCustomSheets } from './render/customPics';
 import { giveHelp, setGiveHelp, setLivingSound } from './universe/living';
 import { killPc } from './game/damage';
 import { BOE_HEIGHT, BOE_WIDTH, ToolbarButton } from './render/layout';
@@ -277,6 +278,8 @@ async function main(): Promise<void> {
   );
 
   await Promise.all([sheetsReady, fontsReady]);
+  // The scenario's own graphics — `load_spec_graphics_v2`.
+  await loadCustomSheets(store, scen, `${import.meta.env.BASE_URL}scenarios/${name}/graphics/`);
 
   const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
   const session = new GameSession(univ);
@@ -1324,15 +1327,12 @@ async function main(): Promise<void> {
         await session.runSpecial(
           SpecCtx.USE_SPEC_ITEM, SpecCtxType.SCEN, spec.special, univ.party.getLoc());
     } else {
-      // put_spec_item_info's cStrDlog. TODO(M6): it draws the scenario's intro
-      // picture beside the text, which needs custom scenario graphics.
+      // `put_spec_item_info` (boe.infodlg.cpp:703): a cStrDlog with the
+      // item's name for a title and the scenario's intro picture beside it.
       sound.play(57);
-      await dialogs.run({
-        title: spec.name,
-        text: spec.descr,
-        escapeButton: 'okay',
-        buttons: [{ name: 'okay', label: 'OK' }],
-      });
+      await dialogs.runNested(strDialog(ctx, store, {
+        str1: spec.descr, title: spec.name, pic: univ.scenario.introPic, picType: 6,
+      }));
     }
     redraw();
   };

@@ -1,12 +1,13 @@
 /**
  * The party sprite on the terrain view — draw_party_symbol
  * (boe.graphutil.cpp:446). Pics under 100 come from pcs.png in a 2-column-per
- * -graphic layout; 100..999 borrow a monster graphic; 1000+ are custom
- * scenario graphics (deferred with the rest of custom-graphics support).
+ * -graphic layout; 100..999 borrow a monster graphic; 1000+ are the
+ * scenario's own (`customPics.ts`), and from 10000 the party's.
  */
 
 import { Direction, Rect } from '../core/location';
 import { monsterGraphic } from './monsterPics';
+import { customGraphic } from './customPics';
 import { calcRect } from './sheets';
 
 export interface PcGraphic {
@@ -28,7 +29,7 @@ export function pcGraphic(
 ): PcGraphic | null {
   // Facing: directions S and beyond (>= 4) use the mirrored column.
   const facingRight = direction >= Direction.S;
-  if (pic >= 1000) return null; // TODO: custom scenario party graphics
+  if (pic >= 1000) return customGraphic(pic % 1000, pic >= 10000);
   if (pic >= 100) {
     return monsterGraphic(pic - 100, (facingRight ? 1 : 0) + (attacking ? 10 : 0), 0);
   }

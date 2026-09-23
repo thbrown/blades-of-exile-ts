@@ -11,6 +11,7 @@ import { monsterGraphic } from '../render/monsterPics';
 import { SheetStore, calcRect } from '../render/sheets';
 import { statIconRect } from '../data/statusIcons';
 import { terrainGraphic } from '../render/terrainPics';
+import { customGraphic } from '../render/customPics';
 import { PictType } from './dialogXml';
 
 /** The 28x36 box a picture is drawn into, unless its type says otherwise. */
@@ -32,6 +33,18 @@ export function drawPictAt(
       sheet, from.left, from.top, from.width, from.height,
       x + dx, y + dy, from.width, from.height);
   };
+  // `drawCustomTalk` / `drawCustomDlog` (pict.cpp:1155, :1190): a scenario's
+  // own portrait is two cells side by side — the left part of `num` and the
+  // left part of `num + 1`, 16×32 for a talk or scenario picture and 18×36
+  // for a dialog one.
+  if (num >= 1000 && (type === 'talk' || type === 'scen' || type === 'dlog')) {
+    const [w, h] = type === 'dlog' ? [18, 36] : [16, 32];
+    for (let half = 0; half < 2; half++) {
+      const g = customGraphic((num % 1000) + half);
+      if (g) blit(g.sheetName, { left: g.rect.left, top: g.rect.top, width: w, height: h }, half * w);
+    }
+    return;
+  }
   switch (type) {
     case 'dlog': {
       // dlogpics.png is a 4-across grid of 36x36 portraits; the large kind

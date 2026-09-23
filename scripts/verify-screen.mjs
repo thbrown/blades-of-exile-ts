@@ -1187,7 +1187,8 @@ await page.mouse.click(infoRowAt.x, infoRowAt.y);
 await page.waitForTimeout(250);
 const specInfo = await page.evaluate(() => {
   const d = window.__dialogs.active;
-  return d ? { title: d.spec.title, text: d.spec.text.slice(0, 40) } : null;
+  // put_spec_item_info's cStrDlog: the item's name as the title.
+  return d && d.def ? { title: d.getText('title'), text: d.getText('str1').slice(0, 40) } : null;
 });
 await press('Escape');
 await page.waitForTimeout(200);
@@ -2857,6 +2858,28 @@ for (const pc of [3, 4]) {
 await page.evaluate(() => { window.__univ.curPc = 0; });
 menus.dialogsClear = await page.evaluate(() => window.__dialogs.active === null);
 console.log('MENUS:', JSON.stringify(menus));
+
+// The scenario's own graphics: valleydy's graphics/sheet0.png is loaded, and
+// town 10's barrels (terrain 230, picture 1006) come from it rather than
+// drawing nothing.
+const custom = await page.evaluate(async () => {
+  const s = window.__session;
+  const specials = s.specials;
+  s.specials = null;
+  s.forceTownEntry(10, { x: 13, y: 6 });
+  s.startTownMode(10, 9);
+  s.specials = specials;
+  window.__redraw();
+  const sheet = window.__screen.store.get('scen-sheet0');
+  return {
+    sheet: sheet ? [sheet.width, sheet.height] : null,
+    barrelPic: s.univ.scenario.terTypes[230].picture,
+    town: s.univ.town?.record.name,
+  };
+});
+await page.waitForTimeout(200);
+await shot('02n-custom-graphics');
+console.log('CUSTOM GRAPHICS:', JSON.stringify(custom));
 await shot('02i-word-of-recall');
 
 // The two endings. `handle_death` on the real party-death.xml: wipe the party
@@ -3093,6 +3116,7 @@ const ok =
   menus.spellName === 'Light' && menus.tip.length > 10 &&
   menus.stats[0] === 'PARTY STATS:' && menus.aboutMage === 'Instant Help' &&
   menus.castLists.some((n) => n > 3) &&
+  custom.sheet !== null && custom.barrelPic === 1006 &&
   fields.typed === true && fields.fieldError === 'Error' &&
   fields.numAnswer === 75 && fields.textAnswer === 'hello' &&
   errors.length === 0;

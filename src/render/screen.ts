@@ -917,12 +917,15 @@ export class Screen {
       if (pic < 0) continue;
       const q = enc.mLoc.x - centre.x + TER_VIEW_CENTER;
       const row = enc.mLoc.y - centre.y + TER_VIEW_CENTER;
-      const { w, h } = monsterDims(pic);
+      // A custom picture has no `m_pic_index` entry; its size is the
+      // monster's own (`get_monst_dims`).
+      const mon = univ.scenario.scenMonsters[which];
+      const { w, h } = pic >= 1000 && mon ? { w: mon.xWidth, h: mon.yWidth } : monsterDims(pic);
       for (let part = 0; part < w * h; part++) {
         const px = q + (part % w);
         const py = row + Math.floor(part / w);
         if (px < 0 || py < 0 || px >= TER_VIEW_TILES || py >= TER_VIEW_TILES) continue;
-        const g = monsterGraphic(pic, enc.direction < 4 ? 0 : 1, part);
+        const g = monsterGraphic(pic, enc.direction < 4 ? 0 : 1, part, w * h);
         if (!g) continue;
         const img = this.store.get(g.sheetName);
         if (!img) continue;
@@ -945,7 +948,8 @@ export class Screen {
       if (!session.partyCanSeeMonst(monst)) continue;
       const q = monst.curLoc.x - center.x + TER_VIEW_CENTER;
       const row = monst.curLoc.y - center.y + TER_VIEW_CENTER;
-      const { w, h } = monsterDims(monst.pictureNum);
+      const { w, h } = monst.pictureNum >= 1000
+        ? { w: monst.xWidth, h: monst.yWidth } : monsterDims(monst.pictureNum);
       if (q + w <= 0 || row + h <= 0 || q >= TER_VIEW_TILES || row >= TER_VIEW_TILES) continue;
       const facingRight = monst.direction >= Direction.S;
       const posing = session.posingMonster === 100 + town.monsters.indexOf(monst);
@@ -956,7 +960,8 @@ export class Screen {
         // `pic_mode += (combat_posing_monster == i + 100) ? 10 : 0`
         // (boe.graphutil.cpp:200) — the creature's attack sprite, four columns
         // along the monst sheet.
-        const g = monsterGraphic(monst.pictureNum, (facingRight ? 1 : 0) + (posing ? 10 : 0), part);
+        const g = monsterGraphic(
+          monst.pictureNum, (facingRight ? 1 : 0) + (posing ? 10 : 0), part, w * h);
         if (!g) continue;
         const img = this.store.get(g.sheetName);
         if (!img) continue;

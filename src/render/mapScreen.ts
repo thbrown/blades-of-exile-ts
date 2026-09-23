@@ -18,6 +18,7 @@ import { GameMode } from '../game/modes';
 import { GameSession } from '../game/session';
 import { Colours } from './colours';
 import { UiRect } from './layout';
+import { customGraphic } from './customPics';
 import { SheetStore } from './sheets';
 import { terrainGraphic } from './terrainPics';
 import { drawString } from './text';
@@ -299,7 +300,21 @@ export class MapScreen {
       large = true;
     }
     if (pic >= 1000) {
-      // TODO(M6): custom scenario graphics sheets aren't loaded yet.
+      // `draw_map`'s custom branch (boe.town.cpp:1484): a full-size picture
+      // is shrunk from its cell, and a map picture is one of the nine 12×12
+      // squares in the cell `pic % 1000`, chosen by `pic / 1000 - 1`.
+      const g = customGraphic(pic % 1000);
+      const img = g && this.store.get(g.sheetName);
+      if (g && img) {
+        if (large) {
+          this.ctx.drawImage(img, g.rect.left, g.rect.top, g.rect.width, g.rect.height,
+            dx, dy, MAP_TILE, MAP_TILE);
+        } else {
+          const n = Math.floor(pic / 1000) - 1;
+          this.ctx.drawImage(img, g.rect.left + Math.floor(n / 3) * 12, g.rect.top + (n % 3) * 12,
+            12, 12, dx, dy, MAP_TILE, MAP_TILE);
+        }
+      }
     } else if (large) {
       // No map icon of its own: shrink the full-size terrain tile into 6px.
       const g = terrainGraphic(pic);

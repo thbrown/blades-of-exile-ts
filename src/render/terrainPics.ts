@@ -3,10 +3,12 @@
  * ../exile-wasm/src/game/boe.graphutil.cpp:79-103:
  *   pic <  960: sheet ter(1 + pic/50), cell pic%50
  *   pic >= 960 && < 1000: teranim, col 4*((pic-960)/5) + frame, row (pic-960)%5
- *   pic >= 1000: custom scenario sheets (deferred until custom gfx land)
+ *   pic >= 1000: the scenario's own sheets (`customPics.ts`), and from 2000
+ *   the same four-frame animation from a custom base cell
  */
 
 import { Rect } from '../core/location';
+import { customGraphic } from './customPics';
 import { calcRect } from './sheets';
 
 export interface TerGraphic {
@@ -15,7 +17,9 @@ export interface TerGraphic {
 }
 
 export function terrainGraphic(pic: number, animFrame = 0): TerGraphic | null {
-  if (pic >= 1000) return null; // custom graphics — deferred
+  // `draw_one_terrain_spot` (boe.graphutil.cpp:86).
+  if (pic >= 2000) return customGraphic(pic - 2000 + (animFrame % 4));
+  if (pic >= 1000) return customGraphic(pic - 1000);
   if (pic >= 960) {
     const n = pic - 960;
     return {
