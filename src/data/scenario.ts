@@ -41,6 +41,13 @@ export interface Scenario {
   /** Whether monster health scales with the party's total level. */
   adjustDiff: boolean;
   /**
+   * `cScenario::is_legacy` — the scenario came from a 1997 `.exs` and hasn't
+   * been re-saved by OBoE's editor. A handful of rules keep their original
+   * behaviour for it (`univ.scenario.is_legacy` in the C++). The four bundled
+   * scenarios were re-saved and say `<legacy>false</legacy>`.
+   */
+  isLegacy: boolean;
+  /**
    * `cScenario::feature_flags` (`<feature-flags>` in scenario.xml) — **the
    * scenario's own flags, not the replay's.** The C++ has two feature-flag maps
    * that are easy to confuse: the global one a recording replaces wholesale

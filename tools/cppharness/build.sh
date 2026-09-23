@@ -60,6 +60,10 @@ for f in "${SOURCES[@]}"; do
   ( cd "$SRC" && clang++ "${DEFS[@]}" -c -O0 -g -w "${INCLUDES[@]}" "$f" -o "$o" )
 done
 clang++ "${DEFS[@]}" -c -w "${INCLUDES[@]}" "$HERE/stubs.cpp" -o "$OUT/obj/stubs.o"
+# `BOE_DUMP_SCEN=<file>`: print a loaded scenario and exit (scendump.cpp). It
+# must link after every src_*.o — its constructor runs last that way — and
+# "zz_" keeps it there.
+clang++ "${DEFS[@]}" -c -w "${INCLUDES[@]}" "$HERE/scendump.cpp" -o "$OUT/obj/zz_scendump.o"
 
 echo "Linking ..."
 clang++ -std=c++17 -g -rdynamic -o "$OUT/boe-native" "$OUT"/obj/*.o -lz

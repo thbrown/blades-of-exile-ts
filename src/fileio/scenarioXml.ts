@@ -125,6 +125,8 @@ export interface ScenarioHeader {
   startTown: number;
   difficulty: number;
   adjustDiff: boolean;
+  /** `<legacy>` — see `Scenario.isLegacy`. */
+  isLegacy: boolean;
   /** `<feature-flags>` — the scenario's own, see `Scenario.featureFlags`. */
   featureFlags: Record<string, string>;
   townStart: { x: number; y: number };
@@ -221,6 +223,7 @@ export function readScenarioFromXml(root: Element, fname = 'scenario.xml'): Scen
     startTown: 0,
     difficulty: 0,
     adjustDiff: false,
+    isLegacy: false,
     featureFlags: {},
     townStart: { x: 0, y: 0 },
     outdoorStart: { x: 0, y: 0 },
@@ -251,6 +254,7 @@ export function readScenarioFromXml(root: Element, fname = 'scenario.xml'): Scen
     } else if (type === 'flags') {
       for (const f of children(elem)) {
         if (tag(f) === 'adjust-difficulty') hdr.adjustDiff = text(f) === 'true';
+        else if (tag(f) === 'legacy') hdr.isLegacy = text(f) === 'true';
       }
     } else if (type === 'feature-flags') {
       // `scenario.feature_flags = info_from_action(*elem)` (fileio_scen.cpp:819)
