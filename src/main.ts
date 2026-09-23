@@ -1131,6 +1131,24 @@ async function main(): Promise<void> {
    * turn behind it — the clock, the upkeep and the monsters. Leaving an
    * outdoor fight does not (:1339 never sets the flag).
    */
+  /**
+   * `handle_combat_switch` (boe.actions.cpp:1312) — the f key, the sword and
+   * the End button: into a fight from town, out of one in combat, and nothing
+   * anywhere else. **Starting a town fight costs a turn** (`did_something`,
+   * :1335), which the replay driver has always charged and the live key and
+   * button did not: the monsters sat out the round the fight began.
+   */
+  const combatSwitchFlow = async (): Promise<void> => {
+    if (session.mode === GameMode.TOWN) {
+      if (session.startCombat(univ.party.direction)) await session.afterPartyTurn();
+    } else if (session.mode === GameMode.COMBAT) {
+      await endCombatFlow();
+      return;
+    }
+    setStatus();
+    redraw();
+  };
+
   const endCombatFlow = async (): Promise<void> => {
     const wasTown = session.whichCombatType !== 0;
     if (session.endCombat() && wasTown) await session.afterPartyTurn();
@@ -1880,42 +1898,66 @@ async function main(): Promise<void> {
       const btn = screen.buttonAt(x, y);
       if (btn) {
         sound.play(Snd.BUTTON); // the UI click
-        if (btn.btn === ToolbarButton.TALK) {
-          beginTalk();
-        } else if (btn.btn === ToolbarButton.LOOK) {
-          beginLook();
-        } else if (btn.btn === ToolbarButton.CAMP) {
-          void session.rest();
-        } else if (btn.btn === ToolbarButton.USE) {
-          selectSpace('use');
-        } else if (btn.btn === ToolbarButton.MAP) {
-          toggleMap();
-        } else if (btn.btn === ToolbarButton.HAND) {
-          void getItems();
-        } else if (btn.btn === ToolbarButton.SWORD) {
-          // The sword is Fight: drop into combat where the party stands.
-          if (session.inTown) session.startCombat(univ.party.direction);
-          else univ.addStringToBuf("Can't fight out here yet.");
-        } else if (btn.btn === ToolbarButton.END) {
-          // End combat and regroup.
-          void endCombatFlow();
-        } else if (btn.btn === ToolbarButton.WAIT) {
-          // handle_stand_ready — give up the turn *on guard*, not just idle.
-          if (session.mode === GameMode.COMBAT) void session.pause();
-        } else if (btn.btn === ToolbarButton.SHIELD) {
-          // handle_parry — spend what's left of the turn on defence.
-          if (session.mode === GameMode.COMBAT) void session.parry();
-        } else if (btn.btn === ToolbarButton.MAGE || btn.btn === ToolbarButton.PRIEST) {
-          // The two spellbook buttons are the same flow as the 'm' and 'p'
-          // keys — handle_spell_button dispatches on which book.
-          void castSpellFlow(btn.btn === ToolbarButton.MAGE
-            ? Skill.MAGE_SPELLS : Skill.PRIEST_SPELLS);
-        } else if (btn.btn === ToolbarButton.ACT) {
-          // handle_toggle_active — pin the turn to this PC, or release it.
-          if (session.mode === GameMode.COMBAT) session.toggleActivePc();
-        } else {
-          // TODO(M3+): wire the remaining toolbar buttons to real actions.
-          univ.addStringToBuf(`(${ToolbarButton[btn.btn]} is not implemented yet)`);
+        // `handle_action`'s toolbar switch (boe.actions.cpp:1630), with its
+        // mode guards: a button pressed in a mode it has no business in does
+        // nothing, as in the original.
+        const mode = session.mode;
+        switch (btn.btn) {
+          case ToolbarButton.MAGE: case ToolbarButton.PRIEST:
+            // handle_spell_button dispatches on which book — the m/p keys' flow.
+            void castSpellFlow(btn.btn === ToolbarButton.MAGE
+              ? Skill.MAGE_SPELLS : Skill.PRIEST_SPELLS);
+            break;
+          case ToolbarButton.LOOK:
+            beginLook();
+            break;
+          case ToolbarButton.SHIELD:
+            // handle_parry — spend what's left of the turn on defence.
+            if (mode === GameMode.COMBAT) void session.parry();
+            break;
+          case ToolbarButton.TALK:
+            if (mode === GameMode.TOWN || mode === GameMode.TALK_TOWN) beginTalk();
+            break;
+          case ToolbarButton.CAMP:
+            if (mode === GameMode.OUTDOORS) void session.rest();
+            break;
+          case ToolbarButton.SCROLL: case ToolbarButton.MAP:
+            // display_map — and "do not call advance_time".
+            toggleMap();
+            break;
+          case ToolbarButton.BAG: case ToolbarButton.HAND:
+            if (mode === GameMode.TOWN || mode === GameMode.COMBAT) void getItems();
+            break;
+          case ToolbarButton.SAVE:
+            if (mode === GameMode.OUTDOORS) void saveGameFlow();
+            break;
+          case ToolbarButton.USE:
+            if (mode === GameMode.TOWN || mode === GameMode.USE_TOWN) selectSpace('use');
+            break;
+          case ToolbarButton.WAIT:
+            // handle_stand_ready — give up the turn *on guard*, not just idle.
+            if (mode === GameMode.COMBAT) void session.pause();
+            break;
+          case ToolbarButton.LOAD:
+            if (mode === GameMode.OUTDOORS) void loadGameFlow();
+            break;
+          case ToolbarButton.SHOOT:
+            // handle_missile — the 's' key's flow, arm and cancel alike.
+            if (mode === GameMode.COMBAT) session.handleMissile();
+            else if (mode === GameMode.FIRING || mode === GameMode.THROWING) {
+              session.handleMissile();
+              recentre();
+            }
+            break;
+          case ToolbarButton.SWORD: case ToolbarButton.END:
+            void combatSwitchFlow();
+            break;
+          case ToolbarButton.ACT:
+            // handle_toggle_active — pin the turn to this PC, or release it.
+            if (mode === GameMode.COMBAT) session.toggleActivePc();
+            break;
+          default:
+            break;
         }
         setStatus();
         redraw();
@@ -2066,10 +2108,9 @@ async function main(): Promise<void> {
       const inCombat = session.mode === GameMode.COMBAT;
       switch (key) {
         case 'f': case 'F':
-          // Toggle combat, both ways — the same key in the original.
-          if (inCombat) await endCombatFlow();
-          else if (session.inTown) session.startCombat(univ.party.direction);
-          else univ.addStringToBuf("Combat: can't fight out here yet.");
+          // Toggle combat, both ways — the same key in the original, and only
+          // in town or combat (boe.actions.cpp:3155).
+          await combatSwitchFlow();
           break;
         case 'e': case 'E':
           if (inCombat) await endCombatFlow();

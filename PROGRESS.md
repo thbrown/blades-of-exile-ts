@@ -11638,3 +11638,20 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     dialog unless it names a colour, and **a text control written with no
     width or height is sized to its text** — it doesn't wrap, which is what
     had every toolbar label in help-combat.xml showing only its first word.
+
+- **The toolbar, whole (M8, 2026-09-22).** Corpus-neutral: **51 /
+  1,231,440**. Every button now does what `handle_action`'s switch does
+  (boe.actions.cpp:1630), with its mode guards: **Scroll** is the map (and
+  charges no turn), **Save** and **Load** work outdoors, **Bag** gets items in
+  town or combat, **Shoot** arms and cancels a missile as `s` does. A button
+  pressed in a mode it has no business in does nothing — Camp in town, Talk
+  outdoors — as in the original, rather than trying anyway.
+  - **Starting a town fight from the keyboard or the sword cost no turn.**
+    `handle_combat_switch` sets `did_something` on that branch (:1335), and
+    the replay driver has charged it since the corpus found it; the live `f`
+    key and the sword button called `startCombat` bare, so the monsters sat
+    out the round the fight began. Both now go through one
+    `combatSwitchFlow`, and outdoors the key does nothing rather than saying
+    "can't fight out here yet".
+  - "Combat!" and sound 18 moved into `startCombat` itself, so both routes
+    have them. Neither draws.

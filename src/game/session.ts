@@ -3682,6 +3682,10 @@ export class GameSession {
       this.univ.addStringToBuf('Combat: Not while on horseback.');
       return false;
     }
+    // The two lines `handle_combat_switch` has before `start_town_combat`
+    // (boe.actions.cpp:1329). Neither draws a die.
+    this.univ.addStringToBuf('Combat!');
+    this.sound?.play(18);
     startTownCombat(this, direction);
     this.whichCombatType = 1;
     this.mode = GameMode.COMBAT;
