@@ -185,11 +185,20 @@ const LIBRARY_URL: string = (import.meta.env['VITE_LIBRARY_URL'] as string | und
   ?? `${import.meta.env.BASE_URL}library/catalog.json`;
 
 /** The library for the startup screen; null if there's no catalog to read. */
-async function loadLibrary(installed: Set<string>): Promise<StartupLibrary | null> {
+async function loadLibrary(
+  installed: Set<string>, withoutGraphics: Set<string>,
+): Promise<StartupLibrary | null> {
   try {
     const resp = await fetch(LIBRARY_URL);
     if (!resp.ok) return null;
     const catalog = await resp.json() as LibraryCatalog;
+    // An install that should have custom graphics but was stored without
+    // them counts as not installed, so the next click installs it again.
+    // Scenarios whose `.bmp` was MacBinary-wrapped were stored that way
+    // before the loader learnt to unwrap it.
+    for (const e of catalog.scenarios) {
+      if (e.customGraphics && withoutGraphics.has(e.id)) installed.delete(e.id);
+    }
     return {
       entries: catalog.scenarios.filter((e) => !BUNDLED_SCENARIOS.includes(e.id)),
       url: (path) => libraryUrl(LIBRARY_URL, path),
@@ -282,13 +291,15 @@ async function main(): Promise<void> {
     // The player's own library follows the bundled four.
     const added: StartupScenario[] = [];
     const installedIds = new Set<string>();
+    const withoutGraphics = new Set<string>();
     if (scenarioStoreAvailable()) {
       for (const scen of await listInstalledScenarios()) {
         added.push(startupEntry(scen));
         installedIds.add(scen.id);
+        if (!scen.hasGraphics) withoutGraphics.add(scen.id);
       }
     }
-    const library = scenarioStoreAvailable() ? await loadLibrary(installedIds) : null;
+    const library = scenarioStoreAvailable() ? await loadLibrary(installedIds, withoutGraphics) : null;
     const saves = saveStoreAvailable() ? await listSaves() : [];
     const titleOf = (id: string): string | undefined =>
       headers.find((h) => h.id === id)?.title ?? added.find((h) => h.id === id)?.title;

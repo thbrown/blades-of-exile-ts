@@ -47,6 +47,8 @@ export interface MapLabel {
 
 export interface MapSnapshot {
   type: 'snapshot';
+  /** Which game tab sent it (`WorldMapFeed.gameId`). */
+  game: string;
   scenario: string;
   /** "Outdoors", or the town's name. */
   place: string;
@@ -68,11 +70,21 @@ export interface MapSnapshot {
   labels: MapLabel[];
 }
 
-/** From the map tab: send everything, palette included. */
-export interface MapHello { type: 'hello' }
+/**
+ * From the map tab: send everything, palette included. `game` names the game
+ * tab it belongs to. A map tab opened by hand has none, and pairs with the
+ * first game that answers.
+ */
+export interface MapHello { type: 'hello'; game?: string }
 /** From the game tab when it starts, so an open map tab says hello again. */
-export interface MapReady { type: 'ready' }
-export type MapMessage = MapSnapshot | MapHello | MapReady;
+export interface MapReady { type: 'ready'; game: string }
+/**
+ * From a game tab that already has the id a newly started one announced.
+ * Duplicating a tab copies its sessionStorage, id and all, so the newcomer
+ * takes a fresh one.
+ */
+export interface MapTaken { type: 'taken'; game: string }
+export type MapMessage = MapSnapshot | MapHello | MapReady | MapTaken;
 
 /** The map as terrain types, before they're turned into palette indices. */
 interface MapGrid {
@@ -272,11 +284,22 @@ function rectExplored(
 /**
  * The game tab's end: answers a map tab's hello with everything, and after
  * that posts a snapshot whenever `update` is called, at most every
- * `intervalMs`. Nothing is built or sent until a map tab has said hello.
+ * `intervalMs`. Nothing is built or sent until a map tab has said hello, and
+ * a snapshot identical to the last one isn't sent at all. The game redraws
+ * several times a second just to animate.
+ *
+ * **Every message carries the game tab's id.** Two game tabs on one origin
+ * share the channel, and each numbers its palette in its own order, so a map
+ * tab hearing both drew one game's grid with the other's palette, which came
+ * out as scattered specks or black. The id is kept in `sessionStorage`, so
+ * reloading the game tab keeps its map tab.
  */
 export class WorldMapFeed {
+  gameId = gameTabId();
   private channel: BroadcastChannel | null = null;
   private listening = false;
+  private lastSent: MapSnapshot | null = null;
+  private roadDrawn = false;
   private palette = new Map<number, number>();
   private paletteCanvas: HTMLCanvasElement | null = null;
   private paletteVersion = 0;
@@ -295,17 +318,28 @@ export class WorldMapFeed {
     if (typeof BroadcastChannel === 'undefined') return;
     this.channel = new BroadcastChannel(MAP_CHANNEL);
     this.channel.onmessage = (ev: MessageEvent<MapMessage>) => {
-      if (ev.data?.type !== 'hello') return;
+      const msg = ev.data;
+      if (msg?.type === 'ready' && msg.game === this.gameId) {
+        this.channel?.postMessage({ type: 'taken', game: this.gameId } satisfies MapTaken);
+        return;
+      }
+      if (msg?.type === 'taken' && msg.game === this.gameId) {
+        this.gameId = gameTabId(true);
+        return;
+      }
+      if (msg?.type !== 'hello') return;
+      if (msg.game !== undefined && msg.game !== this.gameId) return;
       this.listening = true;
       this.sentPaletteVersion = -1;
-      this.post();
+      this.post(true);
     };
-    this.channel.postMessage({ type: 'ready' } satisfies MapReady);
+    this.channel.postMessage({ type: 'ready', game: this.gameId } satisfies MapReady);
   }
 
-  /** Open the map tab. */
+  /** Open this game's map tab, or bring it back if it's already open. */
   open(): void {
-    window.open(`${import.meta.env.BASE_URL}?popout=map`, 'exile-js-map');
+    const id = encodeURIComponent(this.gameId);
+    window.open(`${import.meta.env.BASE_URL}?popout=map&game=${id}`, `exile-js-map-${this.gameId}`);
   }
 
   /** Something may have changed: post a snapshot soon. */
@@ -317,10 +351,12 @@ export class WorldMapFeed {
     }, this.intervalMs);
   }
 
-  private post(): void {
+  private post(force = false): void {
     if (this.channel === null) return;
     const snap = this.snapshot();
+    if (!force && !snap.palette && this.lastSent !== null && sameSnapshot(snap, this.lastSent)) return;
     this.channel.postMessage(snap);
+    this.lastSent = snap;
     if (snap.palette) this.sentPaletteVersion = snap.paletteVersion;
   }
 
@@ -332,8 +368,9 @@ export class WorldMapFeed {
       const ter = grid.terrain[i]!;
       cells[i] = ter < 0 ? PAL_UNEXPLORED : this.paletteIndex(ter, session.univ.terrainType(ter));
     }
+    if (!this.roadDrawn) this.ensurePalette();
     const snap: MapSnapshot = {
-      type: 'snapshot', scenario: this.scenarioTitle(), place: grid.place, note: grid.note,
+      type: 'snapshot', game: this.gameId, scenario: this.scenarioTitle(), place: grid.place, note: grid.note,
       w: grid.w, h: grid.h, cells, roads: grid.roads, paletteVersion: this.paletteVersion,
       party: grid.party, life: grid.life, labels: grid.labels,
     };
@@ -350,14 +387,16 @@ export class WorldMapFeed {
     const known = this.palette.get(ter);
     if (known !== undefined) return known;
     const index = PAL_FIRST_TERRAIN + this.palette.size;
-    this.palette.set(ter, index);
     const canvas = this.ensurePalette(index);
     const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.imageSmoothingEnabled = false;
-      const [x, y] = paletteCell(index);
-      drawMapTile(ctx, this.store, spec, x, y, WORLD_TILE);
-    }
+    if (!ctx) return PAL_UNEXPLORED;
+    ctx.imageSmoothingEnabled = false;
+    const [x, y] = paletteCell(index);
+    // A sheet still loading (a scenario's custom graphics, say): show the
+    // square as unexplored for now and try again next time, rather than
+    // keeping a blank tile for good.
+    if (!drawMapTile(ctx, this.store, spec, x, y, WORLD_TILE)) return PAL_UNEXPLORED;
+    this.palette.set(ter, index);
     this.paletteVersion++;
     return index;
   }
@@ -375,14 +414,18 @@ export class WorldMapFeed {
       if (ctx) {
         ctx.imageSmoothingEnabled = false;
         if (canvas !== null) ctx.drawImage(canvas, 0, 0);
-        else {
-          const [rx, ry] = paletteCell(PAL_ROAD);
-          drawRoadStub(ctx, this.store, rx, ry, WORLD_TILE);
-        }
       }
       canvas = next;
       this.paletteCanvas = next;
       this.paletteVersion++;
+    }
+    if (!this.roadDrawn) {
+      const ctx = canvas.getContext('2d');
+      const [rx, ry] = paletteCell(PAL_ROAD);
+      if (ctx && drawRoadStub(ctx, this.store, rx, ry, WORLD_TILE)) {
+        this.roadDrawn = true;
+        this.paletteVersion++;
+      }
     }
     return canvas;
   }
@@ -391,4 +434,28 @@ export class WorldMapFeed {
 /** Where palette entry `index` sits, in pixels. */
 export function paletteCell(index: number): [number, number] {
   return [(index % PALETTE_COLS) * WORLD_TILE, Math.floor(index / PALETTE_COLS) * WORLD_TILE];
+}
+
+/** This game tab's id: made once, and kept across reloads of the same tab. */
+function gameTabId(fresh = false): string {
+  const KEY = 'exile-js:game-tab';
+  try {
+    const kept = fresh ? null : sessionStorage.getItem(KEY);
+    if (kept) return kept;
+    const made = Math.random().toString(36).slice(2, 10);
+    sessionStorage.setItem(KEY, made);
+    return made;
+  } catch {
+    return Math.random().toString(36).slice(2, 10);
+  }
+}
+
+/** Would `a` draw exactly what `b` did? The palette is compared by version. */
+function sameSnapshot(a: MapSnapshot, b: MapSnapshot): boolean {
+  if (a.paletteVersion !== b.paletteVersion || a.w !== b.w || a.h !== b.h) return false;
+  if (a.place !== b.place || a.note !== b.note || a.scenario !== b.scenario) return false;
+  if (JSON.stringify([a.party, a.life, a.labels]) !== JSON.stringify([b.party, b.life, b.labels])) return false;
+  for (let i = 0; i < a.cells.length; i++) if (a.cells[i] !== b.cells[i]) return false;
+  for (let i = 0; i < a.roads.length; i++) if (a.roads[i] !== b.roads[i]) return false;
+  return true;
 }

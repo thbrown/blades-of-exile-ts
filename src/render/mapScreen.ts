@@ -320,7 +320,7 @@ export class MapScreen {
 export function drawMapTile(
   ctx: CanvasRenderingContext2D, store: SheetStore, spec: Terrain,
   dx: number, dy: number, size: number,
-): void {
+): boolean {
   let pic = spec.mapPic;
   let large = false;
   if (pic === -1) {
@@ -336,10 +336,12 @@ export function drawMapTile(
     if (g && img) {
       if (large) {
         ctx.drawImage(img, g.rect.left, g.rect.top, g.rect.width, g.rect.height, dx, dy, size, size);
+        return true;
       } else {
         const n = Math.floor(pic / 1000) - 1;
         ctx.drawImage(img, g.rect.left + Math.floor(n / 3) * 12, g.rect.top + (n % 3) * 12,
           12, 12, dx, dy, size, size);
+        return true;
       }
     }
   } else if (large) {
@@ -348,6 +350,7 @@ export function drawMapTile(
     const img = g && store.get(g.sheetName);
     if (g && img) {
       ctx.drawImage(img, g.rect.left, g.rect.top, g.rect.width, g.rect.height, dx, dy, size, size);
+      return true;
     }
   } else {
     // The termap sheet is indexed by the terrain's *full-size* picture, not
@@ -359,17 +362,21 @@ export function drawMapTile(
       const sx = p < 960 ? 12 * (p % 20) : 12 * 20;
       const sy = p < 960 ? 12 * Math.floor(p / 20) : 12 * (p - 960);
       ctx.drawImage(img, sx, sy, 12, 12, dx, dy, size, size);
+      return true;
     }
   }
+  // Its sheet isn't loaded (yet).
+  return false;
 }
 
 /** The road stub `draw_map` lays over a road square, inset by a sixth. */
 export function drawRoadStub(
   ctx: CanvasRenderingContext2D, store: SheetStore, dx: number, dy: number, size: number,
-): void {
+): boolean {
   const trim = store.get('trim');
-  if (!trim) return;
+  if (!trim) return false;
   const inset = size / MAP_TILE;
   ctx.drawImage(trim, ROAD_SRC.left, ROAD_SRC.top, 4, 4,
     dx + inset, dy + inset, size - 2 * inset, size - 2 * inset);
+  return true;
 }

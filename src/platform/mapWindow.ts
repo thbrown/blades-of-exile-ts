@@ -57,7 +57,9 @@ export function startMapWindow(): void {
     b.classList.toggle('on', on);
     return b;
   };
-  const cropBtn = toggle('Explored area only', false, 'Zoom in on the part of the map the party has seen');
+  // Cropped by default: early in a game the explored part of a whole
+  // continent is a speck, which looks like a blank map.
+  const cropBtn = toggle('Explored area only', true, 'Zoom in on the part of the map the party has seen');
   const namesBtn = toggle('Names', true, 'Show town and area names');
   bar.append(title, place, spacer, cropBtn, namesBtn);
   const view = document.createElement('div');
@@ -72,7 +74,7 @@ export function startMapWindow(): void {
   let snap: MapSnapshot | null = null;
   let prevCells: Uint16Array | null = null;
   let prevRoads: Uint8Array | null = null;
-  let crop = false;
+  let crop = true;
   let names = true;
 
   cropBtn.addEventListener('click', () => {
@@ -178,14 +180,23 @@ export function startMapWindow(): void {
     if (names) drawLabels(ctx, snap.labels, at, scale, dpr);
   };
 
+  // The game tab that opened this one names itself in the URL. Every other
+  // game on the channel is ignored, because each numbers its palette its own
+  // way. Opened by hand, the map pairs with the first game that answers.
+  let game = new URLSearchParams(window.location.search).get('game');
+  const hello = (): void => {
+    channel.postMessage(game === null ? { type: 'hello' } : { type: 'hello', game });
+  };
   const channel = new BroadcastChannel(MAP_CHANNEL);
   channel.onmessage = (ev: MessageEvent<MapMessage>) => {
     const msg = ev.data;
     if (msg?.type === 'ready') {
-      channel.postMessage({ type: 'hello' });
+      if (game === null || msg.game === game) hello();
       return;
     }
     if (msg?.type !== 'snapshot') return;
+    if (game === null) game = msg.game;
+    if (msg.game !== game) return;
     let full = false;
     if (msg.palette) {
       palette.width = msg.palette.width;
@@ -201,7 +212,7 @@ export function startMapWindow(): void {
     updateGrid(msg, full);
     paint();
   };
-  channel.postMessage({ type: 'hello' });
+  hello();
   window.addEventListener('resize', paint);
   paint();
 }

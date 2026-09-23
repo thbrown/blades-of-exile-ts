@@ -34,9 +34,11 @@ export interface InstalledScenario {
   introPic: number;
   /** A PNG of the terrain view as a new game starts, once the game has shown it. */
   preview?: Uint8Array;
+  /** Whether custom graphics were stored with it. */
+  hasGraphics: boolean;
 }
 
-interface ScenarioRecord extends InstalledScenario {
+interface ScenarioRecord extends Omit<InstalledScenario, 'hasGraphics'> {
   /** Absent on records made before `.exs` support, which were all `.boes`. */
   kind?: PackageKind;
   fileName?: string;
@@ -84,8 +86,9 @@ export function scenarioStoreAvailable(): boolean {
 export async function listInstalledScenarios(): Promise<InstalledScenario[]> {
   const rows = await withStore('readonly', (store) => run(store.getAll() as IDBRequest<ScenarioRecord[]>));
   return rows
-    .map(({ id, title, blurb, installedAt, introPic, preview }) => ({
+    .map(({ id, title, blurb, installedAt, introPic, preview, graphics }) => ({
       id, title, blurb, installedAt, introPic: introPic ?? 0, ...(preview ? { preview } : {}),
+      hasGraphics: graphics !== undefined,
     }))
     .sort((a, b) => a.installedAt - b.installedAt);
 }
@@ -134,7 +137,10 @@ export async function installScenario(pkg: ScenarioPackage): Promise<InstalledSc
     ...(pkg.graphics ? { graphics: new Uint8Array(pkg.graphics) } : {}),
   };
   await withStore('readwrite', (store) => run(store.put(record)));
-  return { id: record.id, title: record.title, blurb: record.blurb, installedAt: record.installedAt, introPic: record.introPic };
+  return {
+    id: record.id, title: record.title, blurb: record.blurb, installedAt: record.installedAt,
+    introPic: record.introPic, hasGraphics: record.graphics !== undefined,
+  };
 }
 
 /** Keep a picture of where the game starts, taken the first time it's played. */

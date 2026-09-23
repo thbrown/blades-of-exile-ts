@@ -47,13 +47,16 @@ for (const id of ids) {
       await page.waitForFunction(() => window.__dialogs?.active?.def?.byName.has('okay'), null, { timeout: 60000 });
     }
     await page.goto(`${BASE}?scenario=${encodeURIComponent(id)}`);
-    await page.waitForFunction(() => window.__session !== undefined, null, { timeout: 60000 });
+    await page.waitForFunction(() => window.__session !== undefined && window.__desktop, null, { timeout: 60000 });
     const dataUrl = await page.evaluate((r) => {
       const canvas = document.getElementById('canvas');
+      // The game screen sits at an offset on the desktop (render/desktop.ts).
+      const { gameX, gameY } = window.__desktop;
       const crop = document.createElement('canvas');
       crop.width = r.right - r.left;
       crop.height = r.bottom - r.top;
-      crop.getContext('2d').drawImage(canvas, r.left, r.top, crop.width, crop.height, 0, 0, crop.width, crop.height);
+      crop.getContext('2d').drawImage(canvas, gameX + r.left, gameY + r.top, crop.width, crop.height,
+        0, 0, crop.width, crop.height);
       return crop.toDataURL('image/png');
     }, TER);
     writeFileSync(outPath(id), Buffer.from(dataUrl.split(',')[1], 'base64'));

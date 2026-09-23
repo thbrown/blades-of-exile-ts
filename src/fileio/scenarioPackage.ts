@@ -58,13 +58,16 @@ const stem = (name: string): string => (name.split('/').pop() ?? name).replace(/
  */
 export function identifyScenarioFiles(files: { name: string; data: Uint8Array }[]): ScenarioPackage[] {
   const flat: { name: string; data: Uint8Array }[] = [];
+  const add = (name: string, data: Uint8Array): void => {
+    flat.push({ name, data: macBinaryDataFork(data) ?? data });
+  };
   for (const f of files) {
     if (isZip(f.data)) {
       for (const [name, data] of Object.entries(unzipSync(f.data))) {
         if (name.endsWith('/') || name.startsWith('__MACOSX') || name.includes('/._')) continue;
-        flat.push({ name, data });
+        add(name, data);
       }
-    } else flat.push(f);
+    } else add(f.name, f.data);
   }
   const bmps = flat.filter((f) => /\.bmp$/i.test(f.name) && f.data[0] === 0x42 && f.data[1] === 0x4d);
   const out: ScenarioPackage[] = [];
@@ -109,4 +112,23 @@ export async function loadScenarioPackage(
     }
   }
   return { scenario, sheets, warnings };
+}
+
+/**
+ * The data fork of a MacBinary file, or null if `data` isn't one. Mac authors
+ * sometimes uploaded files wrapped this way: a 128-byte header naming the
+ * file, then its data fork, then its resource fork. Four archive scenarios'
+ * `.bmp`s are wrapped (Echoes: Pawns, Black Horse, Nightmare, Quintessence).
+ * Without this their custom graphics were silently dropped, and every custom
+ * terrain drew as a blank square. The header is checked as MacBinary readers
+ * check it: a zero first byte, a 1–63 character name, zeros at bytes 74 and
+ * 82, and a data fork that fits in the file.
+ */
+export function macBinaryDataFork(data: Uint8Array): Uint8Array | null {
+  if (data.length < 128) return null;
+  const nameLen = data[1]!;
+  if (data[0] !== 0 || nameLen < 1 || nameLen > 63 || data[74] !== 0 || data[82] !== 0) return null;
+  const len = ((data[83]! << 24) | (data[84]! << 16) | (data[85]! << 8) | data[86]!) >>> 0;
+  if (len === 0 || 128 + len > data.length) return null;
+  return data.subarray(128, 128 + len);
 }

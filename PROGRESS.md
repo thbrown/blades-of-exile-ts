@@ -12034,3 +12034,36 @@ terrain**. Towns could still be entered (entry goes by `cityLocs`), but
 not seen. The fix is in the `Universe` constructor. A save still overrides
 it with TOWNVISIBLE/TOWNHIDDEN. The replay corpus is unchanged at
 51 / 1,231,440.
+
+**Pop-out map fixes (2026-09-23), after "I just see black on the pop-out tab".**
+Reproduced in the user's real Chrome: **two game tabs shared the channel**, and
+each numbers its palette in its own order. The map tab drew one game's grid
+with the other game's palette, which came out as specks or black, and its
+title flipped between them. Each message now carries the game tab's id
+(`sessionStorage`, so a reload keeps it, and a duplicated tab gets a new one via
+`ready`/`taken`). `?popout=map&game=<id>` listens only to that game. Also: a
+snapshot identical to the last isn't re-sent (an idle game redraws several
+times a second to animate), a tile whose sheet isn't loaded yet isn't cached
+blank (`drawMapTile` returns whether it drew), and the map tab starts
+cropped to the explored area, because a whole continent with one path explored
+looks empty.
+
+**MacBinary-wrapped `.bmp`s (2026-09-23), after "white squares in Echoes:
+Pawns".** Four archive scenarios (amovie, black, nightmar24, quint) ship their
+custom graphics as a MacBinary file: a 128-byte header, then the data fork. The
+`BM` check passed over them, so every custom terrain drew blank.
+`macBinaryDataFork` in `scenarioPackage.ts` unwraps every file in a package.
+The library was rebuilt (only those four `customGraphics` flags changed) and
+their previews retaken. An install stored before the fix has no graphics.
+The startup screen treats it as not installed when the catalog says it should
+have some, so the next click reinstalls it. `scenario-previews.mjs` now crops
+at the desktop offset. `docs/library` (the embedded copy) has **not** been
+rebuilt yet.
+
+**Masks v. 1.0.3 is still garbage** (town "nd", terrain names shifted by a
+few characters, most pictures 0), and its white squares are that, not
+graphics. Its header is the ordinary Mac one (23 towns, 3×4 outdoors). But the
+check fields near the end of `scenario_data_type`, which the 1997 editor
+fills from the password (`flag_d = init_data(...)`, tfileio.c:199), are
+0xFFFF, where Pawns and Echoes both have 9504/14182. So another editor wrote
+it, with a layout neither this loader nor OBoE's reads. Not fixed.
