@@ -94,7 +94,7 @@ export function putMonstInfo(
  */
 export function monsterInfoDialog(
   ctx: CanvasRenderingContext2D, store: SheetStore,
-  univ: Universe, which?: Creature,
+  univ: Universe, which?: Creature, start = 0,
 ): XmlDialog {
   const dlg = new XmlDialog(ctx, store, getDialogDef('monster-info'));
   // `adjust_monst_menu` (boe.menus.win.cpp:140) builds `on_monst_menu` from
@@ -106,7 +106,9 @@ export function monsterInfoDialog(
     dlg.hide('right');
     putMonstInfo(dlg, which.mon, univ.scenario, which);
   } else {
-    let position = 0;
+    // `display_monst(array_pos, …, 1)` — the Monsters menu opens the roster
+    // on the entry that was picked.
+    let position = start;
     const show = (): void => {
       const num = roster[position];
       if (num === undefined) return;

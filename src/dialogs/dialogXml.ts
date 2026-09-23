@@ -76,6 +76,13 @@ export interface PictControl extends Base {
   framed: boolean;
   filled: boolean;
   size?: 'small' | 'wide' | 'tall' | 'large';
+  /**
+   * `cPict`'s frame style: `framed='false'` is none, `outline` names one, and
+   * the default is solid (pict.cpp:144).
+   */
+  outline: 'none' | 'solid' | 'inset' | 'outset' | 'double';
+  /** `color` — a pict's *fill* colour (`fillClr`, black by default). */
+  colour?: string;
 }
 
 export interface LedControl extends Base {
@@ -96,6 +103,8 @@ export interface FieldControl extends Base {
 
 export interface LineControl extends Base {
   kind: 'line';
+  /** Unset on a dark dialog means white (`cConnector::validatePostParse`). */
+  colour?: string;
 }
 
 /**
@@ -247,6 +256,9 @@ function parseControl(el: Element): DialogControl | null {
         framed: parseBool(attr(el, 'framed'), true),
         filled: parseBool(attr(el, 'filled'), true),
         size: attr(el, 'size') as PictControl['size'],
+        outline: (attr(el, 'outline') as PictControl['outline'] | undefined)
+          ?? (parseBool(attr(el, 'framed'), true) ? 'solid' : 'none'),
+        colour: attr(el, 'colour') ?? attr(el, 'color'),
       };
     case 'led':
       return parseLed(el);
@@ -266,7 +278,7 @@ function parseControl(el: Element): DialogControl | null {
           ? undefined : Number(attr(el, 'tab-order')),
       };
     case 'line':
-      return { ...parseBase(el), kind: 'line' };
+      return { ...parseBase(el), kind: 'line', colour: attr(el, 'colour') ?? attr(el, 'color') };
     default:
       // stack/page/pane/tilemap/mapgroup belong to the scenario editor's
       // dialogs, which this port doesn't run.

@@ -85,6 +85,9 @@ const COLOURS: Record<string, string> = {
   link: Colours.LIGHT_BLUE,
 };
 
+/** `cPict::getSheet(SHEET_FULL, n)` (pict.cpp:703) — the three named help pictures. */
+const FULL_SHEETS: Record<number, string> = { 1400: 'outhelp', 1401: 'fighthelp', 1402: 'townhelp' };
+
 /** cControl::drawFrame's two greys (control.cpp:443). */
 const FRAME_DARK = 'rgb(48,48,48)';
 const FRAME_LIGHT = 'rgb(224,224,224)';
@@ -753,17 +756,21 @@ export class XmlDialog implements ModalScreen {
     const text = this.fillKey(control, this.getText(control.name) || control.text);
     if (!text) return;
     // A message wraps inside its own rect, which is what gives the multi-line
-    // blocks in the game's dialogs their shape.
+    // blocks in the game's dialogs their shape. One written with no width or
+    // height is sized to its text instead (`cTextMsg::recalcRect`,
+    // message.cpp:139): it does not wrap, and nothing is cut off below it.
+    const fixedWidth = width(rect) > 0;
+    const fixedHeight = height(rect) > 0;
     const lines: string[] = [];
     for (const paragraph of text.split('\n')) {
-      lines.push(...(paragraph.length === 0
-        ? ['']
+      lines.push(...(paragraph.length === 0 || !fixedWidth
+        ? [paragraph]
         : wrapLines(this.ctx, paragraph, width(rect), style)));
     }
     const lineHeight = style.size + 2;
     let y = rect.top;
     for (const line of lines) {
-      if (y > rect.bottom) break;
+      if (fixedHeight && y > rect.bottom) break;
       const box = { ...rect, top: y, bottom: y + lineHeight };
       if (control.align === 'right') {
         const w = measureString(this.ctx, line, style);
@@ -851,13 +858,26 @@ export class XmlDialog implements ModalScreen {
     const num = this.picNum.get(control.name) ?? control.num;
     const type = this.picType.get(control.name) ?? control.type;
     const large = control.size === 'large';
-    drawPictAt(this.ctx, this.store, type, num, at.left, at.top, large);
-    if (!control.framed) return;
+    const { ctx } = this;
+    if (type === 'blank') {
+      // "Just a solid fill" (pict.cpp:737), in `fillClr` — black unless the
+      // definition gives a colour. The help pages draw their white panels so.
+      ctx.fillStyle = control.colour ? COLOURS[control.colour] ?? control.colour : Colours.BLACK;
+      ctx.fillRect(at.left, at.top, width(at), height(at));
+    } else if (type === 'full') {
+      // `drawFullSheet`: a whole image, at its own size. 1400-1402 are the
+      // three help pictures; anything else is a scenario's `sheet<n>`.
+      const name = FULL_SHEETS[num] ?? `sheet${num}`;
+      const sheet = this.store.get(name);
+      if (sheet) ctx.drawImage(sheet, at.left, at.top);
+    } else {
+      drawPictAt(ctx, this.store, type, num, at.left, at.top, large);
+    }
+    if (control.outline === 'none') return;
     // A picture's frame is `FRM_SOLID` (pict.cpp:144) — one dark line two
     // pixels out, round the picture as it now is rather than as it was read.
     const size = pictNaturalSize(type, num, large);
     const rect = size ? { ...at, right: at.left + size.w, bottom: at.top + size.h } : at;
-    const { ctx } = this;
     ctx.strokeStyle = FRAME_DARK;
     ctx.lineWidth = 1;
     ctx.strokeRect(rect.left - 2 + 0.5, rect.top - 2 + 0.5, width(rect) + 3, height(rect) + 3);
@@ -917,13 +937,15 @@ export class XmlDialog implements ModalScreen {
     ctx.restore();
   }
 
+  /** `cConnector::draw` — white on a dark dialog unless it names a colour. */
   private drawLine(control: DialogControl): void {
+    if (control.kind !== 'line') return;
     const rect = this.screenRect(control);
-    this.ctx.strokeStyle = FRAME_LIGHT;
+    this.ctx.strokeStyle = control.colour ? COLOURS[control.colour] ?? control.colour : Colours.WHITE;
     this.ctx.lineWidth = 1;
     this.ctx.beginPath();
-    this.ctx.moveTo(rect.left, rect.top + 0.5);
-    this.ctx.lineTo(rect.right, rect.bottom + 0.5);
+    this.ctx.moveTo(rect.left + 0.5, rect.top + 0.5);
+    this.ctx.lineTo(rect.right + 0.5, rect.bottom + 0.5);
     this.ctx.stroke();
   }
 }

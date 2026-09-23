@@ -19,6 +19,11 @@ export function hasStrings(name: string): boolean {
   return tables.has(name);
 }
 
+/** How many strings a table holds — `ResMgr::strings.get(name)->size()`. */
+export function stringCount(name: string): number {
+  return tables.get(name)?.length ?? 0;
+}
+
 /** get_str — 1-based line lookup; missing entries give an empty string. */
 export function getStr(name: string, index: number): string {
   return tables.get(name)?.[index - 1] ?? '';
@@ -37,6 +42,7 @@ export const STRING_TABLES = [
   // give_help's instant help, and the Library's tip of the day.
   'help',
   'tips',
+  'spell-times',
 ];
 
 export async function loadStringTables(

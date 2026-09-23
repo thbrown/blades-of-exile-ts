@@ -27,6 +27,12 @@ export const MENU_SEPARATOR = Symbol('separator');
 export interface Menu {
   label: string;
   items: (MenuItem | typeof MENU_SEPARATOR)[];
+  /**
+   * Items built afresh each time the menu opens, after the fixed ones — the
+   * spell menus list what the current PC can cast *now* (`adjust_spell_menus`),
+   * and the Monsters menu what the party has met.
+   */
+  dynamic?: () => (MenuItem | typeof MENU_SEPARATOR)[];
 }
 
 export interface MenuBar {
@@ -61,12 +67,13 @@ export function installMenuBar(host: HTMLElement, menus: Menu[]): MenuBar {
     dropdown.className = 'dropdown';
     const items: { el: HTMLElement; item: MenuItem }[] = [];
 
-    for (const entry of menu.items) {
+    const addEntry = (entry: MenuItem | typeof MENU_SEPARATOR, dynamic: boolean): void => {
       const li = document.createElement('li');
+      if (dynamic) li.dataset['dynamic'] = '1';
       if (entry === MENU_SEPARATOR) {
         li.className = 'separator';
         dropdown.append(li);
-        continue;
+        return;
       }
       li.append(entry.label);
       if (entry.shortcut !== undefined) {
@@ -83,7 +90,18 @@ export function installMenuBar(host: HTMLElement, menus: Menu[]): MenuBar {
       });
       items.push({ el: li, item: entry });
       dropdown.append(li);
-    }
+    };
+    for (const entry of menu.items) addEntry(entry, false);
+
+    /** Throw away the last opening's dynamic items and build this one's. */
+    const rebuild = (): void => {
+      if (!menu.dynamic) return;
+      for (const li of [...dropdown.querySelectorAll('li[data-dynamic]')]) li.remove();
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (items[i]!.el.dataset['dynamic']) items.splice(i, 1);
+      }
+      for (const entry of menu.dynamic()) addEntry(entry, true);
+    };
 
     root.append(dropdown);
     root.addEventListener('click', (ev) => {
@@ -91,6 +109,7 @@ export function installMenuBar(host: HTMLElement, menus: Menu[]): MenuBar {
       const wasOpen = root.classList.contains('open');
       closeAll();
       if (!wasOpen) {
+        rebuild();
         refresh();
         root.classList.add('open');
       }
@@ -100,6 +119,7 @@ export function installMenuBar(host: HTMLElement, menus: Menu[]): MenuBar {
     root.addEventListener('mouseenter', () => {
       if (!entries.some((e) => e.root.classList.contains('open'))) return;
       closeAll();
+      rebuild();
       refresh();
       root.classList.add('open');
     });

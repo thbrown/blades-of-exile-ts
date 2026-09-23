@@ -11599,3 +11599,42 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
   - `verify-screen.mjs` now builds its party: deletes PC 6 and makes "Zed"
     through all four dialogs by mouse and keyboard, including the empty-name
     refusal. Menu items are picked by label rather than position.
+
+- **The rest of the menu bar (M8, 2026-09-22).** Corpus-neutral: **51 /
+  1,231,440**. The bar now has the original's menus: File, Options, Actions,
+  Monsters, Mage Spells, Priest Spells, Library and Help
+  (`handle_menu_choice`, boe.main.cpp).
+  - **Options** adds Journal and Party Statistics (`print_party_stats`).
+    **The event journal is always empty**: nothing in the C++ ever calls
+    `add_to_journal`, so `journal()` only ever prints "Nothing in your events
+    journal." — ported as exactly that.
+  - **Actions**: Alchemy, Wait (`handle_wait`, the long wait) and Map — menu
+    routes to flows that already had keys.
+  - **Monsters** and the two **spell menus** are built when they open
+    (`Menu.dynamic`): the monsters the party has noted, in number order, each
+    opening the roster on its own page; and the spells the *current* PC can
+    cast (`adjust_spell_menus`). Choosing a spell is `handle_menu_spell`:
+    the current PC casts it with no picker, it becomes the stored spell for
+    the M/P recast, and a spell that needs a PC asks "Cast spell on who?".
+    Each menu's "About" item is a *forced* `give_help` (9 or 12), which shows
+    even with instant help off.
+  - **Library**: `display_spells` (spell-info.xml, with the resurrection-balm
+    text kept only in a scenario that uses balm), `display_skills`
+    (skill-info.xml), `display_alchemy()` (the "alchemy" string table on
+    many-str.xml), Tip of the Day and the Introduction. **Tip of the Day
+    draws a die** — `get_ran(1, 0, tips - 51)` for the first tip — on the
+    game stream, as the C++'s does. Its "See tips upon startup" LED is the
+    `GiveIntroHint` preference.
+  - **Help**: the six help pages and About, via `show_dialog_action`
+    (`choiceDialog`). The item panel's help button opens help-inventory.xml.
+  - **pc-info's see-mage / see-priest / see-alchemy** open `display_pc`
+    (pc-spell-info.xml, sixty-two LEDs, arrows over every PC who isn't
+    ABSENT — the dead included) and `display_alchemy(false)`
+    (pc-alchemy-info.xml). Nothing on either is clickable.
+  - **What the help pages needed from the toolkit**: `type='blank'` is a
+    *fill* in the pict's `color` (black by default), `type='full'` is a whole
+    image at its own size (1400-1402 are outhelp/fighthelp/townhelp.png), a
+    pict's `outline` names its frame style, a `line` is white on a dark
+    dialog unless it names a colour, and **a text control written with no
+    width or height is sized to its text** — it doesn't wrap, which is what
+    had every toolbar label in help-combat.xml showing only its first word.

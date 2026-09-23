@@ -2799,6 +2799,64 @@ const textAnswer = await page.evaluate(() => window.__textAnswer);
 const fields = { typed, fieldError, numAnswer, textAnswer };
 
 console.log('TEXT FIELDS:', JSON.stringify(fields));
+
+// The menu bar: every Library and Help item opens its real dialog, which
+// closes on Enter; Party Statistics and Journal print; Monsters and the spell
+// menus fill themselves when they open; and an "About" item forces its help
+// box up even though instant help is off.
+const clickMenu = async (menu, item) => {
+  await page.locator('#game-menu-bar .menu-item', { hasText: menu }).first().click();
+  await page.locator('#game-menu-bar .menu-item.open .dropdown li', { hasText: item }).first().click();
+  await page.waitForTimeout(200);
+};
+const openDialog = () => page.evaluate(() => {
+  const d = window.__dialogs.active;
+  return d && d.def ? [...d.def.byName.keys()] : null;
+});
+const menus = {};
+for (const [menu, item, expect] of [
+  ['Library', 'Mage Spells', 'cost'], ['Library', 'Priest Spells', 'when'],
+  ['Library', 'Skills', 'tips'], ['Library', 'Alchemy', 'str'],
+  ['Library', 'Introduction', 'okay'],
+  ['Help', 'Outdoors', 'okay'], ['Help', 'Town', 'okay'], ['Help', 'Combat', 'okay'],
+  ['Help', 'Barriers', 'okay'], ['Help', 'Hints', 'okay'], ['Help', 'Magic', 'okay'],
+  ['Help', 'About Blades', 'okay'],
+]) {
+  await clickMenu(menu, item);
+  const names = await openDialog();
+  menus[`${menu}/${item}`] = !!names && names.includes(expect);
+  if (item === 'Mage Spells') {
+    menus.spellName = await page.evaluate(() => window.__dialogs.active.getText('name'));
+    await shot('02m-spell-info');
+  }
+  if (item === 'Combat') await shot('02m-help-combat');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(150);
+}
+await clickMenu('Library', 'Tip of the Day');
+menus.tip = await page.evaluate(() => window.__dialogs.active?.getText('tip') ?? '');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(150);
+await clickMenu('Options', 'Party Statistics');
+menus.stats = await page.evaluate(() => window.__univ.transcript.slice(-6));
+await clickMenu('Mage Spells', 'About Mage Spells');
+menus.aboutMage = await page.evaluate(() => window.__dialogs.active?.getText('title') ?? null);
+await page.keyboard.press('Enter');
+await page.waitForTimeout(150);
+// The spell menus list what the *current* PC can cast. Ask for a caster's.
+menus.castLists = [];
+for (const pc of [3, 4]) {
+  await page.evaluate((n) => { window.__univ.curPc = n; }, pc);
+  for (const book of ['Mage Spells', 'Priest Spells']) {
+    await page.locator('#game-menu-bar > .menu-item', { hasText: book }).first().click();
+    menus.castLists.push((await page.locator('#game-menu-bar .menu-item.open .dropdown li')
+      .allTextContents()).length);
+    await page.keyboard.press('Escape');
+  }
+}
+await page.evaluate(() => { window.__univ.curPc = 0; });
+menus.dialogsClear = await page.evaluate(() => window.__dialogs.active === null);
+console.log('MENUS:', JSON.stringify(menus));
 await shot('02i-word-of-recall');
 
 // The two endings. `handle_death` on the real party-death.xml: wipe the party
@@ -3031,6 +3089,10 @@ const ok =
   built.nameError === 'Cannot be empty.' && built.partyAfter[5] === 'Zed' &&
   built.zed.name === 'Zed' && built.zed.race === 1 && built.zed.pic === 2 &&
   built.zed.status === 1 && built.zed.tough === true && built.zed.items > 0 &&
+  Object.entries(menus).filter(([, v]) => typeof v === 'boolean').every(([, v]) => v === true) &&
+  menus.spellName === 'Light' && menus.tip.length > 10 &&
+  menus.stats[0] === 'PARTY STATS:' && menus.aboutMage === 'Instant Help' &&
+  menus.castLists.some((n) => n > 3) &&
   fields.typed === true && fields.fieldError === 'Error' &&
   fields.numAnswer === 75 && fields.textAnswer === 'hello' &&
   errors.length === 0;

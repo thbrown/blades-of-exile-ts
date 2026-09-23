@@ -13,8 +13,8 @@ import type { SpecialHost } from './game/specials/context';
 import { SpecCtx, SpecCtxType } from './game/specials/context';
 import { Location, dist, locsEqual, shiftLoc } from './core/location';
 import { SpellPat } from './data/pattern';
-import { SPELLS, Spell, spellName } from './data/spell';
-import { CastStatus, castableSpells } from './game/spellCast';
+import { SPELLS, Spell, SpellSelect, spellFromNum, spellName } from './data/spell';
+import { CastStatus, castableSpells, pcCanCastSpell } from './game/spellCast';
 import { castSpell } from './game/spellTown';
 import { combatCastCheck, combatCastSpell } from './game/spellCombat';
 import {
@@ -45,8 +45,12 @@ import {
   pickPcName, pickRaceAbil, startNewParty,
 } from './dialogs/partyEditor';
 import { XpMode } from './game/createPc';
+import {
+  LIBRARY_DIALOG_DEFS, alchemyHelpDialog, alchemyKnownDialog, choiceDialog, pcSpellsDialog,
+  skillInfoDialog, spellInfoDialog, tipOfDayDialog,
+} from './dialogs/libraryDialogs';
 import { setErrorSink } from './game/showError';
-import { appendIarrayPref, getBoolPref, iarrayPrefContains } from './platform/prefs';
+import { appendIarrayPref, getBoolPref, iarrayPrefContains, setPref } from './platform/prefs';
 import { notesRefusal } from './game/notes';
 import { ItemWinMode, QUEST_COMPLETED_OFFSET } from './game/itemWindow';
 import { BASIC_BUTTON_KEYS } from './game/specials/oneshot';
@@ -54,7 +58,7 @@ import { specItemUseable } from './data/quest';
 import { trappedMonsters } from './game/soulCrystal';
 import { cancelTownTargeting, castTownSpell, startTownTargeting } from './game/spellTarget';
 import { CastDialog } from './dialogs/castDialog';
-import { forcedCast } from './game/spellRepeat';
+import { forcedCast, storeFor } from './game/spellRepeat';
 import { GetItemsDialog } from './dialogs/getItemsDialog';
 import { placeSpellPattern } from './game/spellPatterns';
 import { GameMode, isCombat, isOut, isScrollable, isTown } from './game/modes';
@@ -64,7 +68,7 @@ import { Missile, setMissileSink } from './game/missileAnim';
 import { pickNextPc } from './game/combat';
 import { GameRng } from './core/rng';
 import { DialogHost } from './dialogs/dialog';
-import { STRING_TABLES, getStr, loadStringTables } from './data/strings';
+import { STRING_TABLES, getStr, loadStringTables, stringCount } from './data/strings';
 import { TerSpec } from './data/terrain';
 import { GameSession } from './game/session';
 import { TalkAction } from './game/talk';
@@ -74,7 +78,7 @@ import {
   SaveSlot, exportSave, getSave, importSave, listSaves, putSave, saveStoreAvailable,
 } from './platform/saveStore';
 import { AutosaveReason, getAutosavePrefs, setAutosaveSink } from './game/autosave';
-import { MENU_SEPARATOR, installMenuBar } from './platform/menu';
+import { MENU_SEPARATOR, MenuItem, installMenuBar } from './platform/menu';
 import { showStartupScreen } from './platform/startup';
 import { readScenarioFromXml } from './fileio/scenarioXml';
 import { parseXmlDoc } from './fileio/xml';
@@ -234,12 +238,14 @@ async function main(): Promise<void> {
     'scenpics', 'bigscenpics',
     // draw_startup's picture, behind the party editor at the start of a game.
     'startup',
+    // The pictures in help-outdoor, help-combat and help-town (PIC_FULL 1400-1402).
+    'outhelp', 'fighthelp', 'townhelp',
   ];
   for (let i = 1; i <= 11; i++) sheets.push(`monst${i}`);
   const dialogNames = ['pc-info', 'quest-info', 'get-items', 'item-info', 'many-str', 'monster-info', 'job-board',
     'pick-potion', 'party-death', 'steal-item', ...STR_DIALOG_DEFS, ...NOTES_DIALOG_DEFS,
     ...INPUT_DIALOG_DEFS, ...PICT_CHOICE_DIALOG_DEFS, ...SPEND_XP_DIALOG_DEFS,
-    ...PARTY_EDITOR_DIALOG_DEFS];
+    ...PARTY_EDITOR_DIALOG_DEFS, ...LIBRARY_DIALOG_DEFS];
   addTotal(1 /* opcodes */ + STRING_TABLES.length + dialogNames.length + sheets.length
     + (document.fonts ? 4 : 0) + 1 /* scenario.xml */);
 
@@ -478,6 +484,92 @@ async function main(): Promise<void> {
       }
     }
     redraw();
+  };
+
+  /** `show_dialog_action(xml)` — a help page, the welcome, About. */
+  const showDialogAction = async (name: string): Promise<void> => {
+    await dialogs.runNested(choiceDialog(ctx, store, name));
+    redraw();
+  };
+
+  /** `print_party_stats` (boe.text.cpp:678) — Options › Party Statistics. */
+  const printPartyStats = (): void => {
+    const { party } = univ;
+    univ.addStringToBuf('PARTY STATS:');
+    univ.addStringToBuf(`  Number of kills: ${party.totalMKilled}`);
+    if (isTown(session.mode) || (isCombat(session.mode) && session.whichCombatType === 1)) {
+      univ.addStringToBuf(`  Kills in this town: ${univ.town?.record.monstersKilled ?? 0}`);
+    }
+    univ.addStringToBuf(`  Total experience: ${party.totalXpGained}`);
+    univ.addStringToBuf(`  Total damage done: ${party.totalDamDone}`);
+    univ.addStringToBuf(`  Total damage taken: ${party.totalDamTaken}`);
+    redraw();
+  };
+
+  /**
+   * `tip_of_day` — the Library's Tip of the Day. It draws a die, as the C++'s
+   * does, and "See tips upon startup" is the `GiveIntroHint` preference.
+   */
+  const tipOfDayFlow = async (): Promise<void> => {
+    const { dlg, showAtStart } = tipOfDayDialog(ctx, store, univ.rng, stringCount('tips'),
+      getBoolPref('GiveIntroHint', true));
+    await dialogs.runNested(dlg);
+    setPref('GiveIntroHint', showAtStart());
+    redraw();
+  };
+
+  /**
+   * `handle_menu_spell` (boe.actions.cpp:2027) — a spell chosen from the Mage
+   * or Priest menu: the current PC casts it, with no picker. It is stored as
+   * the thing to recast, and a spell that needs a PC asks for one first.
+   */
+  const menuSpellFlow = async (spell: Spell): Promise<void> => {
+    const info = SPELLS[spell];
+    const type = info?.type ?? Skill.MAGE_SPELLS;
+    if (!session.primeTime) {
+      univ.addStringToBuf('Cast: Finish what you are doing first.');
+      redraw();
+      return;
+    }
+    const pcNum = univ.curPc;
+    const pc = univ.currentPc;
+    session.pcCasting = pcNum;
+    pc.lastCast[type] = spell;
+    pc.lastCastType = type;
+    const stored = storeFor(session, type);
+    stored.spell = spell;
+    stored.caster = pcNum;
+    const selectModes: Partial<Record<SpellSelect, SelectPcMode>> = {
+      [SpellSelect.ACTIVE]: SelectPcMode.ONLY_LIVING,
+      [SpellSelect.ANY]: SelectPcMode.ANY,
+      [SpellSelect.DEAD]: SelectPcMode.ONLY_DEAD,
+      [SpellSelect.STONE]: SelectPcMode.ONLY_STONE,
+    };
+    const selectMode = selectModes[info?.select ?? SpellSelect.NO];
+    if (selectMode !== undefined) {
+      const target = await selectPc(selectMode, 'Cast spell on who?');
+      if (target === 6) { redraw(); return; }
+      session.spellTarget = target;
+    }
+    if (isCombat(session.mode)) {
+      if (combatCastCheck(session, type)) await combatCastSpell(session, spell);
+    } else {
+      await session.castTownSpell(pcNum, spell);
+    }
+    setStatus();
+    redraw();
+  };
+
+  /** `adjust_spell_menus` — what the current PC can cast, in spell order. */
+  const spellMenuItems = (type: Skill): MenuItem[] => {
+    const pc = univ.currentPc;
+    const items: MenuItem[] = [];
+    for (let i = 0; i < 62; i++) {
+      const spell = spellFromNum(type, i);
+      if (!pcCanCastSpell(session, pc, spell)) continue;
+      items.push({ label: spellName(spell), action: () => { void menuSpellFlow(spell); } });
+    }
+    return items;
   };
 
   /**
@@ -1094,7 +1186,9 @@ async function main(): Promise<void> {
     if (dialogs.active) return;
     void dialogs.runScreen(pcInfoDialog(ctx, store, univ, which, (what, pc) => {
       if (what === 'trait') void pickRaceAbil(partyHost, univ.party.pcs[pc]!, 1);
-      else univ.addStringToBuf(`(${what} needs its own dialog yet)`);
+      else if (what === 'seealch') void dialogs.runNested(alchemyKnownDialog(ctx, store, univ));
+      else void dialogs.runNested(pcSpellsDialog(ctx, store, univ, pc,
+        what === 'seemage' ? 'mage' : 'priest'));
     })).then(() => redraw());
   };
 
@@ -1760,9 +1854,7 @@ async function main(): Promise<void> {
           if (bottom === 6) screen.itemWindow.setStatWindow(univ, ItemWinMode.SPECIAL);
           else if (bottom === 7) screen.itemWindow.setStatWindow(univ, ItemWinMode.QUESTS);
           else if (bottom === 8) {
-            // TODO(M6): show_dialog_action("help-inventory"), one of the help
-            // dialogs the toolkit can now draw but nothing opens yet.
-            univ.addStringToBuf('(The inventory help dialog is still to come)');
+            void showDialogAction('help-inventory');
           } else {
             univ.curPc = bottom;
             screen.itemWindow.setStatWindowForPc(univ, bottom);
@@ -2309,6 +2401,90 @@ async function main(): Promise<void> {
         MENU_SEPARATOR,
         { label: 'Talk Notes', action: () => { void notesFlow('talk'); } },
         { label: 'Encounter Notes', action: () => { void notesFlow('encounter'); } },
+        {
+          // `journal` (boe.infodlg.cpp:653). Nothing in the C++ ever calls
+          // `add_to_journal`, so this is all the Journal ever says.
+          label: 'Journal',
+          action: () => { univ.addStringToBuf('Nothing in your events journal.'); redraw(); },
+        },
+        { label: 'Party Statistics', action: printPartyStats },
+      ],
+    }, {
+      label: 'Actions',
+      items: [
+        { label: 'Alchemy…', action: () => { void doAlchemyFlow(); } },
+        {
+          label: 'Wait',
+          action: () => {
+            if (dialogs.active || midAction()) return;
+            void session.wait().then(() => { setStatus(); redraw(); });
+          },
+        },
+        { label: 'Map', action: () => { toggleMap(); redraw(); } },
+      ],
+    }, {
+      // `adjust_monst_menu` (boe.menus.win.cpp:140): the monsters the party
+      // has noted, in number order, each opening the roster at its own page.
+      label: 'Monsters',
+      items: [
+        { label: 'About Monsters', action: () => { giveHelp(12, 0, true); } },
+        MENU_SEPARATOR,
+      ],
+      dynamic: () => [...univ.party.mNoted].sort((a, b) => a - b).map((num, i) => ({
+        label: univ.scenario.scenMonsters[num]?.name ?? `Monster ${num}`,
+        action: () => {
+          void dialogs.runNested(monsterInfoDialog(ctx, store, univ, undefined, i))
+            .then(() => redraw());
+        },
+      })),
+    }, {
+      label: 'Mage Spells',
+      items: [
+        { label: 'About Mage Spells', action: () => { giveHelp(9, 0, true); } },
+        MENU_SEPARATOR,
+      ],
+      dynamic: () => spellMenuItems(Skill.MAGE_SPELLS),
+    }, {
+      label: 'Priest Spells',
+      items: [
+        { label: 'About Priest Spells', action: () => { giveHelp(9, 0, true); } },
+        MENU_SEPARATOR,
+      ],
+      dynamic: () => spellMenuItems(Skill.PRIEST_SPELLS),
+    }, {
+      label: 'Library',
+      items: [
+        {
+          label: 'Mage Spells',
+          action: () => { void dialogs.runNested(spellInfoDialog(ctx, store, univ, 'mage')).then(redraw); },
+        },
+        {
+          label: 'Priest Spells',
+          action: () => { void dialogs.runNested(spellInfoDialog(ctx, store, univ, 'priest')).then(redraw); },
+        },
+        {
+          label: 'Skills',
+          action: () => { void dialogs.runNested(skillInfoDialog(ctx, store)).then(redraw); },
+        },
+        {
+          label: 'Alchemy',
+          action: () => { void dialogs.runNested(alchemyHelpDialog(ctx, store)).then(redraw); },
+        },
+        MENU_SEPARATOR,
+        { label: 'Tip of the Day', action: () => { void tipOfDayFlow(); } },
+        { label: 'Introduction', action: () => { void showDialogAction('welcome'); } },
+      ],
+    }, {
+      label: 'Help',
+      items: [
+        { label: 'Outdoors', action: () => { void showDialogAction('help-outdoor'); } },
+        { label: 'Town', action: () => { void showDialogAction('help-town'); } },
+        { label: 'Combat', action: () => { void showDialogAction('help-combat'); } },
+        { label: 'Barriers and Fields', action: () => { void showDialogAction('help-fields'); } },
+        { label: 'Hints', action: () => { void showDialogAction('help-hints'); } },
+        { label: 'Magic', action: () => { void showDialogAction('help-magic'); } },
+        MENU_SEPARATOR,
+        { label: 'About Blades of Exile', action: () => { void showDialogAction('about-boe'); } },
       ],
     }]);
   }
