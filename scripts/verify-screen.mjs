@@ -3069,12 +3069,31 @@ await dp.waitForTimeout(150);
 desk.scaled = await dp.evaluate(() => ({ ...window.__desktop,
   scrolls: document.documentElement.scrollHeight > window.innerHeight }));
 await dp.screenshot({ path: `${SHOTS}/03b-desktop-2x.png` });
+// View > Map in New Window: a second page that draws what this one sends.
+const popupP = dp.waitForEvent('popup');
+await dp.locator('#game-menu-bar .menu-item', { hasText: 'View' }).first().click();
+await dp.locator('#game-menu-bar .dropdown li', { hasText: 'Map in New Window' }).click();
+const pop = await popupP;
+pop.on('pageerror', (e) => errors.push(`map tab pageerror: ${e.message}`));
+pop.on('console', (m) => { if (m.type() === 'error') errors.push(`map tab console: ${m.text()}`); });
+await pop.waitForFunction(() => (document.querySelector('.map-place')?.textContent ?? '') !== '',
+  { timeout: 15000 });
+desk.popout = await pop.evaluate(() => {
+  const c = document.querySelector('.map-view canvas');
+  const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+  let lit = 0;
+  for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 120) lit++;
+  return { place: document.querySelector('.map-place').textContent, lit };
+});
+await pop.screenshot({ path: `${SHOTS}/03c-map-tab.png` });
+await pop.close();
 await dp.close();
 console.log('DESKTOP:', JSON.stringify(desk));
 const desktopOk = desk.layout.gameX === 0 && desk.layout.gameY === 0 && desk.layout.w > 605 &&
   !desk.scrolls && desk.map.visible && desk.map.x >= 605 && desk.curPc === 1 &&
   desk.prefsFull === true && desk.centred.gameX > 0 &&
-  desk.scaled.scale === 2 && !desk.scaled.scrolls;
+  desk.scaled.scale === 2 && !desk.scaled.scrolls &&
+  desk.popout.place === 'Fort Talrus' && desk.popout.lit > 500;
 
 console.log('ERRORS:', errors.length ? errors.join(' | ') : 'none');
 await browser.close();

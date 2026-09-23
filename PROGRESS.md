@@ -12003,3 +12003,34 @@ OBoE's `adjust_window_mode` / `compute_viewport`:
 - Gotcha: the menu bar is `display: none` while empty and is filled in after
   loading, so it pushes the canvas down 36px *after* the first fit.
   `refitDesktop()` runs again once it's installed.
+
+**The pop-out map (2026-09-23).** View › Map in New Window opens `?popout=map`,
+a page that loads none of the game (`platform/mapWindow.ts`). The game tab's
+`WorldMapFeed` (`render/worldMap.ts`) answers its hello on the BroadcastChannel
+`exile-js:map`, then posts a snapshot at most every 150ms after a redraw.
+Nothing is built until a map tab has said hello. A snapshot is a grid of
+palette indices plus a palette of 12px map squares, drawn by the automap's own
+`drawMapTile`, which was split out of `MapScreen`. The palette is only resent
+when a new terrain type turns up.
+- Outdoors it's the whole continent. The live 2×2 block comes from
+  `univ.out` and every other sector from `sector.maps`/`terrain`. Hidden
+  towns get `erase_hidden_towns`' flag1 swap applied there too, so nothing
+  is spoiled.
+- Labels: a town when `canFind` is set and its entrance has been explored
+  (entrances to the same town within 10 squares share one label), area
+  descriptions once any square in them is explored, and faint sector names.
+  In town it's the whole town with its area names and Detect Life markers.
+- The map tab can crop to the explored area and hide names. It has no
+  pan or zoom yet.
+- Nothing here is in the original; it sits beside the desktop automap, which
+  is unchanged. On a phone there's no second window, so that automap
+  stays the map there.
+
+**Gotcha, and a real bug it found (2026-09-23): `canFind` was never
+initialised.** OBoE's `enter_scenario` sets `town->can_find = !is_hidden`
+(universe.cpp:1430). The port never did, so every town started hidden and
+`erase_hidden_towns` drew **every town entrance outdoors as its plain flag1
+terrain**. Towns could still be entered (entry goes by `cityLocs`), but
+not seen. The fix is in the `Universe` constructor. A save still overrides
+it with TOWNVISIBLE/TOWNHIDDEN. The replay corpus is unchanged at
+51 / 1,231,440.

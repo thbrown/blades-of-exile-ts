@@ -139,6 +139,11 @@ export class Universe {
     // every vehicle the scenario placed.
     this.party.boats = scenario.boats.filter((v) => v.exists).map((v) => ({ ...v }));
     this.party.horses = scenario.horses.filter((v) => v.exists).map((v) => ({ ...v }));
+    // enter_scenario (universe.cpp:1430): a town starts findable unless the
+    // scenario hides it. Without this every town started hidden, so
+    // `erase_hidden_towns` drew each entrance as its plain `flag1` terrain.
+    // A saved game overwrites these with its own TOWNVISIBLE/TOWNHIDDEN.
+    for (const town of scenario.towns) town.canFind = !town.isHidden;
     this.out = new CurOut(scenario, this.party);
     this.out.addMaps();
     // The tail of cUniverse::set_scenario (universe.cpp:1438): the party begins

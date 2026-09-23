@@ -55,6 +55,8 @@ import {
   setPref,
 } from './platform/prefs';
 import { fitCanvasToPage } from './platform/pageLayout';
+import { startMapWindow } from './platform/mapWindow';
+import { WorldMapFeed } from './render/worldMap';
 import { GAME_SPEED_PACE, PREFERENCES_DIALOG_DEFS, preferencesDialog } from './dialogs/preferencesDialog';
 import { setTargetLockPref } from './game/targetMode';
 import { notesRefusal } from './game/notes';
@@ -238,6 +240,12 @@ function showLoadingUi(): void {
 }
 
 async function main(): Promise<void> {
+  // The pop-out map is this same page with none of the game in it.
+  if (new URLSearchParams(window.location.search).get('popout') === 'map') {
+    hideLoadingUi();
+    startMapWindow();
+    return;
+  }
   const canvas = document.getElementById('canvas') as HTMLCanvasElement;
   const status = document.getElementById('status')!;
   canvas.width = BOE_WIDTH;
@@ -456,6 +464,7 @@ async function main(): Promise<void> {
     if (screen.mapVisible) screen.mapScreen.draw(session);
     dialogs.draw();
     ctx.restore();
+    worldMap.update();
     const css = cursorCss(changeCursor(session.mode, pointer?.x ?? null, pointer?.y ?? null,
       dialogs.active !== null));
     if (css !== shownCursor) {
@@ -464,6 +473,9 @@ async function main(): Promise<void> {
     }
   };
   const dialogs = new DialogHost(ctx, store, () => redraw());
+  // The pop-out map, if one is open; it hears about every redraw.
+  const worldMap = new WorldMapFeed(store, () => session, () => univ.scenario.title);
+  worldMap.attach();
   // Exposed now rather than with the other handles at the end of `main`:
   // a new party is built in dialogs before the game has even started.
   Object.assign(window as unknown as Record<string, unknown>, { __dialogs: dialogs, __univ: univ });
@@ -2684,7 +2696,10 @@ async function main(): Promise<void> {
       // alignment and UI scale, which the dialog can only show on a desktop
       // tall enough for all of it.
       label: 'View',
-      items: [],
+      items: [
+        { label: 'Map in New Window', action: () => worldMap.open() },
+        MENU_SEPARATOR,
+      ],
       dynamic: () => {
         const mode = getIntPref('DisplayMode', DisplayMode.CENTRE);
         const scale = getFloatPref('UIScale', DEFAULT_UI_SCALE);

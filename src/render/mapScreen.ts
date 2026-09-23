@@ -13,6 +13,7 @@
  * tiles, the black backing, the road stubs, the markers — is verbatim.
  */
 
+import type { Terrain } from '../data/terrain';
 import { PartyStatus } from '../universe/skills';
 import { GameMode } from '../game/modes';
 import { GameSession } from '../game/session';
@@ -291,63 +292,9 @@ export class MapScreen {
 
     const dx = this.window.left + MAP_AREA.left + MAP_TILE * (x - view.left);
     const dy = this.window.top + MAP_AREA.top + MAP_TILE * (y - view.top);
-    const spec = univ.terrainType(ter);
-
-    let pic = spec.mapPic;
-    let large = false;
-    if (pic === -1) {
-      pic = spec.picture;
-      large = true;
-    }
-    if (pic >= 1000) {
-      // `draw_map`'s custom branch (boe.town.cpp:1484): a full-size picture
-      // is shrunk from its cell, and a map picture is one of the nine 12×12
-      // squares in the cell `pic % 1000`, chosen by `pic / 1000 - 1`.
-      const g = customGraphic(pic % 1000);
-      const img = g && this.store.get(g.sheetName);
-      if (g && img) {
-        if (large) {
-          this.ctx.drawImage(img, g.rect.left, g.rect.top, g.rect.width, g.rect.height,
-            dx, dy, MAP_TILE, MAP_TILE);
-        } else {
-          const n = Math.floor(pic / 1000) - 1;
-          this.ctx.drawImage(img, g.rect.left + Math.floor(n / 3) * 12, g.rect.top + (n % 3) * 12,
-            12, 12, dx, dy, MAP_TILE, MAP_TILE);
-        }
-      }
-    } else if (large) {
-      // No map icon of its own: shrink the full-size terrain tile into 6px.
-      const g = terrainGraphic(pic);
-      const img = g && this.store.get(g.sheetName);
-      if (g && img) {
-        this.ctx.drawImage(
-          img, g.rect.left, g.rect.top, g.rect.width, g.rect.height,
-          dx, dy, MAP_TILE, MAP_TILE,
-        );
-      }
-    } else {
-      // The termap sheet is indexed by the terrain's *full-size* picture, not
-      // by map_pic — map_pic only decides which branch runs. That reads like a
-      // slip in the C++, but scenarios are drawn against it, so it stays.
-      const img = this.store.get('termap');
-      if (img) {
-        const p = spec.picture;
-        const sx = p < 960 ? 12 * (p % 20) : 12 * 20;
-        const sy = p < 960 ? 12 * Math.floor(p / 20) : 12 * (p - 960);
-        this.ctx.drawImage(img, sx, sy, 12, 12, dx, dy, MAP_TILE, MAP_TILE);
-      }
-    }
-
+    drawMapTile(this.ctx, this.store, univ.terrainType(ter), dx, dy, MAP_TILE);
     const road = outMode ? univ.out.isRoad(ox, oy) : town?.isRoad(x, y);
-    if (road) {
-      const trim = this.store.get('trim');
-      if (trim) {
-        this.ctx.drawImage(
-          trim, ROAD_SRC.left, ROAD_SRC.top, 4, 4,
-          dx + 1, dy + 1, MAP_TILE - 2, MAP_TILE - 2,
-        );
-      }
-    }
+    if (road) drawRoadStub(this.ctx, this.store, dx, dy, MAP_TILE);
   }
 
   /** fill_rect + frame_circle over one map square. */
@@ -363,4 +310,66 @@ export class MapScreen {
     ctx.arc(dx + MAP_TILE / 2, dy + MAP_TILE / 2, MAP_TILE / 2 - 0.5, 0, Math.PI * 2);
     ctx.stroke();
   }
+}
+
+/**
+ * One terrain type's map square, `size` pixels across — the picture half of
+ * `draw_map`'s inner loop (boe.town.cpp:1460). The automap draws these at 6px;
+ * the pop-out map (`worldMap.ts`) draws them at 12, the sheets' own size.
+ */
+export function drawMapTile(
+  ctx: CanvasRenderingContext2D, store: SheetStore, spec: Terrain,
+  dx: number, dy: number, size: number,
+): void {
+  let pic = spec.mapPic;
+  let large = false;
+  if (pic === -1) {
+    pic = spec.picture;
+    large = true;
+  }
+  if (pic >= 1000) {
+    // `draw_map`'s custom branch (boe.town.cpp:1484): a full-size picture
+    // is shrunk from its cell, and a map picture is one of the nine 12×12
+    // squares in the cell `pic % 1000`, chosen by `pic / 1000 - 1`.
+    const g = customGraphic(pic % 1000);
+    const img = g && store.get(g.sheetName);
+    if (g && img) {
+      if (large) {
+        ctx.drawImage(img, g.rect.left, g.rect.top, g.rect.width, g.rect.height, dx, dy, size, size);
+      } else {
+        const n = Math.floor(pic / 1000) - 1;
+        ctx.drawImage(img, g.rect.left + Math.floor(n / 3) * 12, g.rect.top + (n % 3) * 12,
+          12, 12, dx, dy, size, size);
+      }
+    }
+  } else if (large) {
+    // No map icon of its own: shrink the full-size terrain tile.
+    const g = terrainGraphic(pic);
+    const img = g && store.get(g.sheetName);
+    if (g && img) {
+      ctx.drawImage(img, g.rect.left, g.rect.top, g.rect.width, g.rect.height, dx, dy, size, size);
+    }
+  } else {
+    // The termap sheet is indexed by the terrain's *full-size* picture, not
+    // by map_pic — map_pic only decides which branch runs. That reads like a
+    // slip in the C++, but scenarios are drawn against it, so it stays.
+    const img = store.get('termap');
+    if (img) {
+      const p = spec.picture;
+      const sx = p < 960 ? 12 * (p % 20) : 12 * 20;
+      const sy = p < 960 ? 12 * Math.floor(p / 20) : 12 * (p - 960);
+      ctx.drawImage(img, sx, sy, 12, 12, dx, dy, size, size);
+    }
+  }
+}
+
+/** The road stub `draw_map` lays over a road square, inset by a sixth. */
+export function drawRoadStub(
+  ctx: CanvasRenderingContext2D, store: SheetStore, dx: number, dy: number, size: number,
+): void {
+  const trim = store.get('trim');
+  if (!trim) return;
+  const inset = size / MAP_TILE;
+  ctx.drawImage(trim, ROAD_SRC.left, ROAD_SRC.top, 4, 4,
+    dx + inset, dy + inset, size - 2 * inset, size - 2 * inset);
 }
