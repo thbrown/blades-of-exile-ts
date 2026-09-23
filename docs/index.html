@@ -86,6 +86,339 @@
           transform: rotate(360deg);
         }
       }
+      /* Empty until the game is running, and an empty bar looks broken. */
+      #game-menu-bar:empty,
+      body.starting #canvas-wrap,
+      body.starting #status {
+        display: none;
+      }
+      #game-menu-bar {
+        width: 1210px;
+        max-width: 100%;
+        height: 26px;
+        background: #2a2a2a;
+        border: 1px solid #444;
+        border-radius: 3px;
+        display: flex;
+        align-items: stretch;
+        font-size: 13px;
+        color: #ddd;
+        user-select: none;
+        position: relative;
+        z-index: 10;
+      }
+      .menu-item {
+        padding: 0 10px;
+        cursor: pointer;
+        position: relative;
+        display: flex;
+        align-items: center;
+        white-space: nowrap;
+      }
+      .menu-item:hover,
+      .menu-item.open {
+        background: #4a4a6a;
+      }
+      .dropdown {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        background: #2a2a2a;
+        border: 1px solid #555;
+        min-width: 230px;
+        /* The spell and monster menus can run to sixty entries. */
+        max-height: 80vh;
+        overflow-y: auto;
+        z-index: 200;
+        padding: 3px 0;
+        box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.5);
+        list-style: none;
+        margin: 0;
+      }
+      .menu-item.open .dropdown {
+        display: block;
+      }
+      .dropdown li {
+        list-style: none;
+        padding: 5px 20px 5px 14px;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        align-items: center;
+      }
+      .dropdown li:hover {
+        background: #4a4a6a;
+      }
+      .dropdown li.disabled {
+        color: #666;
+        cursor: default;
+      }
+      .dropdown li.disabled:hover {
+        background: none;
+      }
+      .dropdown li span {
+        color: #888;
+        font-size: 11px;
+      }
+      .dropdown li.separator {
+        padding: 0;
+        margin: 3px 0;
+        border-top: 1px solid #444;
+        cursor: default;
+      }
+      .dropdown li.separator:hover {
+        background: none;
+      }
+      .startup {
+        width: 1210px;
+        max-width: 100%;
+        background: #222;
+        border: 1px solid #444;
+        border-radius: 4px;
+        padding: 24px 28px 28px;
+        box-sizing: border-box;
+      }
+      .startup h1 {
+        margin: 0 0 4px;
+        font-size: 22px;
+        font-weight: 600;
+      }
+      .startup h2 {
+        margin: 20px 0 8px;
+        font-size: 13px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #8fa8cd;
+      }
+      .startup-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 8px;
+      }
+      .startup-choice {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 3px;
+        text-align: left;
+        padding: 10px 12px;
+        background: #2c2c2c;
+        border: 1px solid #4a4a4a;
+        border-radius: 3px;
+        color: #ddd;
+        font: inherit;
+        cursor: pointer;
+      }
+      .startup-choice:hover,
+      .startup-choice:focus {
+        background: #3a3a55;
+        border-color: #6a8fc7;
+        outline: none;
+      }
+      .startup-choice strong {
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .startup-choice small {
+        font-size: 11px;
+        color: #999;
+        line-height: 1.35;
+      }
+      .startup-cards {
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      }
+      .startup-card {
+        padding: 0;
+        gap: 0;
+        overflow: hidden;
+      }
+      .startup-picture {
+        position: relative;
+        display: block;
+        width: 100%;
+        aspect-ratio: 279 / 200;
+        background: #111;
+        overflow: hidden;
+      }
+      .startup-picture img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center 40%;
+        image-rendering: pixelated;
+        display: block;
+      }
+      .startup-picture .startup-icon {
+        position: absolute;
+        right: 6px;
+        bottom: 6px;
+        box-shadow: 0 0 0 1px #000, 0 1px 4px rgba(0, 0, 0, 0.6);
+      }
+      .startup-picture.icon-only {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(circle at center, #2e2a22, #141210);
+      }
+      .startup-picture.icon-only .startup-icon {
+        position: static;
+        box-shadow: none;
+      }
+      .startup-icon {
+        display: inline-block;
+        width: 64px;
+        height: 64px;
+        /* scenpics is 160×224; doubled, as the game canvas is */
+        background-size: 320px 448px;
+        image-rendering: pixelated;
+      }
+      .startup-words {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding: 9px 12px 11px;
+      }
+      /* Author rules like `.startup-choice { display: flex }` beat the
+         browser's own [hidden] rule, which is how the filter once hid nothing. */
+      .startup [hidden] {
+        display: none !important;
+      }
+      .startup-about {
+        margin: 10px 0 4px;
+        padding: 12px 16px;
+        background: #1c1c1c;
+        border: 1px solid #383838;
+        border-radius: 4px;
+        font-size: 13px;
+        line-height: 1.5;
+        color: #bbb;
+        max-width: 60rem;
+      }
+      .startup-about p {
+        margin: 0;
+      }
+      .startup-about p + p {
+        margin-top: 6px;
+      }
+      .startup-about a,
+      .startup-source {
+        color: #8fa8cd;
+      }
+      .startup-sub {
+        margin: -4px 0 12px;
+        font-size: 13px;
+        color: #999;
+      }
+      .startup-controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+      .startup-shown {
+        font-size: 12px;
+        color: #888;
+        margin-left: auto;
+      }
+      .startup-empty {
+        color: #999;
+        font-size: 13px;
+      }
+      .startup-filter {
+        font: inherit;
+        font-size: 13px;
+        padding: 5px 9px;
+        min-width: 16rem;
+        background: #1a1a1a;
+        border: 1px solid #4a4a4a;
+        border-radius: 3px;
+        color: #ddd;
+      }
+      .startup-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .startup-chip {
+        font: inherit;
+        font-size: 12px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid #4a4a4a;
+        background: transparent;
+        color: #888;
+        cursor: pointer;
+      }
+      .startup-chip.on {
+        background: #3a3a55;
+        border-color: #6a8fc7;
+        color: #ddd;
+      }
+      .startup-badge {
+        position: absolute;
+        left: 6px;
+        top: 6px;
+        padding: 2px 8px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .startup-badge.official {
+        background: #6b5418;
+        color: #f3dc98;
+      }
+      .startup-badge.added {
+        background: #23425f;
+        color: #b9d5f0;
+      }
+      .startup-credit {
+        margin: 6px 0 12px;
+        font-size: 12px;
+        color: #888;
+      }
+      .startup-facts {
+        font-size: 11px;
+        color: #c9b27a;
+      }
+      .startup-state {
+        font-size: 11px;
+        color: #8fcd9a;
+      }
+      .startup-state:empty {
+        display: none;
+      }
+      .startup-source {
+        font-size: 11px;
+        color: #7f95b8;
+      }
+      .startup-card.busy {
+        cursor: progress;
+        opacity: 0.7;
+      }
+      .startup.dropping {
+        outline: 2px dashed #6a8fc7;
+        outline-offset: -10px;
+      }
+      .startup.busy {
+        cursor: progress;
+      }
+      .startup-add {
+        margin-top: 8px;
+        border-style: dashed;
+        background: transparent;
+      }
+      .startup-problem {
+        margin: 8px 0 0;
+        color: #e08a7a;
+        font-size: 12px;
+      }
       #progress-wrap {
         width: 1210px;
         max-width: 100%;
@@ -101,9 +434,11 @@
         transition: width 0.15s ease-out;
       }
     </style>
-    <script type="module" crossorigin src="/exile-js/assets/index-DO1P66_w.js"></script>
+    <script type="module" crossorigin src="/exile-js/assets/index-gmQVMc_x.js"></script>
   </head>
   <body>
+    <nav id="game-menu-bar"></nav>
+    <div id="startup-host"></div>
     <div id="canvas-wrap">
       <canvas id="canvas" width="605" height="430"></canvas>
       <div id="spinner" aria-hidden="true"></div>
