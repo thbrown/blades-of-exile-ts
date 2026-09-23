@@ -82,7 +82,7 @@ export class Universe {
   /**
    * `univ.node_step_through` — the scripting debugger's single-step flag
    * (boe.actions.cpp:2247). Toggled by a debug key and read by the specials VM,
-   * which this port does not pause. TODO(M8) if a recording ever needs a node
+   * which this port does not pause. TODO(M9) if a recording ever needs a node
    * to stop.
    */
   nodeStepThrough = false;

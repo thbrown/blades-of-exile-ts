@@ -32,9 +32,10 @@ and **read `DIVERGENCES.md` before assuming which C++ is right.**
   differ.** That is the rule `DIVERGENCES.md` records and justifies; the one
   decided case so far is `get_ran`, where matching the original would cost the
   entire replay corpus and change nothing a player can see.
-- **`TODO(Mn)` marks every place the port stops short**, naming the milestone
-  that fills it in. `grep -rn "TODO(M" src/` is the honest inventory of what's
-  missing.
+- **`TODO(...)` marks every place the port stops short**, naming what fills
+  it in: a milestone (`TODO(M9)`), or `TODO(campaign)` for cross-scenario
+  state that is out of scope. `grep -rn "TODO(" src/` is the honest inventory
+  of what's missing — keep prose from matching it.
 - **Update `PROGRESS.md` and commit it with the work.** New findings go in its
   gotchas log with a date.
 

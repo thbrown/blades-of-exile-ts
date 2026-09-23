@@ -175,10 +175,8 @@ export function canDrawTerrainSpot(
  * is the one currently spending them — the C++'s own comment says so, and its
  * `i = 400` is just a `break`.
  *
- * Exported so the wording is testable without a canvas.
- *
- * TODO(M6): the right-hand half — the "hit m to recast <spell>" hint, and the
- * party status icons it replaces.
+ * Exported so the wording is testable without a canvas. The right-hand half
+ * — the recast hint or the party's status icons — is `drawStatusBar`'s.
  */
 /** The party statuses' icons (`choose_status_effect`'s `pstatus_pics`). */
 const PARTY_STATUS_ICON: Record<PartyStatus, number> = {

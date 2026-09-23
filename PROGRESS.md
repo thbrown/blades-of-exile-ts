@@ -69,7 +69,11 @@
 
 ## Current state
 
-**M8, fidelity hardening, is the live milestone (2026-09-05).** M0–M7 are
+**Part 1 is finished (2026-09-23)**: M0–M8 are closed, and the player needs
+nothing that says "not implemented yet". See "Handoff to Part 2" at the very
+bottom for where the Exile 3 work starts. The history below is kept as it was.
+
+**M8, fidelity hardening, was the live milestone (2026-09-05).** M0–M7 are
 closed; what M8 does is take the C++ replay corpus and drive the two engines'
 `get_ran` streams together, rule by rule. It stands at **1,213,908 matching
 draws and 47 of 87 recordings agreeing all the way**, against 1,039,384 and 33
@@ -827,7 +831,7 @@ Notes for M2 implementer:
 - [x] **M0 — Skeleton**: Vite+TS(strict)+Vitest scaffold; `core/` (mt19937 rng, location) with tests; assets copied to `public/data`; tile-grid demo page
 - [x] **M1 — Scenario loads, outdoor walkabout**: XML/.map/.spec parsers, terrain view, outdoor movement (gzip+tar for packed .boes deferred to file-upload work; items/monsters XML land with M2)
 - [x] **M2 — Towns + full 605×430 shell**: town enter/exit ✅, UI chrome ✅, pregen party ✅, GameSession/Universe ✅, sound ✅, line-of-sight fog + lighting ✅, terrain trim + roads ✅, floor items ✅, inventory panel ✅, fields overlay ✅, **replay driver ✅ (2026-08-01)**
-- [ ] **M3 — Dialog toolkit + talk + shops**: talking ✅, minimal async modal dialog ✅, doors + look + signs ✅, item/equip model + inventory panel ✅, shops ✅, sell/identify/recharge ✅, training ✅, inns ✅, **item Use ✅ (2026-07-27)**, **enchanting ✅ (2026-09-05)**; full dialogxml still open
+- [x] **M3 — Dialog toolkit + talk + shops**: talking ✅, minimal async modal dialog ✅, doors + look + signs ✅, item/equip model + inventory panel ✅, shops ✅, sell/identify/recharge ✅, training ✅, inns ✅, **item Use ✅ (2026-07-27)**, **enchanting ✅ (2026-09-05)**, **text fields, nested dialogs, spend-xp.xml, the party editor and every dialog the player reaches ✅ (2026-09-22/23)**
 - [x] **M4 — Specials interpreter (breadth-first)**: VM core (pointers, queueing, messages) + all seven opcode groups; triggers wired for movement, look, town entry/exit, use-space, call-special terrain and the two talk nodes. Opcodes needing combat/fields/timers/quests report themselves and wait for M5/M6.
 - [x] **M5 — Combat**: M5a ✅ (the iLiving seam, damage/status, combat mode, melee); M5b ✅ (monster turns, melee AI, town *and outdoor* encounters, the `uAbility` port, missiles on both sides, breath, summons, touch abilities, on-hit weapon abilities, **monster spellcasting**); M5c ✅ (spell patterns, `process_fields`, the 147-spell table, `pc_can_cast_spell`, town/combat/targeted/multi-target casting, and the real casting dialog). Remaining odds and ends: none — `record_monst`, `do_mindduel` and the SPECIAL monster ability have all landed since (checked 2026-09-05).
 - [x] **M6 — Specials depth + party ops** (valleydy completable): quests, job
@@ -838,14 +842,19 @@ Notes for M2 implementer:
       niceties, not the milestone's demo path.
 - [x] **M7 — Save/load (.exg) + startup flow** (2026-08-01): the tag file, the
       tarball, the whole `.exg` round trip, the IndexedDB slots, the File menu,
-      the autosave and the startup screen. Open: preferences for the autosave
-      triggers, and the legacy v1 save format (an M8 stretch)
-- [ ] **M8 — Fidelity hardening** (replay golden masters): begun 2026-08-02,
-      and **the rules queue emptied 2026-09-05** — 1,213,908 matching draws and
-      47 of 87 recordings agreeing all the way, with every remaining file
-      blocked by the oracle or unstartable. What is left is harness work (the
-      fourteen `party-death` stops are the biggest lump) and captured end
-      states.
+      the autosave and the startup screen. **Preferences ✅ (2026-09-23)**.
+      The legacy v1 save format is out of scope.
+- [x] **M8 — Fidelity hardening** (2026-08-02 → 2026-09-23): the corpus at
+      **1,231,440 matching draws, 51 of 87 agreeing all the way**, the other
+      36 blocked by the oracle or unstartable (24 of them agree on every draw
+      the oracle made). The menus, toolbar, cursors, custom graphics and
+      preferences closed the player-facing gaps (2026-09-22/23).
+- **After Part 1** — `grep -rn "TODO(" src/` lists what is left, and it is
+  seven lines: `TODO(campaign)` is cross-scenario state (stored PCs, custom
+  party sheets, `scen_won`), out of scope for Part 1 by the user's decision;
+  `TODO(M9)` is replay-harness work (the V2 debug-kill dialog, the node
+  single-stepper, `new_party` mid-recording) and one no-known-case timing
+  note on `fogLifted`. Also out of scope: the legacy `.exs` importer.
 
 ## Milestones (Part 2: Exile 3)
 
@@ -11769,3 +11778,36 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     `resolvePositions` walked the top level only. LEDs are also sized with
     their label now (`cLed::getPreferredSize`, estimated at parse time), and
     where two controls' rects overlap the topmost wins the click.
+
+
+## Handoff to Part 2 (Exile 3) — 2026-09-23
+
+Part 1 is done; Part 2 starts at **E3-0** in `PLAN.md`. What a fresh agent
+needs to know:
+
+- **The engine takes a standard unpacked v2 scenario** — the layout of
+  `public/scenarios/<id>/` (`scenario.xml`, `terrain.xml`, `items.xml`,
+  `monsters.xml`, `towns/`, `out/`, `graphics/sheet*.png`). The converter's
+  job is to emit exactly that; nothing in the engine should need to change for
+  a scenario that fits the format. Add an id to `BUNDLED_SCENARIOS` in
+  `src/main.ts` to offer it on the startup screen, or open `?scenario=<id>`.
+- **Custom graphics are supported** (`render/customPics.ts`): pictures from
+  1000 index `graphics/sheet<n>.png`, 100 cells of 28×36 to a sheet. How many
+  sheets to load is worked out from the highest custom picture the terrain,
+  monsters and items use, so a converter only has to write the sheets and
+  refer to them.
+- **The converter goes in `tools/e3convert/`**, a Node/TS tool that also runs
+  under Vitest. E3's files are the user's own (`../exile3-mapping/Exile3/`,
+  plus `outdoor-to-json.js` — 90 zones × 3,220 bytes, a 48×48 terrain grid at
+  the start of each — and `display.js`'s partial terrain mapping). **They are
+  commercial assets and are never committed**: the converter takes a path, and
+  its tests skip when it is absent.
+- **The legacy structs to diff against** are in `../exile-wasm/src/oldstructs.hpp`
+  (`outdoor_record_type`, `town_record_type`, `ave_tr_type`,
+  `talking_record_type`), and `DIVERGENCES.md` explains why the 1997 source
+  (`../boe-source-1997`) is the better guide to E3-era data than OBoE.
+- **The checks still apply**: `npx vitest run`, `npx tsc --noEmit`,
+  `node scripts/verify-screen.mjs` (with `npx vite --port 5199` running). The
+  replay corpus (`node scripts/diverge.mjs --all --refresh`) only covers the
+  four BoE scenarios, but anything touching the engine should still leave it
+  at 51 / 1,231,440.

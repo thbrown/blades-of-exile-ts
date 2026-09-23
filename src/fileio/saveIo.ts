@@ -673,8 +673,8 @@ export function writeParty(file: TagFile, party: Party, scenarioId: string): voi
   page.add('WOUNDS', party.totalDamTaken);
   page.add('EXPERIENCE', party.totalXpGained);
   page.add('SCENARIO', scenarioId);
-  // TODO(M7): scen_won / scen_played are part of the cross-scenario campaign
-  // bookkeeping this port doesn't keep.
+  // TODO(campaign): scen_won / scen_played are part of the cross-scenario
+  // campaign bookkeeping, which is out of scope for Part 1.
   for (const [which, job] of party.activeQuests) {
     page.add(
       'QUEST', which,

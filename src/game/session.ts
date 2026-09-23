@@ -681,7 +681,7 @@ export class GameSession {
       // so `party_can_see_monst` says yes to everything on screen for that one
       // turn.
       //
-      // TODO(M8): the C++ clears it at the tail of `advance_time`, which runs
+      // TODO(M9): the C++ clears it at the tail of `advance_time`, which runs
       // on **every** action; this port has no single per-action hook, so a
       // `TOWN_LIFT_FOG` raised by an action that sets no `did_something` would
       // linger one action longer. Every node that can raise it fires from a
@@ -3123,7 +3123,7 @@ export class GameSession {
    * goodbye with a message node before the end-scenario node, so anything added
    * here would be a second ending on top of the author's.
    *
-   * TODO(M8): `exportGraphics`, `exportSummons` and `clear_stored_pcs` — the
+   * TODO(campaign): `exportGraphics`, `exportSummons` and `clear_stored_pcs` — the
    * three lines that carry a party out of one scenario and into the next. They
    * need the campaign-level state (custom sheets, stored PCs) that `saveIo.ts`
    * already lists as unmodelled.

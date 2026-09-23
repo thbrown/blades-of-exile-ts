@@ -829,11 +829,8 @@ export async function runReplay(
             break;
           }
           // Otherwise it opens `pick_spell`, and the choice arrives as the
-          // `click_control`s that follow. `spell_forced` is the "hit m again to
-          // recast" shortcut, which this port has no equivalent of (see the
-          // TODO(M6) on the transcript's right-hand half) — it is read so that
-          // a file using it fails honestly rather than silently casting the
-          // wrong thing.
+          // `click_control`s that follow — unless `spell_forced` says it was
+          // the recast shortcut, below.
           const type = action.info.which_type === 'priest'
             ? Skill.PRIEST_SPELLS : Skill.MAGE_SPELLS;
           // `spell_forced` is **shift-M / shift-P**, the recast shortcut
@@ -1338,7 +1335,7 @@ export async function runReplay(
             [{ name: 'okay', label: 'New Game' }, { name: 'cancel', label: 'Cancel' }],
             '', 0, 0);
           if (picked !== 0) break;
-          // TODO(M8): the confirmed arm drops to the startup screen and runs
+          // TODO(M9): the confirmed arm drops to the startup screen and runs
           // `start_new_game()`, which is the same flow `pick_a_scen` needs and
           // which this driver does not have yet. Stopping is the honest answer
           // — carrying on with the old party would make every action after this
@@ -1484,7 +1481,7 @@ export async function runReplay(
         case 'debug_step_through':
           // :2247 — a scripting-debug toggle. Nothing in this port reads it
           // yet (the C++ pauses on each special node), but it is universe
-          // state a recording sets. TODO(M8) if a node ever has to stop.
+          // state a recording sets. TODO(M9) if a node ever has to stop.
           session.univ.nodeStepThrough = !session.univ.nodeStepThrough;
           session.univ.addStringToBuf(session.univ.nodeStepThrough
             ? 'Debug: Step-through enabled' : 'Debug: Step-through disabled');
@@ -1628,7 +1625,7 @@ export async function runReplay(
           // one of the three deaths V2 offers.
           const { univ } = session;
           if (hasFeatureFlag('debug-kill-party', 'V2')) {
-            // TODO(M8): the V2 arm is a `cStringChoice` for the death kind and
+            // TODO(M9): the V2 arm is a `cStringChoice` for the death kind and
             // then a `select_pc`. No recording in the corpus takes it — the
             // one file that uses this key predates the flag and answers the
             // yes/no box — so its control names would be a guess, and a guess
