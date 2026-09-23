@@ -11960,3 +11960,21 @@ ratings as "Rated PG".
 - The previews are 49 MB in total with the zips, which is fine for a bucket.
 - The smoke test is shallow (no dialog-driven specials). Real play is the
   next test.
+
+## Screen size and full screen (2026-09-23)
+
+**Full Screen button, added.** It sits at the right-hand end of the menu bar
+(`installFullScreenButton`, `src/platform/menu.ts`) and fullscreens the whole
+page, not just the canvas, so the menus keep working. The `:root:fullscreen`
+rules in `index.html` scale the canvas to fit the screen at 605:430. The
+button is left out where `document.fullscreenEnabled` is false.
+`verify-screen.mjs` crops its screenshots at x=12, which cuts the button's
+label short in the images. The page itself is fine.
+
+**Open, user-reported: dialogs cut off, and the map sits over play.** The
+cause is structural. Dialogs and the automap are drawn *inside* the 605×430
+canvas, so anything larger is clipped, and the map can only go over the
+play area. The original drew the 605×430 screen at a position on a larger
+window (`display_mode` 0–5 picks centred or one of the corners; see
+`boe-source-1997`) and gave dialogs and the map windows of their own. Fixing
+it is a separate change and hasn't been decided.

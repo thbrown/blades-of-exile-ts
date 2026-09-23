@@ -115,6 +115,19 @@
         align-items: center;
         white-space: nowrap;
       }
+      .menu-item.menu-right {
+        margin-left: auto;
+      }
+      /* Full screen: the canvas, and the bar with it, grow as large as the
+         screen allows at 605:430. The 90px is the bar, gaps and status line. */
+      :root:fullscreen #canvas-wrap,
+      :root:fullscreen #game-menu-bar {
+        width: min(100%, calc((100vh - 90px) * 605 / 430));
+      }
+      :root:fullscreen body {
+        min-height: 100vh;
+        box-sizing: border-box;
+      }
       .menu-item:hover,
       .menu-item.open {
         background: #4a4a6a;

@@ -146,3 +146,27 @@ export function installMenuBar(host: HTMLElement, menus: Menu[]): MenuBar {
     },
   };
 }
+
+/**
+ * A Full Screen toggle at the right-hand end of the bar. It fullscreens the
+ * whole page rather than the canvas, so the menu bar stays usable, and the
+ * stylesheet's `:fullscreen` rules grow the canvas to fill the screen. Not
+ * shown at all where the browser can't do it (iPhone Safari, some iframes).
+ */
+export function installFullScreenButton(host: HTMLElement): void {
+  if (!document.fullscreenEnabled) return;
+  const button = document.createElement('div');
+  button.className = 'menu-item menu-right';
+  const label = (): void => {
+    button.textContent = document.fullscreenElement === null ? 'Full Screen' : 'Exit Full Screen';
+  };
+  label();
+  button.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    if (document.fullscreenElement === null) void document.documentElement.requestFullscreen().catch(() => {});
+    else void document.exitFullscreen().catch(() => {});
+  });
+  // Esc and F11 leave full screen without the button's help.
+  document.addEventListener('fullscreenchange', label);
+  host.append(button);
+}

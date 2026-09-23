@@ -85,7 +85,7 @@ import {
   AUTOSAVE_TRIGGER_DEFAULTS, AutosaveReason, MAX_AUTOSAVE_DEFAULT, getAutosavePrefs, setAutosavePrefs,
   setAutosaveSink,
 } from './game/autosave';
-import { MENU_SEPARATOR, MenuItem, installMenuBar } from './platform/menu';
+import { MENU_SEPARATOR, MenuItem, installFullScreenButton, installMenuBar } from './platform/menu';
 import { StartupLibrary, StartupScenario, showStartupScreen } from './platform/startup';
 import { LibraryCatalog, libraryUrl } from './fileio/libraryCatalog';
 import {
@@ -2713,6 +2713,7 @@ async function main(): Promise<void> {
         { label: 'About Blades of Exile', action: () => { void showDialogAction('about-boe'); } },
       ],
     }]);
+    installFullScreenButton(menuHost);
   }
 
   // Handles for headless verification and manual debugging.
