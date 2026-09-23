@@ -13,7 +13,8 @@
  */
 
 import { Colours } from '../render/colours';
-import { BOE_HEIGHT, BOE_WIDTH, UiRect, height, width } from '../render/layout';
+import { centreOnDesktop } from '../render/desktop';
+import { UiRect, height, width } from '../render/layout';
 import { monsterGraphic } from '../render/monsterPics';
 import { SheetStore, calcRect } from '../render/sheets';
 import { statIconRect } from '../data/statusIcons';
@@ -238,10 +239,7 @@ export class XmlDialog implements ModalScreen {
       // placed rect back into it flipped the control on every other showing.
       this.placed.set(c, { top, left, bottom: top + h, right: left + w });
     }
-    const origin = options.origin ?? {
-      x: Math.round((BOE_WIDTH - right) / 2),
-      y: Math.round((BOE_HEIGHT - bottom) / 2),
-    };
+    const origin = options.origin ?? centreOnDesktop(right, bottom);
     this.frame = {
       left: origin.x, top: origin.y, right: origin.x + right, bottom: origin.y + bottom,
     };

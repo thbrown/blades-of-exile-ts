@@ -9,6 +9,7 @@ import {
 } from '../src/dialogs/preferencesDialog';
 import { XmlDialog } from '../src/dialogs/xmlDialog';
 import { DEFAULT_AUTOSAVE_PREFS } from '../src/game/autosave';
+import { DisplayMode, UI_SCALE_FIT, desktop } from '../src/render/desktop';
 import { SheetStore } from '../src/render/sheets';
 
 const DIALOG_DIR = fileURLToPath(new URL('../public/data/dialogs', import.meta.url));
@@ -38,6 +39,7 @@ function click(dlg: ModalScreen, name: string): string | null {
 const base: Preferences = {
   playSounds: true, gameSpeed: 1, targetLock: true, showInstantHelp: true,
   autosave: DEFAULT_AUTOSAVE_PREFS, easyMode: false, lessWm: false,
+  displayMode: DisplayMode.CENTRE, uiScale: 2,
 };
 
 describe('the preferences dialog', () => {
@@ -75,5 +77,37 @@ describe('the preferences dialog', () => {
       nest: async (screen) => { click(screen, 'med'); return click(screen, 'okay')!; },
     });
     expect(out?.gameSpeed).toBe(1);
+  });
+
+  it('offers alignment and scale when the desktop has room for the whole dialog', async () => {
+    Object.assign(desktop, { w: 1000, h: 700 });
+    try {
+      const out = await preferencesDialog(fakeCtx(), new SheetStore(), base, {
+        resetHelp: () => {},
+        nest: async (screen) => {
+          const d = screen as XmlDialog;
+          expect(d.isVisible('display')).toBe(true);
+          expect(d.getLed('mid')).toBe('red');
+          expect(d.getLed('2')).toBe('red');
+          expect(d.getText('other')).toBe('Fit');
+          expect(d.frame.bottom).toBeLessThanOrEqual(700);
+          click(d, 'tl');
+          click(d, 'tl'); // clicking the lit one again leaves it lit
+          click(d, 'other');
+          return click(d, 'okay')!;
+        },
+      });
+      expect(out).toMatchObject({ displayMode: DisplayMode.TOP_LEFT, uiScale: UI_SCALE_FIT });
+    } finally {
+      Object.assign(desktop, { w: 605, h: 430 });
+    }
+  });
+
+  it('a compact dialog hands the display settings back unchanged', async () => {
+    const out = await preferencesDialog(fakeCtx(), new SheetStore(), { ...base, displayMode: 4, uiScale: 1.5 }, {
+      resetHelp: () => {},
+      nest: async (screen) => click(screen, 'okay')!,
+    });
+    expect(out).toMatchObject({ displayMode: 4, uiScale: 1.5 });
   });
 });

@@ -51,8 +51,10 @@ import {
 } from './dialogs/libraryDialogs';
 import { setErrorSink } from './game/showError';
 import {
-  appendIarrayPref, clearPref, getBoolPref, getIntPref, iarrayPrefContains, readAutosavePrefs, setPref,
+  appendIarrayPref, clearPref, getBoolPref, getFloatPref, getIntPref, iarrayPrefContains, readAutosavePrefs,
+  setPref,
 } from './platform/prefs';
+import { fitCanvasToPage } from './platform/pageLayout';
 import { GAME_SPEED_PACE, PREFERENCES_DIALOG_DEFS, preferencesDialog } from './dialogs/preferencesDialog';
 import { setTargetLockPref } from './game/targetMode';
 import { notesRefusal } from './game/notes';
@@ -108,6 +110,10 @@ import { killPc } from './game/damage';
 import { BOE_HEIGHT, BOE_WIDTH, ToolbarButton } from './render/layout';
 
 import { CHROME_SHEETS, Screen } from './render/screen';
+import {
+  DEFAULT_UI_SCALE, DisplayMode, UI_SCALES, UI_SCALE_FIT, desktop, placeBesideGame,
+} from './render/desktop';
+import { MAP_DEFAULT_POS, MAP_H, MAP_W } from './render/mapScreen';
 import { ShopHit, shopItemInfo } from './render/shopScreen';
 import { SheetStore } from './render/sheets';
 import { PartyPreset, Player } from './universe/player';
@@ -297,6 +303,10 @@ async function main(): Promise<void> {
     document.body.classList.remove('starting');
   }
   showLoadingUi();
+  /** `DisplayMode` and `UIScale`, OBoE's two window preferences. */
+  const fitDesktop = (): boolean => fitCanvasToPage(canvas,
+    getIntPref('DisplayMode', DisplayMode.CENTRE), getFloatPref('UIScale', DEFAULT_UI_SCALE));
+  fitDesktop();
 
   // Progress UI: total starts at the fixed-size loads (opcodes, string
   // tables, dialog defs, sheets, fonts, scenario.xml itself) and grows once
@@ -430,8 +440,22 @@ async function main(): Promise<void> {
   let pointer: { x: number; y: number } | null = null;
   let shownCursor = '';
   const redraw = (): void => {
+    // The desktop around the game screen is black, as OBoE's full-screen
+    // window is. The game screen is drawn over it at its offset, and that
+    // offset is left in place afterwards. The map and dialogs belong to the
+    // desktop, so they are drawn without it.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (desktop.w !== BOE_WIDTH || desktop.h !== BOE_HEIGHT) {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, desktop.w, desktop.h);
+    }
+    ctx.translate(desktop.gameX, desktop.gameY);
     screen.draw(session);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (screen.mapVisible) screen.mapScreen.draw(session);
     dialogs.draw();
+    ctx.restore();
     const css = cursorCss(changeCursor(session.mode, pointer?.x ?? null, pointer?.y ?? null,
       dialogs.active !== null));
     if (css !== shownCursor) {
@@ -478,6 +502,8 @@ async function main(): Promise<void> {
       autosave: auto,
       easyMode: univ.party.easyMode,
       lessWm: univ.party.lessWm,
+      displayMode: getIntPref('DisplayMode', DisplayMode.CENTRE),
+      uiScale: getFloatPref('UIScale', DEFAULT_UI_SCALE),
     }, {
       nest: (screen) => dialogs.runNested(screen),
       resetHelp: () => clearPref('ReceivedHelp'),
@@ -497,6 +523,7 @@ async function main(): Promise<void> {
       univ.party.easyMode = next.easyMode;
       univ.party.lessWm = next.lessWm;
       applyPrefs();
+      setDesktopPrefs(next.displayMode, next.uiScale);
     }
     redraw();
   };
@@ -1950,6 +1977,32 @@ async function main(): Promise<void> {
       return;
     }
     screen.mapVisible = !screen.mapVisible;
+    // The first opening, and the first after the desktop changes shape, puts
+    // the map beside the game screen if there is room. After that it stays
+    // where the player dragged it.
+    if (screen.mapVisible && !mapPlaced) {
+      screen.mapScreen.pos = placeBesideGame(desktop, MAP_W, MAP_H, MAP_DEFAULT_POS);
+      mapPlaced = true;
+    }
+  };
+  let mapPlaced = false;
+  /** Lay the desktop out again, and move the map to suit if it changed. */
+  const refitDesktop = (): void => {
+    if (!fitDesktop()) return;
+    mapPlaced = false;
+    if (screen.mapVisible) {
+      screen.mapScreen.pos = placeBesideGame(desktop, MAP_W, MAP_H, MAP_DEFAULT_POS);
+      mapPlaced = true;
+    }
+    redraw();
+  };
+  // A resize, or going full screen, is the page changing shape under it.
+  window.addEventListener('resize', refitDesktop);
+  /** Preferences and the View menu both set these two. */
+  const setDesktopPrefs = (mode: number, scale: number): void => {
+    setPref('DisplayMode', mode);
+    setPref('UIScale', scale);
+    refitDesktop();
   };
 
   const router = new InputRouter(canvas, {
@@ -1968,22 +2021,28 @@ async function main(): Promise<void> {
     },
     onDrag: (x, y) => {
       if (!screen.mapScreen.dragging) return;
-      screen.mapScreen.dragTo(x, y, BOE_WIDTH, BOE_HEIGHT);
+      screen.mapScreen.dragTo(x, y, desktop.w, desktop.h);
       redraw();
     },
     onRelease: () => {
       screen.mapScreen.endDrag();
     },
-    onClick: (x, y) => {
-      if (dialogs.handleClick(x, y)) return;
+    // The router speaks desktop coordinates. Dialogs and the map live there;
+    // everything else is on the game screen and is offset from it.
+    onClick: (dx, dy) => {
+      if (dialogs.handleClick(dx, dy)) return;
       // The map is a separate window in the original, so a click that lands on
       // it never reaches the game screen underneath.
-      if (screen.mapVisible && screen.mapScreen.contains(x, y)) {
+      if (screen.mapVisible && screen.mapScreen.contains(dx, dy)) {
         // A click anywhere on the map window picks it up, as the WASM build
         // allows ("Allow dragging from anywhere on the map window").
-        screen.mapScreen.startDrag(x, y);
+        screen.mapScreen.startDrag(dx, dy);
         return;
       }
+      const x = dx - desktop.gameX;
+      const y = dy - desktop.gameY;
+      // The desktop around the game screen is only background.
+      if (x < 0 || y < 0 || x >= BOE_WIDTH || y >= BOE_HEIGHT) return;
       // The party stats list: clicking a name makes that PC active, the HP and
       // SP columns read themselves out, and the two icons are Info and Trade
       // Places (handle_action's PC-area branch, boe.actions.cpp:1739).
@@ -2184,7 +2243,9 @@ async function main(): Promise<void> {
     // The targeting overlay follows the cursor, so a move has to repaint — but
     // only while something is actually being aimed, or every mouse twitch
     // redraws the whole 605x430 screen for nothing.
-    onHover: (x, y) => {
+    onHover: (dx, dy) => {
+      const x = dx - desktop.gameX;
+      const y = dy - desktop.gameY;
       pointer = { x, y };
       if (!isAiming()) {
         // The cursor follows the pointer even when nothing else on screen does.
@@ -2532,6 +2593,7 @@ async function main(): Promise<void> {
 
   if (buildParty) {
     hideLoadingUi();
+    refitDesktop(); // the progress bar's room is the canvas's now
     screen.startupBackdrop = true;
     redraw();
     if (!(await startNewParty(partyHost))) {
@@ -2563,6 +2625,7 @@ async function main(): Promise<void> {
   }
 
   hideLoadingUi();
+  refitDesktop();
   setStatus();
   redraw();
   // An installed scenario's first fresh start leaves behind a picture of where
@@ -2616,6 +2679,32 @@ async function main(): Promise<void> {
         MENU_SEPARATOR,
         { label: 'Preferences…', action: () => { void preferencesFlow(); } },
       ],
+    }, {
+      // Not one of the original's menus. It carries Preferences' display
+      // alignment and UI scale, which the dialog can only show on a desktop
+      // tall enough for all of it.
+      label: 'View',
+      items: [],
+      dynamic: () => {
+        const mode = getIntPref('DisplayMode', DisplayMode.CENTRE);
+        const scale = getFloatPref('UIScale', DEFAULT_UI_SCALE);
+        const tick = (on: boolean, label: string): string => `${on ? '✓' : '\u2003'} ${label}`;
+        const modes: [DisplayMode, string][] = [
+          [DisplayMode.CENTRE, 'Center'], [DisplayMode.TOP_LEFT, 'Top Left'],
+          [DisplayMode.TOP_RIGHT, 'Top Right'], [DisplayMode.BOTTOM_LEFT, 'Bottom Left'],
+          [DisplayMode.BOTTOM_RIGHT, 'Bottom Right'], [DisplayMode.SMALL_WINDOW, 'Game Screen Only'],
+        ];
+        return [
+          ...modes.map(([m, label]): MenuItem => ({
+            label: tick(mode === m, label), action: () => setDesktopPrefs(m, scale),
+          })),
+          MENU_SEPARATOR,
+          ...[...UI_SCALES, UI_SCALE_FIT].map((s): MenuItem => ({
+            label: tick(scale === s, s === UI_SCALE_FIT ? 'Scale to Fit' : `Scale ${s}×`),
+            action: () => setDesktopPrefs(mode, s),
+          })),
+        ];
+      },
     }, {
       // The original's Options menu (boe.menus.hpp's OPTIONS_*).
       label: 'Options',
@@ -2714,6 +2803,8 @@ async function main(): Promise<void> {
       ],
     }]);
     installFullScreenButton(menuHost);
+    // The bar is hidden while empty, so the canvas has just moved down.
+    refitDesktop();
   }
 
   // Handles for headless verification and manual debugging.
@@ -2723,6 +2814,7 @@ async function main(): Promise<void> {
     __screen: screen,
     __scen: scen,
     __redraw: redraw,
+    __desktop: desktop,
     // How long the animation queue still has to run. A driver has to wait for
     // this as well as `settled()` — input is dropped while it is non-zero.
     __animPending: animPending,

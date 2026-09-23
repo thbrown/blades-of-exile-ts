@@ -89,3 +89,8 @@ export function readAutosavePrefs(
 export function resetPrefsCache(): void {
   cache = null;
 }
+
+/** `get_float_pref` — OBoE keeps UIScale as a float, and 1.5 is one of its choices. */
+export function getFloatPref(name: string, def = 0): number {
+  return getIntPref(name, def);
+}

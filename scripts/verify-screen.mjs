@@ -24,9 +24,12 @@ page.on('console', (m) => {
 // Instant help starts off, as for a player who has turned it off: its boxes
 // come up on a preference, not on the game, and each would eat the next click
 // of a step that isn't about help. The Help menu's step turns it on itself.
+//
+// DisplayMode 5 is the game screen alone, so every coordinate below is on the
+// 605x430 screen. The DESKTOP step at the end checks the other layouts.
 await page.addInitScript(() => {
   try {
-    localStorage.setItem('exile-js:prefs', JSON.stringify({ ShowInstantHelp: false }));
+    localStorage.setItem('exile-js:prefs', JSON.stringify({ ShowInstantHelp: false, DisplayMode: 5, UIScale: 2 }));
   } catch { /* a page with no storage gets the default */ }
 });
 await page.goto(process.argv[2] ?? 'http://localhost:5199/?pace=1');
@@ -317,8 +320,8 @@ const talkClosed = await page.evaluate(async () => {
 console.log('TALK CLOSED:', JSON.stringify(talkClosed));
 
 // 2b-1a. Options > Talk Notes, through the real menu bar, shows what 'r' kept.
-await page.click('#game-menu-bar .menu-item:nth-child(2)');
-await page.locator('#game-menu-bar .menu-item:nth-child(2) .dropdown li', { hasText: 'Talk Notes' }).click();
+await page.click('#game-menu-bar .menu-item:nth-child(3)'); // Options, after File and View
+await page.locator('#game-menu-bar .menu-item:nth-child(3) .dropdown li', { hasText: 'Talk Notes' }).click();
 await page.waitForTimeout(250);
 const talkNotes = await page.evaluate(() => {
   const d = window.__dialogs.active;
@@ -2426,7 +2429,7 @@ await page.evaluate(async () => {
 // of a step that isn't about help. The Help menu's step turns it on itself.
 await page.addInitScript(() => {
   try {
-    localStorage.setItem('exile-js:prefs', JSON.stringify({ ShowInstantHelp: false }));
+    localStorage.setItem('exile-js:prefs', JSON.stringify({ ShowInstantHelp: false, DisplayMode: 5, UIScale: 2 }));
   } catch { /* a page with no storage gets the default */ }
 });
 await page.goto(process.argv[2] ?? 'http://localhost:5199/?pace=1');
@@ -2992,6 +2995,87 @@ if (quitRect) {
 console.log('PARTY DEATH QUIT:', deathQuit);
 await page.screenshot({ path: `${SHOTS}/02k-after-quit.png` });
 
+// DESKTOP. Everything above ran with the canvas as just the game screen
+// (DisplayMode 5). Here the canvas is a desktop with the game screen in its
+// top-left corner at 1x, as OBoE's DisplayMode 1 / UIScale 1. The map should
+// open beside the screen, clicks should reach the game through the offset,
+// and Preferences should have room for its alignment and scale block.
+const dp = await browser.newPage({ viewport: { width: 1280, height: 960 } });
+dp.on('pageerror', (e) => errors.push(`desktop pageerror: ${e.message}`));
+dp.on('console', (m) => { if (m.type() === 'error') errors.push(`desktop console: ${m.text()}`); });
+await dp.addInitScript(() => {
+  try {
+    localStorage.setItem('exile-js:prefs', JSON.stringify({
+      ShowInstantHelp: false, DisplayMode: 1, UIScale: 1,
+    }));
+  } catch { /* defaults */ }
+});
+await dp.goto('http://localhost:5199/?scenario=valleydy&pace=1');
+await dp.waitForFunction(() => window.__desktop && document.getElementById('spinner').classList.contains('hidden'),
+  { timeout: 30000 });
+await dp.waitForTimeout(300);
+const deskAt = (x, y) => dp.evaluate(({ x, y }) => {
+  const c = document.querySelector('canvas');
+  const r = c.getBoundingClientRect();
+  return { x: r.left + (x + 0.5) * (r.width / c.width), y: r.top + (y + 0.5) * (r.height / c.height) };
+}, { x, y });
+const desk = {};
+Object.assign(desk, await dp.evaluate(() => ({
+  layout: { ...window.__desktop },
+  scrolls: document.documentElement.scrollHeight > window.innerHeight,
+})));
+await dp.keyboard.press('a');
+await dp.waitForTimeout(200);
+desk.map = await dp.evaluate(() => ({ visible: window.__screen.mapVisible, ...window.__screen.mapScreen.pos }));
+await dp.keyboard.press('Escape');
+// PC 2's name, clicked through the offset, makes PC 2 active.
+const row = await dp.evaluate(() => {
+  for (let y = 0; y < 430; y++) for (let x = 305; x < 576; x++) {
+    const hit = window.__screen.pcRowHit(x, y);
+    if (hit && hit.index === 1) return { x, y };
+  }
+  return null;
+});
+if (row) {
+  const at = await deskAt(row.x + desk.layout.gameX, row.y + desk.layout.gameY);
+  await dp.mouse.click(at.x, at.y);
+  await dp.waitForTimeout(150);
+}
+// A click on the empty desktop does nothing at all.
+const empty = await deskAt(desk.layout.w - 5, desk.layout.h - 5);
+await dp.mouse.click(empty.x, empty.y);
+desk.curPc = await dp.evaluate(() => window.__univ.curPc);
+// Preferences: the full dialog, and choosing Center moves the screen.
+await dp.locator('#game-menu-bar .menu-item', { hasText: 'File' }).first().click();
+await dp.locator('#game-menu-bar .dropdown li', { hasText: 'Preferences' }).click();
+await dp.waitForTimeout(200);
+desk.prefsFull = await dp.evaluate(() => window.__dialogs.active.isVisible('display'));
+await dp.screenshot({ path: `${SHOTS}/03a-desktop-prefs.png` });
+for (const name of ['mid', 'okay']) {
+  const r = await dp.evaluate((n) => {
+    const d = window.__dialogs.active;
+    return d.screenRect(d.def.byName.get(n));
+  }, name);
+  const at = await deskAt((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+  await dp.mouse.click(at.x, at.y);
+  await dp.waitForTimeout(150);
+}
+desk.centred = await dp.evaluate(() => ({ ...window.__desktop }));
+// The View menu sets the scale; 2x doesn't fit 1280x960 beside anything, so
+// the desktop is the game screen and a little more.
+await dp.locator('#game-menu-bar .menu-item', { hasText: 'View' }).first().click();
+await dp.locator('#game-menu-bar .dropdown li', { hasText: 'Scale 2×' }).click();
+await dp.waitForTimeout(150);
+desk.scaled = await dp.evaluate(() => ({ ...window.__desktop,
+  scrolls: document.documentElement.scrollHeight > window.innerHeight }));
+await dp.screenshot({ path: `${SHOTS}/03b-desktop-2x.png` });
+await dp.close();
+console.log('DESKTOP:', JSON.stringify(desk));
+const desktopOk = desk.layout.gameX === 0 && desk.layout.gameY === 0 && desk.layout.w > 605 &&
+  !desk.scrolls && desk.map.visible && desk.map.x >= 605 && desk.curPc === 1 &&
+  desk.prefsFull === true && desk.centred.gameX > 0 &&
+  desk.scaled.scale === 2 && !desk.scaled.scrolls;
+
 console.log('ERRORS:', errors.length ? errors.join(' | ') : 'none');
 await browser.close();
 
@@ -3152,6 +3236,7 @@ const ok =
   prefs.ledAfterClick === 'red' && prefs.lessWm === true && prefs.closed === true &&
   fields.typed === true && fields.fieldError === 'Error' &&
   fields.numAnswer === 75 && fields.textAnswer === 'hello' &&
+  desktopOk &&
   errors.length === 0;
 console.log(ok ? 'PASS' : 'FAIL');
 process.exit(ok ? 0 : 1);

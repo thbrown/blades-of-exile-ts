@@ -255,7 +255,6 @@ export class Screen {
       this.drawInventory(session);
       this.drawPanel('transcript');
       this.drawTranscript(session);
-      if (this.mapVisible) this.mapScreen.draw(session);
       return;
     }
     this.drawPanel('terView');
@@ -270,7 +269,8 @@ export class Screen {
     this.drawTranscript(session);
     this.drawToolbar(session);
     // redraw_screen ends with `if(map_visible) draw_map(false)` (boe.main.cpp:1767).
-    if (this.mapVisible) this.mapScreen.draw(session);
+    // The map is on the desktop rather than the game screen, so the host
+    // draws it straight after this, outside the game screen's offset.
   }
 
   /** put_background (boe.graphics.cpp:653) — the pattern behind everything. */

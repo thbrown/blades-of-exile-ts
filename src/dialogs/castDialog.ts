@@ -19,7 +19,8 @@ import { pcCanCastType, CastStatus } from '../game/spellCast';
 import { CastChoice, SPELL_SLOTS, SpellPick } from '../game/spellPick';
 import type { GameSession } from '../game/session';
 import { Colours } from '../render/colours';
-import { UiRect } from '../render/layout';
+import { centreOnDesktop } from '../render/desktop';
+import { BOE_HEIGHT, BOE_WIDTH, UiRect } from '../render/layout';
 import { SheetStore } from '../render/sheets';
 import {
   drawString, drawStringCentre, drawStringEllipsis, drawStringRight,
@@ -97,6 +98,12 @@ export class CastDialog implements ModalScreen {
     this.pick = new SpellPick(session, type, canChooseCaster);
   }
 
+  /**
+   * The layout below is in 605×430 game-screen coordinates, so the whole
+   * dialog is shifted to the middle of the desktop when it opens.
+   */
+  private readonly origin = centreOnDesktop(BOE_WIDTH, BOE_HEIGHT);
+
   get choice(): CastChoice { return this.pick.choice; }
 
   /** `finish_pick_spell`'s tail — see `SpellPick.finish`. */
@@ -156,7 +163,9 @@ export class CastDialog implements ModalScreen {
 
   // ------------------------------------------------------------------ input
 
-  onClick(x: number, y: number): string | null {
+  onClick(atX: number, atY: number): string | null {
+    const x = atX - this.origin.x;
+    const y = atY - this.origin.y;
     const btns = this.buttonRects();
     const inside = (r: UiRect): boolean =>
       x >= r.left && x < r.right && y >= r.top && y < r.bottom;
@@ -209,6 +218,13 @@ export class CastDialog implements ModalScreen {
   // ------------------------------------------------------------------- draw
 
   draw(): void {
+    this.ctx.save();
+    this.ctx.translate(this.origin.x, this.origin.y);
+    this.drawInGameCoords();
+    this.ctx.restore();
+  }
+
+  private drawInGameCoords(): void {
     const { ctx } = this;
     const pats = this.store.get('pixpats');
     if (pats) tilePattern(ctx, pats, BG, FRAME);

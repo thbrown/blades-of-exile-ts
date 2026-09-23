@@ -11971,10 +11971,35 @@ button is left out where `document.fullscreenEnabled` is false.
 `verify-screen.mjs` crops its screenshots at x=12, which cuts the button's
 label short in the images. The page itself is fine.
 
-**Open, user-reported: dialogs cut off, and the map sits over play.** The
-cause is structural. Dialogs and the automap are drawn *inside* the 605×430
-canvas, so anything larger is clipped, and the map can only go over the
-play area. The original drew the 605×430 screen at a position on a larger
-window (`display_mode` 0–5 picks centred or one of the corners; see
-`boe-source-1997`) and gave dialogs and the map windows of their own. Fixing
-it is a separate change and hasn't been decided.
+**Desktop mode (2026-09-23), for the report that dialogs were cut off and the
+map sat over play.** The cause was structural. Dialogs and the automap were
+drawn *inside* the 605×430 canvas, so anything larger was clipped, and the map
+could only go over the play area. The canvas is now a *desktop* that fills
+the browser window (`render/desktop.ts`, `platform/pageLayout.ts`), following
+OBoE's `adjust_window_mode` / `compute_viewport`:
+- **`DisplayMode`** (0 centre, 1–4 corners, 5 game screen only; OBoE's
+  numbers) places the game screen. **`UIScale`** (1, 1.5, 2, 3, 4, or 0 for
+  Fit) sets the size of a game pixel. Both are set in Preferences, the block
+  the port used to hide, and on a new **View** menu. Defaults are centre and
+  2×.
+- The desktop is the window's size divided by the scale. If the game screen
+  doesn't fit at the chosen scale, the scale shrinks until it does.
+- The game screen is drawn with `ctx.translate(gameX, gameY)`, which stays set
+  after `redraw`. The map and dialogs are drawn with the identity transform.
+  `InputRouter` reports desktop coordinates, and `onClick`/`onHover` in
+  `main.ts` subtract the offset. A click on the empty desktop is dropped.
+- Dialogs centre on the desktop (`centreOnDesktop`, clamped at 0, so an
+  oversized one loses its bottom rather than its title). `CastDialog`'s
+  hard-coded layout is translated as a whole.
+- The map opens beside the game screen if there's room (`placeBesideGame`),
+  and otherwise at the WASM build's spot. At 2× on a 1080p screen, centring
+  leaves under 300px each side, so the map only gets its own space in a
+  corner mode or at a smaller scale.
+- Preferences is 570px tall with the display block. On a desktop shorter
+  than that it falls back to the old compact layout, which is why the View
+  menu exists.
+- `verify-screen.mjs` runs everything as DisplayMode 5 so its 605×430
+  coordinates hold, then a DESKTOP step checks the other layouts.
+- Gotcha: the menu bar is `display: none` while empty and is filled in after
+  loading, so it pushes the canvas down 36px *after* the first fit.
+  `refitDesktop()` runs again once it's installed.

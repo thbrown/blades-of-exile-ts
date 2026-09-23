@@ -255,7 +255,7 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
       const bits: [string, string?][] = [];
       if (entry.category) bits.push([entry.category]);
       if (entry.difficulty) bits.push([entry.difficulty, `Listed as “${entry.difficultyListed}”`]);
-      if (entry.contentRating) bits.push([`Rated ${entry.contentRating}`]);
+      if (entry.contentRating) bits.push([entry.contentRating, 'Content rating']);
       bits.push(entry.review !== null
         ? [`★ ${entry.review.toFixed(1)}`, 'Average player review on the archive, out of 5']
         : ['Not yet reviewed']);

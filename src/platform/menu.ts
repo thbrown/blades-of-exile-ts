@@ -158,7 +158,15 @@ export function installFullScreenButton(host: HTMLElement): void {
   const button = document.createElement('div');
   button.className = 'menu-item menu-right';
   const label = (): void => {
-    button.textContent = document.fullscreenElement === null ? 'Full Screen' : 'Exit Full Screen';
+    const full = document.fullscreenElement !== null;
+    button.title = full ? 'Exit Full Screen' : 'Full Screen';
+    button.setAttribute('aria-label', button.title);
+    // Corners pointing out to enter, pointing in to leave.
+    const path = full
+      ? 'M6 2v4H2M10 2v4h4M6 14v-4H2M10 14v-4h4'
+      : 'M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4';
+    button.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+      stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg>`;
   };
   label();
   button.addEventListener('click', (ev) => {

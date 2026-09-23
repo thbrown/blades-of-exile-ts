@@ -12,7 +12,8 @@
  */
 
 import { Colours } from '../render/colours';
-import { BOE_HEIGHT, BOE_WIDTH, UiRect, height, width } from '../render/layout';
+import { centreOnDesktop } from '../render/desktop';
+import { UiRect, height, width } from '../render/layout';
 import { itemGraphic } from '../render/itemPics';
 import { SheetStore } from '../render/sheets';
 import { drawString, wrapLines } from '../render/text';
@@ -199,8 +200,7 @@ export class Dialog {
 
     const w = innerWidth + 2 * PADDING;
     const h = innerHeight + 2 * PADDING;
-    const left = Math.round((BOE_WIDTH - w) / 2);
-    const top = Math.round((BOE_HEIGHT - h) / 2);
+    const { x: left, y: top } = centreOnDesktop(w, h);
     this.frame = { top, left, bottom: top + h, right: left + w };
 
     // Rows stack under the text, each one clickable across its column.
