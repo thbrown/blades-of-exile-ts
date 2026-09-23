@@ -4358,10 +4358,8 @@ export class GameSession {
   /**
    * pc_combat_move (boe.combat.cpp:216) — one square for the current PC, which
    * may instead be an attack, a swap with another PC, or a refusal. One action
-   * point for a move, four for a swing.
-   *
-   * TODO(M5b): monsters adjacent to the square you're leaving get a free
-   * back-shot, which needs monster_attack.
+   * point for a move, four for a swing. Monsters adjacent to the square being
+   * left get a free back-shot (boe.combat.cpp:300), below.
    */
   async combatMove(destination: Location): Promise<boolean> {
     const town = this.univ.town;
