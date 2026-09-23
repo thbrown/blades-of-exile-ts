@@ -73,6 +73,7 @@ class PromptHost implements SpecialHost {
   async choice(): Promise<number> { return 0; }
   async story(): Promise<void> {}
   async askText(): Promise<string> { return ''; }
+  async askNum(min: number): Promise<number> { return min; }
   async selectPc(rows: PcChoice[]): Promise<number> {
     this.asked++;
     if (this.pick === 'cancel') return SELECT_PC_CANCEL;

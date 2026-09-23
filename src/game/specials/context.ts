@@ -133,6 +133,12 @@ export interface SpecialHost {
   /** get_text_response — a typed answer, for IF_TEXT_RESPONSE. */
   askText(prompt: string): Promise<string>;
   /**
+   * get_num_response (strchoice.cpp:323) — a number from `min` to `max`, for
+   * IF_NUM_RESPONSE. The dialog itself refuses anything out of range and has
+   * no Cancel, so what comes back is in range whenever `min < max`.
+   */
+  askNum(min: number, max: number, prompt: string): Promise<number>;
+  /**
    * The select-PC dialog, given the rows `select_pc` has already worked out.
    *
    * **Only the dialog.** Which PCs may be picked is a game rule with eight

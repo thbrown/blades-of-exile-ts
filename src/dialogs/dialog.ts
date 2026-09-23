@@ -426,6 +426,16 @@ export class DialogHost {
   private current: Dialog | null = null;
   private screen: ModalScreen | null = null;
   private resolve: ((name: string) => void) | null = null;
+  /**
+   * The dialogs a nested one is sitting on, innermost last. The C++ passes a
+   * `parent` to a dialog it opens from inside another — the party editor's
+   * delete confirmation, a text field's "You need to enter an integer!" — and
+   * the parent stays drawn but deaf until the child closes. `runNested` is
+   * that; the plain `run`/`runScreen` still refuse a second dialog, because
+   * outside those cases one is a bug.
+   */
+  private below: { current: Dialog | null; screen: ModalScreen | null;
+    resolve: ((name: string) => void) | null }[] = [];
 
   constructor(
     private ctx: CanvasRenderingContext2D,
@@ -480,6 +490,23 @@ export class DialogHost {
 
   private tail: Promise<void> = Promise.resolve();
 
+  /**
+   * Open a dialog on top of whatever is up (or on its own, if nothing is). The
+   * one underneath keeps drawing and gets its input back when this closes.
+   */
+  runNested(screen: ModalScreen): Promise<string> {
+    if (this.current || this.screen) {
+      this.below.push({ current: this.current, screen: this.screen, resolve: this.resolve });
+      this.current = null;
+      this.resolve = null;
+    }
+    this.screen = screen;
+    this.redraw();
+    return new Promise<string>((resolve) => {
+      this.resolve = resolve;
+    });
+  }
+
   run(spec: DialogSpec): Promise<string> {
     // One dialog at a time: a second request while one is up is a bug, so fail
     // loudly rather than losing the first one's result.
@@ -495,6 +522,10 @@ export class DialogHost {
 
   /** Draw the open dialog, if there is one. Call after drawing the screen. */
   draw(): void {
+    for (const under of this.below) {
+      under.current?.draw();
+      under.screen?.draw();
+    }
     this.current?.draw();
     this.screen?.draw();
   }
@@ -527,9 +558,10 @@ export class DialogHost {
 
   private close(name: string): void {
     const resolve = this.resolve;
-    this.current = null;
-    this.screen = null;
-    this.resolve = null;
+    const under = this.below.pop();
+    this.current = under?.current ?? null;
+    this.screen = under?.screen ?? null;
+    this.resolve = under?.resolve ?? null;
     this.redraw();
     resolve?.(name);
   }

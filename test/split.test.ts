@@ -45,6 +45,7 @@ class SplitHost implements SpecialHost {
   async choice(): Promise<number> { return 0; }
   async story(): Promise<void> {}
   async askText(): Promise<string> { return ''; }
+  async askNum(min: number): Promise<number> { return min; }
   async selectPc(_rows: PcChoice[]): Promise<number> { return this.who; }
   async getNumOfItems(max: number): Promise<number> { return max; }
   startShop(): boolean { return true; }

@@ -96,6 +96,17 @@ export const SKILL_MAX: Partial<Record<Skill, number>> = {
   [Skill.LUCK]: 20,
 };
 
+/** `skill_cost` (shop.cpp:14) — skill points per level. */
+export const SKILL_POINT_COST: Partial<Record<Skill, number>> = {
+  [Skill.STRENGTH]: 3, [Skill.DEXTERITY]: 3, [Skill.INTELLIGENCE]: 3,
+  [Skill.EDGED_WEAPONS]: 2, [Skill.BASHING_WEAPONS]: 2, [Skill.POLE_WEAPONS]: 2,
+  [Skill.THROWN_MISSILES]: 1, [Skill.ARCHERY]: 2, [Skill.DEFENSE]: 2,
+  [Skill.MAGE_SPELLS]: 6, [Skill.PRIEST_SPELLS]: 5, [Skill.MAGE_LORE]: 1,
+  [Skill.ALCHEMY]: 2, [Skill.ITEM_LORE]: 4, [Skill.DISARM_TRAPS]: 2,
+  [Skill.LOCKPICKING]: 1, [Skill.ASSASSINATION]: 4, [Skill.POISON]: 2,
+  [Skill.LUCK]: 5,
+};
+
 export const SKILL_GOLD_COST: Partial<Record<Skill, number>> = {
   [Skill.STRENGTH]: 50, [Skill.DEXTERITY]: 50, [Skill.INTELLIGENCE]: 50,
   [Skill.EDGED_WEAPONS]: 40, [Skill.BASHING_WEAPONS]: 40, [Skill.POLE_WEAPONS]: 40,

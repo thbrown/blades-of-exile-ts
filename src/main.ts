@@ -34,6 +34,15 @@ import { jobBoardDialog } from './dialogs/jobBoardDialog';
 import { pickPotionDialog, potionSlot } from './dialogs/pickPotionDialog';
 import { questInfoDialog } from './dialogs/questInfoDialog';
 import { NOTES_DIALOG_DEFS, adventureNotesDialog, talkNotesDialog } from './dialogs/notesDialogs';
+import {
+  INPUT_DIALOG_DEFS, errorDialog, numOfItemsDialog, numResponseDialog, textResponseDialog,
+} from './dialogs/inputDialogs';
+import { setFieldErrorSink } from './dialogs/xmlDialog';
+import { PICT_CHOICE_DIALOG_DEFS } from './dialogs/pictChoiceDialog';
+import { SPEND_XP_DIALOG_DEFS, spendXpDialog } from './dialogs/spendXpDialog';
+import { XpMode } from './game/createPc';
+import { setErrorSink } from './game/showError';
+import { appendIarrayPref, getBoolPref, iarrayPrefContains } from './platform/prefs';
 import { notesRefusal } from './game/notes';
 import { ItemWinMode, QUEST_COMPLETED_OFFSET } from './game/itemWindow';
 import { BASIC_BUTTON_KEYS } from './game/specials/oneshot';
@@ -69,14 +78,13 @@ import { TOWN_NUM_OUTDOORS } from './universe/party';
 import { FetchSource } from './fileio/source';
 import { InputRouter } from './platform/input';
 import { Snd, SoundPlayer } from './platform/sound';
-import { setLivingSound } from './universe/living';
+import { setGiveHelp, setLivingSound } from './universe/living';
 import { BOE_HEIGHT, BOE_WIDTH, ToolbarButton } from './render/layout';
 
 import { CHROME_SHEETS, Screen } from './render/screen';
 import { ShopHit, shopItemInfo } from './render/shopScreen';
 import { SheetStore } from './render/sheets';
 import { PartyPreset, Player } from './universe/player';
-import { HP_PER_LEVEL, TrainingState, trainCost } from './game/training';
 import { doRest } from './game/rest';
 import { SpellPick } from './game/spellPick';
 import { MainStatus, NUM_SKILLS, Skill, Status } from './universe/skills';
@@ -222,7 +230,8 @@ async function main(): Promise<void> {
   ];
   for (let i = 1; i <= 11; i++) sheets.push(`monst${i}`);
   const dialogNames = ['pc-info', 'quest-info', 'get-items', 'item-info', 'many-str', 'monster-info', 'job-board',
-    'pick-potion', 'party-death', 'steal-item', ...STR_DIALOG_DEFS, ...NOTES_DIALOG_DEFS];
+    'pick-potion', 'party-death', 'steal-item', ...STR_DIALOG_DEFS, ...NOTES_DIALOG_DEFS,
+    ...INPUT_DIALOG_DEFS, ...PICT_CHOICE_DIALOG_DEFS, ...SPEND_XP_DIALOG_DEFS];
   addTotal(1 /* opcodes */ + STRING_TABLES.length + dialogNames.length + sheets.length
     + (document.fonts ? 4 : 0) + 1 /* scenario.xml */);
 
@@ -289,12 +298,50 @@ async function main(): Promise<void> {
   const dialogs = new DialogHost(ctx, store, () => redraw());
 
   /**
-   * get_text_response: a one-line typed answer. The dialogxml text field lands
-   * with the rest of that toolkit; until then this borrows the browser prompt.
+   * `showError` / `showWarning` — for the game rules (`game/showError.ts`)
+   * and for a text field that won't take what was typed. Both open on top of
+   * whatever is up, as the C++'s do with their `parent`.
    */
-  const askForText = async (prompt: string): Promise<string> =>
-    // TODO(M3): replace with a canvas text field once dialogxml has one.
-    Promise.resolve(window.prompt(prompt) ?? '');
+  const showErrorBox = (str1: string, str2 = '', warning = false): void => {
+    void dialogs.runNested(errorDialog(ctx, store, str1, str2, warning)).then(() => redraw());
+  };
+  setErrorSink(showErrorBox);
+
+  /**
+   * `give_help` (strdlog.cpp:182) — the "Instant Help" box, shown once per
+   * message unless the player has turned instant help off. What has been seen
+   * is a *preference*, not part of the save, so it outlives the game.
+   */
+  setGiveHelp((help1, help2, forced) => {
+    if (!forced && (!getBoolPref('ShowInstantHelp', true)
+      || iarrayPrefContains('ReceivedHelp', help1))) return;
+    appendIarrayPref('ReceivedHelp', help1);
+    if (help2 !== -1) appendIarrayPref('ReceivedHelp', help2);
+    const str1 = getStr('help', help1);
+    const str2 = help2 > 0 ? getStr('help', help2) : '';
+    sound.play(57);
+    void dialogs.runNested(strDialog(ctx, store, {
+      str1, str2, title: 'Instant Help', pic: 24, picType: 4,
+    })).then(() => redraw());
+  });
+  setFieldErrorSink((message) => showErrorBox(message));
+
+  /**
+   * get_text_response (boe.items.cpp:869): a one-line typed answer,
+   * lowercased. `lowercase` is false only for this port's own save-slot
+   * names, which are not a game answer and keep the player's capitals.
+   */
+  const askForText = async (prompt: string, lowercase = true): Promise<string> => {
+    const { dlg, result } = textResponseDialog(ctx, store, prompt, undefined, lowercase);
+    return result(await dialogs.runNested(dlg));
+  };
+
+  /** get_num_response (strchoice.cpp:323) — IF_NUM_RESPONSE's number. */
+  const askForNum = async (min: number, max: number, prompt: string): Promise<number> => {
+    const { dlg, result } = numResponseDialog(ctx, store, min, max, prompt,
+      (msg) => showErrorBox(msg));
+    return result(await dialogs.runNested(dlg));
+  };
 
   /**
    * The select-PC dialog. Which PCs may be picked is worked out by
@@ -344,14 +391,22 @@ async function main(): Promise<void> {
   ): Promise<number> => runSelectPc(univ, mode, prompt, askSelectPc, opts);
 
   /**
-   * `get_num_of_items` (boe.items.cpp:648) — how many out of a stack.
-   * TODO(M8): a real number field once dialogxml has one; the browser's prompt
-   * stands in, as it does for `askForText`.
+   * `spend_xp(who, mode)` — true if the player kept the changes. Opens on top
+   * of whatever is up, since the party editor calls it from inside its own
+   * dialog.
    */
+  const spendXpFlow = async (who: number, mode: XpMode): Promise<boolean> => {
+    const { dlg } = spendXpDialog(ctx, store, univ, who, mode, {
+      nest: (screen) => dialogs.runNested(screen),
+      redraw,
+    });
+    return (await dialogs.runNested(dlg)) === 'keep';
+  };
+
+  /** `get_num_of_items` (boe.items.cpp:667) — how many out of a stack. */
   const getNumOfItems = async (max: number): Promise<number> => {
-    const answer = window.prompt(`How many? (0-${max})`, String(max));
-    const n = Number(answer ?? '');
-    return Number.isFinite(n) ? Math.max(0, Math.min(max, Math.trunc(n))) : 0;
+    const { dlg, result } = numOfItemsDialog(ctx, store, max);
+    return result(await dialogs.runNested(dlg));
   };
 
   /** attack-friendly.xml — swinging at someone who hasn't done anything yet. */
@@ -524,6 +579,7 @@ async function main(): Promise<void> {
         () => storyDialog(ctx, store, univ, title, first, last, strType, pic, picType));
     },
     askText: (prompt) => askForText(prompt),
+    askNum: askForNum,
     selectPc: askSelectPc,
     getNumOfItems,
     // `start_shop_mode(ex1a, ex1b, str1)` — see the note in `replay/host.ts`.
@@ -570,73 +626,14 @@ async function main(): Promise<void> {
   session.onStatWindowForPc = (pc) => { screen.itemWindow.setStatWindowForPc(univ, pc); };
 
   /**
-   * Training (spend_xp in mode 1, pc.editors.cpp:644): pick who trains, then
-   * buy skill levels one at a time until they run out of points, gold, or
-   * interest.
-   *
-   * TODO(M3): the original is one dense dialog with a +/- stepper per skill.
-   * This is the same rules with a list, pending stepper widgets.
+   * Training — the TRAINING talk node (boe.dlgutil.cpp:991): pick who
+   * trains, then `spend_xp` in mode 1 on the real spend-xp.xml.
    */
   session.onTrain = () => {
     if (dialogs.active) return;
     void (async () => {
       const who = await selectPc(SelectPcMode.ONLY_CAN_TRAIN, 'Train who?');
-      if (who >= 6) {
-        redraw();
-        return;
-      }
-      const pc = univ.party.pcs[who]!;
-      const state = new TrainingState(pc, univ.party.gold);
-      // Buy one level per pass; the list reflects what's still affordable.
-      for (;;) {
-        const rows: { name: string; key?: string; label: string; disabled?: boolean }[] = [];
-        const choices: (Skill | 'hp' | 'sp')[] = [];
-        const add = (which: Skill | 'hp' | 'sp', name: string) => {
-          const cost = trainCost(which);
-          const at = state.level(which);
-          rows.push({
-            name: String(choices.length),
-            key: choices.length < 9 ? String(choices.length + 1) : undefined,
-            label: `${name} ${at} → ${which === 'hp' ? at + HP_PER_LEVEL : at + 1}`
-              + `  (${cost.points} sp, ${cost.gold} gold)`,
-            disabled: !state.canChange(which, true),
-          });
-          choices.push(which);
-        };
-        for (let i = 0; i < NUM_SKILLS; i++) add(i as Skill, getStr('skills', i * 2 + 1));
-        add('hp', 'Health');
-        add('sp', 'Spell Points');
-
-        const picked = await dialogs.run({
-          text: `Training ${pc.name}.\n`
-            + `Skill points: ${state.points}    Gold: ${state.gold}\n`
-            + 'Pick a skill to raise, then Keep to pay for it.',
-          rows,
-          escapeButton: 'cancel',
-          buttons: [
-            { name: 'keep', label: 'Keep', key: 'k' },
-            { name: 'cancel', label: 'Cancel', key: 'c' },
-          ],
-        });
-        if (picked === 'keep') {
-          if (state.breaksAnamaOath)
-            await dialogs.run({
-              text: 'The oaths of an Anama member include eschewing research into '
-                + 'arcane magics. By increasing your mage spells skill, you will be in '
-                + 'violation of this oath. If you keep this change, you will be '
-                + 'afflicted with a terrible permanent curse.',
-              escapeButton: 'okay',
-              buttons: [{ name: 'okay', label: 'OK' }],
-            });
-          univ.party.gold = state.keep();
-          if (state.changed) univ.addStringToBuf(`  ${pc.name} trains.`);
-          break;
-        }
-        if (picked === 'cancel') break;
-        const which = choices[Number(picked)];
-        if (which === undefined) break;
-        if (!state.change(which, true)) sound.play(Snd.BUTTON);
-      }
+      if (who < 6) await spendXpFlow(who, XpMode.TRAIN);
       redraw();
     })();
   };
@@ -794,7 +791,7 @@ async function main(): Promise<void> {
       return;
     }
     const name = picked === 'new'
-      ? (await askForText('Name this saved game:')).trim()
+      ? (await askForText('Name this saved game:', false)).trim()
       : picked.slice('slot:'.length);
     if (name === '') {
       redraw();
@@ -1809,7 +1806,12 @@ async function main(): Promise<void> {
       redraw();
     },
     onKey: async (key, event) => {
-      if (dialogs.handleKey(key)) return;
+      if (dialogs.handleKey(key)) {
+        // Tab moves between a dialog's fields, not the browser's focus, and
+        // Backspace/Space mustn't scroll or navigate behind a text field.
+        if (key === 'Tab' || key === 'Backspace' || key === ' ') event.preventDefault();
+        return;
+      }
       // The File menu the original has and this port doesn't: Ctrl+S and
       // Ctrl+L. Checked before everything else so they work in any mode that
       // will have them, and so the browser's own Save Page doesn't fire.
@@ -2228,6 +2230,11 @@ async function main(): Promise<void> {
     __setLivingSound: (fn: ((which: number) => void) | null) =>
       setLivingSound(fn ?? playSound),
     __dialogs: dialogs,
+    // The typed-answer dialogs, so the verifier can drive a real text field
+    // with the real keyboard.
+    __getNumOfItems: getNumOfItems,
+    __askText: (prompt: string) => askForText(prompt),
+    __spendXp: (who: number, mode: XpMode) => spendXpFlow(who, mode),
     // Save/load without the picker, so the verifier can round-trip a real game
     // through the real serialiser.
     __saveGame: () => saveGame(univ),

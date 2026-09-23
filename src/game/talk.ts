@@ -16,6 +16,7 @@ import { Creature, CreatureStatus } from '../universe/creature';
 import { ItemShopMode } from './itemShop';
 import { receiveQuest } from './jobBank';
 import { giveHelp, livingSound } from '../universe/living';
+import { showError } from './showError';
 
 /** Pseudo-node ids for the fixed buttons (boe.newgraph.hpp:31). */
 export enum TalkAction {
@@ -432,9 +433,9 @@ export class TalkState {
       }
       case TalkNodeType.RECEIVE_QUEST: {
         if (a < 0 || a >= this.univ.scenario.quests.length) {
-          // showError("Tried to give a nonexistent quest!") — the C++ returns
-          // without touching the reply, so the previous one stays up.
-          this.univ.addStringToBuf('Tried to give a nonexistent quest!');
+          // The C++ returns without touching the reply, so the previous one
+          // stays up.
+          showError(this.univ, 'Tried to give a nonexistent quest!');
           return 'ok';
         }
         const result = receiveQuest(this.univ, a);

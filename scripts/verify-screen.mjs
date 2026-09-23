@@ -20,6 +20,15 @@ page.on('console', (m) => {
 // play-testing default. Damage waits for its blast now, so a step that swings
 // twenty-five times waits for twenty-five of them — at the shipped 3x pace this
 // gate would take minutes. The ordering being checked is the same either way.
+//
+// Instant help starts off, as for a player who has turned it off: its boxes
+// come up on a preference, not on the game, and each would eat the next click
+// of a step that isn't about help. The Help menu's step turns it on itself.
+await page.addInitScript(() => {
+  try {
+    localStorage.setItem('exile-js:prefs', JSON.stringify({ ShowInstantHelp: false }));
+  } catch { /* a page with no storage gets the default */ }
+});
 await page.goto(process.argv[2] ?? 'http://localhost:5199/?pace=1');
 
 // No `?scenario=` means the startup screen, so this is also the check that it
@@ -348,19 +357,36 @@ const trainWho = await page.evaluate(async () => {
 });
 await press('1');
 await page.waitForTimeout(250);
+// spend-xp.xml: a number and a −/+ pair for every skill, health and spell
+// points — twenty-one of them — with the cost on each label.
 const trainList = await page.evaluate(async () => {
   const d = window.__dialogs.active;
-  return d ? { rows: d.spec.rows.length, first: d.spec.rows[0].label } : null;
+  if (!d || !d.def) return null;
+  const ids = ['str', 'dex', 'int', 'edged', 'bashing', 'pole', 'thrown', 'archery',
+    'defense', 'mage', 'priest', 'mage-lore', 'alchemy', 'item-lore', 'traps', 'lockpick',
+    'assassin', 'poison', 'luck', 'hp', 'sp'];
+  return {
+    rows: ids.filter((id) => d.def.byName.has(id) && d.def.byName.has(`${id}-p`)).length,
+    recipient: d.getText('recipient'),
+    skp: d.getText('skp'),
+  };
 });
 console.log('TRAIN:', JSON.stringify({ trainWho, trainList }));
-await shot('01b4-training');
 const trainBefore = await page.evaluate(() => ({
   str: window.__univ.party.pcs[0].skills[0],
   pts: window.__univ.party.pcs[0].skillPts,
   gold: window.__univ.party.gold,
 }));
-await press('1'); // raise Strength
+{
+  const r = await page.evaluate(() => {
+    const d = window.__dialogs.active;
+    return d.screenRect(d.def.byName.get('str-p'));
+  });
+  const at = await canvasPoint((r.left + r.right) / 2 - 0.5, (r.top + r.bottom) / 2 - 0.5);
+  await page.mouse.click(at.x, at.y); // raise Strength
+}
 await page.waitForTimeout(200);
+await shot('01b4-training');
 await press('k'); // Keep
 await page.waitForTimeout(250);
 const trained = await page.evaluate(() => ({
@@ -2313,6 +2339,15 @@ await page.evaluate(async () => {
   window.__univ.party.gold = 7171;
   await store.putSave('ResumeSlot', window.__saveGame());
 });
+//
+// Instant help starts off, as for a player who has turned it off: its boxes
+// come up on a preference, not on the game, and each would eat the next click
+// of a step that isn't about help. The Help menu's step turns it on itself.
+await page.addInitScript(() => {
+  try {
+    localStorage.setItem('exile-js:prefs', JSON.stringify({ ShowInstantHelp: false }));
+  } catch { /* a page with no storage gets the default */ }
+});
 await page.goto(process.argv[2] ?? 'http://localhost:5199/?pace=1');
 await page.waitForSelector('.startup .startup-choice', { timeout: 20000 });
 const resumeOffered = await page.evaluate(() =>
@@ -2650,6 +2685,44 @@ const recall = await page.evaluate(() => {
   };
 });
 console.log('WORD OF RECALL:', JSON.stringify(recall));
+
+// Typing into a dialog. get-num.xml opens with the stack size selected, so the
+// first key replaces it; a letter won't close it, and says why in an error box
+// opened on top; Escape on that returns to the number, which then takes a
+// backspace and a digit. get-response.xml comes back lowercased.
+const typed = await page.evaluate(() => {
+  window.__numAnswer = null;
+  window.__getNumOfItems(99).then((n) => { window.__numAnswer = n; });
+  return window.__dialogs.active?.def?.byName.has('number') ?? false;
+});
+await page.waitForTimeout(200);
+await page.keyboard.type('7');
+await page.keyboard.type('x');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(200);
+const fieldError = await page.evaluate(() => window.__dialogs.active?.getText?.('title') ?? null);
+await shot('02j-field-error');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(200);
+await page.keyboard.press('Backspace');
+await page.keyboard.type('5');
+await shot('02j-get-num');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(200);
+const numAnswer = await page.evaluate(() => window.__numAnswer);
+await page.evaluate(() => {
+  window.__textAnswer = null;
+  window.__askText('You respond:').then((t) => { window.__textAnswer = t; });
+});
+await page.waitForTimeout(200);
+await page.keyboard.type('Hello');
+await shot('02j-get-response');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(200);
+const textAnswer = await page.evaluate(() => window.__textAnswer);
+const fields = { typed, fieldError, numAnswer, textAnswer };
+
+console.log('TEXT FIELDS:', JSON.stringify(fields));
 await shot('02i-word-of-recall');
 
 // The two endings. `handle_death` on the real party-death.xml: wipe the party
@@ -2785,7 +2858,7 @@ const ok =
   sold.gained > 0 &&
   sold.lastLine === 'You sell your item.' &&
   trainWho?.rows === 6 &&
-  trainList?.rows === 21 &&
+  trainList?.rows === 21 && trainList.skp === '40' &&
   trained.str === trainBefore.str + 1 &&
   trained.gold < trainBefore.gold &&
   trained.dialogGone === true &&
@@ -2877,6 +2950,8 @@ const ok =
   deathReasked !== null && deathReasked.back === true && deathReasked.alive === false &&
   // …and Quit lands on the startup screen, where handle_victory goes too.
   deathQuit === true &&
+  fields.typed === true && fields.fieldError === 'Error' &&
+  fields.numAnswer === 75 && fields.textAnswer === 'hello' &&
   errors.length === 0;
 console.log(ok ? 'PASS' : 'FAIL');
 process.exit(ok ? 0 : 1);

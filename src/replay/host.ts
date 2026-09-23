@@ -99,15 +99,23 @@ export interface ReplayHostOptions {
  * which field the keys belong to; every dialog answered here has exactly one,
  * so it only moves the caret to the end, as `cTextField::callHandler` does.
  *
+ * **A prefilled field starts fully selected.** `cTextField::setText` leaves
+ * the selection point at 0 (field.cpp:73) and focusing puts the insertion
+ * point at the end, so the first character typed *replaces* the prefill and a
+ * backspace clears it; an arrow collapses the selection instead. Every typed
+ * get-num in the corpus starts from "0", where appending and replacing parse
+ * the same, so the corpus cannot tell — the C++ can.
+ *
  * Only the three special keys the corpus actually types with are modelled.
- * Anything else — including `field_selection`, which is how a player replaces a
- * field's default text — is refused by name rather than guessed at.
+ * Anything else — including `field_selection`, a selection made by dragging —
+ * is refused by name rather than guessed at.
  */
 export function typeInto(
   source: ReplaySource, what: string, initial: string, onAnswered?: () => void,
 ): string {
   let text = initial;
   let caret = text.length;
+  let selected = text.length > 0;
   while (source.hasNext('field_focus') || source.hasNext('field_input')) {
     const action = source.pop();
     onAnswered?.();
@@ -116,7 +124,19 @@ export function typeInto(
       continue;
     }
     if (action.info.spec === 'true') {
-      switch (Number(action.info.k ?? '-1')) {
+      const k = Number(action.info.k ?? '-1');
+      if (selected) {
+        selected = false;
+        if (k === KEY_BSP) {
+          text = '';
+          caret = 0;
+          continue;
+        }
+        // An arrow collapses the selection to its near end (field.cpp:530).
+        caret = k === KEY_LEFT ? 0 : text.length;
+        continue;
+      }
+      switch (k) {
         case KEY_LEFT: caret = Math.max(0, caret - 1); break;
         case KEY_RIGHT: caret = Math.min(text.length, caret + 1); break;
         case KEY_BSP:
@@ -132,6 +152,11 @@ export function typeInto(
       continue;
     }
     const ch = action.info.c ?? '';
+    if (selected) {
+      selected = false;
+      text = '';
+      caret = 0;
+    }
     text = text.slice(0, caret) + ch + text.slice(caret);
     caret += ch.length;
   }
@@ -259,6 +284,19 @@ export function makeReplayHost(
      *
      * The field starts empty, and what comes back is lowercased.
      */
+    /**
+     * `get_num_response` on get-num.xml — prefilled with 0, no Cancel. Its
+     * range check keeps the dialog open on a bad number, which a recording
+     * would show as more typing before a second `okay`; none in the corpus
+     * does, so one `okay` is expected.
+     */
+    askNum: async (min: number, max: number, prompt: string): Promise<number> => {
+      const what = `the number prompt "${prompt} (${min}-${max})"`;
+      const typed = typeInto(source, what, '0', options.onAnswered);
+      popClick(source, what, options.onAnswered);
+      const n = parseInt(typed.trim(), 10);
+      return Number.isFinite(n) ? n : 0;
+    },
     askText: async (prompt: string): Promise<string> => {
       const what = `the text prompt "${prompt}"`;
       const typed = typeInto(source, what, '', options.onAnswered);

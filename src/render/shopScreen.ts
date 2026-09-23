@@ -10,6 +10,7 @@ import { ShopItemType } from '../data/shop';
 import { Colours } from './colours';
 import { ITEM_BTN_ICONS, UiRect, height, width } from './layout';
 import { itemGraphic } from './itemPics';
+import { Scrollbar } from './scrollbar';
 import { SheetStore } from './sheets';
 import { TextStyle, drawString, drawStringEllipsis, drawStringRight } from './text';
 import { tilePattern } from './tiling';
@@ -97,15 +98,23 @@ export type ShopHit =
 
 /** The Done button, bottom right of the panel (shop_done_rect). */
 const DONE_RECT: UiRect = { top: 386, left: 210, bottom: 406, right: 270 };
-/** Stand-ins for the scrollbar arrows until the widget lands. */
-const UP_RECT: UiRect = { top: 63, left: 278, bottom: 83, right: 294 };
-const DOWN_RECT: UiRect = { top: 331, left: 278, bottom: 351, right: 294 };
+/**
+ * `shop_sbar_rect` (boe.main.cpp:70) — in *window* coordinates, unlike the
+ * rows, because the scrollbar is a control on the main window rather than
+ * part of the talk area it sits over.
+ */
+const SHOP_SBAR_RECT: UiRect = { top: 69, left: 272, bottom: 359, right: 288 };
 
 export class ShopScreen {
+  /** `shop_sbar` — page size 8, one row per step (boe.main.cpp:390). */
+  readonly sbar = new Scrollbar(SHOP_SBAR_RECT);
+
   constructor(
     private ctx: CanvasRenderingContext2D,
     private store: SheetStore,
-  ) {}
+  ) {
+    this.sbar.setPageSize(8);
+  }
 
   private at(rect: UiRect): UiRect {
     return {
@@ -223,11 +232,10 @@ export class ShopScreen {
         label, BOLD12);
     };
     frame(DONE_RECT, 'Done');
-    // TODO(M3): a real cScrollbar; two arrows do the job for now.
-    if (state.maxScroll > 0) {
-      frame(UP_RECT, '▲');
-      frame(DOWN_RECT, '▼');
-    }
+    // Hidden, not just idle, when everything fits (boe.dlgutil.cpp:652).
+    this.sbar.setMaximum(state.maxScroll);
+    this.sbar.setPosition(state.scroll);
+    if (state.maxScroll > 0) this.sbar.draw(ctx, this.store);
   }
 
   /** Which part of the shop screen a click landed on. */
@@ -237,9 +245,14 @@ export class ShopScreen {
       return x >= r.left && x < r.right && y >= r.top && y < r.bottom;
     };
     if (inside(DONE_RECT)) return { part: 'done' };
-    if (state.maxScroll > 0) {
-      if (inside(UP_RECT)) return { part: 'scroll', delta: -1 };
-      if (inside(DOWN_RECT)) return { part: 'scroll', delta: 1 };
+    if (state.maxScroll > 0 && this.sbar.contains(x, y)) {
+      // An arrow steps one row and the track pages eight; the thumb is a
+      // drag, which a click on it doesn't start.
+      this.sbar.setMaximum(state.maxScroll);
+      this.sbar.setPosition(state.scroll);
+      const before = this.sbar.getPosition();
+      this.sbar.handleClick(x, y);
+      return { part: 'scroll', delta: this.sbar.getPosition() - before };
     }
     for (let row = 0; row < SHOP_ROWS; row++) {
       if (!state.rowEntry(row)) break;

@@ -7,7 +7,9 @@ import { Scenario } from '../src/data/scenario';
 import { TalkNodeType } from '../src/data/talking';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
 import { doRest } from '../src/game/rest';
-import { TrainingState, trainCost } from '../src/game/training';
+import { SpendXp, XpMode } from '../src/game/createPc';
+import { SKILL_GOLD_COST, SKILL_POINT_COST } from '../src/data/shop';
+import { setGiveHelp } from '../src/universe/living';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
@@ -36,32 +38,50 @@ function newGame(): { univ: Universe; session: GameSession } {
 }
 
 describe('training', () => {
+  /** spend_xp in mode 1, on the first PC, with the party holding `gold`. */
+  function train(univ: Universe, gold: number): SpendXp {
+    univ.party.gold = gold;
+    return new SpendXp(univ, 0, XpMode.TRAIN);
+  }
+
   it('charges both skill points and gold', async () => {
     const { univ } = newGame();
     const pc = univ.party.pcs[0]!;
     pc.skillPts = 20;
-    const state = new TrainingState(pc, 1000);
-    const cost = trainCost(Skill.LOCKPICKING);
+    const state = train(univ, 1000);
     const before = pc.skills[Skill.LOCKPICKING]!;
 
-    expect(state.change(Skill.LOCKPICKING, true)).toBe(true);
-    expect(state.points).toBe(20 - cost.points);
-    expect(state.gold).toBe(1000 - cost.gold);
+    state.click('lockpick-p');
+    expect(state.skp).toBe(20 - SKILL_POINT_COST[Skill.LOCKPICKING]!);
+    expect(state.gold).toBe(1000 - SKILL_GOLD_COST[Skill.LOCKPICKING]!);
     // Nothing is committed until keep().
     expect(pc.skills[Skill.LOCKPICKING]).toBe(before);
-    expect(state.keep()).toBe(1000 - cost.gold);
+    state.keep();
+    expect(univ.party.gold).toBe(1000 - SKILL_GOLD_COST[Skill.LOCKPICKING]!);
     expect(pc.skills[Skill.LOCKPICKING]).toBe(before + 1);
-    expect(pc.skillPts).toBe(20 - cost.points);
+    expect(pc.skillPts).toBe(20 - SKILL_POINT_COST[Skill.LOCKPICKING]!);
   });
 
-  it('refuses without the skill points or the gold', async () => {
+  it('refuses without the skill points or the gold, and says which', async () => {
     const { univ } = newGame();
     const pc = univ.party.pcs[0]!;
-    pc.skillPts = 0;
-    expect(new TrainingState(pc, 10000).canChange(Skill.LUCK, true)).toBe(false);
-    pc.skillPts = 100;
-    expect(new TrainingState(pc, 0).canChange(Skill.STRENGTH, true)).toBe(false);
-    expect(new TrainingState(pc, 10000).canChange(Skill.STRENGTH, true)).toBe(true);
+    const helps: number[] = [];
+    setGiveHelp((h) => { helps.push(h); });
+    try {
+      pc.skillPts = 0;
+      const broke = train(univ, 10000);
+      expect(broke.canChange(Skill.LUCK, true)).toBe(false);
+      broke.click('luck-p');
+      pc.skillPts = 100;
+      const poor = train(univ, 0);
+      expect(poor.canChange(Skill.STRENGTH, true)).toBe(false);
+      poor.click('str-p');
+      expect(train(univ, 10000).canChange(Skill.STRENGTH, true)).toBe(true);
+      // give_help(25) for skill points, give_help(24) for gold.
+      expect(helps).toEqual([25, 24]);
+    } finally {
+      setGiveHelp(null);
+    }
   });
 
   it('stops at the skill cap', async () => {
@@ -69,7 +89,7 @@ describe('training', () => {
     const pc = univ.party.pcs[0]!;
     pc.skillPts = 1000;
     pc.skills[Skill.MAGE_SPELLS] = 7; // the mage-spell cap
-    const state = new TrainingState(pc, 100000);
+    const state = train(univ, 100000);
     expect(state.canChange(Skill.MAGE_SPELLS, true)).toBe(false);
     expect(state.canChange(Skill.MAGE_LORE, true)).toBe(true);
   });
@@ -79,13 +99,13 @@ describe('training', () => {
     const pc = univ.party.pcs[0]!;
     pc.skillPts = 100;
     pc.skills[Skill.LOCKPICKING] = 3;
-    const state = new TrainingState(pc, 10000);
+    const state = train(univ, 10000);
     expect(state.canChange(Skill.LOCKPICKING, false)).toBe(false);
-    state.change(Skill.LOCKPICKING, true);
+    state.click('lockpick-p');
     expect(state.canChange(Skill.LOCKPICKING, false)).toBe(true);
-    state.change(Skill.LOCKPICKING, false);
-    expect(state.level(Skill.LOCKPICKING)).toBe(3);
-    expect(state.points).toBe(100);
+    state.click('lockpick-m');
+    expect(state.cur(Skill.LOCKPICKING)).toBe(3);
+    expect(state.skp).toBe(100);
     expect(state.gold).toBe(10000);
   });
 
@@ -95,14 +115,15 @@ describe('training', () => {
     pc.skillPts = 10;
     pc.curHealth = pc.maxHealth;
     const maxBefore = pc.maxHealth;
-    const state = new TrainingState(pc, 1000);
-    expect(state.change('hp', true)).toBe(true);
+    const state = train(univ, 1000);
+    state.click('hp-p');
     state.keep();
     expect(pc.maxHealth).toBe(maxBefore + 2);
     expect(pc.curHealth).toBe(pc.maxHealth);
+    expect(univ.party.gold).toBe(990);
   });
 
-  it('curses an Anama member who takes up mage magic', async () => {
+  it('warns an Anama member off mage magic, and curses one who keeps it', async () => {
     const { univ } = newGame();
     const pc = univ.party.pcs[0]!;
     pc.traits[Trait.ANAMA] = true;
@@ -112,15 +133,35 @@ describe('training', () => {
     pc.skills[Skill.INTELLIGENCE] = 10;
     pc.skills[Skill.LUCK] = 5;
     pc.skillPts = 100;
-    const state = new TrainingState(pc, 10000);
-    state.change(Skill.MAGE_SPELLS, true);
-    expect(state.breaksAnamaOath).toBe(true);
+    const state = train(univ, 10000);
+    state.click('mage-p');
+    expect(state.anamaWarning).toBe(true);
+    // Once the working copy has a mage level, the warning has been given.
+    state.click('mage-p');
+    expect(state.anamaWarning).toBe(false);
     state.keep();
     expect(pc.skills[Skill.STRENGTH]).toBe(8);
     expect(pc.skills[Skill.DEXTERITY]).toBe(8);
     expect(pc.skills[Skill.INTELLIGENCE]).toBe(6);
     expect(pc.skills[Skill.LUCK]).toBe(0);
     expect(pc.traits[Trait.ANAMA]).toBe(false);
+  });
+
+  it('steps between living PCs, and knows when it has something to lose', async () => {
+    const { univ } = newGame();
+    univ.party.pcs[1]!.mainStatus = MainStatus.DEAD;
+    univ.party.pcs.forEach((pc) => { pc.skillPts = 10; });
+    const state = train(univ, 1000);
+    expect(state.needsConfirm).toBe(false);
+    state.click('luck-p');
+    expect(state.needsConfirm).toBe(true);
+    expect(state.click('right')).toBe('right');
+    state.switchPc('right');
+    expect(state.who).toBe(2);
+    expect(state.needsConfirm).toBe(false);
+    state.switchPc('left');
+    state.switchPc('left');
+    expect(state.who).toBe(5);
   });
 
   it('only offers PCs with skill points to spend', async () => {

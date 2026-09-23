@@ -39,6 +39,7 @@ class TestHost implements SpecialHost {
   async choice(_strs: string[], buttons: ChoiceButton[]): Promise<number> { return buttons.length - 1; }
   async story(): Promise<void> {}
   async askText(): Promise<string> { return ''; }
+  async askNum(min: number): Promise<number> { return min; }
   async selectPc(): Promise<number> { return 0; }
   async getNumOfItems(max: number): Promise<number> { return max; }
   startShop(): boolean { return true; }
@@ -85,7 +86,7 @@ describe('position_party', () => {
     expect(party.outdoorCorner).toEqual(corner);
     expect(party.outLoc).toEqual(where);
     expect(session.univ.transcript.at(-1)).toBe(
-      'The scenario has tried to place you in an out of bounds outdoor location.');
+      '  Error: The scenario has tried to place you in an out of bounds outdoor location.');
   });
 
   it('clears every wandering group in flight', () => {

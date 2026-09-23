@@ -66,6 +66,7 @@ class TestHost implements SpecialHost {
   async choice(_s: string[], buttons: ChoiceButton[]): Promise<number> { return buttons.length - 1; }
   async story(): Promise<void> {}
   async askText(): Promise<string> { return ''; }
+  async askNum(min: number): Promise<number> { return min; }
   async selectPc(): Promise<number> { return 0; }
   async getNumOfItems(max: number): Promise<number> { return max; }
   startShop(): boolean { return true; }

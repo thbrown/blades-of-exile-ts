@@ -11491,3 +11491,65 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
     than its slot.
   - **Not stale, and added to the plan**: `lookAt` still doesn't list fields,
     decals, boats or horses (`do_look`, boe.text.cpp:695).
+
+- **The last dialog widgets, instant help, and training on spend-xp.xml
+  (M3, 2026-09-22).** Corpus-neutral: **51 / 1,231,440**, 0 of 76 drift, 0
+  clocks, all re-run to completion.
+  - **The text field types.** `XmlDialog` has `cTextField`'s focus, caret,
+    Backspace/Delete/arrows/Home/End, Tab order and — the part that matters —
+    its *defocus check*: `lexical_cast` of the whole text for an `int`,
+    `uint` or `real` field, so "12 " or "" is refused with "You need to
+    enter an integer!" and the dialog stays open (`toast(true)` returns
+    false). Drawn white-on-black at 12pt as `cTextField::draw` does.
+  - **A prefilled field starts fully selected.** `cTextField::setText` leaves
+    the selection point at 0 and focusing puts the caret at the end, so the
+    first key *replaces* "How many? 20" rather than making it "207". The
+    replay driver's `typeInto` appended; it now replaces too. The corpus can't
+    tell — every get-num typed in it starts from "0" — so this is from the
+    C++ alone, and worth knowing the next time someone reads `typeInto`.
+  - **The first focus is the first *visible* field in tab order**, picked on
+    first use (`cDialog::run`, dialog.cpp:519), because callers hide things
+    after construction.
+  - `window.prompt` is gone: **get-num.xml** (`get_num_of_items`),
+    **get-response.xml** (`get_text_response`, lowercased — this port's own
+    save-slot names opt out), and **`get_num_response`** for IF_NUM_RESPONSE,
+    which is a *different* dialog: no Cancel, a range check that refuses to
+    close, and no clamping afterwards. `SpecialHost` grew `askNum`; the node
+    used to go through the text prompt and clamp.
+  - **Dialogs nest.** `DialogHost.runNested` opens one on top of another, as
+    the C++'s `parent` argument does — an error box over a field, a confirm
+    over the party editor. `run`/`runScreen` still refuse a second dialog.
+  - **`showError` / `showWarning`** (`game/showError.ts`): a sink the host
+    installs, the message buffer without one. Five places the port had
+    written straight to the buffer go through it.
+  - **`give_help` is live.** The browser never installed the hook, so no
+    instant-help box had ever appeared outside a replay. It shows each
+    message once, tracked in a `ReceivedHelp` preference, unless
+    `ShowInstantHelp` is off (`platform/prefs.ts`, localStorage, every access
+    in try/catch). `verify-screen.mjs` starts with instant help off, as a
+    player who turned it off would; each box would otherwise eat the next
+    click of a step that isn't about help.
+  - **A definition shown twice put its `neg` controls somewhere else the
+    second time.** The constructor wrote the placed rect back into the
+    *shared* definition, so the next showing measured from the moved rect.
+    edit-party's help button and about-boe's OK are both `neg`; neither had
+    been shown twice yet.
+  - **`addLabelFor`'s label is a 10pt control that copies the colour once**,
+    when made — not 12pt and following the control. spend-xp colours every
+    number green or red, and the labels were following.
+  - **Training runs on the real spend-xp.xml** (`dialogs/spendXpDialog.ts`),
+    `draw_xp_skills` and both event filters: green/red/white numbers, hidden
+    buttons for a refused step, each label's cost ("(3 pts./50gp)", "(MAX)"),
+    the left/right arrows between living PCs with `confirm-spend-xp` when
+    points have moved, and the Anama warning on *either* mage button before
+    the change. **`training.ts` is gone**: `SpendXp` was already the faithful
+    shape, and the shop's copy had its own subtly different rules
+    (`>= max` for `== max`). A refused step now calls `give_help(25)` or
+    `(24)` or plays sound 1 from inside `SpendXp`, so the replay driver gets
+    the help box too.
+  - **`cPictChoice`** (`dialogs/pictChoiceDialog.ts`, paging in
+    `game/pictChoice.ts`, which `PcGraphicPick` now extends) and the shop's
+    real scrollbar (`shop_sbar_rect`, window coordinates, page 8) are in.
+  - **Still missing**: Alt-click for a skill's description — `ModalScreen`
+    has no modifier keys yet. `cStringChoice` is not needed by anything in
+    scope (the V2 debug-kill and `get_num_response`'s choice list).

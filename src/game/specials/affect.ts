@@ -30,6 +30,7 @@ import { SpecialCtx, TARGET_PARTY, defaultTarget } from './context';
 import { SELECT_PC_CANCEL, SelectPcMode, runSelectPc } from '../selectPc';
 import { reportUnsupported } from './general';
 import { handleMessage } from './vm';
+import { showError } from '../showError';
 
 /**
  * The creature a `pc_num` of 100 or more names — `univ.town.monst[i - 100]`,
@@ -309,8 +310,7 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
     case SpecType.AFFECT_TRAITS: {
       if (monsterTarget) break;
       if (spec.ex1a < 0 || spec.ex1a > 16) {
-        // TODO(M3): `showError` is a modal; the buffer says it meanwhile.
-        univ.addStringToBuf('Trait is out of range (0 - 16).');
+        showError(univ, 'Trait is out of range (0 - 16).');
         break;
       }
       for (const pc of targets()) pc.traits[spec.ex1a as Trait] = !spec.ex1b;

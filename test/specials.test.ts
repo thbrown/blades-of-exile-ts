@@ -72,6 +72,10 @@ class TestHost implements SpecialHost {
   async askText(): Promise<string> {
     return this.textAnswers.shift() ?? '';
   }
+  numAnswers: number[] = [];
+  async askNum(min: number): Promise<number> {
+    return this.numAnswers.shift() ?? min;
+  }
 
   async selectPc(): Promise<number> {
     return this.pcAnswer;
@@ -1000,7 +1004,7 @@ describe('the AFFECT nodes that act on the party', () => {
       0: { type: SpecType.AFFECT_TRAITS, ex1a: 17, ex1b: 0 },
     });
     await run(0);
-    expect(univ.transcript.at(-1)).toBe('Trait is out of range (0 - 16).');
+    expect(univ.transcript.at(-1)).toBe('  Error: Trait is out of range (0 - 16).');
   });
 
   /**

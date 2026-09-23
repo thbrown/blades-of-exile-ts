@@ -150,14 +150,20 @@ let soundSink: ((which: number) => void) | null = null;
  * scenario editor. Note `web` and `poison` call `give_help` *outside* the
  * guard anyway.
  */
-let helpHook: ((help1: number, help2: number) => void) | null = null;
+let helpHook: ((help1: number, help2: number, forced: boolean) => void) | null = null;
 
-export function setGiveHelp(fn: ((help1: number, help2: number) => void) | null): void {
+export function setGiveHelp(
+  fn: ((help1: number, help2: number, forced: boolean) => void) | null,
+): void {
   helpHook = fn;
 }
 
-export function giveHelp(help1: number, help2 = 0): void {
-  helpHook?.(help1, help2);
+/**
+ * `give_help(help1, help2, help_forced)`. `forced` is the Help menu's route
+ * (`menu_give_help`), which shows the box whether or not it has been seen.
+ */
+export function giveHelp(help1: number, help2 = 0, forced = false): void {
+  helpHook?.(help1, help2, forced);
 }
 
 export function setLivingSound(fn: ((which: number) => void) | null): void {

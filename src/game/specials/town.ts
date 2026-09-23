@@ -18,6 +18,7 @@ import {
   SpecCtx, SpecCtxType, SpecialCtx, TARGET_PARTY, defaultTarget, targetIndexAt,
 } from './context';
 import { drawTerrain } from '../textBar';
+import { showError } from '../showError';
 import type { GameSession } from '../session';
 import { alterSpace, reportUnsupported } from './general';
 import { setTownAttitude } from '../townAttitude';
@@ -278,7 +279,7 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
     case SpecType.TOWN_SPELL_PAT_BOOM: {
       const isBoom = spec.type === SpecType.TOWN_SPELL_PAT_BOOM;
       if (spec.ex1c < -1 || spec.ex1c > 14) {
-        univ.addStringToBuf('  Error: Invalid spell pattern (-1 - 14).');
+        showError(univ, 'Invalid spell pattern (-1 - 14).');
         break;
       }
       // `ex2a == -1` with the protective circle in the air means "leave the
@@ -657,10 +658,7 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
     case SpecType.TOWN_START_TARGETING: {
       ctx.nextSpec = -1;
       if (spec.ex1a < 0 || spec.ex1a > 7) {
-        // TODO(M3): `showError` is a modal, which needs dialogxml. The text
-        // goes to the message buffer meanwhile, so a broken scenario still
-        // says why nothing happened.
-        univ.addStringToBuf('  Error: Invalid spell pattern (0 - 7).');
+        showError(univ, 'Invalid spell pattern (0 - 7).');
         break;
       }
       if (spec.ex1c > 1 && !isCombat(ctx.session.mode)) {

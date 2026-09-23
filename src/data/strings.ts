@@ -34,6 +34,9 @@ export const STRING_TABLES = [
   'item-abilities',
   'item-types-display',
   'shop-specials',
+  // give_help's instant help, and the Library's tip of the day.
+  'help',
+  'tips',
 ];
 
 export async function loadStringTables(

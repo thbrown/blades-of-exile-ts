@@ -88,6 +88,7 @@ import { castSpell } from './spellTown';
 import { handleTargetMode } from './targetMode';
 import { EffectPattern, SpellPat, getBuiltinPattern } from '../data/pattern';
 import { drawTerrain } from './textBar';
+import { showError } from './showError';
 
 /** d_string (boe.combat.cpp:70) — the direction names the transcript prints. */
 const DIRECTION_NAMES = [
@@ -3191,7 +3192,7 @@ export class GameSession {
       || outX !== minmax(0, scenario.outWidth - 1, outX)
       || outY !== minmax(0, scenario.outHeight - 1, outY)
     ) {
-      this.univ.addStringToBuf(
+      showError(this.univ,
         'The scenario has tried to place you in an out of bounds outdoor location.');
       return false;
     }

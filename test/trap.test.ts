@@ -53,6 +53,7 @@ class TrapHost implements SpecialHost {
   }
   async story(): Promise<void> {}
   async askText(): Promise<string> { return ''; }
+  async askNum(min: number): Promise<number> { return min; }
   async selectPc(_rows: PcChoice[], prompt: string): Promise<number> {
     this.prompts.push(prompt);
     return this.pc;

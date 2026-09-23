@@ -21,8 +21,8 @@ import { terrainGraphic } from '../render/terrainPics';
 import { drawString, drawStringCentre, measureString, wrapLines } from '../render/text';
 import { tilePattern } from '../render/tiling';
 import {
-  ButtonControl, ButtonType, DialogControl, DialogDef, FontSpec, KEY_PLACEHOLDER,
-  LedControl, LedState, PictControl, PictType, TextControl,
+  ButtonControl, ButtonType, DialogControl, DialogDef, FieldControl, FieldType, FontSpec,
+  KEY_PLACEHOLDER, LedControl, LedState, PictControl, PictType, TextControl,
 } from './dialogXml';
 import { ModalScreen } from './dialog';
 import { drawPictAt } from './pict';
@@ -122,6 +122,39 @@ function controlSize(control: DialogControl): { w: number; h: number } {
 /** What a handler tells the runner to do once it has run. */
 export type DialogAction = 'stay' | 'close';
 
+/**
+ * Where `showError` goes when a text field refuses to give up the focus. The
+ * C++ opens a `cStrDlog` on top of the dialog (strdlog.cpp:111); the host that
+ * owns the modal stack installs that here, and a test leaves it unset.
+ */
+let fieldErrorSink: ((message: string) => void) | null = null;
+
+export function setFieldErrorSink(sink: ((message: string) => void) | null): void {
+  fieldErrorSink = sink;
+}
+
+/**
+ * `cTextField`'s defocus check (field.cpp:22) — `boost::lexical_cast` of the
+ * whole text, which is strict: no spaces, no trailing junk, and an empty
+ * field is not a number.
+ */
+export function fieldTextValid(type: FieldType, text: string): boolean {
+  switch (type) {
+    case 'int': return /^[+-]?\d+$/.test(text);
+    case 'uint': return /^\+?\d+$/.test(text);
+    case 'real': return text.trim() === text && text !== '' && Number.isFinite(Number(text));
+    case 'text':
+    default: return true;
+  }
+}
+
+const FIELD_TYPE_NAMES: Record<FieldType, string> = {
+  int: 'an integer', uint: 'a non-negative integer', real: 'a number', text: '',
+};
+
+/** `cTextField::draw`'s style: 12pt plain black on white (field.cpp:301). */
+const FIELD_STYLE = { size: 12, colour: Colours.BLACK, font: 'plain' as const };
+
 export interface XmlDialogOptions {
   /** Where to put the panel; by default it is centred, as the C++ centres it. */
   origin?: { x: number; y: number };
@@ -144,10 +177,31 @@ export class XmlDialog implements ModalScreen {
   /** Keys attached at runtime; `def-key` in the definition is separate. */
   private keys = new Map<string, string>();
   /** `cDialog::addLabelFor` — a text control synthesised beside another. */
-  private labels = new Map<string, { text: string; bold: boolean }>();
+  private labels = new Map<string, { text: string; bold: boolean; colour: string }>();
   private labelPos = new Map<string, { where: 'left' | 'right' | 'above' | 'below'; offset: number }>();
+  /** Where the `neg`-positioned controls ended up (see the constructor). */
+  private placed = new Map<DialogControl, UiRect>();
   /** The control the pointer is holding down, drawn pressed. */
   private pressed: string | null = null;
+  /**
+   * `cDialog::currentFocus` — the text field typing goes into. `cDialog::run`
+   * starts it on the first *visible* field in tab order (dialog.cpp:519), and
+   * visibility is only settled once the caller has finished hiding things, so
+   * it is picked on first use rather than in the constructor.
+   */
+  private focus: string | null = null;
+  private focusPicked = false;
+  /** Each field's insertion point, as an index into its text. */
+  private caret = new Map<string, number>();
+  /**
+   * Fields whose whole text is selected. `cTextField::setText` puts the
+   * insertion point at the end and the selection point at 0 (field.cpp:68),
+   * so a prefilled field — "How many?" with the stack size in it — is replaced
+   * by the first thing typed rather than appended to.
+   */
+  private selectedAll = new Set<string>();
+  /** `attachFocusHandler` — false from a losing call keeps the focus. */
+  private focusHandlers = new Map<string, (dlg: XmlDialog, losing: boolean) => boolean>();
 
   constructor(
     private ctx: CanvasRenderingContext2D,
@@ -175,7 +229,9 @@ export class XmlDialog implements ModalScreen {
       const h = height(c.rect);
       const left = this.negX(c) ? right - c.rect.left : c.rect.left;
       const top = this.negY(c) ? bottom - c.rect.top : c.rect.top;
-      c.rect = { top, left, bottom: top + h, right: left + w };
+      // Kept on the instance: the definition is shared, and writing the
+      // placed rect back into it flipped the control on every other showing.
+      this.placed.set(c, { top, left, bottom: top + h, right: left + w });
     }
     const origin = options.origin ?? {
       x: Math.round((BOE_WIDTH - right) / 2),
@@ -184,6 +240,22 @@ export class XmlDialog implements ModalScreen {
     this.frame = {
       left: origin.x, top: origin.y, right: origin.x + right, bottom: origin.y + bottom,
     };
+  }
+
+  private tabOrder(): FieldControl[] {
+    return this.fields()
+      .filter((f) => !this.hidden.has(f.name))
+      .sort((a, b) => (a.tabOrder ?? 0) - (b.tabOrder ?? 0));
+  }
+
+  private pickFocus(): void {
+    if (this.focusPicked) return;
+    this.focusPicked = true;
+    const first = this.tabOrder()[0];
+    if (!first) return;
+    this.focus = first.name;
+    this.focusHandlers.get(first.name)?.(this, false);
+    this.placeCaret(first.name);
   }
 
   /** A control still carrying `neg` positioning is placed against the window. */
@@ -201,6 +273,10 @@ export class XmlDialog implements ModalScreen {
   /** `me[name].setText(str)`. */
   setText(name: string, text: string): this {
     this.textOverride.set(name, text);
+    if (this.def.byName.get(name)?.kind === 'field') {
+      this.caret.set(name, text.length);
+      this.selectedAll.add(name);
+    }
     return this;
   }
 
@@ -292,17 +368,35 @@ export class XmlDialog implements ModalScreen {
 
   /**
    * `cDialog::addLabelFor` (dialog.cpp:971) — a small text label placed against
-   * one edge of a control. `offset` is doubled, as the C++ doubles it, and the
-   * label inherits the control's colour except that a button on a dark
-   * background takes the default text colour instead.
+   * one edge of a control. `offset` is doubled, as the C++ doubles it.
+   *
+   * **The label is a control of its own**, a 10pt `cTextMsg`, and it *copies*
+   * the control's colour when it is made — a button on a dark background
+   * gives it the default text colour instead. So recolouring the control
+   * afterwards leaves the label alone, which is how spend-xp's numbers turn
+   * green and red while their labels stay white. Setting the text of a label
+   * that already exists keeps the colour it was made with, as the C++'s
+   * `appendText` on the existing label does.
    */
   setLabel(
     name: string, text: string, where: 'left' | 'right' | 'above' | 'below' = 'left',
     offset = 7, bold = false,
   ): this {
-    this.labels.set(name, { text, bold });
+    const existing = this.labels.get(name);
+    const control = this.def.byName.get(name);
+    const colour = existing?.colour
+      ?? (control?.kind === 'button' ? DEF_TEXT : this.resolvedColour(name));
+    this.labels.set(name, { text, bold, colour });
     this.labelPos.set(name, { where, offset });
     return this;
+  }
+
+  /** A control's colour as drawn — its override, its definition's, or the default. */
+  private resolvedColour(name: string): string {
+    const control = this.def.byName.get(name);
+    const named = this.colour.get(name)
+      ?? (control && 'font' in control ? control.font.colour : undefined);
+    return named ? COLOURS[named] ?? named : DEF_TEXT;
   }
 
   attachHandler(name: string, fn: (dlg: XmlDialog) => DialogAction): this {
@@ -310,9 +404,148 @@ export class XmlDialog implements ModalScreen {
     return this;
   }
 
+  /** `attachFocusHandler` — asked when a field gains (`losing` false) or loses focus. */
+  attachFocusHandler(name: string, fn: (dlg: XmlDialog, losing: boolean) => boolean): this {
+    this.focusHandlers.set(name, fn);
+    return this;
+  }
+
+  /** `cControl::getTextAsNum` — `istringstream >> n`, so leading digits count. */
+  getTextAsNum(name: string): number {
+    const n = parseInt(this.getText(name).trim(), 10);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  get focused(): string | null {
+    this.pickFocus();
+    return this.focus;
+  }
+
+  /**
+   * `cDialog::toast(triggerFocus)`. Accepting runs the focused field's
+   * defocus check first, and refuses to close — returning false — when it
+   * fails, which is how a "How many?" box with "abc" in it stays open. A
+   * handler that means to close on accept calls this and returns 'close' only
+   * if it said yes.
+   */
+  toast(accept: boolean): boolean {
+    this.pickFocus();
+    if (accept && this.focus !== null) return this.defocus(this.focus);
+    return true;
+  }
+
+  /** `cTextField::callHandler(EVT_DEFOCUS)` — type check, then the handler. */
+  private defocus(name: string): boolean {
+    const control = this.def.byName.get(name);
+    if (control?.kind !== 'field') return true;
+    if (!fieldTextValid(control.type, this.getText(name))) {
+      fieldErrorSink?.(`You need to enter ${FIELD_TYPE_NAMES[control.type]}!`);
+      return false;
+    }
+    const handler = this.focusHandlers.get(name);
+    return handler ? handler(this, true) : true;
+  }
+
+  /** `cDialog::setFocus` — only if the field that has it lets go. */
+  setFocus(name: string): boolean {
+    this.pickFocus();
+    if (this.focus === name) return true;
+    if (this.focus !== null && !this.defocus(this.focus)) return false;
+    this.focus = name;
+    this.focusHandlers.get(name)?.(this, false);
+    this.placeCaret(name);
+    return true;
+  }
+
+  /**
+   * A field focused for the first time: the insertion point goes to the end,
+   * and since the selection point starts at 0 (field.cpp:295), everything
+   * already in it is selected.
+   */
+  private placeCaret(name: string): void {
+    if (this.caret.has(name)) return;
+    const len = this.getText(name).length;
+    this.caret.set(name, len);
+    if (len > 0) this.selectedAll.add(name);
+  }
+
+  private fields(): FieldControl[] {
+    return this.def.controls.filter((c): c is FieldControl => c.kind === 'field');
+  }
+
+  /** `handleTabOrder` — the next field by `tab-order`, then by position. */
+  private tab(back: boolean): void {
+    const order = this.tabOrder();
+    if (order.length < 2 || this.focus === null) return;
+    const at = order.findIndex((f) => f.name === this.focus);
+    const next = order[(at + (back ? order.length - 1 : 1)) % order.length]!;
+    if (this.setFocus(next.name)) this.caret.set(next.name, this.getText(next.name).length);
+  }
+
+  /**
+   * `cTextField::handleInput` (field.cpp:488), cut down to one line with no
+   * selection: characters insert at the caret, and the editing keys move it.
+   * Returns whether the key was the field's.
+   */
+  private fieldKey(name: string, key: string): boolean {
+    const control = this.def.byName.get(name);
+    if (control?.kind !== 'field') return false;
+    const text = this.getText(name);
+    const ip = Math.min(this.caret.get(name) ?? text.length, text.length);
+    const put = (next: string, caret: number): void => {
+      this.textOverride.set(name, next);
+      this.caret.set(name, caret);
+    };
+    if (this.selectedAll.delete(name) && text.length > 0) {
+      // A key that edits replaces the selection; one that moves collapses it.
+      if (key.length === 1) {
+        put(key, 1);
+        return true;
+      }
+      if (key === 'Backspace' || key === 'Delete') {
+        put('', 0);
+        return true;
+      }
+    }
+    if (key.length === 1) {
+      if (control.maxChars === undefined || control.maxChars < 0 || text.length < control.maxChars)
+        put(text.slice(0, ip) + key + text.slice(ip), ip + 1);
+      return true;
+    }
+    switch (key) {
+      case 'Backspace': if (ip > 0) put(text.slice(0, ip - 1) + text.slice(ip), ip - 1); return true;
+      case 'Delete': if (ip < text.length) put(text.slice(0, ip) + text.slice(ip + 1), ip); return true;
+      case 'ArrowLeft': this.caret.set(name, Math.max(0, ip - 1)); return true;
+      case 'ArrowRight': this.caret.set(name, Math.min(text.length, ip + 1)); return true;
+      case 'Home': case 'ArrowUp': this.caret.set(name, 0); return true;
+      case 'End': case 'ArrowDown': this.caret.set(name, text.length); return true;
+      default: return false;
+    }
+  }
+
   // ------------------------------------------------------- events
 
   onClick(x: number, y: number): string | null {
+    // A click in a field takes the focus there and puts the caret under the
+    // pointer (`cTextField::handleClick`, field.cpp:202).
+    for (const field of this.fields()) {
+      if (this.hidden.has(field.name)) continue;
+      const r = this.screenRect(field);
+      if (x < r.left - 2 || x >= r.right + 2 || y < r.top - 2 || y >= r.bottom + 2) continue;
+      if (this.setFocus(field.name)) {
+        const text = this.getText(field.name);
+        const origin = r.left + 2 - this.fieldScroll(field.name, r);
+        let ip = text.length;
+        for (let i = 0; i < text.length; i++) {
+          const mid = measureString(this.ctx, text.slice(0, i), FIELD_STYLE)
+            + measureString(this.ctx, text[i]!, FIELD_STYLE) / 2;
+          if (x < origin + mid) { ip = i; break; }
+        }
+        this.caret.set(field.name, ip);
+        this.selectedAll.delete(field.name);
+      }
+      return null;
+    }
     const hit = this.controlAt(x, y);
     this.pressed = null;
     if (!hit) return null;
@@ -320,6 +553,16 @@ export class XmlDialog implements ModalScreen {
   }
 
   onKey(key: string): string | null {
+    this.pickFocus();
+    // A focused field gets everything but Enter and Escape (dialog.cpp:918).
+    // The C++ lets a button's hotkey fire *as well*, and warns against
+    // putting a typable one beside a field; none of the player's do, so here
+    // the field simply wins.
+    if (this.focus !== null && !this.hidden.has(this.focus)) {
+      if (key === 'Tab') { this.tab(false); return null; }
+      if (key !== 'Escape' && key !== 'Enter' && key !== 'Return'
+        && this.fieldKey(this.focus, key)) return null;
+    }
     if (key === 'Escape' && this.def.escBtn) return this.activate(this.def.escBtn);
     if ((key === 'Enter' || key === 'Return') && this.def.defBtn) {
       return this.activate(this.def.defBtn);
@@ -374,7 +617,7 @@ export class XmlDialog implements ModalScreen {
 
   /** A control's rect in screen coordinates (its own is dialog-relative). */
   screenRect(control: DialogControl): UiRect {
-    const { rect } = control;
+    const rect = this.placed.get(control) ?? control.rect;
     const { w, h } = controlSize(control);
     return {
       left: this.frame.left + rect.left,
@@ -387,6 +630,7 @@ export class XmlDialog implements ModalScreen {
   // ------------------------------------------------------- drawing
 
   draw(): void {
+    this.pickFocus();
     const { ctx, frame } = this;
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.fillRect(frame.left + 4, frame.top + 4, width(frame), height(frame));
@@ -460,8 +704,7 @@ export class XmlDialog implements ModalScreen {
       rect = { ...rect, top: rect.top + by, bottom: rect.bottom + by };
     }
     drawString(this.ctx, rect, label.text, {
-      size: 12, font: label.bold ? 'bold' : 'plain',
-      colour: this.colour.get(control.name) ?? DEF_TEXT,
+      size: 10, font: label.bold ? 'bold' : 'plain', colour: label.colour,
     });
   }
 
@@ -594,18 +837,57 @@ export class XmlDialog implements ModalScreen {
   }
 
   /**
-   * A text field. It draws its frame and contents; typing into one needs the
-   * focus/caret handling `cTextField` has, which no dialog this port runs yet
-   * requires. TODO(M7): the save/load and character-creation dialogs will.
+   * How far a field's text is scrolled left so the caret stays in view. The
+   * C++ wraps and scrolls *vertically*; every field the player meets is one
+   * line tall, where that would hide the text, so this scrolls sideways.
+   */
+  private fieldScroll(name: string, rect: UiRect): number {
+    const text = this.getText(name);
+    const ip = Math.min(this.caret.get(name) ?? text.length, text.length);
+    const caretX = measureString(this.ctx, text.slice(0, ip), FIELD_STYLE);
+    return Math.max(0, caretX - (width(rect) - 4));
+  }
+
+  /**
+   * `cTextField::draw` (field.cpp:301) — a white box two pixels outside the
+   * control's frame, outlined in black, with the text in 12pt black and the
+   * insertion point as a grey bar when it has the focus.
    */
   private drawField(control: DialogControl): void {
     if (control.kind !== 'field') return;
+    const { ctx } = this;
     const rect = this.screenRect(control);
-    this.drawFrame(rect);
-    const text = this.getText(control.name) || control.text;
-    if (text) {
-      drawString(this.ctx, rect, text, { size: 10, colour: DEF_TEXT, font: 'plain' });
+    const outline = { left: rect.left - 2, top: rect.top - 2, right: rect.right + 2, bottom: rect.bottom + 2 };
+    ctx.fillStyle = Colours.WHITE;
+    ctx.fillRect(outline.left, outline.top, width(outline), height(outline));
+    ctx.strokeStyle = Colours.BLACK;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(outline.left + 0.5, outline.top + 0.5, width(outline) - 1, height(outline) - 1);
+    const text = this.getText(control.name);
+    const scroll = this.fieldScroll(control.name, rect);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(rect.left, rect.top, width(rect), height(rect));
+    ctx.clip();
+    if (text) drawString(ctx, { ...rect, left: rect.left + 2 - scroll }, text, FIELD_STYLE);
+    if (this.focus === control.name && this.selectedAll.has(control.name) && text) {
+      // hiliteClr, {127,127,127}, behind the selected run.
+      ctx.fillStyle = 'rgb(127,127,127)';
+      ctx.fillRect(rect.left + 2 - scroll, rect.top,
+        measureString(ctx, text, FIELD_STYLE), height(rect));
+      drawString(ctx, { ...rect, left: rect.left + 2 - scroll }, text, FIELD_STYLE);
     }
+    if (this.focus === control.name) {
+      const ip = Math.min(this.caret.get(control.name) ?? text.length, text.length);
+      const x = Math.round(rect.left + 2 - scroll
+        + measureString(ctx, text.slice(0, ip), FIELD_STYLE)) + 0.5;
+      ctx.strokeStyle = 'rgb(92,92,92)';
+      ctx.beginPath();
+      ctx.moveTo(x, rect.top + 1);
+      ctx.lineTo(x, rect.bottom - 1);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   private drawLine(control: DialogControl): void {

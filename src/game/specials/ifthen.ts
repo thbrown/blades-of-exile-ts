@@ -347,8 +347,7 @@ export async function ifThenSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       let hi = spec.m3;
       if (lo > hi) [lo, hi] = [hi, lo];
       const prompt = univ.getStr(SpecCtxType.SCEN, spec.m1) ?? '';
-      const answer = await ctx.host.askText(`${prompt} (${lo}-${hi})`);
-      const i = Math.max(lo, Math.min(hi, parseInt(answer, 10) || 0));
+      const i = await ctx.host.askNum(lo, hi, prompt);
       setSdf(univ, spec.sd1, spec.sd2, Math.abs(i));
 
       const mode = Math.max(0, Math.min(2, spec.pic));
