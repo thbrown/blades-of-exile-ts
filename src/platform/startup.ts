@@ -267,7 +267,8 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
       });
       words.append(facts);
       words.append(el('small', undefined, entry.description || entry.blurb));
-      const state = el('span', 'startup-state', lib.installed.has(entry.id) ? 'Installed' : '');
+      // Empty (and hidden) until a click starts a download: progress and errors only.
+      const state = el('span', 'startup-state', '');
       words.append(state);
       words.append(link(entry.source, `Listed as “${entry.listedAs}”`, 'startup-source'));
       card.append(words);

@@ -64,8 +64,10 @@ export function tilePattern(
   ctx.beginPath();
   ctx.rect(dest.left, dest.top, dest.right - dest.left, dest.bottom - dest.top);
   ctx.clip();
-  const startX = dest.left - (dest.left % pw);
-  const startY = dest.top - (dest.top % ph);
+  // Rounded down, so a rect that starts off the canvas (the desktop around the
+  // game screen, drawn in the game screen's coordinates) still lines up.
+  const startX = Math.floor(dest.left / pw) * pw;
+  const startY = Math.floor(dest.top / ph) * ph;
   for (let y = startY; y < dest.bottom; y += ph)
     for (let x = startX; x < dest.right; x += pw)
       ctx.drawImage(pixpats, src.left, src.top, pw, ph, x, y, pw, ph);

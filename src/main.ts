@@ -112,6 +112,7 @@ import { killPc } from './game/damage';
 import { BOE_HEIGHT, BOE_WIDTH, ToolbarButton } from './render/layout';
 
 import { CHROME_SHEETS, Screen } from './render/screen';
+import { tilePattern } from './render/tiling';
 import {
   DEFAULT_UI_SCALE, DisplayMode, UI_SCALES, UI_SCALE_FIT, desktop, placeBesideGame,
 } from './render/desktop';
@@ -448,16 +449,25 @@ async function main(): Promise<void> {
   let pointer: { x: number; y: number } | null = null;
   let shownCursor = '';
   const redraw = (): void => {
-    // The desktop around the game screen is black, as OBoE's full-screen
-    // window is. The game screen is drawn over it at its offset, and that
-    // offset is left in place afterwards. The map and dialogs belong to the
-    // desktop, so they are drawn without it.
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // The desktop around the game screen gets the same background pattern.
+    // OBoE's put_background tiles its whole window (boe.graphics.cpp:683).
+    // It's tiled in the game screen's coordinates, so the pattern runs on
+    // into the screen without a seam. The game screen is then drawn over it
+    // at its offset, and that offset stays set afterwards. The map and
+    // dialogs belong to the desktop, so they're drawn without it.
+    ctx.setTransform(1, 0, 0, 1, desktop.gameX, desktop.gameY);
     if (desktop.w !== BOE_WIDTH || desktop.h !== BOE_HEIGHT) {
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, desktop.w, desktop.h);
+      const whole = {
+        left: -desktop.gameX, top: -desktop.gameY,
+        right: desktop.w - desktop.gameX, bottom: desktop.h - desktop.gameY,
+      };
+      const pats = store.get('pixpats');
+      if (pats) tilePattern(ctx, pats, screen.backgroundIndex(session), whole);
+      else {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(whole.left, whole.top, whole.right - whole.left, whole.bottom - whole.top);
+      }
     }
-    ctx.translate(desktop.gameX, desktop.gameY);
     screen.draw(session);
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);

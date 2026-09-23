@@ -282,12 +282,20 @@ export class Screen {
       this.ctx.fillRect(0, 0, BOE_WIDTH, BOE_HEIGHT);
       return;
     }
-    let index: number;
-    if (session.isOutdoors) index = DEFAULT_BG.out;
-    else if (session.univ.townRecord?.lightingType !== Lighting.LIGHT_NORMAL)
-      index = DEFAULT_BG.dungeon;
-    else index = DEFAULT_BG.town;
-    tilePattern(this.ctx, pats, index, full);
+    tilePattern(this.ctx, pats, this.backgroundIndex(session), full);
+  }
+
+  /**
+   * Which pattern `put_background` tiles with. The host tiles the desktop
+   * around the game screen with it too, because OBoE's `tileImage` covers
+   * the whole window (boe.graphics.cpp:683).
+   */
+  backgroundIndex(session: GameSession): number {
+    // MODE_STARTUP uses bg[4].
+    if (this.startupBackdrop) return 4;
+    if (session.isOutdoors) return DEFAULT_BG.out;
+    if (session.univ.townRecord?.lightingType !== Lighting.LIGHT_NORMAL) return DEFAULT_BG.dungeon;
+    return DEFAULT_BG.town;
   }
 
   private drawPanel(which: keyof typeof PANEL_IMAGES): void {

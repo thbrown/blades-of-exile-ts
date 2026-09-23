@@ -34,9 +34,10 @@ export const UI_SCALES = [1, 1.5, 2, 3, 4];
 export const UI_SCALE_FIT = 0;
 /**
  * OBoE's own default is the monitor's scale factor (`fallback_scale`). The
- * port's default is 2, the size the page used before it had this setting.
+ * port's default is 1, the original's size, centred, as a 605×430 window
+ * sat on a 1990s monitor.
  */
-export const DEFAULT_UI_SCALE = 2;
+export const DEFAULT_UI_SCALE = 1;
 
 /** What the page gives the canvas, in CSS pixels. */
 export interface DesktopRoom {

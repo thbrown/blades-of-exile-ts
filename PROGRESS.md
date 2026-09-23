@@ -11981,7 +11981,7 @@ OBoE's `adjust_window_mode` / `compute_viewport`:
   numbers) places the game screen. **`UIScale`** (1, 1.5, 2, 3, 4, or 0 for
   Fit) sets the size of a game pixel. Both are set in Preferences, the block
   the port used to hide, and on a new **View** menu. Defaults are centre and
-  2×.
+  1×.
 - The desktop is the window's size divided by the scale. If the game screen
   doesn't fit at the chosen scale, the scale shrinks until it does.
 - The game screen is drawn with `ctx.translate(gameX, gameY)`, which stays set
