@@ -260,11 +260,15 @@ const LOADING_UI = ['spinner', 'loading-file', 'progress-wrap'];
 
 function hideLoadingUi(): void {
   for (const id of LOADING_UI) document.getElementById(id)?.classList.add('hidden');
+  // The status line goes with them: it reports loading, and in play it would
+  // only be a footer under the game.
+  document.body.classList.add('playing');
 }
 
 /** The spinner starts visible; the startup screen hides it and this puts it back. */
 function showLoadingUi(): void {
   for (const id of LOADING_UI) document.getElementById(id)?.classList.remove('hidden');
+  document.body.classList.remove('playing');
 }
 
 async function main(): Promise<void> {

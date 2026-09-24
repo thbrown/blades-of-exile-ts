@@ -251,6 +251,8 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
   return new Promise((resolve) => {
     // The masthead sits above the card, not in it.
     const page = el('div', 'startup-page');
+    // The party has a card of its own, between the masthead and the rest.
+    const partyCard = el('div', 'startup startup-party-card');
     const root = el('div', 'startup');
     page.append(header(), root);
 
@@ -267,9 +269,10 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
     const start = (scenarioId: string): StartupChoice =>
       (partyPcs !== null ? { scenarioId, party: 'enter' } : { scenarioId });
     if (party !== undefined) {
-      root.append(el('h2', undefined, 'Your party'));
+      partyCard.append(el('h2', undefined, 'Your party'));
       const panel = el('div', 'startup-party');
-      root.append(panel);
+      partyCard.append(panel);
+      root.before(partyCard);
       const showParty = (): void => {
         panel.replaceChildren();
         const make = el('button', 'startup-party-button', 'Make New Party');

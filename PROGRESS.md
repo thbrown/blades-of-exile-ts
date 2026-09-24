@@ -12187,3 +12187,16 @@ chosen first, and a win threw the party away.
   a save's picture, Continue, File › Main Menu, and HP/SP. **Gotcha:** a save
   card carries its scenario's title too, so scripts should click scenario
   cards by `data-id`, not by text.
+
+**Layout polish (2026-09-23).**
+- The party is in **its own card** (`.startup-party-card`) between the
+  masthead and the main card. Each PC shows SP under HP, both in blue.
+- **The menu bar is a real one**: the full width of the window, flush against
+  its top edge (the body has no top padding; the bar takes back the side
+  padding with negative margins), and `position: sticky`. `pageLayout.ts`
+  no longer sizes it to the canvas.
+- **No footer in play**: `#status` is only for loading now. `hideLoadingUi`
+  sets `body.playing`, which hides it, and `showLoadingUi` clears it.
+  `setStatus` still writes to it, but unseen.
+- `verify-screen.mjs` crops its screenshots to the canvas's bounding box
+  rather than a fixed (12, 12), which the menu bar moved.

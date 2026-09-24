@@ -33,7 +33,8 @@
         flex-direction: column;
         align-items: center;
         gap: 8px;
-        padding: 12px;
+        /* No top padding: the menu bar sits flush against the top edge. */
+        padding: 0 12px 12px;
       }
       #status {
         margin: 0;
@@ -88,25 +89,31 @@
           transform: rotate(360deg);
         }
       }
-      /* Empty until the game is running, and an empty bar looks broken. */
+      /* Empty until the game is running, and an empty bar looks broken. The
+         status line is only for loading; in play it would be a footer. */
       #game-menu-bar:empty,
       body.starting #canvas-wrap,
-      body.starting #status {
+      body.starting #status,
+      body.playing #status {
         display: none;
       }
+      /* A real menu bar: the full width of the window, snug on its top edge,
+         and staying there if the page scrolls. The body's side padding is
+         taken back with negative margins. */
       #game-menu-bar {
-        width: 1210px;
-        max-width: 100%;
-        height: 26px;
+        align-self: stretch;
+        margin: 0 -12px;
+        height: 28px;
+        position: sticky;
+        top: 0;
         background: #2a2a2a;
-        border: 1px solid #444;
-        border-radius: 3px;
+        border-bottom: 1px solid #444;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
         display: flex;
         align-items: stretch;
         font-size: 13px;
         color: #ddd;
         user-select: none;
-        position: relative;
         z-index: 10;
       }
       .menu-item {
@@ -292,6 +299,10 @@
       .startup-page {
         width: 1210px;
         max-width: 100%;
+        margin-top: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
       }
       .startup-header {
         display: flex;
@@ -483,14 +494,10 @@
       }
       .startup-pc-stats {
         display: flex;
-        gap: 8px;
+        flex-direction: column;
         font-size: 11px;
+        line-height: 1.35;
         font-variant-numeric: tabular-nums;
-      }
-      .startup-pc-stats .hp {
-        color: #7fcf86;
-      }
-      .startup-pc-stats .sp {
         color: #8fa8ff;
       }
       .startup-party-active {

@@ -2,7 +2,7 @@
  * Fits the canvas to the browser window, as `adjust_window_mode` fits OBoE's
  * window to the monitor (see `render/desktop.ts` for the layout itself).
  * This file is only the DOM side: measuring the room the page leaves the
- * canvas, and sizing the canvas, its wrapper and the menu bar to match.
+ * canvas, and sizing the canvas and its wrapper to match.
  */
 
 import { Desktop, DesktopRoom, DisplayMode, desktop, layoutDesktop } from '../render/desktop';
@@ -51,12 +51,10 @@ export function fitCanvasToPage(
   return moved;
 }
 
-/** Size the canvas, its wrapper and the menu bar for `d`. */
+/** Size the canvas and its wrapper for `d`. The menu bar spans the window. */
 function apply(canvas: HTMLCanvasElement, wrap: HTMLElement, d: Desktop): Desktop {
   const cssWidth = `${Math.floor(d.w * d.scale)}px`;
   wrap.style.width = cssWidth;
-  const bar = document.getElementById('game-menu-bar');
-  if (bar !== null) bar.style.width = cssWidth;
   // Assigning the size clears the canvas even when it is unchanged.
   if (canvas.width !== d.w) canvas.width = d.w;
   if (canvas.height !== d.h) canvas.height = d.h;

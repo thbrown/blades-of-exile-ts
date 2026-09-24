@@ -49,7 +49,11 @@ const valley = page.locator('.startup .startup-choice', { hasText: 'Valley of Dy
 await valley.first().click();
 console.log('STARTUP:', JSON.stringify(startupChoices), 'canAdd:', startupCanAdd);
 
-const shot = (n) => page.screenshot({ path: `${SHOTS}/${n}.png`, clip: { x: 12, y: 12, width: 1210, height: 860 } });
+// Cropped to the canvas, wherever the page has put it (below the menu bar).
+const shot = async (n) => {
+  const box = await page.locator('#canvas').boundingBox();
+  await page.screenshot({ path: `${SHOTS}/${n}.png`, ...(box ? { clip: box } : {}) });
+};
 
 // A new game from the startup screen builds its party first: new-party.xml,
 // then the party editor on the default party. Delete PC 6, and make a new one
