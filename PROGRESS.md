@@ -902,6 +902,26 @@ Notes for M2 implementer:
     - E3's own lock-pick roll (`TODO(E3-3)`);
     - signs.
 - [ ] **E3-2 — Towns, NPCs, shops, dialogue** (needs M2–M3)
+  - 2026-09-24:
+    - **Monsters** (190) and **items** (415) convert from E3's own tables
+      through the legacy importer (`convertMonster`/`convertItem`), and are
+      written by `tools/e3convert/xmlWrite.ts`. That writer round-trips every
+      bundled scenario exactly (`test/xmlWrite.test.ts`).
+    - Fields E3 keeps in code rather than tables come from BoE's `bladbase`,
+      Jeff's own export of the same monsters and items (generated into
+      `bladbaseExtras.ts`, GPL):
+      - for monsters: breath type, radiation, attitude, summon, face, loot;
+      - for items with a namesake: ability, strength, use, treasure class,
+        curse.
+    - Sprites come from MONST1–9, OBJECTS and TINYOBJ.
+    - Every town places its creatures, preset items and crates/barrels.
+  - Still to do:
+    - conversations (the `^`-separated RT_STRING text, and the creatures'
+      `personality` byte);
+    - shops;
+    - room names, and signs;
+    - the villages' block builder;
+    - creatures' appear/disappear conditions.
 - [ ] **E3-3 — Quest logic, incrementally** (needs M4+)
 
 ## Key references (do not lose)

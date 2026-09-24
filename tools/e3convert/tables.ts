@@ -5,8 +5,8 @@
  * "Tables in the EXE").
  */
 
-import type { LegacyMonster } from '../../src/fileio/legacy/structs';
-import { BLADBASE_EXTRAS } from './bladbaseExtras';
+import type { LegacyItem, LegacyMonster } from '../../src/fileio/legacy/structs';
+import { BLADBASE_EXTRAS, BLADBASE_ITEMS } from './bladbaseExtras';
 import { neAutoDataSegment, readNeSegment } from './ne';
 
 export const E3_TERRAIN_COUNT = 256;
@@ -133,6 +133,75 @@ export function readE3Monsters(exe: Uint8Array, strings: Map<number, string>): L
       xWidth: u8(4400, n) || 1, yWidth: u8(4600, n) || 1,
       radiate1: x[1] ?? 0, radiate2: x[2] ?? 0, defaultAttitude: x[3] ?? 0, summonType: x[4] ?? 0,
       defaultFacialPic: x[5] ?? 0, pictureNum: u8(4200, n),
+    });
+  }
+  return out;
+}
+
+export const E3_ITEM_COUNT = 415;
+
+/**
+ * E3's item ability codes → BoE legacy ones, for items with no BoE namesake.
+ * Derived by matching E3's items to bladbase's by name and taking, for each
+ * E3 code, the BoE code most of its items carry (94 of 103 codes agree
+ * throughout; the rest are items BoE retuned). E3 codes seen only on E3-only
+ * items (60, 70, 78, 82, 97, 98, 101–103, 111, 132–135, 168) are absent.
+ */
+const E3_ABILITY_TO_LEGACY: Readonly<Record<number, number>> = {
+  0: 0, 2: 35, 3: 87, 4: 72, 5: 110, 6: 111, 8: 70, 9: 48, 10: 131, 11: 161, 12: 90, 13: 160,
+  14: 0, 16: 32, 17: 158, 18: 71, 19: 124, 20: 88, 21: 91, 22: 112, 23: 113, 24: 87, 25: 49,
+  26: 73, 27: 74, 28: 72, 29: 89, 30: 84, 31: 86, 32: 14, 33: 1, 34: 2, 35: 3, 36: 75, 37: 116,
+  38: 114, 39: 115, 40: 85, 41: 132, 42: 55, 43: 128, 44: 118, 45: 117, 46: 50, 47: 46, 48: 57,
+  49: 51, 50: 2, 51: 5, 52: 150, 53: 151, 54: 152, 55: 153, 56: 157, 57: 155, 58: 156, 59: 77,
+  61: 42, 63: 85, 65: 170, 66: 33, 67: 94, 68: 159, 71: 119, 72: 119, 73: 119, 74: 55, 75: 53,
+  76: 119, 77: 34, 79: 79, 80: 134, 81: 135, 83: 87, 84: 119, 85: 127, 86: 122, 87: 78, 88: 77,
+  89: 120, 90: 84, 91: 119, 92: 172, 93: 11, 94: 55, 95: 56, 96: 43, 99: 40, 100: 80, 110: 52,
+  115: 71, 117: 44, 118: 54, 120: 54, 121: 83, 122: 36, 123: 123, 124: 121, 125: 126, 127: 31,
+  129: 45, 130: 82, 131: 4,
+};
+
+const WEAPON_VARIETIES = new Set([1, 2, 4, 5, 6, 23, 24, 25]);
+
+/**
+ * E3's items as BoE legacy records, for `convertItem`. The numbers are E3's
+ * own (segment 38, 59 bytes a record; FORMATS.md). E3 has no ability strength
+ * and codes abilities its own way: an item with a namesake in BoE's bladbase
+ * (367 of 408) takes its ability, strength, use type, treasure class and
+ * curse from there; the rest map E3's code through `E3_ABILITY_TO_LEGACY`
+ * with the level as strength. TODO(E3-3): E3's own ability semantics.
+ * `graphicNum` is E3's picture, for `buildItemSheet` to replace.
+ */
+export function readE3Items(exe: Uint8Array): LegacyItem[] {
+  const t = readNeSegment(exe, 38);
+  const v = new DataView(t.buffer, t.byteOffset, t.byteLength);
+  const text = (from: number, len: number) => {
+    const b = t.subarray(from, from + len);
+    const end = b.indexOf(0);
+    return new TextDecoder('windows-1252').decode(end < 0 ? b : b.subarray(0, end));
+  };
+  const out: LegacyItem[] = [];
+  for (let i = 0; i < E3_ITEM_COUNT; i++) {
+    const o = i * 59;
+    const u8 = (k: number) => t[o + k] ?? 0;
+    const variety = v.getInt16(o, true);
+    const level = v.getInt16(o + 2, true);
+    const fullName = text(o + 19, 25);
+    const blad = BLADBASE_ITEMS.get(fullName);
+    const weapon = WEAPON_VARIETIES.has(variety);
+    const e3Props = (u8(15) ? 1 : 0) | (u8(16) ? 4 : 0);
+    out.push({
+      variety, itemLevel: level, awkward: u8(4), bonus: u8(5),
+      protection: u8(6) > 127 ? u8(6) - 256 : u8(6), charges: u8(7),
+      type: weapon ? u8(8) : blad?.[4] ?? 0,
+      magicUseType: weapon ? blad?.[2] ?? 0 : u8(8),
+      graphicNum: u8(9),
+      ability: blad ? blad[0] ?? 0 : E3_ABILITY_TO_LEGACY[u8(10)] ?? 0,
+      abilityStrength: blad ? blad[1] ?? 0 : level,
+      typeFlag: u8(11), isSpecial: 0, value: v.getInt16(o + 13, true), weight: u8(17),
+      specialClass: 0, itemLoc: { x: 0, y: 0 }, fullName, name: text(o + 44, 15),
+      treasClass: blad?.[3] ?? 0,
+      // Identified and magic are E3's; cursed (16) comes with the namesake.
+      itemProperties: e3Props | ((blad?.[5] ?? 0) & 16),
     });
   }
   return out;

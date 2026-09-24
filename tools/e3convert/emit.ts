@@ -11,14 +11,14 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { encodePng } from './png';
-import { convertMonster } from '../../src/fileio/legacy/convert';
-import { buildMonsterSheets, buildTerrainSheets, e3TerrainPic } from './graphics';
+import { convertItem, convertMonster, convertPresetField } from '../../src/fileio/legacy/convert';
+import { buildItemSheet, buildMonsterSheets, buildTerrainSheets, e3TerrainPic } from './graphics';
 import { readE3Files } from './install';
 import { readNeResources, readStringTable } from './ne';
 import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor } from './outdoor';
-import { readE3Monsters, readE3Start, readE3Terrain, type E3TerrainType } from './tables';
+import { readE3Items, readE3Monsters, readE3Start, readE3Terrain, type E3TerrainType } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3Town } from './town';
-import { esc, monstersXml } from './xmlWrite';
+import { esc, itemsXml, monstersXml } from './xmlWrite';
 
 const ATTITUDE = ['docile', 'hostile-a', 'friendly', 'hostile-b'];
 const BLOCKAGE = ['none', 'sight', 'monsters', 'move', 'move-and-shoot', 'move-and-sight'];
@@ -146,7 +146,17 @@ function townXml(t: E3Town, name: string): string {
   const size = townSize(t);
   const r = t.village ? { top: 0, left: 0, bottom: size - 1, right: size - 1 } : t.inTownRect;
   const creatures = townCreatures(t).map((c, i) => (c.number > 0 ? creatureXml(c, i) : '')).join('');
-  // TODO(E3-2): preset items and fields, room names.
+  // Preset items: the legacy field called `ability` holds the charges, as in
+  // BoE (`loadLegacy.ts`); -1 is an empty slot.
+  const items = t.presetItems.map((p, i) => (p.itemCode < 0 ? '' : `    <item id="${i}">
+        <type>${p.itemCode}</type>
+        <charges>${p.ability}</charges>
+        <always>${p.alwaysThere !== 0}</always>
+        <property>${p.property !== 0}</property>
+        <contained>${p.contained !== 0}</contained>
+    </item>
+`)).join('');
+  // TODO(E3-2): room names.
   return `${XML_HEAD}<town boes="2.0.0">
     <size>${size}</size>
     <name>${esc(name)}</name>
@@ -154,7 +164,7 @@ function townXml(t: E3Town, name: string): string {
     <difficulty>0</difficulty>
     <lighting>${LIGHTING[t.lighting] ?? 'lit'}</lighting>
     <flags />
-${creatures}</town>
+${items}${creatures}</town>
 `;
 }
 
@@ -170,6 +180,13 @@ function townMap(t: E3Town): string {
   t.startLocs.forEach((l, i) => {
     if (inside(l)) addMark(marks, l.x, l.y, ENTRANCE_MARK[i] ?? '');
   });
+  t.presetItems.forEach((p, i) => {
+    if (p.itemCode >= 0 && inside(p.loc)) addMark(marks, p.loc.x, p.loc.y, `@${i}`);
+  });
+  for (const f of t.presetFields) {
+    const field = f.fieldType > 0 ? convertPresetField({ fieldLoc: f.loc, fieldType: f.fieldType }) : null;
+    if (field && inside(f.loc)) addMark(marks, f.loc.x, f.loc.y, `&${field.type}`);
+  }
   townCreatures(t).forEach((c, i) => {
     if (c.number > 0 && inside(c.startLoc)) addMark(marks, c.startLoc.x, c.startLoc.y, `$${i}`);
   });
@@ -264,8 +281,15 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
     return mon;
   });
   write('monsters.xml', monstersXml(monsters));
-  // TODO(E3-2): E3's item table.
-  write('items.xml', `${XML_HEAD}<items boes="2.0.0">\n</items>\n`);
+  // Items: E3's table through the legacy importer, pictured from one custom
+  // sheet after the monsters'.
+  const itemSheetNum = terrainSheets.length + monsterArt.sheets.length;
+  const items = readE3Items(files.exe).map((old) => {
+    const it = convertItem(old);
+    it.graphicNum = 1000 + itemSheetNum * 100 + old.graphicNum;
+    return it;
+  });
+  write('items.xml', itemsXml(items));
 
   zones.forEach((z, i) => {
     const base = `out/out${i % E3_ZONES_WIDE}~${Math.floor(i / E3_ZONES_WIDE)}`;
@@ -281,7 +305,7 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
     // TODO(E3-2): conversations.
     write(`towns/talk${t.number}.xml`, `${XML_HEAD}<dialogue boes="2.0.0">\n</dialogue>\n`);
   });
-  const sheets = [...terrainSheets, ...monsterArt.sheets];
+  const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(e3Dir)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
   return { sectors: zones.length, towns: towns.length, sheets: sheets.length };
 }

@@ -74,6 +74,17 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(scen.scenMonsters[177]?.name).toBe('Rentar-Ihrno');
   });
 
+  it("has E3's items, and the things lying about its towns", () => {
+    expect(scen.scenItems).toHaveLength(415);
+    const knife = scen.scenItems[41]!;
+    expect(knife.fullName).toBe('Bronze Knife');
+    expect([knife.itemLevel, knife.value, knife.weight]).toEqual([4, 16, 7]);
+    expect(knife.graphicNum).toBeGreaterThanOrEqual(1000);
+    const krizsan = scen.towns[0]!;
+    expect(krizsan.presetItems[0]).toMatchObject({ code: 9, loc: { x: 6, y: 19 }, alwaysThere: true });
+    expect(krizsan.presetFields.length).toBeGreaterThan(0);
+  });
+
   it('places the fort\'s people', () => {
     const fort = scen.towns[21]!;
     expect(fort.creatures.filter((c) => c.number > 0).length).toBeGreaterThan(40);

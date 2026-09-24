@@ -110,3 +110,24 @@ export function buildMonsterSheets(
   }
   return { sheets, pics };
 }
+
+/**
+ * One custom sheet of E3's item pictures, cell `p` for E3 picture `p`: 0–24
+ * are OBJECTS.BMP's full 28×36 pictures, the rest TINYOBJ.BMP's 18×18 icons
+ * set into a cell at (5, 9), where the engine insets a tiny item.
+ */
+export function buildItemSheet(e3Dir: string): Rgba {
+  const bmp = (name: string) => decodeBmp(new Uint8Array(readFileSync(join(e3Dir, `${name}.BMP`))));
+  const objects = bmp('OBJECTS');
+  const tiny = bmp('TINYOBJ');
+  const out = blank(10 * W, 10 * H);
+  for (let p = 0; p < 100; p++) {
+    const dx = (p % 10) * W, dy = Math.floor(p / 10) * H;
+    if (p < 25) blit(objects, (p % 5) * W, Math.floor(p / 5) * H, out, dx, dy, W, H);
+    else blit(tiny, (p % 10) * 18, Math.floor(p / 10) * 18, out, dx + 5, dy + 9, 18, 18);
+  }
+  for (let q = 0; q < out.data.length; q += 4) {
+    if (out.data[q] === 255 && out.data[q + 1] === 255 && out.data[q + 2] === 255) out.data[q + 3] = 0;
+  }
+  return out;
+}
