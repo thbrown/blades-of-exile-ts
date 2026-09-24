@@ -14,7 +14,7 @@ public class DecompAt extends GhidraScript {
     if (f == null) {
       byte[] pro = {(byte)0x45,(byte)0x55,(byte)0x8b,(byte)0xec};
       Address st = currentProgram.getMemory().findBytes(hit, pro, null, false, monitor);
-      Address fs = st.subtract(3); // 8c d8 90 (mov ax,ds; nop) precedes inc bp in win16 far prologue
+      Address fs = st.subtract(3); // 8c d0 90 (mov ax,ss; nop) precedes inc bp in win16 far prologue
       println("prologue at "+st+" bytes before: "+getByte(fs)+" "+getByte(fs.add(1))+" "+getByte(fs.add(2)));
       if (getByte(fs)!=(byte)0x8c) fs = st;
       disassemble(fs);

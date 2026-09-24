@@ -869,6 +869,14 @@ Notes for M2 implementer:
     dialogs holding all encounter prose, 100 WAVs), but only by throwaway
     Python so far. Next: port the extractors to TS in `tools/e3convert`, pin
     the outdoor record's encounter table, and render TOWN.DAT at 100 × 7,092.
+  - 2026-09-23: **both .DAT layouts are pinned** from the game's own loaders
+    (`FUN_1040_3677` for zones and `FUN_1040_1e1c` for towns), and the readers
+    are in TS with tests (`tools/e3convert/{ne,outdoor,town}.ts`,
+    `test/e3formats.test.ts`, which skips without an install). The files are
+    big-endian. TOWN.DAT is 200 records: 40 large, 40 medium and 40 small
+    towns, plus 80 terrain-less "variant" records whose purpose is open.
+    FORMATS.md lists every field still marked **open**. None of them block
+    E3-1 (walkable overworld): terrain, exits and zone names are solid.
 - [ ] **E3-1 — Walkable overworld** (needs M1)
 - [ ] **E3-2 — Towns, NPCs, shops, dialogue** (needs M2–M3)
 - [ ] **E3-3 — Quest logic, incrementally** (needs M4+)
@@ -890,8 +898,11 @@ Notes for M2 implementer:
 
 ## Findings / gotchas log
 
+- (2026-09-23) **E3 data is big-endian and `[x][y]`.** Read it with `LegacyReader(data, true)`. The terrain byte is `x*48 + y`, *not* the row-major order `../exile3-mapping/outdoor-to-json.js` assumed, so its OUTDOOR.json is transposed. Everything that Ghidra shows as `DS:-0x500e + …` is a zone field. The town record is loaded at `DS:0004`, so subtract 4.
+- (2026-09-23) Ghidra's decompiler drops the arguments of Win16 imports (`_llseek`, `_lread`, `OPENFILE`), and the arithmetic that sizes a record disappears with them. `tools/e3convert/ghidra/Disasm.java` gives the listing where the `PUSH`es are visible. The Win16 far prologue is `8c d0 90 45 55 8b ec` (`mov ax,ss`), not `8c d8`.
+
 - (2026-09-23) **EXILE3.EXE is NE (Win16), not PE.** Encounter prose is in `RT_DIALOG` resources (one dialog per encounter, BoE-style `kind_num` control tags), short text is in `RT_STRING` (ids in runs of 300, the Mac `STR#` convention), and type 100 is sounds. Headless Ghidra needs `openjdk@21` on `PATH` or it fails with "Unable to prompt user for JDK path". It also misses big functions: 643 found, and the outdoor encounter handler is not among them. See `tools/e3convert/ghidra/README.md`.
-- (2026-09-23) The outdoor encounter handler `FUN_10a0_0062` indexes zones with strides 0x1928/0xc94 (2×3,220): a 2×2 loaded-zone grid, as in BoE. The zone record carries a table of 16-bit encounter numbers that the handler `switch`es on. That table ties OUTDOOR.DAT's unknown bytes to code.
+- (2026-09-23) The outdoor encounter handler `FUN_10a0_0062` indexes zones with strides 0x1928/0xc94 (2×3,220): a 2×2 loaded-zone grid, as in BoE. The handler `switch`es on the zone's `special_id[i]` byte and zeroes it afterwards (one-shot). *(Corrected the same day: at first I took the 16-bit read of `special_locs[i]` for an encounter table.)*
 
 - (2026-07-05) `../exile3-mapping/Exile3/strings.txt` is a headerless Windows EXE image, not text — game text is inside as resources. *(2026-09-23: it is `strings(1)` output of EXILE3.EXE; read the NE resources instead — `tools/e3convert/FORMATS.md`.)*
 - (2026-07-05) BoE legacy `outdoor_record_type` ≈ 4146 B vs E3 zone 3220 B; difference is mostly the `specials[60]` node array (1320 B) BoE added — E3 encounter logic is hardcoded in EXILE3.EXE.

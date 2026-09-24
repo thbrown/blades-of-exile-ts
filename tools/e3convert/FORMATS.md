@@ -32,8 +32,10 @@ encounter. There is exactly one `push 5051` in the code, at file offset
 - `FUN_10a0_0062(?, int which_special, int encounter, int ...)`. The code
   indexes the loaded zones as `zx*0x1928 + zy*0xc94` (0xc94 = **3,220**, the
   zone size; the 2×2 loaded-zone grid is BoE's `outdoors[2][2]`), then reads
-  `+ which_special*2 - 0x470e`. So each zone record holds a table of
-  **16-bit encounter numbers**, and the handler `switch`es on them.
+  `+ which_special*2 - 0x470e`, which is `special_locs[which]` (a packed
+  location). The encounter number comes from `special_id[which]`, and the
+  handler `switch`es on it. Once an encounter runs it zeroes
+  `special_id[which]` (at `-0x46ea`).
 - Encounter numbers 100–199 and ≥ 200 are generic kinds that are driven by
   flags (`encounter-100`, `encounter-200`). The range 50–59 returns
   immediately. The rest are unique scripts.
@@ -42,18 +44,87 @@ encounter. There is exactly one `push 5051` in the code, at file offset
   sounds 0x97 and 0x9d, and raise a skill of each of the 6 PCs. The PC record
   stride is **0x722 = 1,826 bytes**.
 - Auto-analysis found only 643 functions and missed this one. Expect to create
-  functions by hand (`ghidra/DecompAt.java` does it).
+  functions by hand. `ghidra/DecompAll.java` does it for every prologue.
 
-## OUTDOOR.DAT — 90 zones × 3,220 B
+## Byte order: big-endian — confirmed
 
-- `+0`: 48×48 terrain bytes, row-major (the user's `outdoor-to-json.js`).
-  **Confirmed.**
-- The encounter-number table read by `FUN_10a0_0062` is at a zone offset still
-  to be pinned. It's reached via `-0x470e` relative to the zone array's base
-  in segment `1158`.
-- The rest of the 916 B: to do.
+Both .DAT files are the Mac original's data. The Windows game byte-swaps
+selected 16-bit fields after every read, which is the job the 1997 BoE source
+calls `port_out`/`port_town`. The list of swapped fields is how the layouts
+below were pinned: a swapped word is an int16, and anything else is bytes.
+Rects are in Mac order (top, left, bottom, right). The readers use
+`LegacyReader(data, true)`.
 
-## TOWN.DAT — 709,200 B
+## OUTDOOR.DAT: 90 zones × 3,220 B — pinned (`outdoor.ts`)
 
-- Byte autocorrelation suggests **100 × 7,092 B**. Not yet checked by
-  rendering a town.
+Zone `y*9 + x`, 9 across and 10 down. The loader is `FUN_1040_3677`: it seeks
+to `(y*9+x)*0xc94` and reads into `zones[2][2]` at `DS:-0x500e`.
+
+| offset | field | notes |
+|---|---|---|
+| 0 | `terrain[48][48]` | **`[x][y]`, byte `x*48+y`**, as BoE (the code writes `x*0x30 + y`) |
+| 2304 | `special_locs[18]` | the encounter handler centres on it |
+| 2340 | `special_id[18]` | encounter number; the handler zeroes it after running (one-shot) |
+| 2358 | `exit_locs[8]` | |
+| 2374 | `exit_dests[8]` | TOWN.DAT record numbers |
+| 2382 | `sign_locs[8]` | |
+| 2398 | `wandering[4]` | 24 B each, see below |
+| 2494 | `wandering_locs[4]` | the code picks one at random |
+| 2502 | `info_rect[8]` | swapped as rects |
+| 2566 | area names, 8 × 30 B | inline text, one per `info_rect` (BoE used `strlens` + a string table) |
+| 2806 | zone name, 30 B | "Northwestern Valorim" |
+| 2836 | `special_enc[4]` | 24 B each |
+| 2932 | 288 B bitmap | one bit per tile (48×48), about 9 set per zone. **Open**: no code reads it at a fixed offset. |
+
+**Wandering group, 24 B** (BoE `out_wandering_type` is 22): `monst[7]`,
+`friendly[3]`, then swapped int16s at +10, +14, +16, +18, +20 and +22, with
+2 unswapped bytes at +12 (often 1). **Open**: which int16 is which. BoE's six
+are `spec_on_meet, spec_on_win, spec_on_flee, cant_flee, end_spec1,
+end_spec2`, but the +12 gap means E3's do not line up with them by position.
+Slot `monst[0]` is empty in every shipped group.
+
+## TOWN.DAT: 200 records — pinned (`town.ts`)
+
+The loader is `FUN_1040_1e1c`. Record `t` sits at
+`t*0x422 + Σ(earlier blocks)`: a 1,058-byte common record, then a block sized
+by `t`:
+
+| records | block | size | contents, in order |
+|---|---|---|---|
+| 0–39 | large | 5,904 | terrain 64×64, 12 room rects, 12 room names × 30 B, 60 creatures × 14 B, lighting 8×64 |
+| 40–79 | medium | 3,532 | terrain 48×48, 10 rects, 10 names, 40 creatures, lighting 6×48 |
+| 80–119 | small | 1,724 | terrain 32×32, 4 rects, 4 names, 30 creatures, lighting 4×32 |
+| 120–199 | variant | 640 | 30 creatures, 15 × 8 B (first two words swapped), 10 × {rect, 2 B}. **No terrain.** |
+
+These sum to exactly 709,200. The loader sets `town_size` from the same
+ranges, and treats 120+ as medium. **Open**: what a variant record is. Towns
+also change state without one: records 0 and 1 are the same town before and
+after ("Small Shipyard" becomes "Ruined Shipyard"). `FUN_1040_1600` runs after
+a variant loads.
+
+**Common record, 1,058 B.** The loader reads it to `DS:0004`, so the addresses
+in the disassembly are these offsets + 4.
+
+| offset | field | vs BoE `town_record_type` |
+|---|---|---|
+| 0x000 | `town_chop_time`, `town_chop_key` | same |
+| 0x004 | `wandering[4]` × `monst[4]` | same |
+| 0x014 | `wandering_locs[4]` | same |
+| 0x01c | `special_locs[40]` | BoE 50 |
+| 0x06c | `spec_id[40]` | BoE 50 |
+| 0x094 | `sign_locs[12]` | BoE 15 |
+| 0x0ac | `lighting` | same |
+| 0x0ae | `start_locs[4]` | same |
+| 0x0b6 | `exit_specs[4]` | BoE has `exit_locs` first |
+| 0x0be | 4 locations | **open**: probably `exit_locs`, but a cross around (20,33) in town 0 |
+| 0x0c6 | `in_town_rect` | same |
+| 0x0ce | `preset_items[64]` × 10 B | same layout |
+| 0x34e | `max_num_monst` | same |
+| 0x350 | int16 | **open** |
+| 0x352 | `preset_fields[50]` × 4 B | same |
+| 0x41a | 4 × int16 | **open** (BoE continues with `spec_on_entry` …, then specials E3 doesn't have) |
+
+**Creature, 14 B** (BoE 24): `number, start_attitude, start_loc, mobile,
+time_flag, extra1, extra2, spec1, spec2` (bytes), then 3 unknown bytes
+(+10/+11 are always 255), and `+13` personality (distinct per named NPC,
+shared by guards). **Open**: confirm the personality against the talk code.
