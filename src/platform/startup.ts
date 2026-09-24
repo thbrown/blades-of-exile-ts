@@ -181,7 +181,7 @@ interface Card {
   node: HTMLElement;
   /** What the search box matches against (`searchable`). */
   text: string;
-  /** Official first, then the player's own, then the library by review. */
+  /** Official first, then the player's own, then the library by review, corrupted last. */
   rank: number;
 }
 
@@ -248,7 +248,14 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
       const lib = library!;
       const card = el('button', 'startup-choice startup-card');
       card.dataset['library'] = entry.id;
-      card.append(pictureElement(entry.icon, entry.preview ? lib.url(entry.preview) : undefined));
+      const picture = pictureElement(entry.icon, entry.preview ? lib.url(entry.preview) : undefined);
+      if (entry.corrupted !== undefined) {
+        const badge = el('span', 'startup-badge corrupted', 'Corrupted');
+        badge.title = `This file seems to have been misread, so it will not play properly. ${entry.corrupted}`;
+        picture.append(badge);
+        card.classList.add('corrupted');
+      }
+      card.append(picture);
       const words = el('span', 'startup-words');
       words.append(el('strong', undefined, entry.title));
       const facts = el('span', 'startup-facts');
@@ -292,7 +299,8 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
     const libraryIds = new Set(library?.entries.map((e) => e.id) ?? []);
     added.filter((s) => !libraryIds.has(s.id)).forEach((s, i) => cards.push(scenarioCard(s, 'added', 1000 + i)));
     [...(library?.entries ?? [])]
-      .sort((a, b) => (b.review ?? 0) - (a.review ?? 0) || a.title.localeCompare(b.title))
+      .sort((a, b) => Number(a.corrupted !== undefined) - Number(b.corrupted !== undefined)
+        || (b.review ?? 0) - (a.review ?? 0) || a.title.localeCompare(b.title))
       .forEach((e, i) => cards.push(libraryCard(e, 10000 + i)));
     cards.sort((a, b) => a.rank - b.rank);
 

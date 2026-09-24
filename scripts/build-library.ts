@@ -26,7 +26,7 @@ import { GameRng } from '../src/core/rng';
 import { identifyScenarioFiles, loadScenarioPackage } from '../src/fileio/scenarioPackage';
 import { legacyPlatform } from '../src/fileio/legacy/loadLegacy';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
-import { LibraryCatalog, LibraryEntry } from '../src/fileio/libraryCatalog';
+import { LibraryCatalog, LibraryEntry, corruptionSigns } from '../src/fileio/libraryCatalog';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
 import { PartyPreset } from '../src/universe/player';
 import { Universe } from '../src/universe/universe';
@@ -162,6 +162,7 @@ for (const item of listings()) {
       seen.add(pkg.id);
       writeFileSync(join(DIST, 'files', basename(item.zip)), trimmed);
       const trim = (s: string): string => s.trim();
+      const corrupted = corruptionSigns(scenario);
       entries.push({
         id: pkg.id,
         title: trim(scenario.title) || item.name,
@@ -183,6 +184,7 @@ for (const item of listings()) {
         ...(existsSync(join(DIST, 'previews', `${pkg.id}.png`)) ? { preview: `previews/${pkg.id}.png` } : {}),
         source: `${PAGE_URL}${item.table}.html`,
         ...(warnings.length ? { warnings } : {}),
+        ...(corrupted !== null ? { corrupted } : {}),
       });
     } catch (err) {
       skipped.push(`${item.zip} (${pkg.fileName}): ${err instanceof Error ? err.message : String(err)}`);
@@ -199,4 +201,6 @@ const catalog: LibraryCatalog = {
 };
 writeFileSync(join(DIST, 'catalog.json'), JSON.stringify(catalog, null, 1));
 console.log(`${entries.length} scenarios in ${join(DIST, 'catalog.json')}`);
+const corrupt = entries.filter((e) => e.corrupted !== undefined);
+if (corrupt.length) console.log(`Tagged as corrupted:\n  ${corrupt.map((e) => `${e.id}: ${e.corrupted}`).join('\n  ')}`);
 if (skipped.length) console.log(`Skipped:\n  ${skipped.join('\n  ')}`);

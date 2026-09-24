@@ -4,6 +4,8 @@
  * the catalog's own URL.
  */
 
+import { Scenario } from '../data/scenario';
+
 export interface LibraryEntry {
   /** The id it installs under; what saves record. */
   id: string;
@@ -38,6 +40,11 @@ export interface LibraryEntry {
   /** The listing page, for credit. */
   source: string;
   warnings?: string[];
+  /**
+   * Why the scenario looks misread, if it does (`corruptionSigns`). It still
+   * loads, but plays as garbage; the startup screen tags it and lists it last.
+   */
+  corrupted?: string;
 }
 
 export interface LibraryCatalog {
@@ -45,6 +52,27 @@ export interface LibraryCatalog {
   source: string;
   note: string;
   scenarios: LibraryEntry[];
+}
+
+/**
+ * Signs that a scenario loaded without error but was misread: the names every
+ * scenario inherits from the editor's template (the first terrain types, the
+ * first monsters) coming out empty or as stray bytes. Across the archive only
+ * Masks v. 1.0.3 shows this — written by some other editor, in a layout
+ * neither this port nor OBoE reads (PROGRESS.md) — and it fails both counts
+ * by a wide margin, while every other scenario has none. Returns a reason,
+ * or null.
+ */
+export function corruptionSigns(scenario: Pick<Scenario, 'terTypes' | 'scenMonsters'>): string | null {
+  // Empty, or holding control characters or a run of 0xFF (ˇ in Mac Roman).
+  const garbled = (name: string): boolean => {
+    const t = name.trim();
+    return t.length < 2 || /[\u0000-\u001f\u007f]|\u02c7\u02c7/.test(t);
+  };
+  const ter = scenario.terTypes.slice(0, 20).filter((t) => garbled(t.name)).length;
+  const mon = scenario.scenMonsters.slice(1, 30).filter((m) => garbled(m.name)).length;
+  if (ter < 5 && mon < 10) return null;
+  return `${ter} of the first 20 terrain names and ${mon} of the first 29 monster names are unreadable.`;
 }
 
 /** Resolve an entry's relative path against the catalog's URL. */

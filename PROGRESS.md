@@ -12067,3 +12067,17 @@ check fields near the end of `scenario_data_type`, which the 1997 editor
 fills from the password (`flag_d = init_data(...)`, tfileio.c:199), are
 0xFFFF, where Pawns and Echoes both have 9504/14182. So another editor wrote
 it, with a layout neither this loader nor OBoE's reads. Not fixed.
+
+**Corrupted tag (2026-09-23).** `corruptionSigns` (`fileio/libraryCatalog.ts`)
+flags a scenario that loads but was misread: 5+ of the first 20 terrain names,
+or 10+ of the first 29 monster names, empty or stray bytes (control
+characters, runs of 0xFF). These are names every scenario inherits from the
+editor's template, so a sound file has none. `build-library.ts` writes the
+reason as the entry's `corrupted`, and the startup screen shows a red
+**Corrupted** badge (the reason in its tooltip) and sorts those cards last.
+Across the archive it tags **only Masks** (8/20 and 24/29), and every other
+scenario scores 0 on both. `test/corruptionSigns.test.ts` checks the originals
+and, with `LEGACY_ARCHIVE=1`, that Masks is the only one tagged. Town names
+were considered and dropped: 3advclub has 18 blank ones that are just unused
+slots. `docs/library` still hasn't been rebuilt (`npm run build`), so the
+published site doesn't show the tag yet.
