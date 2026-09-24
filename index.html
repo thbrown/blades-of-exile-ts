@@ -412,15 +412,44 @@
         list-style: none;
       }
       .startup-party-pcs li {
-        padding: 3px 10px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 12px 6px 6px;
         border: 1px solid #4a4a4a;
         border-radius: 3px;
         background: #2a2a3a;
-        font-size: 13px;
       }
       .startup-party-pcs li.gone {
-        color: #777;
-        text-decoration: line-through;
+        opacity: 0.5;
+      }
+      .startup-pc-picture {
+        display: block;
+        width: 56px;
+        height: 72px;
+        flex: none;
+        background: #5b6b45; /* grass, so the sprite reads as it does in play */
+        border: 1px solid #1a1a1a;
+        border-radius: 2px;
+      }
+      .startup-pc-picture canvas {
+        display: block;
+        width: 56px;
+        height: 72px;
+        image-rendering: pixelated;
+      }
+      .startup-pc-words {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .startup-pc-words strong {
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .startup-pc-words small {
+        font-size: 11px;
+        color: #999;
       }
       .startup-party-button {
         font: inherit;

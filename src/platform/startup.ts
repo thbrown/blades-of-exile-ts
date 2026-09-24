@@ -59,13 +59,25 @@ export interface StartupChoice {
   party?: 'make' | 'enter';
 }
 
+export interface StartupPc {
+  name: string;
+  level: number;
+  race: number;
+  alive: boolean;
+  /** The PC's graphic at 28×36, when there is one to show. */
+  picture?: HTMLCanvasElement;
+}
+
+/** The player races (`eRace` 0-3); a PC of any other shows none. */
+const RACE_NAMES: Record<number, string> = { 0: 'Human', 1: 'Nephilim', 2: 'Slithzerikai', 3: 'Vahnatai' };
+
 /**
  * The party in memory — the C++'s `party_in_memory` and `draw_startup`'s
  * party list. The startup screen takes it into whichever scenario is picked.
  */
 export interface StartupParty {
   /** null when there is no party in memory. */
-  pcs: { name: string; level: number; alive: boolean }[] | null;
+  pcs: StartupPc[] | null;
   /** Forget it, as `do_abort` does. */
   forget: () => Promise<void>;
 }
@@ -266,8 +278,16 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
         }
         const list = el('ul', 'startup-party-pcs');
         for (const pc of partyPcs) {
-          const item = el('li', pc.alive ? undefined : 'gone', `${pc.name} · level ${pc.level}`);
-          if (!pc.alive) item.title = 'Not alive';
+          const item = el('li', pc.alive ? undefined : 'gone');
+          const frame = el('span', 'startup-pc-picture');
+          if (pc.picture !== undefined) frame.append(pc.picture);
+          item.append(frame);
+          const words = el('span', 'startup-pc-words');
+          words.append(el('strong', undefined, pc.name));
+          const race = RACE_NAMES[pc.race];
+          words.append(el('small', undefined,
+            `Level ${pc.level}${race === undefined ? '' : ` ${race}`}${pc.alive ? '' : ' · dead'}`));
+          item.append(words);
           list.append(item);
         }
         panel.append(list);

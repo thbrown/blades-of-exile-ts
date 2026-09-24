@@ -12130,7 +12130,29 @@ chosen first, and a win threw the party away.
 - **Not done:**
   - The replay harness still refuses party-only saves and `pick_a_scen`
     recordings (`replay/startup.ts`). They need the picker's paging modelled.
-  - There is still no intro dialog on entering a scenario, the same gap as a
-    fresh start.
   - Importing parties from the original game's save files.
   - `TODO(campaign)`: exported graphics and summons, and campaign flags.
+
+**The intro dialog, and PC portraits (2026-09-23).**
+- **Scenarios now open with their intro** (`put_party_in_scen`,
+  boe.party.cpp:231): the intro messages over `intro_mess_pic` (PIC_SCEN) with
+  one Done button, then the init node, then `give_help(1, 2)`. It's the
+  session's `onScenarioIntro` hook, set in `main.ts`, and it applies to both a
+  fresh start and a party entering. With no hook (tests, replays) the init
+  node starts synchronously exactly as before, so no draws move. Corpus
+  unchanged at 51 / 1,231,440.
+  `Scenario.introMessPic` is `<text><icon>`, falling back to `introPic` as
+  the C++ does.
+- The dialog opens *before* the rest of `main.ts` paints, and the Valley's
+  start room sits at the right of the view, so the terrain behind the
+  dialog looks black in a screenshot. It isn't: the room is under the
+  dialog. Don't chase it.
+- `verify-screen.mjs` now dismisses the intro after the party editor (and
+  checks its text). `verify-party.mjs` dismisses it on both entries.
+- **The Your party panel shows each PC's picture** (cut from `pcs.png` or a
+  monster sheet by `pcGraphic`, on a grass-coloured tile), with name, level and
+  race. `SavePreview.pcs` gained `graphic` and `race`. `getPartyInMemory`
+  re-reads the preview from the bytes, so a party stored before this still
+  shows. A custom PC graphic (1000+) belongs to a scenario and shows an empty
+  tile.
+

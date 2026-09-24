@@ -120,6 +120,12 @@ await page.keyboard.press('Enter'); // Done
 const built = { editorUp, partyBefore, emptied, raceUp, xpUp, pictUp, nameUp, nameError, partyAfter };
 
 await page.waitForFunction(() => window.__session !== undefined, { timeout: 30000 });
+// put_party_in_scen's intro dialog: the scenario's intro messages, then Done.
+await page.waitForFunction(
+  () => window.__dialogs?.active?.spec?.buttons?.some((b) => b.name === 'done'), null, { timeout: 30000 });
+built.intro = await page.evaluate(() => window.__dialogs.active.spec.text.startsWith('Adventuring!'));
+await shot('00f-intro');
+await page.keyboard.press('Enter');
 await page.waitForTimeout(600);
 built.zed = await page.evaluate(() => {
   const pc = window.__univ.party.pcs[5];

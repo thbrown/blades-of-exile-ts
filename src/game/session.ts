@@ -18,7 +18,7 @@ import { SIGHT_BLOCKED, canSee } from '../core/sight';
 import { Item, ItemAbil, ItemType, defaultItem } from '../data/item';
 import { MonstTime } from '../data/monster';
 import { MonstAbil } from '../data/monsterAbility';
-import { SpellNote } from '../universe/living';
+import { SpellNote, giveHelp } from '../universe/living';
 import { FieldType } from '../data/fields';
 import { AmbientSound, SECTOR_SIZE, SpecLoc } from '../data/outdoors';
 import { StepSound, Terrain, TerObstruct, TerSpec, TrimType, blocksMove } from '../data/terrain';
@@ -495,8 +495,18 @@ export class GameSession {
     // load straight from the startup screen passes `force`, and skips the intro
     // dialogs and the init node with it.
     if (!force) {
-      void this.runSpecial(
-        SpecCtx.STARTUP, SpecCtxType.SCEN, this.univ.scenario.initSpec, loc(0, 0));
+      const initNode = async (): Promise<void> => {
+        await this.runSpecial(SpecCtx.STARTUP, SpecCtxType.SCEN, this.univ.scenario.initSpec, loc(0, 0));
+      };
+      // The intro dialog comes first, then the init node, then the welcome
+      // help (boe.party.cpp:231-239). With no host to show the dialog, the node
+      // starts at once, as it always has, so a headless run's draws don't move.
+      const intro = this.onScenarioIntro;
+      if (intro === null) {
+        void initNode();
+      } else {
+        void intro().then(initNode).then(() => { giveHelp(1, 2); });
+      }
     }
   }
 
@@ -3110,6 +3120,13 @@ export class GameSession {
    * lets the player take as long as they like — and awaiting that is a no-op.
    */
   onLockedDoor: ((where: Location, terrain: number) => void | Promise<void>) | null = null;
+
+  /**
+   * Set by the host: `put_party_in_scen`'s intro dialog — the scenario's
+   * intro messages over its picture, shown once as a scenario starts
+   * (boe.party.cpp:231).
+   */
+  onScenarioIntro: (() => Promise<void>) | null = null;
 
   /** Set by the host: called when a TRAINING node needs its dialog. */
   onTrain: (() => void) | null = null;

@@ -51,7 +51,7 @@ import { CurTown } from '../universe/curTown';
 import { Creature, CreatureStatus } from '../universe/creature';
 import { Party, TOWN_NUM_OUTDOORS, timerIsValid } from '../universe/party';
 import { NUM_INVEN_SLOTS, Player } from '../universe/player';
-import { MainStatus, PartyStatus, Status } from '../universe/skills';
+import { MainStatus, PartyStatus, Race, Status } from '../universe/skills';
 import { Universe } from '../universe/universe';
 import { TagFile, TagPage, asHex } from './tagfile';
 import { Tarball } from './tarball';
@@ -1389,7 +1389,7 @@ export interface SavePreview {
   gold: number;
   /** 200 when the party is outdoors. */
   townNum: number;
-  pcs: { name: string; level: number; mainStatus: MainStatus }[];
+  pcs: { name: string; level: number; mainStatus: MainStatus; graphic: number; race: Race }[];
 }
 
 export function readSavePreview(data: Uint8Array): SavePreview {
@@ -1409,6 +1409,8 @@ export function readSavePreview(data: Uint8Array): SavePreview {
       level: page.first('LEVEL')?.int(0) ?? 1,
       mainStatus: readEnumTagOrNumber(
         mainStatusNames, page.next('STATUS')?.str(1) ?? '', MainStatus.ABSENT),
+      graphic: page.first('ICON')?.int(0) ?? 0,
+      race: readEnumTagOrNumber(raceNames, page.first('RACE')?.str(0) ?? '', 0),
     });
   }
   const townText = ball.text('save/town.txt');

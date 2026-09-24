@@ -38,6 +38,9 @@ const check = (what, ok, detail) => {
 const panel = () => page.evaluate(() => document.querySelector('.startup-party')?.innerText ?? '');
 const dialogUp = (name) => page.waitForFunction(
   (n) => window.__dialogs?.active?.def?.byName.has(n), name, { timeout: 30000 });
+/** A plain `Dialog` (the intro is one) has a spec rather than an XML def. */
+const specDialogUp = (button) => page.waitForFunction(
+  (b) => window.__dialogs?.active?.spec?.buttons?.some((x) => x.name === b), button, { timeout: 30000 });
 const inGame = () => page.waitForFunction(() => window.__session !== undefined, { timeout: 30000 });
 
 await page.goto(`${BASE}?pace=1`);
@@ -52,12 +55,19 @@ await dialogUp('delete6');
 await page.screenshot({ path: `${SHOTS}/p2-editor.png` });
 await page.keyboard.press('Enter'); // the editor: Done
 await page.waitForSelector('.startup-party li', { timeout: 30000 });
-const names = await page.$$eval('.startup-party li', (lis) => lis.map((li) => li.textContent.split(' · ')[0]));
+const names = await page.$$eval('.startup-pc-words strong', (els) => els.map((e) => e.textContent));
 check('the new party is in memory', names.length === 6, names);
+const pictures = await page.$$eval('.startup-pc-picture canvas', (cs) => cs.length);
+check('each PC shows its picture', pictures === 6, pictures);
 await page.screenshot({ path: `${SHOTS}/p3-party.png` });
 
 await page.locator('.startup-card', { hasText: 'Valley of Dying Things' }).first().click();
 await inGame();
+// put_party_in_scen's intro: the scenario's intro messages, one Done button.
+await specDialogUp('done');
+check('the intro dialog comes up', true);
+await page.screenshot({ path: `${SHOTS}/p3b-intro.png` });
+await page.keyboard.press('Enter');
 await page.waitForTimeout(800);
 const valley = await page.evaluate(() => ({
   town: window.__univ.party.townNum,
@@ -81,7 +91,7 @@ await dialogUp('save');
 await page.screenshot({ path: `${SHOTS}/p4-congrats.png` });
 await page.keyboard.press('Escape'); // no save, straight back
 await page.waitForSelector('.startup-party li', { timeout: 30000 });
-check('a win leaves the party in memory', (await panel()).includes('level 9'));
+check('a win leaves the party in memory', (await panel()).includes('Level 9'));
 
 await page.locator('.startup-card', { hasText: 'A Small Rebellion' }).first().click();
 await dialogUp('okay');
@@ -90,6 +100,8 @@ await dialogUp('okay');
 check('special items are taken, with removed-special-items', await page.evaluate(
   () => [...window.__dialogs.active.def.byName.keys()].filter((k) => k !== 'okay').length <= 1));
 await page.screenshot({ path: `${SHOTS}/p5-removed.png` });
+await page.keyboard.press('Enter');
+await specDialogUp('done'); // then the intro
 await page.keyboard.press('Enter');
 await page.waitForTimeout(800);
 const rebellion = await page.evaluate(() => ({
@@ -105,7 +117,7 @@ await page.screenshot({ path: `${SHOTS}/p6-rebellion.png` });
 
 await page.goto(BASE);
 await page.waitForSelector('.startup-party');
-check('a reload keeps it', (await panel()).includes('level 9'));
+check('a reload keeps it', (await panel()).includes('Level 9'));
 await page.click('text=Forget Party');
 await page.waitForFunction(() => document.querySelector('.startup-party')?.innerText.includes('No party in memory'));
 check('Forget Party forgets it', true);

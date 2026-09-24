@@ -119,6 +119,7 @@ export interface ScenarioHeader {
   teasers: string[];
   introMsgs: string[];
   introPic: number;
+  introMessPic?: number;
   numTowns: number;
   outWidth: number;
   outHeight: number;
@@ -250,6 +251,7 @@ export function readScenarioFromXml(root: Element, fname = 'scenario.xml'): Scen
       for (const t of children(elem)) {
         if (tag(t) === 'teaser') hdr.teasers.push(text(t));
         else if (tag(t) === 'intro-msg') hdr.introMsgs.push(text(t));
+        else if (tag(t) === 'icon') hdr.introMessPic = intText(t);
       }
     } else if (type === 'ratings') {
       // Stored one lower than it reads in the file: 1-4 in XML, 0-3 in memory.

@@ -11,7 +11,8 @@ import {
 } from './game/selectPc';
 import type { SpecialHost } from './game/specials/context';
 import { SpecCtx, SpecCtxType } from './game/specials/context';
-import { Location, dist, locsEqual, shiftLoc } from './core/location';
+import { Direction, Location, dist, locsEqual, shiftLoc } from './core/location';
+import { pcGraphic } from './render/pcPics';
 import { SpellPat } from './data/pattern';
 import { SPELLS, Spell, SpellSelect, spellFromNum, spellName } from './data/spell';
 import { CastStatus, castableSpells, pcCanCastSpell } from './game/spellCast';
@@ -311,6 +312,30 @@ async function main(): Promise<void> {
     const library = scenarioStoreAvailable() ? await loadLibrary(installedIds, withoutGraphics) : null;
     const saves = saveStoreAvailable() ? await listSaves() : [];
     const inMemory = saveStoreAvailable() ? await getPartyInMemory() : null;
+    // Each PC's picture, cut from the game's own sheets as the party editor
+    // draws it. A custom one (1000+) belongs to a scenario and isn't to hand.
+    const portraitSheets = new SheetStore();
+    const portrait = async (pic: number): Promise<HTMLCanvasElement | undefined> => {
+      const g = pic < 1000 ? pcGraphic(pic, Direction.N) : null;
+      if (g === null) return undefined;
+      const sheet = await portraitSheets.load(g.sheetName).catch(() => null);
+      if (sheet === null) return undefined;
+      const art = document.createElement('canvas');
+      art.width = g.rect.right - g.rect.left;
+      art.height = g.rect.bottom - g.rect.top;
+      art.getContext('2d')!.drawImage(
+        sheet, g.rect.left, g.rect.top, art.width, art.height, 0, 0, art.width, art.height);
+      return art;
+    };
+    const partyPcs = inMemory === null ? null : await Promise.all(inMemory.preview.pcs
+      .filter((pc) => pc.mainStatus !== MainStatus.ABSENT)
+      .map(async (pc) => ({
+        name: pc.name,
+        level: pc.level,
+        race: pc.race,
+        alive: pc.mainStatus === MainStatus.ALIVE,
+        picture: await portrait(pc.graphic),
+      })));
     const titleOf = (id: string): string | undefined =>
       headers.find((h) => h.id === id)?.title ?? added.find((h) => h.id === id)?.title;
     const choice = await showStartupScreen(document.getElementById('startup-host')!, {
@@ -333,9 +358,7 @@ async function main(): Promise<void> {
       ...(library ? { library } : {}),
       ...(saveStoreAvailable() ? {
         party: {
-          pcs: inMemory === null ? null : inMemory.preview.pcs
-            .filter((pc) => pc.mainStatus !== MainStatus.ABSENT)
-            .map((pc) => ({ name: pc.name, level: pc.level, alive: pc.mainStatus === MainStatus.ALIVE })),
+          pcs: partyPcs,
           forget: () => setPartyInMemory(null),
         },
       } : {}),
@@ -934,6 +957,28 @@ async function main(): Promise<void> {
    * announces nothing — the scenario has already said its own goodbye through
    * the message node before the one that ended it — so neither does this.
    */
+  /**
+   * `put_party_in_scen`'s intro (boe.party.cpp:231): `custom_choice_dialog`
+   * with the scenario's intro messages, its intro picture (PIC_SCEN) and
+   * `basic_buttons[0]`, Done — shown if any of the messages has text.
+   */
+  session.onScenarioIntro = async () => {
+    const { introMsgs, introPic, introMessPic } = univ.scenario;
+    if (!introMsgs.some((m) => m !== '')) return;
+    // The C++ redraws the game screen first (`redraw_screen`, boe.party.cpp:220),
+    // so the start town is what the dialog sits over.
+    redraw();
+    // Trailing empty strings are dropped; the rest are the dialog's paragraphs.
+    const strs = [...introMsgs];
+    while (strs.length > 0 && strs[strs.length - 1] === '') strs.pop();
+    await dialogs.runQueued({
+      text: strs.join('\n\n'),
+      pic: { type: 'scen', num: introMessPic ?? introPic },
+      escapeButton: 'done',
+      buttons: [{ name: 'done', label: 'Done' }],
+    });
+  };
+
   session.onVictory = () => {
     void (async () => {
       // `handle_victory` empties `scen_name` first, so what "Save First" writes

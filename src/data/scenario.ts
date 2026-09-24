@@ -32,6 +32,11 @@ export interface Scenario {
    * (fileio_scen.cpp:801, handle_message's `pic == -1` arm).
    */
   introPic: number;
+  /**
+   * `intro_mess_pic` — the picture on the intro dialog, `<text><icon>` in the
+   * XML; `intro_pic` when absent (fileio_scen.cpp:802), as in every legacy one.
+   */
+  introMessPic?: number;
   numTowns: number;
   outWidth: number;
   outHeight: number;

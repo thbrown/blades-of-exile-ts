@@ -80,7 +80,11 @@ const PARTY_IN_MEMORY = '\u0000party in memory';
 export async function getPartyInMemory(): Promise<{ data: Uint8Array; preview: SavePreview } | null> {
   const row = await withStore(
     'readonly', (store) => run(store.get(PARTY_IN_MEMORY) as IDBRequest<SaveRecord | undefined>));
-  return row === undefined ? null : { data: new Uint8Array(row.data), preview: row.preview };
+  if (row === undefined) return null;
+  // Read afresh rather than trusting the stored preview, which an older build
+  // wrote with fewer fields.
+  const data = new Uint8Array(row.data);
+  return { data, preview: readSavePreview(data) };
 }
 
 /** Keep a party in memory (a save written with `serialiseSave(univ, true)`), or forget it. */
