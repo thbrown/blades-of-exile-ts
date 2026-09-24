@@ -210,9 +210,9 @@ export function readTimerFromXml(data: Element, fname = 'scenario.xml'): Timer {
   return { time: parseInt(freq, 10), node: intText(data) };
 }
 
-export function readScenarioFromXml(root: Element, fname = 'scenario.xml'): ScenarioHeader {
-  if (tag(root) !== 'scenario') throw new Error(`${fname}: bad root <${tag(root)}>`);
-  const hdr: ScenarioHeader = {
+/** A header with nothing in it, which `readScenarioFromXml` fills in. */
+function blankScenarioHeader(): ScenarioHeader {
+  return {
     title: '',
     teasers: [],
     introMsgs: [],
@@ -237,6 +237,11 @@ export function readScenarioFromXml(root: Element, fname = 'scenario.xml'): Scen
     townMods: [],
     storeItemRects: new Map(),
   };
+}
+
+export function readScenarioFromXml(root: Element, fname = 'scenario.xml'): ScenarioHeader {
+  if (tag(root) !== 'scenario') throw new Error(`${fname}: bad root <${tag(root)}>`);
+  const hdr = blankScenarioHeader();
   for (const elem of children(root)) {
     const type = tag(elem);
     if (type === 'title') hdr.title = text(elem);
@@ -307,6 +312,16 @@ export function readScenarioFromXml(root: Element, fname = 'scenario.xml'): Scen
     }
   }
   return hdr;
+}
+
+/**
+ * No scenario at all: what the Universe holds while the party is in memory at
+ * the startup screen, before any scenario is entered — OBoE's
+ * `cUniverse(PARTY_DEFAULT)` with no `set_scenario`. Its empty id is what
+ * `serialiseSave` takes as "not in a scenario".
+ */
+export function noScenario(): Scenario {
+  return emptyScenario(blankScenarioHeader());
 }
 
 export function emptyScenario(hdr: ScenarioHeader): Scenario {

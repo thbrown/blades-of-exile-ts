@@ -746,6 +746,18 @@ export function writeParty(file: TagFile, party: Party, scenarioId: string): voi
       writeCreature(creaturePage, pop.monsters[j]!);
     }
   }
+  // The items left in each town's storage rectangle. They were not written
+  // before 2026-09-23, so a save and reload dropped them; they matter more now
+  // that a party carries them out of a scenario and asks, on entering the
+  // next, whether to keep them.
+  for (const [town, items] of party.storedItems) {
+    for (let j = 0; j < items.length; j++) {
+      if (items[j]!.variety === ItemType.NO_ITEM) continue;
+      const itemPage = file.add();
+      itemPage.add('STORED', town, j);
+      writeItem(itemPage, items[j]!);
+    }
+  }
   for (let i = 0; i < party.summons.length; i++) {
     const monstPage = file.add();
     monstPage.add('SUMMON', i);
@@ -901,6 +913,12 @@ export function readParty(file: TagFile, party: Party): void {
       while (list.length <= i) list.push(emptyVehicle());
       list[i]!.exists = true;
       readVehicle(page, list[i]!);
+    } else if (page.firstKey() === 'STORED') {
+      const tag = page.first('STORED')!;
+      const town = tag.int(0);
+      const list = party.storedItems.get(town) ?? [];
+      party.storedItems.set(town, list);
+      list.push(readItem(page));
     } else if (page.firstKey() === 'MAGICSTORE') {
       const tag = page.first('MAGICSTORE')!;
       const shop = tag.int(0);
@@ -1307,12 +1325,19 @@ export function readScenarioState(file: TagFile, scen: Scenario): void {
 
 // --- the whole file ---------------------------------------------------------
 
-/** `save_party_const` (fileio_party.cpp:536), minus the custom party graphics. */
-export function serialiseSave(univ: Universe): Tarball {
+/**
+ * `save_party_const` (fileio_party.cpp:536), minus the custom party graphics.
+ *
+ * `outOfScenario` writes the party as the C++ holds it after `handle_victory`
+ * clears `scen_name`: the party and PC pages only, `SCENARIO` empty — the
+ * party in memory at the startup screen, which any scenario can take in.
+ */
+export function serialiseSave(univ: Universe, outOfScenario = false): Tarball {
   const ball = new Tarball();
   const file = new TagFile();
+  const scenarioId = outOfScenario ? '' : univ.scenario.id;
 
-  writeParty(file, univ.party, univ.scenario.id);
+  writeParty(file, univ.party, scenarioId);
   ball.addText('save/party.txt', file.serialise());
 
   for (let i = 0; i < 6; i++) {
@@ -1321,7 +1346,7 @@ export function serialiseSave(univ: Universe): Tarball {
     ball.addText(`save/pc${i + 1}.txt`, file.serialise());
   }
 
-  if (univ.scenario.id !== '') {
+  if (scenarioId !== '') {
     file.clear();
     writeScenarioState(file, univ.scenario);
     ball.addText('save/scenario.txt', file.serialise());
@@ -1343,9 +1368,12 @@ export function serialiseSave(univ: Universe): Tarball {
   return ball;
 }
 
-/** The gzipped `.exg` bytes. */
-export function saveGame(univ: Universe): Uint8Array {
-  return gzipSync(serialiseSave(univ).serialise());
+/**
+ * The gzipped `.exg` bytes. `outOfScenario` writes the party alone, as the
+ * party in memory at the startup screen (`serialiseSave`).
+ */
+export function saveGame(univ: Universe, outOfScenario = false): Uint8Array {
+  return gzipSync(serialiseSave(univ, outOfScenario).serialise());
 }
 
 /** Accepts either the gzipped desktop form or the WASM build's plain tarball. */
@@ -1511,6 +1539,27 @@ export function applySave(data: Uint8Array, univ: Universe): void {
   univ.out.build();
   const outText = ball.text('save/out.txt');
   if (outText !== undefined) readCurOut(outText, univ.out);
+}
+
+/**
+ * The party and PC pages of a save, and nothing of its scenario — the half of
+ * `load_party` a party carried into a *different* scenario keeps. The caller
+ * follows it with `GameSession.enterWithParty`, whose `enterScenario` resets
+ * everything the last scenario left on the party page.
+ */
+export function applyPartySave(data: Uint8Array, univ: Universe): void {
+  const ball = openSave(data);
+  const partyText = ball.text('save/party.txt');
+  if (partyText === undefined) throw new Error('not a Blades of Exile save: no save/party.txt');
+  freshenForLoad(univ);
+  readParty(TagFile.parse(partyText), univ.party);
+  for (let i = 0; i < 6; i++) {
+    const text = ball.text(`save/pc${i + 1}.txt`);
+    if (text === undefined) throw new Error(`corrupt save: no save/pc${i + 1}.txt`);
+    readPlayer(TagFile.parse(text), univ.party.pcs[i]!);
+  }
+  univ.party.townNum = TOWN_NUM_OUTDOORS;
+  univ.town = null;
 }
 
 /** `applySave` onto a Universe built for the occasion — what tests want. */

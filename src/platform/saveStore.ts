@@ -67,10 +67,33 @@ export function saveStoreAvailable(): boolean {
   return typeof indexedDB !== 'undefined';
 }
 
+/**
+ * The key the party in memory lives under — the C++'s `party_in_memory`, the
+ * party the startup screen will take into whichever scenario is picked next.
+ * It has to be stored because a page reload lies between the startup screen
+ * and the game. The NUL keeps it from clashing with a name a player types, and
+ * `listSaves` leaves it out.
+ */
+const PARTY_IN_MEMORY = '\u0000party in memory';
+
+/** The party in memory, as a party-only save; null when there is none. */
+export async function getPartyInMemory(): Promise<{ data: Uint8Array; preview: SavePreview } | null> {
+  const row = await withStore(
+    'readonly', (store) => run(store.get(PARTY_IN_MEMORY) as IDBRequest<SaveRecord | undefined>));
+  return row === undefined ? null : { data: new Uint8Array(row.data), preview: row.preview };
+}
+
+/** Keep a party in memory (a save written with `serialiseSave(univ, true)`), or forget it. */
+export async function setPartyInMemory(data: Uint8Array | null): Promise<void> {
+  if (data === null) await deleteSave(PARTY_IN_MEMORY);
+  else await putSave(PARTY_IN_MEMORY, data);
+}
+
 /** The slots, newest first, without their bytes. */
 export async function listSaves(): Promise<SaveSlot[]> {
   const rows = await withStore('readonly', (store) => run(store.getAll() as IDBRequest<SaveRecord[]>));
   return rows
+    .filter((row) => row.name !== PARTY_IN_MEMORY)
     .map(({ name, savedAt, preview }) => ({ name, savedAt, preview }))
     .sort((a, b) => b.savedAt - a.savedAt);
 }

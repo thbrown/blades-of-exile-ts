@@ -42,9 +42,32 @@ export interface StartupSave {
 }
 
 export interface StartupChoice {
+  /** '' for a choice about the party alone. */
   scenarioId: string;
-  /** Set when the player picked a saved game rather than a fresh start. */
+  /**
+   * Set when the player picked a saved game rather than a fresh start. With
+   * an empty `scenarioId` it is a party-only save, which becomes the party in
+   * memory (`finish_load_party` returning to the startup screen).
+   */
   slot?: string;
+  /**
+   * `make`: Make New Party, with no scenario — the party becomes the one in
+   * memory. `enter`: take the party in memory into `scenarioId`
+   * (`put_party_in_scen`). Absent: a scenario started the old way, making a
+   * party on the way in.
+   */
+  party?: 'make' | 'enter';
+}
+
+/**
+ * The party in memory — the C++'s `party_in_memory` and `draw_startup`'s
+ * party list. The startup screen takes it into whichever scenario is picked.
+ */
+export interface StartupParty {
+  /** null when there is no party in memory. */
+  pcs: { name: string; level: number; alive: boolean }[] | null;
+  /** Forget it, as `do_abort` does. */
+  forget: () => Promise<void>;
 }
 
 /**
@@ -72,6 +95,8 @@ export interface StartupOptions {
   /** Absent when there's nowhere to keep a scenario (no IndexedDB). */
   importScenarios?: ImportScenarios;
   library?: StartupLibrary;
+  /** Absent when there's nowhere to keep one (no IndexedDB). */
+  party?: StartupParty;
 }
 
 const REPO_URL = 'https://github.com/thbrown/exile-js';
@@ -190,7 +215,7 @@ interface Card {
  * itself first, so the caller can get on with loading against a clean page.
  */
 export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Promise<StartupChoice> {
-  const { official, added, saves, importScenarios, library } = opts;
+  const { official, added, saves, importScenarios, library, party } = opts;
   return new Promise((resolve) => {
     const root = el('div', 'startup');
     root.append(el('h1', undefined, 'Blades of Exile'));
@@ -220,6 +245,47 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
       root.append(list);
     }
 
+    // ---- the party in memory
+    let partyPcs = party?.pcs ?? null;
+    /** A scenario card's choice: the party in memory goes in, if there is one. */
+    const start = (scenarioId: string): StartupChoice =>
+      (partyPcs !== null ? { scenarioId, party: 'enter' } : { scenarioId });
+    if (party !== undefined) {
+      root.append(el('h2', undefined, 'Your party'));
+      const panel = el('div', 'startup-party');
+      root.append(panel);
+      const showParty = (): void => {
+        panel.replaceChildren();
+        const make = el('button', 'startup-party-button', 'Make New Party');
+        make.addEventListener('click', () => { choose({ scenarioId: '', party: 'make' }); });
+        if (partyPcs === null) {
+          panel.append(el('p', 'startup-sub',
+            'No party in memory. Make one here, or pick a scenario and make one on the way in.'));
+          panel.append(make);
+          return;
+        }
+        const list = el('ul', 'startup-party-pcs');
+        for (const pc of partyPcs) {
+          const item = el('li', pc.alive ? undefined : 'gone', `${pc.name} · level ${pc.level}`);
+          if (!pc.alive) item.title = 'Not alive';
+          list.append(item);
+        }
+        panel.append(list);
+        panel.append(el('p', 'startup-sub',
+          'Pick any scenario below to take this party into it. It keeps its gold, items, '
+          + 'levels and skills; special items stay behind.'));
+        const forget = el('button', 'startup-party-button', 'Forget Party');
+        forget.addEventListener('click', () => {
+          void party.forget().then(() => {
+            partyPcs = null;
+            showParty();
+          });
+        });
+        panel.append(make, forget);
+      };
+      showParty();
+    }
+
     // ---- the one list
     const hasLibrary = library !== undefined && library.entries.length > 0;
     root.append(el('h2', undefined, 'Start a new game'));
@@ -240,7 +306,7 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
       words.append(el('strong', undefined, scen.title));
       if (scen.blurb !== '') words.append(el('small', undefined, scen.blurb));
       card.append(words);
-      card.addEventListener('click', () => { choose({ scenarioId: scen.id }); });
+      card.addEventListener('click', () => { choose(start(scen.id)); });
       return { id: scen.id, group, node: card, text: searchable(`${scen.id} ${scen.title} ${scen.blurb}`), rank };
     };
 
@@ -280,11 +346,11 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
       words.append(link(entry.source, `Listed as “${entry.listedAs}”`, 'startup-source'));
       card.append(words);
       card.addEventListener('click', () => {
-        if (lib.installed.has(entry.id)) { choose({ scenarioId: entry.id }); return; }
+        if (lib.installed.has(entry.id)) { choose(start(entry.id)); return; }
         if (card.classList.contains('busy')) return;
         card.classList.add('busy');
         state.textContent = `Downloading ${Math.max(1, Math.round(entry.fileBytes / 1024))} KB…`;
-        lib.install(entry).then(() => { choose({ scenarioId: entry.id }); }).catch((err: unknown) => {
+        lib.install(entry).then(() => { choose(start(entry.id)); }).catch((err: unknown) => {
           card.classList.remove('busy');
           state.textContent = `Couldn’t install: ${err instanceof Error ? err.message : String(err)}`;
         });

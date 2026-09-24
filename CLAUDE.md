@@ -48,6 +48,7 @@ node scripts/floating-promises.mjs   # async calls nobody waits for
 node scripts/opcode-sweep.mjs        # special-node opcodes with no case arm
 npx vite --port 5199    # then, in another shell:
 node scripts/verify-screen.mjs   # drives the real UI in Chromium, screenshots it
+node scripts/verify-party.mjs    # the party in memory, carried between scenarios
 ```
 
 `floating-promises.mjs` is cheap and worth the habit: **`get_ran`'s call order

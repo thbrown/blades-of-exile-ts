@@ -63,7 +63,12 @@ export class CurOut {
   /** build_outdoors (boe.fileio.cpp:245): stitch the 2x2 block together. */
   build(): void {
     const { x, y } = this.party.outdoorCorner;
-    const base = this.scen.outdoors[x]![y]!;
+    // A Universe with no scenario — the party in memory at the startup screen
+    // (`emptyScenario`) — has no world to stitch. Nor does one whose corner
+    // was carried over from another scenario's save, until `enterScenario`
+    // moves it.
+    const base = this.scen.outdoors[x]?.[y];
+    if (base === undefined) return;
     const hasE = x + 1 < this.scen.outWidth;
     const hasS = y + 1 < this.scen.outHeight;
     const east = hasE ? this.scen.outdoors[x + 1]![y]! : null;

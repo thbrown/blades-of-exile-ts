@@ -12081,3 +12081,56 @@ and, with `LEGACY_ARCHIVE=1`, that Masks is the only one tagged. Town names
 were considered and dropped: 3advclub has 18 blank ones that are just unused
 slots. `docs/library` still hasn't been rebuilt (`npm run build`), so the
 published site doesn't show the tag yet.
+
+## The party in memory (2026-09-23)
+
+The original's flow is back: make or load a party **outside any scenario**,
+then take it into whichever scenario you like, and after a win it comes back
+out, ready for the next one. Before this, a game was always one scenario,
+chosen first, and a win threw the party away.
+
+- **Startup screen, "Your party" panel** (`platform/startup.ts`). It shows
+  "No party in memory" or the six PCs, with **Make New Party** and
+  **Forget Party**. A scenario card takes the party in memory in
+  (`StartupChoice.party = 'enter'`). With no party, a card makes one on the
+  way in, as before, and that party is kept in memory too.
+- **The party in memory is a party-only save** stored under a reserved key in
+  the save store (`getPartyInMemory`/`setPartyInMemory`, left out of
+  `listSaves`). `serialiseSave(univ, true)`/`saveGame(univ, true)` write the
+  party and PC pages with `SCENARIO` empty, which is what the C++ writes
+  after `handle_victory` clears `scen_name`. A party-only save in the save
+  list (or opened in-game) becomes the party in memory and returns to the
+  startup screen (`finish_load_party`).
+- **No scenario at all**: `noScenario()` (`fileio/scenarioXml.ts`). Make New
+  Party runs the party editor on a Universe holding it, then returns to the
+  startup screen. `CurOut.build` and the `GameSession` constructor skip the
+  world when there are no outdoors, and the screen draws only the startup
+  backdrop.
+- **Entering** is `Universe.enterScenario` (`enter_scenario`) plus
+  `GameSession.enterWithParty` (the rest of `put_party_in_scen`: item
+  stripping with `removed-special-items`, `keep-stored-items`, then the start
+  that `startNewGame` shares via `beginScenario`). `applyPartySave` reads
+  only the party and PC pages onto the new scenario's Universe. `finishCreate`
+  now runs once, when the party is made (`finishNewParty`), not again on
+  entry.
+- **Where 1997 and OBoE differ on entry, this follows 1997**: DIVERGENCES.md
+  #7. Items with custom pictures and summoning items are taken, along with
+  OBoE's call-special and IMPORTANT items. The soul crystal and the
+  monsters-seen list are emptied. "Yes" to stored items hands over all of
+  them.
+- **Winning** (`onVictory`) shows `congrats-save`. "Save First" asks for a slot
+  name and writes the party-only save. Either way the party goes into memory
+  and the page returns to the startup screen. **Party death** (New or Quit)
+  forgets it, as `do_abort` does.
+- **Stored items are now saved** (`STORED` pages). They used to be lost on any
+  save and load.
+- Tests: `test/enterScenario.test.ts`. `scripts/verify-party.mjs` is the
+  end-to-end check (make, enter Valley, win, enter A Small Rebellion, reload,
+  forget), and CLAUDE.md lists it. Corpus unchanged at 51 / 1,231,440.
+- **Not done:**
+  - The replay harness still refuses party-only saves and `pick_a_scen`
+    recordings (`replay/startup.ts`). They need the picker's paging modelled.
+  - There is still no intro dialog on entering a scenario, the same gap as a
+    fresh start.
+  - Importing parties from the original game's save files.
+  - `TODO(campaign)`: exported graphics and summons, and campaign flags.

@@ -50,7 +50,7 @@ import type { SpellTarget } from './spellCombatTarget';
 import { LoadedMissile, fireMissile, isLoaded, loadMissile } from './missiles';
 import { setCentreSink } from './missileAnim';
 import { CurTown } from '../universe/curTown';
-import type { Player } from '../universe/player';
+import { NUM_INVEN_SLOTS, type Player } from '../universe/player';
 import {
   GiveStatus,
   equipItem,
@@ -58,6 +58,7 @@ import {
   hasAbilEquip,
   takeItemFrom,
   unequipItem,
+  takeItem as takeInvenItem,
 } from '../universe/inventory';
 import { MainStatus, PartyStatus, Race, Skill, Status, Trait } from '../universe/skills';
 import { Enchant, enchantWeapon } from '../data/enchant';
@@ -367,7 +368,8 @@ export class GameSession {
 
   constructor(readonly univ: Universe) {
     this.center = { ...univ.party.outLoc };
-    this.updateExplored(univ.party.outLoc);
+    // A party with no scenario (Make New Party) has no world to look at.
+    if (univ.scenario.outdoors.length > 0) this.updateExplored(univ.party.outLoc);
     // `do_missile_anim` writes the C++'s global `center` and never restores it,
     // and `party_can_see` reads it — see the note on `setCentreSink`. Installed
     // here for the same reason `Universe` installs `setPrintResult`: the C++
@@ -401,9 +403,79 @@ export class GameSession {
     // pregens walk in barehanded, three of them short their bonus spell
     // points and the slith and nephil short their racial stat bonuses. This
     // port has no party editor, so `startNewGame` is where the two steps meet.
+    this.finishNewParty();
+    this.beginScenario(force);
+  }
+
+  /** `finish_create` for every living PC — the tail of `start_new_game`. */
+  finishNewParty(): void {
     for (const pc of this.univ.party.pcs) {
       if (pc.mainStatus === MainStatus.ALIVE) pc.finishCreate();
     }
+  }
+
+  /**
+   * `put_party_in_scen` (boe.party.cpp:119; PARTY.CPP:440 in the original)
+   * for a party that already exists — made on the startup screen, or carried
+   * out of another scenario — rather than the preset one `startNewGame`
+   * finishes. The Universe must already hold the new scenario, with the party
+   * applied to it (`applyPartySave`).
+   *
+   * **Which items are taken away** is both engines' lists together. The
+   * original strips items with a custom picture (`graphic_num >= 150`, which
+   * is 1000+ here) and summoning items; OBoE instead carries those across
+   * (`exportGraphics`, `exportSummons`), which this port can't yet
+   * (`TODO(campaign)`), so without the original's rule they would arrive as
+   * blank pictures and monsters of the wrong scenario. OBoE adds the items
+   * that call a special node, and slayers and wards against IMPORTANT
+   * creatures; those abilities don't exist in the original, so there is no
+   * disagreement. DIVERGENCES.md #7.
+   *
+   * **Stored items** follow the original: "yes" hands over all of them, as
+   * many as the party can carry. OBoE lets the player pick.
+   */
+  async enterWithParty(ask: {
+    removedSpecialItems: () => Promise<void>;
+    keepStoredItems: () => Promise<boolean>;
+  }, force = false): Promise<void> {
+    const { party } = this.univ;
+    // "Drop debug mode" (boe.party.cpp:122).
+    this.univ.debugMode = false;
+    this.univ.ghostMode = false;
+    let itemTook = false;
+    for (const pc of party.pcs) {
+      for (let i = NUM_INVEN_SLOTS - 1; i >= 0; i--) {
+        const item = pc.items[i];
+        if (item === undefined || item.variety === ItemType.NO_ITEM) continue;
+        item.specialClass = 0;
+        if (carriedOutOfScenario(item)) continue;
+        takeInvenItem(pc, i);
+        itemTook = true;
+      }
+    }
+    if (itemTook) await ask.removedSpecialItems();
+
+    const stored = [...party.storedItems.values()].flat().filter((it) => it.variety !== ItemType.NO_ITEM);
+    if (stored.length > 0 && await ask.keepStoredItems()) {
+      // `give_to_party(item, FALSE)` each, stopping at the first that fits
+      // nobody (PARTY.CPP:406).
+      for (const item of stored) {
+        const taken = party.pcs.some((pc) => giveItem(pc, party, item).status === GiveStatus.OK);
+        if (!taken) break;
+      }
+    }
+
+    this.univ.enterScenario();
+    this.univ.curPc = Math.max(0, party.pcs.findIndex((pc) => pc.mainStatus === MainStatus.ALIVE));
+    this.beginScenario(force);
+  }
+
+  /**
+   * The tail both ways into a scenario share, from `build_outdoors` on. The
+   * host calls it directly between `finishNewParty` and here when it wants the
+   * finished party before the scenario touches it.
+   */
+  beginScenario(force = false): void {
     this.univ.addStringToBuf(`Welcome to ${this.univ.scenario.title}.`);
     // `put_party_in_scen`: `build_outdoors(); erase_out_specials();`
     // (boe.party.cpp:207) before the party is put in its start town.
@@ -5870,3 +5942,25 @@ function clampToWindow(where: Location): Location {
 }
 
 export { OUT_HALF_DIM, SECTOR_SIZE };
+
+/**
+ * Whether `put_party_in_scen` lets an item into the next scenario — see
+ * `GameSession.enterWithParty` for whose rule each test is.
+ */
+export function carriedOutOfScenario(item: Item): boolean {
+  if (item.graphicNum >= 1000) return false; // original: a custom picture
+  switch (item.ability) {
+    case ItemAbil.SUMMONING:
+    case ItemAbil.MASS_SUMMONING: // original
+    case ItemAbil.CALL_SPECIAL:
+    case ItemAbil.WEAPON_CALL_SPECIAL:
+    case ItemAbil.HIT_CALL_SPECIAL:
+    case ItemAbil.DROP_CALL_SPECIAL: // OBoE
+      return false;
+    case ItemAbil.PROTECT_FROM_SPECIES:
+    case ItemAbil.SLAYER_WEAPON: // OBoE
+      return item.abilData !== Race.IMPORTANT;
+    default:
+      return true;
+  }
+}

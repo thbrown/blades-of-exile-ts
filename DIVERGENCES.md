@@ -238,6 +238,33 @@ anything, since it read the structs natively.
   Windows-made scenarios in the archive (48) all have exact tables, so this
   is a quirk of those three files, not of the platform.
 
+### 7. Taking a party into a scenario (2026-09-23)
+
+**DECIDED: the original wherever the two differ.** The party can visibly tell
+every difference, and several of OBoE's choices depend on `exportGraphics`
+and `exportSummons`, which this port doesn't have yet (`TODO(campaign)`).
+Each point below was checked in both sources: `put_party_in_scen` and
+`init_party_scen_data` (PARTY.CPP:320, :440), and `put_party_in_scen`
+(boe.party.cpp:119) and `cUniverse::enter_scenario` (universe.cpp:1384).
+The code is in `Universe.enterScenario` and `GameSession.enterWithParty`.
+
+| | 1997 | OBoE | here |
+|---|---|---|---|
+| Items taken away | a custom picture (`graphic_num >= 150`, 1000+ here), summoning | call-special abilities, IMPORTANT slayers and wards | **both lists**: OBoE's abilities don't exist in 1997, so the two lists don't conflict |
+| Soul crystal | emptied | kept (exported) | emptied |
+| Monsters seen (`m_seen`) | emptied | kept | emptied |
+| Stored items, on "yes" | all of them, as many as the party can carry | the player picks | all of them |
+| `PSD[306][4]` | survives the SDF wipe | wiped | moot: it held the "no instant help" preference, which is a preference here |
+
+- **The journal agrees.** 1997 empties `journal_str`, and OBoE has the clear
+  commented out ("Now uncertain if the journal should really persist"). This
+  port has no events journal yet, so there's nothing to clear.
+- **Kept from OBoE, as a likely bug:** `enter_scenario` adds the new
+  scenario's auto-start quests without removing the last scenario's, and job
+  banks keep their anger. The original has no quests to compare with.
+- **Stored items are now saved** (`STORED` pages, as OBoE writes them). This
+  port used to drop them on save and load even within a scenario.
+
 ---
 
 ## Agreements worth recording

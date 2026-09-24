@@ -81,9 +81,10 @@ import { TerSpec } from './data/terrain';
 import { GameSession } from './game/session';
 import { TalkAction } from './game/talk';
 import { loadOpcodes, loadScenario } from './fileio/loadScenario';
-import { applySave, readSavePreview, saveGame } from './fileio/saveIo';
+import { applyPartySave, applySave, readSavePreview, saveGame } from './fileio/saveIo';
 import {
-  SaveSlot, exportSave, getSave, importSave, listSaves, putSave, saveStoreAvailable,
+  SaveSlot, exportSave, getPartyInMemory, getSave, importSave, listSaves, putSave, saveStoreAvailable,
+  setPartyInMemory,
 } from './platform/saveStore';
 import {
   AUTOSAVE_TRIGGER_DEFAULTS, AutosaveReason, MAX_AUTOSAVE_DEFAULT, getAutosavePrefs, setAutosavePrefs,
@@ -98,7 +99,7 @@ import {
 } from './platform/scenarioStore';
 import { LoadedPackage, identifyScenarioFiles, loadScenarioPackage } from './fileio/scenarioPackage';
 import { Scenario } from './data/scenario';
-import { readScenarioFromXml } from './fileio/scenarioXml';
+import { noScenario, readScenarioFromXml } from './fileio/scenarioXml';
 import { parseXmlDoc } from './fileio/xml';
 import { TOWN_NUM_OUTDOORS } from './universe/party';
 import { FetchSource } from './fileio/source';
@@ -269,6 +270,14 @@ async function main(): Promise<void> {
   let name = scenarioFromQuery();
   let openSlot = window.sessionStorage.getItem(PENDING_SAVE_KEY);
   window.sessionStorage.removeItem(PENDING_SAVE_KEY);
+  /**
+   * Make New Party from the startup screen: the party editor with no scenario
+   * loaded at all, as the C++'s `start_new_game` runs it, then back to the
+   * startup screen with the result in memory.
+   */
+  let makingParty = false;
+  /** The party in memory, when the startup screen is taking it into a scenario. */
+  let enteringParty: Uint8Array | null = null;
   if (name === null) {
     hideLoadingUi();
     document.body.classList.add('starting');
@@ -301,6 +310,7 @@ async function main(): Promise<void> {
     }
     const library = scenarioStoreAvailable() ? await loadLibrary(installedIds, withoutGraphics) : null;
     const saves = saveStoreAvailable() ? await listSaves() : [];
+    const inMemory = saveStoreAvailable() ? await getPartyInMemory() : null;
     const titleOf = (id: string): string | undefined =>
       headers.find((h) => h.id === id)?.title ?? added.find((h) => h.id === id)?.title;
     const choice = await showStartupScreen(document.getElementById('startup-host')!, {
@@ -312,12 +322,34 @@ async function main(): Promise<void> {
         // The scenario's title if it is one of the bundled four, else its id —
         // a save can name a scenario that isn't installed, which is the case
         // the C++ shows "could not be found" for.
-        label: `${titleOf(slot.preview.scenarioId) ?? slot.preview.scenarioId} — day ${Math.floor(slot.preview.age / 3700) + 1}`
-          + ` (${new Date(slot.savedAt).toLocaleString()})`,
+        label: slot.preview.scenarioId === ''
+          // A party between scenarios: loading it makes it the party in memory.
+          ? `Party: ${slot.preview.pcs.filter((pc) => pc.name !== '').map((pc) => pc.name).join(', ')}`
+            + ` (${new Date(slot.savedAt).toLocaleString()})`
+          : `${titleOf(slot.preview.scenarioId) ?? slot.preview.scenarioId} — day ${Math.floor(slot.preview.age / 3700) + 1}`
+            + ` (${new Date(slot.savedAt).toLocaleString()})`,
       })),
       ...(scenarioStoreAvailable() ? { importScenarios: importScenarioFiles } : {}),
       ...(library ? { library } : {}),
+      ...(saveStoreAvailable() ? {
+        party: {
+          pcs: inMemory === null ? null : inMemory.preview.pcs
+            .filter((pc) => pc.mainStatus !== MainStatus.ABSENT)
+            .map((pc) => ({ name: pc.name, level: pc.level, alive: pc.mainStatus === MainStatus.ALIVE })),
+          forget: () => setPartyInMemory(null),
+        },
+      } : {}),
     });
+    if (choice.slot !== undefined && choice.scenarioId === '') {
+      // A party-only save: `finish_load_party` makes it the party in memory and
+      // stays on the startup screen (boe.fileio.cpp:66).
+      const data = await getSave(choice.slot);
+      if (data !== null) await setPartyInMemory(data);
+      window.location.reload();
+      return;
+    }
+    makingParty = choice.party === 'make';
+    if (choice.party === 'enter') enteringParty = inMemory?.data ?? null;
     name = choice.scenarioId;
     openSlot = choice.slot ?? null;
     document.body.classList.remove('starting');
@@ -371,7 +403,7 @@ async function main(): Promise<void> {
   ];
   for (let i = 1; i <= 11; i++) sheets.push(`monst${i}`);
   const dialogNames = ['pc-info', 'quest-info', 'get-items', 'item-info', 'many-str', 'monster-info', 'job-board',
-    'pick-potion', 'party-death', 'steal-item', ...STR_DIALOG_DEFS, ...NOTES_DIALOG_DEFS,
+    'pick-potion', 'party-death', 'steal-item', 'removed-special-items', 'keep-stored-items', 'congrats-save', ...STR_DIALOG_DEFS, ...NOTES_DIALOG_DEFS,
     ...INPUT_DIALOG_DEFS, ...PICT_CHOICE_DIALOG_DEFS, ...SPEND_XP_DIALOG_DEFS,
     ...PARTY_EDITOR_DIALOG_DEFS, ...LIBRARY_DIALOG_DEFS, ...PREFERENCES_DIALOG_DEFS];
   addTotal(1 /* opcodes */ + STRING_TABLES.length + dialogNames.length + sheets.length
@@ -405,7 +437,9 @@ async function main(): Promise<void> {
   let scen: Scenario;
   let packageSheets: LoadedPackage['sheets'] = [];
   let installedPreview = true;
-  if (isBundled) {
+  if (makingParty) {
+    scen = noScenario();
+  } else if (isBundled) {
     scen = await loadScenario(new FetchSource(bundledUrl, tick), opcodes, addTotal);
   } else {
     const installed = scenarioStoreAvailable() ? await getInstalledScenario(name) : null;
@@ -449,9 +483,12 @@ async function main(): Promise<void> {
   // C++'s `start_new_game`, which runs before a scenario is entered — so
   // `startNewGame` (put_party_in_scen) waits for the editor, further down.
   // A direct `?scenario=` link and a saved game skip the editor.
-  const buildParty = scenarioFromQuery() === null && openSlot === null;
-  if (!buildParty) session.startNewGame();
+  const buildParty = scenarioFromQuery() === null && openSlot === null && enteringParty === null;
+  if (!buildParty && enteringParty === null) session.startNewGame();
   const screen = new Screen(ctx, store);
+  // With no scenario there is no game screen to draw, only the backdrop the
+  // party editor sits on — from the very first redraw.
+  if (makingParty) screen.startupBackdrop = true;
   // `set_stat_window(ITEM_WIN_PC1)` from create_pc_graphics (boe.party.cpp:226)
   // — the panel's list and scroll limit are set before it is first drawn.
   screen.itemWindow.setStatWindowForPc(univ, 0);
@@ -869,11 +906,14 @@ async function main(): Promise<void> {
       for (;;) {
         const choice = await dialogs.runScreen(
           new XmlDialog(ctx, store, getDialogDef('party-death')));
+        // Both leave no party in memory, as `do_abort` does (boe.actions.cpp:3307).
         if (choice === 'new') {
+          if (saveStoreAvailable()) await setPartyInMemory(null);
           window.location.reload();
           return;
         }
         if (choice === 'quit') {
+          if (saveStoreAvailable()) await setPartyInMemory(null);
           window.location.href = import.meta.env.BASE_URL;
           return;
         }
@@ -895,7 +935,18 @@ async function main(): Promise<void> {
    * the message node before the one that ended it — so neither does this.
    */
   session.onVictory = () => {
-    window.location.href = import.meta.env.BASE_URL;
+    void (async () => {
+      // `handle_victory` empties `scen_name` first, so what "Save First" writes
+      // is the party alone — the same bytes that become the party in memory.
+      const party = saveGame(univ, true);
+      const choice = await dialogs.runScreen(new XmlDialog(ctx, store, getDialogDef('congrats-save')));
+      if (choice === 'save' && saveStoreAvailable()) {
+        const slot = (await askForText('Name this saved party:', false)).trim();
+        if (slot !== '') await putSave(slot, party);
+      }
+      if (saveStoreAvailable()) await setPartyInMemory(party);
+      window.location.href = import.meta.env.BASE_URL;
+    })();
   };
 
   /**
@@ -1321,6 +1372,13 @@ async function main(): Promise<void> {
     // the whole world — which this port does by restarting on the new one.
     try {
       const preview = readSavePreview(data);
+      if (preview.scenarioId === '' && saveStoreAvailable()) {
+        // A party between scenarios: `finish_load_party` puts it in memory and
+        // goes back to the startup screen (boe.fileio.cpp:66).
+        await setPartyInMemory(data);
+        window.location.href = import.meta.env.BASE_URL;
+        return true;
+      }
       if (preview.scenarioId !== scen.id) {
         // Another scenario means another world to fetch, so the page reopens on
         // it and picks the slot back up. Only a stored slot can make that trip;
@@ -2625,6 +2683,7 @@ async function main(): Promise<void> {
   });
 
   if (buildParty) {
+    if (makingParty) status.textContent = 'Make a party.';
     hideLoadingUi();
     refitDesktop(); // the progress bar's room is the canvas's now
     screen.startupBackdrop = true;
@@ -2632,11 +2691,41 @@ async function main(): Promise<void> {
     if (!(await startNewParty(partyHost))) {
       // Cancelled, or nobody left: "if no PCs left, forget it" — back to the
       // startup screen with no party in memory.
+      if (!makingParty) {
+        window.location.href = import.meta.env.BASE_URL;
+        return;
+      }
+      await setPartyInMemory(null);
+      window.location.href = import.meta.env.BASE_URL;
+      return;
+    }
+    // `start_new_game` ends by keeping the finished party (`party_in_memory`,
+    // and `do_save(true)`), before any scenario has touched it.
+    session.finishNewParty();
+    if (saveStoreAvailable()) await setPartyInMemory(saveGame(univ, true));
+    if (makingParty) {
       window.location.href = import.meta.env.BASE_URL;
       return;
     }
     screen.startupBackdrop = false;
-    session.startNewGame();
+    session.beginScenario();
+    screen.itemWindow.setStatWindowForPc(univ, univ.curPc);
+  }
+
+  // The party in memory, into the scenario the startup screen picked
+  // (`put_party_in_scen`): its dialogs need the game screen up.
+  if (enteringParty !== null) {
+    hideLoadingUi();
+    refitDesktop();
+    applyPartySave(enteringParty, univ);
+    redraw();
+    await session.enterWithParty({
+      removedSpecialItems: async () => {
+        await dialogs.runScreen(new XmlDialog(ctx, store, getDialogDef('removed-special-items')));
+      },
+      keepStoredItems: async () =>
+        (await dialogs.runScreen(new XmlDialog(ctx, store, getDialogDef('keep-stored-items')))) === 'yes',
+    });
     screen.itemWindow.setStatWindowForPc(univ, univ.curPc);
   }
 

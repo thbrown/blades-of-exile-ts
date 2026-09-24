@@ -20,6 +20,8 @@ import { CurOut } from './curOut';
 import { CurTown } from './curTown';
 import { setLivingRng, setPrintResult } from './living';
 import { Party, TOWN_NUM_OUTDOORS } from './party';
+import { MainStatus, isSplitStatus } from './skills';
+import { Direction } from '../core/location';
 import { PartyPreset, NUM_PC_SLOTS, Player, makePresetPlayer } from './player';
 
 /** Lines kept in the scrolling transcript pane. */
@@ -156,6 +158,90 @@ export class Universe {
       if (scenario.quests[i]!.autoStart) this.party.activeQuests.set(i, makeJob(1));
     }
     this.refreshStoreItems();
+  }
+
+  /**
+   * `cUniverse::enter_scenario` (universe.cpp:1384) with the 1997
+   * `init_party_scen_data` (PARTY.CPP:320) where the two differ — a party from
+   * the startup screen, made there or carried out of another scenario, starts
+   * this one. Everything the party earned stays: gold, food, the PCs' items,
+   * levels, skills and alchemy. Everything that belonged to the last scenario
+   * goes: its flags, notes, vehicles, timers, special items and maps.
+   *
+   * The constructor does the scenario-dependent half of this for a brand-new
+   * game; this is the whole of it, for a party that already existed. The
+   * stored-items question and the item stripping are `put_party_in_scen`'s,
+   * and live in `GameSession.enterWithParty`.
+   *
+   * Where the original and OBoE disagree (DIVERGENCES.md #7), this follows
+   * the original, since a player can see each one:
+   * - the soul crystal is emptied (OBoE keeps it and exports its monsters,
+   *   which this port can't: `TODO(campaign)`);
+   * - the list of monsters seen is emptied (OBoE keeps it, though the next
+   *   scenario numbers its monsters differently).
+   * `PSD[306][4]` survives the original's SDF wipe because it held the
+   * "no instant help" preference; that is a preference here, not an SDF.
+   */
+  enterScenario(): void {
+    const { party, scenario } = this;
+    party.age = 0;
+    party.wipeSdfs();
+    party.lightLevel = 0;
+    party.outdoorCorner = { ...scenario.outdoorStart };
+    party.iwc = { x: 0, y: 0 };
+    party.locInSec = { ...scenario.sectorStart };
+    party.outLoc = { ...scenario.sectorStart };
+    party.boats = scenario.boats.filter((v) => v.exists).map((v) => ({ ...v }));
+    party.horses = scenario.horses.filter((v) => v.exists).map((v) => ({ ...v }));
+    for (const pc of party.pcs) {
+      pc.status.fill(0);
+      if (isSplitStatus(pc.mainStatus)) pc.mainStatus -= MainStatus.SPLIT;
+      pc.curHealth = pc.maxHealth;
+      pc.curSp = pc.maxSp;
+    }
+    party.inBoat = -1;
+    party.inHorse = -1;
+    for (const pop of party.creatureSave) pop.whichTown = 200;
+    for (const c of party.outC) c.exists = false;
+    party.storeLimitedStock.clear();
+    party.magicStoreItems.clear();
+    party.imprisonedMonst.fill(0); // the original's; OBoE keeps them
+    party.mSeen.clear(); // the original's; OBoE keeps them
+    party.specialNotes = [];
+    party.talkSave = [];
+    party.mNoted.clear();
+    party.direction = Direction.N;
+    party.atWhichSaveSlot = 0;
+    for (const town of scenario.towns) {
+      town.canFind = !town.isHidden;
+      town.monstersKilled = 0;
+      town.itemTaken.fill(false);
+      for (const col of town.maps) col.fill(0);
+    }
+    party.keyTimes.clear();
+    party.partyEventTimers = [];
+    party.specItems.clear();
+    for (let i = 0; i < scenario.specialItems.length; i++) {
+      if (specItemStartWith(scenario.specialItems[i]!)) party.specItems.add(i);
+    }
+    // The C++ adds the auto-start quests without clearing the old ones, so a
+    // quest from the last scenario stays under its old number (and job banks
+    // keep their anger). Looks like a bug; kept, as the C++'s. The original
+    // has no quests to compare with.
+    for (let i = 0; i < scenario.quests.length; i++) {
+      if (scenario.quests[i]!.autoStart) party.activeQuests.set(i, makeJob(1));
+    }
+    this.refreshStoreItems();
+    for (const col of this.out.explored) col.fill(0);
+    party.storedItems.clear();
+    for (const col of scenario.outdoors)
+      for (const sector of col)
+        for (const row of sector.maps) row.fill(0);
+    // `put_party_in_scen`'s `build_outdoors` (boe.party.cpp:204).
+    party.townNum = TOWN_NUM_OUTDOORS;
+    this.town = null;
+    this.departedTown = null;
+    this.out.build();
   }
 
   /**
