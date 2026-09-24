@@ -60,6 +60,25 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(scen.terTypes[104]?.special).toBe(TerSpec.UNLOCKABLE);
   });
 
+  it("has E3's monsters, with E3's own stats and sprites", () => {
+    expect(scen.scenMonsters).toHaveLength(191);
+    const guard = scen.scenMonsters[12]!;
+    expect(guard.name).toBe('Guard');
+    expect([guard.level, guard.health, guard.armor]).toEqual([30, 140, 30]);
+    // E3's guard swings 2d10, where BoE's bladbase rebalanced it to 3d10.
+    expect(guard.attacks[0]).toMatchObject({ dice: 2, sides: 10 });
+    expect(guard.pictureNum).toBeGreaterThanOrEqual(1400); // a custom sheet after the terrain's
+    const giant = scen.scenMonsters[54]!;
+    expect(giant.name).toBe('Cave Giant');
+    expect([giant.xWidth, giant.yWidth]).toEqual([1, 2]);
+    expect(scen.scenMonsters[177]?.name).toBe('Rentar-Ihrno');
+  });
+
+  it('places the fort\'s people', () => {
+    const fort = scen.towns[21]!;
+    expect(fort.creatures.filter((c) => c.number > 0).length).toBeGreaterThan(40);
+  });
+
   it('has all 200 towns, their maps sized by record number', () => {
     expect(scen.towns).toHaveLength(200);
     expect(scen.towns[0]?.maxDim).toBe(64);

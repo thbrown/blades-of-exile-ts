@@ -55,3 +55,58 @@ export function buildTerrainSheets(e3Dir: string): Rgba[] {
   }
   return [stack(bmp('TER1'), bmp('TER2')), stack(bmp('TER3'), bmp('TER4')), stack(bmp('TER5'), null), sheet3];
 }
+
+/**
+ * Cuts every monster's frames out of MONST1–9 into custom sheets, from sheet
+ * `firstSheet` on, in the order the engine reads a custom monster (the parts
+ * facing left, then facing right, then the attack pose each way:
+ * `monsterGraphic`). Returns the sheets and each monster's new picture number.
+ *
+ * MONST sheets use BoE's layout (`get_monster_template_rect`): 20 sprites a
+ * sheet, sprite `r` at row `r % 10`, columns `2*floor((r%20)/10)` (facing
+ * right) and `+1` (facing left), attack pose 4 columns on. White is the
+ * background and becomes transparent.
+ */
+export function buildMonsterSheets(
+  e3Dir: string, monsters: { pic: number; w: number; h: number }[], firstSheet: number,
+): { sheets: Rgba[]; pics: number[] } {
+  const src = Array.from({ length: 9 }, (_, i) => decodeBmp(new Uint8Array(readFileSync(join(e3Dir, `MONST${i + 1}.BMP`)))));
+  const cells: { sheet: Rgba; x: number; y: number }[] = [];
+  const pics: number[] = [];
+  const byPic = new Map<string, number>();
+  for (const m of monsters) {
+    const key = `${m.pic}:${m.w}x${m.h}`;
+    const seen = byPic.get(key);
+    if (seen !== undefined) { pics.push(seen); continue; }
+    const base = cells.length;
+    const size = m.w * m.h;
+    // left, right, attack-left, attack-right (monsterGraphic: +size, +2*size).
+    for (const [adj] of [[1], [0], [5], [4]] as const) {
+      for (let part = 0; part < size; part++) {
+        const r = m.pic + part;
+        const sheet = src[Math.floor(r / 20)];
+        const idx = r % 20;
+        if (!sheet) { cells.push({ sheet: blank(W, H), x: 0, y: 0 }); continue; }
+        cells.push({ sheet, x: (2 * Math.floor(idx / 10) + adj) * W, y: (idx % 10) * H });
+      }
+    }
+    const pic = 1000 + firstSheet * 100 + base;
+    byPic.set(key, pic);
+    pics.push(pic);
+  }
+  const sheets: Rgba[] = [];
+  for (let s = 0; s * 100 < cells.length; s++) {
+    const n = Math.min(100, cells.length - s * 100);
+    const out = blank(10 * W, Math.ceil(n / 10) * H);
+    for (let c = 0; c < n; c++) {
+      const cell = cells[s * 100 + c]!;
+      blit(cell.sheet, cell.x, cell.y, out, (c % 10) * W, Math.floor(c / 10) * H, W, H);
+    }
+    // White background → transparent.
+    for (let p = 0; p < out.data.length; p += 4) {
+      if (out.data[p] === 255 && out.data[p + 1] === 255 && out.data[p + 2] === 255) out.data[p + 3] = 0;
+    }
+    sheets.push(out);
+  }
+  return { sheets, pics };
+}

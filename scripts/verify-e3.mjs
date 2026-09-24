@@ -56,7 +56,7 @@ if (start.townNum !== 21 || start.townLoc.x !== 59 || start.townLoc.y !== 6) {
 // Walk out of the fort: a breadth-first path to the nearest square off the
 // town's active area, through doors (moving into one opens it, and the step is
 // then taken again).
-const walkOut = () => page.evaluate(async () => {
+const walkOut = (maxSteps = 1000) => page.evaluate(async (maxSteps) => {
   const s = window.__session;
   const STALLED = Symbol('stalled');
   const step = (d) => Promise.race([s.move(d), new Promise((r) => setTimeout(() => r(STALLED), 400))]);
@@ -92,7 +92,7 @@ const walkOut = () => page.evaluate(async () => {
   if (!path) return { stalled: 'no path out' };
   let steps = 0;
   for (const d of path) {
-    if (!s.inTown) break;
+    if (!s.inTown || steps >= maxSteps) break;
     if (window.__dialogs.active) return { steps, stalled: 'dialog' };
     let res = await step(d);
     if (res === STALLED) return { steps, stalled: 'move' };
@@ -101,7 +101,14 @@ const walkOut = () => page.evaluate(async () => {
     steps++;
   }
   return { steps, planned: path.length };
-});
+}, maxSteps);
+// Halfway out, a look at the fort and its people.
+await walkOut(25);
+await page.evaluate(() => window.__redraw());
+await shot('01b-fort');
+const peopleSeen = await page.evaluate(() => window.__session.univ.town.monsters.filter((m) => m.isAlive).length);
+console.log('FORT CREATURES:', peopleSeen);
+if (peopleSeen === 0) errors.push('Fort Emergence has no creatures');
 const exit = await walkOut();
 const outside = await where();
 console.log('LEFT TOWN:', JSON.stringify(exit), JSON.stringify(outside));

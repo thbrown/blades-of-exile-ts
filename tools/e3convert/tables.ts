@@ -5,6 +5,8 @@
  * "Tables in the EXE").
  */
 
+import type { LegacyMonster } from '../../src/fileio/legacy/structs';
+import { BLADBASE_EXTRAS } from './bladbaseExtras';
 import { neAutoDataSegment, readNeSegment } from './ne';
 
 export const E3_TERRAIN_COUNT = 256;
@@ -97,4 +99,41 @@ export interface E3Start {
 export function readE3Start(exe: Uint8Array): E3Start {
   const ds = readNeSegment(exe, neAutoDataSegment(exe));
   return { town: 21, loc: { x: ds[0x5f0] ?? 0, y: ds[0x5f1] ?? 0 } };
+}
+
+export const E3_MONSTER_COUNT = 190;
+
+/**
+ * E3's monsters 1–190 as BoE legacy records, ready for the legacy importer's
+ * `convertMonster`. Index 0 is the empty monster. The stats are E3's own:
+ * segment 39's parallel arrays (`FUN_1090_0000`; FORMATS.md). `pictureNum`
+ * is E3's sprite index, for `buildMonsterSheets` to replace.
+ */
+export function readE3Monsters(exe: Uint8Array, strings: Map<number, string>): LegacyMonster[] {
+  const t = readNeSegment(exe, 39);
+  const v = new DataView(t.buffer, t.byteOffset, t.byteLength);
+  const u8 = (off: number, n: number) => t[off + n] ?? 0;
+  const i16 = (off: number, n: number) => v.getInt16(off + 2 * n, true);
+  const resist = (n: number) => [4800, 5000, 5200, 5400]
+    .reduce((bits, off, k) => bits | (u8(off, n) === 1 ? 1 << (2 * k) : u8(off, n) >= 2 ? 2 << (2 * k) : 0), 0);
+  const out: LegacyMonster[] = [];
+  for (let n = 0; n <= E3_MONSTER_COUNT; n++) {
+    // Fields E3's table lacks: borrowed from BoE's bladbase for 1–176, the
+    // monsters the two games share; E3's unique 177–190 get BoE's defaults.
+    // TODO(E3-3): find where E3 keeps them (its code).
+    const x = BLADBASE_EXTRAS[n - 1] ?? [0, 0, 0, 1, 0, 0, 0, 0];
+    out.push({
+      level: u8(0, n), mName: n === 0 ? '' : strings.get(600 + n) ?? `Monster ${n}`,
+      mHealth: i16(200, n), armor: u8(600, n), skill: u8(800, n),
+      a: [i16(1000, n), i16(1400, n), i16(1800, n)],
+      a1Type: u8(2200, n), a23Type: u8(2400, n), mType: u8(2600, n), speed: u8(2800, n),
+      mu: u8(3000, n), cl: u8(3200, n), breath: u8(3400, n), breathType: x[0] ?? 0,
+      treasure: u8(3800, n), specSkill: u8(4000, n), poison: u8(3600, n),
+      corpseItem: x[6] ?? 0, corpseItemChance: x[7] ?? 0, immunities: resist(n),
+      xWidth: u8(4400, n) || 1, yWidth: u8(4600, n) || 1,
+      radiate1: x[1] ?? 0, radiate2: x[2] ?? 0, defaultAttitude: x[3] ?? 0, summonType: x[4] ?? 0,
+      defaultFacialPic: x[5] ?? 0, pictureNum: u8(4200, n),
+    });
+  }
+  return out;
 }

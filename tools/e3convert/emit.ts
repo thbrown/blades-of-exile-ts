@@ -11,23 +11,22 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { encodePng } from './png';
-import { buildTerrainSheets, e3TerrainPic } from './graphics';
+import { convertMonster } from '../../src/fileio/legacy/convert';
+import { buildMonsterSheets, buildTerrainSheets, e3TerrainPic } from './graphics';
 import { readE3Files } from './install';
 import { readNeResources, readStringTable } from './ne';
 import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor } from './outdoor';
-import { readE3Start, readE3Terrain, type E3TerrainType } from './tables';
-import { E3_TOWN_COUNT, readE3Towns, type E3Town } from './town';
+import { readE3Monsters, readE3Start, readE3Terrain, type E3TerrainType } from './tables';
+import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3Town } from './town';
+import { esc, monstersXml } from './xmlWrite';
 
+const ATTITUDE = ['docile', 'hostile-a', 'friendly', 'hostile-b'];
 const BLOCKAGE = ['none', 'sight', 'monsters', 'move', 'move-and-shoot', 'move-and-sight'];
 const LIGHTING = ['lit', 'dark', 'drains', 'none'];
 /** Town entrance markers for `start_locs[0..3]` (`loadTownMapData`). */
 const ENTRANCE_MARK = ['v', '<', '^', '>'];
 /** Plain grass, the ground E3's village builder starts from (`FUN_1040_1600`). */
 const GRASS = 2;
-
-function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
 
 const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="no" ?>\n';
 
@@ -127,10 +126,27 @@ function townSize(t: E3Town): number {
   return t.kind === 'large' ? 64 : t.kind === 'small' ? 32 : 48;
 }
 
+/** A town's creatures: the record's own, or a village's. Empty slots have number 0. */
+function townCreatures(t: E3Town): E3CreatureStart[] {
+  return t.village ? t.village.creatures : t.creatures;
+}
+
+function creatureXml(c: E3CreatureStart, id: number): string {
+  // TODO(E3-2): conversations (`personality`), and the appear/disappear
+  // conditions (`time_flag`, `spec1`/`spec2`) once E3's flags are mapped.
+  return `    <creature id="${id}">
+        <type>${c.number}</type>
+        <attitude>${ATTITUDE[c.startAttitude] ?? 'docile'}</attitude>
+        <mobility>${c.mobile}</mobility>
+    </creature>
+`;
+}
+
 function townXml(t: E3Town, name: string): string {
   const size = townSize(t);
   const r = t.village ? { top: 0, left: 0, bottom: size - 1, right: size - 1 } : t.inTownRect;
-  // TODO(E3-2): creatures, preset items and fields, room names.
+  const creatures = townCreatures(t).map((c, i) => (c.number > 0 ? creatureXml(c, i) : '')).join('');
+  // TODO(E3-2): preset items and fields, room names.
   return `${XML_HEAD}<town boes="2.0.0">
     <size>${size}</size>
     <name>${esc(name)}</name>
@@ -138,7 +154,7 @@ function townXml(t: E3Town, name: string): string {
     <difficulty>0</difficulty>
     <lighting>${LIGHTING[t.lighting] ?? 'lit'}</lighting>
     <flags />
-</town>
+${creatures}</town>
 `;
 }
 
@@ -150,8 +166,12 @@ function townMap(t: E3Town): string {
     ? Array.from({ length: size }, () => Array<number>(size).fill(GRASS))
     : t.terrain;
   const marks = new Map<string, string>();
+  const inside = (l: { x: number; y: number }) => l.x >= 0 && l.x < size && l.y >= 0 && l.y < size;
   t.startLocs.forEach((l, i) => {
-    if (l.x >= 0 && l.x < size && l.y >= 0 && l.y < size) addMark(marks, l.x, l.y, ENTRANCE_MARK[i] ?? '');
+    if (inside(l)) addMark(marks, l.x, l.y, ENTRANCE_MARK[i] ?? '');
+  });
+  townCreatures(t).forEach((c, i) => {
+    if (c.number > 0 && inside(c.startLoc)) addMark(marks, c.startLoc.x, c.startLoc.y, `$${i}`);
   });
   return mapFile(terrain, size, marks);
 }
@@ -232,9 +252,20 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
   write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town)));
   write('scenario.spec', '');
   write('terrain.xml', terrainXml(terrain));
-  // TODO(E3-2): E3's monster and item tables.
+  // Monsters: E3's table through the legacy importer, drawn from E3's own
+  // sprites cut into custom sheets after the terrain's.
+  const terrainSheets = buildTerrainSheets(e3Dir);
+  const legacyMonsters = readE3Monsters(files.exe, strings);
+  const monsterArt = buildMonsterSheets(e3Dir,
+    legacyMonsters.map((m) => ({ pic: m.pictureNum, w: m.xWidth, h: m.yWidth })), terrainSheets.length);
+  const monsters = legacyMonsters.map((m, n) => {
+    const mon = convertMonster(m);
+    mon.pictureNum = monsterArt.pics[n]!;
+    return mon;
+  });
+  write('monsters.xml', monstersXml(monsters));
+  // TODO(E3-2): E3's item table.
   write('items.xml', `${XML_HEAD}<items boes="2.0.0">\n</items>\n`);
-  write('monsters.xml', `${XML_HEAD}<monsters boes="2.0.0">\n</monsters>\n`);
 
   zones.forEach((z, i) => {
     const base = `out/out${i % E3_ZONES_WIDE}~${Math.floor(i / E3_ZONES_WIDE)}`;
@@ -250,7 +281,7 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
     // TODO(E3-2): conversations.
     write(`towns/talk${t.number}.xml`, `${XML_HEAD}<dialogue boes="2.0.0">\n</dialogue>\n`);
   });
-  const sheets = buildTerrainSheets(e3Dir);
+  const sheets = [...terrainSheets, ...monsterArt.sheets];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
   return { sectors: zones.length, towns: towns.length, sheets: sheets.length };
 }
