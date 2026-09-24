@@ -77,6 +77,44 @@ E3 keeps its terrain types in code and data, not in a file:
 - **Talk text**: RT_STRING, with fields separated by `^` (e.g. `…^0^0^99`).
   Not yet parsed.
 
+- **Monsters** (1–190; string `600 + n` is the name, 0 is empty): segment 39
+  (`1130:`) holds 28 parallel arrays of 200, which `FUN_1090_0000`
+  (`return_monster_template`) gathers into a record. Byte arrays unless
+  marked i16:
+
+  | offset | field | offset | field |
+  |---|---|---|---|
+  | 0 | level | 3000 | mage level |
+  | 200 | hp (i16) | 3200 | priest level |
+  | 600 | armor | 3400 | breath damage |
+  | 800 | skill | 3600 | poison |
+  | 1000/1400/1800 | attacks (i16, `dice*100 + sides`) | 3800 | treasure |
+  | 2200 / 2400 | a1 / a2–3 attack type | 4000 | special skill |
+  | 2600 | race (`m_type`) | 4200 | picture: sprite index, 0 blank |
+  | 2800 | speed | 4400 / 4600 | width / height |
+  | 4800–5400 | magic/fire/cold/poison resistance: 0, 1 resistant, 2 immune |
+
+  These were checked against BoE's `bladbase` (the 1997 Mac `.exs`), whose
+  monsters 1–176 **are** E3's: the same names, levels and HP, with two
+  renamed. Every field above agrees on all 176, except that BoE rebalanced the
+  attack dice (E3's guard hits 2d10, BoE's 3d10), changed 5 breaths and 3
+  special skills, and renumbered pictures for its own sheets.
+  **Not in E3's tables** (in code somewhere): breath type, radiation, default
+  attitude, summon type, facial picture, loot. 177–190 are E3's own unique
+  characters (Rentar-Ihrno, Athron, Sulfras, Erika …).
+  **Sprites**: MONST1–9 use BoE's layout. There are 20 sprites a sheet in
+  column pairs (idx < 10 in columns 0/1, else 2/3), with the attack pose 4
+  columns further along. Column 1 faces left, the default.
+- **Items** (415 records): segment 38 (`1128:`), 59 bytes each,
+  little-endian: `i16 variety, i16 level, awkward, bonus, i8 protection,
+  charges, skill/use, graphic, ability, type_flag, 0, i16 value, known, magic,
+  weight, class, full_name[25], name[15]`. `variety` is BoE's `eItemType`.
+  367 have a namesake in bladbase (reordered), which agrees on
+  variety/level/awkward/bonus/protection/charges/type_flag/value/weight for
+  about 97%. **Ability codes are E3's own**: 94 of 103 map to one BoE legacy
+  code, and the other 9 are items BoE retuned. The graphic is an E3 picture
+  number (only 134 agree with BoE), not yet mapped to a sheet.
+
 Ghidra can't recover these `switch` statements: it reports "Could not recover
 jumptable". The table is `n` case values followed by `n` target offsets, and
 `Disasm.java <addr> <out> <count>` lists the arms.
