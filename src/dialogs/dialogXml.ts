@@ -132,7 +132,9 @@ export interface GroupControl extends Base {
  * `cScrollPane` — a window onto controls taller than it, with a scrollbar
  * down its right edge. Its children's coordinates are the dialog's own, as
  * the file writes them; the pane shows the slice of them it is scrolled to.
- * Only about-boe.xml's credits use one in the player's dialogs.
+ * OBoE's About box scrolled its credits in one. The player's dialogs no
+ * longer use it (about-boe.xml is the 1997 box again), but OBoE-format
+ * dialogs may.
  */
 export interface PaneControl extends Base {
   kind: 'pane';
@@ -238,7 +240,8 @@ function readLabel(el: Element): string {
   }
   // Spaces at either end of a line go (the markup is indented), but not the
   // breaks themselves: a label that opens with `<br/>` starts on its second
-  // line, which is how about-boe.xml's credit columns line up.
+  // line, which is how OBoE's credit columns (about-boe.xml, before it was
+  // the 1997 box again) lined up.
   return out.split('\n').map((line) => line.trim()).join('\n');
 }
 
@@ -389,7 +392,7 @@ function layOut(
 
 /**
  * The second, measured layout pass: `cDialog::recalcRect` sizing each text
- * that was written without a height or width (about-boe.xml's paragraphs and
+ * that was written without a height or width (OBoE's About paragraphs and
  * links), then placing again everything positioned after it. Done once per definition,
  * since the result doesn't change.
  */

@@ -267,6 +267,19 @@ The code is in `Universe.enterScenario` and `GameSession.enterWithParty`.
 
 ---
 
+### 8. The About box (2026-09-23)
+
+**DECIDED: the original.** OBoE's about-boe.xml is its own: "v2.0 alpha",
+a scrolling pane of open-source credits and funders, the GPL notice and
+GitHub links. The 1997 box is dialog 1062 (GAMEDLOG.RC:1334): version
+1.0.1, Spiderweb's copyright, four credits, the trademark line, the $30
+shareware note and the 1997 contact addresses. A player can see which one
+they get, so the file is the 1997 dialog again, verbatim. The only
+difference is that the credits' three-space indent is lost to whitespace
+condensing. The page's own masthead links to this port's source.
+
+---
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

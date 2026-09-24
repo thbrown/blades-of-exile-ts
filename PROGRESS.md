@@ -12234,3 +12234,7 @@ chosen first, and a win threw the party away.
   background over the whole canvas. `measureRoom` reads the padding, so the
   fit follows (verify-screen's DESKTOP step: the desktop is now 1280 wide at a
   1280 viewport, and nothing scrolls).
+- **About Blades of Exile is the 1997 box again** (dialog 1062,
+  GAMEDLOG.RC:1334), replacing OBoE's credits and licence version.
+  DIVERGENCES.md #8. The scroll pane code stays for OBoE-format dialogs,
+  but no player dialog uses it now.
