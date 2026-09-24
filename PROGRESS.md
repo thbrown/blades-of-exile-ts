@@ -12200,3 +12200,31 @@ chosen first, and a win threw the party away.
   `setStatus` still writes to it, but unseen.
 - `verify-screen.mjs` crops its screenshots to the canvas's bounding box
   rather than a fixed (12, 12), which the menu bar moved.
+
+**Main menu backdrop, and dialog text read the way the C++ reads it (2026-09-23).**
+- The main menu stands on the granite of the game's window frame (the 64×64
+  tile at the top left of `pixpats.png`, cut into a data URL by
+  `installBackdrop`), at 2× with a dark gradient over it. The cards are
+  nearly opaque, and the masthead text has a shadow so it reads.
+- **Dialog text: TinyXML condenses whitespace.** `readLabel` used to keep
+  the file's own line breaks, so every `<br/>` at the end of a source line
+  broke twice, and text written one sentence per source line broke at each
+  one. Now whitespace collapses to a space and only `<br/>` breaks. A
+  leading `<br/>` is kept too (the final `.trim()` had eaten it). This fixed
+  About Blades of Exile, Help › Combat (text had been hidden under its
+  picture) and the death dialog's paragraphs. Every other verify-screen shot
+  is pixel-identical.
+- **Texts with no height or width** are sized to their text, as
+  `cTextMsg::recalcRect` does (the lines plus 8, the widest line plus 16).
+  That needs fonts, so it's a second layout pass: `measureDialog` /
+  `measureDialogDef`, run once per definition as a dialog first opens. It
+  rebuilds rects from `fileRect` (the rect as written) and places the
+  relative controls again. **Gotcha:** a definition derived by dropping
+  controls (the compact Preferences) must be measured *before* it's copied
+  and the copy marked `measured`. Otherwise `rel-anchor='prev'` chains
+  re-anchor on different controls, which is what first broke Preferences.
+- **`<pane>`, a scroll pane** (`PaneControl`), for about-boe.xml's credits:
+  the children clipped to the pane with a scrollbar, scrolled by the mouse
+  wheel (`InputRouter.onWheel` → `DialogHost.handleWheel` →
+  `XmlDialog.onWheel`), a click on the bar (a page), or the arrow and Page
+  keys. A text in a pane isn't cut at its written height; the pane clips.

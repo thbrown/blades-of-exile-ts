@@ -38,6 +38,8 @@ export interface FontSpec {
 interface Base {
   name: string;
   rect: UiRect;
+  /** The rect as the file wrote it, before sizing and relative placement. */
+  fileRect: UiRect;
   /**
    * The positioning attributes, kept as read. `anchor` names the control this
    * one is placed against; `relative` is the two-axis mode list.
@@ -58,6 +60,15 @@ export interface TextControl extends Base {
   align: 'left' | 'right';
   underline: boolean;
   ellipsis: boolean;
+  /**
+   * Written without a height, or without a width: `cTextMsg::recalcRect`
+   * (message.cpp:139) sizes whichever is missing to the text — the height to
+   * the wrapped lines plus 8, the width to the longest line plus 16. That
+   * needs the fonts, so it happens in `measureDialog`, the first time the
+   * dialog opens.
+   */
+  autoHeight: boolean;
+  autoWidth: boolean;
 }
 
 export interface ButtonControl extends Base {
@@ -117,9 +128,20 @@ export interface GroupControl extends Base {
   leds: LedControl[];
 }
 
+/**
+ * `cScrollPane` — a window onto controls taller than it, with a scrollbar
+ * down its right edge. Its children's coordinates are the dialog's own, as
+ * the file writes them; the pane shows the slice of them it is scrolled to.
+ * Only about-boe.xml's credits use one in the player's dialogs.
+ */
+export interface PaneControl extends Base {
+  kind: 'pane';
+  children: DialogControl[];
+}
+
 export type DialogControl =
   | TextControl | ButtonControl | PictControl | LedControl
-  | FieldControl | LineControl | GroupControl;
+  | FieldControl | LineControl | GroupControl | PaneControl;
 
 export interface DialogDef {
   /** The button Enter presses, and the one Escape does. */
@@ -128,6 +150,8 @@ export interface DialogDef {
   controls: DialogControl[];
   /** Every control by name, groups' members included. */
   byName: Map<string, DialogControl>;
+  /** Whether `measureDialog` has sized the auto-height texts yet. */
+  measured?: boolean;
 }
 
 /** The three named text sizes (dialog.xsd's `size` union). */
@@ -172,9 +196,11 @@ function parseRect(el: Element): UiRect {
 
 function parseBase(el: Element): Base {
   const key = attr(el, 'def-key');
+  const rect = parseRect(el);
   return {
     name: attr(el, 'name') ?? '',
-    rect: parseRect(el),
+    rect,
+    fileRect: { ...rect },
     anchor: attr(el, 'anchor'),
     relAnchor: attr(el, 'rel-anchor') as Base['relAnchor'],
     relative: (attr(el, 'relative') ?? 'abs').split(/\s+/).filter((s) => s.length > 0),
@@ -196,7 +222,11 @@ function readLabel(el: Element): string {
   let out = '';
   for (let i = 0; i < el.childNodes.length; i++) {
     const node = el.childNodes[i]!;
-    if (node.nodeType === 3) out += node.nodeValue ?? '';
+    // TinyXML condenses whitespace (`SetCondenseWhiteSpace`, on by default),
+    // so a line break in the file is only a space: `<br/>` is the one thing
+    // that breaks a line. Keeping the file's own newlines doubled every
+    // `<br/>` that ends a source line.
+    if (node.nodeType === 3) out += (node.nodeValue ?? '').replace(/\s+/g, ' ');
     else if (node.nodeType === 1) {
       const child = node as Element;
       if (tag(child) === 'br') out += '\n';
@@ -206,8 +236,10 @@ function readLabel(el: Element): string {
       else if (tag(child) === 'key') out += attr(child, 'ref') ?? KEY_PLACEHOLDER;
     }
   }
-  // The files indent their markup, so a label spans lines with leading tabs.
-  return out.split('\n').map((line) => line.trim()).join('\n').trim();
+  // Spaces at either end of a line go (the markup is indented), but not the
+  // breaks themselves: a label that opens with `<br/>` starts on its second
+  // line, which is how about-boe.xml's credit columns line up.
+  return out.split('\n').map((line) => line.trim()).join('\n');
 }
 
 function parseLed(el: Element): LedControl {
@@ -233,6 +265,8 @@ function parseControl(el: Element): DialogControl | null {
         align: (attr(el, 'align') ?? 'left') as 'left' | 'right',
         underline: parseBool(attr(el, 'underline'), false),
         ellipsis: parseBool(attr(el, 'ellipsis'), false),
+        autoHeight: attr(el, 'height') === undefined,
+        autoWidth: attr(el, 'width') === undefined,
       };
     case 'button': {
       const textSize = attr(el, 'text-size');
@@ -279,9 +313,15 @@ function parseControl(el: Element): DialogControl | null {
       };
     case 'line':
       return { ...parseBase(el), kind: 'line', colour: attr(el, 'colour') ?? attr(el, 'color') };
+    case 'pane':
+      return {
+        ...parseBase(el),
+        kind: 'pane',
+        children: children(el).map(parseControl).filter((c): c is DialogControl => c !== null),
+      };
     default:
-      // stack/page/pane/tilemap/mapgroup belong to the scenario editor's
-      // dialogs, which this port doesn't run.
+      // stack/page/tilemap/mapgroup belong to the scenario editor's dialogs,
+      // which this port doesn't run.
       return null;
   }
 }
@@ -296,11 +336,7 @@ export function readDialogDef(root: Element): DialogDef {
     const control = parseControl(el);
     if (control) controls.push(control);
   }
-  for (const control of controls) {
-    setNaturalSize(control);
-    if (control.kind === 'group') control.leds.forEach(setNaturalSize);
-  }
-  resolvePositions(controls);
+  layOut(controls, null);
   const byName = new Map<string, DialogControl>();
   for (const control of controls) {
     if (control.name) byName.set(control.name, control);
@@ -314,6 +350,53 @@ export function readDialogDef(root: Element): DialogDef {
     controls,
     byName,
   };
+}
+
+/** Every control, groups' LEDs and panes' children included. */
+function everyControl(controls: DialogControl[]): DialogControl[] {
+  return controls.flatMap((c) => [
+    c,
+    ...(c.kind === 'group' ? c.leds : []),
+    ...(c.kind === 'pane' ? everyControl(c.children) : []),
+  ]);
+}
+
+/**
+ * Size every control and place the relative ones, starting from the rects as
+ * written. `textHeight` sizes the auto-height texts; with none (at parse time,
+ * where there are no fonts to measure with) they keep the height they were
+ * written with, which is none.
+ */
+function layOut(
+  controls: DialogControl[], textSize: ((c: TextControl) => { w: number; h: number }) | null,
+): void {
+  for (const control of everyControl(controls)) {
+    control.rect = { ...control.fileRect };
+    setNaturalSize(control);
+    if (textSize !== null && control.kind === 'text' && (control.autoHeight || control.autoWidth)) {
+      const { w, h } = textSize(control);
+      const { top, left } = control.rect;
+      control.rect = {
+        top, left,
+        bottom: control.autoHeight ? top + h : control.rect.bottom,
+        right: control.autoWidth ? left + w : control.rect.right,
+      };
+    }
+  }
+  resolvePositions(controls);
+  for (const c of controls) if (c.kind === 'pane') resolvePositions(c.children);
+}
+
+/**
+ * The second, measured layout pass: `cDialog::recalcRect` sizing each text
+ * that was written without a height or width (about-boe.xml's paragraphs and
+ * links), then placing again everything positioned after it. Done once per definition,
+ * since the result doesn't change.
+ */
+export function measureDialog(def: DialogDef, textSize: (c: TextControl) => { w: number; h: number }): void {
+  if (def.measured) return;
+  def.measured = true;
+  layOut(def.controls, textSize);
 }
 
 /** Each button type's artwork size (`cButton::btnRects`, button.cpp:247). */

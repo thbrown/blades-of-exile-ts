@@ -200,6 +200,24 @@ async function readFiles(list: FileList | File[]): Promise<{ name: string; data:
 }
 
 /**
+ * The main menu's backdrop: the granite of the game's own window frame, the
+ * 64×64 tile at the top left of `pixpats.png`, tiled behind the page. CSS can't
+ * tile part of an image, so it's cut out once into a data URL. Until it loads
+ * (or if it can't) the page keeps its plain dark ground.
+ */
+function installBackdrop(): void {
+  const img = new Image();
+  img.addEventListener('load', () => {
+    const tile = document.createElement('canvas');
+    tile.width = 64;
+    tile.height = 64;
+    tile.getContext('2d')!.drawImage(img, 0, 0, 64, 64, 0, 0, 64, 64);
+    document.body.style.setProperty('--menu-tile', `url(${tile.toDataURL()})`);
+  }, { once: true });
+  img.src = `${import.meta.env.BASE_URL}data/graphics/pixpats.png`;
+}
+
+/**
  * The page's masthead: the game's icon, then the title in the game's own
  * Dungeon face (the logo on the original's startup screen is the same letters)
  * over two lines on what this is.
@@ -250,6 +268,7 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
   const { official, added, saves, importScenarios, library, party } = opts;
   return new Promise((resolve) => {
     // The masthead sits above the card, not in it.
+    installBackdrop();
     const page = el('div', 'startup-page');
     // The party has a card of its own, between the masthead and the rest.
     const partyCard = el('div', 'startup startup-party-card');

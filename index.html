@@ -296,6 +296,28 @@
       .startup [hidden] {
         display: none !important;
       }
+      /* The main menu stands on the game's granite, darkened towards the
+         bottom so the cards and the title read over it. */
+      body.starting {
+        background:
+          linear-gradient(rgba(10, 10, 10, 0.45), rgba(10, 10, 10, 0.82)) fixed,
+          var(--menu-tile, none) 0 0 / 128px 128px repeat,
+          #1a1a1a;
+        image-rendering: pixelated;
+        min-height: 100vh;
+        box-sizing: border-box;
+      }
+      body.starting .startup {
+        background: rgba(30, 30, 30, 0.94);
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55);
+      }
+      body.starting .startup-masthead p {
+        color: #d0d0d0;
+        text-shadow: 0 1px 3px #000, 0 0 8px rgba(0, 0, 0, 0.8);
+      }
+      body.starting .startup-masthead a {
+        color: #b7cbef;
+      }
       .startup-page {
         width: 1210px;
         max-width: 100%;
@@ -341,7 +363,7 @@
         -webkit-background-clip: text;
         background-clip: text;
         -webkit-text-fill-color: transparent;
-        filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.8));
+        filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.9)) drop-shadow(0 0 10px rgba(0, 0, 0, 0.7));
       }
       .startup-masthead p {
         margin: 0;

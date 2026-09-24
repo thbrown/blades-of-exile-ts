@@ -2238,6 +2238,7 @@ async function main(): Promise<void> {
     },
     // The router speaks desktop coordinates. Dialogs and the map live there;
     // everything else is on the game screen and is offset from it.
+    onWheel: (dx, dy, deltaY) => dialogs.handleWheel(dx, dy, deltaY),
     onClick: (dx, dy) => {
       if (dialogs.handleClick(dx, dy)) return;
       // The map is a separate window in the original, so a click that lands on

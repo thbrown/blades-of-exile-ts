@@ -22,7 +22,7 @@ import { SheetStore } from '../render/sheets';
 import { ModalScreen } from './dialog';
 import { DialogControl, DialogDef } from './dialogXml';
 import { getDialogDef } from './dialogStore';
-import { XmlDialog } from './xmlDialog';
+import { XmlDialog, measureDialogDef } from './xmlDialog';
 
 export const PREFERENCES_DIALOG_DEFS = ['preferences', 'pref-autosave', 'confirm-reset-help'];
 
@@ -79,8 +79,12 @@ export interface PreferencesHost {
  * on the View menu as well, so they can always be reached. Built fresh each
  * time from the shared definition, which is left alone.
  */
-function browserPreferencesDef(compact: boolean): DialogDef {
+function browserPreferencesDef(ctx: CanvasRenderingContext2D, compact: boolean): DialogDef {
   const def = getDialogDef('preferences');
+  // Laid out for good before copying: the copy leaves controls out, and the
+  // ones placed relative to their predecessor would anchor on the wrong one
+  // if it were laid out again.
+  measureDialogDef(ctx, def);
   const top = def.byName.get('disp-head')!.rect.top;
   const cut = compact ? def.byName.get('spd-head')!.rect.top - top : 0;
   // The minimap group's LEDs are named '1', '2'… like the UI group's, so
@@ -99,7 +103,7 @@ function browserPreferencesDef(compact: boolean): DialogDef {
     if (c.name) byName.set(c.name, c);
     if (c.kind === 'group') for (const l of c.leds) byName.set(l.name, l);
   }
-  return { ...def, controls, byName };
+  return { ...def, controls, byName, measured: true };
 }
 
 /**
@@ -110,9 +114,9 @@ function browserPreferencesDef(compact: boolean): DialogDef {
 export async function preferencesDialog(
   ctx: CanvasRenderingContext2D, store: SheetStore, prefs: Preferences, host: PreferencesHost,
 ): Promise<Preferences | null> {
-  let dlg = new XmlDialog(ctx, store, browserPreferencesDef(false));
+  let dlg = new XmlDialog(ctx, store, browserPreferencesDef(ctx, false));
   const compact = dlg.frame.bottom - dlg.frame.top > desktop.h;
-  if (compact) dlg = new XmlDialog(ctx, store, browserPreferencesDef(true));
+  if (compact) dlg = new XmlDialog(ctx, store, browserPreferencesDef(ctx, true));
   for (const name of compact ? [...HIDDEN, ...DESKTOP_BLOCK] : HIDDEN) dlg.hide(name);
   if (!compact) {
     dlg.setText('other', 'Fit');

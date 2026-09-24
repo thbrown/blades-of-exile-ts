@@ -416,6 +416,8 @@ export interface ModalScreen {
   draw(): void;
   onClick(x: number, y: number): string | null;
   onKey(key: string): string | null;
+  /** The mouse wheel; true if it scrolled something. */
+  onWheel?(x: number, y: number, deltaY: number): boolean;
 }
 
 /**
@@ -541,6 +543,12 @@ export class DialogHost {
     const btn = this.current.buttonAt(x, y);
     if (btn) this.close(btn.name);
     return true;
+  }
+
+  /** The mouse wheel, for a screen that scrolls. True if a dialog is up (it eats the wheel). */
+  handleWheel(x: number, y: number, deltaY: number): boolean {
+    if (this.screen?.onWheel?.(x, y, deltaY)) this.redraw();
+    return this.screen !== null || this.current !== null;
   }
 
   handleKey(key: string): boolean {

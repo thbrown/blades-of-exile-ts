@@ -23,7 +23,8 @@ import { drawString, drawStringCentre, measureString, wrapLines } from '../rende
 import { tilePattern } from '../render/tiling';
 import {
   ButtonControl, ButtonType, DialogControl, DialogDef, FieldControl, FieldType, FontSpec,
-  KEY_PLACEHOLDER, LedControl, LedState, PictControl, PictType, TextControl, pictNaturalSize,
+  KEY_PLACEHOLDER, LedControl, LedState, PaneControl, PictControl, PictType, TextControl, measureDialog,
+  pictNaturalSize,
 } from './dialogXml';
 import { ModalScreen } from './dialog';
 import { drawPictAt } from './pict';
@@ -88,6 +89,45 @@ const COLOURS: Record<string, string> = {
 
 /** `cPict::getSheet(SHEET_FULL, n)` (pict.cpp:703) — the three named help pictures. */
 const FULL_SHEETS: Record<number, string> = { 1400: 'outhelp', 1401: 'fighthelp', 1402: 'townhelp' };
+
+/** The style a text control's own font gives, before any runtime colour. */
+function textStyle(font: FontSpec): { font: 'plain' | 'bold' | 'dungeon' | 'maidenword'; size: number; colour: string } {
+  return { font: font.font === 'bold' ? 'bold' : font.font, size: font.size, colour: DEF_TEXT };
+}
+
+/** A text's lines, wrapped to its written width when it has one. */
+function wrapControlText(ctx: CanvasRenderingContext2D, control: TextControl, text: string): string[] {
+  const style = textStyle(control.font);
+  const w = width(control.fileRect);
+  const lines: string[] = [];
+  for (const paragraph of text.split('\n')) {
+    lines.push(...(paragraph.length === 0 || w <= 0
+      ? [paragraph]
+      : wrapLines(ctx, paragraph, w, style)));
+  }
+  return lines;
+}
+
+/**
+ * Size a definition's texts written without a width or height, with the real
+ * fonts (`measureDialog`). Every dialog does this as it opens; code that
+ * derives a new definition from a shared one (the compact Preferences) calls
+ * it first, because the derived one can't be laid out again from the file.
+ */
+export function measureDialogDef(ctx: CanvasRenderingContext2D, def: DialogDef): void {
+  measureDialog(def, (c) => {
+    const lines = wrapControlText(ctx, c, c.text);
+    const style = textStyle(c.font);
+    return {
+      w: Math.max(0, ...lines.map((l) => measureString(ctx, l, style))) + 16,
+      h: lines.length * (c.font.size + 2) + 8,
+    };
+  });
+}
+
+/** A scroll pane's scrollbar width, and how far one wheel notch or arrow moves it. */
+const PANE_BAR = 8;
+const PANE_STEP = 12;
 
 /** cControl::drawFrame's two greys (control.cpp:443). */
 const FRAME_DARK = 'rgb(48,48,48)';
@@ -215,6 +255,10 @@ export class XmlDialog implements ModalScreen {
     readonly def: DialogDef,
     options: XmlDialogOptions = {},
   ) {
+    // Texts written without a height or width take the size of their text,
+    // measured with the real fonts, so everything placed after them moves to
+    // clear them (`cTextMsg::recalcRect`: the lines plus 8, the width plus 16).
+    measureDialogDef(ctx, def);
     // `cDialog::recalcRect` (dialog.cpp:425): the window is as big as its
     // furthest control plus a 6px margin. Controls positioned against the
     // dialog's own edges (`neg` with no anchor) are placed afterwards, since
@@ -557,6 +601,16 @@ export class XmlDialog implements ModalScreen {
       }
       return null;
     }
+    // A click on a pane's scrollbar pages it towards the click.
+    const pane = this.paneAt(x, y);
+    if (pane !== null && x >= this.screenRect(pane).right - PANE_BAR) {
+      const r = this.screenRect(pane);
+      const scroll = this.paneScroll.get(pane) ?? 0;
+      const range = this.paneRange(pane);
+      const thumbMid = r.top + (range > 0 ? height(r) * scroll / range : 0);
+      this.scrollPane(pane, (y < thumbMid ? -1 : 1) * (height(r) - PANE_STEP));
+      return null;
+    }
     const hit = this.controlAt(x, y);
     this.pressed = null;
     if (!hit) return null;
@@ -573,6 +627,14 @@ export class XmlDialog implements ModalScreen {
       if (key === 'Tab') { this.tab(false); return null; }
       if (key !== 'Escape' && key !== 'Enter' && key !== 'Return'
         && this.fieldKey(this.focus, key)) return null;
+    }
+    // The arrow keys and Page Up/Down scroll the dialog's pane, if it has one.
+    const pane = this.def.controls.find((c): c is PaneControl => c.kind === 'pane');
+    if (pane !== undefined) {
+      const step = key === 'ArrowUp' ? -PANE_STEP : key === 'ArrowDown' ? PANE_STEP
+        : key === 'PageUp' ? -(height(pane.rect) - PANE_STEP)
+          : key === 'PageDown' ? height(pane.rect) - PANE_STEP : 0;
+      if (step !== 0) { this.scrollPane(pane, step); return null; }
     }
     const esc = this.escBtn ?? this.def.escBtn;
     if (key === 'Escape' && esc) return this.activate(esc);
@@ -663,24 +725,90 @@ export class XmlDialog implements ModalScreen {
       ctx.fillRect(inner.left, inner.top, width(inner), height(inner));
     }
 
-    for (const control of this.def.controls) {
-      if (control.name && this.hidden.has(control.name)) continue;
-      switch (control.kind) {
-        case 'text': this.drawText(control); break;
-        case 'button': this.drawButton(control); break;
-        case 'pict': this.drawPict(control); break;
-        case 'led': this.drawLed(control); break;
-        case 'group':
-          for (const led of control.leds) {
-            if (!this.hidden.has(led.name)) this.drawLed(led);
-          }
-          break;
-        case 'field': this.drawField(control); break;
-        case 'line': this.drawLine(control); break;
-        default: break;
-      }
-      if (control.name && this.labels.has(control.name)) this.drawLabel(control);
+    for (const control of this.def.controls) this.drawControl(control);
+  }
+
+  private drawControl(control: DialogControl): void {
+    if (control.name && this.hidden.has(control.name)) return;
+    switch (control.kind) {
+      case 'text': this.drawText(control); break;
+      case 'button': this.drawButton(control); break;
+      case 'pict': this.drawPict(control); break;
+      case 'led': this.drawLed(control); break;
+      case 'group':
+        for (const led of control.leds) {
+          if (!this.hidden.has(led.name)) this.drawLed(led);
+        }
+        break;
+      case 'field': this.drawField(control); break;
+      case 'line': this.drawLine(control); break;
+      case 'pane': this.drawPane(control); break;
+      default: break;
     }
+    if (control.name && this.labels.has(control.name)) this.drawLabel(control);
+  }
+
+  // ------------------------------------------------------- scroll panes
+
+  /** How far each pane is scrolled, in pixels. */
+  private paneScroll = new Map<PaneControl, number>();
+
+  /** How far a pane can scroll: its contents' bottom past its own. */
+  private paneRange(pane: PaneControl): number {
+    // A text runs to its last line, whatever height the file gave it: the
+    // credits' columns are written a guessed "10 times the number of lines".
+    const bottom = Math.max(pane.rect.bottom, ...pane.children.map((c) => (c.kind === 'text'
+      ? c.rect.top + this.wrapText(c, c.text).length * (c.font.size + 2)
+      : c.rect.bottom)));
+    return Math.max(0, bottom - pane.rect.bottom);
+  }
+
+  private scrollPane(pane: PaneControl, by: number): void {
+    const to = Math.max(0, Math.min(this.paneRange(pane), (this.paneScroll.get(pane) ?? 0) + by));
+    this.paneScroll.set(pane, to);
+  }
+
+  private paneAt(x: number, y: number): PaneControl | null {
+    for (const c of this.def.controls) {
+      if (c.kind !== 'pane') continue;
+      const r = this.screenRect(c);
+      if (x >= r.left && x < r.right && y >= r.top && y < r.bottom) return c;
+    }
+    return null;
+  }
+
+  /** The children, clipped to the pane and moved up by its scroll; a scrollbar down the right. */
+  private drawPane(pane: PaneControl): void {
+    const { ctx } = this;
+    const r = this.screenRect(pane);
+    const scroll = this.paneScroll.get(pane) ?? 0;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(r.left, r.top, width(r), height(r));
+    ctx.clip();
+    ctx.translate(0, -scroll);
+    for (const child of pane.children) this.drawControl(child);
+    ctx.restore();
+    const range = this.paneRange(pane);
+    if (range <= 0) return;
+    const track = { left: r.right - PANE_BAR, top: r.top, w: PANE_BAR, h: height(r) };
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(track.left, track.top, track.w, track.h);
+    const thumbH = Math.max(12, Math.round(track.h * track.h / (track.h + range)));
+    const thumbTop = track.top + Math.round((track.h - thumbH) * scroll / range);
+    ctx.fillStyle = 'rgb(160,160,160)';
+    ctx.fillRect(track.left + 1, thumbTop, track.w - 2, thumbH);
+  }
+
+  /**
+   * The mouse wheel over a pane scrolls it. True if it did anything — the
+   * host then redraws and keeps the page from scrolling too.
+   */
+  onWheel(x: number, y: number, deltaY: number): boolean {
+    const pane = this.paneAt(x, y);
+    if (pane === null) return false;
+    this.scrollPane(pane, Math.sign(deltaY) * PANE_STEP);
+    return true;
   }
 
   /**
@@ -751,6 +879,11 @@ export class XmlDialog implements ModalScreen {
     ctx.restore();
   }
 
+  /** A text's lines, wrapped to its width when it has one. */
+  private wrapText(control: TextControl, text: string): string[] {
+    return wrapControlText(this.ctx, control, text);
+  }
+
   private drawText(control: TextControl): void {
     const rect = this.screenRect(control);
     if (control.framed) this.drawFrame(rect);
@@ -761,14 +894,10 @@ export class XmlDialog implements ModalScreen {
     // blocks in the game's dialogs their shape. One written with no width or
     // height is sized to its text instead (`cTextMsg::recalcRect`,
     // message.cpp:139): it does not wrap, and nothing is cut off below it.
-    const fixedWidth = width(rect) > 0;
-    const fixedHeight = height(rect) > 0;
-    const lines: string[] = [];
-    for (const paragraph of text.split('\n')) {
-      lines.push(...(paragraph.length === 0 || !fixedWidth
-        ? [paragraph]
-        : wrapLines(this.ctx, paragraph, width(rect), style)));
-    }
+    // Nothing in a scroll pane is cut short; the pane does the clipping.
+    const inPane = this.def.controls.some((c) => c.kind === 'pane' && c.children.includes(control));
+    const fixedHeight = height(rect) > 0 && !control.autoHeight && !inPane;
+    const lines = this.wrapText(control, text);
     const lineHeight = style.size + 2;
     let y = rect.top;
     for (const line of lines) {

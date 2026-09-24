@@ -47,6 +47,8 @@ export interface InputHandlers {
    */
   onDrag?(x: number, y: number): void;
   onRelease?(x: number, y: number): void;
+  /** The mouse wheel over the canvas; true if it was used, so the page doesn't scroll. */
+  onWheel?(x: number, y: number, deltaY: number): boolean;
 }
 
 export class InputRouter {
@@ -63,6 +65,10 @@ export class InputRouter {
     this.canvas.addEventListener('mousedown', (ev) => this.onMouseDown(ev));
     this.canvas.addEventListener('mousemove', (ev) => this.onMouseMove(ev));
     this.canvas.addEventListener('mouseleave', () => this.handlers.onHoverEnd?.());
+    this.canvas.addEventListener('wheel', (ev) => {
+      const at = this.toCanvas(ev);
+      if (this.handlers.onWheel?.(at.x, at.y, ev.deltaY)) ev.preventDefault();
+    }, { passive: false });
     window.addEventListener('mousemove', (ev) => {
       const at = this.toCanvas(ev);
       this.handlers.onDrag?.(at.x, at.y);
