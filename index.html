@@ -36,6 +36,16 @@
         /* No top padding: the menu bar sits flush against the top edge. */
         padding: 0 12px 12px;
       }
+      /* In play the canvas is the whole window below the menu bar: the game
+         tiles its own background over all of it, so the page's padding and
+         gap would only be a dark frame around it. */
+      body.playing {
+        padding: 0;
+        gap: 0;
+      }
+      body.playing #game-menu-bar {
+        margin: 0;
+      }
       #status {
         margin: 0;
         font-size: 13px;

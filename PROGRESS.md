@@ -12228,3 +12228,9 @@ chosen first, and a win threw the party away.
   wheel (`InputRouter.onWheel` → `DialogHost.handleWheel` →
   `XmlDialog.onWheel`), a click on the bar (a page), or the arrow and Page
   keys. A text in a pane isn't cut at its written height; the pane clips.
+- **No frame around the play screen (2026-09-23).** `body.playing` drops the
+  body's padding and flex gap, and the menu bar's negative margins, so the
+  canvas runs from edge to edge below the menu bar. The game tiles its own
+  background over the whole canvas. `measureRoom` reads the padding, so the
+  fit follows (verify-screen's DESKTOP step: the desktop is now 1280 wide at a
+  1280 viewport, and nothing scrolls).
