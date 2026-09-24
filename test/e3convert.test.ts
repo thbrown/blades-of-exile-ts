@@ -85,6 +85,18 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(krizsan.presetFields.length).toBeGreaterThan(0);
   });
 
+  it("has E3's conversations, keyed to its people", () => {
+    // E3 personalities are 1-based; the fort's official (20) is Anaximander,
+    // the engine's 19, in talk block 1.
+    const official = scen.towns[21]!.creatures.find((c) => c.number === 33)!;
+    expect(official.personality).toBe(19);
+    const who = scen.townTalk[1]!.people[9]!;
+    expect(who.title).toBe('Anaximander');
+    expect(who.job).toMatch(/^"It is my job to give you instruction/);
+    const nodes = scen.townTalk[1]!.talkNodes.filter((n) => n.personality === 19);
+    expect(nodes.map((n) => n.link1)).toContain('surf');
+  });
+
   it('places the fort\'s people', () => {
     const fort = scen.towns[21]!;
     expect(fort.creatures.filter((c) => c.number > 0).length).toBeGreaterThan(40);

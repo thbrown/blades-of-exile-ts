@@ -11,8 +11,9 @@
 
 import {
   attitudeStrs, dmgNames, fieldNames, itemAbils, itemTypes, itemUses, monstAbilTypes, monstAbils,
-  monstMelee, monstMissiles, monstSummons, pcStatus, raceNames, skillNames, spellPats,
+  monstMelee, monstMissiles, monstSummons, pcStatus, raceNames, skillNames, spellPats, talkNodes,
 } from '../../src/data/enumTags';
+import type { Speech } from '../../src/data/talking';
 import type { Item } from '../../src/data/item';
 import { NUM_DAMAGE_TYPES, type Monster } from '../../src/data/monster';
 import { MonstAbil, MonstAbilCat, MonstSummon, abilityCategory } from '../../src/data/monsterAbility';
@@ -179,4 +180,33 @@ ${it.desc ? `        <description>${esc(it.desc)}</description>\n` : ''}    </it
 
 export function itemsXml(items: Item[]): string {
   return `${XML_HEAD}<items boes="2.0.0">\n${items.map((it, i) => itemXml(it, i)).join('')}</items>\n`;
+}
+
+function cdata(s: string): string {
+  return `<![CDATA[${s.replace(/]]>/g, ']]]]><![CDATA[>')}]]>`;
+}
+
+/**
+ * `talk<n>.xml`, the inverse of `readDialogueFromXml`: all ten personalities
+ * (ids `town*10 …`), then the nodes. Text goes in CDATA, as the bundled files
+ * have it; the reader trims it either way.
+ */
+export function dialogueXml(talk: Speech, townNum: number): string {
+  const people = talk.people.map((p, i) => `    <personality id="${townNum * 10 + i}">
+        <title>${cdata(p.title)}</title>
+        <look>${cdata(p.look)}</look>
+        <name>${cdata(p.name)}</name>
+        <job>${cdata(p.job)}</job>
+        <unknown>${cdata(p.dunno)}</unknown>
+    </personality>
+`).join('');
+  const nodes = talk.talkNodes.map((n) => `    <node for="${n.personality}">
+        <keyword>${esc(n.link1)}</keyword>
+        <keyword>${esc(n.link2)}</keyword>
+        <type>${tagOf(talkNodes, n.type, 'talk node type')}</type>
+${n.extras.map((x) => `        <param>${x}</param>\n`).join('')}        <text>${cdata(n.str1)}</text>
+        <text>${cdata(n.str2)}</text>
+    </node>
+`).join('');
+  return `${XML_HEAD}<dialogue boes="2.0.0">\n${people}${nodes}</dialogue>\n`;
 }

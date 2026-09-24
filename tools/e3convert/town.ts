@@ -58,9 +58,12 @@ export interface E3CreatureStart {
   number: number; startAttitude: number; startLoc: LegacyLoc;
   mobile: number; timeFlag: number; extra1: number; extra2: number;
   spec1: number; spec2: number;
-  /** +10 … +12; +10/+11 are 255 in every record seen. */
-  unknown: number[];
-  /** +13: distinct for each named NPC, shared by guards. Probably the conversation. */
+  /** +10/+11, an int16; -1 in every record seen. */
+  unknown10: number;
+  /**
+   * +12/+13, big-endian: the conversation. Personality `p` is slot `p % 10`
+   * of talk block `120 + floor(p / 10)` in the string table (FORMATS.md).
+   */
   personality: number;
 }
 
@@ -114,7 +117,7 @@ function readCreature(r: LegacyReader): E3CreatureStart {
     number: r.u8(), startAttitude: r.u8(), startLoc: r.loc(),
     mobile: r.u8(), timeFlag: r.u8(), extra1: r.u8(), extra2: r.u8(),
     spec1: r.u8(), spec2: r.u8(),
-    unknown: r.u8s(3), personality: r.u8(),
+    unknown10: r.i16(), personality: r.i16(),
   };
 }
 

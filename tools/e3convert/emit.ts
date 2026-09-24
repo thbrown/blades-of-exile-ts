@@ -18,7 +18,8 @@ import { readNeResources, readStringTable } from './ne';
 import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor } from './outdoor';
 import { readE3Items, readE3Monsters, readE3Start, readE3Terrain, type E3TerrainType } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3Town } from './town';
-import { esc, itemsXml, monstersXml } from './xmlWrite';
+import { dialogueXml, esc, itemsXml, monstersXml } from './xmlWrite';
+import { readE3Talk } from './talk';
 
 const ATTITUDE = ['docile', 'hostile-a', 'friendly', 'hostile-b'];
 const BLOCKAGE = ['none', 'sight', 'monsters', 'move', 'move-and-shoot', 'move-and-sight'];
@@ -132,12 +133,14 @@ function townCreatures(t: E3Town): E3CreatureStart[] {
 }
 
 function creatureXml(c: E3CreatureStart, id: number): string {
-  // TODO(E3-2): conversations (`personality`), and the appear/disappear
-  // conditions (`time_flag`, `spec1`/`spec2`) once E3's flags are mapped.
+  // TODO(E3-2): the appear/disappear conditions (`time_flag`, `spec1`/`spec2`)
+  // once E3's flags are mapped.
+  // E3's personalities are 1-based (talk.ts), the engine's 0-based.
   return `    <creature id="${id}">
         <type>${c.number}</type>
         <attitude>${ATTITUDE[c.startAttitude] ?? 'docile'}</attitude>
         <mobility>${c.mobile}</mobility>
+        <personality>${c.personality > 0 ? c.personality - 1 : -1}</personality>
     </creature>
 `;
 }
@@ -297,13 +300,15 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
     write(`${base}.map`, sectorMap(z));
     write(`${base}.spec`, '');
   });
+  const talkBlocks = readE3Talk(strings);
   towns.forEach((t) => {
     const base = `towns/town${t.number}`;
     write(`${base}.xml`, townXml(t, townName(strings, t.number)));
     write(`${base}.map`, townMap(t));
     write(`${base}.spec`, '');
-    // TODO(E3-2): conversations.
-    write(`towns/talk${t.number}.xml`, `${XML_HEAD}<dialogue boes="2.0.0">\n</dialogue>\n`);
+    // Talk block b is talk<b>.xml, whichever town its people live in.
+    const talk = talkBlocks[t.number];
+    write(`towns/talk${t.number}.xml`, talk ? dialogueXml(talk, t.number) : `${XML_HEAD}<dialogue boes="2.0.0">\n</dialogue>\n`);
   });
   const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(e3Dir)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));

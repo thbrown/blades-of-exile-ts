@@ -53,6 +53,44 @@ if (start.townNum !== 21 || start.townLoc.x !== 59 || start.townLoc.y !== 6) {
   errors.push(`a new game should start in Fort Emergence (21) at 59,6: ${JSON.stringify(start)}`);
 }
 
+// A conversation: someone in the fort who talks, and a keyword followed.
+const talk = await page.evaluate(async () => {
+  const s = window.__session;
+  const sc = window.__screen;
+  const who = s.univ.town.monsters.find((m) => m.isAlive && m.personality >= 0 && m.isFriendly);
+  if (!who) return { error: 'no one in the fort will talk' };
+  const home = { ...s.univ.party.townLoc };
+  s.univ.party.townLoc = { x: who.curLoc.x, y: who.curLoc.y + 1 };
+  s.center = { ...s.univ.party.townLoc };
+  await s.talkTo(who.curLoc);
+  window.__redraw();
+  const opening = s.talk?.str1;
+  // Ask about the job, as a player would: the greeting often names no topics.
+  const job = s.talk?.words.find((w) => w.preset && /job/i.test(w.word));
+  if (job) s.chooseTalkNode(job.node);
+  window.__redraw();
+  const kw = s.talk?.words.find((w) => !w.preset && w.rect);
+  let followed = null;
+  if (kw) {
+    const hit = sc.talkScreen.wordAt(s.talk, (kw.rect.left + kw.rect.right) / 2, (kw.rect.top + kw.rect.bottom) / 2);
+    const before = s.talk?.str1;
+    if (hit) s.chooseTalkNode(hit.node);
+    window.__redraw();
+    if (hit) followed = { word: kw.word, reply: s.talk?.str1?.slice(0, 60), changed: s.talk?.str1 !== before };
+  }
+  const result = { title: s.talk?.title, opening: opening?.slice(0, 60), keywords: s.talk?.words.filter((w) => !w.preset).length, followed };
+  return { result, home };
+});
+console.log('TALK:', JSON.stringify(talk.result ?? talk));
+await shot('01c-talk');
+if (!talk.result?.title || !talk.result.followed?.changed) errors.push(`talking in the fort failed: ${JSON.stringify(talk)}`);
+await page.evaluate((home) => {
+  const s = window.__session;
+  s.chooseTalkNode(-14); // Done
+  s.univ.party.townLoc = home; s.center = { ...home };
+  window.__redraw();
+}, talk.home);
+
 // Walk out of the fort: a breadth-first path to the nearest square off the
 // town's active area, through doors (moving into one opens it, and the step is
 // then taken again).
