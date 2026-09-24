@@ -8,7 +8,7 @@
  * | 0–39 | large, 64×64 | 5,904 |
  * | 40–79 | medium, 48×48 | 3,532 |
  * | 80–119 | small, 32×32 | 1,724 |
- * | 120–199 | no terrain | 640 |
+ * | 120–199 | a village: no terrain, built at load | 640 |
  *
  * Big-endian, like OUTDOOR.DAT. The common record is BoE's `town_record_type`
  * with smaller arrays and no special nodes (E3's scripting is code). See
@@ -20,7 +20,7 @@ import { LegacyReader, type LegacyLoc, type LegacyRect } from '../../src/fileio/
 export const E3_TOWN_COUNT = 200;
 export const E3_TOWN_RECORD_SIZE = 0x422;
 
-export type E3TownKind = 'large' | 'medium' | 'small' | 'variant';
+export type E3TownKind = 'large' | 'medium' | 'small' | 'village';
 
 interface Geometry { kind: E3TownKind; size: number; rooms: number; creatures: number; bytes: number }
 
@@ -28,7 +28,7 @@ const GEOMETRY: Geometry[] = [
   { kind: 'large', size: 64, rooms: 12, creatures: 60, bytes: 0x1710 },
   { kind: 'medium', size: 48, rooms: 10, creatures: 40, bytes: 0xdcc },
   { kind: 'small', size: 32, rooms: 4, creatures: 30, bytes: 0x6bc },
-  { kind: 'variant', size: 0, rooms: 0, creatures: 30, bytes: 0x280 },
+  { kind: 'village', size: 0, rooms: 0, creatures: 30, bytes: 0x280 },
 ];
 
 function geometry(town: number): Geometry {
@@ -64,8 +64,11 @@ export interface E3CreatureStart {
   personality: number;
 }
 
-/** The 640-byte block of records 120–199. */
-export interface E3TownVariant {
+/**
+ * The 640-byte block of records 120–199, the villages. Their maps are built at
+ * load from building blocks (`FUN_1040_1600`; FORMATS.md).
+ */
+export interface E3Village {
   creatures: E3CreatureStart[];
   /** 15 × 8 bytes; the loader byte-swaps the first two words. */
   entries: { words: number[]; bytes: number[] }[];
@@ -96,14 +99,14 @@ export interface E3Town {
   presetFields: E3PresetField[];
   /** The four byte-swapped words that end the record. */
   tail: number[];
-  /** terrain[x][y]; empty for a variant record. */
+  /** terrain[x][y]; empty for a village. */
   terrain: number[][];
   roomRects: LegacyRect[];
   roomNames: string[];
   creatures: E3CreatureStart[];
-  /** lighting[row][x], one bit per tile; empty for a variant record. */
+  /** lighting[row][x], one bit per tile; empty for a village. */
   lightingMap: number[][];
-  variant: E3TownVariant | null;
+  village: E3Village | null;
 }
 
 function readCreature(r: LegacyReader): E3CreatureStart {
@@ -151,14 +154,14 @@ export function readE3Town(data: Uint8Array, town: number): E3Town {
   r.expect(start, E3_TOWN_RECORD_SIZE, 'E3 town record');
 
   const blockStart = r.pos;
-  if (g.kind === 'variant') {
-    const variant: E3TownVariant = {
+  if (g.kind === 'village') {
+    const village: E3Village = {
       creatures: Array.from({ length: g.creatures }, () => readCreature(r)),
       entries: Array.from({ length: 15 }, () => ({ words: r.i16s(2), bytes: r.u8s(4) })),
       rects: Array.from({ length: 10 }, () => ({ rect: r.rect(), bytes: r.u8s(2) })),
     };
-    r.expect(blockStart, g.bytes, 'E3 town variant block');
-    return { ...head, terrain: [], roomRects: [], roomNames: [], creatures: [], lightingMap: [], variant };
+    r.expect(blockStart, g.bytes, 'E3 village block');
+    return { ...head, terrain: [], roomRects: [], roomNames: [], creatures: [], lightingMap: [], village };
   }
   const terrain = Array.from({ length: g.size }, () => r.u8s(g.size));
   const roomRects = r.rects(g.rooms);
@@ -166,7 +169,7 @@ export function readE3Town(data: Uint8Array, town: number): E3Town {
   const creatures = Array.from({ length: g.creatures }, () => readCreature(r));
   const lightingMap = Array.from({ length: g.size / 8 }, () => r.u8s(g.size));
   r.expect(blockStart, g.bytes, `E3 ${g.kind} town block`);
-  return { ...head, terrain, roomRects, roomNames, creatures, lightingMap, variant: null };
+  return { ...head, terrain, roomRects, roomNames, creatures, lightingMap, village: null };
 }
 
 export function readE3Towns(data: Uint8Array): E3Town[] {

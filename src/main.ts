@@ -166,6 +166,15 @@ function scenarioFromQuery(): string | null {
 const BUNDLED_SCENARIOS = ['valleydy', 'stealth', 'zakhazi', 'busywork'];
 
 /**
+ * Scenarios the dev server may have in `public/scenarios` but the repo never
+ * ships — Exile 3, which `tools/e3convert/convert.ts` writes from the user's
+ * own copy of the game (gitignored). Fetched like a bundled one, reached only
+ * by `?scenario=`, and never listed on the startup screen, which can't know
+ * whether the files are there.
+ */
+const LOCAL_SCENARIOS = ['exile3'];
+
+/**
  * A save for a scenario other than the one running can't be applied in place —
  * the whole world would have to be re-fetched. Instead the slot is parked here
  * and the page reopened on the right scenario, which `main` then notices.
@@ -512,7 +521,7 @@ async function main(): Promise<void> {
   // A bundled scenario is fetched file by file; anything else is a package
   // the player installed, already whole in IndexedDB.
   const bundledUrl = `${import.meta.env.BASE_URL}scenarios/${name}/`;
-  const isBundled = BUNDLED_SCENARIOS.includes(name);
+  const isBundled = BUNDLED_SCENARIOS.includes(name) || LOCAL_SCENARIOS.includes(name);
   let scen: Scenario;
   let packageSheets: LoadedPackage['sheets'] = [];
   let installedPreview = true;

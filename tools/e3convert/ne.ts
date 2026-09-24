@@ -137,3 +137,27 @@ export function readSounds(resources: NeResource[]): Map<number, Uint8Array> {
   }
   return out;
 }
+
+/**
+ * NE segment `n` (1-based, as the segment table numbers them), as loaded.
+ * Ghidra names segment n `0x1000 + (n-1)*8`, so segment 33 is `1100:` and the
+ * automatic data segment (DGROUP, `DS`) is 48, `1178:`.
+ */
+export function readNeSegment(exe: Uint8Array, n: number): Uint8Array {
+  const v = new DataView(exe.buffer, exe.byteOffset, exe.byteLength);
+  const ne = v.getUint16(0x3c, true);
+  const count = v.getUint16(ne + 0x1c, true);
+  if (n < 1 || n > count) throw new Error(`no NE segment ${n} (the file has ${count})`);
+  const table = ne + v.getUint16(ne + 0x22, true);
+  const align = v.getUint16(ne + 0x32, true);
+  const entry = table + 8 * (n - 1);
+  const off = v.getUint16(entry, true) << align;
+  const len = v.getUint16(entry + 2, true) || 0x10000;
+  return exe.subarray(off, off + len);
+}
+
+/** The automatic data segment's number (DGROUP, what `DS` points at). */
+export function neAutoDataSegment(exe: Uint8Array): number {
+  const v = new DataView(exe.buffer, exe.byteOffset, exe.byteLength);
+  return v.getUint16(v.getUint16(0x3c, true) + 0x0e, true);
+}

@@ -21,3 +21,7 @@ tools/cppharness/scendumps/
 # Ghidra project for EXILE3.EXE (tools/e3convert/ghidra/README.md) — derived
 # from the commercial binary, regenerable in 20 seconds
 tools/e3convert/ghidra/project/
+
+# Exile 3 converted by tools/e3convert/convert.ts — the commercial game's
+# content, never committed
+public/scenarios/exile3/

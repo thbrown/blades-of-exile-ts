@@ -46,6 +46,41 @@ encounter. There is exactly one `push 5051` in the code, at file offset
 - Auto-analysis found only 643 functions and missed this one. Expect to create
   functions by hand. `ghidra/DecompAll.java` does it for every prologue.
 
+## Tables in the EXE — pinned (`tables.ts`)
+
+E3 keeps its terrain types in code and data, not in a file:
+
+- **Pictures**: `terrain_pic[256]` int16 at `1100:00a0` (segment 33).
+  0–239 are TER1–TER5, 50 to a sheet. 300–314 are animations in TERANIM,
+  where animation `k` is row `k%5` with its 4 frames in columns
+  `4*floor(k/5)…`, BoE's teranim layout.
+- **Blockage**: `u8[256]` at `DS:1c7e`. `FUN_1080_14f9` blocks movement at
+  ≥ 3; the scale is BoE's `eTerObstruct`.
+- **Names**: string `301 + id`. Monster names start at 601.
+- **Boats**: a list in the move code, not a table. A boat can enter 22, 24–35,
+  50–64, 71, 74, 75 and 86.
+- **Doors**: two jump tables. Moving into a terrain (`FUN_10c0_0c97`, cases at
+  `10c0:186a`) does the following for each wall style
+  (base 101 stone, 118 basalt, 133 adobe):
+  - `base` is a secret door drawn as wall. Bumping it becomes `base+1`, a
+    passable wall with the door showing, and plays sound 58.
+  - `base+2` is a closed door, and becomes `base+6` (open).
+  - `base+3`…`base+5` are locked and ask "This door is locked. What do you
+    do?" (dialog 993).
+  - Picking (`FUN_10d8_3f67`, cases at `10d8:4182`) works only on `base+3`,
+    succeeding when the roll is over 35, and adds 3.
+  - Terrains 7, 10, 13 and 16 (blockage 1) are walk-through cave walls.
+- **New game**: `FUN_1010_6b20` calls `start_town_mode(21, 9)`, which puts the
+  party in Fort Emergence at the location held in `DS:05f0`, i.e. (59, 6).
+  `start_town_mode` is `FUN_10d8_0107`. A direction below 9 means
+  `start_locs[dir]`.
+- **Talk text**: RT_STRING, with fields separated by `^` (e.g. `…^0^0^99`).
+  Not yet parsed.
+
+Ghidra can't recover these `switch` statements: it reports "Could not recover
+jumptable". The table is `n` case values followed by `n` target offsets, and
+`Disasm.java <addr> <out> <count>` lists the arms.
+
 ## Byte order: big-endian — confirmed
 
 Both .DAT files are the Mac original's data. The Windows game byte-swaps
@@ -94,13 +129,27 @@ by `t`:
 | 0–39 | large | 5,904 | terrain 64×64, 12 room rects, 12 room names × 30 B, 60 creatures × 14 B, lighting 8×64 |
 | 40–79 | medium | 3,532 | terrain 48×48, 10 rects, 10 names, 40 creatures, lighting 6×48 |
 | 80–119 | small | 1,724 | terrain 32×32, 4 rects, 4 names, 30 creatures, lighting 4×32 |
-| 120–199 | variant | 640 | 30 creatures, 15 × 8 B (first two words swapped), 10 × {rect, 2 B}. **No terrain.** |
+| 120–199 | village | 640 | 30 creatures, 15 building placements × 8 B, 10 × {rect, 2 B}. **No terrain**: built at load, see below. |
 
 These sum to exactly 709,200. The loader sets `town_size` from the same
-ranges, and treats 120+ as medium. **Open**: what a variant record is. Towns
-also change state without one: records 0 and 1 are the same town before and
-after ("Small Shipyard" becomes "Ruined Shipyard"). `FUN_1040_1600` runs after
-a variant loads.
+ranges, and treats 120+ as medium (48×48).
+
+**Records 120–199 are the villages** (Delan, Delis, Pergies, Inn of Blades …;
+about 58 named, the rest "Name"). Their maps are *assembled* by
+`FUN_1040_1600` after loading: fill 48×48 with grass (cave floor underground),
+then stamp up to 15 8×8 building blocks. Each placement is
+`{i16 block, i16 condition, u8 rotation/flip, …}`. The block is cut from a
+template map (block `b` is at `((b%8)*8, (b/8)*8)`), and rotation `r%4`
+quarter-turns with `r>=4` mirrored. Then it scatters random variants: grass
+2→3/4, 0→1, 84→85, 91→92, 36→37. **Open**: where the template map lives, and
+the placement fields past the block index. Because of the random scatter, a
+village's grass is re-rolled on every load (cosmetic, and it uses the RNG).
+
+Towns also change state without a village record: records 0–3 are Krizsan and
+its later states (0 and 1 differ in "Small Shipyard" vs "Ruined Shipyard").
+
+**Town names** are string `30001 + 20t`, the first of a 20-string block per
+town.
 
 **Common record, 1,058 B.** The loader reads it to `DS:0004`, so the addresses
 in the disassembly are these offsets + 4.

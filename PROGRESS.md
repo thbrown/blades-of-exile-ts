@@ -877,7 +877,30 @@ Notes for M2 implementer:
     towns, plus 80 terrain-less "variant" records whose purpose is open.
     FORMATS.md lists every field still marked **open**. None of them block
     E3-1 (walkable overworld): terrain, exits and zone names are solid.
-- [ ] **E3-1 — Walkable overworld** (needs M1)
+- [x] **E3-1 — Walkable overworld** (2026-09-24)
+  - `npx vite-node tools/e3convert/convert.ts` writes `public/scenarios/exile3/`
+    (gitignored). Open it with `?scenario=exile3`. `main.ts` has a
+    `LOCAL_SCENARIOS` list for this: fetched like the bundled ones, never on the
+    startup screen.
+  - What converts:
+    - terrain from the EXE's own tables: name, picture, blockage, boats, and
+      doors as `step-change`/`unlock` specials;
+    - the four graphics sheets;
+    - all 90 zones, with names, area names and town entrances;
+    - all 200 towns' maps, entrances, bounds and lighting.
+  - The villages (120–199) are bare grass until the block builder is ported.
+  - A new game starts in Fort Emergence at (59,6) as E3's does.
+  - Checks:
+    - `test/e3convert.test.ts` converts and loads;
+    - `scripts/verify-e3.mjs` walks out of the fort, through its doors, onto
+      the world;
+    - `tools/e3convert/renderWorld.ts` draws the whole world to one PNG to look
+      at. The world joins up seamlessly across zones, which is the check that
+      orientation and pictures are right.
+  - Not yet:
+    - `terrain.xml`'s light, step sounds, trims and `fly`;
+    - E3's own lock-pick roll (`TODO(E3-3)`);
+    - signs.
 - [ ] **E3-2 — Towns, NPCs, shops, dialogue** (needs M2–M3)
 - [ ] **E3-3 — Quest logic, incrementally** (needs M4+)
 
@@ -898,7 +921,9 @@ Notes for M2 implementer:
 
 ## Findings / gotchas log
 
-- (2026-09-23) **E3 data is big-endian and `[x][y]`.** Read it with `LegacyReader(data, true)`. The terrain byte is `x*48 + y`, *not* the row-major order `../exile3-mapping/outdoor-to-json.js` assumed, so its OUTDOOR.json is transposed. Everything that Ghidra shows as `DS:-0x500e + …` is a zone field. The town record is loaded at `DS:0004`, so subtract 4.
+- (2026-09-23) **E3 data is big-endian and `[x][y]`.** Read it with `LegacyReader(data, true)`. The terrain byte is `x*48 + y`. *(Corrected 2026-09-24: I first claimed `outdoor-to-json.js`'s output was transposed, but `display.js` draws `map[i*48+j]` at column `i`, so it was right all along.)* Everything that Ghidra shows as `DS:-0x500e + …` is a zone field. The town record is loaded at `DS:0004`, so subtract 4.
+- (2026-09-24) **TOWN.DAT records 120–199 are villages, not variants**: named towns (Delan, Pergies, Inn of Blades …) whose maps E3 builds at load from 8×8 building blocks (`FUN_1040_1600`). A record with no terrain is not a spare. Town names are string `30001 + 20t`.
+- (2026-09-24) E3 has no terrain property data file. Pictures are a table in segment 33, blockage a table in DGROUP, and doors and boats are `switch`es in code (FORMATS.md, "Tables in the EXE"). Ghidra can't recover those `switch`es: the case table is `n` values then `n` targets, read as plain data, and `Disasm.java`'s count form lists the arms.
 - (2026-09-23) Ghidra's decompiler drops the arguments of Win16 imports (`_llseek`, `_lread`, `OPENFILE`), and the arithmetic that sizes a record disappears with them. `tools/e3convert/ghidra/Disasm.java` gives the listing where the `PUSH`es are visible. The Win16 far prologue is `8c d0 90 45 55 8b ec` (`mov ax,ss`), not `8c d8`.
 
 - (2026-09-23) **EXILE3.EXE is NE (Win16), not PE.** Encounter prose is in `RT_DIALOG` resources (one dialog per encounter, BoE-style `kind_num` control tags), short text is in `RT_STRING` (ids in runs of 300, the Mac `STR#` convention), and type 100 is sounds. Headless Ghidra needs `openjdk@21` on `PATH` or it fails with "Unable to prompt user for JDK path". It also misses big functions: 643 found, and the outdoor encounter handler is not among them. See `tools/e3convert/ghidra/README.md`.

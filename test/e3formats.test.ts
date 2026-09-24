@@ -74,7 +74,7 @@ describe.skipIf(!files)('Exile 3 files', () => {
 
     it('is 200 records whose sizes add up to the file', () => {
       expect(e3TownOffset(E3_TOWN_COUNT)).toBe(f.town.length);
-      expect(towns.map((t) => t.kind).filter((k) => k === 'variant')).toHaveLength(80);
+      expect(towns.map((t) => t.kind).filter((k) => k === 'village')).toHaveLength(80);
     });
 
     it('reads a large town: rooms, preset items and people', () => {
