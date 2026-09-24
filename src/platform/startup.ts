@@ -38,7 +38,14 @@ export interface StartupSave {
   /** The slot name in the save store. */
   slot: string;
   scenarioId: string;
+  /** The scenario's title, or who is in a party-only save. */
   label: string;
+  /** When, and where in the game — "Day 3 · 12 May, 14:02". */
+  detail: string;
+  /** A picture of the terrain view at the time, when the save has one. */
+  thumb?: string;
+  /** The scenario's icon, for a save with no picture. */
+  icon?: number;
 }
 
 export interface StartupChoice {
@@ -64,6 +71,10 @@ export interface StartupPc {
   level: number;
   race: number;
   alive: boolean;
+  health: number;
+  maxHealth: number;
+  sp: number;
+  maxSp: number;
   /** The PC's graphic at 28×36, when there is one to show. */
   picture?: HTMLCanvasElement;
 }
@@ -80,6 +91,12 @@ export interface StartupParty {
   pcs: StartupPc[] | null;
   /** Forget it, as `do_abort` does. */
   forget: () => Promise<void>;
+  /** The scenario it was last taken into and hasn't finished, if any. */
+  active?: {
+    title: string;
+    /** The newest save in that scenario, to pick up from. */
+    resume?: { scenarioId: string; slot: string; label: string };
+  };
 }
 
 /**
@@ -182,25 +199,28 @@ async function readFiles(list: FileList | File[]): Promise<{ name: string; data:
   return Promise.all([...list].map(async (f) => ({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) })));
 }
 
-function aboutSection(): HTMLElement {
-  const about = el('section', 'startup-about');
-  const p1 = el('p');
-  p1.append(
-    el('strong', undefined, 'Blades of Exile'),
-    ' is a fantasy role-playing game by Jeff Vogel of Spiderweb Software, released in 1997 — the fourth and last of '
-    + 'the Exile games. It shipped with three adventures and a scenario editor, and its players went on to write '
-    + 'many more of their own. ',
-    link(WIKIPEDIA_URL, 'More on Wikipedia'),
-  );
-  const p2 = el('p');
-  p2.append(
-    'This is a from-scratch port of the game to the browser: the original rules, screen and art, with nothing to '
-    + 'install. It was built with heavy use of AI: most of the code was written by Claude, directed by a person, '
-    + 'and checked against the original game by automated tests. ',
-    link(REPO_URL, 'Source on GitHub'),
-  );
-  about.append(p1, p2);
-  return about;
+/**
+ * The page's masthead: the game's icon, then the title in the game's own
+ * Dungeon face (the logo on the original's startup screen is the same letters)
+ * over two lines on what this is.
+ */
+function header(): HTMLElement {
+  const head = el('header', 'startup-header');
+  const icon = document.createElement('img');
+  icon.className = 'startup-logo';
+  icon.src = `${import.meta.env.BASE_URL}data/graphics/icon.png`;
+  icon.alt = '';
+  const words = el('div', 'startup-masthead');
+  words.append(el('h1', 'startup-title', 'Blades of Exile'));
+  const what = el('p');
+  what.append('A fantasy role-playing game by Jeff Vogel of Spiderweb Software, 1997. ',
+    link(WIKIPEDIA_URL, 'Wikipedia'));
+  const port = el('p');
+  port.append('This is a JavaScript port for the browser, written largely by AI (Claude). ',
+    link(REPO_URL, 'Source on GitHub'));
+  words.append(what, port);
+  head.append(icon, words);
+  return head;
 }
 
 /**
@@ -229,33 +249,17 @@ interface Card {
 export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Promise<StartupChoice> {
   const { official, added, saves, importScenarios, library, party } = opts;
   return new Promise((resolve) => {
+    // The masthead sits above the card, not in it.
+    const page = el('div', 'startup-page');
     const root = el('div', 'startup');
-    root.append(el('h1', undefined, 'Blades of Exile'));
-    root.append(aboutSection());
+    page.append(header(), root);
 
     const cleanups: (() => void)[] = [];
     const choose = (choice: StartupChoice): void => {
       for (const c of cleanups) c();
-      root.remove();
+      page.remove();
       resolve(choice);
     };
-
-    if (saves.length > 0) {
-      root.append(el('h2', undefined, 'Continue a saved game'));
-      const list = el('div', 'startup-list');
-      for (const save of saves) {
-        const button = el('button', 'startup-choice');
-        button.append(el('strong', undefined, save.slot));
-        button.append(el('small', undefined, save.label));
-        // A save names its own scenario, so picking one here is also how a
-        // party in a scenario other than the default gets opened at all.
-        button.addEventListener('click', () => {
-          choose({ scenarioId: save.scenarioId, slot: save.slot });
-        });
-        list.append(button);
-      }
-      root.append(list);
-    }
 
     // ---- the party in memory
     let partyPcs = party?.pcs ?? null;
@@ -287,13 +291,30 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
           const race = RACE_NAMES[pc.race];
           words.append(el('small', undefined,
             `Level ${pc.level}${race === undefined ? '' : ` ${race}`}${pc.alive ? '' : ' · dead'}`));
+          const stats = el('span', 'startup-pc-stats');
+          stats.append(el('span', 'hp', `HP ${pc.health}/${pc.maxHealth}`));
+          if (pc.maxSp > 0) stats.append(el('span', 'sp', `SP ${pc.sp}/${pc.maxSp}`));
+          words.append(stats);
           item.append(words);
           list.append(item);
         }
         panel.append(list);
+        const active = party.active;
+        if (active !== undefined) {
+          const where = el('p', 'startup-party-active');
+          where.append('Now adventuring in ', el('strong', undefined, active.title), '.');
+          panel.append(where);
+        }
         panel.append(el('p', 'startup-sub',
           'Pick any scenario below to take this party into it. It keeps its gold, items, '
           + 'levels and skills; special items stay behind.'));
+        if (active?.resume !== undefined) {
+          const { scenarioId, slot, label } = active.resume;
+          const resume = el('button', 'startup-party-button primary', `Continue ${active.title}`);
+          resume.title = label;
+          resume.addEventListener('click', () => { choose({ scenarioId, slot }); });
+          panel.append(resume);
+        }
         const forget = el('button', 'startup-party-button', 'Forget Party');
         forget.addEventListener('click', () => {
           void party.forget().then(() => {
@@ -304,6 +325,28 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
         panel.append(make, forget);
       };
       showParty();
+    }
+
+    if (saves.length > 0) {
+      root.append(el('h2', undefined, 'Continue a saved game'));
+      const list = el('div', 'startup-list startup-cards startup-saves');
+      for (const save of saves) {
+        const card = el('button', 'startup-choice startup-card');
+        card.dataset['slot'] = save.slot;
+        card.append(pictureElement(save.icon, save.thumb));
+        const words = el('span', 'startup-words');
+        words.append(el('strong', undefined, save.slot));
+        words.append(el('span', 'startup-facts', save.label));
+        words.append(el('small', undefined, save.detail));
+        card.append(words);
+        // A save names its own scenario, so picking one here is also how a
+        // party in a scenario other than the default gets opened at all.
+        card.addEventListener('click', () => {
+          choose({ scenarioId: save.scenarioId, slot: save.slot });
+        });
+        list.append(card);
+      }
+      root.append(list);
     }
 
     // ---- the one list
@@ -521,9 +564,11 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
       root.append(add, problem);
     }
 
-    host.append(root);
+    host.append(page);
     // So Enter or a stray keypress doesn't fall through to nothing, and the
     // screen is reachable by keyboard alone.
-    (list.querySelector('button:not([hidden])') as HTMLElement | null)?.focus();
+    // Focused for the keyboard, but without scrolling to it: the masthead and
+    // the party come first on the page and should be what it opens on.
+    (list.querySelector('button:not([hidden])') as HTMLElement | null)?.focus({ preventScroll: true });
   });
 }

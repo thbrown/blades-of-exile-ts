@@ -85,7 +85,7 @@ import { loadOpcodes, loadScenario } from './fileio/loadScenario';
 import { applyPartySave, applySave, readSavePreview, saveGame } from './fileio/saveIo';
 import {
   SaveSlot, exportSave, getPartyInMemory, getSave, importSave, listSaves, putSave, saveStoreAvailable,
-  setPartyInMemory,
+  setPartyActiveScenario, setPartyInMemory,
 } from './platform/saveStore';
 import {
   AUTOSAVE_TRIGGER_DEFAULTS, AutosaveReason, MAX_AUTOSAVE_DEFAULT, getAutosavePrefs, setAutosavePrefs,
@@ -137,6 +137,22 @@ const DEFAULT_SCENARIO = 'valleydy';
  * is what a direct link, a cross-scenario load and the headless verifier all
  * want. Null means "ask".
  */
+/**
+ * The URL a game gets once the startup screen hands it over, so the browser's
+ * Back button leaves the game for the main menu. A game isn't kept across a
+ * page load, so opening one of these URLs (Reload, or Forward after Back)
+ * shows the main menu, and the parameter is dropped.
+ */
+const GAME_PARAMS = ['play', 'party'] as const;
+
+function urlWith(param: (typeof GAME_PARAMS)[number] | null, value = ''): string {
+  const q = new URLSearchParams(window.location.search);
+  for (const p of GAME_PARAMS) q.delete(p);
+  if (param !== null) q.set(param, value);
+  const search = q.toString();
+  return `${window.location.pathname}${search === '' ? '' : `?${search}`}`;
+}
+
 function scenarioFromQuery(): string | null {
   const q = new URLSearchParams(window.location.search).get('scenario');
   return q && /^[a-z0-9_-]+$/i.test(q) ? q : null;
@@ -280,6 +296,9 @@ async function main(): Promise<void> {
   /** The party in memory, when the startup screen is taking it into a scenario. */
   let enteringParty: Uint8Array | null = null;
   if (name === null) {
+    if (GAME_PARAMS.some((p) => new URLSearchParams(window.location.search).has(p))) {
+      window.history.replaceState(null, '', urlWith(null));
+    }
     hideLoadingUi();
     document.body.classList.add('starting');
     status.textContent = 'Choose a game.';
@@ -334,32 +353,59 @@ async function main(): Promise<void> {
         level: pc.level,
         race: pc.race,
         alive: pc.mainStatus === MainStatus.ALIVE,
+        health: pc.health,
+        maxHealth: pc.maxHealth,
+        sp: pc.sp,
+        maxSp: pc.maxSp,
         picture: await portrait(pc.graphic),
       })));
-    const titleOf = (id: string): string | undefined =>
-      headers.find((h) => h.id === id)?.title ?? added.find((h) => h.id === id)?.title;
+    const known = (id: string): { title: string; icon?: number } | undefined =>
+      headers.find((h) => h.id === id) ?? added.find((h) => h.id === id)
+        ?? library?.entries.find((e) => e.id === id);
+    const titleOf = (id: string): string | undefined => known(id)?.title;
+    const when = (at: number): string =>
+      new Date(at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    // The newest save in the scenario the party in memory is off in, to resume.
+    const activeId = inMemory?.activeScenario;
+    const resumeSlot = activeId === undefined ? undefined
+      : saves.find((slot) => slot.preview.scenarioId === activeId);
     const choice = await showStartupScreen(document.getElementById('startup-host')!, {
       official: headers,
       added,
-      saves: saves.map((slot) => ({
-        slot: slot.name,
-        scenarioId: slot.preview.scenarioId,
-        // The scenario's title if it is one of the bundled four, else its id —
-        // a save can name a scenario that isn't installed, which is the case
-        // the C++ shows "could not be found" for.
-        label: slot.preview.scenarioId === ''
-          // A party between scenarios: loading it makes it the party in memory.
-          ? `Party: ${slot.preview.pcs.filter((pc) => pc.name !== '').map((pc) => pc.name).join(', ')}`
-            + ` (${new Date(slot.savedAt).toLocaleString()})`
-          : `${titleOf(slot.preview.scenarioId) ?? slot.preview.scenarioId} — day ${Math.floor(slot.preview.age / 3700) + 1}`
-            + ` (${new Date(slot.savedAt).toLocaleString()})`,
-      })),
+      saves: saves.map((slot) => {
+        const id = slot.preview.scenarioId;
+        const icon = known(id)?.icon;
+        return {
+          slot: slot.name,
+          scenarioId: id,
+          // The scenario's title if it is installed, else its id — a save can
+          // name a scenario that isn't, which is the case the C++ shows "could
+          // not be found" for. A party between scenarios lists who is in it:
+          // loading one makes it the party in memory.
+          label: id === ''
+            ? `Party: ${slot.preview.pcs.filter((pc) => pc.name !== '').map((pc) => pc.name).join(', ')}`
+            : titleOf(id) ?? id,
+          detail: id === ''
+            ? `Between scenarios · ${when(slot.savedAt)}`
+            : `Day ${Math.floor(slot.preview.age / 3700) + 1} · ${when(slot.savedAt)}`,
+          ...(slot.thumb ? { thumb: URL.createObjectURL(new Blob([slot.thumb as BlobPart], { type: 'image/png' })) } : {}),
+          ...(icon !== undefined ? { icon } : {}),
+        };
+      }),
       ...(scenarioStoreAvailable() ? { importScenarios: importScenarioFiles } : {}),
       ...(library ? { library } : {}),
       ...(saveStoreAvailable() ? {
         party: {
           pcs: partyPcs,
           forget: () => setPartyInMemory(null),
+          ...(activeId !== undefined ? {
+            active: {
+              title: titleOf(activeId) ?? activeId,
+              ...(resumeSlot !== undefined ? {
+                resume: { scenarioId: activeId, slot: resumeSlot.name, label: `${resumeSlot.name}, ${when(resumeSlot.savedAt)}` },
+              } : {}),
+            },
+          } : {}),
         },
       } : {}),
     });
@@ -371,6 +417,12 @@ async function main(): Promise<void> {
       window.location.reload();
       return;
     }
+    // A history entry for the game, so Back returns to this menu. The page
+    // reloads to get there, which is how this port gets a clean Universe.
+    window.history.pushState(null, '', choice.party === 'make'
+      ? urlWith('party', 'new')
+      : urlWith('play', choice.scenarioId));
+    window.addEventListener('popstate', () => { window.location.reload(); });
     makingParty = choice.party === 'make';
     if (choice.party === 'enter') enteringParty = inMemory?.data ?? null;
     name = choice.scenarioId;
@@ -876,6 +928,19 @@ async function main(): Promise<void> {
     window.location.href = import.meta.env.BASE_URL;
   };
 
+  /**
+   * File › Main Menu: back to the startup screen, which keeps the party in
+   * memory. Not in the original, where the startup screen was only reached by
+   * winning, dying or starting over; it asks the same question New Game does.
+   */
+  const mainMenuFlow = async (): Promise<void> => {
+    const confirm = new XmlDialog(ctx, store, getDialogDef('restart-game'));
+    confirm.setText('warning', confirm.getText('warning').replace('{{action}}', 'Going to the main menu'));
+    confirm.setText('okay', 'Main Menu');
+    if ((await dialogs.runNested(confirm)) === 'cancel') return;
+    window.location.href = urlWith(null);
+  };
+
   /** `get_num_of_items` (boe.items.cpp:667) — how many out of a stack. */
   const getNumOfItems = async (max: number): Promise<number> => {
     const { dlg, result } = numOfItemsDialog(ctx, store, max);
@@ -984,10 +1049,11 @@ async function main(): Promise<void> {
       // `handle_victory` empties `scen_name` first, so what "Save First" writes
       // is the party alone — the same bytes that become the party in memory.
       const party = saveGame(univ, true);
+      const thumb = await captureTerrainView(canvas);
       const choice = await dialogs.runScreen(new XmlDialog(ctx, store, getDialogDef('congrats-save')));
       if (choice === 'save' && saveStoreAvailable()) {
         const slot = (await askForText('Name this saved party:', false)).trim();
-        if (slot !== '') await putSave(slot, party);
+        if (slot !== '') await putSave(slot, party, thumb);
       }
       if (saveStoreAvailable()) await setPartyInMemory(party);
       window.location.href = import.meta.env.BASE_URL;
@@ -1278,6 +1344,9 @@ async function main(): Promise<void> {
       return;
     }
     const data = saveGame(univ);
+    // The picture for the startup screen's list, taken before the slot picker
+    // covers the view.
+    const thumb = await captureTerrainView(canvas);
     const slots = await listSaves();
     const picked = await dialogs.run({
       text: 'Save the game in which slot?',
@@ -1307,7 +1376,7 @@ async function main(): Promise<void> {
       return;
     }
     try {
-      await putSave(name, data);
+      await putSave(name, data, thumb);
       univ.saveSlot = name;
       univ.addStringToBuf(`Game saved: ${name}.`);
     } catch (err) {
@@ -1353,7 +1422,7 @@ async function main(): Promise<void> {
           // The ring is full, so the oldest goes.
           target = [...mine.values()].sort((a, b) => a.savedAt - b.savedAt)[0]!.name;
         }
-        await putSave(target, saveGame(univ));
+        await putSave(target, saveGame(univ), await captureTerrainView(canvas));
         univ.addStringToBuf(`Autosave: Game saved (${reason}).`);
       } catch (err) {
         univ.addStringToBuf(`Autosave: Save not completed (${String(err)})`);
@@ -2752,6 +2821,7 @@ async function main(): Promise<void> {
       window.location.href = import.meta.env.BASE_URL;
       return;
     }
+    if (saveStoreAvailable()) await setPartyActiveScenario(scen.id);
     screen.startupBackdrop = false;
     session.beginScenario();
     screen.itemWindow.setStatWindowForPc(univ, univ.curPc);
@@ -2772,6 +2842,7 @@ async function main(): Promise<void> {
         (await dialogs.runScreen(new XmlDialog(ctx, store, getDialogDef('keep-stored-items')))) === 'yes',
     });
     screen.itemWindow.setStatWindowForPc(univ, univ.curPc);
+    if (saveStoreAvailable()) await setPartyActiveScenario(scen.id);
   }
 
   // A saved game chosen on the startup screen (or parked by a cross-scenario
@@ -2814,6 +2885,10 @@ async function main(): Promise<void> {
     installMenuBar(menuHost, [{
       label: 'File',
       items: [
+        {
+          label: 'Main Menu',
+          action: () => { void mainMenuFlow(); },
+        },
         {
           label: 'New Game',
           action: () => { void newPartyFlow(); },

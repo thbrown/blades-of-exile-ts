@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>exile-js</title>
+    <title>Blades of Exile</title>
     <link rel="icon" type="image/png" href="/data/graphics/icon.png" />
     <style>
       /* The game's own fonts, so panel text measures like the C++ build. */
@@ -185,10 +185,8 @@
         padding: 24px 28px 28px;
         box-sizing: border-box;
       }
-      .startup h1 {
-        margin: 0 0 4px;
-        font-size: 22px;
-        font-weight: 600;
+      .startup > h2:first-child {
+        margin-top: 0;
       }
       .startup h2 {
         margin: 20px 0 8px;
@@ -291,24 +289,56 @@
       .startup [hidden] {
         display: none !important;
       }
-      .startup-about {
-        margin: 10px 0 4px;
-        padding: 12px 16px;
-        background: #1c1c1c;
-        border: 1px solid #383838;
+      .startup-page {
+        width: 1210px;
+        max-width: 100%;
+      }
+      .startup-header {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        padding: 8px 4px 20px;
+      }
+      .startup-logo {
+        width: 96px;
+        height: 96px;
+        flex: none;
+        image-rendering: pixelated;
+        border: 1px solid #444;
         border-radius: 4px;
-        font-size: 13px;
-        line-height: 1.5;
-        color: #bbb;
-        max-width: 60rem;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
       }
-      .startup-about p {
+      .startup-masthead {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 4px;
+        min-width: 0;
+      }
+      /* The logo on the original's startup screen is the Dungeon face in small
+         capitals, in brushed silver. */
+      .startup-title {
         margin: 0;
+        font-family: 'BoEDungeon', Georgia, serif;
+        font-variant: small-caps;
+        font-weight: normal;
+        font-size: 52px;
+        line-height: 1;
+        letter-spacing: 0.04em;
+        color: #d8d8d8;
+        background: linear-gradient(#ffffff, #9a9a9a);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.8));
       }
-      .startup-about p + p {
-        margin-top: 6px;
+      .startup-masthead p {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.45;
+        color: #aaa;
       }
-      .startup-about a,
+      .startup-masthead a,
       .startup-source {
         color: #8fa8cd;
       }
@@ -450,6 +480,31 @@
       .startup-pc-words small {
         font-size: 11px;
         color: #999;
+      }
+      .startup-pc-stats {
+        display: flex;
+        gap: 8px;
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+      }
+      .startup-pc-stats .hp {
+        color: #7fcf86;
+      }
+      .startup-pc-stats .sp {
+        color: #8fa8ff;
+      }
+      .startup-party-active {
+        flex-basis: 100%;
+        margin: 2px 0 0;
+        font-size: 13px;
+        color: #c9b27a;
+      }
+      .startup-party-button.primary {
+        background: #34466a;
+        border-color: #6a8fc7;
+      }
+      .startup-saves {
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
       }
       .startup-party-button {
         font: inherit;

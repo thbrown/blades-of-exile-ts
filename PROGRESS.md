@@ -12156,3 +12156,34 @@ chosen first, and a win threw the party away.
   shows. A custom PC graphic (1000+) belongs to a scenario and shows an empty
   tile.
 
+
+**Main menu redesign, URLs and save pictures (2026-09-23).**
+- **Masthead** above the card (`header()` in `platform/startup.ts`): the
+  game's icon, then "Blades of Exile" in the game's own Dungeon face in small
+  capitals with a silver gradient (the original startup logo is those same
+  letters), over two lines: what the game is (Wikipedia) and what this port
+  is (GitHub). The old About box is gone, and the page title is "Blades of
+  Exile". The first card no longer scrolls itself into view on load
+  (`preventScroll`), which had hidden the masthead on short windows.
+- **Party panel**: each PC's HP and SP (cur/max; `SavePreview.pcs` gained
+  `health`, `maxHealth`, `sp`, `maxSp`, with the maximums read from the `hp`
+  and `sp` SKILL tags). "Now adventuring in X" appears when the party was
+  taken into a scenario and hasn't won it (`setPartyActiveScenario`, kept on
+  the party-in-memory record). **Continue X** opens that scenario's newest
+  save, whichever party made it.
+- **Saved games are picture cards** now, before the scenarios. `putSave` takes
+  a PNG of the terrain view (`captureTerrainView`), taken by Save (before the
+  slot picker covers the view), by the autosave and by the victory save. An
+  older save with no picture shows its scenario's icon.
+- **URLs**: once the startup screen hands over, the page pushes `?play=<id>`
+  (or `?party=new`), so **Back returns to the main menu** (a `popstate`
+  reload). A game isn't kept across page loads, so opening one of those
+  URLs directly shows the menu and drops the parameter. `?scenario=` is
+  unchanged.
+- **File › Main Menu** (new, not in the original), confirmed with
+  restart-game.xml relabelled. `verify-screen.mjs` now picks Open Game by its
+  text rather than its position.
+- `verify-party.mjs` also covers the game's URL, Back, "Now adventuring in",
+  a save's picture, Continue, File › Main Menu, and HP/SP. **Gotcha:** a save
+  card carries its scenario's title too, so scripts should click scenario
+  cards by `data-id`, not by text.

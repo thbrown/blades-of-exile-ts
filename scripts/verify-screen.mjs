@@ -2398,7 +2398,7 @@ void menuItems;
 await page.click('#game-menu-bar .menu-item');
 const fileMenu = await page.evaluate(() =>
   [...document.querySelectorAll('#game-menu-bar .dropdown li')].map((li) => li.textContent));
-await page.click('#game-menu-bar .dropdown li:nth-child(2)'); // Open Game…
+await page.locator('#game-menu-bar .dropdown li', { hasText: 'Open Game' }).first().click();
 await page.waitForTimeout(300);
 const pickerRow = await page.evaluate(() =>
   window.__dialogs.active?.placedRows?.find((r) => r.name === 'slot:VerifySlot')?.rect ?? null);

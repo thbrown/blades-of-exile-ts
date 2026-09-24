@@ -1389,7 +1389,10 @@ export interface SavePreview {
   gold: number;
   /** 200 when the party is outdoors. */
   townNum: number;
-  pcs: { name: string; level: number; mainStatus: MainStatus; graphic: number; race: Race }[];
+  pcs: {
+    name: string; level: number; mainStatus: MainStatus; graphic: number; race: Race;
+    health: number; maxHealth: number; sp: number; maxSp: number;
+  }[];
 }
 
 export function readSavePreview(data: Uint8Array): SavePreview {
@@ -1404,6 +1407,9 @@ export function readSavePreview(data: Uint8Array): SavePreview {
     if (text === undefined) continue;
     const page = TagFile.parse(text).at(0);
     if (page === undefined) continue;
+    // Maximum health and spell points are written as the `hp` and `sp` skills.
+    const skill = (tag: string): number =>
+      page.list('SKILL').find((t) => t.str(0) === tag)?.int(1) ?? 0;
     pcs.push({
       name: page.first('NAME')?.str(0) ?? '',
       level: page.first('LEVEL')?.int(0) ?? 1,
@@ -1411,6 +1417,10 @@ export function readSavePreview(data: Uint8Array): SavePreview {
         mainStatusNames, page.next('STATUS')?.str(1) ?? '', MainStatus.ABSENT),
       graphic: page.first('ICON')?.int(0) ?? 0,
       race: readEnumTagOrNumber(raceNames, page.first('RACE')?.str(0) ?? '', 0),
+      health: page.first('HEALTH')?.int(0) ?? 0,
+      maxHealth: skill('hp'),
+      sp: page.first('MANA')?.int(0) ?? 0,
+      maxSp: skill('sp'),
     });
   }
   const townText = ball.text('save/town.txt');

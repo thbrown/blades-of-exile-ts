@@ -24,10 +24,14 @@ export interface SaveSlot {
   /** Milliseconds since the epoch, for sorting newest first. */
   savedAt: number;
   preview: SavePreview;
+  /** A PNG of the terrain view when it was saved, for the startup screen. */
+  thumb?: Uint8Array;
 }
 
 interface SaveRecord extends SaveSlot {
   data: Uint8Array;
+  /** On the party in memory only: the scenario it was last taken into, and not yet finished. */
+  activeScenario?: string;
 }
 
 function open(): Promise<IDBDatabase> {
@@ -77,14 +81,19 @@ export function saveStoreAvailable(): boolean {
 const PARTY_IN_MEMORY = '\u0000party in memory';
 
 /** The party in memory, as a party-only save; null when there is none. */
-export async function getPartyInMemory(): Promise<{ data: Uint8Array; preview: SavePreview } | null> {
+export async function getPartyInMemory(): Promise<{
+  data: Uint8Array; preview: SavePreview; activeScenario?: string;
+} | null> {
   const row = await withStore(
     'readonly', (store) => run(store.get(PARTY_IN_MEMORY) as IDBRequest<SaveRecord | undefined>));
   if (row === undefined) return null;
   // Read afresh rather than trusting the stored preview, which an older build
   // wrote with fewer fields.
   const data = new Uint8Array(row.data);
-  return { data, preview: readSavePreview(data) };
+  return {
+    data, preview: readSavePreview(data),
+    ...(row.activeScenario !== undefined ? { activeScenario: row.activeScenario } : {}),
+  };
 }
 
 /** Keep a party in memory (a save written with `serialiseSave(univ, true)`), or forget it. */
@@ -93,23 +102,39 @@ export async function setPartyInMemory(data: Uint8Array | null): Promise<void> {
   else await putSave(PARTY_IN_MEMORY, data);
 }
 
+/**
+ * Note which scenario the party in memory is off in (null: none — it won, or
+ * is between scenarios). The startup screen says so, and offers that
+ * scenario's latest save.
+ */
+export async function setPartyActiveScenario(id: string | null): Promise<void> {
+  await withStore('readwrite', async (store) => {
+    const row = await run(store.get(PARTY_IN_MEMORY) as IDBRequest<SaveRecord | undefined>);
+    if (row === undefined) return;
+    if (id === null) delete row.activeScenario;
+    else row.activeScenario = id;
+    await run(store.put(row));
+  });
+}
+
 /** The slots, newest first, without their bytes. */
 export async function listSaves(): Promise<SaveSlot[]> {
   const rows = await withStore('readonly', (store) => run(store.getAll() as IDBRequest<SaveRecord[]>));
   return rows
     .filter((row) => row.name !== PARTY_IN_MEMORY)
-    .map(({ name, savedAt, preview }) => ({ name, savedAt, preview }))
+    .map(({ name, savedAt, preview, thumb }) => ({ name, savedAt, preview, ...(thumb ? { thumb } : {}) }))
     .sort((a, b) => b.savedAt - a.savedAt);
 }
 
 /** Store (or overwrite) a slot. The preview is derived from the bytes. */
-export async function putSave(name: string, data: Uint8Array): Promise<SaveSlot> {
+export async function putSave(name: string, data: Uint8Array, thumb?: Uint8Array | null): Promise<SaveSlot> {
   const record: SaveRecord = {
     name,
     savedAt: Date.now(),
     preview: readSavePreview(data),
     // A copy, because the caller's array may be a view onto a larger buffer.
     data: new Uint8Array(data),
+    ...(thumb ? { thumb: new Uint8Array(thumb) } : {}),
   };
   await withStore('readwrite', (store) => run(store.put(record)));
   return { name: record.name, savedAt: record.savedAt, preview: record.preview };

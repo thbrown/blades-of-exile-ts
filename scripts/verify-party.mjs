@@ -61,7 +61,7 @@ const pictures = await page.$$eval('.startup-pc-picture canvas', (cs) => cs.leng
 check('each PC shows its picture', pictures === 6, pictures);
 await page.screenshot({ path: `${SHOTS}/p3-party.png` });
 
-await page.locator('.startup-card', { hasText: 'Valley of Dying Things' }).first().click();
+await page.click('.startup-card[data-id="valleydy"]');
 await inGame();
 // put_party_in_scen's intro: the scenario's intro messages, one Done button.
 await specDialogUp('done');
@@ -69,6 +69,40 @@ check('the intro dialog comes up', true);
 await page.screenshot({ path: `${SHOTS}/p3b-intro.png` });
 await page.keyboard.press('Enter');
 await page.waitForTimeout(800);
+check('the game has a URL of its own', new URL(page.url()).searchParams.get('play') === 'valleydy', page.url());
+
+// Back leaves the game for the main menu, which says where the party is.
+// A save made in the scenario is offered from there, with its picture.
+await page.evaluate(async () => {
+  const store = await import('/src/platform/saveStore.ts');
+  const { captureTerrainView } = await import('/src/render/preview.ts');
+  await store.putSave('Party test', window.__saveGame(), await captureTerrainView(document.querySelector('canvas')));
+});
+await page.goBack();
+await page.waitForSelector('.startup-party li', { timeout: 30000 });
+check('Back returns to the main menu', new URL(page.url()).searchParams.get('play') === null, page.url());
+check('it says where the party is', (await panel()).includes('Now adventuring in Valley of Dying Things'));
+check('the save shows its picture', await page.evaluate(
+  () => document.querySelector('[data-slot="Party test"] img') !== null));
+await page.screenshot({ path: `${SHOTS}/p3c-menu-in-scenario.png` });
+await page.click('text=Continue Valley of Dying Things');
+await inGame();
+await page.waitForTimeout(800);
+check('Continue picks up the save', await page.evaluate(() => window.__univ.saveSlot === 'Party test'));
+
+// File › Main Menu, confirmed, goes there too.
+await page.locator('#game-menu-bar .menu-item', { hasText: 'File' }).first().click();
+await page.locator('#game-menu-bar .dropdown li', { hasText: 'Main Menu' }).first().click();
+await dialogUp('okay');
+await page.keyboard.press('Enter');
+await page.waitForSelector('.startup-party li', { timeout: 30000 });
+check('File › Main Menu returns to the main menu', true);
+await page.click('.startup-card[data-id="valleydy"]');
+await inGame();
+await specDialogUp('done');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(800);
+
 const valley = await page.evaluate(() => ({
   town: window.__univ.party.townNum,
   names: window.__univ.party.pcs.map((p) => p.name),
@@ -93,7 +127,7 @@ await page.keyboard.press('Escape'); // no save, straight back
 await page.waitForSelector('.startup-party li', { timeout: 30000 });
 check('a win leaves the party in memory', (await panel()).includes('Level 9'));
 
-await page.locator('.startup-card', { hasText: 'A Small Rebellion' }).first().click();
+await page.click('.startup-card[data-id="stealth"]');
 await dialogUp('okay');
 // removed-special-items.xml is the only okay-only dialog on this path (its
 // neighbour, keep-stored-items, is yes/no).
@@ -118,6 +152,7 @@ await page.screenshot({ path: `${SHOTS}/p6-rebellion.png` });
 await page.goto(BASE);
 await page.waitForSelector('.startup-party');
 check('a reload keeps it', (await panel()).includes('Level 9'));
+check('with HP and SP', /HP \d+\/\d+/.test(await panel()));
 await page.click('text=Forget Party');
 await page.waitForFunction(() => document.querySelector('.startup-party')?.innerText.includes('No party in memory'));
 check('Forget Party forgets it', true);
