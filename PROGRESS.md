@@ -901,7 +901,7 @@ Notes for M2 implementer:
     - `terrain.xml`'s light, step sounds, trims and `fly`;
     - E3's own lock-pick roll (`TODO(E3-3)`);
     - signs.
-- [ ] **E3-2 — Towns, NPCs, shops, dialogue** (needs M2–M3)
+- [x] **E3-2 — Towns, NPCs, shops, dialogue** (2026-09-24)
   - 2026-09-24:
     - **Monsters** (190) and **items** (415) convert from E3's own tables
       through the legacy importer (`convertMonster`/`convertItem`), and are
