@@ -227,7 +227,7 @@
         margin: 20px 0 12px;
         font-size: 16px;
         font-weight: bold;
-        color: #e8e8e8;
+        color: #000;
       }
       .startup-list {
         display: grid;
@@ -338,8 +338,11 @@
         min-height: 100vh;
         box-sizing: border-box;
       }
+      /* Both of the page's cards, the party's and the one holding the
+         lists, are the game's paper too. */
       body.starting .startup {
-        background: rgba(30, 30, 30, 0.94);
+        background: var(--paper-tile, none) 0 0 / 64px 64px repeat, #e4e4e4;
+        color: #000;
         box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55);
       }
       body.starting .startup-masthead p {
@@ -419,18 +422,18 @@
       }
       .startup-shown {
         font-size: 12px;
-        color: #aaa;
+        color: #333;
         margin-left: auto;
       }
       .startup-empty {
-        color: #aaa;
+        color: #333;
         font-size: 13px;
       }
       .startup-filter {
         font-size: 12px;
         padding: 5px 9px;
         min-width: 16rem;
-        background: var(--paper-tile, none) 0 0 / 64px 64px repeat, #e4e4e4;
+        background: #fff;
         border: 1px solid #000;
         border-radius: 3px;
         color: #000;
@@ -444,13 +447,13 @@
         font-size: 12px;
         padding: 4px 10px;
         border-radius: 3px;
-        border: 1px solid #666;
+        border: 1px solid #888;
         background: transparent;
-        color: #aaa;
+        color: #666;
         cursor: pointer;
       }
       .startup-chip.on {
-        background: var(--paper-tile, none) 0 0 / 64px 64px repeat, #e4e4e4;
+        background: #fff;
         border-color: #000;
         color: #000;
       }
@@ -479,15 +482,7 @@
       .startup-credit {
         margin: 6px 0 12px;
         font-size: 12px;
-        color: #aaa;
-      }
-      /* The party's card is paper too, and its text all black. */
-      body.starting .startup-party-card {
-        background: var(--paper-tile, none) 0 0 / 64px 64px repeat, #e4e4e4;
-        color: #000;
-      }
-      .startup-party-card h2 {
-        color: #000;
+        color: #333;
       }
       .startup-party {
         display: flex;
@@ -594,7 +589,7 @@
         opacity: 0.7;
       }
       .startup.dropping {
-        outline: 2px dashed #ddd;
+        outline: 2px dashed #000;
         outline-offset: -10px;
       }
       .startup.busy {
@@ -602,20 +597,12 @@
       }
       .startup-add {
         margin-top: 8px;
-        border: 1px dashed #888;
+        border: 1px dashed #000;
         background: transparent;
-        color: #ddd;
-      }
-      .startup-add small {
-        color: #aaa;
-      }
-      .startup-add:hover,
-      .startup-add:focus {
-        outline: 1px solid #ddd;
       }
       .startup-problem {
         margin: 8px 0 0;
-        color: #e08a7a;
+        color: #8a1c10;
         font-size: 12px;
       }
       #progress-wrap {
