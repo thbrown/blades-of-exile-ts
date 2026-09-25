@@ -326,6 +326,50 @@ export class SpecBuilder {
     };
   }
 
+  gold(n: number): Step {
+    return (next) => this.node('gold', { ex1: [n, 0] }, next);
+  }
+
+  food(n: number): Step {
+    return (next) => this.node('food', { ex1: [n, 0] }, next);
+  }
+
+  /**
+   * `FUN_1070_0564`: the party is given `item` (the first PC with room);
+   * `then` runs if it was taken and `otherwise` if nobody had room.
+   */
+  giveItem(item: number, then: Step[] = [], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('once-give-item', { ex1: [item, 0], ex2: [0, no] }, yes);
+    };
+  }
+
+  /**
+   * The reply to a scripted talk node (`FUN_1020_2eb0`): strings `4500 + a`
+   * and `4500 + b`. A message node run from a conversation becomes its reply.
+   */
+  reply(a: number, b = 0): Step {
+    return this.msg(15, a, b);
+  }
+
+  /** `can_find_town[t] = 1`: town `t` shows on the map. */
+  townVisible(t: number): Step {
+    return (next) => this.node('town-visible', { ex1: [t], ex2: [1] }, next);
+  }
+
+  /**
+   * A node that clears `flags` at the start of every day, for a scenario
+   * `<timer>` of 3700 ticks: a scenario timer fires once, so the node rearms
+   * itself as a party timer each time.
+   */
+  dailyReset(flags: Flag[]): number {
+    const clear = this.seq(flags.map((f) => this.setFlag(f, 0)))(-1);
+    const self = this.nodes.length;
+    return this.node('start-timer-scen', { ex1: [3700, self] }, clear);
+  }
+
   /** `FUN_1080_1b1f`: terrains `a` and `b` trade places at `(x, y)`. */
   swapTer(x: number, y: number, a: number, b: number): Step {
     return (next) => this.node('swap-ter', { ex1: [x, y], ex2: [a, b] }, next);

@@ -53,3 +53,13 @@ export function e3DayReached(day: number, _event: number): { day: number; event:
 export function e3SpotFlag(place: { zone: number } | { town: number }, k: number): [number, number] {
   return 'town' in place ? [place.town, 10 + k] : [200 + place.zone, 10 + k];
 }
+
+/**
+ * A converter flag that a new day clears: `(290, 10 + k)`. E3 stamps some
+ * things with the day they last happened (Levy's pay, Elisa's rations) and
+ * compares it with `calc_day()`; the engine has no node that reads the day
+ * into a flag, so a daily timer clears these instead (`dailyReset`).
+ */
+export function e3DailyFlag(k: number): [number, number] {
+  return [290, 10 + k];
+}

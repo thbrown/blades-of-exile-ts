@@ -195,6 +195,15 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(fort.specStrs[briefing.m1]).toMatch(/^You pass through the door/);
   });
 
+  it('turns scripted replies into scenario specials, with a new day each 3700 ticks', () => {
+    // Levy (E3 personality 21) pays an allowance: talk type 100.
+    const node = scen.townTalk[2]!.talkNodes.find((n) => n.personality === 20 && n.link1 === 'allo')!;
+    expect(node.type).toBe(TalkNodeType.CALL_SCEN_SPEC);
+    const first = scen.scenSpecials.get(node.extras[0]!)!;
+    expect(first.type).toBe(SpecType.IF_SDF_EQ);
+    expect(scen.scenarioTimers).toEqual([{ time: 3700, node: expect.any(Number) }]);
+  });
+
   it('places the fort\'s people', () => {
     const fort = scen.towns[21]!;
     expect(fort.creatures.filter((c) => c.number > 0).length).toBeGreaterThan(40);

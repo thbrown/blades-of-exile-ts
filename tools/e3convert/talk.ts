@@ -34,6 +34,8 @@ import { TalkNodeType, emptyPersonality, emptySpeech, emptyTalkNode, type Person
 import type { Shop } from '../../src/data/shop';
 import { e3DayReached, e3Flag } from './flags';
 import { E3ShopType, HEALER_SHOP, e3Shop, type E3ShopTables } from './shops';
+import type { SpecBuilder } from './script';
+import { TALK_SCRIPTS } from './towns/talkScripts';
 
 export const E3_TALK_BLOCKS = 39;
 
@@ -173,6 +175,9 @@ export interface E3TalkConversion {
 }
 
 interface Context {
+  /** The scenario's own specials, where scripted replies go. */
+  scen: SpecBuilder;
+  scripts: Map<number, number>;
   tables: E3ShopTables;
   foodBase: number;
   shops: Shop[];
@@ -297,10 +302,21 @@ function convertNode(ctx: Context, raw: E3TalkNodeRaw, personality: number, extr
     case E3Node.DEP_ON_TOWN:
       set(TalkNodeType.DEP_ON_TOWN, e1);
       break;
-    default:
-      // TODO(E3-3): the scripted replies, `FUN_1020_2eb0`'s switch on the
-      // type. Their text lives in the script, so the node shows nothing yet.
-      set(TalkNodeType.REGULAR);
+    default: {
+      // The scripted replies (`towns/talkScripts.ts`) run as scenario
+      // specials. TODO(E3-3): the types not transcribed yet show nothing.
+      const script = TALK_SCRIPTS.get(raw.type);
+      if (!script) {
+        set(TalkNodeType.REGULAR);
+        break;
+      }
+      let n = ctx.scripts.get(raw.type);
+      if (n === undefined) {
+        n = ctx.scen.compile(script(ctx.scen));
+        ctx.scripts.set(raw.type, n);
+      }
+      set(TalkNodeType.CALL_SCEN_SPEC, n);
+    }
   }
   return node;
 }
@@ -312,8 +328,9 @@ function convertNode(ctx: Context, raw: E3TalkNodeRaw, personality: number, extr
  */
 export function convertE3Talk(
   raw: E3TalkRaw, speakers: E3Speaker[], tables: E3ShopTables, blocks: number, firstShop: number, foodBase: number,
+  scen: SpecBuilder,
 ): E3TalkConversion {
-  const ctx: Context = { tables, foodBase, shops: [], shopIds: new Map(), firstShop };
+  const ctx: Context = { scen, scripts: new Map(), tables, foodBase, shops: [], shopIds: new Map(), firstShop };
   const speeches = Array.from({ length: blocks }, emptySpeech);
   const personalityOf = new Map<string, number>();
   const nodesOf = new Map<number, E3TalkNodeRaw[]>();

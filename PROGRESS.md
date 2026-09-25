@@ -1013,8 +1013,26 @@ Notes for M2 implementer:
     - Trapped containers (`FUN_10e0_03ae`) are BoE 1997's `run_trap` behind
       an E3 dialog, so they become `once-trap`.
     - Left as TODO(E3-3): sounds, and E3's journal.
-  - Next: the remaining fort spots, then Krizsan (towns 0–3,
-    `FUN_1078_0000`) and the fort's outdoor zone.
+  - 2026-09-24: **scripted conversations** (`towns/talkScripts.ts`). Talk
+    node types 100+ are the cases of `FUN_1020_2eb0` (jump table
+    `1020:4a5f`, 71 of them; `.scratch`-style helper: list a case's asm by
+    its range). Each chooses a reply (strings `4500 + n`) and may change
+    things first.
+    - They become scenario specials behind CALL_SCEN_SPEC. A message node
+      run from a conversation becomes the reply, which the engine already
+      did (`handleMessage` in TALK).
+    - E3 stamps some rewards with the day (`calc_day()` into a flag byte).
+      The engine can't read the day into a flag, so these use converter
+      flags that a scenario `<timer>` clears every 3700 ticks. The timer
+      rearms itself as a party timer, because a scenario timer fires only
+      once.
+    - Done: the fort's eight (100–107): Levy's pay and rewards, Elisa's
+      rations, Berra's evidence, Mazumdar's pass, the spell rewards, and
+      Flanagan. `scripts` list: `npx vite-node .scratch/talkscr.ts` printed
+      which personality and town each type belongs to (the table is in the
+      2026-09-24 commit message of this work).
+  - Next: Krizsan (towns 0–3, `FUN_1078_0000`, talk 118/119), and the fort's
+    outdoor zone.
 
 ## Key references (do not lose)
 

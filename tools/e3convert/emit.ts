@@ -25,6 +25,9 @@ import { e3DayReached, e3Event, e3Flag } from './flags';
 import { buildE3Village, villageTemplate } from './village';
 import { e3SpotScript, type PlaceScript, type SpotScript } from './specials';
 import { town21 } from './towns/town21';
+import { DAILY_FLAGS } from './towns/talkScripts';
+import { SpecBuilder } from './script';
+import { BASIC_BUTTONS } from '../../src/game/specials/oneshot';
 import { makeSpecItem, type SpecItem } from '../../src/data/quest';
 import type { Shop } from '../../src/data/shop';
 
@@ -327,7 +330,7 @@ function townMap(t: E3Town, terrain: number[][], strings: Map<number, string>, s
 function scenarioXml(
   start: { town: number; loc: { x: number; y: number } },
   outStart: { sector: { x: number; y: number }; loc: { x: number; y: number } },
-  shops: Shop[], specialItems: SpecItem[],
+  shops: Shop[], specialItems: SpecItem[], specStrings: string[], newDay: number,
 ): string {
   return `${XML_HEAD}<scenario boes="2.0.0">
     <title>Exile III: Ruined World</title>
@@ -364,7 +367,8 @@ function scenarioXml(
         <town-start x="${start.loc.x}" y="${start.loc.y}" />
         <outdoor-start x="${outStart.sector.x}" y="${outStart.sector.y}" />
         <sector-start x="${outStart.loc.x}" y="${outStart.loc.y}" />
-${shops.map(shopXml).join('')}${specialItems.map(specialItemXml).join('')}    </game>
+${shops.map(shopXml).join('')}${specialItems.map(specialItemXml).join('')}        <timer freq="3700">${newDay}</timer>
+${specStrings.map((str, i) => `        <string id="${i}">${esc(str)}</string>\n`).join('')}    </game>
 </scenario>
 `;
 }
@@ -403,7 +407,6 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
 
   // header.exs: the OBoE marker every unpacked tree carries.
   write('header.exs', new Uint8Array([0x4f, 0x42, 0x4f, 0x45, 0x01, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00, 0x04]));
-  write('scenario.spec', '');
   write('terrain.xml', terrainXml(terrain));
   // Monsters: E3's table through the legacy importer, drawn from E3's own
   // sprites cut into custom sheets after the terrain's.
@@ -437,7 +440,12 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
     c.number > 0 && c.personality > 0
       ? [{ town: t.number, index, personality: c.personality, extra1: c.extra1, extra2: c.extra2 }] : []));
   const shops = standardShops();
-  const talk = convertE3Talk(readE3Talk(strings), speakers, shopTables, E3_TOWN_COUNT, shops.length, foodBase);
+  // The scenario's own specials: scripted replies, and the daily reset their
+  // day stamps need.
+  const scen = new SpecBuilder(e3Src, (label) => Math.max(0, BASIC_BUTTONS.indexOf(label)));
+  const talk = convertE3Talk(readE3Talk(strings), speakers, shopTables, E3_TOWN_COUNT, shops.length, foodBase, scen);
+  const newDay = scen.dailyReset(DAILY_FLAGS);
+  write('scenario.spec', scen.spec);
   shops.push(...talk.shops);
   // Special items: a name and a description each, from string 1801.
   const specialItems = Array.from({ length: E3_SPECIAL_ITEMS }, (_, k) => {
@@ -446,7 +454,7 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
     item.descr = strings.get(1802 + 2 * k) ?? '';
     return item;
   });
-  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town), shops, specialItems));
+  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town), shops, specialItems, scen.strings, newDay));
 
   zones.forEach((z, i) => {
     const base = `out/out${i % E3_ZONES_WIDE}~${Math.floor(i / E3_ZONES_WIDE)}`;
