@@ -121,6 +121,12 @@ export interface SpecialHost {
    */
   choice(
     strs: string[], buttons: ChoiceButton[], title: string, pic: number, picType: number,
+    /**
+     * The stock definition this prompt is (`basic-trap`, `basic-stair-up`, …),
+     * for the ones `cChoiceDlog` raises from a file. Without it the prompt is
+     * a `cThreeChoice`, laid out from the strings and buttons.
+     */
+    xml?: string,
   ): Promise<number>;
   /**
    * `story_dialog` (boe.items.cpp:611) — a title and a *range* of strings to

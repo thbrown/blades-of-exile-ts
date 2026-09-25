@@ -38,9 +38,8 @@ const check = (what, ok, detail) => {
 const panel = () => page.evaluate(() => document.querySelector('.startup-party')?.innerText ?? '');
 const dialogUp = (name) => page.waitForFunction(
   (n) => window.__dialogs?.active?.def?.byName.has(n), name, { timeout: 30000 });
-/** A plain `Dialog` (the intro is one) has a spec rather than an XML def. */
-const specDialogUp = (button) => page.waitForFunction(
-  (b) => window.__dialogs?.active?.spec?.buttons?.some((x) => x.name === b), button, { timeout: 30000 });
+/** The intro: a `cThreeChoice` with Done alone, which it names `btn1`. */
+const introUp = () => dialogUp('str1');
 const inGame = () => page.waitForFunction(() => window.__session !== undefined, { timeout: 30000 });
 
 await page.goto(`${BASE}?pace=1`);
@@ -64,7 +63,7 @@ await page.screenshot({ path: `${SHOTS}/p3-party.png` });
 await page.click('.startup-card[data-id="valleydy"]');
 await inGame();
 // put_party_in_scen's intro: the scenario's intro messages, one Done button.
-await specDialogUp('done');
+await introUp();
 check('the intro dialog comes up', true);
 await page.screenshot({ path: `${SHOTS}/p3b-intro.png` });
 await page.keyboard.press('Enter');
@@ -99,7 +98,7 @@ await page.waitForSelector('.startup-party li', { timeout: 30000 });
 check('File › Main Menu returns to the main menu', true);
 await page.click('.startup-card[data-id="valleydy"]');
 await inGame();
-await specDialogUp('done');
+await introUp();
 await page.keyboard.press('Enter');
 await page.waitForTimeout(800);
 
@@ -135,7 +134,7 @@ check('special items are taken, with removed-special-items', await page.evaluate
   () => [...window.__dialogs.active.def.byName.keys()].filter((k) => k !== 'okay').length <= 1));
 await page.screenshot({ path: `${SHOTS}/p5-removed.png` });
 await page.keyboard.press('Enter');
-await specDialogUp('done'); // then the intro
+await introUp(); // then the intro
 await page.keyboard.press('Enter');
 await page.waitForTimeout(800);
 const rebellion = await page.evaluate(() => ({

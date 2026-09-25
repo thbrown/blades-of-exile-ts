@@ -483,9 +483,11 @@ export class DialogHost {
    * modal. The screen is built lazily so a chain of them doesn't lay them all
    * out at once against stale state.
    */
-  runScreenQueued(build: ModalScreen | (() => ModalScreen)): Promise<string> {
+  runScreenQueued(
+    build: ModalScreen | (() => ModalScreen | Promise<ModalScreen>),
+  ): Promise<string> {
     const next = this.tail.then(
-      () => this.runScreen(typeof build === 'function' ? build() : build));
+      async () => this.runScreen(await (typeof build === 'function' ? build() : build)));
     this.tail = next.then(() => undefined, () => undefined);
     return next;
   }

@@ -100,7 +100,12 @@ function wrapControlText(ctx: CanvasRenderingContext2D, control: TextControl, te
   const style = textStyle(control.font);
   const w = width(control.fileRect);
   const lines: string[] = [];
-  for (const paragraph of text.split('\n')) {
+  // A '|' is a hard line break (render_text.cpp:159), except in text written
+  // into the definition itself, where the C++ shows pipes literally
+  // (`showPipes`, message.cpp:76). Scenario text — signs, messages, names —
+  // comes in through setText and breaks on them.
+  const breaks = control.text.includes('|') ? /\n/ : /\n|\|/;
+  for (const paragraph of text.split(breaks)) {
     lines.push(...(paragraph.length === 0 || w <= 0
       ? [paragraph]
       : wrapLines(ctx, paragraph, w, style)));

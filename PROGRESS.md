@@ -12575,3 +12575,37 @@ chosen first, and a win threw the party away.
   48px tall, not OBoE's 25, because this port's font wraps it to four lines
   (an `exile-js:` comment in the XML says so). `verify-screen.mjs` reads the
   title and the visible rows, and saves a shot of it as `01c2-select-pc`.
+- **Every game dialog is a real one now (2026-09-25).** Seven prompts still
+  went through the generic fallback (`dialogs.run`), and it showed. That's
+  now left for the Save and Load slot pickers alone: the original used the
+  Mac's file dialog there, so there is nothing to match.
+  - **`cThreeChoice`** (`dialogs/threeChoiceDialog.ts`), the dialog a special
+    node asks a question with, and the scenario intro. It has no XML file;
+    `init_strings`/`init_buttons` (3choice.cpp) lay it out, so this builds
+    the same layout as a definition: one text width (√(12 × total length)
+    + 20, at least 340), each string's C++ height estimate, and buttons
+    right-aligned under the text in slot order 2, 3, 1. **Divergence:** a
+    string whose lines need more than the estimate gets their height, since
+    this port's font wraps differently and the estimate would cut it off.
+    Escape takes the first button when there's no Cancel, as the generic
+    dialog did; OBoE has it do nothing.
+  - **Stock prompts open their own files.** `host.choice` takes an optional
+    definition name: `basic-trap`, `basic-portal`, `basic-button`,
+    `basic-lever` and the eight `stairDlogs` (`STAIR_DLOGS` in
+    `specials/town.ts`). The replay host ignores it.
+  - `locked-door-action`, `view-sign`, `attack-friendly`, `boat-bridge` and
+    `soul-crystal` are on their XML files. The locked-door picture is the
+    file's own door (terrain 112), since OBoE doesn't set it. Attack and
+    Under have no keys, in OBoE as here, so `verify-screen.mjs` clicks
+    Attack instead of pressing `a` (`clickDialogButton`).
+  - **The shop's info button opens what `shop_info` does**
+    (boe.dlgutil.cpp:510): the item sheet, or the Library page for a
+    spell, skill or alchemy, or a `cStrDlog` for a service. It used to
+    show one line of text, some of it made up.
+  - **`|` is a line break in dialog text** (render_text.cpp:159), except in
+    text written into the XML itself, which shows pipes literally
+    (`showPipes`, message.cpp:76). Signs use it: "Commander's
+    Office|Cmd. Terrance" now reads as two lines.
+  - Every new definition has to be in `main.ts`'s `dialogNames`
+    (`CHOICE_DIALOG_DEFS` covers the stock prompts), or `getDialogDef`
+    throws and nothing appears.

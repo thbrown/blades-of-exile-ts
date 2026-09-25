@@ -24,11 +24,12 @@ import {
 import { takeAp } from './game/combat';
 import { openJobBank } from './game/jobBank';
 import { alchemyChoices, makePotion } from './game/alchemy';
-import { getDialogDef, loadDialogDefs } from './dialogs/dialogStore';
+import { getDialogDef, hasDialogDef, loadDialogDefs } from './dialogs/dialogStore';
 import { XmlDialog } from './dialogs/xmlDialog';
 import { pcInfoDialog } from './dialogs/pcInfoDialog';
 import { itemInfoDialog } from './dialogs/itemInfoDialog';
 import { STR_DIALOG_DEFS, pictTypeOf, strDialog } from './dialogs/strDialog';
+import { CHOICE_DIALOG_DEFS, threeChoiceDialog } from './dialogs/threeChoiceDialog';
 import { storyDialog } from './dialogs/storyDialog';
 import { monsterInfoDialog } from './dialogs/monsterInfoDialog';
 import { jobBoardDialog } from './dialogs/jobBoardDialog';
@@ -492,7 +493,8 @@ async function main(): Promise<void> {
   ];
   for (let i = 1; i <= 11; i++) sheets.push(`monst${i}`);
   const dialogNames = ['pc-info', 'quest-info', 'get-items', 'item-info', 'many-str', 'monster-info', 'job-board',
-    'pick-potion', 'party-death', 'steal-item', 'select-pc', 'removed-special-items', 'keep-stored-items', 'congrats-save', ...STR_DIALOG_DEFS, ...NOTES_DIALOG_DEFS,
+    'pick-potion', 'party-death', 'steal-item', 'select-pc', 'attack-friendly', 'boat-bridge',
+    'locked-door-action', 'soul-crystal', 'view-sign', ...CHOICE_DIALOG_DEFS, 'removed-special-items', 'keep-stored-items', 'congrats-save', ...STR_DIALOG_DEFS, ...NOTES_DIALOG_DEFS,
     ...INPUT_DIALOG_DEFS, ...PICT_CHOICE_DIALOG_DEFS, ...SPEND_XP_DIALOG_DEFS,
     ...PARTY_EDITOR_DIALOG_DEFS, ...LIBRARY_DIALOG_DEFS, ...PREFERENCES_DIALOG_DEFS];
   addTotal(1 /* opcodes */ + STRING_TABLES.length + dialogNames.length + sheets.length
@@ -973,27 +975,17 @@ async function main(): Promise<void> {
 
   /** attack-friendly.xml — swinging at someone who hasn't done anything yet. */
   session.onConfirmAttackFriendly = async () => {
-    const choice = await dialogs.run({
-      text: "This creature isn't hostile.\nAttack anyway?",
-      escapeButton: 'cancel',
-      buttons: [
-        { name: 'cancel', label: 'Cancel', key: 'c' },
-        { name: 'attack', label: 'Attack', key: 'a' },
-      ],
-    });
+    const choice = await dialogs.runNested(
+      new XmlDialog(ctx, store, getDialogDef('attack-friendly')));
     return choice === 'attack';
   };
 
   /** boat-bridge.xml — a boat reaching a bridge: go under it, or come ashore. */
   session.onConfirmBoatBridge = async () => {
-    const choice = await dialogs.run({
-      text: 'Sail under the bridge, or come ashore?',
-      escapeButton: 'land',
-      buttons: [
-        { name: 'land', label: 'Land', key: 'l' },
-        { name: 'under', label: 'Under', key: 'u' },
-      ],
-    });
+    // boat-bridge.xml names no escape button, so Escape does nothing here,
+    // as in OBoE: the question has to be answered.
+    const choice = await dialogs.runNested(
+      new XmlDialog(ctx, store, getDialogDef('boat-bridge')));
     return choice === 'under';
   };
 
@@ -1060,12 +1052,9 @@ async function main(): Promise<void> {
     // Trailing empty strings are dropped; the rest are the dialog's paragraphs.
     const strs = [...introMsgs];
     while (strs.length > 0 && strs[strs.length - 1] === '') strs.pop();
-    await dialogs.runQueued({
-      text: strs.join('\n\n'),
-      pic: { type: 'scen', num: introMessPic ?? introPic },
-      escapeButton: 'done',
-      buttons: [{ name: 'done', label: 'Done' }],
-    });
+    // `custom_choice_dialog` with `basic_buttons[0]`, Done, alone.
+    await dialogs.runScreenQueued(() => threeChoiceDialog(ctx, store, strs,
+      [{ name: 'btn1', label: 'Done' }], introMessPic ?? introPic, 6 /* PIC_SCEN */));
   };
 
   session.onVictory = () => {
@@ -1102,16 +1091,11 @@ async function main(): Promise<void> {
     // Bumping the door again while the prompt is up shouldn't stack prompts.
     if (dialogs.active) return;
     void (async () => {
-      const choice = await dialogs.run({
-        text: 'This door is locked.\nWhat do you do?',
-        terPic: scen.terTypes[terrain]?.picture,
-        escapeButton: 'leave',
-        buttons: [
-          { name: 'leave', label: 'Leave', key: 'l' },
-          { name: 'bash', label: 'Bash Door', key: 'b' },
-          { name: 'pick', label: 'Pick Lock', key: 'p' },
-        ],
-      });
+      // locked-door-action.xml (boe.specials.cpp:485). Its picture is the
+      // file's own door, terrain 112, whatever the door looks like: OBoE
+      // doesn't set it.
+      const choice = await dialogs.runNested(
+        new XmlDialog(ctx, store, getDialogDef('locked-door-action')));
       if (choice === 'bash') {
         const who = await selectPc(SelectPcMode.ONLY_LIVING, 'Who will bash?',
           { highlight: Skill.STRENGTH });
@@ -1157,20 +1141,14 @@ async function main(): Promise<void> {
         }),
       }));
     },
-    choice: async (strs, buttons, title, pic, picType) => {
-      const text = strs.filter((s) => s.length > 0).join('\n\n');
-      const picked = await dialogs.runQueued({
-        text: title ? `${title}\n\n${text}` : text,
-        // `cThreeChoice::init_pict` (3choice.cpp:159) — a choice dialog raised
-        // by a special node carries the node's picture too.
-        pic: pic >= 0 ? { type: pictTypeOf(picType), num: pic } : undefined,
-        escapeButton: buttons[0]?.name ?? 'okay',
-        // Each button carries its control *name* as well as its label, because
-        // the name is what a replay records; the two are rarely the same
-        // string. `basic_buttons` attaches a letter to several of them —
-        // 'y'/'n' most of all — and the dialog answers to those keys.
-        buttons: buttons.map((b) => ({ name: b.name, label: b.label, key: b.key })),
-      });
+    choice: async (strs, buttons, _title, pic, picType, xml) => {
+      // A stock prompt opens its own definition (`cChoiceDlog("basic-trap")`),
+      // picture and wording included; everything else is a `cThreeChoice`
+      // laid out from the node's strings and `basic_buttons`. Either way the
+      // answer is a control *name*, which is what a replay records.
+      const picked = await dialogs.runScreenQueued(async () => xml && hasDialogDef(xml)
+        ? new XmlDialog(ctx, store, getDialogDef(xml))
+        : threeChoiceDialog(ctx, store, strs, buttons, pic, picType));
       return Math.max(0, buttons.findIndex((b) => b.name === picked));
     },
     story: async (title, first, last, strType, pic, picType) => {
@@ -1259,18 +1237,21 @@ async function main(): Promise<void> {
     if (dialogs.active) return 0;
     const held = trappedMonsters(univ);
     if (held.length === 0) return 0;
-    const picked = await dialogs.run({
-      text: 'The soul crystal holds:\nWhich will you summon?',
-      rows: held.map((slot, i) => ({
-        name: String(slot.which),
-        key: String(i + 1),
-        label: `${slot.name} (level ${slot.level})`,
-      })),
-      escapeButton: 'cancel',
-      buttons: [{ name: 'cancel', label: 'Cancel', key: 'c' }],
-    });
-    const which = Number(picked);
-    return Number.isInteger(which) && held.some((h) => h.which === which) ? which : 0;
+    // soul-crystal.xml, filled as pick_trapped_monst fills it: an empty slot
+    // loses its button and keeps "(spot empty)".
+    const dlg = new XmlDialog(ctx, store, getDialogDef('soul-crystal'));
+    for (let slot = 0; slot < 4; slot++) {
+      const h = held.find((m) => m.slot === slot);
+      if (!h) {
+        dlg.hide(`pick${slot + 1}`);
+        continue;
+      }
+      dlg.setText(`slot${slot + 1}`, h.name);
+      dlg.setText(`lvl${slot + 1}`, String(h.level));
+    }
+    const picked = await dialogs.runNested(dlg);
+    const slot = Number(picked.replace(/^pick/, '')) - 1;
+    return held.find((m) => m.slot === slot)?.which ?? 0;
   };
 
   /**
@@ -1918,12 +1899,15 @@ async function main(): Promise<void> {
       void session.buyShopRow(hit.row).then(() => redraw());
     } else {
       const info = shopItemInfo(shop, hit.row);
-      if (info && !dialogs.active)
-        void dialogs.run({
-          text: info.text,
-          escapeButton: 'okay',
-          buttons: [{ name: 'okay', label: 'OK' }],
-        }).then(() => redraw());
+      if (info && !dialogs.active) {
+        const screen = info.kind === 'item' ? itemInfoDialog(ctx, store, univ, 6, 0, info.item)
+          : info.kind === 'alchemy' ? alchemyHelpDialog(ctx, store)
+            : info.kind === 'spell' ? spellInfoDialog(ctx, store, univ, info.school, info.level)
+              : info.kind === 'skill' ? skillInfoDialog(ctx, store, info.skill as Skill)
+                : strDialog(ctx, store,
+                  { str1: info.text, title: info.title, pic: info.pic, picType: info.picType });
+        void dialogs.runScreen(screen).then(() => redraw());
+      }
     }
     setStatus();
     redraw();
@@ -1995,12 +1979,12 @@ async function main(): Promise<void> {
     }
     const sign = session.signAt(target);
     if (sign === null || dialogs.active) return;
-    await dialogs.run({
-      text: sign,
-      terPic: scen.terTypes[ter]?.picture,
-      escapeButton: 'okay',
-      buttons: [{ name: 'okay', label: 'OK' }],
-    });
+    // do_sign (boe.dlgutil.cpp:1277): view-sign.xml, with the sign's own
+    // terrain as its picture.
+    const dlg = new XmlDialog(ctx, store, getDialogDef('view-sign'));
+    dlg.setPictType('ter', 'ter', scen.terTypes[ter]?.picture ?? 0);
+    dlg.setText('sign', sign);
+    await dialogs.runNested(dlg);
   };
 
   /**

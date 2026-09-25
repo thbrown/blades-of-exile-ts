@@ -7,6 +7,7 @@
 
 import { ShopState, SHOP_CHARS, SHOP_ROWS, COST_STRINGS } from '../game/shop';
 import { ShopItemType } from '../data/shop';
+import { Item } from '../data/item';
 import { Colours } from './colours';
 import { ITEM_BTN_ICONS, UiRect, height, width } from './layout';
 import { itemGraphic } from './itemPics';
@@ -276,44 +277,66 @@ export class ShopScreen {
   }
 }
 
-/** A one-line description for the info button (handle_info_request, :510). */
-export function shopItemInfo(state: ShopState, row: number): { title: string; text: string } | null {
+/**
+ * What the info button opens (`shop_info`, boe.dlgutil.cpp:510): the item's
+ * own sheet, the Library page for a spell, skill or alchemy, or a message box
+ * for a service. A treasure or class entry opens nothing.
+ */
+export type ShopInfo =
+  | { kind: 'item'; item: Item }
+  | { kind: 'alchemy' }
+  | { kind: 'spell'; school: 'mage' | 'priest'; level: number }
+  | { kind: 'skill'; skill: number }
+  | { kind: 'message'; title: string; text: string; pic: number; picType: number };
+
+/** `PIC_DLOG` and `PIC_ITEM` (pictypes.hpp). */
+const PIC_DLOG = 4;
+const PIC_ITEM = 7;
+
+export function shopItemInfo(state: ShopState, row: number): ShopInfo | null {
   const target = state.rowEntry(row);
   if (!target) return null;
   const { entry } = target;
-  const title = entry.item.fullName;
+  const service = (title: string, text: string): ShopInfo =>
+    ({ kind: 'message', title, text, pic: 15, picType: PIC_DLOG });
   switch (entry.type) {
     case ShopItemType.ITEM:
-      return { title, text: entry.item.desc || 'A perfectly ordinary item.' };
-    case ShopItemType.CALL_SPECIAL:
-      return { title, text: entry.item.desc };
-    case ShopItemType.SKILL:
-      return { title, text: 'Buying this raises the skill by one level.' };
-    case ShopItemType.MAGE_SPELL:
-    case ShopItemType.PRIEST_SPELL:
-      return { title, text: 'Buying this teaches the spell to the current character.' };
+      return { kind: 'item', item: entry.item };
     case ShopItemType.ALCHEMY:
-      return { title, text: 'Buying this teaches the party an alchemical recipe.' };
+      // "TODO: Create a dedicated dialog for alchemy info" — OBoE's own note;
+      // it opens the Library's alchemy pages.
+      return { kind: 'alchemy' };
+    case ShopItemType.MAGE_SPELL:
+      return { kind: 'spell', school: 'mage', level: entry.item.itemLevel };
+    case ShopItemType.PRIEST_SPELL:
+      return { kind: 'spell', school: 'priest', level: entry.item.itemLevel };
+    case ShopItemType.SKILL:
+      return { kind: 'skill', skill: entry.item.itemLevel };
     case ShopItemType.HEAL_WOUNDS:
-      return { title, text: 'Select this option to restore the current PC to full health.' };
+      return service('Heal Wounds', 'Select this option to restore the current PC to full health.');
     case ShopItemType.REMOVE_CURSE:
-      return { title, text: 'Select this option to remove any curses on any items the PC is wearing.' };
+      return service('Remove Curse', 'Select this option to remove any curses on any items the PC is wearing.');
     case ShopItemType.CURE_DUMBFOUNDING:
-      return { title, text: "Select this option to restore the PC's mind from dumbfounding." };
+      return service('Cure Dumbfounding', "Select this option to restore the PC's mind from dumbfounding.");
     case ShopItemType.CURE_POISON:
-      return { title, text: 'Select this option purge all poison from the current PC.' };
+      return service('Cure Poison', 'Select this option purge all poison from the current PC.');
     case ShopItemType.CURE_DISEASE:
-      return { title, text: 'Select this option purge all disease from the current PC.' };
+      return service('Cure Disease', 'Select this option purge all disease from the current PC.');
     case ShopItemType.CURE_ACID:
-      return { title, text: 'Select this option purge all acid from the current PC.' };
+      return service('Cure Acid', 'Select this option purge all acid from the current PC.');
     case ShopItemType.CURE_PARALYSIS:
-      return { title, text: "Select this option to cure the current PC's paralysis." };
+      return service('Cure Paralysis', "Select this option to cure the current PC's paralysis.");
     case ShopItemType.DESTONE:
-      return { title, text: 'Select this option to restore a PC that has been turned to stone.' };
+      return service('Destone', 'Select this option to restore a PC that has been turned to stone.');
     case ShopItemType.RAISE_DEAD:
-      return { title, text: 'Select this option to resurrect a PC.' };
+      return service('Raise Dead', 'Select this option to resurrect a PC.');
     case ShopItemType.RESURRECT:
-      return { title, text: 'Select this option to resurrect a PC that has been turned to dust.' };
+      return service('Resurrect', 'Select this option to resurrect a PC that has been turned to dust.');
+    case ShopItemType.CALL_SPECIAL:
+      return {
+        kind: 'message', title: entry.item.fullName, text: entry.item.desc,
+        pic: entry.item.graphicNum, picType: PIC_ITEM,
+      };
     default:
       return null;
   }

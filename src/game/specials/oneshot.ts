@@ -307,7 +307,7 @@ export async function oneshotSpec(
         // and Yes/No the other way round from the custom-message branch.
         refused = await ctx.host.choice(
           ["You think you've found a trap.\nDo you try to disarm it?"],
-          XML_BUTTONS['basic-trap']!, '', 27, 0) === 0;
+          XML_BUTTONS['basic-trap']!, '', 27, 0, 'basic-trap') === 0;
       }
       if (refused) {
         // Walking away leaves the one-shot flag unset, so the trap is still

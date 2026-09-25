@@ -125,9 +125,10 @@ const built = { editorUp, partyBefore, emptied, raceUp, xpUp, pictUp, nameUp, na
 
 await page.waitForFunction(() => window.__session !== undefined, { timeout: 30000 });
 // put_party_in_scen's intro dialog: the scenario's intro messages, then Done.
+// It is a `cThreeChoice`: the strings are str1…, the lone Done is btn1.
 await page.waitForFunction(
-  () => window.__dialogs?.active?.spec?.buttons?.some((b) => b.name === 'done'), null, { timeout: 30000 });
-built.intro = await page.evaluate(() => window.__dialogs.active.spec.text.startsWith('Adventuring!'));
+  () => window.__dialogs?.active?.def?.byName.has('str1'), null, { timeout: 30000 });
+built.intro = await page.evaluate(() => window.__dialogs.active.getText('str1').startsWith('Adventuring!'));
 await shot('00f-intro');
 await page.keyboard.press('Enter');
 await page.waitForTimeout(600);
@@ -218,6 +219,17 @@ const canvasPoint = async (x, y) => page.evaluate(({ x, y }) => {
   const r = c.getBoundingClientRect();
   return { x: r.left + (x + 0.5) * (r.width / c.width), y: r.top + (y + 0.5) * (r.height / c.height) };
 }, { x, y });
+/** Click a dialog's button by name — for buttons their XML gives no key. */
+const clickDialogButton = async (name) => {
+  const rect = await page.evaluate((n) => {
+    const d = window.__dialogs.active;
+    const c = d?.def?.controls.find((x) => x.name === n);
+    return c ? d.screenRect(c) : null;
+  }, name);
+  if (!rect) throw new Error(`no dialog button named ${name}`);
+  const at = await canvasPoint((rect.left + rect.right) / 2 - 0.5, (rect.top + rect.bottom) / 2 - 0.5);
+  await page.mouse.click(at.x, at.y);
+};
 const grab = await canvasPoint(60, 70);
 await page.mouse.move(grab.x, grab.y);
 await page.mouse.down();
@@ -1427,11 +1439,13 @@ const trapAsked = await page.evaluate(() => {
   // `fullText` is checked below: ONCE_TRAP takes only m1 and m2, and reading a
   // six-string run instead dragged the front gate's "leave the scenario"
   // question in behind the commander's belongings.
-  return d ? {
-    buttons: d.spec.buttons.map((b) => b.label),
-    text: d.spec.text.slice(0, 45),
-    bled: d.spec.text.includes('leave the scenario'),
-  } : null;
+  if (!d || !d.def) return null;
+  // A `cThreeChoice`: its buttons left to right, and its strings str1…str6.
+  const buttons = d.def.controls.filter((c) => c.kind === 'button')
+    .sort((a, b) => a.rect.left - b.rect.left).map((b) => b.label);
+  const text = [1, 2, 3, 4, 5, 6].filter((n) => d.def.byName.has(`str${n}`))
+    .map((n) => d.getText(`str${n}`)).join('\n');
+  return { buttons, text: text.slice(0, 45), bled: text.includes('leave the scenario') };
 });
 // Say No: the one-shot flag stays unset so the trap is still there.
 await press('n');
@@ -2158,7 +2172,8 @@ const attackFriendly = await page.evaluate(async () => {
   };
 });
 await shot('02f-attack-friendly');
-await press('a'); // the Attack button's def-key
+// attack-friendly.xml gives Attack no key, in OBoE as here.
+if (attackFriendly.promptUp) await clickDialogButton('attack');
 await page.waitForTimeout(200);
 const attackFriendlyDone = await page.evaluate(async () => {
   const s = window.__session;

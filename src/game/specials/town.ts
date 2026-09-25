@@ -77,6 +77,12 @@ const STAIR_PROMPTS = [
     + ' into total darkness.',
 ];
 
+/** `stairDlogs` itself: the definition each of those prompts opens. */
+export const STAIR_DLOGS = [
+  'basic-stair-up', 'basic-stair-down', 'basic-slope-up', 'basic-slope-down',
+  'slimy-stair-up', 'slimy-stair-down', 'dark-slope-up', 'dark-slope-down',
+];
+
 export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
   const spec = ctx.curSpec;
   const town = univ.town;
@@ -469,7 +475,8 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
       // the generic portal gets basic-portal.xml, whose buttons are No/Yes.
       const buttons = generic
         ? XML_BUTTONS['basic-portal']! : threeChoiceButtons([9, 8, -1]);
-      const picked = await ctx.host.choice(strs, buttons, '', spec.pic, spec.pictype);
+      const picked = await ctx.host.choice(
+        strs, buttons, '', spec.pic, spec.pictype, generic ? 'basic-portal' : undefined);
       if (picked === 0) {
         // **Declining a *generic* portal does not stop the party stepping onto
         // the square, and does not end the chain.** `TOWN_GENERIC_PORTAL`'s
@@ -502,7 +509,7 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
 
     case SpecType.TOWN_GENERIC_BUTTON: {
       const picked = await ctx.host.choice(
-        [BUTTON_PROMPT], XML_BUTTONS['basic-button']!, '', spec.pic, spec.pictype);
+        [BUTTON_PROMPT], XML_BUTTONS['basic-button']!, '', spec.pic, spec.pictype, 'basic-button');
       if (picked === 1) ctx.nextSpec = spec.ex1b;
       break;
     }
@@ -543,7 +550,7 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
           // One of the eight stairway dialogs, whose pair is Leave/Climb —
           // index 1 is Climb.
           take = (await ctx.host.choice([STAIR_PROMPTS[which] ?? STAIR_PROMPTS[0]!],
-            XML_BUTTONS['stairway']!, '', spec.pic, spec.pictype)) === 1;
+            XML_BUTTONS['stairway']!, '', spec.pic, spec.pictype, STAIR_DLOGS[which])) === 1;
         }
       }
       ctx.retA = 1;
@@ -914,7 +921,7 @@ function fade(
 /** handle_lever — the square becomes whatever it transforms into. */
 async function pullLever(univ: Universe, ctx: SpecialCtx): Promise<boolean> {
   const picked = await ctx.host.choice(
-    ['You see a lever. Do you want to pull it?'], XML_BUTTONS['basic-lever']!, '', -1, 0);
+    ['You see a lever. Do you want to pull it?'], XML_BUTTONS['basic-lever']!, '', -1, 0, 'basic-lever');
   if (picked !== 1) return false;
   transformSpace(univ, ctx);
   return true;
