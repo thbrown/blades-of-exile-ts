@@ -74,14 +74,15 @@ export function buildE3Village(template: Uint8Array, v: E3Village, underground: 
   const t = Array.from({ length: VILLAGE_SIZE }, () => Array<number>(VILLAGE_SIZE).fill(underground ? CAVE_FLOOR : GRASS));
   const inside = (x: number, y: number) => x >= 0 && y >= 0 && x < VILLAGE_SIZE && y < VILLAGE_SIZE;
 
-  // FUN_1040_1440. The rect's words are used in stored order: the first and
-  // third bound x, the second and fourth bound y.
+  // FUN_1040_1440, over x from the rect's left to its right and y from its
+  // top to its bottom. (In memory the loader has turned the file's Mac rect
+  // into a Windows one, left first, as BoE 1997's `port_rect` does.)
   const fillRect = (r: E3Village['rects'][number]) => {
     const [terrain = 0, rawKind = 0] = r.bytes;
     const kind = rawKind % 10;
     const frame = kind === 1;
     const chance = RECT_CHANCE[kind] ?? 20;
-    const { top: x0, left: y0, bottom: x1, right: y1 } = r.rect;
+    const { left: x0, top: y0, right: x1, bottom: y1 } = r.rect;
     for (let x = 0; x < VILLAGE_SIZE; x++) {
       for (let y = 0; y < VILLAGE_SIZE; y++) {
         if (x < x0 || x > x1 || y < y0 || y > y1) continue;
