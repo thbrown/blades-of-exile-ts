@@ -90,6 +90,22 @@ describe('unlocked doors', () => {
     expect(await session.move(Direction.N)).toBe(true);
     expect(session.univ.party.townLoc).toEqual(where);
   });
+
+  it('lights up what is behind the door the moment it opens', async () => {
+    // check_special_terrain ends in update_explored (boe.specials.cpp:355) so
+    // the room past a door shows as soon as it swings open, not on the next step.
+    const session = newSession();
+    const where = findTerrain(session, TerSpec.CHANGE_WHEN_STEP_ON)!;
+    const cur = session.univ.town!;
+    session.univ.party.townLoc = { x: where.x, y: where.y + 1 };
+    session.center = { ...session.univ.party.townLoc };
+    for (const col of cur.explored) col.fill(0);
+    session.updateExplored(session.univ.party.townLoc);
+    expect(cur.isExplored(where.x, where.y - 1)).toBe(false);
+
+    expect(await session.move(Direction.N)).toBe(false);
+    expect(cur.isExplored(where.x, where.y - 1)).toBe(true);
+  });
 });
 
 describe('a scripted door in a town fight', () => {

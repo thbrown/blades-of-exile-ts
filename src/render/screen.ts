@@ -1381,9 +1381,9 @@ export class Screen {
     // The C++ measures the name alone and adds 33 for the "1. " and the gap.
     const nameWidth = measureString(this.ctx, pc.name, { size: 12 });
     let left = nameRow.left + nameWidth + 30;
-    // The icon row sits three pixels above the name row: {18,15,30,27} in the
-    // C++ against a name row that starts at 21.
-    const top = nameRow.top - 3;
+    // The icon row is the name row: {18,15,30,27} in the original, whose name
+    // rows start at 18 too. (OBoE moved the names to 21 and left the icons.)
+    const top = nameRow.top;
     const rightLimit = at(PC_ROWS[0]!.hp).left - 5;
 
     for (let which = Status.POISONED_WEAPON; which <= Status.CHARM; which++) {
@@ -1451,10 +1451,12 @@ export class Screen {
     let title = service ? ITEM_SHOP_TITLES[service.mode] : `${pc.name} inventory:`;
     if (!service && win.mode === ItemWinMode.SPECIAL) title = 'Special items:';
     if (!service && win.mode === ItemWinMode.QUESTS) title = 'Quests/Jobs:';
+    // White, not OBoE's yellow: `ForeColor(whiteColor)` (text.c:327). The
+    // yellow "Party stats:" above it is baked into the original's panel art.
     drawStringEllipsis(this.ctx, at(ITEM_PANEL.title), title, {
       font: 'bold',
       size: 10,
-      colour: Colours.YELLOW,
+      colour: Colours.WHITE,
     });
 
     // The scrollbar is a control on the main window, not part of the panel, so
@@ -1658,10 +1660,12 @@ export class Screen {
       // The numeral sits to the left of the portrait; "6" is nudged an extra
       // pixel down because it has an ascender in this font.
       const numeral = String(i + 1);
-      const style = { font: 'bold', size: 10, colour: Colours.YELLOW } as const;
+      // 12pt rather than the labels' 10: the original's numerals are as tall
+      // as its PC names.
+      const style = { font: 'bold', size: 12, colour: Colours.YELLOW } as const;
       const w = measureString(this.ctx, numeral, style);
       drawString(this.ctx, {
-        top: inner.top + (i === 5 ? 3 : 2),
+        top: inner.top + (i === 5 ? 2 : 1),
         left: inner.left - w - 5,
         bottom: inner.bottom,
         right: inner.right,

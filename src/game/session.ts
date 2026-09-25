@@ -2613,6 +2613,27 @@ export class GameSession {
       this.pushThings(fromLoc, where);
     }
 
+    const entered = await this.enterTerrainSpecial(spec, ter, where, inCombatMove, town, forced);
+    // "Action may change terrain, so update what's been seen"
+    // (boe.specials.cpp:355, specials.c:381) — the tail every branch of the
+    // switch falls through to. It is what lights up the room behind a door the
+    // moment it swings open; this port returned from inside the switch and
+    // skipped it, so the far side stayed dark until the party next moved.
+    if (this.inTown) this.updateExplored(this.univ.party.townLoc);
+    if (inCombatMove) this.updateExplored(this.univ.currentPc.combatPos);
+    return entered;
+  }
+
+  /** The terrain-special switch at the end of `check_special_terrain` (boe.specials.cpp:306). */
+  private async enterTerrainSpecial(
+    spec: ReturnType<Universe['terrainType']>,
+    ter: number,
+    where: Location,
+    inCombatMove: boolean,
+    town: Universe['town'],
+    forced: boolean,
+  ): Promise<{ canEnter: boolean; forced: boolean }> {
+    const stop = { canEnter: false, forced: false };
     switch (spec.special) {
       case TerSpec.CHANGE_WHEN_STEP_ON: {
         // An unlocked door: walking into it swaps the terrain for flag1, and

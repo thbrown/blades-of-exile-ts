@@ -12541,3 +12541,22 @@ chosen first, and a win threw the party away.
   fresh in a small scenario, so the carried sector always existed. The
   one-by-one sweep of all 173 archive-only scenarios passed for the same
   reason.
+- **Fixed: opening a door left the room behind it dark until the next step
+  (2026-09-25).** `check_special_terrain` ends with "Action may change
+  terrain, so update what's been seen" — `update_explored` on the party's
+  square (boe.specials.cpp:355, the original's specials.c:381), which every
+  branch of the terrain switch falls through to. The port returned from
+  inside the switch and never got there. The switch is now
+  `enterTerrainSpecial` and the tail runs after it, for walked-into doors
+  and picked or bashed locks alike. No draws are involved, so the corpus is
+  unaffected. `doors.test.ts` covers it.
+- **The PC and item panels follow the original's text positions, not
+  OBoE's (2026-09-25).** A player could tell, so by `DIVERGENCES.md`'s rule
+  the original wins. OBoE moved the PC rows from `top = 18`
+  (blxactions.c:262) to 21, which left more space above the first name than
+  below the last; they are back at 18, clicks included, and the status
+  icons sit on the row as they did. Food/gold/day values use the original's
+  `small_erase_rects` (top 101, text.c:122), on the labels' baseline. The
+  "*name* inventory:" title is white (`ForeColor(whiteColor)`, text.c:327).
+  The yellow 1-6 beside the portraits are 12pt, which is a match by eye:
+  they are part of the original's panel art.

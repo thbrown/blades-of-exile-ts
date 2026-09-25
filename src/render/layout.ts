@@ -75,7 +75,10 @@ export interface PcRowRects {
 }
 
 export const PC_ROWS: PcRowRects[] = Array.from({ length: 6 }, (_, i) => {
-  const top = 21 + 13 * i;
+  // 18, the original's (blxactions.c:262). OBoE moved the rows to 21, which
+  // leaves the list sitting low in its box: a gap above the first name that
+  // the space under the last one doesn't match.
+  const top = 18 + 13 * i;
   const bottom = top + 12;
   return {
     name: r(top, 3, bottom, 180),
@@ -90,11 +93,13 @@ export const PC_ROWS: PcRowRects[] = Array.from({ length: 6 }, (_, i) => {
 export const PC_PANEL = {
   titles: [r(4, 4, 16, 180), r(4, 184, 16, 214), r(4, 214, 16, 237)],
   foodLabel: r(103, 3, 114, 40),
-  foodValue: r(103, 34, 114, 76),
+  // The values sit in the original's `small_erase_rects` (text.c:122), two
+  // pixels higher than OBoE's, which puts them on the labels' baseline.
+  foodValue: r(101, 34, 114, 76),
   goldLabel: r(103, 75, 114, 104),
-  goldValue: r(103, 106, 114, 147),
+  goldValue: r(101, 106, 114, 147),
   dayLabel: r(103, 147, 114, 172),
-  dayValue: r(103, 174, 114, 201),
+  dayValue: r(101, 174, 114, 201),
 } as const;
 
 // --- Inventory panel rows (init_inven_rects, boe.actions.cpp:200) ----------
