@@ -91,6 +91,17 @@ export class SpecBuilder {
     return n;
   }
 
+  /** A node number to fill in later, for a chain that loops back. */
+  private reserve(): number {
+    this.nodes.push('');
+    return this.nodes.length - 1;
+  }
+
+  private fill(n: number, op: string, f: NodeFields, goto: number): void {
+    const text = this.node(op, f, goto);
+    this.nodes[n] = this.nodes.pop()!.replace(`= ${text}\n`, `= ${n}\n`);
+  }
+
   /** Runs steps in order, then `next`. */
   seq(steps: Step[]): Step {
     return (next) => steps.reduceRight((after, step) => step(after), next);
@@ -323,6 +334,29 @@ export class SpecBuilder {
         sdf: flag, msg: [pages[pages.length - 1]!, -1],
         ex1: [k === 5 ? 6 : k, strong ? 2 : 0], ex2: [k === 8 || k === 11 ? 10 : 0],
       }, next);
+    };
+  }
+
+  /** `FUN_10b0_958e(n, type)`: every living PC takes `n` damage of `type`. */
+  damageAll(n: number, type: number): Step {
+    return (next) => this.node('damage', { ex1: [0, 1], ex2: [n, type] }, next);
+  }
+
+  xp(n: number): Step {
+    return (next) => this.node('xp', { ex1: [n, 0] }, next);
+  }
+
+  /**
+   * `while (FUN_1070_079e(cls)) { body }`: take items of class `cls` one at
+   * a time, running `body` for each, then go on. (E3 names the class by
+   * `type_flag`, which the converter copies into the item's special class.)
+   */
+  eachItemOfClass(cls: number, body: Step[]): Step {
+    return (next) => {
+      const check = this.reserve();
+      const loop = this.seq(body)(check);
+      this.fill(check, 'if-item-class', { ex1: [cls, loop], ex2: [1] }, next);
+      return check;
     };
   }
 

@@ -27,7 +27,7 @@
 
 import { BASIC_BUTTONS } from '../../src/game/specials/oneshot';
 import { e3SpotFlag } from './flags';
-import { SpecBuilder, type ScriptSource, type Step } from './script';
+import { SpecBuilder, townSpotFlag, type ScriptSource, type Step } from './script';
 
 export interface E3Spot { loc: { x: number; y: number }; id: number }
 
@@ -76,7 +76,12 @@ export function e3SpotScript(
     if (s.id < 100) {
       const steps = scripts.get(s.id);
       if (!steps) return;
-      n = compiled.get(s.id) ?? b.compile(steps);
+      // The town dispatcher skips a spot below 10 whose flag `(t, id)` is 20,
+      // the value E3's one-shot helpers leave (`FUN_10c0_0000`).
+      const guarded: Step[] = isTown && s.id < 10
+        ? [b.ifFlagEq(townSpotFlag(place.town, s.id), 20, [], steps)]
+        : steps;
+      n = compiled.get(s.id) ?? b.compile(guarded);
       compiled.set(s.id, n);
     } else {
       const msg: [number, number] = s.id >= 200

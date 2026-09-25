@@ -13,6 +13,8 @@ import { partyFlag as f, partySpecItem, type SpecBuilder, type Step } from '../s
 export const LEVY_PAID = e3DailyFlag(0);
 export const ELISA_FED = e3DailyFlag(1);
 export const DAILY_FLAGS = [LEVY_PAID, ELISA_FED];
+/** A scratch flag of the converter's for a count E3 keeps on the stack. */
+const AGROD_SOLD: [number, number] = [291, 10];
 
 /** The fort's four pieces of evidence: special items at party+0x40…+0x46. */
 const EVIDENCE = [0x40, 0x42, 0x44, 0x46].map(partySpecItem);
@@ -81,5 +83,19 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
         b.ifFlagEq(f(0xc90), 4, [b.incFlag(f(0xc90)), b.reply(0x16)], [b.reply(0x17)]),
       ]),
     ]),
+  ]],
+  // Mayor Arbuckle's slime mission (Krizsan). The first ask sets it
+  // (0xc84), reporting back after Anaximander's report (0xc85) pays 1500 gold
+  // and 10 experience each. TODO(E3-3): journal entry 5.
+  [118, (b) => [b.ifFlagEq(f(0xa3), 0, [b.incFlag(f(0xa3)), b.setFlag(f(0xc84), 1), b.reply(0x3e, 0x3f)], [
+    b.ifFlagAtLeast(f(0xc85), 1, [
+      b.ifFlagEq(f(0xa3), 1, [b.xp(10), b.gold(1500), b.setFlag(f(0xa3), 2), b.reply(0x41, 0x42)], [b.reply(0x43)]),
+    ], [b.reply(0x40)]),
+  ])]],
+  // Captain Agrod buys unicorn horns (type flag 111) at 10 gold each.
+  [119, (b) => [
+    b.setFlag(AGROD_SOLD, 0),
+    b.eachItemOfClass(111, [b.gold(10), b.setFlag(AGROD_SOLD, 1)]),
+    b.ifFlagEq(AGROD_SOLD, 0, [b.reply(0x3b, 0x3c)], [b.reply(0x3d)]),
   ]],
 ]);

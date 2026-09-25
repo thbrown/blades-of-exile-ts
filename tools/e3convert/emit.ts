@@ -25,6 +25,7 @@ import { e3DayReached, e3Event, e3Flag } from './flags';
 import { buildE3Village, villageTemplate } from './village';
 import { e3SpotScript, type PlaceScript, type SpotScript } from './specials';
 import { town21 } from './towns/town21';
+import { krizsan } from './towns/krizsan';
 import { DAILY_FLAGS } from './towns/talkScripts';
 import { SpecBuilder } from './script';
 import { BASIC_BUTTONS } from '../../src/game/specials/oneshot';
@@ -38,7 +39,9 @@ const LIGHTING = ['lit', 'dark', 'drains', 'none'];
 const ENTRANCE_MARK = ['v', '<', '^', '>'];
 
 /** The towns whose own encounters are transcribed so far (E3-3). */
-const TOWN_SCRIPTS = new Map<number, PlaceScript>([[21, town21]]);
+const TOWN_SCRIPTS = new Map<number, PlaceScript>([
+  [21, town21], ...[0, 1, 2, 3].map((t): [number, PlaceScript] => [t, krizsan(t)]),
+]);
 
 /** E3's special items: strings 1801 on, and the engine's limit too. */
 const E3_SPECIAL_ITEMS = 50;
@@ -431,6 +434,9 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
   const items = [...e3Items, ...shopTables.food].map((old) => {
     const it = convertItem(old);
     it.graphicNum = 1000 + itemSheetNum * 100 + old.graphicNum;
+    // E3's scripts name kinds of item by `type_flag` (unicorn horns are 111);
+    // the engine's item-class nodes read the special class.
+    if (old.typeFlag > 0) it.specialClass = old.typeFlag;
     return it;
   });
   write('items.xml', itemsXml(items));

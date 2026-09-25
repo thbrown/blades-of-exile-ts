@@ -1033,8 +1033,17 @@ Notes for M2 implementer:
       scripted type, its speaker and towns, and whether it is done.
       `tools/e3convert/ghidra/talkcase.py <type>` prints a case's
       disassembly.
-  - Next: Krizsan (towns 0–3, `FUN_1078_0000`, talk 118/119), and the fort's
-    outdoor zone.
+  - 2026-09-24: **Krizsan** (towns 0–3, `towns/krizsan.ts`, `FUN_1078_0000`)
+    and its talk scripts 118 (Mayor Arbuckle) and 119 (Captain Agrod, who
+    buys unicorn horns).
+    - The town dispatcher's guard is now general. A spot below 10 whose
+      flag `(t, id)` is 20 is skipped, which is the value E3's one-shot
+      helpers leave.
+    - Loops are possible (`eachItemOfClass`). E3 names kinds of item by
+      `type_flag`, which the converter copies into the special class.
+  - Next: the outdoor zones around the fort and Krizsan (`FUN_10a0_0062`'s
+    zone arms), then Shayder (4–7), Sharimik (8–11), Lorelei (12–15) and
+    Gale (16–19). The talk types are listed by `listTalkScripts.ts`.
 
 ## Key references (do not lose)
 
