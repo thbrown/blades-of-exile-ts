@@ -12525,3 +12525,19 @@ chosen first, and a win threw the party away.
   under "Newer copies played". `version` is in the catalog.
 - The bundle's README names two more sources, `openboe.com/scenarios/` and
   `truesite.openboe.com`. Both timed out on 2026-09-25. Worth another try.
+- **Fixed: a party in memory entering a smaller world half-drew the screen
+  (2026-09-25).** Reported with the library's new scenarios, but it wasn't
+  about them. `main.ts` drew the game screen before
+  `enterWithParty`, so `put_party_in_scen`'s dialogs had it behind them. The
+  party still stood in its last scenario's sector until `enterScenario`
+  moved it, so a party from Valley (sector 2,2) entering a one-sector
+  scenario threw from `CurOut.sector` via the status bar. Only the terrain
+  view, all shaded as unexplored, got drawn. Those dialogs now come up over
+  the startup art, as in the original, where `put_party_in_scen` is called
+  from `handle_startup_press` (STARTUP.CPP:91). `enterWithParty` has an
+  `entered` hook where the game screen takes over. `verify-party.mjs` now
+  takes the Valley party into Bandit Busywork (one sector wide) and fails
+  without the fix. **Why the first probes missed it:** each made its party
+  fresh in a small scenario, so the carried sector always existed. The
+  one-by-one sweep of all 173 archive-only scenarios passed for the same
+  reason.

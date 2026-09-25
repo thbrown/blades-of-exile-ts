@@ -2842,11 +2842,16 @@ async function main(): Promise<void> {
   }
 
   // The party in memory, into the scenario the startup screen picked
-  // (`put_party_in_scen`): its dialogs need the game screen up.
+  // (`put_party_in_scen`). Its dialogs come up over the startup art, as the
+  // C++'s do: until `enterScenario` moves it, the party still stands where
+  // its last scenario left it, a sector this world may not have. Drawing the
+  // game screen then threw from the status bar (`CurOut.sector`) and left
+  // only the terrain drawn, when the last scenario had more sectors.
   if (enteringParty !== null) {
     hideLoadingUi();
     refitDesktop();
     applyPartySave(enteringParty, univ);
+    screen.startupBackdrop = true;
     redraw();
     await session.enterWithParty({
       removedSpecialItems: async () => {
@@ -2854,6 +2859,7 @@ async function main(): Promise<void> {
       },
       keepStoredItems: async () =>
         (await dialogs.runScreen(new XmlDialog(ctx, store, getDialogDef('keep-stored-items')))) === 'yes',
+      entered: () => { screen.startupBackdrop = false; },
     });
     screen.itemWindow.setStatWindowForPc(univ, univ.curPc);
     if (saveStoreAvailable()) await setPartyActiveScenario(scen.id);

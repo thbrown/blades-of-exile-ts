@@ -437,6 +437,8 @@ export class GameSession {
   async enterWithParty(ask: {
     removedSpecialItems: () => Promise<void>;
     keepStoredItems: () => Promise<boolean>;
+    /** The party now stands in this scenario's world, and can be drawn there. */
+    entered?: () => void;
   }, force = false): Promise<void> {
     const { party } = this.univ;
     // "Drop debug mode" (boe.party.cpp:122).
@@ -466,6 +468,7 @@ export class GameSession {
     }
 
     this.univ.enterScenario();
+    ask.entered?.();
     this.univ.curPc = Math.max(0, party.pcs.findIndex((pc) => pc.mainStatus === MainStatus.ALIVE));
     this.beginScenario(force);
   }

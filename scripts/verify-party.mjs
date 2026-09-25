@@ -153,6 +153,27 @@ await page.goto(BASE);
 await page.waitForSelector('.startup-party');
 check('a reload keeps it', (await panel()).includes('Level 9'));
 check('with HP and SP', /HP \d+\/\d+/.test(await panel()));
+
+// Into a smaller world: the party in memory still stands in Valley's sector
+// (2,2), which Bandit Busywork (one sector) doesn't have. Drawing the game
+// screen before `enterScenario` moved it threw from the status bar and left
+// the screen half drawn.
+const beforeErrors = errors.length;
+await page.click('.startup-card[data-id="busywork"]');
+for (let i = 0; i < 20 && !(await page.evaluate(() => window.__session !== undefined
+  && document.body.classList.contains('playing') && !window.__dialogs?.active)); i++) {
+  if (await page.evaluate(() => !!window.__dialogs?.active)) await page.keyboard.press('Enter');
+  await page.waitForTimeout(400);
+}
+const busywork = await page.evaluate(() => ({
+  scen: window.__univ?.scenario.id, sector: window.__univ?.party.sector,
+}));
+check('it enters a world smaller than the last one', busywork.scen === 'busywork'
+  && busywork.sector?.x === 0 && errors.length === beforeErrors, { ...busywork, errors: errors.slice(beforeErrors) });
+await page.screenshot({ path: `${SHOTS}/p7-busywork.png` });
+
+await page.goto(BASE);
+await page.waitForSelector('.startup-party');
 await page.click('text=Forget Party');
 await page.waitForFunction(() => document.querySelector('.startup-party')?.innerText.includes('No party in memory'));
 check('Forget Party forgets it', true);
