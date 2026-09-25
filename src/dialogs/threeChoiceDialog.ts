@@ -101,10 +101,9 @@ export async function threeChoiceDialog(
   }
 
   // Done and OK take Enter and Cancel takes Escape (their `defaultKey`s).
-  // Where there is no Cancel, Escape takes the first button, as this port's
-  // choice dialogs always have — OBoE leaves it doing nothing.
+  // Without a Cancel, Escape does nothing: the question has to be answered.
   const enter = buttons.find((b) => b.label === 'Done' || b.label === 'OK');
-  const esc = buttons.find((b) => b.label === 'Cancel') ?? buttons[0];
+  const esc = buttons.find((b) => b.label === 'Cancel');
   const attrs = (enter ? ` defbtn='${enter.name}'` : '') + (esc ? ` escbtn='${esc.name}'` : '');
   const def = readDialogDef(await parseXmlDoc(
     `<dialog${attrs}>${controls.join('')}</dialog>`, 'cThreeChoice'));

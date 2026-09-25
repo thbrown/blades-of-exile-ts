@@ -12587,8 +12587,8 @@ chosen first, and a win threw the party away.
     right-aligned under the text in slot order 2, 3, 1. **Divergence:** a
     string whose lines need more than the estimate gets their height, since
     this port's font wraps differently and the estimate would cut it off.
-    Escape takes the first button when there's no Cancel, as the generic
-    dialog did; OBoE has it do nothing.
+    Escape does nothing unless there is a Cancel button, as in OBoE (the
+    generic dialog used to let it pick the first button).
   - **Stock prompts open their own files.** `host.choice` takes an optional
     definition name: `basic-trap`, `basic-portal`, `basic-button`,
     `basic-lever` and the eight `stairDlogs` (`STAIR_DLOGS` in
