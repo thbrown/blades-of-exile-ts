@@ -12,6 +12,8 @@ const TOWN = 21;
 const BLOCK = 56;
 /** Anaximander's reports, `FUN_1008_386f`. */
 const ANAX = 14;
+/** The engine's Mage Lore, skill 11 as in E3's PC record. */
+const MAGE_LORE = 11;
 /** Special items 7 and 23/24 live at party+0x1a, +0x3a and +0x3c. */
 const AMULET = partySpecItem(0x1a);
 const PRAZAC_SCROLL = partySpecItem(0x3a);
@@ -93,9 +95,25 @@ export function town21(b: SpecBuilder): Map<number, Step[]> {
     [4, [b.ifFlagAtLeast(spot(4), 1, [b.msg(BLOCK, 0x10)], [b.msg(BLOCK, 0xe, 0xf), b.blockMove()])]],
     [5, [b.onceMsg(spot(5), BLOCK, 0x13)]],
     [6, [b.onceMsg(spot(6), BLOCK, 4)]],
-    // TODO(E3-3): 11 and 12, the gates to the surface and to the caves
-    // (`FUN_1040_2c2d` puts the party in the other world); 14 and 15, which
-    // teach a spell to a party of enough levels; 16 (`FUN_10e0_09e5`).
+    // 11 and 12: the north gate comes out on the surface, and the south one
+    // in the caves. E3 only moves the party when it came in from the other
+    // side (by the zone it was in); each target is the fort's own entrance on
+    // that side, so moving it regardless comes to the same thing.
+    [11, [b.exitTo(1, 8, 20, 25)]],
+    [12, [b.exitTo(7, 8, 84, 84)]],
+    // 14 and 15: runes that teach a mage or priest spell to a party with
+    // enough Mage Lore between them (`FUN_10b0_302f` totals skill 11).
+    ...([14, 15] as const).map((id): [number, Step[]] => [id, [b.askDialog(0x809, [
+      b.ifSkillTotal(MAGE_LORE, 7, [b.msg(BLOCK, id - 3), b.teachSpell(id === 14 ? 9 : 0x6a)], [b.msg(BLOCK, 10)]),
+    ])]]),
+    // 16: a lever (`FUN_10e0_09e5`: dialog 0x3fc, then the lever itself
+    // flips between 243 and 244), which works five portcullises.
+    // TODO(E3-3): E3 plays sound 94 as it goes.
+    [16, [b.askDialog(0x3fc, [
+      b.swapTer(57, 52, 243, 244),
+      b.ifTer(57, 52, 243, [b.msg(BLOCK, 0x15)], [b.msg(BLOCK, 0x16)]),
+      ...[[58, 53], [58, 56], [58, 58], [52, 55], [54, 55]].map(([x, y]) => b.swapTer(x!, y!, 0x7c, 0x7d)),
+    ])]],
     // 17: the beds.
     [17, [b.askDialog(0x806, [b.msg(BLOCK, 0x17), b.heal(200), b.restoreSp(100), b.addAge(500)])]],
     [18, [b.ifFlagAtLeast(f(0xc8c), 1, [b.msg(BLOCK, 6)])]],

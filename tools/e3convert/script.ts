@@ -27,14 +27,24 @@ interface NodeFields {
   ex2?: [number, number?, number?];
 }
 
-/** BoE 1997's `button_strs`, which E3's dialogs name their buttons from. */
-const E3_BUTTONS: Record<number, string> = {
-  9: 'Leave', 51: 'Take', 60: 'Leave', 61: 'Steal', 62: 'Attack', 63: 'OK', 64: 'Yes', 65: 'No',
-  66: 'Step In', 69: 'Climb', 70: 'Flee', 71: 'Onward', 72: 'Answer', 73: 'Drink', 74: 'Approach',
-  86: 'Rest', 87: 'Read', 88: 'Pull', 91: 'Push', 92: 'Pray', 93: 'Wait', 99: 'Give',
-  100: 'Destroy', 101: 'Pay', 102: 'Free', 104: 'Touch', 129: 'Burn', 130: 'Insert',
-  131: 'Remove', 132: 'Accept', 133: 'Refuse', 134: 'Open', 135: 'Close', 136: 'Sit', 137: 'Stand',
-};
+/**
+ * BoE 1997's `button_strs` (DLOGTOOL.CPP:108, GPL), which E3's dialogs name
+ * their buttons from: E3 has the same table up to 104 (it is in the EXE at
+ * file offset 0x91c00).
+ */
+const E3_BUTTONS = [
+  'Done', 'Ask', ' ', ' ', 'Keep', 'Cancel', '+', '-', 'Buy', 'Leave',
+  'Get', '1', '2', '3', '4', '5', '6', 'Cast', ' ', ' ',
+  ' ', ' ', ' ', 'Buy', 'Sell', 'Other Spells', 'Buy x10', ' ', ' ', 'Save',
+  'Race', 'Train', 'Items', 'Spells', 'Heal Party', '1', '2', '3', '4', '5',
+  '6', '7', '8', '9', '10', '11', '12', '13', '14', '15',
+  '16', 'Take', 'Create', 'Delete', 'Race/Special', 'Skill', 'Name', 'Graphic', 'Bash Door', 'Pick Lock',
+  'Leave', 'Steal', 'Attack', 'OK', 'Yes', 'No', 'Step In', ' ', 'Record', 'Climb',
+  'Flee', 'Onward', 'Answer', 'Drink', 'Approach', 'Mage Spells', 'Priest Spells', 'Advantages', 'New Game', 'Land',
+  'Under', 'Restore', 'Restart', 'Quit', 'Save First', 'Just Quit', 'Rest', 'Read', 'Pull', 'Alchemy',
+  '17', 'Push', 'Pray', 'Wait', '', '', 'Delete', 'Graphic', 'Create', 'Give',
+  'Destroy', 'Pay', 'Free', 'Next Tip', 'Touch',
+];
 
 /** Roughly how much text fits in one dialog on the engine's screen. */
 const PAGE = 700;
@@ -138,7 +148,7 @@ export class SpecBuilder {
     if (!d) throw new Error(`E3 dialog ${id} not found`);
     const texts = d.controls.filter((c) => !/^\d+_\d+$/.test(c.text)).sort((a, b) => a.y - b.y || a.x - b.x);
     const buttons = d.controls.filter((c) => /^[01]_\d+$/.test(c.text)).sort((a, b) => a.id - b.id)
-      .map((c) => E3_BUTTONS[Number(c.text.split('_')[1])] ?? 'OK');
+      .map((c) => E3_BUTTONS[Number(c.text.split('_')[1])] || 'OK');
     const groups: string[][] = [[]];
     let size = 0;
     for (const t of texts) {
@@ -267,6 +277,46 @@ export class SpecBuilder {
 
   copyFlag(to: Flag, from: Flag): Step {
     return (next) => this.node('copy-sdf', { sdf: to, ex1: [from[0], from[1]] }, next);
+  }
+
+  /** `if (the living PCs' skill totals at least value) { then } else { otherwise }`. */
+  ifSkillTotal(skill: number, value: number, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-statistic', { ex1: [value, yes], ex2: [skill, 0] }, no);
+    };
+  }
+
+  /** `FUN_10b0_366a`: every PC learns spell `s` (priest spell `s - 100` from 100). */
+  teachSpell(s: number): Step {
+    return (next) => s >= 100
+      ? this.node('spell-priest', { ex1: [s - 100, 0] }, next)
+      : this.node('spell-mage', { ex1: [s, 0] }, next);
+  }
+
+  /**
+   * `FUN_1040_2c2d`: where the party comes out when it leaves town, given
+   * as E3 does, a zone and a square in the 2×2 window whose corner it is.
+   */
+  exitTo(zx: number, zy: number, x: number, y: number): Step {
+    return (next) => this.node('relocate', {
+      ex1: [zx + Math.floor(x / 48), zy + Math.floor(y / 48)], ex2: [x % 48, y % 48],
+    }, next);
+  }
+
+  /** `FUN_1080_1b1f`: terrains `a` and `b` trade places at `(x, y)`. */
+  swapTer(x: number, y: number, a: number, b: number): Step {
+    return (next) => this.node('swap-ter', { ex1: [x, y], ex2: [a, b] }, next);
+  }
+
+  /** `if (terrain at (x, y) == t) { then } else { otherwise }`. */
+  ifTer(x: number, y: number, t: number, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-ter', { ex1: [x, y], ex2: [t, yes] }, no);
+    };
   }
 
   /** Refuses the step onto the spot (the town handler returning 0). */

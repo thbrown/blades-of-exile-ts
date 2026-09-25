@@ -1007,9 +1007,11 @@ Notes for M2 implementer:
       (`FUN_1078_0ee6`, about 35 flags).
     - E3's script helpers identified so far are in FORMATS.md
       ("Script helpers").
-    - Left as TODO(E3-3): the trapped chest, the two gates between the
-      surface and the caves, the spell-teaching shrines, spot 16, and E3's
-      journal.
+    - Also done: the gates between the surface and the caves (`relocate`),
+      the rune books that teach a spell to a party with 7 Mage Lore between
+      them, and the lever that works five portcullises.
+    - Left as TODO(E3-3): the trapped chest (`FUN_10e0_03ae` rolls its own
+      disarm), sounds, and E3's journal.
   - Next: the remaining fort spots, then Krizsan (towns 0–3,
     `FUN_1078_0000`) and the fort's outdoor zone.
 
