@@ -90,7 +90,8 @@ export function town21(b: SpecBuilder): Map<number, Step[]> {
     [1, anaximander(b)],
     // A bookshelf with something on it.
     [2, [b.giveItemDialog(0x803, spot(2), 0x192)]],
-    // TODO(E3-3): 3, a trapped chest (`FUN_10e0_03ae`, trap 7, dialog 0x805).
+    // 3: a chest behind a tripwire.
+    [3, [b.trap(0x805, spot(3), 0)]],
     // 4: the way is barred until the flag is set.
     [4, [b.ifFlagAtLeast(spot(4), 1, [b.msg(BLOCK, 0x10)], [b.msg(BLOCK, 0xe, 0xf), b.blockMove()])]],
     [5, [b.onceMsg(spot(5), BLOCK, 0x13)]],

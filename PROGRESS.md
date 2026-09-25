@@ -1010,8 +1010,9 @@ Notes for M2 implementer:
     - Also done: the gates between the surface and the caves (`relocate`),
       the rune books that teach a spell to a party with 7 Mage Lore between
       them, and the lever that works five portcullises.
-    - Left as TODO(E3-3): the trapped chest (`FUN_10e0_03ae` rolls its own
-      disarm), sounds, and E3's journal.
+    - Trapped containers (`FUN_10e0_03ae`) are BoE 1997's `run_trap` behind
+      an E3 dialog, so they become `once-trap`.
+    - Left as TODO(E3-3): sounds, and E3's journal.
   - Next: the remaining fort spots, then Krizsan (towns 0–3,
     `FUN_1078_0000`) and the fort's outdoor zone.
 

@@ -305,6 +305,27 @@ export class SpecBuilder {
     }, next);
   }
 
+  /**
+   * `FUN_10e0_03ae(7, flag, dlg, kind)`: a trapped container, once. It is
+   * BoE 1997's `run_trap` behind an E3 dialog: the party picks who disarms,
+   * `kind` 0 is a random trap, and 20 more is a trap three times as strong.
+   * Two differences: kind 5 does nothing (BoE's is a sleep ray), and kinds 8
+   * and 11 are harder by 10.
+   * TODO(E3-3): check kinds 10 and 11 (`FUN_10b0_16e6`, `FUN_1070_23b9`)
+   * against BoE's dumbfound and disease.
+   */
+  trap(id: number, flag: Flag, kind: number): Step {
+    return (next) => {
+      const { pages } = this.dialogPages(id);
+      const strong = kind >= 20;
+      const k = strong ? kind - 20 : kind;
+      return this.node('once-trap', {
+        sdf: flag, msg: [pages[pages.length - 1]!, -1],
+        ex1: [k === 5 ? 6 : k, strong ? 2 : 0], ex2: [k === 8 || k === 11 ? 10 : 0],
+      }, next);
+    };
+  }
+
   /** `FUN_1080_1b1f`: terrains `a` and `b` trade places at `(x, y)`. */
   swapTer(x: number, y: number, a: number, b: number): Step {
     return (next) => this.node('swap-ter', { ex1: [x, y], ex2: [a, b] }, next);
