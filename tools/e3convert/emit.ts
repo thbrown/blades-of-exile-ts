@@ -21,7 +21,7 @@ import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3Town } from '.
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
 import { convertE3Talk, readE3Talk, type E3Speaker } from './talk';
 import { readE3ShopTables, standardShops } from './shops';
-import { e3Flag } from './flags';
+import { e3DayReached, e3Event, e3Flag } from './flags';
 import { makeSpecItem, type SpecItem } from '../../src/data/quest';
 import type { Shop } from '../../src/data/shop';
 
@@ -139,8 +139,40 @@ function townCreatures(t: E3Town): E3CreatureStart[] {
   return t.village ? t.village.creatures : t.creatures;
 }
 
+/**
+ * A creature's `time_flag`, from the town loader's switch (`10d8:0d36`),
+ * which is BoE 1997's (TOWN.CPP:314) with the day and event packed into one
+ * int16 (`E3CreatureStart.timeCode`).
+ */
+function creatureTimeXml(c: E3CreatureStart): string {
+  const day = (tag: string) => {
+    const t = e3DayReached(c.timeCode % 1000, Math.floor(c.timeCode / 1000));
+    return `        <time type="${tag}">\n            <day>${t.day}</day>\n${t.event ? `            <event>${t.event}</event>\n` : ''}        </time>\n`;
+  };
+  // 7 and 8 compare the day with the event's key time directly.
+  const event = (tag: string) =>
+    `        <time type="${tag}">\n            <event>${e3Event(Math.floor(c.timeCode / 1000))}</event>\n        </time>\n`;
+  switch (c.timeFlag) {
+    case 1: return day('after-day');
+    case 2: return day('until-day');
+    // 4–6: one of three places on a rota. The engine's rota turns by the
+    // day where E3's (and BoE 1997's) turns every 1,000 ticks of age, and
+    // the engine numbers the three C, A, B; the tags follow the legacy
+    // importer's mapping (`convertTownperson`).
+    case 4: return '        <time type="travel-b" />\n';
+    case 5: return '        <time type="travel-c" />\n';
+    case 6: return '        <time type="travel-a" />\n';
+    case 7: return event('after-event');
+    case 8: return event('until-event');
+    // 9: only there once the town has been overrun (its `<chop>`).
+    case 9: return '        <time type="after-death" />\n';
+    // 3 (on its day, turn hostile and become monster `extra1`) is used by no
+    // creature E3 ships.
+    default: return '';
+  }
+}
+
 function creatureXml(c: E3CreatureStart, id: number, personality: number): string {
-  // TODO(E3-2): the appear/disappear conditions (`time_flag`).
   // `spec1`/`spec2` is the creature's death flag: END_DIE sets it, and a town
   // loading leaves out anyone whose flag is set (`10d8:` town setup, which
   // skips row 0 and 200 up). TODO(E3-3): 200–204 are creatures a script
@@ -150,9 +182,28 @@ function creatureXml(c: E3CreatureStart, id: number, personality: number): strin
         <type>${c.number}</type>
         <attitude>${ATTITUDE[c.startAttitude] ?? 'docile'}</attitude>
         <mobility>${c.mobile}</mobility>
-${sdf ? `        <sdf x="${sdf[0]}" y="${sdf[1]}" />\n` : ''}        <personality>${personality}</personality>
+${sdf ? `        <sdf x="${sdf[0]}" y="${sdf[1]}" />\n` : ''}${creatureTimeXml(c)}        <personality>${personality}</personality>
     </creature>
 `;
+}
+
+/**
+ * When a town is overrun: E3's villages fall to the monsters on a day unless
+ * a plot event comes first (the town loader, `10d8:0f51`), and any town is
+ * "cleaned out" once more than `max_num_monst` of its creatures are killed.
+ * TODO(E3-3): E3's overrun spares the town's hostile creatures (attitude
+ * odd) as well as its `after-death` ones; the engine's spares only the
+ * latter.
+ */
+function chopXml(t: E3Town): string {
+  const attrs: string[] = [];
+  if (t.townChopTime > 0) {
+    const d = e3DayReached(t.townChopTime, t.townChopKey);
+    attrs.push(`day="${d.day}"`);
+    if (d.event) attrs.push(`event="${d.event}"`);
+  }
+  attrs.push(`kills="${t.maxNumMonst}"`);
+  return `        <chop ${attrs.join(' ')} />\n`;
 }
 
 function townXml(t: E3Town, name: string, personalityOf: Map<string, number>): string {
@@ -177,7 +228,8 @@ function townXml(t: E3Town, name: string, personalityOf: Map<string, number>): s
     <bounds top="${r.top}" left="${r.left}" bottom="${r.bottom}" right="${r.right}" />
     <difficulty>0</difficulty>
     <lighting>${LIGHTING[t.lighting] ?? 'lit'}</lighting>
-    <flags />
+    <flags>
+${chopXml(t)}    </flags>
 ${items}${creatures}</town>
 `;
 }

@@ -32,7 +32,7 @@
 
 import { TalkNodeType, emptyPersonality, emptySpeech, emptyTalkNode, type Personality, type Speech, type TalkNode } from '../../src/data/talking';
 import type { Shop } from '../../src/data/shop';
-import { e3Flag } from './flags';
+import { e3DayReached, e3Flag } from './flags';
 import { E3ShopType, HEALER_SHOP, e3Shop, type E3ShopTables } from './shops';
 
 export const E3_TALK_BLOCKS = 39;
@@ -225,15 +225,14 @@ function convertNode(ctx: Context, raw: E3TalkNodeRaw, personality: number, extr
       // engine's INN adds BoE's 700, which runs the calendar a little fast.
       set(TalkNodeType.INN, e1, e2, extras[0], extras[1]);
       break;
-    case E3Node.DEP_ON_TIME:
-      // E3's `day_reached` adds 20 days (so did BoE 1997's; OBoE dropped
-      // it), so the day is moved here. TODO(E3-3): `e2` is an event key,
-      // and E3 treats one that never happened as "not before the day" —
-      // the opposite of the engine's DEP_ON_TIME_AND_EVENT, which needs it
-      // to have happened. Nothing sets E3's key times until E3-3's scripts
-      // do, so for now the event is left out.
-      set(TalkNodeType.DEP_ON_TIME, e1 + 20);
+    case E3Node.DEP_ON_TIME: {
+      // `e3DayReached` moves E3's extra 20 days into the day, and for now
+      // drops the event (its TODO says why).
+      const t = e3DayReached(e1, e2);
+      if (t.event) set(TalkNodeType.DEP_ON_TIME_AND_EVENT, t.day, t.event);
+      else set(TalkNodeType.DEP_ON_TIME, t.day);
       break;
+    }
     case E3Node.SELL_ARMOR:
       set(TalkNodeType.SELL_ARMOR);
       break;

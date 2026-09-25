@@ -223,6 +223,8 @@ in the disassembly are these offsets + 4.
 | 0x41a | 4 × int16 | **open** (BoE continues with `spec_on_entry` …, then specials E3 doesn't have) |
 
 **Creature, 14 B** (BoE 24): `number, start_attitude, start_loc, mobile,
-time_flag, extra1, extra2, spec1, spec2` (bytes), then 3 unknown bytes
-(+10/+11 are always 255), and `+13` personality (distinct per named NPC,
-shared by guards). **Open**: confirm the personality against the talk code.
+time_flag, extra1, extra2, spec1, spec2` (bytes), then an int16 time code at
++10 (`event*1000 + day`, -1 when unused), then the personality, an int16 at
++12 (confirmed by the talk code). `extra1`/`extra2` do double duty: a
+shopkeeper's stock range, an innkeeper's bed. `spec1`/`spec2` is the death
+flag, except that 200–204 mark creatures a script brings in.

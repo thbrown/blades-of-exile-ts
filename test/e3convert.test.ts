@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { TerObstruct, TerSpec } from '../src/data/terrain';
 import type { Scenario } from '../src/data/scenario';
 import { ItemType } from '../src/data/item';
+import { MonstTime } from '../src/data/monster';
 import { ShopItemType, ShopPrompt } from '../src/data/shop';
 import { TalkNodeType } from '../src/data/talking';
 import { loadScenario } from '../src/fileio/loadScenario';
@@ -132,6 +133,15 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
   it("has E3's special items", () => {
     expect(scen.specialItems).toHaveLength(50);
     expect(scen.specialItems[16]?.name).toBe('Silver Key');
+  });
+
+  it('makes people come and go, and villages fall, on E3\'s days', () => {
+    // Two in the fort wait for plot event 4 (the engine's key 5).
+    const waiting = scen.towns[21]!.creatures.filter((c) => c.timeFlag === MonstTime.APPEAR_WHEN_EVENT);
+    expect(waiting.map((c) => c.timeCode)).toEqual([5, 5, 5]);
+    // Delis falls on E3's day 60, which is the engine's 80.
+    expect(scen.towns[121]!.townChopTime).toBe(80);
+    expect(scen.towns[121]!.creatures.some((c) => c.timeFlag === MonstTime.APPEAR_AFTER_CHOP)).toBe(true);
   });
 
   it('places the fort\'s people', () => {

@@ -280,6 +280,37 @@ condensing. The page's own masthead links to this port's source.
 
 ---
 
+### 9. `day_reached`: three versions, and the engine has OBoE's (2026-09-24)
+
+**OPEN: not decided, and not changed.** Found while converting Exile 3,
+whose `day_reached` (`FUN_10d0_54b8`) is the Windows 1997 one exactly. This
+test runs everywhere time matters: talk nodes, creatures that come and go,
+towns that fall.
+
+| | Windows 1997 (TEXT.CPP:1653) | Mac 1997 (text.c:1719) | OBoE (boe.text.cpp:1233), this port |
+|---|---|---|---|
+| Extra days | **+20, always** ("to give party bonus time") | none | +10 in easy mode only |
+| "No event" | event 8 | event 0 | event 0 |
+| An event that never happened | passes: `key_times` start at 30000 (PARTY.CPP) | passes, the same way | **fails**: `key_times` is a map and a missing key returns false |
+
+The last row is the one a player can see. Take a creature that appears on
+day 30 unless event 3 happened first. In both 1997 builds it turns up on day
+30 if event 3 never happened. In OBoE it never turns up at all. Neither
+original reads an unset event as "no".
+
+- **Exile 3 does not depend on it yet.** The converter (`e3DayReached`,
+  `tools/e3convert/flags.ts`) puts the +20 into the data and drops the event
+  key, which is exactly E3's behaviour until E3-3's scripts set events. That
+  is marked `TODO(E3-3)`.
+- **Legacy BoE scenarios (Part 1b) do depend on it.** A 1997-era scenario
+  that uses events gets OBoE's answer. The Windows +20 is another question:
+  it depends on which build the scenario was balanced for.
+- **Related:** the travelling-NPC rota (time flags 4–6) turns every 1,000
+  ticks of age in 1997 (`party.age / 1000 % 3`) and E3. OBoE turns it by the
+  day.
+
+---
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

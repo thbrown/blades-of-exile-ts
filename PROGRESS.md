@@ -953,10 +953,17 @@ Notes for M2 implementer:
   - Still to do:
     - room names, and signs;
     - the villages' block builder;
-    - creatures' appear/disappear conditions (`time_flag` 1–9, decoded in
-      the town loader around `exile3.c:65400`: 1/2 appear/disappear on
-      `day_reached(extra1, extra2)`, 3 turns hostile and becomes monster
-      `extra1`, 4–6 the day-of-three rota, 7/8 key-time events).
+  - **Creatures come and go, and villages fall** (2026-09-24). A creature's
+    `time_flag` is BoE 1997's, with the day and event packed into the int16
+    at creature +10 as `event*1000 + day` (the field was thought unused).
+    The town loader's switch is at `10d8:0d36`. Villages carry `town_chop_time`:
+    **the monster plague is BoE's town chop**, as PLAN.md hoped, so it
+    converts to `<chop day=… kills=…>` without engine changes.
+    - Found on the way (**DIVERGENCES.md #9, open**): `day_reached` has three
+      versions. The engine has OBoE's, which reads an event that never
+      happened as "no", where both 1997 builds read it as "not yet". E3 is
+      unaffected for now because the converter drops event keys
+      (`TODO(E3-3)`). Legacy BoE scenarios that use events are affected.
 - [ ] **E3-3 — Quest logic, incrementally** (needs M4+)
 
 ## Key references (do not lose)
