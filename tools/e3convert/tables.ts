@@ -43,7 +43,17 @@ export type E3TerrainSpecial =
    * Locked: picking (or bashing) it turns it into `to`. `pickable` false is a
    * door E3's lock-pick code refuses outright.
    */
-  | { kind: 'unlock'; to: number; pickable: boolean };
+  | { kind: 'unlock'; to: number; pickable: boolean }
+  /** Readable: a sign location on it has text (`sign_locs`). */
+  | { kind: 'sign' };
+
+/**
+ * The terrains a sign can stand on: the three "w. Sign" walls, the two free
+ * signs, the obelisk and the basalt runes. These are exactly the terrains
+ * under E3's 630 sign locations, towns and zones together. The code that
+ * reads them has not been found, so this list comes from the data.
+ */
+const SIGN_TERRAINS = new Set([110, 127, 142, 213, 214, 252]);
 
 /** Door sound: `play_sound(-58)` in both door arms. */
 const DOOR_SOUND = 58;
@@ -83,7 +93,7 @@ export function readE3Terrain(exe: Uint8Array, strings: Map<number, string>): E3
     pic: pics.getInt16(t * 2, true),
     blockage: blocked[t] ?? 0,
     boat: boatPassable(t),
-    special: doorSpecial(t),
+    special: SIGN_TERRAINS.has(t) ? { kind: 'sign' } : doorSpecial(t),
   }));
 }
 

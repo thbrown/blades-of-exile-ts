@@ -960,8 +960,14 @@ Notes for M2 implementer:
       signed, so villages 128–177 (49 entrances) were unreachable.
     - `TODO(E3-3)`: ruined variants (block `b+1`) on a placement's day, or
       once the village has fallen.
-  - Still to do:
-    - room names, and signs;
+  - **Signs and room names** (2026-09-24). Sign `k` of zone `z` is string
+    `27001 + 20z + k`, and of town `t` it is `30005 + 20t + k`, after the
+    town's name. The sign terrains (110, 127, 142, 213, 214, 252) are exactly
+    the terrains under E3's sign locations. The code that reads signs has not
+    been found. Room names come from the town records.
+  - Still to do: wandering monsters, in towns (`wandering[4]`) and outdoors
+    (the zone's wandering and special-encounter groups; their int16 fields
+    are still open in FORMATS.md).
   - **Creatures come and go, and villages fall** (2026-09-24). A creature's
     `time_flag` is BoE 1997's, with the day and event packed into the int16
     at creature +10 as `event*1000 + day` (the field was thought unused).

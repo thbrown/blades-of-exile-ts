@@ -91,6 +91,24 @@ await page.evaluate((home) => {
   window.__redraw();
 }, talk.home);
 
+// A sign in the fort, read from beside it.
+const sign = await page.evaluate(() => {
+  const s = window.__session;
+  const rec = s.univ.town.record;
+  const at = rec.signLocs.find((l) => l.text);
+  if (!at) return { error: 'no sign in the fort' };
+  const home = { ...s.univ.party.townLoc };
+  const dirs = [[0, 1], [1, 0], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+  const stand = dirs.map(([dx, dy]) => ({ x: at.x + dx, y: at.y + dy }))
+    .find((p) => s.univ.terrainType(rec.terrain[p.x]?.[p.y] ?? 5).blockage < 3);
+  if (stand) s.univ.party.townLoc = stand;
+  const text = s.signAt({ x: at.x, y: at.y });
+  s.univ.party.townLoc = home;
+  return { at: { x: at.x, y: at.y }, stand, text };
+});
+console.log('SIGN:', JSON.stringify(sign));
+if (!sign.text) errors.push(`could not read a sign in the fort: ${JSON.stringify(sign)}`);
+
 // Shops: E3 stocks them from the shopkeeper, so a converted shop should show
 // real goods at E3's prices. Jinx's is in Krizsan; open it from here.
 const shop = await page.evaluate(() => {

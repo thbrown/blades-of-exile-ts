@@ -154,6 +154,16 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(entrances.filter((t) => t >= 128).length).toBe(49);
   });
 
+  it('has signs to read and rooms with names', () => {
+    const krizsan = scen.towns[0]!;
+    const sign = krizsan.signLocs[0]!;
+    expect(sign.text).toBe('KRIZSAN SHIPYARD');
+    expect(scen.terTypes[krizsan.terrain[sign.x]![sign.y]!]?.special).toBe(TerSpec.IS_A_SIGN);
+    expect(krizsan.areaDesc.map((a) => a.descr)).toContain("Jinx's Smithy");
+    const zone = scen.outdoors[0]![0]!;
+    expect(zone.signLocs[0]?.text).toMatch(/^VALORIM IS DECLARED UNDER QUARANTINE/);
+  });
+
   it('places the fort\'s people', () => {
     const fort = scen.towns[21]!;
     expect(fort.creatures.filter((c) => c.number > 0).length).toBeGreaterThan(40);

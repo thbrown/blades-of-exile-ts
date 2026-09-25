@@ -19,7 +19,7 @@ import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor } from './
 import { readE3Items, readE3Monsters, readE3Start, readE3Terrain, type E3TerrainType } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3Town } from './town';
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
-import { convertE3Talk, readE3Talk, type E3Speaker } from './talk';
+import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
 import { readE3ShopTables, standardShops } from './shops';
 import { e3DayReached, e3Event, e3Flag } from './flags';
 import { buildE3Village, villageTemplate } from './village';
@@ -57,6 +57,7 @@ function addMark(marks: Map<string, string>, x: number, y: number, mark: string)
 function specialXml(t: E3TerrainType): string {
   const sp = t.special;
   const [type, f1, f2, f3] = !sp ? ['none', -1, 0, 0]
+    : sp.kind === 'sign' ? ['sign', 0, 0, 0]
     : sp.kind === 'step-change' ? ['step-change', sp.to, sp.sound, 0]
     // BoE's `unlock`: flag2 is the difficulty, 5 and up beyond picking and
     // bashing; flag3 1 lets it be bashed. TODO(E3-3): E3 rolls its own pick
@@ -103,22 +104,46 @@ function isUnusedLoc(l: { x: number; y: number }): boolean {
   return l.x === 0 && l.y === 0;
 }
 
-function sectorXml(z: E3Outdoor): string {
+/**
+ * The signs with something written on them: location `k` reads string
+ * `first + k` (zone `z`'s from 27001 + 20z, town `t`'s from 30005 + 20t).
+ */
+function signs(locs: { x: number; y: number }[], strings: Map<number, string>, first: number): { k: number; x: number; y: number; text: string }[] {
+  return locs.flatMap((l, k) => {
+    const text = strings.get(first + k);
+    return isUnusedLoc(l) || !text ? [] : [{ k, x: l.x, y: l.y, text: e3Text(text) }];
+  });
+}
+
+function signXml(s: { k: number; text: string }): string {
+  return `    <sign id="${s.k}">${esc(s.text)}</sign>\n`;
+}
+
+function areaXml(r: { top: number; left: number; bottom: number; right: number }, name: string): string {
+  return `    <area top="${r.top}" left="${r.left}" bottom="${r.bottom}" right="${r.right}">${esc(name)}</area>\n`;
+}
+
+function zoneSigns(z: E3Outdoor, zone: number, strings: Map<number, string>) {
+  return signs(z.signLocs, strings, 27001 + 20 * zone);
+}
+
+function sectorXml(z: E3Outdoor, zone: number, strings: Map<number, string>): string {
   const areas = z.infoRect
     .map((r, i) => ({ r, name: z.areaNames[i] ?? '' }))
     .filter((a) => a.name !== '')
-    .map((a) => `    <area top="${a.r.top}" left="${a.r.left}" bottom="${a.r.bottom}" right="${a.r.right}">${esc(a.name)}</area>\n`);
+    .map((a) => areaXml(a.r, a.name));
   // TODO(E3-2): wandering and special-encounter groups, once monsters convert.
-  // TODO(E3-3): signs' text and the special encounters (`special_id`).
-  return `${XML_HEAD}<sector boes="2.0.0">\n    <name>${esc(z.name)}</name>\n${areas.join('')}</sector>\n`;
+  // TODO(E3-3): the special encounters (`special_id`).
+  return `${XML_HEAD}<sector boes="2.0.0">\n    <name>${esc(z.name)}</name>\n${areas.join('')}${zoneSigns(z, zone, strings).map(signXml).join('')}</sector>\n`;
 }
 
-function sectorMap(z: E3Outdoor): string {
+function sectorMap(z: E3Outdoor, zone: number, strings: Map<number, string>): string {
   const marks = new Map<string, string>();
   z.exitLocs.forEach((l, i) => {
     const dest = z.exitDests[i] ?? -1;
     if (!isUnusedLoc(l) && dest >= 0 && dest < E3_TOWN_COUNT) addMark(marks, l.x, l.y, `@${dest}`);
   });
+  for (const s of zoneSigns(z, zone, strings)) addMark(marks, s.x, s.y, `!${s.k}`);
   return mapFile(z.terrain, 48, marks);
 }
 
@@ -205,7 +230,12 @@ function chopXml(t: E3Town): string {
   return `        <chop ${attrs.join(' ')} />\n`;
 }
 
-function townXml(t: E3Town, name: string, personalityOf: Map<string, number>): string {
+function townSigns(t: E3Town, strings: Map<number, string>) {
+  const size = townSize(t);
+  return signs(t.signLocs, strings, 30005 + 20 * t.number).filter((s) => s.x < size && s.y < size);
+}
+
+function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, strings: Map<number, string>): string {
   const size = townSize(t);
   const r = t.village ? { top: 0, left: 0, bottom: size - 1, right: size - 1 } : t.inTownRect;
   const creatures = townCreatures(t)
@@ -220,7 +250,7 @@ function townXml(t: E3Town, name: string, personalityOf: Map<string, number>): s
         <contained>${p.contained !== 0}</contained>
     </item>
 `)).join('');
-  // TODO(E3-2): room names.
+  const rooms = t.roomRects.map((r, i) => (t.roomNames[i] ? areaXml(r, t.roomNames[i]!) : '')).join('');
   return `${XML_HEAD}<town boes="2.0.0">
     <size>${size}</size>
     <name>${esc(name)}</name>
@@ -229,11 +259,11 @@ function townXml(t: E3Town, name: string, personalityOf: Map<string, number>): s
     <lighting>${LIGHTING[t.lighting] ?? 'lit'}</lighting>
     <flags>
 ${chopXml(t)}    </flags>
-${items}${creatures}</town>
+${items}${creatures}${rooms}${townSigns(t, strings).map(signXml).join('')}</town>
 `;
 }
 
-function townMap(t: E3Town, villageTerrain: number[][] | null): string {
+function townMap(t: E3Town, villageTerrain: number[][] | null, strings: Map<number, string>): string {
   const size = townSize(t);
   const terrain = villageTerrain ?? t.terrain;
   const marks = new Map<string, string>();
@@ -251,6 +281,7 @@ function townMap(t: E3Town, villageTerrain: number[][] | null): string {
   townCreatures(t).forEach((c, i) => {
     if (c.number > 0 && inside(c.startLoc)) addMark(marks, c.startLoc.x, c.startLoc.y, `$${i}`);
   });
+  for (const s of townSigns(t, strings)) addMark(marks, s.x, s.y, `!${s.k}`);
   return mapFile(terrain, size, marks);
 }
 
@@ -378,8 +409,8 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
 
   zones.forEach((z, i) => {
     const base = `out/out${i % E3_ZONES_WIDE}~${Math.floor(i / E3_ZONES_WIDE)}`;
-    write(`${base}.xml`, sectorXml(z));
-    write(`${base}.map`, sectorMap(z));
+    write(`${base}.xml`, sectorXml(z, i, strings));
+    write(`${base}.map`, sectorMap(z, i, strings));
     write(`${base}.spec`, '');
   });
   const template = villageTemplate(towns);
@@ -389,11 +420,11 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
   }));
   towns.forEach((t) => {
     const base = `towns/town${t.number}`;
-    write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf));
+    write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf, strings));
     // A village is built from its record (village.ts), in the caves if its
     // entrance is: E3 decides by the party's zone column.
     const underground = villageZone.get(t.number) !== undefined && villageZone.get(t.number)! % E3_ZONES_WIDE >= 7;
-    write(`${base}.map`, townMap(t, t.village ? buildE3Village(template, t.village, underground, t.number) : null));
+    write(`${base}.map`, townMap(t, t.village ? buildE3Village(template, t.village, underground, t.number) : null, strings));
     write(`${base}.spec`, '');
     // Talk block b is talk<b>.xml, whichever town its people live in.
     const speech = talk.speeches[t.number];
