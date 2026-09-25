@@ -446,7 +446,8 @@ await page.evaluate(async () => {
 await page.waitForTimeout(250);
 const trainWho = await page.evaluate(async () => {
   const d = window.__dialogs.active;
-  return d ? { text: d.spec.text, rows: d.spec.rows.length } : null;
+  // select-pc.xml: the title is the prompt, and a PC nobody can pick is hidden.
+  return d ? { text: d.getText('title'), rows: [1, 2, 3, 4, 5, 6].filter((n) => d.isVisible(`pc${n}`)).length } : null;
 });
 await press('1');
 await page.waitForTimeout(250);
@@ -677,20 +678,12 @@ console.log('DOOR PROMPT:', JSON.stringify({ promptUp, ...bashed }));
 // 2c-2. Bashing must ask who does it, and play its sound.
 const bashPrompt = await page.evaluate(async () => {
   const d = window.__dialogs.active;
-  return d ? { text: d.spec.text, rows: (d.spec.rows ?? []).length } : null;
+  // select-pc.xml: the title is the prompt, and a PC nobody can pick is hidden.
+  return d ? { text: d.getText('title'), rows: [1, 2, 3, 4, 5, 6].filter((n) => d.isVisible(`pc${n}`)).length } : null;
 });
 console.log('BASH ASKS WHO:', JSON.stringify(bashPrompt));
 if (bashPrompt) {
-  // Pick the first selectable PC through the dialog's own hit test.
-  const hit = await page.evaluate(async () => {
-    const d = window.__dialogs.active;
-    for (let y = 0; y < 430; y++)
-      for (let x = 0; x < 605; x += 4) {
-        const h = d.buttonAt(x, y);
-        if (h && h.name === '0') return { x, y };
-      }
-    return null;
-  });
+  await shot('01c2-select-pc');
   // Number keys pick a PC, the way select-pc.xml's def-keys do.
   await press('3');
   await page.waitForTimeout(200);
@@ -1035,7 +1028,8 @@ await press('A');
 await page.waitForTimeout(250);
 const alchWho = await page.evaluate(() => {
   const d = window.__dialogs.active;
-  return d ? { text: d.spec.text, rows: d.spec.rows.length } : null;
+  // select-pc.xml: the title is the prompt, and a PC nobody can pick is hidden.
+  return d ? { text: d.getText('title'), rows: [1, 2, 3, 4, 5, 6].filter((n) => d.isVisible(`pc${n}`)).length } : null;
 });
 await press('1'); // PC 1 mixes
 await page.waitForTimeout(250);
@@ -1460,7 +1454,8 @@ await press('y');
 await page.waitForTimeout(300);
 const trapWho = await page.evaluate(() => {
   const d = window.__dialogs.active;
-  return d ? { text: d.spec.text, rows: d.spec.rows.length } : null;
+  // select-pc.xml: the title is the prompt, and a PC nobody can pick is hidden.
+  return d ? { text: d.getText('title'), rows: [1, 2, 3, 4, 5, 6].filter((n) => d.isVisible(`pc${n}`)).length } : null;
 });
 await press('1');
 await page.waitForTimeout(1500);

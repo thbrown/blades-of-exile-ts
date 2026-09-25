@@ -12560,3 +12560,18 @@ chosen first, and a win threw the party away.
   "*name* inventory:" title is white (`ForeColor(whiteColor)`, text.c:327).
   The yellow 1-6 beside the portraits are 12pt, which is a match by eye:
   they are part of the original's panel art.
+- **"Select a character" is the real dialog now (2026-09-25).** `select_pc`
+  put up the generic row dialog: prompt and hint as one text block, and six
+  rows, with the ones nobody could pick disabled rather than gone. It now
+  runs `select-pc.xml` and fills it the way OBoE's `select_pc` does
+  (boe.items.cpp:896). The prompt is the title, and the original did the same:
+  `char_select_pc(..., "Trap! Who will disarm?")`, items.c:1245. A PC who
+  can't be picked loses the button, and the name too unless there is a
+  reason to show. The best in the highlighted skill is green, and the hint
+  is hidden when no skill is highlighted. "Everyone" stays hidden: only the
+  debug menu asks for it. **`select-pc` has to be in `main.ts`'s
+  `dialogNames`.** Leave it out and `getDialogDef` throws inside the
+  action, so no dialog appears and nothing else says why. The hint's box is
+  48px tall, not OBoE's 25, because this port's font wraps it to four lines
+  (an `exile-js:` comment in the XML says so). `verify-screen.mjs` reads the
+  title and the visible rows, and saves a shot of it as `01c2-select-pc`.

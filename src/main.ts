@@ -78,6 +78,7 @@ import { pickNextPc } from './game/combat';
 import { GameRng } from './core/rng';
 import { DialogHost } from './dialogs/dialog';
 import { STRING_TABLES, getStr, loadStringTables, stringCount } from './data/strings';
+import { Colours } from './render/colours';
 import { TerSpec } from './data/terrain';
 import { GameSession } from './game/session';
 import { TalkAction } from './game/talk';
@@ -491,7 +492,7 @@ async function main(): Promise<void> {
   ];
   for (let i = 1; i <= 11; i++) sheets.push(`monst${i}`);
   const dialogNames = ['pc-info', 'quest-info', 'get-items', 'item-info', 'many-str', 'monster-info', 'job-board',
-    'pick-potion', 'party-death', 'steal-item', 'removed-special-items', 'keep-stored-items', 'congrats-save', ...STR_DIALOG_DEFS, ...NOTES_DIALOG_DEFS,
+    'pick-potion', 'party-death', 'steal-item', 'select-pc', 'removed-special-items', 'keep-stored-items', 'congrats-save', ...STR_DIALOG_DEFS, ...NOTES_DIALOG_DEFS,
     ...INPUT_DIALOG_DEFS, ...PICT_CHOICE_DIALOG_DEFS, ...SPEND_XP_DIALOG_DEFS,
     ...PARTY_EDITOR_DIALOG_DEFS, ...LIBRARY_DIALOG_DEFS, ...PREFERENCES_DIALOG_DEFS];
   addTotal(1 /* opcodes */ + STRING_TABLES.length + dialogNames.length + sheets.length
@@ -732,34 +733,44 @@ async function main(): Promise<void> {
     prompt: string,
     highlight?: Skill,
   ): Promise<number> => {
-    // select-pc.xml marks the best value in the highlighted skill in green.
-    const best = Math.max(
-      ...options.map((o, i) =>
-        o.canPick && highlight !== undefined ? (univ.party.pcs[i]?.skills[highlight] ?? 0) : -1,
-      ),
-    );
-    const rows = options.map((option) => ({
-      name: String(option.index),
-      key: String(option.index + 1),
-      label: option.label,
-      disabled: !option.canPick,
-      highlight:
-        highlight !== undefined &&
-        option.canPick &&
-        best > 0 &&
-        (univ.party.pcs[option.index]?.skills[highlight] ?? 0) === best,
-    }));
-    const hint =
-      highlight !== undefined
-        ? `${prompt}\nSkill is shown in (). Highest in green. Type '1'-'6'.`
-        : `${prompt}\nType '1'-'6'.`;
-    const picked = await dialogs.run({
-      text: hint,
-      rows,
-      escapeButton: 'cancel',
-      buttons: [{ name: 'cancel', label: 'Cancel' }],
-    });
-    const index = Number(picked);
+    // select_pc's dialog half (boe.items.cpp:896), on select-pc.xml: the
+    // caller's prompt is the title, as the original's `char_select_pc` took one
+    // too (items.c:1245). A PC who can't be picked loses their button, and
+    // their name as well unless there is a reason to show beside it.
+    const dlg = new XmlDialog(ctx, store, getDialogDef('select-pc'));
+    if (prompt) dlg.setText('title', prompt);
+    let highest = 0;
+    let last = 0;
+    let allEqual = true;
+    for (const option of options) {
+      const n = option.index + 1;
+      const pc = univ.party.pcs[option.index];
+      dlg.setText(`pc${n}`, option.label);
+      if (highlight !== undefined && pc?.isAlive) {
+        const skill = pc.skills[highlight] ?? 0;
+        if (skill > highest) highest = skill;
+        if (skill !== last) allEqual = false;
+        last = skill;
+      }
+      if (!option.canPick) {
+        dlg.hide(`pick${n}`);
+        if (!option.extra) dlg.hide(`pc${n}`);
+      }
+    }
+    if (highlight !== undefined) {
+      dlg.setText('hint', dlg.getText('hint').replace('{{skill}}', getStr('skills', highlight * 2 + 1)));
+      for (const option of options) {
+        const skill = univ.party.pcs[option.index]?.skills[highlight] ?? 0;
+        if (skill === highest && !allEqual) dlg.setColour(`pc${option.index + 1}`, Colours.LIGHT_GREEN);
+      }
+    } else {
+      dlg.hide('hint');
+    }
+    // `allow_choose_all` is only ever true for the debug menu's three commands.
+    dlg.hide('pick-all');
+    dlg.hide('all');
+    const picked = await dialogs.runNested(dlg);
+    const index = Number(picked.replace(/^pick/, '')) - 1;
     return Number.isInteger(index) && options[index]?.canPick
       ? index : SELECT_PC_CANCEL;
   };
