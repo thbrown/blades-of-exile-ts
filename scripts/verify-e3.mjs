@@ -299,6 +299,24 @@ console.log('THUGS:', JSON.stringify({ before: thugsBefore, ...thugs }));
 await shot('06-thugs');
 if (thugs.alive !== thugsBefore + 4 || !thugs.hostile.every(Boolean)) errors.push(`the thugs did not come in hostile: ${JSON.stringify({ thugsBefore, thugs })}`);
 
+// The test panel (`?debug=1`, src/platform/debugPanel.ts): into Shayder, and
+// Step onto spot #18, the ferry, which should ask.
+await page.goto('http://localhost:5199/?scenario=exile3&pace=1&debug=1');
+await page.waitForFunction(() => window.__session !== undefined, { timeout: 30000 });
+await dismissDialogs();
+await page.waitForSelector('#debug-panel li');
+await page.selectOption('#debug-panel select', '4');
+await page.click('#debug-panel button:text("Enter")');
+await page.waitForTimeout(600);
+const ferryRow = page.locator('#debug-panel li', { hasText: '#18 ' });
+const panelRow = await ferryRow.textContent().catch(() => null);
+await ferryRow.locator('button:text("Step")').click().catch(() => {});
+await page.waitForTimeout(800);
+const panelAsked = await page.evaluate(() => window.__dialogs.active?.getText?.('str1') ?? null);
+console.log('PANEL:', JSON.stringify({ row: panelRow, asked: panelAsked?.slice(0, 40) }));
+await shot('07-panel');
+if (!panelRow || !/ferry/.test(panelAsked ?? '')) errors.push(`the test panel did not step onto the ferry: ${JSON.stringify({ panelRow, panelAsked })}`);
+
 await browser.close();
 if (errors.length) {
   console.error('ERRORS:\n' + errors.join('\n'));

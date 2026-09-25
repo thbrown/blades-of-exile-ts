@@ -474,6 +474,11 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
   });
   write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town), shops, specialItems, scen.strings, newDay));
 
+  // For the browser's test panel (`?debug=1`): E3's spot numbers, so a
+  // spot can be matched with its line in `towns/`.
+  type DebugSpots = SpotScript['spots'];
+  // Flags written `0x…` in the panel are party-record offsets, as in the C.
+  const debug = { zones: {} as Record<number, DebugSpots>, towns: {} as Record<number, DebugSpots>, flagOffset: 0x84 };
   zones.forEach((z, i) => {
     const base = `out/out${i % E3_ZONES_WIDE}~${Math.floor(i / E3_ZONES_WIDE)}`;
     const spots = z.specialLocs.map((loc, k) => ({ loc, id: z.specialId[k] ?? 0 }));
@@ -481,6 +486,7 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
     write(`${base}.xml`, sectorXml(z, i, strings, script));
     write(`${base}.map`, sectorMap(z, i, strings, script));
     write(`${base}.spec`, script.spec);
+    debug.zones[i] = script.spots;
   });
   const template = villageTemplate(towns);
   const villageZone = new Map<number, number>();
@@ -498,10 +504,12 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
     write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf, strings, script));
     write(`${base}.map`, townMap(t, terrain, strings, script));
     write(`${base}.spec`, script.spec);
+    debug.towns[t.number] = script.spots;
     // Talk block b is talk<b>.xml, whichever town its people live in.
     const speech = talk.speeches[t.number];
     write(`towns/talk${t.number}.xml`, speech ? dialogueXml(speech, t.number) : `${XML_HEAD}<dialogue boes="2.0.0">\n</dialogue>\n`);
   });
+  write('debug.json', JSON.stringify(debug));
   const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(e3Dir)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
   return { sectors: zones.length, towns: towns.length, sheets: sheets.length };

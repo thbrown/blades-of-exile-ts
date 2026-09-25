@@ -38,6 +38,12 @@ export interface SpotScript {
   strings: string[];
   /** Where each spot's node goes on the map. */
   marks: { x: number; y: number; node: number }[];
+  /**
+   * Every spot E3 has here with its encounter number, and its node, or -1
+   * where the place's code is not transcribed yet: for the browser's test
+   * panel (`debug.json`, `src/platform/debugPanel.ts`).
+   */
+  spots: { x: number; y: number; id: number; node: number }[];
 }
 
 /** A place's own encounters, transcribed (`towns/`): steps by encounter number. */
@@ -69,13 +75,19 @@ export function e3SpotScript(
   const scripts = own?.(b) ?? new Map<number, Step[]>();
   const compiled = new Map<number, number>();
   const marks: SpotScript['marks'] = [];
+  const listed: SpotScript['spots'] = [];
   spots.forEach((s, k) => {
     if (s.loc.x === 0 && s.loc.y === 0) return;
     if (isTown && s.id === 255) return;
+    // 50–59 are markers, which do nothing when stepped on.
+    if (s.id >= 50 && s.id < 60) return;
     let n: number;
     if (s.id < 100) {
       const steps = scripts.get(s.id);
-      if (!steps) return;
+      if (!steps) {
+        listed.push({ x: s.loc.x, y: s.loc.y, id: s.id, node: -1 });
+        return;
+      }
       // A spot below 10 whose flag is 20, the value E3's one-shot helpers
       // leave, is dead: the town dispatcher skips it (`FUN_10c0_0000`), and
       // outdoors it is moved off the map (`exile3.c` near line 67048).
@@ -92,6 +104,7 @@ export function e3SpotScript(
         : b.node('once-disp-msg', { sdf: e3SpotFlag(place, k), msg }, -1);
     }
     marks.push({ x: s.loc.x, y: s.loc.y, node: n });
+    listed.push({ x: s.loc.x, y: s.loc.y, id: s.id, node: n });
   });
-  return { spec: b.spec, strings: b.strings, marks };
+  return { spec: b.spec, strings: b.strings, marks, spots: listed };
 }

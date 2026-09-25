@@ -58,6 +58,7 @@ import {
 } from './platform/prefs';
 import { fitCanvasToPage } from './platform/pageLayout';
 import { startMapWindow } from './platform/mapWindow';
+import { installDebugPanel } from './platform/debugPanel';
 import { WorldMapFeed } from './render/worldMap';
 import { GAME_SPEED_PACE, PREFERENCES_DIALOG_DEFS, preferencesDialog } from './dialogs/preferencesDialog';
 import { setTargetLockPref } from './game/targetMode';
@@ -3065,6 +3066,11 @@ async function main(): Promise<void> {
     installFullScreenButton(menuHost);
     // The bar is hidden while empty, so the canvas has just moved down.
     refitDesktop();
+  }
+
+  // `?debug=1`: the test panel beside the game (platform/debugPanel.ts).
+  if (new URLSearchParams(window.location.search).has('debug')) {
+    void installDebugPanel(session, scen.id, redraw);
   }
 
   // Handles for headless verification and manual debugging.

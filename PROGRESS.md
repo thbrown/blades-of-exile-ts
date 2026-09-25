@@ -54,6 +54,13 @@
   waiting on. In conversations: l/n/j/b/s/r/d/g/a. In shops: **a-h** buy, arrows
   scroll, Escape leaves. In prompts: 1-6, Escape, Enter.
 - `npm test` runs everything headless (no browser needed).
+- **`?debug=1` opens the test panel** (`src/platform/debugPanel.ts`) beside
+  the game: go to any town or outdoor square, list the special spots where
+  the party is and *Step* onto one (or *Run* its node), talk to anyone,
+  get/set flags, gold, healing, debug and ghost mode. For Exile 3
+  (`?scenario=exile3&debug=1`) the converter's `debug.json` numbers each
+  spot as E3 does, so `#18` is `towns/shayder.ts`'s 18, shows the spots
+  not transcribed yet in red, and takes flags as party offsets (`0x57f`).
 - `node scripts/verify-screen.mjs` drives the real UI in Chromium and screenshots
   it — needs `npx vite --port 5199` running first. `SHOTS_DIR=...` sets where the
   screenshots go. It exits non-zero if anything regressed, so it's the fastest
@@ -1085,6 +1092,9 @@ Notes for M2 implementer:
       exit, town change) and breaks into the thugs' quarters (four
       creatures come in hostile). Ahonar's conversion is tested through the
       VM in `specials.test.ts`.
+  - 2026-09-25: **the test panel** (`?debug=1`, see Quick orientation),
+    for trying transcribed scripts by hand. `verify-e3.mjs` steps onto the
+    ferry through it.
   - Next: Sharimik (8–11), Lorelei (12–15), Gale (16–19), the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.
