@@ -144,6 +144,16 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(scen.towns[121]!.creatures.some((c) => c.timeFlag === MonstTime.APPEAR_AFTER_CHOP)).toBe(true);
   });
 
+  it('builds the villages from their building blocks', () => {
+    // Delan: grass, walls, houses and a dock, not a bare field.
+    const delan = scen.towns[120]!;
+    const tiles = new Set(delan.terrain.flat());
+    expect(tiles.size).toBeGreaterThan(20);
+    // Every village has a way in: exits past town 127 are unsigned bytes.
+    const entrances = scen.outdoors.flat().flatMap((o) => o?.cityLocs.map((c) => c.spec) ?? []);
+    expect(entrances.filter((t) => t >= 128).length).toBe(49);
+  });
+
   it('places the fort\'s people', () => {
     const fort = scen.towns[21]!;
     expect(fort.creatures.filter((c) => c.number > 0).length).toBeGreaterThan(40);

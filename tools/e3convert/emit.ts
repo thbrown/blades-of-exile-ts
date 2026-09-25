@@ -22,6 +22,7 @@ import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from
 import { convertE3Talk, readE3Talk, type E3Speaker } from './talk';
 import { readE3ShopTables, standardShops } from './shops';
 import { e3DayReached, e3Event, e3Flag } from './flags';
+import { buildE3Village, villageTemplate } from './village';
 import { makeSpecItem, type SpecItem } from '../../src/data/quest';
 import type { Shop } from '../../src/data/shop';
 
@@ -30,8 +31,6 @@ const BLOCKAGE = ['none', 'sight', 'monsters', 'move', 'move-and-shoot', 'move-a
 const LIGHTING = ['lit', 'dark', 'drains', 'none'];
 /** Town entrance markers for `start_locs[0..3]` (`loadTownMapData`). */
 const ENTRANCE_MARK = ['v', '<', '^', '>'];
-/** Plain grass, the ground E3's village builder starts from (`FUN_1040_1600`). */
-const GRASS = 2;
 
 /** E3's special items: strings 1801 on, and the engine's limit too. */
 const E3_SPECIAL_ITEMS = 50;
@@ -118,7 +117,7 @@ function sectorMap(z: E3Outdoor): string {
   const marks = new Map<string, string>();
   z.exitLocs.forEach((l, i) => {
     const dest = z.exitDests[i] ?? -1;
-    if (!isUnusedLoc(l) && dest >= 0) addMark(marks, l.x, l.y, `@${dest}`);
+    if (!isUnusedLoc(l) && dest >= 0 && dest < E3_TOWN_COUNT) addMark(marks, l.x, l.y, `@${dest}`);
   });
   return mapFile(z.terrain, 48, marks);
 }
@@ -234,13 +233,9 @@ ${items}${creatures}</town>
 `;
 }
 
-function townMap(t: E3Town): string {
+function townMap(t: E3Town, villageTerrain: number[][] | null): string {
   const size = townSize(t);
-  // TODO(E3-2): villages are assembled from 8×8 building blocks by
-  // `FUN_1040_1600`; until that is ported they are bare grass.
-  const terrain = t.village
-    ? Array.from({ length: size }, () => Array<number>(size).fill(GRASS))
-    : t.terrain;
+  const terrain = villageTerrain ?? t.terrain;
   const marks = new Map<string, string>();
   const inside = (l: { x: number; y: number }) => l.x >= 0 && l.x < size && l.y >= 0 && l.y < size;
   t.startLocs.forEach((l, i) => {
@@ -387,10 +382,18 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
     write(`${base}.map`, sectorMap(z));
     write(`${base}.spec`, '');
   });
+  const template = villageTemplate(towns);
+  const villageZone = new Map<number, number>();
+  zones.forEach((z, i) => z.exitDests.forEach((d, e) => {
+    if (!isUnusedLoc(z.exitLocs[e]!) && !villageZone.has(d)) villageZone.set(d, i);
+  }));
   towns.forEach((t) => {
     const base = `towns/town${t.number}`;
     write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf));
-    write(`${base}.map`, townMap(t));
+    // A village is built from its record (village.ts), in the caves if its
+    // entrance is: E3 decides by the party's zone column.
+    const underground = villageZone.get(t.number) !== undefined && villageZone.get(t.number)! % E3_ZONES_WIDE >= 7;
+    write(`${base}.map`, townMap(t, t.village ? buildE3Village(template, t.village, underground, t.number) : null));
     write(`${base}.spec`, '');
     // Talk block b is talk<b>.xml, whichever town its people live in.
     const speech = talk.speeches[t.number];

@@ -41,7 +41,10 @@ export interface E3Outdoor {
    */
   specialId: number[];
   exitLocs: LegacyLoc[];
-  /** Town numbers, as TOWN.DAT indexes them. */
+  /**
+   * Town numbers, as TOWN.DAT indexes them. Unsigned bytes: read signed, the
+   * villages from 128 up came out negative and lost their entrances.
+   */
   exitDests: number[];
   signLocs: LegacyLoc[];
   wandering: E3OutWandering[];
@@ -75,7 +78,7 @@ export function readE3Outdoor(r: LegacyReader): E3Outdoor {
     specialLocs: r.locs(18),
     specialId: r.u8s(18),
     exitLocs: r.locs(8),
-    exitDests: r.i8s(8),
+    exitDests: r.u8s(8),
     signLocs: r.locs(8),
     wandering: Array.from({ length: 4 }, () => readWandering(r)),
     wanderingLocs: r.locs(4),

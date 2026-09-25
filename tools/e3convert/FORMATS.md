@@ -190,8 +190,11 @@ then stamp up to 15 8×8 building blocks. Each placement is
 `{i16 block, i16 condition, u8 rotation/flip, …}`. The block is cut from a
 template map (block `b` is at `((b%8)*8, (b/8)*8)`), and rotation `r%4`
 quarter-turns with `r>=4` mirrored. Then it scatters random variants: grass
-2→3/4, 0→1, 84→85, 91→92, 36→37. **Open**: where the template map lives, and
-the placement fields past the block index. Because of the random scatter, a
+2→3/4, 0→1, 84→85, 91→92, 36→37. **Pinned** (`village.ts`): the template
+is town record 20's map. A placement is `{i16 block, i16 day, u8 rotation, u8
+event, u8 x, u8 y}`. A rect entry is `{rect, u8 terrain, u8 kind}`: kinds
+0–3 run before the buildings and 10–13 after. Kind % 10 is 1 for the frame
+only; otherwise it indexes the fill chance in 20, `[20, 20, 1, 8]`. Because of the random scatter, a
 village's grass is re-rolled on every load (cosmetic, and it uses the RNG).
 
 Towns also change state without a village record: records 0–3 are Krizsan and

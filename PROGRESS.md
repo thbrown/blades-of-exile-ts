@@ -950,9 +950,18 @@ Notes for M2 implementer:
       takes the gold again;
     - job boards need E3's jobs;
     - node types 100+ are scripts.
+  - **The villages are built** (2026-09-24, `tools/e3convert/village.ts`).
+    `FUN_1040_1600` ported step by step. The building sheet is **town
+    record 20**, "Town 20": a 64×64 map of 8×8 buildings, each with its
+    ruin beside it. Rotation and mirroring swap wall and door terrains
+    through tables in the code. E3 re-rolls the grass on every visit; the
+    converter rolls it once from a fixed seed.
+    - Found on the way: **zone exits are unsigned bytes**. They were read
+      signed, so villages 128–177 (49 entrances) were unreachable.
+    - `TODO(E3-3)`: ruined variants (block `b+1`) on a placement's day, or
+      once the village has fallen.
   - Still to do:
     - room names, and signs;
-    - the villages' block builder;
   - **Creatures come and go, and villages fall** (2026-09-24). A creature's
     `time_flag` is BoE 1997's, with the day and event packed into the int16
     at creature +10 as `event*1000 + day` (the field was thought unused).
