@@ -994,8 +994,24 @@ Notes for M2 implementer:
     A message runs once unless the terrain under it is high enough; the
     converter uses `once-disp-msg`, with flags in columns 10–49, which E3
     never uses. `scripts/verify-e3.mjs` steps on Krizsan's common room.
-  - Next: encounters below 100, one town at a time, starting with Fort
-    Emergence (`FUN_1078_0b66`) and the outdoor handler's zone arms.
+  - 2026-09-24: **the script builder, and Fort Emergence as the pilot.**
+    - `tools/e3convert/script.ts` (`SpecBuilder`) compiles *steps* into node
+      chains that read top to bottom as the C does. Steps name E3 strings
+      and dialogs by number, and the converter fills in the text from the
+      user's copy, so the committed scripts hold no game text.
+    - E3's dialogs (RT_DIALOG) name buttons from BoE 1997's `button_strs`.
+      A dialog longer than the engine's screen is split into pages of about
+      700 characters.
+    - `towns/town21.ts` transcribes most of the fort (`FUN_1078_0b66`),
+      including Anaximander's opening briefing and every report
+      (`FUN_1078_0ee6`, about 35 flags).
+    - E3's script helpers identified so far are in FORMATS.md
+      ("Script helpers").
+    - Left as TODO(E3-3): the trapped chest, the two gates between the
+      surface and the caves, the spell-teaching shrines, spot 16, and E3's
+      journal.
+  - Next: the remaining fort spots, then Krizsan (towns 0–3,
+    `FUN_1078_0000`) and the fort's outdoor zone.
 
 ## Key references (do not lose)
 

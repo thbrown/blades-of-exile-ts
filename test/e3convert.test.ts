@@ -183,6 +183,18 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect([node.sd1, node.sd2]).toEqual([0, 16]);
   });
 
+  it("runs Fort Emergence's own scripts: Anaximander's briefing first", () => {
+    const fort = scen.towns[21]!;
+    const office = fort.specialLocs.find((l) => l.x === 5 && l.y === 7)!;
+    const first = fort.specials.get(office.spec)!;
+    // The chain opens on E3's flag (307,0): not yet briefed.
+    expect(first.type).toBe(SpecType.IF_SDF_EQ);
+    expect([first.sd1, first.sd2, first.ex1a]).toEqual([307, 0, 0]);
+    const briefing = fort.specials.get(first.ex1b)!;
+    expect(briefing.type).toBe(SpecType.ONCE_DIALOG);
+    expect(fort.specStrs[briefing.m1]).toMatch(/^You pass through the door/);
+  });
+
   it('places the fort\'s people', () => {
     const fort = scen.towns[21]!;
     expect(fort.creatures.filter((c) => c.number > 0).length).toBeGreaterThan(40);

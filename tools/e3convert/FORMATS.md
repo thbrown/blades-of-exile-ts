@@ -231,3 +231,33 @@ time_flag, extra1, extra2, spec1, spec2` (bytes), then an int16 time code at
 +12 (confirmed by the talk code). `extra1`/`extra2` do double duty: a
 shopkeeper's stock range, an innkeeper's bed. `spec1`/`spec2` is the death
 flag, except that 200–204 mark creatures a script brings in.
+
+## Script helpers (E3-3) — identified 2026-09-24
+
+The encounter code calls a small set of helpers. The decompiler drops the
+arguments of far calls, so read them from the disassembly (`Disasm.java`).
+
+| function | what it does |
+|---|---|
+| `FUN_1008_37de(block, i, snd)` | message: string `block*300 + i` |
+| `FUN_1008_3812(block, i, block, j, snd)` | message: two strings |
+| `FUN_1008_386f(i, j)` | Anaximander's report: block 14 (strings 4200+) |
+| `FUN_1008_3780(n)` | journal entry `n`, dated today (party+0x7bb2 / +0x7c2a) |
+| `FUN_1070_31cd(dlg, 0)` | show dialog resource `dlg`; returns the control id clicked (1 = the first button) |
+| `FUN_10e0_0097(dlg)` | the same, true if the second button |
+| `FUN_10e0_0044(i, j, block, snd, flag)` | message once, marking `flag` 20 |
+| `FUN_10e0_00ec(item, flag, dlg, reward)` | once: dialog offering `item` (Leave/Take); `reward` 1000s food, 2000s gold, 300s special item |
+| `FUN_10e0_03ae(trap, flag, dlg, kind)` | a trapped container |
+| `FUN_10e0_07b7(id)` | the location of the town's spot `id` |
+| `FUN_1080_1b76(x, y, ter)` | set terrain (town or outdoors) |
+| `FUN_1080_1b1f(x, y, a, b)` | swap terrain `a` and `b` at a spot |
+| `FUN_10c0_4a61(town, x, y)` | move the party into `town` at `(x, y)` |
+| `FUN_1040_2c2d(zx, zy, x, y)` | leave for outdoor zone `(zx, zy)` at `(x, y)` (in the 2×2 window) |
+| `FUN_10b0_302f()` | total level of the living PCs |
+| `FUN_10b0_366a(s)` | teach every PC mage spell `s` (priest `s - 100` from 100) |
+| `FUN_10b0_1509(n)` / `FUN_10b0_1fb3(n)` | heal the party / restore spell points |
+| `FUN_1090_4053(code, att)` | bring in the creatures whose `spec1` is `code` |
+| `FUN_10d0_548b()` | `calc_day()` |
+
+Flags are addressed as party-record offsets, and flag `(a, b)` is byte
+`0x84 + 10a + b`. Special items are the int16s at party+0xc.

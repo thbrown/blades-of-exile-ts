@@ -25,7 +25,9 @@
  * while flag (306, 3) is set.
  */
 
+import { BASIC_BUTTONS } from '../../src/game/specials/oneshot';
 import { e3SpotFlag } from './flags';
+import { SpecBuilder, type ScriptSource, type Step } from './script';
 
 export interface E3Spot { loc: { x: number; y: number }; id: number }
 
@@ -38,6 +40,9 @@ export interface SpotScript {
   marks: { x: number; y: number; node: number }[];
 }
 
+/** A place's own encounters, transcribed (`towns/`): steps by encounter number. */
+export type PlaceScript = (b: SpecBuilder) => Map<number, Step[]>;
+
 export function e3TownMessageBlock(t: number): number {
   if (t < 20) return Math.floor((t - (t % 4)) / 5) + 52;
   if (t < 40) return Math.floor(t / 5) + 52;
@@ -48,17 +53,6 @@ export function e3ZoneMessageBlock(zone: number): number {
   return Math.floor(zone / 10) + 80;
 }
 
-function node(op: string, n: number, sdf: [number, number], msg: [number, number]): string {
-  return `@${op} = ${n}
-\tsdf ${sdf[0]}, ${sdf[1]}
-\tmsg ${msg[0]}, ${msg[1]}, -1
-\tpic 0, 4
-\tex1 -1, -1, -1
-\tex2 -1, -1, -1
-\tgoto -1
-`;
-}
-
 /**
  * The generic message spots of a zone (`place` = `{ zone }`) or a town
  * (`{ town }`). `terrainAt` gives the terrain under a spot, which decides
@@ -66,29 +60,33 @@ function node(op: string, n: number, sdf: [number, number], msg: [number, number
  */
 export function e3SpotScript(
   spots: E3Spot[], place: { zone: number } | { town: number },
-  strings: Map<number, string>, terrainAt: (x: number, y: number) => number,
+  src: ScriptSource, terrainAt: (x: number, y: number) => number, own?: PlaceScript,
 ): SpotScript {
   const isTown = 'town' in place;
   const block = isTown ? e3TownMessageBlock(place.town) : e3ZoneMessageBlock(place.zone);
   const repeatsFrom = isTown ? 237 : 209;
-  const out: SpotScript = { spec: '', strings: [], marks: [] };
-  const addString = (id: number) => {
-    out.strings.push((strings.get(block * 300 + id) ?? '').replace(/_/g, '"'));
-    return out.strings.length - 1;
-  };
-  const nodes: string[] = [];
+  const b = new SpecBuilder(src, (label) => Math.max(0, BASIC_BUTTONS.indexOf(label)));
+  const scripts = own?.(b) ?? new Map<number, Step[]>();
+  const compiled = new Map<number, number>();
+  const marks: SpotScript['marks'] = [];
   spots.forEach((s, k) => {
-    if (s.id < 100 || (isTown && s.id === 255)) return;
     if (s.loc.x === 0 && s.loc.y === 0) return;
-    const msg: [number, number] = s.id >= 200
-      ? [addString(s.id - 200), addString(s.id - 199)]
-      : [addString(s.id - 100), -1];
-    const n = nodes.length;
-    nodes.push(terrainAt(s.loc.x, s.loc.y) >= repeatsFrom
-      ? node('disp-msg', n, [-1, -1], msg)
-      : node('once-disp-msg', n, e3SpotFlag(place, k), msg));
-    out.marks.push({ x: s.loc.x, y: s.loc.y, node: n });
+    if (isTown && s.id === 255) return;
+    let n: number;
+    if (s.id < 100) {
+      const steps = scripts.get(s.id);
+      if (!steps) return;
+      n = compiled.get(s.id) ?? b.compile(steps);
+      compiled.set(s.id, n);
+    } else {
+      const msg: [number, number] = s.id >= 200
+        ? [b.e3(block, s.id - 200), b.e3(block, s.id - 199)]
+        : [b.e3(block, s.id - 100), -1];
+      n = terrainAt(s.loc.x, s.loc.y) >= repeatsFrom
+        ? b.node('disp-msg', { msg }, -1)
+        : b.node('once-disp-msg', { sdf: e3SpotFlag(place, k), msg }, -1);
+    }
+    marks.push({ x: s.loc.x, y: s.loc.y, node: n });
   });
-  out.spec = nodes.join('');
-  return out;
+  return { spec: b.spec, strings: b.strings, marks };
 }

@@ -14,7 +14,7 @@ import { encodePng } from './png';
 import { convertItem, convertMonster, convertPresetField } from '../../src/fileio/legacy/convert';
 import { buildItemSheet, buildMonsterSheets, buildTerrainSheets, e3TerrainPic } from './graphics';
 import { readE3Files } from './install';
-import { readNeResources, readStringTable } from './ne';
+import { readDialogs, readNeResources, readStringTable } from './ne';
 import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor, type E3OutWandering } from './outdoor';
 import { readE3Items, readE3Monsters, readE3Start, readE3Terrain, type E3TerrainType } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3Town } from './town';
@@ -23,7 +23,8 @@ import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
 import { readE3ShopTables, standardShops } from './shops';
 import { e3DayReached, e3Event, e3Flag } from './flags';
 import { buildE3Village, villageTemplate } from './village';
-import { e3SpotScript, type SpotScript } from './specials';
+import { e3SpotScript, type PlaceScript, type SpotScript } from './specials';
+import { town21 } from './towns/town21';
 import { makeSpecItem, type SpecItem } from '../../src/data/quest';
 import type { Shop } from '../../src/data/shop';
 
@@ -32,6 +33,9 @@ const BLOCKAGE = ['none', 'sight', 'monsters', 'move', 'move-and-shoot', 'move-a
 const LIGHTING = ['lit', 'dark', 'drains', 'none'];
 /** Town entrance markers for `start_locs[0..3]` (`loadTownMapData`). */
 const ENTRANCE_MARK = ['v', '<', '^', '>'];
+
+/** The towns whose own encounters are transcribed so far (E3-3). */
+const TOWN_SCRIPTS = new Map<number, PlaceScript>([[21, town21]]);
 
 /** E3's special items: strings 1801 on, and the engine's limit too. */
 const E3_SPECIAL_ITEMS = 50;
@@ -383,7 +387,9 @@ export interface EmitSummary { sectors: number; towns: number; sheets: number }
 
 export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
   const files = readE3Files(e3Dir);
-  const strings = readStringTable(readNeResources(files.exe));
+  const resources = readNeResources(files.exe);
+  const strings = readStringTable(resources);
+  const e3Src = { strings, dialogs: readDialogs(resources) };
   const terrain = readE3Terrain(files.exe, strings);
   const zones = readE3Outdoors(files.outdoor);
   const towns = readE3Towns(files.town);
@@ -445,7 +451,7 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
   zones.forEach((z, i) => {
     const base = `out/out${i % E3_ZONES_WIDE}~${Math.floor(i / E3_ZONES_WIDE)}`;
     const spots = z.specialLocs.map((loc, k) => ({ loc, id: z.specialId[k] ?? 0 }));
-    const script = e3SpotScript(spots, { zone: i }, strings, (x, y) => z.terrain[x]?.[y] ?? 0);
+    const script = e3SpotScript(spots, { zone: i }, e3Src, (x, y) => z.terrain[x]?.[y] ?? 0);
     write(`${base}.xml`, sectorXml(z, i, strings, script));
     write(`${base}.map`, sectorMap(z, i, strings, script));
     write(`${base}.spec`, script.spec);
@@ -462,7 +468,7 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
     const underground = villageZone.get(t.number) !== undefined && villageZone.get(t.number)! % E3_ZONES_WIDE >= 7;
     const terrain = t.village ? buildE3Village(template, t.village, underground, t.number) : t.terrain;
     const spots = t.specialLocs.map((loc, k) => ({ loc, id: t.specId[k] ?? 255 }));
-    const script = e3SpotScript(spots, { town: t.number }, strings, (x, y) => terrain[x]?.[y] ?? 0);
+    const script = e3SpotScript(spots, { town: t.number }, e3Src, (x, y) => terrain[x]?.[y] ?? 0, TOWN_SCRIPTS.get(t.number));
     write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf, strings, script));
     write(`${base}.map`, townMap(t, terrain, strings, script));
     write(`${base}.spec`, script.spec);
