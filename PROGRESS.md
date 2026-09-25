@@ -965,9 +965,14 @@ Notes for M2 implementer:
     town's name. The sign terrains (110, 127, 142, 213, 214, 252) are exactly
     the terrains under E3's sign locations. The code that reads signs has not
     been found. Room names come from the town records.
-  - Still to do: wandering monsters, in towns (`wandering[4]`) and outdoors
-    (the zone's wandering and special-encounter groups; their int16 fields
-    are still open in FORMATS.md).
+  - **Wandering monsters** (2026-09-24), in towns and outdoors, and the
+    zones' special-encounter groups. From the code: `(+14, +16)` is the
+    flag that stops a group being placed, and `+12` is `cant_flee`.
+    `TODO(E3-3)`: the meeting script (`+10`), and `(+18, +20)` and `+22`,
+    which are still open.
+  - **E3-2's demo works**: enter Krizsan, talk to its people, buy gear. What
+    remains is E3-3: the scripts (`special_id` encounters, talk node types
+    100+, job boards, E3's event keys).
   - **Creatures come and go, and villages fall** (2026-09-24). A creature's
     `time_flag` is BoE 1997's, with the day and event packed into the int16
     at creature +10 as `event*1000 + day` (the field was thought unused).

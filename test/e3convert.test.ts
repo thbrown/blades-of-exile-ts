@@ -164,6 +164,14 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(zone.signLocs[0]?.text).toMatch(/^VALORIM IS DECLARED UNDER QUARANTINE/);
   });
 
+  it('has wandering monsters, in towns and on the world', () => {
+    // Around Fort Emergence: a group that stops coming once flag (307,3) is set.
+    const zone = scen.outdoors[1]![8]!;
+    expect(zone.wandering[0]).toMatchObject({ monst: [0, 0, 0, 0, 138, 139, 140], endSpec1: 307, endSpec2: 3, cantFlee: true });
+    expect(zone.wanderingLocs[0]).toEqual({ x: 42, y: 42 });
+    expect(scen.towns[11]!.wandering[0]).toEqual([149, 149, 150, 150]);
+  });
+
   it('places the fort\'s people', () => {
     const fort = scen.towns[21]!;
     expect(fort.creatures.filter((c) => c.number > 0).length).toBeGreaterThan(40);

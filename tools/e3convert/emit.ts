@@ -15,7 +15,7 @@ import { convertItem, convertMonster, convertPresetField } from '../../src/filei
 import { buildItemSheet, buildMonsterSheets, buildTerrainSheets, e3TerrainPic } from './graphics';
 import { readE3Files } from './install';
 import { readNeResources, readStringTable } from './ne';
-import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor } from './outdoor';
+import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor, type E3OutWandering } from './outdoor';
 import { readE3Items, readE3Monsters, readE3Start, readE3Terrain, type E3TerrainType } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3Town } from './town';
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
@@ -123,6 +123,28 @@ function areaXml(r: { top: number; left: number; bottom: number; right: number }
   return `    <area top="${r.top}" left="${r.left}" bottom="${r.bottom}" right="${r.right}">${esc(name)}</area>\n`;
 }
 
+/**
+ * A zone's monster group: `<wandering>` ones turn up at random, and
+ * `<encounter>` ones are placed by scripts. TODO(E3-3): the meeting script
+ * (`+10`), and `(+18, +20)` and `+22`, whose meaning is still open
+ * (outdoor.ts).
+ */
+function outGroupXml(tag: 'wandering' | 'encounter', g: E3OutWandering): string {
+  const [, end1 = 0, end2 = 0] = g.words;
+  const sdf = end1 > 0 && end2 > 0 ? e3Flag(end1, end2) : [-1, -1];
+  const monsters = [
+    ...g.monst.map((m) => `        <monster>${m}</monster>\n`),
+    ...g.friendly.map((m) => `        <monster friendly="true">${m}</monster>\n`),
+  ].join('');
+  return `    <${tag} can-flee="${g.gap[0] === 1 ? 'false' : 'true'}" force="false">
+${monsters}        <onmeet>-1</onmeet>
+        <onwin>-1</onwin>
+        <onflee>-1</onflee>
+        <sdf x="${sdf[0]}" y="${sdf[1]}" />
+    </${tag}>
+`;
+}
+
 function zoneSigns(z: E3Outdoor, zone: number, strings: Map<number, string>) {
   return signs(z.signLocs, strings, 27001 + 20 * zone);
 }
@@ -132,9 +154,9 @@ function sectorXml(z: E3Outdoor, zone: number, strings: Map<number, string>): st
     .map((r, i) => ({ r, name: z.areaNames[i] ?? '' }))
     .filter((a) => a.name !== '')
     .map((a) => areaXml(a.r, a.name));
-  // TODO(E3-2): wandering and special-encounter groups, once monsters convert.
   // TODO(E3-3): the special encounters (`special_id`).
-  return `${XML_HEAD}<sector boes="2.0.0">\n    <name>${esc(z.name)}</name>\n${areas.join('')}${zoneSigns(z, zone, strings).map(signXml).join('')}</sector>\n`;
+  const groups = [...z.specialEnc.map((g) => outGroupXml('encounter', g)), ...z.wandering.map((g) => outGroupXml('wandering', g))];
+  return `${XML_HEAD}<sector boes="2.0.0">\n    <name>${esc(z.name)}</name>\n${groups.join('')}${areas.join('')}${zoneSigns(z, zone, strings).map(signXml).join('')}</sector>\n`;
 }
 
 function sectorMap(z: E3Outdoor, zone: number, strings: Map<number, string>): string {
@@ -144,6 +166,7 @@ function sectorMap(z: E3Outdoor, zone: number, strings: Map<number, string>): st
     if (!isUnusedLoc(l) && dest >= 0 && dest < E3_TOWN_COUNT) addMark(marks, l.x, l.y, `@${dest}`);
   });
   for (const s of zoneSigns(z, zone, strings)) addMark(marks, s.x, s.y, `!${s.k}`);
+  z.wanderingLocs.forEach((l, k) => { if (!isUnusedLoc(l)) addMark(marks, l.x, l.y, `*${k}`); });
   return mapFile(z.terrain, 48, marks);
 }
 
@@ -250,6 +273,11 @@ function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, st
         <contained>${p.contained !== 0}</contained>
     </item>
 `)).join('');
+  // A town's four wandering groups, kept in place: the engine picks one at
+  // random, so an empty one still counts.
+  const wandering = t.wandering.some((g) => g.some((m) => m > 0))
+    ? t.wandering.map((g) => `    <wandering>\n${g.map((m) => `        <monster>${m}</monster>\n`).join('')}    </wandering>\n`).join('')
+    : '';
   const rooms = t.roomRects.map((r, i) => (t.roomNames[i] ? areaXml(r, t.roomNames[i]!) : '')).join('');
   return `${XML_HEAD}<town boes="2.0.0">
     <size>${size}</size>
@@ -259,7 +287,7 @@ function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, st
     <lighting>${LIGHTING[t.lighting] ?? 'lit'}</lighting>
     <flags>
 ${chopXml(t)}    </flags>
-${items}${creatures}${rooms}${townSigns(t, strings).map(signXml).join('')}</town>
+${wandering}${items}${creatures}${rooms}${townSigns(t, strings).map(signXml).join('')}</town>
 `;
 }
 
@@ -282,6 +310,7 @@ function townMap(t: E3Town, villageTerrain: number[][] | null, strings: Map<numb
     if (c.number > 0 && inside(c.startLoc)) addMark(marks, c.startLoc.x, c.startLoc.y, `$${i}`);
   });
   for (const s of townSigns(t, strings)) addMark(marks, s.x, s.y, `!${s.k}`);
+  t.wanderingLocs.forEach((l, k) => { if (!isUnusedLoc(l) && inside(l)) addMark(marks, l.x, l.y, `*${k}`); });
   return mapFile(terrain, size, marks);
 }
 

@@ -22,12 +22,18 @@ export interface E3OutWandering {
   friendly: number[];
   /**
    * The six 16-bit fields the loader byte-swaps, at +10, +14, +16, +18, +20
-   * and +22. BoE has six int16s here too (`spec_on_meet` … `end_spec2`), but
-   * E3 has a 2-byte gap after the first and what each one means is not yet
-   * pinned, so they keep their positions for now.
+   * and +22. Pinned from the code: `(+14, +16)` is the flag that, once set,
+   * stops the group being placed (`FUN_1090_07e7`; both must be above 0).
+   * A `+10` from 2 to 99 starts the meeting even when the group is not
+   * beside the party (the outdoor turn, `exile3.c` near line 5278), which
+   * suggests an encounter script. Still open: `(+18, +20)`, often `(87, n)`,
+   * and `+22`.
    */
   words: number[];
-  /** +12 and +13, which the loader leaves alone. +12 is often 1. */
+  /**
+   * +12 and +13, which the loader leaves alone. +12 is 1 for a group that
+   * will not run from a stronger party (`FUN_1010_42d3`), BoE's `cant_flee`.
+   */
   gap: number[];
 }
 
