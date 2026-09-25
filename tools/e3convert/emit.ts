@@ -26,6 +26,7 @@ import { buildE3Village, villageTemplate } from './village';
 import { e3SpotScript, type PlaceScript, type SpotScript } from './specials';
 import { town21 } from './towns/town21';
 import { krizsan } from './towns/krizsan';
+import { ZONE_SCRIPTS } from './towns/zones';
 import { DAILY_FLAGS } from './towns/talkScripts';
 import { SpecBuilder } from './script';
 import { BASIC_BUTTONS } from '../../src/game/specials/oneshot';
@@ -465,7 +466,7 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
   zones.forEach((z, i) => {
     const base = `out/out${i % E3_ZONES_WIDE}~${Math.floor(i / E3_ZONES_WIDE)}`;
     const spots = z.specialLocs.map((loc, k) => ({ loc, id: z.specialId[k] ?? 0 }));
-    const script = e3SpotScript(spots, { zone: i }, e3Src, (x, y) => z.terrain[x]?.[y] ?? 0);
+    const script = e3SpotScript(spots, { zone: i }, e3Src, (x, y) => z.terrain[x]?.[y] ?? 0, ZONE_SCRIPTS.get(i));
     write(`${base}.xml`, sectorXml(z, i, strings, script));
     write(`${base}.map`, sectorMap(z, i, strings, script));
     write(`${base}.spec`, script.spec);

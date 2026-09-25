@@ -218,13 +218,14 @@ export class SpecBuilder {
    * A two-button dialog (`FUN_10e0_0097` and friends): the first button is
    * the way out, and the second runs `then`.
    */
-  askDialog(id: number, then: Step[]): Step {
+  askDialog(id: number, then: Step[], otherwise: Step[] = []): Step {
     return (next) => {
       const { pages, buttons } = this.dialogPages(id);
       const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
       return this.leadPages(pages, this.node('once-dlog', {
         msg: [pages[pages.length - 1]!, -1, 1], ex1: [this.buttonIndex(buttons[1] ?? 'OK'), yes],
-      }, next));
+      }, no));
     };
   }
 
@@ -258,10 +259,11 @@ export class SpecBuilder {
   }
 
   /** `if (calc_day() >= day) { then }`. */
-  ifDayReached(day: number, then: Step[]): Step {
+  ifDayReached(day: number, then: Step[], otherwise: Step[] = []): Step {
     return (next) => {
       const yes = this.seq(then)(next);
-      return this.node('if-day', { ex1: [day, yes] }, next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-day', { ex1: [day, yes] }, no);
     };
   }
 
@@ -360,6 +362,18 @@ export class SpecBuilder {
     };
   }
 
+  /**
+   * `FUN_10c0_443a(block, i, block, j, group, flag, spot)`: once, a message
+   * and the zone's special encounter `group`. E3 places the group on its
+   * marker spot (encounter number `50 + k`); the engine's node places it by
+   * the party, which is a step or two away.
+   */
+  onceEncounter(flag: Flag, block: number, a: number, b: number, group: number): Step {
+    return (next) => this.node('once-out-encounter', {
+      sdf: flag, msg: [this.e3(block, a), b > 0 ? this.e3(block, b) : -1], ex1: [group],
+    }, next);
+  }
+
   gold(n: number): Step {
     return (next) => this.node('gold', { ex1: [n, 0] }, next);
   }
@@ -437,4 +451,9 @@ export function partyFlag(offset: number): Flag {
 /** Party-record word `offset` as a special item (party+0xc is item 0). */
 export function partySpecItem(offset: number): number {
   return (offset - 0xc) / 2;
+}
+
+/** A zone's flag for its own spot `id` (`2000 + zone*10 + id`, party+0x854 on). */
+export function zoneSpotFlag(zone: number, id: number): Flag {
+  return e3Flag(200 + zone, id);
 }

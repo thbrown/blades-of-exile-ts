@@ -1041,9 +1041,21 @@ Notes for M2 implementer:
       helpers leave.
     - Loops are possible (`eachItemOfClass`). E3 names kinds of item by
       `type_flag`, which the converter copies into the special class.
-  - Next: the outdoor zones around the fort and Krizsan (`FUN_10a0_0062`'s
-    zone arms), then Shayder (4–7), Sharimik (8–11), Lorelei (12–15) and
-    Gale (16–19). The talk types are listed by `listTalkScripts.ts`.
+  - 2026-09-24: **the zones around the start** (`towns/zones.ts`): 73 (the
+    fort's surface), 74 (north of Krizsan), 83 (Krizsan's farms) and 89 (the
+    caves outside the fort).
+    - The outdoor handler is four functions, split by zone number in the
+      caller.
+    - A zone's spot flag is `(200 + zone, id)`.
+    - `FUN_10c0_443a` puts up a once-only message and brings in one of the
+      zone's special encounter groups. E3 places the group on its `50 + k`
+      marker spot (the 50–59 numbers mark those places, which is why they
+      do nothing when stepped on). The engine places it by the party.
+    - The id-below-10 guard applies outdoors too: E3 moves a dead spot off
+      the map.
+  - Next: Shayder (4–7), Sharimik (8–11), Lorelei (12–15), Gale (16–19),
+    and the zones between them. The talk types are listed by
+    `listTalkScripts.ts`.
 
 ## Key references (do not lose)
 
