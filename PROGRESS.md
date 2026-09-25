@@ -1053,8 +1053,40 @@ Notes for M2 implementer:
       do nothing when stepped on). The engine places it by the party.
     - The id-below-10 guard applies outdoors too: E3 moves a dead spot off
       the map.
-  - Next: Shayder (4–7), Sharimik (8–11), Lorelei (12–15), Gale (16–19),
-    and the zones between them. The talk types are listed by
+  - 2026-09-25: **Shayder** (towns 4–7, `towns/shayder.ts`,
+    `FUN_1078_01af`) and its talk scripts 125–132: the Anama priests'
+    question (one case for five priests in five towns), Ahonar, Mayor
+    Bernathy and Irvine.
+    - Shayder's messages are in Krizsan's block, 52: the dispatcher's
+      `(t - t % 4) / 5 + 52` is 52 for towns 0–7. Most of its one-shot
+      flags are town 4's by address, so they fire once for the city across
+      its four states.
+    - New builder steps: `pay` (IF_HAS_GOLD), `diseaseAll`/`cureDiseaseAll`,
+      `changeTown` (`FUN_10c0_4a61`, a silent `TOWN_GENERIC_STAIR`), `bringIn`
+      (`FUN_1090_4053`), `log` (a literal read from the EXE by address, so no
+      game text is committed), and the per-PC ones below.
+    - **Hidden creatures.** A creature whose `spec1` is 200–204 starts
+      absent, and `FUN_1090_4053(code, attitude)` brings its group in. They
+      are now written as `<encounter>` codes: 64 towns have some, and until
+      a town's script is transcribed, they stay absent, as they do in E3
+      until the script runs.
+    - **Engine extension: `SELECT_TARGET` with `ex1a` 10–15 picks PC 0–5
+      without asking.** Joining the Anama turns each PC's mage skill into
+      priest skill (`max(2, mage)`, capped at 7), which no party-wide node
+      can do. The C++ has no arm for those values, so no BoE scenario is
+      affected. `SpecBuilder.eachPc`, `ifStat`, `whileStat` and `addStat`
+      use it.
+    - Fixed: **`exitTo` wrote the wrong opcode.** `relocate` is
+      `TOWN_RELOCATE_CREATURE`, and `TOWN_RELOCATE` is `set-sector`. Opcode
+      names are the lines of `specials-opcodes.txt` by position, and several
+      don't read as you'd guess: `button-generic` is `TOWN_GENERIC_STAIR`.
+      Fort Emergence's two exit spots never set where the party comes out.
+    - `verify-e3.mjs` takes the ferry to Marish (dialog, 10 gold, outdoor
+      exit, town change) and breaks into the thugs' quarters (four
+      creatures come in hostile). Ahonar's conversion is tested through the
+      VM in `specials.test.ts`.
+  - Next: Sharimik (8–11), Lorelei (12–15), Gale (16–19), the zones
+    between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.
 
 ## Key references (do not lose)
@@ -1074,6 +1106,7 @@ Notes for M2 implementer:
 
 ## Findings / gotchas log
 
+- (2026-09-25) **Check an opcode name against `SpecType` before using it.** The names are `specials-opcodes.txt`'s lines by position (as in OBoE), and several read wrong: `relocate` is `TOWN_RELOCATE_CREATURE` (party relocation is `set-sector`), `stair-generic` is `TOWN_GENERIC_BUTTON` and `button-generic` is `TOWN_GENERIC_STAIR`, and `town-attitude` is `MAKE_TOWN_HOSTILE` (one creature is `set-attitude`). `buildOpcodeTable` plus `SpecType[...]` is a one-line check.
 - (2026-09-23) **E3 data is big-endian and `[x][y]`.** Read it with `LegacyReader(data, true)`. The terrain byte is `x*48 + y`. *(Corrected 2026-09-24: I first claimed `outdoor-to-json.js`'s output was transposed, but `display.js` draws `map[i*48+j]` at column `i`, so it was right all along.)* Everything that Ghidra shows as `DS:-0x500e + …` is a zone field. The town record is loaded at `DS:0004`, so subtract 4.
 - (2026-09-24) **TOWN.DAT records 120–199 are villages, not variants**: named towns (Delan, Pergies, Inn of Blades …) whose maps E3 builds at load from 8×8 building blocks (`FUN_1040_1600`). A record with no terrain is not a spare. Town names are string `30001 + 20t`.
 - (2026-09-24) E3 has no terrain property data file. Pictures are a table in segment 33, blockage a table in DGROUP, and doors and boats are `switch`es in code (FORMATS.md, "Tables in the EXE"). Ghidra can't recover those `switch`es: the case table is `n` values then `n` targets, read as plain data, and `Disasm.java`'s count form lists the arms.

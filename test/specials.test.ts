@@ -18,7 +18,9 @@ import { ChoiceButton, SpecCtx, SpecCtxType, SpecialHost } from '../src/game/spe
 import { ONCE_DONE } from '../src/game/specials/oneshot';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
-import { buildOpcodeTable } from '../src/fileio/specialParse';
+import { buildOpcodeTable, parseSpecials } from '../src/fileio/specialParse';
+import { SpecBuilder } from '../tools/e3convert/script';
+import { anamaConversion } from '../tools/e3convert/towns/talkScripts';
 import { PartyPreset } from '../src/universe/player';
 import { MainStatus, PartyStatus, Race, Skill, Status, Trait } from '../src/universe/skills';
 import { killMonst } from '../src/game/damage';
@@ -516,6 +518,17 @@ describe('affect nodes', () => {
     host.pcAnswer = 2;
     await run();
     expect(univ.party.pcs[2]!.mageSpells[30]).toBe(true);
+    expect(univ.party.pcs[0]!.mageSpells[30]).toBe(false);
+  });
+
+  it('picks PC k without asking for ex1a 10 + k (an exile-js extension)', async () => {
+    const { univ, host, run } = withNodes({
+      0: { type: SpecType.SELECT_TARGET, ex1a: 13, jumpto: 1 },
+      1: { type: SpecType.AFFECT_MAGE_SPELL, ex1a: 30, ex1b: 0 },
+    });
+    host.pcAnswer = 0;
+    await run();
+    expect(univ.party.pcs[3]!.mageSpells[30]).toBe(true);
     expect(univ.party.pcs[0]!.mageSpells[30]).toBe(false);
   });
 
@@ -1982,5 +1995,29 @@ describe('a square intercepting a spell cast on it', () => {
     expect(univ.transcript.at(-1)).not.toBe('  Nothing happens.');
     expect(await session.castSpellOnSpace({ x: 9, y: 9 }, Spell.RITUAL_SANCTIFY)).toBe(true);
     expect(univ.transcript.at(-1)).toBe('  Nothing happens.');
+  });
+});
+
+/**
+ * Exile 3's converter (tools/e3convert/script.ts) compiles steps into these
+ * nodes. Joining the Anama (talk script 130) is the one that leans on the
+ * `SELECT_TARGET` extension: each PC's own mage skill becomes priest skill.
+ */
+describe("Exile 3's per-PC scripts", () => {
+  it('turns each PC\'s mage skill into priest skill, at least 2 and at most 7', async () => {
+    const b = new SpecBuilder({ strings: new Map(), dialogs: new Map() }, () => 0);
+    const entry = b.compile([anamaConversion(b)]);
+    const nodes = Object.fromEntries(parseSpecials(b.spec, opcodes));
+    const { univ, run } = withNodes(nodes);
+    const start: [number, number][] = [[0, 0], [1, 3], [3, 1], [6, 4], [2, 0], [0, 7]];
+    const sp = univ.party.pcs.map((pc) => pc.maxSp);
+    univ.party.pcs.forEach((pc, i) => {
+      pc.skills[Skill.MAGE_SPELLS] = start[i]![0];
+      pc.skills[Skill.PRIEST_SPELLS] = start[i]![1];
+    });
+    await run(entry);
+    expect(univ.party.pcs.map((pc) => [pc.skills[Skill.MAGE_SPELLS], pc.skills[Skill.PRIEST_SPELLS]]))
+      .toEqual([[0, 2], [0, 5], [0, 4], [0, 7], [0, 2], [0, 7]]);
+    expect(univ.party.pcs.map((pc, i) => pc.maxSp - sp[i]!)).toEqual([6, 6, 6, 6, 6, 6]);
   });
 });

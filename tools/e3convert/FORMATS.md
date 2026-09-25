@@ -258,6 +258,21 @@ arguments of far calls, so read them from the disassembly (`Disasm.java`).
 | `FUN_10b0_1509(n)` / `FUN_10b0_1fb3(n)` | heal the party / restore spell points |
 | `FUN_1090_4053(code, att)` | bring in the creatures whose `spec1` is `code` |
 | `FUN_10d0_548b()` | `calc_day()` |
+| `FUN_1070_0623(n, redraw)` | pay `n` gold; false if the party has too little |
+| `FUN_10b0_183a(pc, n)` | BoE 1997's `disease_pc` (save against level, frailty, sound 66) |
+| `FUN_1048_011f(a, b)` | `max(a, b)` |
+| `FUN_10d0_4c8d(far str)` | a line in the text area; a script's literal is in its own code segment (`PUSH CS; PUSH off`) |
+
+The PC record (stride 0x722, PC `i` at `i*0x722 - 0x7ada` in segment 1158) is
+BoE's `pc_record_type`: `main_status` (+0), `name[20]`, `skills[30]` (+0x16;
+mage spells +0x28, priest +0x2a), `max_health` (+0x52), `cur_health`,
+`max_sp` (+0x56), `cur_sp`, `experience`, `skill_pts`, `level` (+0x5e), then
+`status[15]` (+0x60; disease, status 7, is +0x6e). The mage spell book is at
++0x6bc (`-0x741e`), one byte a spell.
+
+Creatures with `spec1` 200–204 start absent (`10d8:0d36`), and
+`FUN_1090_4053(code, attitude)` brings in those whose `spec1` is `code`. The
+converter writes the code as the creature's `<encounter>`.
 
 Flags are addressed as party-record offsets, and flag `(a, b)` is byte
 `0x84 + 10a + b`. Special items are the int16s at party+0xc.

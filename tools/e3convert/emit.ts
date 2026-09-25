@@ -14,7 +14,7 @@ import { encodePng } from './png';
 import { convertItem, convertMonster, convertPresetField } from '../../src/fileio/legacy/convert';
 import { buildItemSheet, buildMonsterSheets, buildTerrainSheets, e3TerrainPic } from './graphics';
 import { readE3Files } from './install';
-import { readDialogs, readNeResources, readStringTable } from './ne';
+import { readDialogs, readNeResources, readNeSegment, readStringTable } from './ne';
 import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor, type E3OutWandering } from './outdoor';
 import { readE3Items, readE3Monsters, readE3Start, readE3Terrain, type E3TerrainType } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3Town } from './town';
@@ -26,9 +26,10 @@ import { buildE3Village, villageTemplate } from './village';
 import { e3SpotScript, type PlaceScript, type SpotScript } from './specials';
 import { town21 } from './towns/town21';
 import { krizsan } from './towns/krizsan';
+import { shayder } from './towns/shayder';
 import { ZONE_SCRIPTS } from './towns/zones';
 import { DAILY_FLAGS } from './towns/talkScripts';
-import { SpecBuilder } from './script';
+import { SpecBuilder, type ScriptSource } from './script';
 import { BASIC_BUTTONS } from '../../src/game/specials/oneshot';
 import { makeSpecItem, type SpecItem } from '../../src/data/quest';
 import type { Shop } from '../../src/data/shop';
@@ -42,6 +43,7 @@ const ENTRANCE_MARK = ['v', '<', '^', '>'];
 /** The towns whose own encounters are transcribed so far (E3-3). */
 const TOWN_SCRIPTS = new Map<number, PlaceScript>([
   [21, town21], ...[0, 1, 2, 3].map((t): [number, PlaceScript] => [t, krizsan(t)]),
+  ...[4, 5, 6, 7].map((t): [number, PlaceScript] => [t, shayder(t)]),
 ]);
 
 /** E3's special items: strings 1801 on, and the engine's limit too. */
@@ -239,14 +241,16 @@ function creatureTimeXml(c: E3CreatureStart): string {
 function creatureXml(c: E3CreatureStart, id: number, personality: number): string {
   // `spec1`/`spec2` is the creature's death flag: END_DIE sets it, and a town
   // loading leaves out anyone whose flag is set (`10d8:` town setup, which
-  // skips row 0 and 200 up). TODO(E3-3): 200–204 are creatures a script
-  // brings in (`FUN_1090_4053`); they start absent.
+  // skips row 0 and 200 up). 200–204 are creatures a script brings in
+  // (`FUN_1090_4053`, `SpecBuilder.bringIn`): the loader leaves them absent
+  // (`10d8:0d36`), which is what an encounter code does.
   const sdf = c.spec1 > 0 && c.spec1 < 200 && c.spec2 < 10 ? e3Flag(c.spec1, c.spec2) : null;
+  const code = c.spec1 >= 200 && c.spec1 < 205 ? c.spec1 : 0;
   return `    <creature id="${id}">
         <type>${c.number}</type>
         <attitude>${ATTITUDE[c.startAttitude] ?? 'docile'}</attitude>
         <mobility>${c.mobile}</mobility>
-${sdf ? `        <sdf x="${sdf[0]}" y="${sdf[1]}" />\n` : ''}${creatureTimeXml(c)}        <personality>${personality}</personality>
+${sdf ? `        <sdf x="${sdf[0]}" y="${sdf[1]}" />\n` : ''}${code ? `        <encounter>${code}</encounter>\n` : ''}${creatureTimeXml(c)}        <personality>${personality}</personality>
     </creature>
 `;
 }
@@ -397,7 +401,14 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
   const files = readE3Files(e3Dir);
   const resources = readNeResources(files.exe);
   const strings = readStringTable(resources);
-  const e3Src = { strings, dialogs: readDialogs(resources) };
+  const e3Src: ScriptSource = {
+    strings, dialogs: readDialogs(resources),
+    exeString: (seg, off) => {
+      const bytes = readNeSegment(files.exe, (seg - 0x1000) / 8 + 1);
+      const end = bytes.indexOf(0, off);
+      return new TextDecoder('latin1').decode(bytes.subarray(off, end < 0 ? undefined : end));
+    },
+  };
   const terrain = readE3Terrain(files.exe, strings);
   const zones = readE3Outdoors(files.outdoor);
   const towns = readE3Towns(files.town);
@@ -483,7 +494,7 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
     const underground = villageZone.get(t.number) !== undefined && villageZone.get(t.number)! % E3_ZONES_WIDE >= 7;
     const terrain = t.village ? buildE3Village(template, t.village, underground, t.number) : t.terrain;
     const spots = t.specialLocs.map((loc, k) => ({ loc, id: t.specId[k] ?? 255 }));
-    const script = e3SpotScript(spots, { town: t.number }, e3Src, (x, y) => terrain[x]?.[y] ?? 0, TOWN_SCRIPTS.get(t.number));
+    const script = e3SpotScript(spots, { town: t.number }, { ...e3Src, creatures: townCreatures(t) },  (x, y) => terrain[x]?.[y] ?? 0, TOWN_SCRIPTS.get(t.number));
     write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf, strings, script));
     write(`${base}.map`, townMap(t, terrain, strings, script));
     write(`${base}.spec`, script.spec);

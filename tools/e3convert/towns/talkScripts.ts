@@ -6,8 +6,10 @@
  * CALL_SCEN_SPEC), and their message nodes become the reply.
  */
 
+import { Skill } from '../../../src/universe/skills';
 import { e3DailyFlag } from '../flags';
 import { partyFlag as f, partySpecItem, type SpecBuilder, type Step } from '../script';
+import { ANAMA, ANAMA_RINGS, IRVINE_ASKED, IRVINE_PARCEL } from './shayder';
 
 /** Flags a new day clears (`e3DailyFlag`), for E3's day stamps. */
 export const LEVY_PAID = e3DailyFlag(0);
@@ -19,7 +21,39 @@ const AGROD_SOLD: [number, number] = [291, 10];
 /** The fort's four pieces of evidence: special items at party+0x40…+0x46. */
 const EVIDENCE = [0x40, 0x42, 0x44, 0x46].map(partySpecItem);
 
+/** How often the party has said yes, and no, to the Anama's priests. */
+const ANAMA_YES = f(0x57f);
+const ANAMA_NO = f(0x580);
+
 export type TalkScript = (b: SpecBuilder) => Step[];
+
+/**
+ * Joining the Anama, PC by PC (talk script 130): priest skill gains the mage
+ * skill, or 2 if that is more, up to 7; mage skill goes to 0; and 6 spell
+ * points more.
+ */
+export function anamaConversion(b: SpecBuilder): Step {
+  return b.eachPc(() => [
+    b.ifStat(Skill.MAGE_SPELLS, 2, [
+      b.whileStat(Skill.MAGE_SPELLS, 1, [b.addStat(Skill.MAGE_SPELLS, -1), b.addStat(Skill.PRIEST_SPELLS, 1)]),
+    ], [b.addStat(Skill.MAGE_SPELLS, -1), b.addStat(Skill.PRIEST_SPELLS, 2)]),
+    b.whileStat(Skill.PRIEST_SPELLS, 8, [b.addStat(Skill.PRIEST_SPELLS, -1)]),
+    b.addStat(Skill.MAX_SP, 6),
+  ]);
+}
+
+/**
+ * Types 125–129 share one case: an Anama priest asks whether the party
+ * believes, once each (flag `party+0x4fd+type`), with dialog `type + 0x1031`,
+ * and counts the answers for Ahonar (130).
+ */
+const anamaQuestion = (type: number): TalkScript => (b) => {
+  const asked = f(0x4fd + type);
+  return [b.ifFlagAtLeast(asked, 1, [b.reply(0x5d)], [
+    b.askDialog(type + 0x1031, [b.reply(0x5b), b.incFlag(ANAMA_YES)], [b.incFlag(ANAMA_NO), b.reply(0x5c)]),
+    b.setFlag(asked, 1),
+  ])];
+};
 
 export const TALK_SCRIPTS = new Map<number, TalkScript>([
   // Levy, Fort Emergence's paymaster: 25 gold once a day. E3 stamps the day
@@ -91,6 +125,38 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
     b.ifFlagAtLeast(f(0xc85), 1, [
       b.ifFlagEq(f(0xa3), 1, [b.xp(10), b.gold(1500), b.setFlag(f(0xa3), 2), b.reply(0x41, 0x42)], [b.reply(0x43)]),
     ], [b.reply(0x40)]),
+  ])]],
+  ...[125, 126, 127, 128, 129].map((t): [number, TalkScript] => [t, anamaQuestion(t)]),
+  // Ahonar, who takes the party into the Anama once three priests have heard
+  // it say yes, and never once it has said no three times. Joining turns each
+  // PC's mage skill into priest skill (at least 2, at most 7), forgets the
+  // mage spells from 30 up, and adds 6 spell points.
+  // TODO(E3-3): journal entry 0x20.
+  [130, (b) => {
+    const join: Step[] = [
+      b.dialog(0xbe8), b.setFlag(ANAMA, 3), b.giveSpecItem(ANAMA_RINGS),
+      anamaConversion(b),
+      ...Array.from({ length: 32 }, (_, i) => b.forgetSpell(30 + i)),
+      b.reply(0x70),
+    ];
+    const notYet: Step[] = [b.ifSpecItem(ANAMA_RINGS, [
+      // A ring the party was never given: Ahonar takes it, and that is that.
+      b.setFlag(ANAMA_NO, 5), b.takeSpecItem(ANAMA_RINGS), b.reply(0x63, 0x64),
+    ], [b.ifFlagAtLeast(ANAMA_NO, 3, [b.reply(0x60)], [
+      b.ifFlagAtLeast(ANAMA_YES, 3, [b.askDialog(0xbe7, join, [b.reply(0x6f)])], [b.reply(0x5e, 0x5f)]),
+    ])])];
+    return [b.ifFlagEq(ANAMA, 0, notYet, [b.ifFlagEq(ANAMA, 3, [b.reply(0x61)], [b.reply(0x62)])])];
+  }],
+  // Mayor Bernathy's mission, and a reward (item 0x136) once flag 0xc87 is set.
+  // TODO(E3-3): journal entry 0x1a.
+  [131, (b) => [b.ifFlagEq(f(0xc87), 0, [
+    b.ifFlagEq(f(0xca), 0, [b.reply(0x65, 0x66), b.setFlag(f(0xca), 1)], [b.reply(0x67)]),
+  ], [
+    b.ifFlagBelow(f(0xca), 2, [b.giveItem(0x136, [b.setFlag(f(0xca), 2)]), b.reply(0x68, 0x69)], [b.reply(0x6a)]),
+  ])]],
+  // Irvine asks the party to fetch a parcel from his chest (Shayder's spot 8).
+  [132, (b) => [b.ifSpecItem(IRVINE_PARCEL, [b.reply(0x6b)], [
+    b.ifFlagAtLeast(IRVINE_ASKED, 1, [b.reply(0x6e)], [b.setFlag(IRVINE_ASKED, 1), b.reply(0x6c, 0x6d)]),
   ])]],
   // Captain Agrod buys unicorn horns (type flag 111) at 10 gold each.
   [119, (b) => [

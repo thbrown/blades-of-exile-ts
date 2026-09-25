@@ -229,6 +229,75 @@ console.log('SPOT:', JSON.stringify({ dialog: spotDialog }));
 await shot('04-spot');
 if (!spotDialog) errors.push('stepping on the common room showed no message');
 await page.keyboard.press('Enter');
+await page.waitForTimeout(300);
+
+// Shayder (towns/shayder.ts). The ferry at the end of the dock: Yes pays ten
+// gold, sets where the party will come out, and sails for Marish (town 128).
+const clickButton = async (label) => {
+  const at = await page.evaluate((text) => {
+    const d = window.__dialogs.active;
+    const name = d && [...d.def.byName.keys()].find((n) => n.startsWith('btn') && d.getText(n) === text);
+    if (!name) return null;
+    const r = d.screenRect(d.def.byName.get(name));
+    const c = document.querySelector('canvas');
+    const b = c.getBoundingClientRect();
+    return { x: b.left + ((r.left + r.right) / 2) * (b.width / c.width), y: b.top + ((r.top + r.bottom) / 2) * (b.height / c.height) };
+  }, label);
+  if (!at) return false;
+  await page.mouse.click(at.x, at.y);
+  return true;
+};
+const dismissDialogs = async () => {
+  for (let i = 0; i < 10 && await page.evaluate(() => !!window.__dialogs?.active); i++) {
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(300);
+  }
+};
+const stepOnto = (town, x, y) => page.evaluate(({ town, x, y }) => {
+  const s = window.__session;
+  s.startTownMode(town, 0);
+  // From the square below, stepping north.
+  s.univ.party.townLoc = { x, y: y + 1 }; s.center = { x, y: y + 1 };
+  window.__redraw();
+  void s.move(0);
+}, { town, x, y });
+await dismissDialogs();
+await page.evaluate(() => { window.__session.univ.party.gold = 100; });
+await stepOnto(4, 8, 49);
+await page.waitForTimeout(800);
+await shot('05-ferry-asks');
+const ferryAsked = await clickButton('Yes');
+await page.waitForTimeout(800);
+await dismissDialogs();
+const ferry = { asked: ferryAsked, ...(await where()), gold: await page.evaluate(() => window.__session.univ.party.gold) };
+console.log('FERRY:', JSON.stringify(ferry));
+await shot('05-ferry');
+if (!ferry.asked || ferry.townNum !== 128 || ferry.gold !== 90) errors.push(`the ferry did not take the party to Marish for 10 gold: ${JSON.stringify(ferry)}`);
+
+// Breaking into the thugs' quarters brings in four hidden creatures, hostile.
+// The spot is on their locked door; the floor goes there instead, since the
+// lock is not what is being tested.
+const thugsBefore = await page.evaluate(() => { window.__session.startTownMode(4, 0); return window.__session.univ.town.monsters.filter((m) => m.isAlive).length; });
+await stepOnto(4, 20, 53);
+await page.waitForTimeout(500);
+await page.keyboard.press('Escape'); // the lock dialog: Leave
+await page.waitForTimeout(300);
+await page.evaluate(() => {
+  const s = window.__session;
+  const t = s.univ.town.record.terrain;
+  t[20][53] = t[20][54];
+  s.univ.party.townLoc = { x: 20, y: 54 };
+  void s.move(0);
+});
+await page.waitForTimeout(800);
+await dismissDialogs();
+const thugs = await page.evaluate(() => {
+  const ms = window.__session.univ.town.monsters;
+  return { alive: ms.filter((m) => m.isAlive).length, hostile: [43, 44, 45, 46].map((i) => ms[i]?.isAlive && !ms[i].isFriendly) };
+});
+console.log('THUGS:', JSON.stringify({ before: thugsBefore, ...thugs }));
+await shot('06-thugs');
+if (thugs.alive !== thugsBefore + 4 || !thugs.hostile.every(Boolean)) errors.push(`the thugs did not come in hostile: ${JSON.stringify({ thugsBefore, thugs })}`);
 
 await browser.close();
 if (errors.length) {

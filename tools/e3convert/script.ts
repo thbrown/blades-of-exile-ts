@@ -46,12 +46,19 @@ const E3_BUTTONS = [
   'Destroy', 'Pay', 'Free', 'Next Tip', 'Touch',
 ];
 
+/** The engine's `Status.DISEASE`, the `ex1c` of an AFFECT_STATUS node. */
+const STATUS_DISEASE = 7;
+
 /** Roughly how much text fits in one dialog on the engine's screen. */
 const PAGE = 700;
 
 export interface ScriptSource {
   strings: Map<number, string>;
   dialogs: Map<number, E3Dialog>;
+  /** The town's creatures, by slot, for `bringIn`. */
+  creatures?: { number: number; spec1: number }[];
+  /** The NUL-terminated string at `seg:off` in the EXE (a Ghidra address). */
+  exeString?: (seg: number, off: number) => string;
 }
 
 export class SpecBuilder {
@@ -311,9 +318,11 @@ export class SpecBuilder {
   /**
    * `FUN_1040_2c2d`: where the party comes out when it leaves town, given
    * as E3 does, a zone and a square in the 2×2 window whose corner it is.
+   * That is `TOWN_RELOCATE`, whose opcode is `set-sector`; `relocate` is
+   * `TOWN_RELOCATE_CREATURE`, which moves a monster.
    */
   exitTo(zx: number, zy: number, x: number, y: number): Step {
-    return (next) => this.node('relocate', {
+    return (next) => this.node('set-sector', {
       ex1: [zx + Math.floor(x / 48), zy + Math.floor(y / 48)], ex2: [x % 48, y % 48],
     }, next);
   }
@@ -430,6 +439,117 @@ export class SpecBuilder {
       const no = this.seq(otherwise)(next);
       return this.node('if-ter', { ex1: [x, y], ex2: [t, yes] }, no);
     };
+  }
+
+  /**
+   * `FUN_1070_0623(n, 1)`: take `n` gold if the party has it, and run
+   * `then`; otherwise run `otherwise`. (The engine's node also says "You give
+   * up n gold.", which E3 does not.)
+   */
+  pay(n: number, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-gold', { ex1: [n, yes], ex2: [1] }, no);
+    };
+  }
+
+  /**
+   * `FUN_10b0_183a(pc, n)` for every PC: BoE 1997's `disease_pc` (the save
+   * against level, frailty, sound 66), which is the engine's own.
+   */
+  diseaseAll(n: number): Step {
+    return (next) => this.node('status', { ex1: [n, 1, STATUS_DISEASE] }, next);
+  }
+
+  /** Every PC's disease cleared (E3 zeroes the status word directly). */
+  cureDiseaseAll(): Step {
+    return (next) => this.node('status', { ex1: [8, 0, STATUS_DISEASE] }, next);
+  }
+
+  /**
+   * `FUN_10c0_4a61(t, x, y)`: the party goes into town `t` at `(x, y)`,
+   * without a word. The engine's `TOWN_GENERIC_STAIR` (opcode
+   * `button-generic`) with `ex2b` 8 asks nothing, and it ends the chain, so it
+   * must be a script's last step.
+   */
+  changeTown(t: number, x: number, y: number): Step {
+    return () => this.node('button-generic', { ex1: [x, y], ex2: [t, 8] }, -1);
+  }
+
+  /**
+   * `FUN_1090_4053(code, attitude)`: the creatures whose `spec1` is `code`
+   * (200–204, which start absent: `emit.ts`) come in, with `attitude`, or 3
+   * for monsters 149–154. The engine's `ONCE_TOWN_ENCOUNTER` brings in the
+   * group whose encounter code is `code`, and a `TOWN_SET_ATTITUDE` per slot
+   * gives each its attitude.
+   * TODO(E3-3): E3 clears each creature's code, so a second call does
+   * nothing; the engine's preset keeps its code and could bring one back.
+   */
+  bringIn(code: number, attitude: number): Step {
+    return (next) => {
+      const slots = (this.src.creatures ?? []).flatMap((c, i) => (c.number > 0 && c.spec1 === code ? [i] : []));
+      const set = slots.reduceRight((after, i) => {
+        const n = this.src.creatures![i]!.number;
+        return this.node('set-attitude', { ex1: [i, n > 0x94 && n < 0x9b ? 3 : attitude] }, after);
+      }, next);
+      return this.node('once-town-encounter', { ex1: [code] }, set);
+    };
+  }
+
+  /**
+   * `FUN_10d0_4c8d`: a line in the text area. E3's few literal strings live
+   * in its code segments, so they are named by address, as Ghidra gives it.
+   */
+  log(seg: number, off: number): Step {
+    return (next) => this.node('disp-sm-msg', { msg: [this.text(this.src.exeString?.(seg, off) ?? '')] }, next);
+  }
+
+  /**
+   * `for (i = 0; i < 6; i++) { body(i) }`, each round aimed at PC `i` alone:
+   * `SELECT_TARGET` with `ex1a` 10 + i, an exile-js extension, picks the PC
+   * without asking. The party is the target again afterwards. The engine
+   * runs the body on empty slots too, where E3 tests `main_status > 0`; an
+   * empty slot's numbers are never seen.
+   */
+  eachPc(body: (pc: number) => Step[]): Step {
+    return (next) => {
+      const done = this.node('select-pc', { ex1: [2] }, next);
+      return [0, 1, 2, 3, 4, 5].reduceRight(
+        (after, pc) => this.node('select-pc', { ex1: [10 + pc] }, this.seq(body(pc))(after)), done);
+    };
+  }
+
+  /**
+   * Adds `n` (which may be negative) to the target's `skill` (the engine's
+   * `Skill`), clamped as the engine clamps. `pic` 101 makes it certain.
+   */
+  addStat(skill: number, n: number): Step {
+    return (next) => this.node('statistic', { pic: [101, 4], ex1: [Math.abs(n), n < 0 ? 1 : 0], ex2: [skill] }, next);
+  }
+
+  /** `if (the target's skill >= value) { then } else { otherwise }`. */
+  ifStat(skill: number, value: number, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-statistic', { ex1: [value, yes], ex2: [skill, -1] }, no);
+    };
+  }
+
+  /** `while (the target's skill >= value) { body }`. */
+  whileStat(skill: number, value: number, body: Step[]): Step {
+    return (next) => {
+      const check = this.reserve();
+      const loop = this.seq(body)(check);
+      this.fill(check, 'if-statistic', { ex1: [value, loop], ex2: [skill, -1] }, next);
+      return check;
+    };
+  }
+
+  /** Every PC forgets mage spell `s` (the target's, after `eachPc`). */
+  forgetSpell(s: number): Step {
+    return (next) => this.node('spell-mage', { ex1: [s, 1] }, next);
   }
 
   /** Refuses the step onto the spot (the town handler returning 0). */
