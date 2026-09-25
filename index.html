@@ -193,11 +193,29 @@
       .dropdown li.separator:hover {
         background: none;
       }
+      /* The main menu is set in the game's own text face (DejaVu Sans, the
+         plain and bold that the panels use) throughout; only the title is in
+         Dungeon. */
+      @font-face {
+        font-family: 'BoEText';
+        src: url('/data/fonts/plain.ttf') format('truetype');
+        font-weight: normal;
+      }
+      @font-face {
+        font-family: 'BoEText';
+        src: url('/data/fonts/bold.ttf') format('truetype');
+        font-weight: bold;
+      }
+      .startup-page,
+      .startup-page button,
+      .startup-page input {
+        font-family: 'BoEText', 'DejaVu Sans', Verdana, sans-serif;
+      }
       .startup {
         width: 1210px;
         max-width: 100%;
         background: #222;
-        border: 1px solid #444;
+        border: 1px solid #000;
         border-radius: 4px;
         padding: 24px 28px 28px;
         box-sizing: border-box;
@@ -206,17 +224,23 @@
         margin-top: 0;
       }
       .startup h2 {
-        margin: 20px 0 8px;
-        font-size: 13px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: #8fa8cd;
+        margin: 20px 0 12px;
+        font-size: 16px;
+        font-weight: bold;
+        color: #e8e8e8;
       }
       .startup-list {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
         gap: 8px;
+      }
+      /* Every card is a sheet of the game's paper — the marble its text and
+         party panels are drawn on — edged in black like the game's panels. */
+      .startup-choice {
+        background: var(--paper-tile, none) 0 0 / 64px 64px repeat, #e4e4e4;
+        image-rendering: pixelated;
+        border: 1px solid #000;
+        color: #000;
       }
       .startup-choice {
         display: flex;
@@ -225,26 +249,22 @@
         gap: 3px;
         text-align: left;
         padding: 10px 12px;
-        background: #2c2c2c;
-        border: 1px solid #4a4a4a;
         border-radius: 3px;
-        color: #ddd;
-        font: inherit;
+        font-size: 12px;
         cursor: pointer;
       }
       .startup-choice:hover,
       .startup-choice:focus {
-        background: #3a3a55;
-        border-color: #6a8fc7;
-        outline: none;
+        outline: 2px solid #000;
+        outline-offset: 0;
       }
       .startup-choice strong {
-        font-size: 14px;
-        font-weight: 600;
+        font-size: 13px;
+        font-weight: bold;
       }
       .startup-choice small {
         font-size: 11px;
-        color: #999;
+        color: #333;
         line-height: 1.35;
       }
       .startup-cards {
@@ -261,6 +281,8 @@
         width: 100%;
         aspect-ratio: 279 / 200;
         background: #111;
+        border-bottom: 1px solid #000;
+        box-sizing: border-box;
         overflow: hidden;
       }
       .startup-picture img {
@@ -275,17 +297,16 @@
         position: absolute;
         right: 6px;
         bottom: 6px;
-        box-shadow: 0 0 0 1px #000, 0 1px 4px rgba(0, 0, 0, 0.6);
+        box-shadow: 0 0 0 1px #000;
       }
       .startup-picture.icon-only {
         display: flex;
         align-items: center;
         justify-content: center;
-        background: radial-gradient(circle at center, #2e2a22, #141210);
+        background: #1a1a1a;
       }
       .startup-picture.icon-only .startup-icon {
         position: static;
-        box-shadow: none;
       }
       .startup-icon {
         display: inline-block;
@@ -326,7 +347,7 @@
         text-shadow: 0 1px 3px #000, 0 0 8px rgba(0, 0, 0, 0.8);
       }
       body.starting .startup-masthead a {
-        color: #b7cbef;
+        color: #e8e8e8;
       }
       .startup-page {
         width: 1210px;
@@ -347,7 +368,7 @@
         height: 96px;
         flex: none;
         image-rendering: pixelated;
-        border: 1px solid #444;
+        border: 1px solid #000;
         border-radius: 4px;
         box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
       }
@@ -381,14 +402,13 @@
         line-height: 1.45;
         color: #aaa;
       }
-      .startup-masthead a,
-      .startup-source {
-        color: #8fa8cd;
+      .startup-masthead a {
+        color: #ddd;
       }
       .startup-sub {
-        margin: -4px 0 12px;
-        font-size: 13px;
-        color: #999;
+        flex-basis: 100%;
+        margin: 0;
+        font-size: 12px;
       }
       .startup-controls {
         display: flex;
@@ -399,22 +419,21 @@
       }
       .startup-shown {
         font-size: 12px;
-        color: #888;
+        color: #aaa;
         margin-left: auto;
       }
       .startup-empty {
-        color: #999;
+        color: #aaa;
         font-size: 13px;
       }
       .startup-filter {
-        font: inherit;
-        font-size: 13px;
+        font-size: 12px;
         padding: 5px 9px;
         min-width: 16rem;
-        background: #1a1a1a;
-        border: 1px solid #4a4a4a;
+        background: var(--paper-tile, none) 0 0 / 64px 64px repeat, #e4e4e4;
+        border: 1px solid #000;
         border-radius: 3px;
-        color: #ddd;
+        color: #000;
       }
       .startup-chips {
         display: flex;
@@ -422,31 +441,28 @@
         gap: 6px;
       }
       .startup-chip {
-        font: inherit;
         font-size: 12px;
         padding: 4px 10px;
-        border-radius: 999px;
-        border: 1px solid #4a4a4a;
+        border-radius: 3px;
+        border: 1px solid #666;
         background: transparent;
-        color: #888;
+        color: #aaa;
         cursor: pointer;
       }
       .startup-chip.on {
-        background: #3a3a55;
-        border-color: #6a8fc7;
-        color: #ddd;
+        background: var(--paper-tile, none) 0 0 / 64px 64px repeat, #e4e4e4;
+        border-color: #000;
+        color: #000;
       }
       .startup-badge {
         position: absolute;
         left: 6px;
         top: 6px;
-        padding: 2px 8px;
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
-        border-radius: 999px;
+        padding: 2px 7px;
+        border: 1px solid #000;
+        border-radius: 3px;
         font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
+        font-weight: bold;
       }
       .startup-badge.official {
         background: #6b5418;
@@ -463,17 +479,22 @@
       .startup-credit {
         margin: 6px 0 12px;
         font-size: 12px;
-        color: #888;
+        color: #aaa;
+      }
+      /* The party's card is paper too, and its text all black. */
+      body.starting .startup-party-card {
+        background: var(--paper-tile, none) 0 0 / 64px 64px repeat, #e4e4e4;
+        color: #000;
+      }
+      .startup-party-card h2 {
+        color: #000;
       }
       .startup-party {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         gap: 8px 10px;
-      }
-      .startup-party .startup-sub {
-        flex-basis: 100%;
-        margin: 0;
+        font-size: 12px;
       }
       .startup-party-pcs {
         flex-basis: 100%;
@@ -489,9 +510,8 @@
         align-items: center;
         gap: 10px;
         padding: 6px 12px 6px 6px;
-        border: 1px solid #4a4a4a;
+        border: 1px solid #000;
         border-radius: 3px;
-        background: #2a2a3a;
       }
       .startup-party-pcs li.gone {
         opacity: 0.5;
@@ -502,8 +522,7 @@
         height: 72px;
         flex: none;
         background: #5b6b45; /* grass, so the sprite reads as it does in play */
-        border: 1px solid #1a1a1a;
-        border-radius: 2px;
+        border: 1px solid #000;
       }
       .startup-pc-picture canvas {
         display: block;
@@ -517,12 +536,11 @@
         gap: 2px;
       }
       .startup-pc-words strong {
-        font-size: 14px;
-        font-weight: 600;
+        font-size: 13px;
+        font-weight: bold;
       }
       .startup-pc-words small {
         font-size: 11px;
-        color: #999;
       }
       .startup-pc-stats {
         display: flex;
@@ -530,58 +548,53 @@
         font-size: 11px;
         line-height: 1.35;
         font-variant-numeric: tabular-nums;
-        color: #8fa8ff;
       }
       .startup-party-active {
         flex-basis: 100%;
-        margin: 2px 0 0;
+        margin: 0 0 2px;
         font-size: 13px;
-        color: #c9b27a;
-      }
-      .startup-party-button.primary {
-        background: #34466a;
-        border-color: #6a8fc7;
       }
       .startup-saves {
         grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
       }
       .startup-party-button {
-        font: inherit;
-        font-size: 13px;
+        font-size: 12px;
         padding: 5px 12px;
-        background: #2a2a3a;
-        border: 1px solid #4a4a4a;
+        background: #f4f4f4;
+        border: 1px solid #000;
         border-radius: 3px;
-        color: #ddd;
+        color: #000;
         cursor: pointer;
+      }
+      .startup-party-button.primary {
+        font-weight: bold;
       }
       .startup-party-button:hover,
       .startup-party-button:focus {
-        background: #3a3a55;
-        border-color: #6a8fc7;
-        outline: none;
+        background: #fff;
+        outline: 1px solid #000;
       }
       .startup-facts {
         font-size: 11px;
-        color: #c9b27a;
+        color: #333;
       }
       .startup-state {
         font-size: 11px;
-        color: #8fcd9a;
+        font-weight: bold;
       }
       .startup-state:empty {
         display: none;
       }
       .startup-source {
         font-size: 11px;
-        color: #7f95b8;
+        color: #333;
       }
       .startup-card.busy {
         cursor: progress;
         opacity: 0.7;
       }
       .startup.dropping {
-        outline: 2px dashed #6a8fc7;
+        outline: 2px dashed #ddd;
         outline-offset: -10px;
       }
       .startup.busy {
@@ -589,8 +602,16 @@
       }
       .startup-add {
         margin-top: 8px;
-        border-style: dashed;
+        border: 1px dashed #888;
         background: transparent;
+        color: #ddd;
+      }
+      .startup-add small {
+        color: #aaa;
+      }
+      .startup-add:hover,
+      .startup-add:focus {
+        outline: 1px solid #ddd;
       }
       .startup-problem {
         margin: 8px 0 0;

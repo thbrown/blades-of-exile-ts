@@ -1283,6 +1283,13 @@ Notes for M2 implementer:
 - (2026-07-27) `monsters_going` is a **drawing** flag (`GameSession.monstersGoing`), not the same thing as `busy`: it is true for exactly the span of `do_monster_turn`. Four bits of drawing read it, the load-bearing one being `can_draw`'s explored-map bypass — without it a monster acting on unexplored ground is a sprite moving over pure black.
 - (2026-07-27) **The damage functions are `async`** (`damagePc`, `damageMonst`, and everything that calls them). The awaits are where the C++ blocks — `boom_space` sleeps for the blast, and `damage_pc` only takes the health off afterwards. A new call site that forgets to `await` will not fail to compile; it will apply its damage in the wrong order. `grep -n "damagePc(\|damageMonst("` and check every hit has an `await` in front of it.
 - (2026-07-27) **Adding an `await` on the monster-turn path changes the RNG stream.** One extra microtask per turn was enough to make `verify-screen` diverge from the first swing on. Its logged outputs are a fingerprint of the whole run: if they move, something in the ordering moved.
+- (2026-09-24) **Destiny of the Spheres' "Disabled Juggernaut" is meant to
+  look broken.** Its preview shows a 2×2 creature in scrambled pieces. Its
+  picture is 4161, one cell past the Juggernaut's 4160, so every quarter comes
+  from the next cell along (the fourth is the right-facing top-left). Both
+  the original (`GUTILS.CPP:332`) and OBoE (`boe.graphutil.cpp:192`) draw cells
+  `pic % 1000 + k`, so the port draws exactly what they draw. It's in the
+  scenario's data, and nothing needs fixing.
 
 ## Handoff: what combat still needs (M5b and M5c)
 

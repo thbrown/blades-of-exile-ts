@@ -22,6 +22,8 @@
  */
 
 import { LibraryEntry } from '../fileio/libraryCatalog';
+import { UiRect } from '../render/layout';
+import { BG_RECTS, PANEL_BG } from '../render/tiling';
 
 export interface StartupScenario {
   id: string;
@@ -200,19 +202,27 @@ async function readFiles(list: FileList | File[]): Promise<{ name: string; data:
 }
 
 /**
- * The main menu's backdrop: the granite of the game's own window frame, the
- * 64×64 tile at the top left of `pixpats.png`, tiled behind the page. CSS can't
- * tile part of an image, so it's cut out once into a data URL. Until it loads
- * (or if it can't) the page keeps its plain dark ground.
+ * The main menu's two grounds, both tiles of `pixpats.png`: the granite of the
+ * game's own window frame (the tile at the top left) behind the page, and the
+ * white marble the game's text and party panels are drawn on (`PANEL_BG`,
+ * render/tiling.ts) as the paper of every card. CSS can't tile part of an
+ * image, so each is cut out once into a data URL. Until they load (or if they
+ * can't) the page keeps its plain grounds.
  */
 function installBackdrop(): void {
   const img = new Image();
   img.addEventListener('load', () => {
-    const tile = document.createElement('canvas');
-    tile.width = 64;
-    tile.height = 64;
-    tile.getContext('2d')!.drawImage(img, 0, 0, 64, 64, 0, 0, 64, 64);
-    document.body.style.setProperty('--menu-tile', `url(${tile.toDataURL()})`);
+    const cut = (name: string, rect: UiRect): void => {
+      const w = rect.right - rect.left;
+      const h = rect.bottom - rect.top;
+      const tile = document.createElement('canvas');
+      tile.width = w;
+      tile.height = h;
+      tile.getContext('2d')!.drawImage(img, rect.left, rect.top, w, h, 0, 0, w, h);
+      document.body.style.setProperty(name, `url(${tile.toDataURL()})`);
+    };
+    cut('--menu-tile', { top: 0, left: 0, bottom: 64, right: 64 });
+    cut('--paper-tile', BG_RECTS[PANEL_BG]!);
   }, { once: true });
   img.src = `${import.meta.env.BASE_URL}data/graphics/pixpats.png`;
 }
@@ -234,7 +244,7 @@ function header(): HTMLElement {
   what.append('A fantasy role-playing game by Jeff Vogel of Spiderweb Software, 1997. ',
     link(WIKIPEDIA_URL, 'Wikipedia'));
   const port = el('p');
-  port.append('This is a JavaScript port for the browser, written largely by AI (Claude). ',
+  port.append('This is a JavaScript port for the browser. ',
     link(REPO_URL, 'Source on GitHub'));
   words.append(what, port);
   head.append(icon, words);
@@ -302,6 +312,12 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
           panel.append(make);
           return;
         }
+        const active = party.active;
+        if (active !== undefined) {
+          const where = el('p', 'startup-party-active');
+          where.append('Now adventuring in ', el('strong', undefined, active.title), '.');
+          panel.append(where);
+        }
         const list = el('ul', 'startup-party-pcs');
         for (const pc of partyPcs) {
           const item = el('li', pc.alive ? undefined : 'gone');
@@ -321,15 +337,6 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
           list.append(item);
         }
         panel.append(list);
-        const active = party.active;
-        if (active !== undefined) {
-          const where = el('p', 'startup-party-active');
-          where.append('Now adventuring in ', el('strong', undefined, active.title), '.');
-          panel.append(where);
-        }
-        panel.append(el('p', 'startup-sub',
-          'Pick any scenario below to take this party into it. It keeps its gold, items, '
-          + 'levels and skills; special items stay behind.'));
         if (active?.resume !== undefined) {
           const { scenarioId, slot, label } = active.resume;
           const resume = el('button', 'startup-party-button primary', `Continue ${active.title}`);
@@ -374,9 +381,6 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
     // ---- the one list
     const hasLibrary = library !== undefined && library.entries.length > 0;
     root.append(el('h2', undefined, 'Start a new game'));
-    root.append(el('p', 'startup-sub', hasLibrary
-      ? 'Choose an official scenario, or pick from the community scenario library.'
-      : 'Choose a scenario.'));
 
     const cards: Card[] = [];
     const list = el('div', 'startup-list startup-cards');
