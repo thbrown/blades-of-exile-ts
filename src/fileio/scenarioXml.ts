@@ -110,6 +110,17 @@ function readShopEntries(elem: Element, shop: Shop, fname: string): void {
       const itype = SIMPLE_ENTRIES[type];
       if (itype === undefined) throw new Error(`${fname}: bad node <${type}> in <entries>`);
       shop.addSpecial(itype, intText(entry));
+      // An exile-js extension, not in OBoE's schema: `cost="N"` replaces the
+      // built-in price of a spell or recipe. Exile 3 sells low-level spells
+      // that BoE never did, and BoE's table prices those at a placeholder 5
+      // gold (tools/e3convert/shops.ts).
+      const cost = attr(entry, 'cost');
+      if (cost !== undefined) {
+        if (itype !== ShopItemType.MAGE_SPELL && itype !== ShopItemType.PRIEST_SPELL
+          && itype !== ShopItemType.ALCHEMY)
+          throw new Error(`${fname}: cost= on <${type}> in <entries>`);
+        shop.getItem(shop.size - 1).item.value = parseInt(cost, 10);
+      }
     }
   }
 }

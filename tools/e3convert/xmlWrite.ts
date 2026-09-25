@@ -14,6 +14,8 @@ import {
   monstMelee, monstMissiles, monstSummons, pcStatus, raceNames, skillNames, spellPats, talkNodes,
 } from '../../src/data/enumTags';
 import type { Speech } from '../../src/data/talking';
+import { specItemStartWith, specItemUseable, type SpecItem } from '../../src/data/quest';
+import { SHOP_PROMPT_TAGS, SHOP_TYPE_TAGS, Shop, ShopItemType, type ShopItem } from '../../src/data/shop';
 import type { Item } from '../../src/data/item';
 import { NUM_DAMAGE_TYPES, type Monster } from '../../src/data/monster';
 import { MonstAbil, MonstAbilCat, MonstSummon, abilityCategory } from '../../src/data/monsterAbility';
@@ -209,4 +211,81 @@ ${n.extras.map((x) => `        <param>${x}</param>\n`).join('')}        <text>${
     </node>
 `).join('');
   return `${XML_HEAD}<dialogue boes="2.0.0">\n${people}${nodes}</dialogue>\n`;
+}
+
+/** A spell or recipe's price when nothing overrides it. */
+function defaultSpecialCost(type: ShopItemType, n: number): number {
+  const probe = new Shop();
+  probe.addSpecial(type, n);
+  return probe.getItem(0).item.value;
+}
+
+const SIMPLE_ENTRY_TAGS: Partial<Record<ShopItemType, string>> = {
+  [ShopItemType.MAGE_SPELL]: 'mage-spell',
+  [ShopItemType.PRIEST_SPELL]: 'priest-spell',
+  [ShopItemType.ALCHEMY]: 'recipe',
+  [ShopItemType.SKILL]: 'skill',
+  [ShopItemType.TREASURE]: 'treasure',
+  [ShopItemType.CLASS]: 'class',
+};
+
+function shopEntryXml(e: ShopItem): string {
+  const pad = '                ';
+  switch (e.type) {
+    case ShopItemType.EMPTY:
+      return '';
+    case ShopItemType.ITEM:
+      return `${pad}<item${e.quantity === 0 ? '' : ` quantity="${e.quantity}"`}>${e.index}</item>\n`;
+    case ShopItemType.OPT_ITEM: {
+      // addItem packs the chance into the thousands place.
+      const amount = e.quantity % 1000;
+      return `${pad}<item quantity="${amount === 0 ? 'infinite' : amount}" chance="${Math.floor(e.quantity / 1000)}">${e.index}</item>\n`;
+    }
+    case ShopItemType.CALL_SPECIAL:
+      return `${pad}<special>
+${pad}    <quantity>${e.quantity === 0 ? 'infinite' : e.quantity}</quantity>
+${pad}    <cost>${e.item.value}</cost>
+${pad}    <node>${e.item.itemLevel}</node>
+${pad}    <icon>${e.item.graphicNum}</icon>
+${pad}    <name>${esc(e.item.fullName)}</name>
+${pad}    <description>${esc(e.item.desc)}</description>
+${pad}</special>\n`;
+    default: {
+      if (e.type >= ShopItemType.HEAL_WOUNDS) return `${pad}<heal>${e.index}</heal>\n`;
+      const t = SIMPLE_ENTRY_TAGS[e.type];
+      if (t === undefined) throw new Error(`no shop entry tag for type ${e.type}`);
+      // `cost=` is the exile-js extension readShopEntries documents.
+      const priced = e.type === ShopItemType.MAGE_SPELL || e.type === ShopItemType.PRIEST_SPELL
+        || e.type === ShopItemType.ALCHEMY;
+      const cost = priced && e.item.value !== defaultSpecialCost(e.type, e.index) ? ` cost="${e.item.value}"` : '';
+      return `${pad}<${t}${cost}>${e.index}</${t}>\n`;
+    }
+  }
+}
+
+/** One `<shop>` of scenario.xml, the inverse of `readShopFromXml`. */
+export function shopXml(shop: Shop): string {
+  return `        <shop>
+            <name>${esc(shop.name)}</name>
+            <type>${tagOf(SHOP_TYPE_TAGS, shop.type, 'shop type')}</type>
+            <prompt>${tagOf(SHOP_PROMPT_TAGS, shop.prompt, 'shop prompt')}</prompt>
+            <face>${shop.face}</face>
+            <entries>
+${shop.items.map(shopEntryXml).join('')}            </entries>
+        </shop>
+`;
+}
+
+/** One `<special-item>` of scenario.xml, the inverse of `readSpecItemFromXml`. */
+export function specialItemXml(item: SpecItem): string {
+  const attrs = [
+    item.special >= 0 ? ` special="${item.special}"` : '',
+    specItemStartWith(item) ? ' start-with="true"' : '',
+    specItemUseable(item) ? ' useable="true"' : '',
+  ].join('');
+  return `        <special-item${attrs}>
+            <name>${esc(item.name)}</name>
+            <description>${esc(item.descr)}</description>
+        </special-item>
+`;
 }

@@ -91,6 +91,22 @@ await page.evaluate((home) => {
   window.__redraw();
 }, talk.home);
 
+// Shops: E3 stocks them from the shopkeeper, so a converted shop should show
+// real goods at E3's prices. Jinx's is in Krizsan; open it from here.
+const shop = await page.evaluate(() => {
+  const s = window.__session;
+  const which = s.univ.scenario.shops.findIndex((sh) => sh.name === "Jinx's Weaponry");
+  if (which < 0 || !s.startShopMode(which, 3, "Jinx's Weaponry")) return { error: 'no shop' };
+  window.__redraw();
+  const rows = [0, 1, 2].map((r) => s.shop.rowEntry(r)).filter(Boolean)
+    .map(({ entry }) => ({ name: entry.item.fullName, cost: s.shop.cost(entry) }));
+  return { which, rows };
+});
+console.log('SHOP:', JSON.stringify(shop));
+await shot('01d-shop');
+if (!shop.rows?.length || shop.rows.some((r) => !r.name || !(r.cost > 0))) errors.push(`Jinx's shop is empty or free: ${JSON.stringify(shop)}`);
+await page.evaluate(() => { window.__session.endShopMode(); window.__redraw(); });
+
 // Walk out of the fort: a breadth-first path to the nearest square off the
 // town's active area, through doors (moving into one opens it, and the step is
 // then taken again).

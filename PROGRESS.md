@@ -915,13 +915,48 @@ Notes for M2 implementer:
         curse.
     - Sprites come from MONST1–9, OBJECTS and TINYOBJ.
     - Every town places its creatures, preset items and crates/barrels.
+    - **Conversations** (2026-09-24): E3's talk is BoE's legacy talk file
+      in the string table; block `b` becomes `talk<b>.xml`, personality `p`
+      becomes `p - 1`.
+    - **Talk node types, shops and special items** (2026-09-24). E3's 29
+      node types were decoded from the talk handler's jump table
+      (`tools/e3convert/talk.ts`, `E3Node`); they are BoE 1997's in another
+      order. Shops, inns and the rest map onto engine node types. Findings:
+      - **A shop's stock comes from the shopkeeper**, not the node: the
+        creature's `extra1..extra2` index a list per shop kind
+        (`tools/e3convert/shops.ts`). Personalities are shared across towns
+        with different lists, so the converter **clones** a personality per
+        list into talk blocks 39+, which no E3 town uses. 125 shops.
+      - Food shops sell from 15 food records of their own, appended to
+        items.xml at 415.
+      - E3 sells low-level spells BoE never did; BoE's price table has a
+        placeholder 5 gold for them. **Engine extension**: `cost="N"` on a
+        `<mage-spell>`/`<priest-spell>`/`<recipe>` shop entry
+        (`readShopEntries`). E3's spell lists name BoE's spell numbers.
+      - E3's flags are `stuff_done[x][10]`, flat index `10a+b`
+        (`tools/e3convert/flags.ts`). A creature's `spec1/spec2` is its death
+        flag, now written as `<sdf>`.
+      - E3's `day_reached` adds 20 days, as BoE 1997's did (OBoE removed it),
+        so DEP_ON_TIME nodes carry the day + 20.
+      - The 50 special items are strings 1801 + 2k (name, description).
+      - `tools/e3convert/xmlWrite.ts` gained shop and special-item writers,
+        round-tripped on every bundled scenario.
+      - `scripts/verify-e3.mjs` opens Jinx's Weaponry and checks its prices.
+  - Known differences, each a `TODO(E3-3)` in `talk.ts`:
+    - an inn ages the party 500, not 700;
+    - DEP_ON_TIME drops its event key: E3 treats an event that never
+      happened as not-yet, the engine the opposite;
+    - buying information twice says "You've already learned that." where E3
+      takes the gold again;
+    - job boards need E3's jobs;
+    - node types 100+ are scripts.
   - Still to do:
-    - conversations (the `^`-separated RT_STRING text, and the creatures'
-      `personality` byte);
-    - shops;
     - room names, and signs;
     - the villages' block builder;
-    - creatures' appear/disappear conditions.
+    - creatures' appear/disappear conditions (`time_flag` 1–9, decoded in
+      the town loader around `exile3.c:65400`: 1/2 appear/disappear on
+      `day_reached(extra1, extra2)`, 3 turns hostile and becomes monster
+      `extra1`, 4–6 the day-of-three rota, 7/8 key-time events).
 - [ ] **E3-3 — Quest logic, incrementally** (needs M4+)
 
 ## Key references (do not lose)

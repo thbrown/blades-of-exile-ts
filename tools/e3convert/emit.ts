@@ -18,8 +18,12 @@ import { readNeResources, readStringTable } from './ne';
 import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor } from './outdoor';
 import { readE3Items, readE3Monsters, readE3Start, readE3Terrain, type E3TerrainType } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3Town } from './town';
-import { dialogueXml, esc, itemsXml, monstersXml } from './xmlWrite';
-import { readE3Talk } from './talk';
+import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
+import { convertE3Talk, readE3Talk, type E3Speaker } from './talk';
+import { readE3ShopTables, standardShops } from './shops';
+import { e3Flag } from './flags';
+import { makeSpecItem, type SpecItem } from '../../src/data/quest';
+import type { Shop } from '../../src/data/shop';
 
 const ATTITUDE = ['docile', 'hostile-a', 'friendly', 'hostile-b'];
 const BLOCKAGE = ['none', 'sight', 'monsters', 'move', 'move-and-shoot', 'move-and-sight'];
@@ -28,6 +32,9 @@ const LIGHTING = ['lit', 'dark', 'drains', 'none'];
 const ENTRANCE_MARK = ['v', '<', '^', '>'];
 /** Plain grass, the ground E3's village builder starts from (`FUN_1040_1600`). */
 const GRASS = 2;
+
+/** E3's special items: strings 1801 on, and the engine's limit too. */
+const E3_SPECIAL_ITEMS = 50;
 
 const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="no" ?>\n';
 
@@ -132,23 +139,27 @@ function townCreatures(t: E3Town): E3CreatureStart[] {
   return t.village ? t.village.creatures : t.creatures;
 }
 
-function creatureXml(c: E3CreatureStart, id: number): string {
-  // TODO(E3-2): the appear/disappear conditions (`time_flag`, `spec1`/`spec2`)
-  // once E3's flags are mapped.
-  // E3's personalities are 1-based (talk.ts), the engine's 0-based.
+function creatureXml(c: E3CreatureStart, id: number, personality: number): string {
+  // TODO(E3-2): the appear/disappear conditions (`time_flag`).
+  // `spec1`/`spec2` is the creature's death flag: END_DIE sets it, and a town
+  // loading leaves out anyone whose flag is set (`10d8:` town setup, which
+  // skips row 0 and 200 up). TODO(E3-3): 200–204 are creatures a script
+  // brings in (`FUN_1090_4053`); they start absent.
+  const sdf = c.spec1 > 0 && c.spec1 < 200 && c.spec2 < 10 ? e3Flag(c.spec1, c.spec2) : null;
   return `    <creature id="${id}">
         <type>${c.number}</type>
         <attitude>${ATTITUDE[c.startAttitude] ?? 'docile'}</attitude>
         <mobility>${c.mobile}</mobility>
-        <personality>${c.personality > 0 ? c.personality - 1 : -1}</personality>
+${sdf ? `        <sdf x="${sdf[0]}" y="${sdf[1]}" />\n` : ''}        <personality>${personality}</personality>
     </creature>
 `;
 }
 
-function townXml(t: E3Town, name: string): string {
+function townXml(t: E3Town, name: string, personalityOf: Map<string, number>): string {
   const size = townSize(t);
   const r = t.village ? { top: 0, left: 0, bottom: size - 1, right: size - 1 } : t.inTownRect;
-  const creatures = townCreatures(t).map((c, i) => (c.number > 0 ? creatureXml(c, i) : '')).join('');
+  const creatures = townCreatures(t)
+    .map((c, i) => (c.number > 0 ? creatureXml(c, i, personalityOf.get(`${t.number}:${i}`) ?? -1) : '')).join('');
   // Preset items: the legacy field called `ability` holds the charges, as in
   // BoE (`loadLegacy.ts`); -1 is an empty slot.
   const items = t.presetItems.map((p, i) => (p.itemCode < 0 ? '' : `    <item id="${i}">
@@ -196,7 +207,11 @@ function townMap(t: E3Town): string {
   return mapFile(terrain, size, marks);
 }
 
-function scenarioXml(start: { town: number; loc: { x: number; y: number } }, outStart: { sector: { x: number; y: number }; loc: { x: number; y: number } }): string {
+function scenarioXml(
+  start: { town: number; loc: { x: number; y: number } },
+  outStart: { sector: { x: number; y: number }; loc: { x: number; y: number } },
+  shops: Shop[], specialItems: SpecItem[],
+): string {
   return `${XML_HEAD}<scenario boes="2.0.0">
     <title>Exile III: Ruined World</title>
     <icon>0</icon>
@@ -232,7 +247,7 @@ function scenarioXml(start: { town: number; loc: { x: number; y: number } }, out
         <town-start x="${start.loc.x}" y="${start.loc.y}" />
         <outdoor-start x="${outStart.sector.x}" y="${outStart.sector.y}" />
         <sector-start x="${outStart.loc.x}" y="${outStart.loc.y}" />
-    </game>
+${shops.map(shopXml).join('')}${specialItems.map(specialItemXml).join('')}    </game>
 </scenario>
 `;
 }
@@ -269,7 +284,6 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
 
   // header.exs: the OBoE marker every unpacked tree carries.
   write('header.exs', new Uint8Array([0x4f, 0x42, 0x4f, 0x45, 0x01, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00, 0x04]));
-  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town)));
   write('scenario.spec', '');
   write('terrain.xml', terrainXml(terrain));
   // Monsters: E3's table through the legacy importer, drawn from E3's own
@@ -287,12 +301,33 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
   // Items: E3's table through the legacy importer, pictured from one custom
   // sheet after the monsters'.
   const itemSheetNum = terrainSheets.length + monsterArt.sheets.length;
-  const items = readE3Items(files.exe).map((old) => {
+  // E3's food isn't in its item table: the food shops sell from a list of
+  // their own (shops.ts), which goes on the end.
+  const shopTables = readE3ShopTables(files.exe);
+  const e3Items = readE3Items(files.exe);
+  const foodBase = e3Items.length;
+  const items = [...e3Items, ...shopTables.food].map((old) => {
     const it = convertItem(old);
     it.graphicNum = 1000 + itemSheetNum * 100 + old.graphicNum;
     return it;
   });
   write('items.xml', itemsXml(items));
+
+  // Conversations, and the shops they open.
+  const speakers: E3Speaker[] = towns.flatMap((t) => townCreatures(t).flatMap((c, index) =>
+    c.number > 0 && c.personality > 0
+      ? [{ town: t.number, index, personality: c.personality, extra1: c.extra1, extra2: c.extra2 }] : []));
+  const shops = standardShops();
+  const talk = convertE3Talk(readE3Talk(strings), speakers, shopTables, E3_TOWN_COUNT, shops.length, foodBase);
+  shops.push(...talk.shops);
+  // Special items: a name and a description each, from string 1801.
+  const specialItems = Array.from({ length: E3_SPECIAL_ITEMS }, (_, k) => {
+    const item = makeSpecItem();
+    item.name = strings.get(1801 + 2 * k) ?? '';
+    item.descr = strings.get(1802 + 2 * k) ?? '';
+    return item;
+  });
+  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town), shops, specialItems));
 
   zones.forEach((z, i) => {
     const base = `out/out${i % E3_ZONES_WIDE}~${Math.floor(i / E3_ZONES_WIDE)}`;
@@ -300,15 +335,14 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
     write(`${base}.map`, sectorMap(z));
     write(`${base}.spec`, '');
   });
-  const talkBlocks = readE3Talk(strings);
   towns.forEach((t) => {
     const base = `towns/town${t.number}`;
-    write(`${base}.xml`, townXml(t, townName(strings, t.number)));
+    write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf));
     write(`${base}.map`, townMap(t));
     write(`${base}.spec`, '');
     // Talk block b is talk<b>.xml, whichever town its people live in.
-    const talk = talkBlocks[t.number];
-    write(`towns/talk${t.number}.xml`, talk ? dialogueXml(talk, t.number) : `${XML_HEAD}<dialogue boes="2.0.0">\n</dialogue>\n`);
+    const speech = talk.speeches[t.number];
+    write(`towns/talk${t.number}.xml`, speech ? dialogueXml(speech, t.number) : `${XML_HEAD}<dialogue boes="2.0.0">\n</dialogue>\n`);
   });
   const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(e3Dir)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));

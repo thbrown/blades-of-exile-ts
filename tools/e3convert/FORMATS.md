@@ -75,7 +75,18 @@ E3 keeps its terrain types in code and data, not in a file:
   `start_town_mode` is `FUN_10d8_0107`. A direction below 9 means
   `start_locs[dir]`.
 - **Talk text**: RT_STRING, with fields separated by `^` (e.g. `…^0^0^99`).
-  Not yet parsed.
+  See `talk.ts`: the node types are the jump table at `1020:2e16`, and the
+  arms are in `ghidra/project/talkarms.s`.
+- **Shops** (`shops.ts`): the item list is int16s at `1100:02a0`; food is 15
+  in-memory item records (63 bytes: the file record with its names at +23 and
+  +48) at `1100:1652`; mage/priest/alchemy lists are in the data segment at
+  `0x2049`/`0x2070` (spell, cost), `0x21e2`/`0x2194`, and `0x22e6`.
+- **Party record** (segment `1158:`): age `+0` (long), gold `+4`, food `+8`,
+  special items `+0xc` (int16[60]), flags `+0x84` (`[x][10]`), job-bank
+  failure flags `+0x847f` (6 bytes), `can_find_town` `+0x8485`.
+- **Live creature** (`0x5c` bytes a creature, from `0x1427`): active `+0`,
+  attitude `+2`, number `+4`, time flag `+0x53`, `extra1` `+0x54`,
+  `extra2` `+0x55`, `spec1` `+0x56`, `spec2` `+0x57`.
 
 - **Monsters** (1–190; string `600 + n` is the name, 0 is empty): segment 39
   (`1130:`) holds 28 parallel arrays of 200, which `FUN_1090_0000`

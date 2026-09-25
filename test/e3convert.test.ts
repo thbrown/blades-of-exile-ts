@@ -10,6 +10,9 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { TerObstruct, TerSpec } from '../src/data/terrain';
 import type { Scenario } from '../src/data/scenario';
+import { ItemType } from '../src/data/item';
+import { ShopItemType, ShopPrompt } from '../src/data/shop';
+import { TalkNodeType } from '../src/data/talking';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
@@ -75,7 +78,9 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
   });
 
   it("has E3's items, and the things lying about its towns", () => {
-    expect(scen.scenItems).toHaveLength(415);
+    // E3's 415, then the fifteen food records its food shops sell from.
+    expect(scen.scenItems).toHaveLength(430);
+    expect(scen.scenItems[415]).toMatchObject({ fullName: 'Crude Rations', variety: ItemType.FOOD, itemLevel: 10, value: 24 });
     const knife = scen.scenItems[41]!;
     expect(knife.fullName).toBe('Bronze Knife');
     expect([knife.itemLevel, knife.value, knife.weight]).toEqual([4, 16, 7]);
@@ -95,6 +100,38 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(who.job).toMatch(/^"It is my job to give you instruction/);
     const nodes = scen.townTalk[1]!.talkNodes.filter((n) => n.personality === 19);
     expect(nodes.map((n) => n.link1)).toContain('surf');
+  });
+
+  it('opens shops stocked from the shopkeeper, at E3\'s prices', () => {
+    // The five magic shops and the healer come first, as in any scenario.
+    expect(scen.shops[5]?.prompt).toBe(ShopPrompt.HEALING);
+    const shopOf = (town: number, x: number, y: number) => {
+      const who = scen.towns[town]!.creatures.find((c) => c.startLoc.x === x && c.startLoc.y === y)!;
+      const node = scen.townTalk[Math.floor(who.personality / 10)]!.talkNodes
+        .find((n) => n.personality === who.personality && n.type === TalkNodeType.SHOP)!;
+      return { node, shop: scen.shops[node.extras[1]!]! };
+    };
+    // Jinx in Krizsan sells entries 30–49 of E3's list, at price level 3.
+    const jinx = shopOf(0, 18, 26);
+    expect(jinx.shop.name).toBe("Jinx's Weaponry");
+    expect(jinx.node.extras[0]).toBe(3);
+    expect(jinx.shop.items.map((e) => e.item.fullName)).toContain('Bronze Knife');
+    // Velnas sells E3's low-level spells, which BoE never sold, at E3's price.
+    const velnas = shopOf(16, 15, 27).shop;
+    expect(velnas.prompt).toBe(ShopPrompt.MAGE);
+    expect(velnas.items[0]).toMatchObject({ type: ShopItemType.MAGE_SPELL, index: 6, item: { value: 1500 } });
+  });
+
+  it('gives a personality shared by villages one copy per shop', () => {
+    // E3's personality 1 is a weaponsmith in six villages, each with its own stock.
+    const smiths = [127, 132].map((t) => scen.towns[t]!.creatures.find((c) => c.personality >= 0 && c.startLoc.x === (t === 127 ? 39 : 15))!);
+    expect(smiths[0]!.personality).toBe(0);
+    expect(smiths[1]!.personality).toBeGreaterThanOrEqual(390);
+  });
+
+  it("has E3's special items", () => {
+    expect(scen.specialItems).toHaveLength(50);
+    expect(scen.specialItems[16]?.name).toBe('Silver Key');
   });
 
   it('places the fort\'s people', () => {
