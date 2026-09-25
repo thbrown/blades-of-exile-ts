@@ -1028,9 +1028,11 @@ Notes for M2 implementer:
       once.
     - Done: the fort's eight (100–107): Levy's pay and rewards, Elisa's
       rations, Berra's evidence, Mazumdar's pass, the spell rewards, and
-      Flanagan. `scripts` list: `npx vite-node .scratch/talkscr.ts` printed
-      which personality and town each type belongs to (the table is in the
-      2026-09-24 commit message of this work).
+      Flanagan.
+    - `npx vite-node tools/e3convert/listTalkScripts.ts` lists every
+      scripted type, its speaker and towns, and whether it is done.
+      `tools/e3convert/ghidra/talkcase.py <type>` prints a case's
+      disassembly.
   - Next: Krizsan (towns 0–3, `FUN_1078_0000`, talk 118/119), and the fort's
     outdoor zone.
 
