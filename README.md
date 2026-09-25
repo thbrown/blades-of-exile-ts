@@ -39,3 +39,23 @@ of the project and its plan.
   Each belongs to its author, and each card in the game links to its listing.
   The files are trimmed to the scenario, its graphics and the author's
   documents.
+
+## Licence
+
+exile-js is released under the **GNU General Public License, version 2**
+(`LICENSE`), the licence Spiderweb Software released the Blades of Exile source
+under. The 1997 release's own `Blades of Exile License.txt` says so, as does
+Open Blades of Exile. It is version 2 only: the release names no "or any later
+version".
+
+The GPL covers the code, and the Blades of Exile data this repository ships
+(graphics, sounds, fonts, dialogs and the bundled scenarios) is taken from Open
+Blades of Exile's GPL tree. The GPL does not cover:
+
+- **Community scenarios.** Each belongs to its author. They are fetched from
+  the archive by script and never committed.
+- **Exile III: Ruined World.** Spiderweb made it freeware in 2013, but its own
+  licence allows non-profit redistribution only of the complete, unmodified
+  archive. The converted scenario is a modified work, so it stays out of the
+  repository (`public/scenarios/exile3/` is ignored) until Spiderweb agrees
+  otherwise.

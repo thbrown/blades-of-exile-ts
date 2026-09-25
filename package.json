@@ -2,6 +2,7 @@
   "name": "exile-js",
   "version": "0.1.0",
   "private": true,
+  "license": "GPL-2.0-only",
   "type": "module",
   "description": "TypeScript rewrite of the Blades of Exile game player",
   "scripts": {

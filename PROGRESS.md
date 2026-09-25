@@ -12156,8 +12156,9 @@ ratings as "Rated PG".
 - Two listing rows merge difficulty and rating ("Medium R"); the parser
   splits them and realigns the row.
 - Wikipedia says the 1997 source was released under the **Common Public
-  License**, but the table at the top of DIVERGENCES.md says GPL v2. Not
-  resolved.
+  License**, but the table at the top of DIVERGENCES.md says GPL v2.
+  **Resolved 2026-09-25: GPL v2.** `../boe-source-1997/Blades of Exile
+  License.txt` says so itself. See the licence entry at the bottom.
 
 **Open (library):**
 - `masks.exs` ("Masks v. 1.0.3", rated 4.7) is listed but reads as garbage
@@ -12445,3 +12446,25 @@ chosen first, and a win threw the party away.
   GAMEDLOG.RC:1334), replacing OBoE's credits and licence version.
   DIVERGENCES.md #8. The scroll pane code stays for OBoE-format dialogs,
   but no player dialog uses it now.
+
+### Main menu, licence, door sight (2026-09-25)
+
+- **Saved games have their own card** on the main menu, between the party
+  card and "Start a new game", instead of sharing one card with the scenario
+  list. A library card's facts line (category · difficulty · rating · review)
+  is italic now, so it reads apart from the title and the description.
+- **Licence: GPL v2 only**, as the 1997 release and OBoE are. `LICENSE` holds
+  the text, `package.json` says `GPL-2.0-only` and README.md's "Licence"
+  section says what it covers. **Exile III is not ours to commit.** It has
+  been freeware since 2013, but its licence permits non-profit
+  redistribution only of the *complete, unmodified* archive. The converted
+  scenario is a modified work, so shipping it needs Spiderweb's permission.
+  Committing the untouched archive and converting it at build time would
+  stay within those terms, if it ever comes to that.
+- **Opening a door does not show the room behind it until you step in, and
+  that is the original's behaviour.** Bumping a door runs `alter_space`
+  (SPECIALS.CPP:280, terrain special 1) and the move fails (blockage > 2).
+  `update_explored` only runs when `town_move_party` succeeds
+  (ACTIONS.CPP:782), and town `draw_terrain` draws only explored squares
+  (GRAPHICS.CPP:1804). So the door's own tile changes, and the room stays
+  dark until the party steps into the doorway. The port already matches this.

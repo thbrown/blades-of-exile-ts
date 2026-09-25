@@ -2,7 +2,9 @@ node_modules/
 dist/
 *.local
 .DS_Store
-# Exile 3 game data is commercial and user-supplied — never commit it
+# Exile 3 game data is user-supplied — never commit it. It has been freeware
+# since 2013, but its licence allows redistributing only the complete,
+# unmodified archive (README.md, "Licence")
 e3data/
 
 # The native C++ harness build (tools/cppharness/README.md)
@@ -22,6 +24,6 @@ tools/cppharness/scendumps/
 # from the commercial binary, regenerable in 20 seconds
 tools/e3convert/ghidra/project/
 
-# Exile 3 converted by tools/e3convert/convert.ts — the commercial game's
-# content, never committed
+# Exile 3 converted by tools/e3convert/convert.ts — a modified copy of
+# Spiderweb's game, which its licence does not let us redistribute
 public/scenarios/exile3/

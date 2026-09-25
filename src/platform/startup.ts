@@ -356,8 +356,11 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
       showParty();
     }
 
+    // Saved games have a card of their own too, so continuing and starting
+    // fresh read as two different choices.
     if (saves.length > 0) {
-      root.append(el('h2', undefined, 'Continue a saved game'));
+      const savesCard = el('div', 'startup startup-saves-card');
+      savesCard.append(el('h2', undefined, 'Continue a saved game'));
       const list = el('div', 'startup-list startup-cards startup-saves');
       for (const save of saves) {
         const card = el('button', 'startup-choice startup-card');
@@ -375,7 +378,8 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
         });
         list.append(card);
       }
-      root.append(list);
+      savesCard.append(list);
+      root.before(savesCard);
     }
 
     // ---- the one list
