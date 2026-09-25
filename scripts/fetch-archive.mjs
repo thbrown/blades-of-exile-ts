@@ -19,6 +19,12 @@
  * (spiderwebforums topic 33604) says S3 plus three TrueSite files
  * (Tatterdemalion, A Little Girl, Witch or Worse) is everything known.
  *
+ * One more source can't be scripted: The Lurker's bundle of all of the above,
+ * BoEArchFull.zip, on Google Drive (linked from that topic). Download it by
+ * hand to library/BoEArchFull.zip. It holds the only whole copies of The
+ * Crusaders and War Preparations, whose TrueSite zips are cut off, and newer
+ * versions of several scenarios.
+ *
  * Already-downloaded files are skipped, so it can be re-run to fill gaps.
  * `test/legacyImport.test.ts` (with LEGACY_ARCHIVE=1) and the smoke harness
  * read `library/unzipped`.

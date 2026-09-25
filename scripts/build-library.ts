@@ -23,7 +23,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { basename, dirname, join } from 'node:path';
 import { unzipSync, zipSync } from 'fflate';
 import { GameRng } from '../src/core/rng';
-import { identifyScenarioFiles, loadScenarioPackage } from '../src/fileio/scenarioPackage';
+import { ScenarioPackage, identifyScenarioFiles, loadScenarioPackage } from '../src/fileio/scenarioPackage';
 import { legacyPlatform } from '../src/fileio/legacy/loadLegacy';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { LibraryCatalog, LibraryEntry, corruptionSigns } from '../src/fileio/libraryCatalog';
@@ -209,37 +209,123 @@ mkdirSync(join(DIST, 'previews'), { recursive: true });
 
 const entries: LibraryEntry[] = [];
 const skipped: string[] = [];
-const seen = new Set<string>();
+/** Scenarios played from a later source than the one that lists them. */
+const newer: string[] = [];
 
 /** What a listing says about a scenario, wherever the listing came from. */
 type Meta = Omit<Listing, 'zip'> & { source: string };
 
+/** One copy of one scenario, from one download. */
+interface Copy {
+  pkg: ScenarioPackage;
+  trimmed: Uint8Array;
+  /** Where the trimmed zip goes under `files/`. */
+  file: string;
+  meta: Meta;
+  /** Which source it came from: lower is listed first. */
+  order: number;
+  /** The author's own version number, `ver[3]` in the scenario header. */
+  version: number;
+}
+
+/** Every copy of every scenario, by id, in the order the sources were read. */
+const copies = new Map<string, Copy[]>();
+let order = 0;
+
 /**
- * Load, smoke-test and list every scenario in one download. `file` is where
- * the trimmed zip goes under `files/`. The first copy of an id wins, which is
- * why Spiderweb's lists go first: they carry the most about each scenario.
+ * `scenario_data_type` opens with four flag bytes and then `ver[3]`, the
+ * version the author set in the editor (GLOBAL.H:275), which the loader has
+ * no use for. As one number, so 1.0.3 beats 1.0.1.
  */
-async function addZip(zipPath: string, file: string, meta: Meta): Promise<void> {
-  const name = basename(zipPath);
+const versionOf = (pkg: ScenarioPackage): number =>
+  (pkg.kind === 'exs' && legacyPlatform(pkg.data) !== null
+    ? (pkg.data[4]! << 16) | (pkg.data[5]! << 8) | pkg.data[6]! : 0);
+
+/** Note every scenario in one download as a copy; nothing is loaded yet. */
+function addZip(label: string, zip: Uint8Array, file: string, meta: Meta): void {
   let trimmed: Uint8Array;
   try {
-    trimmed = trimmedZip(readFileSync(zipPath));
+    trimmed = trimmedZip(zip);
   } catch (err) {
-    skipped.push(`${zipPath}: ${err instanceof Error ? err.message : String(err)}`);
+    skipped.push(`${label}: ${err instanceof Error ? err.message : String(err)}`);
     return;
   }
-  const packages = identifyScenarioFiles([{ name, data: trimmed }]);
-  if (packages.length === 0) skipped.push(`${zipPath}: no scenario inside`);
+  const packages = identifyScenarioFiles([{ name: basename(file), data: trimmed }]);
+  if (packages.length === 0) skipped.push(`${label}: no scenario inside`);
+  order++;
   for (const pkg of packages) {
-    if (seen.has(pkg.id)) { skipped.push(`${zipPath}: ${pkg.id} is already listed`); continue; }
     // The game ships these; a library copy would install under the same id.
-    if (BUNDLED.includes(pkg.id)) { skipped.push(`${zipPath}: ${pkg.id} is bundled with the game`); continue; }
+    if (BUNDLED.includes(pkg.id)) { skipped.push(`${label}: ${pkg.id} is bundled with the game`); continue; }
+    const list = copies.get(pkg.id) ?? [];
+    list.push({ pkg, trimmed, file, meta, order, version: versionOf(pkg) });
+    copies.set(pkg.id, list);
+  }
+}
+
+for (const item of listings()) {
+  const zipPath = join(LIB, 'archive', item.zip);
+  if (!existsSync(zipPath) || !/\.zip$/i.test(item.zip)) {
+    skipped.push(`${item.zip}: not downloaded, or not a zip`);
+    continue;
+  }
+  addZip(zipPath, readFileSync(zipPath), basename(item.zip), { ...item, source: `${PAGE_URL}${item.table}.html` });
+}
+
+// Then the two bigger archives (fetch-archive.mjs), for what Spiderweb's
+// lists leave out. They list a name and a download and nothing else.
+for (const other of OTHER_ARCHIVES) {
+  const dir = join(LIB, other.dir);
+  if (!existsSync(dir)) { skipped.push(`${dir}: not downloaded (node scripts/fetch-archive.mjs)`); continue; }
+  const names = other.names();
+  for (const zip of readdirSync(dir).filter((f) => /\.zip$/i.test(f)).sort()) {
+    const listed = names.get(zip.toLowerCase());
+    addZip(join(dir, zip), readFileSync(join(dir, zip)), `${other.dir}/${zip}`, {
+      table: 'archive', category: listed?.utility ? 'Utility' : '', name: listed?.name ?? zip.replace(/\.zip$/i, ''), size: '',
+      difficulty: '', contentRating: '', description: '', review: null,
+      source: listed?.page ?? other.home,
+    });
+  }
+}
+
+// Last, The Lurker's bundle of all of those (BoEArchFull.zip, from the Google
+// Drive link in forum topic 33604; download it by hand into library/). It has
+// the only whole copies of The Crusaders and War Preparations, and newer
+// versions of a few scenarios than the archives carry. Each download sits in a
+// folder named for its scenario ("Crusaders, The"), under Normal, Series,
+// Utility or Other; a scenario in a series or a utility is in two of those.
+const LURKER = join(LIB, 'BoEArchFull.zip');
+const LURKER_TOPIC = 'https://spiderwebforums.ipbhost.com/topic/33604-scenario-archive-super-editor-and-boe-on-linux/';
+if (existsSync(LURKER)) {
+  const bundle = unzipSync(readFileSync(LURKER), { filter: (f) => /\.zip$/i.test(f.name) });
+  for (const path of Object.keys(bundle).sort()) {
+    const parts = path.split('/');
+    const folder = parts[parts.length - 2] ?? '';
+    const name = folder.replace(/\s*\(Utility\)\s*/i, ' ').trim()
+      .replace(/^(.*), (The|A|An)$/, '$2 $1');
+    const slug = folder.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    addZip(`${LURKER}:${path}`, bundle[path]!, `lurker/${slug}/${parts[parts.length - 1]}`, {
+      table: 'archive', category: parts[1] === 'Utility' || /\(Utility\)/i.test(folder) ? 'Utility' : '',
+      name, size: '', difficulty: '', contentRating: '', description: '', review: null, source: LURKER_TOPIC,
+    });
+  }
+} else skipped.push(`${LURKER}: not there (see forum topic 33604 for the link)`);
+
+/**
+ * For each scenario, list it under the first source that has it, since
+ * Spiderweb's lists say the most about it, but play the newest version any
+ * source has, falling back through older ones if it doesn't load and survive
+ * the smoke steps (a new game, every town entered).
+ */
+for (const [id, list] of copies) {
+  const meta = list[0]!.meta;
+  const tries = [...list].sort((a, b) => b.version - a.version || a.order - b.order);
+  for (const copy of tries) {
+    const { pkg, trimmed, file } = copy;
     try {
       const { scenario, warnings } = await loadScenarioPackage(pkg, opcodes);
       const session = new GameSession(new Universe(scenario, new GameRng(), PartyPreset.DEFAULT));
       session.startNewGame();
       for (let t = 0; t < scenario.towns.length; t++) session.startTownMode(t, FORCED_ENTRY, true);
-      seen.add(pkg.id);
       mkdirSync(dirname(join(DIST, 'files', file)), { recursive: true });
       writeFileSync(join(DIST, 'files', file), trimmed);
       const trim = (s: string): string => s.trim();
@@ -252,8 +338,9 @@ async function addZip(zipPath: string, file: string, meta: Meta): Promise<void> 
       const difficulty = meta.difficulty || forum?.difficulty || '';
       const contentRating = RATING.exec(meta.contentRating)?.[1]
         ?? RATING.exec(forum?.rating.replace(/^PG13$/, 'PG-13') ?? '')?.[1] ?? '';
+      const v = copy.version;
       entries.push({
-        id: pkg.id,
+        id,
         title,
         blurb: scenario.teasers.map(trim).find((t) => t !== '') ?? '',
         icon: scenario.introPic,
@@ -266,44 +353,22 @@ async function addZip(zipPath: string, file: string, meta: Meta): Promise<void> 
         description: meta.description,
         review: meta.review,
         ...(forum !== undefined ? { forum: forum.entry } : {}),
+        ...(v > 0 ? { version: `${v >> 16}.${(v >> 8) & 255}.${v & 255}` } : {}),
         towns: scenario.towns.length,
         customGraphics: pkg.graphics !== undefined,
         file: `files/${file}`,
         fileBytes: trimmed.length,
         package: pkg.fileName,
-        ...(existsSync(join(DIST, 'previews', `${pkg.id}.png`)) ? { preview: `previews/${pkg.id}.png` } : {}),
+        ...(existsSync(join(DIST, 'previews', `${id}.png`)) ? { preview: `previews/${id}.png` } : {}),
         source: meta.source,
         ...(warnings.length ? { warnings } : {}),
         ...(corrupted !== null ? { corrupted } : {}),
       });
+      if (copy.file !== list[0]!.file) newer.push(`${id}: ${file} (${entries.at(-1)!.version ?? 'no version'}) over ${list[0]!.file}`);
+      break;
     } catch (err) {
-      skipped.push(`${zipPath} (${pkg.fileName}): ${err instanceof Error ? err.message : String(err)}`);
+      skipped.push(`${file} (${pkg.fileName}): ${err instanceof Error ? err.message : String(err)}`);
     }
-  }
-}
-
-for (const item of listings()) {
-  const zipPath = join(LIB, 'archive', item.zip);
-  if (!existsSync(zipPath) || !/\.zip$/i.test(item.zip)) {
-    skipped.push(`${item.zip}: not downloaded, or not a zip`);
-    continue;
-  }
-  await addZip(zipPath, basename(item.zip), { ...item, source: `${PAGE_URL}${item.table}.html` });
-}
-
-// Then the two bigger archives (fetch-archive.mjs), for what Spiderweb's
-// lists leave out. They list a name and a download and nothing else.
-for (const other of OTHER_ARCHIVES) {
-  const dir = join(LIB, other.dir);
-  if (!existsSync(dir)) { skipped.push(`${dir}: not downloaded (node scripts/fetch-archive.mjs)`); continue; }
-  const names = other.names();
-  for (const zip of readdirSync(dir).filter((f) => /\.zip$/i.test(f)).sort()) {
-    const listed = names.get(zip.toLowerCase());
-    await addZip(join(dir, zip), `${other.dir}/${zip}`, {
-      table: 'archive', category: listed?.utility ? 'Utility' : '', name: listed?.name ?? zip.replace(/\.zip$/i, ''), size: '',
-      difficulty: '', contentRating: '', description: '', review: null,
-      source: listed?.page ?? other.home,
-    });
   }
 }
 
@@ -311,11 +376,12 @@ const catalog: LibraryCatalog = {
   generated: new Date().toISOString(),
   source: 'https://www.spiderwebsoftware.com/blades/scen_list.html',
   note: 'Community scenarios for Blades of Exile, from Spiderweb Software\'s scenario archive, '
-    + 'Kelandon\'s archive and TrueSite for Blades. Each belongs to its author; see its listing for credit.',
+    + 'Kelandon\'s archive, TrueSite for Blades and The Lurker\'s bundle of them. Each belongs to its author; see its listing for credit.',
   scenarios: entries.sort((a, b) => a.title.localeCompare(b.title)),
 };
 writeFileSync(join(DIST, 'catalog.json'), JSON.stringify(catalog, null, 1));
 console.log(`${entries.length} scenarios in ${join(DIST, 'catalog.json')}`);
 const corrupt = entries.filter((e) => e.corrupted !== undefined);
 if (corrupt.length) console.log(`Tagged as corrupted:\n  ${corrupt.map((e) => `${e.id}: ${e.corrupted}`).join('\n  ')}`);
+if (newer.length) console.log(`Newer copies played:\n  ${newer.join('\n  ')}`);
 if (skipped.length) console.log(`Skipped:\n  ${skipped.join('\n  ')}`);

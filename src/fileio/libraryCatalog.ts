@@ -37,6 +37,11 @@ export interface LibraryEntry {
    * Best/Good/Average/Substandard/Poor votes (5 down to 1), and how many.
    */
   forum?: { url: string; score: number | null; votes: number };
+  /**
+   * The version the author set (`ver` in the scenario header), when it isn't
+   * 0.0.0. Where sources disagree, the newest copy is the one listed.
+   */
+  version?: string;
   towns: number;
   customGraphics: boolean;
   /** The download, as published — a zip. */

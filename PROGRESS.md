@@ -12500,9 +12500,8 @@ chosen first, and a win threw the party away.
   came out in small chunks. Refresh the table the same way.
 - **Gotcha: TrueSite serves 27 of its zips truncated to exactly 65,536
   bytes.** The server's own Content-Length says so. They fail as "invalid
-  zip data". All but two have a good copy elsewhere. **The Crusaders and War
-  Preparations exist only as those broken copies.** The Lurker's Google Drive
-  bundle (linked from topic 33604) may hold whole ones. Also
+  zip data". All but two have a good copy elsewhere, and The Lurker's bundle
+  (below) has those two, The Crusaders and War Preparations. Also
   `archive-s3/valorim1.zip` uses Shrink (method 1), which fflate can't
   read; TrueSite's copy of Assault on Valorim loads instead.
 - New corrupted-looking entry: `tranquil` (Suspension of Tranquility) trips
@@ -12510,3 +12509,19 @@ chosen first, and a win threw the party away.
 - The AI content audit (`content-audit.ts`,
   `library-content-ratings.tsv`) covers only the first 168. The new ones
   without a forum rating show no content rating yet.
+- **The Lurker's bundle, and newest-version-wins: 341 scenarios.**
+  `library/BoEArchFull.zip` (70 MB, Google Drive, linked from topic 33604) is
+  downloaded by hand, since Drive can't be scripted. `build-library.ts` reads
+  it in place. Its folders name the scenarios ("Crusaders, The") and it adds
+  5: The Crusaders, War Preparations, 100 Evil Sliths, Eternity's Edge and
+  Water Supply Code Sequence. The build now gathers every copy of each id
+  before choosing. The listing comes from the first source (Spiderweb's lists
+  say the most), but the copy played is the one with the highest `ver[3]`
+  (bytes 4..6 of the scenario file, the version the author set, which the
+  loader ignores). An older one is the fallback if the newest fails the smoke
+  steps. **12 scenarios now play a newer version than Spiderweb lists**,
+  including Falling Stars 2.0.0, Redemption 2.0.0, Retribution 2.0.3, Shadow
+  of the Stranger 1.3.0 and On a Ship to Algiers 1.0.4. The build prints them
+  under "Newer copies played". `version` is in the catalog.
+- The bundle's README names two more sources, `openboe.com/scenarios/` and
+  `truesite.openboe.com`. Both timed out on 2026-09-25. Worth another try.
