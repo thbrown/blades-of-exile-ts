@@ -14,6 +14,7 @@ import { ItemType } from '../src/data/item';
 import { MonstTime } from '../src/data/monster';
 import { ShopItemType, ShopPrompt } from '../src/data/shop';
 import { TalkNodeType } from '../src/data/talking';
+import { SpecType } from '../src/data/special';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
@@ -170,6 +171,16 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(zone.wandering[0]).toMatchObject({ monst: [0, 0, 0, 0, 138, 139, 140], endSpec1: 307, endSpec2: 3, cantFlee: true });
     expect(zone.wanderingLocs[0]).toEqual({ x: 42, y: 42 });
     expect(scen.towns[11]!.wandering[0]).toEqual([149, 149, 150, 150]);
+  });
+
+  it('turns E3\'s message spots into one-shot special nodes', () => {
+    const krizsan = scen.towns[0]!;
+    const spot = krizsan.specialLocs.find((l) => l.x === 24 && l.y === 7)!;
+    const node = krizsan.specials.get(spot.spec)!;
+    expect(node.type).toBe(SpecType.ONCE_DISPLAY_MSG);
+    expect(krizsan.specStrs[node.m1]).toMatch(/^This is the inn's common room/);
+    // A flag of the converter's own, in a column E3 never uses.
+    expect([node.sd1, node.sd2]).toEqual([0, 16]);
   });
 
   it('places the fort\'s people', () => {

@@ -131,7 +131,17 @@ await page.evaluate(() => { window.__session.endShopMode(); window.__redraw(); }
 const walkOut = (maxSteps = 1000) => page.evaluate(async (maxSteps) => {
   const s = window.__session;
   const STALLED = Symbol('stalled');
-  const step = (d) => Promise.race([s.move(d), new Promise((r) => setTimeout(() => r(STALLED), 400))]);
+  // A step can put up a message (E3's spots); read it and go on, as a player would.
+  const step = async (d) => {
+    const moving = s.move(d);
+    for (let i = 0; i < 10; i++) {
+      const res = await Promise.race([moving, new Promise((r) => setTimeout(() => r(STALLED), 400))]);
+      if (res !== STALLED) return res;
+      if (!window.__dialogs.active) return STALLED;
+      window.__dialogs.handleKey('Enter');
+    }
+    return STALLED;
+  };
   const DIRS = [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
   const plan = () => {
     const rec = s.univ.town.record;
@@ -203,6 +213,22 @@ const stroll = await page.evaluate(async () => {
 console.log('STROLL:', JSON.stringify(stroll));
 await shot('03-stroll');
 if (stroll.moved === 0) errors.push('no outdoor step moved the party');
+
+// A message spot in Krizsan: the inn's common room tells you about itself,
+// once.
+const spot = await page.evaluate(() => {
+  const s = window.__session;
+  s.startTownMode(0, 0);
+  s.univ.party.townLoc = { x: 24, y: 8 }; s.center = { x: 24, y: 8 };
+  window.__redraw();
+  void s.move(0);
+});
+await page.waitForTimeout(800);
+const spotDialog = await page.evaluate(() => !!window.__dialogs?.active);
+console.log('SPOT:', JSON.stringify({ dialog: spotDialog }));
+await shot('04-spot');
+if (!spotDialog) errors.push('stepping on the common room showed no message');
+await page.keyboard.press('Enter');
 
 await browser.close();
 if (errors.length) {

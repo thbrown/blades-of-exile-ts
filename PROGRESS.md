@@ -985,6 +985,17 @@ Notes for M2 implementer:
       unaffected for now because the converter drops event keys
       (`TODO(E3-3)`). Legacy BoE scenarios that use events are affected.
 - [ ] **E3-3 — Quest logic, incrementally** (needs M4+)
+  - 2026-09-24: **the generic message spots convert** (`tools/e3convert/specials.ts`,
+    644 nodes). The outdoor (`FUN_10a0_0062`) and town (`FUN_10c0_0000`)
+    encounter handlers treat numbers 100–199 as one string and 200+ as two,
+    from a string block set by zone or town. After that they switch to
+    per-place code. The town switch's arms are one function per town
+    (`FUN_1078_*`, `FUN_1088_*`, `FUN_10b8_*`), listed near `exile3.c:58600`.
+    A message runs once unless the terrain under it is high enough; the
+    converter uses `once-disp-msg`, with flags in columns 10–49, which E3
+    never uses. `scripts/verify-e3.mjs` steps on Krizsan's common room.
+  - Next: encounters below 100, one town at a time, starting with Fort
+    Emergence (`FUN_1078_0b66`) and the outdoor handler's zone arms.
 
 ## Key references (do not lose)
 

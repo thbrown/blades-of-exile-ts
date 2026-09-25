@@ -23,6 +23,7 @@ import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
 import { readE3ShopTables, standardShops } from './shops';
 import { e3DayReached, e3Event, e3Flag } from './flags';
 import { buildE3Village, villageTemplate } from './village';
+import { e3SpotScript, type SpotScript } from './specials';
 import { makeSpecItem, type SpecItem } from '../../src/data/quest';
 import type { Shop } from '../../src/data/shop';
 
@@ -149,17 +150,21 @@ function zoneSigns(z: E3Outdoor, zone: number, strings: Map<number, string>) {
   return signs(z.signLocs, strings, 27001 + 20 * zone);
 }
 
-function sectorXml(z: E3Outdoor, zone: number, strings: Map<number, string>): string {
+function specStringsXml(script: SpotScript): string {
+  return script.strings.map((str, i) => `    <string id="${i}">${esc(str)}</string>\n`).join('');
+}
+
+function sectorXml(z: E3Outdoor, zone: number, strings: Map<number, string>, script: SpotScript): string {
   const areas = z.infoRect
     .map((r, i) => ({ r, name: z.areaNames[i] ?? '' }))
     .filter((a) => a.name !== '')
     .map((a) => areaXml(a.r, a.name));
-  // TODO(E3-3): the special encounters (`special_id`).
+  // TODO(E3-3): the encounters below 100, which are each zone's own code.
   const groups = [...z.specialEnc.map((g) => outGroupXml('encounter', g)), ...z.wandering.map((g) => outGroupXml('wandering', g))];
-  return `${XML_HEAD}<sector boes="2.0.0">\n    <name>${esc(z.name)}</name>\n${groups.join('')}${areas.join('')}${zoneSigns(z, zone, strings).map(signXml).join('')}</sector>\n`;
+  return `${XML_HEAD}<sector boes="2.0.0">\n    <name>${esc(z.name)}</name>\n${groups.join('')}${areas.join('')}${zoneSigns(z, zone, strings).map(signXml).join('')}${specStringsXml(script)}</sector>\n`;
 }
 
-function sectorMap(z: E3Outdoor, zone: number, strings: Map<number, string>): string {
+function sectorMap(z: E3Outdoor, zone: number, strings: Map<number, string>, script: SpotScript): string {
   const marks = new Map<string, string>();
   z.exitLocs.forEach((l, i) => {
     const dest = z.exitDests[i] ?? -1;
@@ -167,6 +172,7 @@ function sectorMap(z: E3Outdoor, zone: number, strings: Map<number, string>): st
   });
   for (const s of zoneSigns(z, zone, strings)) addMark(marks, s.x, s.y, `!${s.k}`);
   z.wanderingLocs.forEach((l, k) => { if (!isUnusedLoc(l)) addMark(marks, l.x, l.y, `*${k}`); });
+  for (const m of script.marks) addMark(marks, m.x, m.y, `:${m.node}`);
   return mapFile(z.terrain, 48, marks);
 }
 
@@ -258,7 +264,7 @@ function townSigns(t: E3Town, strings: Map<number, string>) {
   return signs(t.signLocs, strings, 30005 + 20 * t.number).filter((s) => s.x < size && s.y < size);
 }
 
-function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, strings: Map<number, string>): string {
+function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, strings: Map<number, string>, script: SpotScript): string {
   const size = townSize(t);
   const r = t.village ? { top: 0, left: 0, bottom: size - 1, right: size - 1 } : t.inTownRect;
   const creatures = townCreatures(t)
@@ -287,13 +293,12 @@ function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, st
     <lighting>${LIGHTING[t.lighting] ?? 'lit'}</lighting>
     <flags>
 ${chopXml(t)}    </flags>
-${wandering}${items}${creatures}${rooms}${townSigns(t, strings).map(signXml).join('')}</town>
+${wandering}${items}${creatures}${rooms}${townSigns(t, strings).map(signXml).join('')}${specStringsXml(script)}</town>
 `;
 }
 
-function townMap(t: E3Town, villageTerrain: number[][] | null, strings: Map<number, string>): string {
+function townMap(t: E3Town, terrain: number[][], strings: Map<number, string>, script: SpotScript): string {
   const size = townSize(t);
-  const terrain = villageTerrain ?? t.terrain;
   const marks = new Map<string, string>();
   const inside = (l: { x: number; y: number }) => l.x >= 0 && l.x < size && l.y >= 0 && l.y < size;
   t.startLocs.forEach((l, i) => {
@@ -311,6 +316,7 @@ function townMap(t: E3Town, villageTerrain: number[][] | null, strings: Map<numb
   });
   for (const s of townSigns(t, strings)) addMark(marks, s.x, s.y, `!${s.k}`);
   t.wanderingLocs.forEach((l, k) => { if (!isUnusedLoc(l) && inside(l)) addMark(marks, l.x, l.y, `*${k}`); });
+  for (const m of script.marks) if (inside(m)) addMark(marks, m.x, m.y, `:${m.node}`);
   return mapFile(terrain, size, marks);
 }
 
@@ -438,9 +444,11 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
 
   zones.forEach((z, i) => {
     const base = `out/out${i % E3_ZONES_WIDE}~${Math.floor(i / E3_ZONES_WIDE)}`;
-    write(`${base}.xml`, sectorXml(z, i, strings));
-    write(`${base}.map`, sectorMap(z, i, strings));
-    write(`${base}.spec`, '');
+    const spots = z.specialLocs.map((loc, k) => ({ loc, id: z.specialId[k] ?? 0 }));
+    const script = e3SpotScript(spots, { zone: i }, strings, (x, y) => z.terrain[x]?.[y] ?? 0);
+    write(`${base}.xml`, sectorXml(z, i, strings, script));
+    write(`${base}.map`, sectorMap(z, i, strings, script));
+    write(`${base}.spec`, script.spec);
   });
   const template = villageTemplate(towns);
   const villageZone = new Map<number, number>();
@@ -449,12 +457,15 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
   }));
   towns.forEach((t) => {
     const base = `towns/town${t.number}`;
-    write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf, strings));
     // A village is built from its record (village.ts), in the caves if its
     // entrance is: E3 decides by the party's zone column.
     const underground = villageZone.get(t.number) !== undefined && villageZone.get(t.number)! % E3_ZONES_WIDE >= 7;
-    write(`${base}.map`, townMap(t, t.village ? buildE3Village(template, t.village, underground, t.number) : null, strings));
-    write(`${base}.spec`, '');
+    const terrain = t.village ? buildE3Village(template, t.village, underground, t.number) : t.terrain;
+    const spots = t.specialLocs.map((loc, k) => ({ loc, id: t.specId[k] ?? 255 }));
+    const script = e3SpotScript(spots, { town: t.number }, strings, (x, y) => terrain[x]?.[y] ?? 0);
+    write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf, strings, script));
+    write(`${base}.map`, townMap(t, terrain, strings, script));
+    write(`${base}.spec`, script.spec);
     // Talk block b is talk<b>.xml, whichever town its people live in.
     const speech = talk.speeches[t.number];
     write(`towns/talk${t.number}.xml`, speech ? dialogueXml(speech, t.number) : `${XML_HEAD}<dialogue boes="2.0.0">\n</dialogue>\n`);

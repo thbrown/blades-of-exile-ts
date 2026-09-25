@@ -43,3 +43,13 @@ export function e3Event(k: number): number {
 export function e3DayReached(day: number, _event: number): { day: number; event: number } {
   return { day: day + 20, event: 0 };
 }
+
+/**
+ * A flag of the converter's own for a one-shot spot, where E3 erases the
+ * spot instead. E3's flags only use columns 0–9, so columns 10–49 are free:
+ * town `t`'s spot `k` (under 40) is `(t, 10 + k)`, and zone `z`'s (under 18)
+ * is `(200 + z, 10 + k)`.
+ */
+export function e3SpotFlag(place: { zone: number } | { town: number }, k: number): [number, number] {
+  return 'town' in place ? [place.town, 10 + k] : [200 + place.zone, 10 + k];
+}
