@@ -144,6 +144,7 @@ const GROUP_LABELS: [Group, string][] = [
   ['solid', 'Solid adventures'],
   ['first_efforts', 'First efforts'],
   ['untried', 'Untried'],
+  ['archive', 'More from the archives'],
   ['added', 'Added by you'],
 ];
 
@@ -422,9 +423,13 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
       if (entry.category) bits.push([entry.category]);
       if (entry.difficulty) bits.push([entry.difficulty, `Listed as “${entry.difficultyListed}”`]);
       if (entry.contentRating) bits.push([entry.contentRating, 'Content rating']);
-      bits.push(entry.review !== null
-        ? [`★ ${entry.review.toFixed(1)}`, 'Average player review on the archive, out of 5']
-        : ['Not yet reviewed']);
+      if (entry.review !== null) bits.push([`★ ${entry.review.toFixed(1)}`, 'Average player review on the archive, out of 5']);
+      const forum = entry.forum;
+      if (forum?.score != null) {
+        bits.push([`Forum ★ ${forum.score.toFixed(1)}`,
+          `Mean of ${forum.votes} vote${forum.votes === 1 ? '' : 's'} on the forum’s review board, out of 5`]);
+      }
+      if (entry.review === null && forum?.score == null) bits.push(['Not yet reviewed']);
       bits.forEach(([text, tip], i) => {
         if (i > 0) facts.append(' · ');
         const span = el('span', undefined, text);
@@ -437,6 +442,7 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
       const state = el('span', 'startup-state', '');
       words.append(state);
       words.append(link(entry.source, `Listed as “${entry.listedAs}”`, 'startup-source'));
+      if (forum !== undefined) words.append(link(forum.url, 'Reviews on the forum', 'startup-source'));
       card.append(words);
       card.addEventListener('click', () => {
         if (lib.installed.has(entry.id)) { choose(start(entry.id)); return; }
@@ -454,12 +460,14 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
       };
     };
 
+    /** Best reviewed first: the archive's own review, else the forum's votes. */
+    const score = (e: LibraryEntry): number => e.review ?? e.forum?.score ?? 0;
     official.forEach((s, i) => cards.push(scenarioCard(s, 'official', i)));
     const libraryIds = new Set(library?.entries.map((e) => e.id) ?? []);
     added.filter((s) => !libraryIds.has(s.id)).forEach((s, i) => cards.push(scenarioCard(s, 'added', 1000 + i)));
     [...(library?.entries ?? [])]
       .sort((a, b) => Number(a.corrupted !== undefined) - Number(b.corrupted !== undefined)
-        || (b.review ?? 0) - (a.review ?? 0) || a.title.localeCompare(b.title))
+        || score(b) - score(a) || a.title.localeCompare(b.title))
       .forEach((e, i) => cards.push(libraryCard(e, 10000 + i)));
     cards.sort((a, b) => a.rank - b.rank);
 
@@ -511,8 +519,9 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
     root.append(controls, list, empty);
     if (hasLibrary) {
       root.append(el('p', 'startup-credit',
-        'Community scenarios come from Spiderweb Software’s scenario archive. Each belongs to its author; '
-        + 'every card links to its listing there.'));
+        'Community scenarios come from Spiderweb Software’s scenario archive, Kelandon’s archive and '
+        + 'TrueSite for Blades, and forum scores from the Spiderweb forums’ review board. Each scenario belongs '
+        + 'to its author; every card links to its listing.'));
     }
     render();
 

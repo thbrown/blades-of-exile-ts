@@ -14,10 +14,14 @@ export interface LibraryEntry {
   blurb: string;
   /** `intro_pic`, into `scenpics`. */
   icon: number;
-  /** The name on Spiderweb's list, which is sometimes not the title. */
+  /** The name on the list it came from, which is sometimes not the title. */
   listedAs: string;
-  /** Which of Spiderweb's three lists it's on. */
-  table: 'solid' | 'untried' | 'first_efforts';
+  /**
+   * Which of Spiderweb's three lists it's on, or `archive` for one only
+   * Kelandon's archive or TrueSite carries (no category, description or
+   * review of its own there).
+   */
+  table: 'solid' | 'untried' | 'first_efforts' | 'archive';
   category: string;
   /** Spiderweb's wording mapped onto four levels; '' if it gave none. */
   difficulty: 'Easy' | 'Moderate' | 'Hard' | 'Very Hard' | '';
@@ -28,6 +32,11 @@ export interface LibraryEntry {
   description: string;
   /** The listing's average user review, 1-5; null when unreviewed. */
   review: number | null;
+  /**
+   * Its topic on the forum's review board, when it has one: the mean of the
+   * Best/Good/Average/Substandard/Poor votes (5 down to 1), and how many.
+   */
+  forum?: { url: string; score: number | null; votes: number };
   towns: number;
   customGraphics: boolean;
   /** The download, as published — a zip. */

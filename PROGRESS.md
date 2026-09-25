@@ -12468,3 +12468,45 @@ chosen first, and a win threw the party away.
   (ACTIONS.CPP:782), and town `draw_terrain` draws only explored squares
   (GRAPHICS.CPP:1804). So the door's own tile changes, and the room stays
   dark until the party steps into the doorway. The port already matches this.
+
+### The library doubles: Kelandon's archive, TrueSite, forum scores (2026-09-25)
+
+- **336 scenarios, up from 168.** `fetch-archive.mjs` now also mirrors
+  Kelandon's archive (back on S3,
+  `spiderwebstuff.s3.us-west-1.amazonaws.com/archive/`) and TrueSite for
+  Blades (`truesite4blades.nethergate.net`) into `library/archive-s3/` and
+  `library/archive-truesite/`. `build-library.ts` adds whatever Spiderweb's
+  three lists lack. Spiderweb goes first, then S3, then TrueSite, and the
+  first copy of an id wins. The new ones go in a fourth table, `archive`
+  ("More from the archives" on the menu). They are listed by name only, so
+  difficulty and content rating come from the forum when it has them.
+  Kelandon's "( Utility )" marks become category `Utility` (31 of them).
+- Forum topic 33604 (The Lurker, 2025) describes the most complete known
+  bundle as S3 plus three from TrueSite: Tatterdemalion, A Little Girl and
+  Witch or Worse. All three are in the library now.
+- **Forum scores: `scripts/forum-reviews.tsv`, committed.** The review board
+  (forum 26) has one topic per scenario, opening with a header: author,
+  difficulty, rating, and Best/Good/Average/Substandard/Poor vote counts.
+  The "Composite Score" is the mean at 5..1 (At the Gallows: 74/17 = 4.35),
+  but it is filled in by hand, so topics with votes can still say "Not
+  reviewed yet". The build recomputes it from the votes. 112 entries match a
+  topic by normalised title and 86 of those have votes. Cards show
+  "Forum ★ x" next to Spiderweb's own ★ and link the topic. Sorting uses
+  Spiderweb's review, else the forum's.
+- **Gotcha: the forum is behind Cloudflare.** curl and WebFetch get a
+  challenge page or a 403. The table was read in a real Chrome (Claude in
+  Chrome) by fetching the topics from inside the page. Chrome blocks that
+  page from POSTing to localhost (a local-network permission), so the rows
+  came out in small chunks. Refresh the table the same way.
+- **Gotcha: TrueSite serves 27 of its zips truncated to exactly 65,536
+  bytes.** The server's own Content-Length says so. They fail as "invalid
+  zip data". All but two have a good copy elsewhere. **The Crusaders and War
+  Preparations exist only as those broken copies.** The Lurker's Google Drive
+  bundle (linked from topic 33604) may hold whole ones. Also
+  `archive-s3/valorim1.zip` uses Shrink (method 1), which fflate can't
+  read; TrueSite's copy of Assault on Valorim loads instead.
+- New corrupted-looking entry: `tranquil` (Suspension of Tranquility) trips
+  `corruptionSigns` the way Masks does, and is tagged and listed last.
+- The AI content audit (`content-audit.ts`,
+  `library-content-ratings.tsv`) covers only the first 168. The new ones
+  without a forum rating show no content rating yet.

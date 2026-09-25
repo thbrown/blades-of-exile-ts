@@ -36,6 +36,11 @@ of the project and its plan.
   through a WebAssembly build of it, which is the running reference.
 - **The community scenarios** in the library come from
   [Spiderweb's scenario archive](https://www.spiderwebsoftware.com/blades/scen_list.html).
+  Scenarios missing from it come from
+  [Kelandon's archive](https://spiderwebstuff.s3.us-west-1.amazonaws.com/archive/archive.html)
+  and [TrueSite for Blades](https://truesite4blades.nethergate.net/), and
+  forum scores come from the Spiderweb forums'
+  [review board](https://spiderwebforums.ipbhost.com/forum/26-blades-of-exile-scenario-reviews/).
   Each belongs to its author, and each card in the game links to its listing.
   The files are trimmed to the scenario, its graphics and the author's
   documents.
