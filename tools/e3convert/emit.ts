@@ -28,6 +28,7 @@ import { lorelei } from './towns/lorelei';
 import { gale } from './towns/gale';
 import { ENTRY_SCRIPTS } from './towns/entry';
 import { slimePit } from './towns/slimePit';
+import { towerOfMagi } from './towns/towerOfMagi';
 import { sharimik, SHARIMIK_DEATH_FLAGS } from './towns/sharimik';
 import { ZONE_SCRIPTS } from './towns/zones';
 import { DAILY_FLAGS } from './towns/talkScripts';
@@ -50,6 +51,7 @@ const TOWN_SCRIPTS = new Map<number, PlaceScript>([
   ...[12, 13, 14, 15].map((t): [number, PlaceScript] => [t, lorelei(t)]),
   ...[16, 17, 18, 19].map((t): [number, PlaceScript] => [t, gale(t)]),
   [22, slimePit(22)], [23, slimePit(23)],
+  [24, towerOfMagi(24)], [25, towerOfMagi(25)],
 ]);
 
 /** E3's special items: strings 1801 on, and the engine's limit too. */

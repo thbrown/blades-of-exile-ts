@@ -1214,6 +1214,27 @@ Notes for M2 implementer:
       committed: it would be Spiderweb's art as our renderer altered it.
     - 2026-09-26: `docs/` rebuilt and committed with all this.
     - Tests no longer skip: the E3 suites always have the game.
+  - 2026-09-26: **the Tower of Magi** (towns 24–25, `towns/towerOfMagi.ts`,
+    `FUN_1078_1e05`/`222d`, blocks 56 and 57), with the end of the demon
+    plot: the Blessed Athame cuts Linda's gate, which sets flag 0xc91 to 3
+    and sends the party to the Portal Fortress.
+    - **E3's demon plot is a countdown**, not yet transcribed: from day 159,
+      with flag 0xc91 at 0, party+0x850f starts at 2000 and falls a tick at
+      a time, and eight values in a table at DGROUP 0x7969 run code
+      (`exile3.c` near lines 6327 and 61540; town 25 also shows messages
+      every 220 ticks). Cutting the gate zeroes it. `TODO(E3-3)` in the file.
+    - `FUN_10b0_95db(mode)` is BoE 1997's `slay_party` (new step
+      `slayParty`), `FUN_10b0_1ff2` is `award_party_xp`, `FUN_10c0_49e5` and
+      `FUN_1098_6e9c` are screen effects only. Party+0x29a6 + 0x1594k are the
+      four saved towns (BoE's `creature_save`); E3 forgets them by writing
+      200.
+    - New steps: `choiceDialog` (three buttons), `drainXp`, `slayParty`.
+    - **`npx vite-node tools/e3convert/show.ts 56:0x5d d0xcae s4500`**
+      prints E3's text by the numbers the scripts use (block:index, dialog,
+      string), which is most of transcribing a case.
+    - `ghidra/DisasmSeg.java <out> <seg>…` disassembles every function in
+      some segments at once: `project/towns.s` (1078, 1088, 10b8) and
+      `project/zones.s` (10a0, 10a8) are made with it.
   - Next: the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.

@@ -248,6 +248,25 @@ export class SpecBuilder {
     };
   }
 
+  /**
+   * A three-button dialog (`FUN_1070_31cd` read as 1, 2 or 3): the first
+   * button is the way out and runs `first`, the second runs `second` and
+   * the third `third`.
+   */
+  choiceDialog(id: number, second: Step[], third: Step[], first: Step[] = []): Step {
+    return (next) => {
+      const { pages, buttons } = this.dialogPages(id);
+      const two = this.seq(second)(next);
+      const three = this.seq(third)(next);
+      const one = this.seq(first)(next);
+      return this.leadPages(pages, this.node('once-dlog', {
+        msg: [pages[pages.length - 1]!, -1, 1],
+        ex1: [this.buttonIndex(buttons[1] ?? 'OK'), two],
+        ex2: [this.buttonIndex(buttons[2] ?? 'OK'), three],
+      }, one));
+    };
+  }
+
   heal(amount: number): Step {
     return (next) => this.node('hp', { ex1: [amount] }, next);
   }
@@ -367,6 +386,23 @@ export class SpecBuilder {
 
   xp(n: number): Step {
     return (next) => this.node('xp', { ex1: [n, 0] }, next);
+  }
+
+  /**
+   * The target loses `n` experience (AFFECT_XP's drain, `drain_pc`). E3
+   * subtracts from the word directly; the engine's drain floors at 0 and
+   * skips the dead, so guard it with `ifStat(CUR_XP, n + 1)` for E3's test.
+   */
+  drainXp(n: number): Step {
+    return (next) => this.node('xp', { ex1: [n, 1] }, next);
+  }
+
+  /**
+   * `FUN_10b0_95db(mode)`: BoE 1997's `slay_party`, every living PC's
+   * `main_status` becomes `mode` (0 gone, 2 dead), which ends the game.
+   */
+  slayParty(mode: 0 | 2): Step {
+    return (next) => this.node('death', { ex1: [mode === 0 ? 5 : 0, 1] }, next);
   }
 
   /**
