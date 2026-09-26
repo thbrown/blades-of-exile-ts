@@ -1176,6 +1176,25 @@ Notes for M2 implementer:
       `decFlag`.
     - TODO(E3-3): level 2's slime pools (destroyed by fire spells,
       `FUN_1018_9a2b`; spawning, `FUN_10c0_61c4`).
+  - 2026-09-25: **Exile III is a bundled scenario** (the user's decision).
+    - Spiderweb's freeware installer is committed **unaltered** in
+      `vendor/exile3/EXL3INST.EXE` (SHA-256 checked); its licence
+      (`GAMEINFO.TXT`) allows free, unaltered redistribution. See
+      `vendor/exile3/README.md` and README.md's Licence section.
+    - `tools/e3convert/installer.ts` unpacks it: Setup Factory 4.01, the
+      setup's own files as name/size/crc headers, then the game's 50 files
+      as bare PKWARE DCL streams in the install script's order
+      (`blast.ts` is a port of zlib's `blast.c`). Byte-identical to an
+      installed copy. `findE3Dir` uses it (`E3_DIR` still overrides).
+    - `npm run dev` runs `tools/e3convert/ensure.ts` first, which converts
+      into `public/scenarios/exile3/` when the installer or any code
+      changed (a hash stamp; about 2 s). `npm run e3` forces it.
+    - **The converted copy is a modified one, so it is never committed and
+      never published**: `vite.config.ts`'s `withholdExile3` drops it from
+      the `docs/` build (GitHub Pages), and the startup screen omits a
+      generated scenario whose files are absent. Offering it on the site
+      would mean converting in the player's browser from the installer.
+    - Tests no longer skip: the E3 suites always have the game.
   - Next: the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.

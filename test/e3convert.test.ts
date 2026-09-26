@@ -1,7 +1,7 @@
 /**
- * The Exile 3 converter end to end: convert the user's install into a scratch
- * directory and load the result with the engine's own loader. Skips without an
- * install (the files are commercial and never committed).
+ * The Exile 3 converter end to end: convert the game (unpacked from the
+ * committed installer, `vendor/exile3/`) into a scratch directory and load the
+ * result with the engine's own loader.
  */
 
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';

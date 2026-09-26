@@ -85,8 +85,10 @@ Blades of Exile's GPL tree. The GPL does not cover:
 
 - **Community scenarios.** Each belongs to its author. They are fetched from
   the archive by script and never committed.
-- **Exile III: Ruined World.** Spiderweb made it freeware in 2013, but its own
-  licence allows non-profit redistribution only of the complete, unmodified
-  archive. The converted scenario is a modified work, so it stays out of the
-  repository (`public/scenarios/exile3/` is ignored) until Spiderweb agrees
-  otherwise.
+- **Exile III: Ruined World.** It is Spiderweb's copyright, and it is not
+  GPL. Its own licence (`GAMEINFO.TXT`) allows anyone to redistribute it free
+  of charge, **unaltered**. So the repository carries Spiderweb's original
+  freeware installer, byte for byte, in `vendor/exile3/` (whose README gives
+  its source, checksum and terms). The GPL converter in `tools/e3convert/`
+  turns it into a scenario when you run `npm run dev`; the converted copy is
+  generated, never committed, and left out of the published site.

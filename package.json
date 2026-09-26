@@ -11,7 +11,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "predev": "vite-node tools/e3convert/ensure.ts",
+    "e3": "vite-node tools/e3convert/ensure.ts --force"
   },
   "devDependencies": {
     "@types/node": "^26.1.0",

@@ -182,7 +182,7 @@ ever executed. The rule is "no chia mining on the bucket".
 
 ## Approach
 
-New directory `exile-js/tools/e3convert/` — a Node/TS converter (runs in Vitest too) that reads the E3 install dir and emits an unpacked v2 scenario tree (`scenario.xml`, `terrain.xml`, `items.xml`, `monsters.xml`, `towns/*`, `out/outX~Y.*`, `graphics/sheetX.png`) which the Part 1 engine loads like any other scenario. E3 game files are **user-supplied input, never committed** (commercial Spiderweb assets — keep out of the public repo; converter takes a path, tests skip if absent).
+New directory `exile-js/tools/e3convert/` — a Node/TS converter (runs in Vitest too) that reads the E3 install dir and emits an unpacked v2 scenario tree (`scenario.xml`, `terrain.xml`, `items.xml`, `monsters.xml`, `towns/*`, `out/outX~Y.*`, `graphics/sheetX.png`) which the Part 1 engine loads like any other scenario. E3's files come from Spiderweb's original freeware installer, committed unaltered in `vendor/exile3/` as its licence allows (decided 2026-09-25; README.md, "Licence"); the converter unpacks it and converts at build time, and only the converted, modified output stays uncommitted.
 
 ## Phases (keyed to Part 1 milestones)
 
@@ -198,4 +198,4 @@ New directory `exile-js/tools/e3convert/` — a Node/TS converter (runs in Vites
 | TOWN.DAT layout unknown | Field-order diff vs oldstructs; the shipped E3 editor (EXILE3ED.EXE) and Ghidra as ground truth; validate by rendering known towns |
 | Quest-logic scale (hardcoded in EXE, ~100+ towns) | Explicitly phased/world-first per user decision; .spec authoring is data-only, shippable town-by-town |
 | Terrain/graphics mapping gaps | display.js seed table + visual diff pages (render every E3 tile next to its mapped sprite) |
-| Licensing | E3 assets never committed; converter consumes a user-supplied install dir |
+| Licensing | The unaltered installer is committed (its licence allows free, unaltered redistribution); the converted scenario is generated at build time, never committed |

@@ -376,14 +376,14 @@ function scenarioXml(
     <language>en-US</language>
     <author>
         <name>Jeff Vogel</name>
-        <email>Spiderweb Software. Converted from the user's own copy by tools/e3convert.</email>
+        <email>Spiderweb Software. Converted from vendor/exile3/EXL3INST.EXE by tools/e3convert.</email>
     </author>
     <feature-flags>
         <use-special-spots>exile3</use-special-spots>
     </feature-flags>
     <text>
-        <teaser>Exile III: Ruined World (1997), converted to run in exile-js.</teaser>
-        <teaser>The world, its towns, people and shops; the quests are being transcribed a town at a time.</teaser>
+        <teaser>The surface world is dying. Find out why.</teaser>
+        <teaser>Spiderweb's 1997 game, converted from its own installer. Its quests are still being transcribed, a town at a time.</teaser>
     </text>
     <ratings>
         <content>G</content>

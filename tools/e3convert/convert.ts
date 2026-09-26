@@ -1,11 +1,12 @@
 /**
- * Converts the user's Exile 3 install into a scenario tree the engine loads:
+ * Converts Exile 3 into a scenario tree the engine loads (`ensure.ts` does
+ * this automatically before dev and build, when anything has changed):
  *
  *   npx vite-node tools/e3convert/convert.ts [e3-dir] [out-dir]
  *
- * `e3-dir` defaults to `findE3Dir()`, `out-dir` to `public/scenarios/exile3`
- * (gitignored — the output is the commercial game's content), which the dev
- * server offers as `?scenario=exile3`.
+ * `e3-dir` defaults to `findE3Dir()` (the committed installer, unpacked),
+ * `out-dir` to `public/scenarios/exile3` (gitignored: a modified copy of the
+ * game, which its licence does not let us commit).
  */
 
 import { rmSync } from 'node:fs';

@@ -165,17 +165,15 @@ function scenarioFromQuery(): string | null {
  * The scenarios shipped in `public/scenarios`. There's no directory listing to
  * fetch over HTTP, so the ids live here; their titles and teasers come out of
  * each one's own `scenario.xml`, so nothing is duplicated but the id.
+ *
+ * `exile3` is generated rather than committed: `tools/e3convert/ensure.ts`
+ * converts it from Spiderweb's own installer (`vendor/exile3/`) before
+ * `npm run dev`. The published site leaves it out, since the converted copy
+ * is a modified one (vendor/exile3/README.md).
  */
-const BUNDLED_SCENARIOS = ['valleydy', 'stealth', 'zakhazi', 'busywork'];
-
-/**
- * Scenarios the dev server may have in `public/scenarios` but the repo never
- * ships — Exile 3, which `tools/e3convert/convert.ts` writes from the user's
- * own copy of the game (gitignored). Fetched like a bundled one, reached only
- * by `?scenario=`, and never listed on the startup screen, which can't know
- * whether the files are there.
- */
-const LOCAL_SCENARIOS = ['exile3'];
+const BUNDLED_SCENARIOS = ['valleydy', 'stealth', 'zakhazi', 'busywork', 'exile3'];
+/** Bundled scenarios that are generated locally and may be absent. */
+const GENERATED_SCENARIOS = new Set(['exile3']);
 
 /**
  * A save for a scenario other than the one running can't be applied in place —
@@ -318,7 +316,7 @@ async function main(): Promise<void> {
     hideLoadingUi();
     document.body.classList.add('starting');
     status.textContent = 'Choose a game.';
-    const headers = await Promise.all(BUNDLED_SCENARIOS.map(async (id) => {
+    const headers = (await Promise.all(BUNDLED_SCENARIOS.map(async (id) => {
       try {
         const url = `${import.meta.env.BASE_URL}scenarios/${id}/scenario.xml`;
         const hdr = readScenarioFromXml(await parseXmlDoc(await (await fetch(url)).text(), url));
@@ -328,11 +326,15 @@ async function main(): Promise<void> {
           preview: `${import.meta.env.BASE_URL}scenarios/${id}/preview.png`,
         };
       } catch {
+        // Exile III is only there where it has been converted (never on the
+        // published site: vite.config.ts, `withholdExile3`), so it is left
+        // off when it isn't.
+        if (GENERATED_SCENARIOS.has(id)) return null;
         // A scenario that won't even parse its header is still offered by id,
         // so the screen never comes up empty because of one bad directory.
         return { id, title: id, blurb: '' };
       }
-    }));
+    }))).filter((h) => h !== null);
     // The player's own library follows the bundled four.
     const added: StartupScenario[] = [];
     const installedIds = new Set<string>();
@@ -525,7 +527,7 @@ async function main(): Promise<void> {
   // A bundled scenario is fetched file by file; anything else is a package
   // the player installed, already whole in IndexedDB.
   const bundledUrl = `${import.meta.env.BASE_URL}scenarios/${name}/`;
-  const isBundled = BUNDLED_SCENARIOS.includes(name) || LOCAL_SCENARIOS.includes(name);
+  const isBundled = BUNDLED_SCENARIOS.includes(name);
   let scen: Scenario;
   let packageSheets: LoadedPackage['sheets'] = [];
   let installedPreview = true;

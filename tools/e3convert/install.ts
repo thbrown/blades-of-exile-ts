@@ -1,26 +1,17 @@
 /**
- * Where the user's Exile 3 install is. The game's files are commercial and are
- * never committed, so everything in `tools/e3convert` takes the directory from
- * outside: `E3_DIR` if set, else the gitignored `e3data/` in the repo, else
- * `../exile3-mapping/Exile3` beside it. Returns null when none of them has
- * EXILE3.EXE, and tests skip.
+ * Where Exile 3's files are: `E3_DIR` if set (another copy, for comparing),
+ * else the committed installer unpacked into the gitignored `e3data/`
+ * (`installer.ts`). Returns null only if neither can be had.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const ROOT = fileURLToPath(new URL('../..', import.meta.url));
+import { E3_INSTALLER, ensureE3Unpacked } from './installer';
 
 export function findE3Dir(): string | null {
-  const candidates = [
-    process.env['E3_DIR'],
-    join(ROOT, 'e3data'),
-    join(ROOT, '../exile3-mapping/Exile3'),
-  ];
-  for (const dir of candidates) {
-    if (dir && existsSync(join(dir, 'EXILE3.EXE'))) return dir;
-  }
+  const env = process.env['E3_DIR'];
+  if (env && existsSync(join(env, 'EXILE3.EXE'))) return env;
+  if (existsSync(E3_INSTALLER)) return ensureE3Unpacked();
   return null;
 }
 

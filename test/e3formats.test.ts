@@ -3,8 +3,8 @@
  * shipped game files that were pinned by hand from the data and EXILE3.EXE's
  * own loaders (tools/e3convert/FORMATS.md).
  *
- * The files are the user's own copy of a commercial game and are never
- * committed, so every case skips when no install is found (`findE3Dir`).
+ * The files come from the committed installer (`vendor/exile3/`), unpacked on
+ * first use; every case skips only if that is missing (`findE3Dir`).
  */
 
 import { describe, expect, it } from 'vitest';
@@ -103,5 +103,23 @@ describe.skipIf(!files)('Exile 3 files', () => {
       expect(towns[80]?.terrain).toHaveLength(32);
       expect(towns[80]?.creatures).toHaveLength(30);
     });
+  });
+});
+
+/**
+ * The installer unpacker (`installer.ts`): Setup Factory 4 with PKWARE DCL
+ * streams. Every one of the 50 files comes out, and the ones the converter
+ * reads have the sizes the game's own loaders assume.
+ */
+describe("Exile III's installer", () => {
+  it('unpacks all 50 files', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { E3_INSTALLER, unpackE3Installer } = await import('../tools/e3convert/installer');
+    const files = unpackE3Installer(new Uint8Array(readFileSync(E3_INSTALLER)));
+    expect(files.size).toBe(50);
+    expect(files.get('EXILE3.EXE')?.length).toBe(3972608);
+    expect(files.get('TOWN.DAT')?.length).toBe(709200);
+    expect(files.get('OUTDOOR.DAT')?.length).toBe(289800);
+    expect(new TextDecoder().decode(files.get('GAMEINFO.TXT'))).toContain('All copies must');
   });
 });

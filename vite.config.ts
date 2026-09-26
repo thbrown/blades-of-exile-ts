@@ -31,6 +31,24 @@ function embedLibrary(): Plugin {
 }
 
 /**
+ * Keeps the converted Exile III out of the built site. It is a modified copy
+ * of Spiderweb's game, and the game's licence lets it be redistributed only
+ * unaltered (vendor/exile3/README.md), so the published site must not carry
+ * it; `npm run dev` converts it locally instead (tools/e3convert/ensure.ts).
+ */
+function withholdExile3(): Plugin {
+  let outDir = 'docs';
+  return {
+    name: 'withhold-exile3',
+    apply: 'build',
+    configResolved(config) { outDir = config.build.outDir; },
+    closeBundle() {
+      rmSync(join(process.cwd(), outDir, 'scenarios', 'exile3'), { recursive: true, force: true });
+    },
+  };
+}
+
+/**
  * In development, serve the scenario library `scripts/build-library.ts` built
  * (`library/dist/`, gitignored) at `/library/`, standing in for the bucket.
  * Production reads the bucket named by `VITE_LIBRARY_URL`.
@@ -59,7 +77,7 @@ export default defineConfig(({ command }) => ({
   // GitHub Pages serves this repo at /exile-js/; keep the dev server at root
   // so local URLs (and verify-screen.mjs) don't need to change.
   base: command === 'build' ? '/exile-js/' : '/',
-  plugins: [devLibrary(), embedLibrary()],
+  plugins: [devLibrary(), embedLibrary(), withholdExile3()],
   build: {
     outDir: 'docs',
   },
