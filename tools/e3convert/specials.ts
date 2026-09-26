@@ -44,10 +44,15 @@ export interface SpotScript {
    * panel (`debug.json`, `src/platform/debugPanel.ts`).
    */
   spots: { x: number; y: number; id: number; node: number }[];
+  /** The town's entry node (`<onenter>`), or -1. */
+  entry: number;
 }
 
 /** A place's own encounters, transcribed (`towns/`): steps by encounter number. */
 export type PlaceScript = (b: SpecBuilder) => Map<number, Step[]>;
+
+/** What a town does as the party enters it (`towns/entry.ts`). */
+export type EntryScript = (b: SpecBuilder) => Step[];
 
 /** Blocked terrains a town spot still runs on (water, and three walls). */
 const WALK_INTO = new Set([71, 101, 118, 133]);
@@ -69,7 +74,7 @@ export function e3ZoneMessageBlock(zone: number): number {
  */
 export function e3SpotScript(
   spots: E3Spot[], place: { zone: number } | { town: number },
-  src: ScriptSource, terrainAt: (x: number, y: number) => number, own?: PlaceScript,
+  src: ScriptSource, terrainAt: (x: number, y: number) => number, own?: PlaceScript, onEntry?: EntryScript,
 ): SpotScript {
   const isTown = 'town' in place;
   const block = isTown ? e3TownMessageBlock(place.town) : e3ZoneMessageBlock(place.zone);
@@ -118,5 +123,6 @@ export function e3SpotScript(
     marks.push({ x: s.loc.x, y: s.loc.y, node: n });
     listed.push({ x: s.loc.x, y: s.loc.y, id: s.id, node: n });
   });
-  return { spec: b.spec, strings: b.strings, marks, spots: listed };
+  const entry = onEntry ? b.compile(onEntry(b)) : -1;
+  return { spec: b.spec, strings: b.strings, marks, spots: listed, entry };
 }

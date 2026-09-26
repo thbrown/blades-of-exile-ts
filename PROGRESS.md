@@ -1156,6 +1156,26 @@ Notes for M2 implementer:
     each town's and zone's untranscribed spots and the talk scripts to go
     (after converting). 2026-09-25: 252 spots done, 1,191 to go; 31 of 71
     talk scripts.
+  - 2026-09-25: **the Slime Pit** (towns 22–23, `towns/slimePit.ts`,
+    `FUN_1078_155e`/`19df`, block 56), Krizsan's mayor's mission.
+    - **Town entry scripts** (`towns/entry.ts`, written as `<onenter>`):
+      E3's town loader `FUN_10d8_0107` (`ghidra/project/townentry.s`) is
+      full of per-town cases; its doc comment lists them, and which are
+      done: "Area has been cleaned out." once a flag is set (22/23 so far,
+      as TOWN_NUKE_MONSTS), Shayder hostile when the Anama flag is 2, and
+      the Slime Pit's pedestal portcullis. The rest are TODO(E3-3), to do
+      with their towns. The entry node runs just after the town appears.
+    - **LED puzzles** (BoE 1997's `cd_set_led` dialogs): the handler sits
+      just *before* its opener in segment 1008 (`FUN_1008_4251` for 0xc97,
+      `436d` for 0xcc0). Four more pedestals exist (0xcc0, 0xcdf, 0xcf4,
+      0xd28). The engine can't show five buttons, so `askNumber`
+      (IF_NUM_RESPONSE, whose prompt is a *scenario* string:
+      `ScriptSource.scenString`; `scenario.xml` is now written last).
+    - New steps: `replaceTerrain` (E3's whole-town terrain loops, resolved
+      at conversion), `ifCoinFlip` (`if-rand` 51), `removeCreatures`,
+      `decFlag`.
+    - TODO(E3-3): level 2's slime pools (destroyed by fire spells,
+      `FUN_1018_9a2b`; spawning, `FUN_10c0_61c4`).
   - Next: the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.

@@ -58,8 +58,15 @@ const PAGE = 700;
 export interface ScriptSource {
   strings: Map<number, string>;
   dialogs: Map<number, E3Dialog>;
+  /** The town's terrain as converted, `[x][y]`, for `replaceTerrain`. */
+  terrain?: number[][];
   /** The town's creatures, by slot, for `bringIn`. */
   creatures?: { number: number; spec1: number }[];
+  /**
+   * Adds a string to the *scenario's* list, returning its index: a few
+   * nodes (IF_NUM_RESPONSE's prompt) read theirs from there, wherever they run.
+   */
+  scenString?: (s: string) => number;
   /** The engine's number for E3's horse `k` (`vehicleNumbers`). */
   horse?: (k: number) => number;
   /** The NUL-terminated string at `seg:off` in the EXE (a Ghidra address). */
@@ -630,6 +637,49 @@ export class SpecBuilder {
   /** `if (FUN_10b0_302f() >= value)`: the living PCs' levels, added up. */
   ifLevelTotal(value: number, then: Step[], otherwise: Step[] = []): Step {
     return this.ifSkillTotal(104, value, then, otherwise);
+  }
+
+  /**
+   * Asks for a number from `lo` to `hi` and stores it in `flag`
+   * (IF_NUM_RESPONSE). For E3's LED puzzles, whose buttons the engine's
+   * dialogs cannot show five of; the prompt is the converter's own words.
+   */
+  askNumber(prompt: string, lo: number, hi: number, flag: Flag): Step {
+    return (next) => {
+      const m = this.src.scenString?.(prompt);
+      if (m === undefined) throw new Error('askNumber needs ScriptSource.scenString');
+      return this.node('if-num-response', { sdf: flag, msg: [m, lo, hi] }, next);
+    };
+  }
+
+  /** `flag -= n`. */
+  decFlag(flag: Flag, n = 1): Step {
+    return (next) => this.node('inc-sdf', { sdf: flag, ex1: [n, 1] }, next);
+  }
+
+  /**
+   * Every square of terrain `from` becomes `to`, as E3's loops over the
+   * whole town do. The squares are found in the converted map, so this is
+   * right as long as nothing else makes or removes `from` first.
+   */
+  replaceTerrain(from: number, to: number): Step {
+    const squares: [number, number][] = [];
+    (this.src.terrain ?? []).forEach((col, x) => col.forEach((t, y) => { if (t === from) squares.push([x, y]); }));
+    return this.seq(squares.map(([x, y]) => this.setTer(x, y, to)));
+  }
+
+  /** `if (random(0, 1) == 0)`: IF_RANDOM passes `get_ran(1,1,100) < 51`, half the time. */
+  ifCoinFlip(then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-rand', { ex1: [51, yes] }, no);
+    };
+  }
+
+  /** TOWN_NUKE_MONSTS: every creature here (0), or of one kind, is gone. */
+  removeCreatures(kind = 0): Step {
+    return (next) => this.node('nuke-monsts', { ex1: [kind] }, next);
   }
 
   /** Refuses the step onto the spot (the town handler returning 0). */

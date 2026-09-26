@@ -29,6 +29,8 @@ import { krizsan } from './towns/krizsan';
 import { shayder } from './towns/shayder';
 import { lorelei } from './towns/lorelei';
 import { gale } from './towns/gale';
+import { ENTRY_SCRIPTS } from './towns/entry';
+import { slimePit } from './towns/slimePit';
 import { sharimik, SHARIMIK_DEATH_FLAGS } from './towns/sharimik';
 import { ZONE_SCRIPTS } from './towns/zones';
 import { DAILY_FLAGS } from './towns/talkScripts';
@@ -50,6 +52,7 @@ const TOWN_SCRIPTS = new Map<number, PlaceScript>([
   ...[8, 9, 10, 11].map((t): [number, PlaceScript] => [t, sharimik(t)]),
   ...[12, 13, 14, 15].map((t): [number, PlaceScript] => [t, lorelei(t)]),
   ...[16, 17, 18, 19].map((t): [number, PlaceScript] => [t, gale(t)]),
+  [22, slimePit(22)], [23, slimePit(23)],
 ]);
 
 /** E3's special items: strings 1801 on, and the engine's limit too. */
@@ -317,7 +320,7 @@ function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, st
     <bounds top="${r.top}" left="${r.left}" bottom="${r.bottom}" right="${r.right}" />
     <difficulty>0</difficulty>
     <lighting>${LIGHTING[t.lighting] ?? 'lit'}</lighting>
-    <flags>
+${script.entry >= 0 ? `    <onenter condition="alive">${script.entry}</onenter>\n    <onenter condition="dead">${script.entry}</onenter>\n` : ''}    <flags>
 ${chopXml(t)}    </flags>
 ${wandering}${items}${creatures}${rooms}${townSigns(t, strings).map(signXml).join('')}${specStringsXml(script)}</town>
 `;
@@ -431,8 +434,15 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
   const strings = readStringTable(resources);
   const vehicles = readE3Vehicles(files.exe);
   const horseNumber = vehicleNumbers(vehicles.horses);
+  // The scenario's own node builder, made below; `scenString` reaches it
+  // from the town scripts.
+  let scen: SpecBuilder | null = null;
   const e3Src: ScriptSource = {
     strings, dialogs: readDialogs(resources),
+    scenString: (text) => {
+      if (!scen) throw new Error('scenario strings are not ready');
+      return scen.text(text);
+    },
     horse: (k) => horseNumber[k] ?? -1,
     exeString: (seg, off) => {
       const bytes = readNeSegment(files.exe, (seg - 0x1000) / 8 + 1);
@@ -491,10 +501,9 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
   const shops = standardShops();
   // The scenario's own specials: scripted replies, and the daily reset their
   // day stamps need.
-  const scen = new SpecBuilder(e3Src, (label) => Math.max(0, BASIC_BUTTONS.indexOf(label)));
+  scen = new SpecBuilder(e3Src, (label) => Math.max(0, BASIC_BUTTONS.indexOf(label)));
   const talk = convertE3Talk(readE3Talk(strings), speakers, shopTables, E3_TOWN_COUNT, shops.length, foodBase, scen);
   const newDay = scen.dailyReset(DAILY_FLAGS);
-  write('scenario.spec', scen.spec);
   shops.push(...talk.shops);
   // Special items: a name and a description each, from string 1801.
   const specialItems = Array.from({ length: E3_SPECIAL_ITEMS }, (_, k) => {
@@ -503,7 +512,6 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
     item.descr = strings.get(1802 + 2 * k) ?? '';
     return item;
   });
-  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town), shops, specialItems, scen.strings, newDay));
 
   // For the browser's test panel (`?debug=1`): E3's spot numbers, so a
   // spot can be matched with its line in `towns/`.
@@ -531,7 +539,8 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
     const underground = villageZone.get(t.number) !== undefined && villageZone.get(t.number)! % E3_ZONES_WIDE >= 7;
     const terrain = t.village ? buildE3Village(template, t.village, underground, t.number) : t.terrain;
     const spots = t.specialLocs.map((loc, k) => ({ loc, id: t.specId[k] ?? 255 }));
-    const script = e3SpotScript(spots, { town: t.number }, { ...e3Src, creatures: townCreatures(t) },  (x, y) => terrain[x]?.[y] ?? 0, TOWN_SCRIPTS.get(t.number));
+    const script = e3SpotScript(spots, { town: t.number }, { ...e3Src, creatures: townCreatures(t), terrain },
+      (x, y) => terrain[x]?.[y] ?? 0, TOWN_SCRIPTS.get(t.number), ENTRY_SCRIPTS.get(t.number));
     write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf, strings, script));
     write(`${base}.map`, townMap(t, terrain, strings, script, vehicles));
     write(`${base}.spec`, script.spec);
@@ -541,6 +550,9 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
     write(`towns/talk${t.number}.xml`, speech ? dialogueXml(speech, t.number) : `${XML_HEAD}<dialogue boes="2.0.0">\n</dialogue>\n`);
   });
   write('debug.json', JSON.stringify(debug));
+  // Last, since the places' scripts may add scenario strings and nodes.
+  write('scenario.spec', scen.spec);
+  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town), shops, specialItems, scen.strings, newDay));
   const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(e3Dir)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
   return { sectors: zones.length, towns: towns.length, sheets: sheets.length };
