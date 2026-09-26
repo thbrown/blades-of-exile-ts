@@ -1095,7 +1095,37 @@ Notes for M2 implementer:
   - 2026-09-25: **the test panel** (`?debug=1`, see Quick orientation),
     for trying transcribed scripts by hand. `verify-e3.mjs` steps onto the
     ferry through it.
-  - Next: Sharimik (8–11), Lorelei (12–15), Gale (16–19), the zones
+  - 2026-09-25: **Sharimik** (towns 8–11, `towns/sharimik.ts`,
+    `FUN_1078_2f0c`, block 53) and its talk scripts 141–145 (Mayor Knight,
+    Commander Corie, Levin's bribe, Ginny and Sloan's ring).
+    - **When E3 runs a town spot** (`FUN_10c0_0c97`, its
+      check_special_terrain): on a step, only if the square is walkable or is
+      water or one of three walls (71, 101, 118, 133); and on **Use** of an
+      adjacent square (`FUN_10c0_425c`), whatever the terrain. Dressers,
+      shelves and altars carry spots that only Use can reach. Two parts:
+      - the walls and water get a first node `CANT_ENTER` with `ex2a` set,
+        which the engine runs on a blocked square, refusal kept;
+      - **engine extension, feature flag `use-special-spots`**
+        (`scenario.xml`'s `<feature-flags>`, as OBoE's `conveyor-belts`):
+        Use runs the square's spot. Off, Use is BoE's.
+    - E3's preset fields are bits `2^(t-1)` of the square's flags byte, which
+      is the numbering OBoE's legacy importer assumes; its 518 force
+      barriers are real ("Magic barrier!", `FUN_1038_063b`). Sharimik's
+      gate has two.
+    - `FUN_1070_23b9` is BoE 1997's `make_town_hostile`, with endings for a
+      few towns (`TODO(E3-3)`). `FUN_10b0_933f` is `poison_pc`.
+      `FUN_1018_99f2(loc, n)` is `place_spell_pattern(3×3, loc, 50 + n)`:
+      in 1997 codes 50–80 are `n`d6 of **fire**; OBoE re-encoded them as
+      `50 + 40*type + n`, so it becomes `DamageType.FIRE`.
+    - Spragin (creature 0) gets a converter death flag (`e3DeathFlag`),
+      since E3 asks whether he is alive and no node can.
+    - **`scripts/try-spot.mjs <town> <spot>`** tries one spot in the real UI
+      through the test panel: `--flag 0xdd=1`, `--use`, `--run`,
+      `--answer Yes,OK`. It prints each dialog, the buttons pressed, the
+      game's log and where the party ended up.
+    - Found with it: the panel's buttons kept the keyboard focus, so the
+      Enter that closed a message clicked the button again.
+  - Next: Lorelei (12–15), Gale (16–19), the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.
 

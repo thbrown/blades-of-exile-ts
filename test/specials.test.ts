@@ -2021,3 +2021,29 @@ describe("Exile 3's per-PC scripts", () => {
     expect(univ.party.pcs.map((pc, i) => pc.maxSp - sp[i]!)).toEqual([6, 6, 6, 6, 6, 6]);
   });
 });
+
+/**
+ * `use-special-spots` (an exile-js feature flag for Exile 3): Use on a square
+ * runs its special spot. Without the flag, as in BoE, it does nothing.
+ */
+describe('Use on a special spot', () => {
+  const useIt = async (flag: boolean) => {
+    const { univ, session } = withNodes({ 0: { type: SpecType.AFFECT_GOLD, ex1a: 7, ex1b: 0 } });
+    const spot = { x: univ.party.townLoc.x + 1, y: univ.party.townLoc.y };
+    univ.town!.record.specialLocs.push({ x: spot.x, y: spot.y, spec: 0 });
+    univ.party.gold = 0;
+    const saved = { ...scen.featureFlags };
+    if (flag) scen.featureFlags['use-special-spots'] = 'exile3';
+    try {
+      return { did: await session.useSpace(spot), gold: univ.party.gold };
+    } finally {
+      scen.featureFlags = saved;
+    }
+  };
+  it('runs the spot when the scenario asks', async () => {
+    expect(await useIt(true)).toEqual({ did: true, gold: 7 });
+  });
+  it('does nothing otherwise', async () => {
+    expect(await useIt(false)).toEqual({ did: false, gold: 0 });
+  });
+});

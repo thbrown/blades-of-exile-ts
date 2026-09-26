@@ -7,8 +7,9 @@
  * - **Go**: into any town, or onto any outdoor square.
  * - **Spots here**: the special spots of the town or sector the party is in.
  *   *Step* puts the party beside one and walks onto it, so the node runs as
- *   it would in play (a refused step stays refused). *Run* runs the node
- *   without moving, for a spot a locked door or a wall stands in front of.
+ *   it would in play (a refused step stays refused). *Use* stands beside it
+ *   and uses the square, as the U key does. *Run* runs the node without
+ *   moving, for a spot a locked door stands in front of.
  * - **Talk**: everyone here who talks, and a button to start the
  *   conversation.
  * - **Flags**: read and set a stuff-done flag.
@@ -24,6 +25,7 @@
 import { Direction, type Location } from '../core/location';
 import type { GameSession } from '../game/session';
 import { SpecCtx, SpecCtxType } from '../game/specials/context';
+import { FieldType } from '../data/fields';
 import { MainStatus } from '../universe/skills';
 
 interface DebugSpot { x: number; y: number; id: number; node: number }
@@ -89,8 +91,13 @@ export async function installDebugPanel(
     return e;
   };
   const num = (value: number, title = '') => el('input', { type: 'number', value: String(value), title });
+  // A button gives the focus back once clicked: left on it, the Enter that
+  // closes the dialog it opened would click it again instead.
   const button = (label: string, action: () => unknown, title = '') =>
-    el('button', { textContent: label, title, onclick: () => { void run(action); } });
+    el('button', {
+      textContent: label, title,
+      onclick: (ev: MouseEvent) => { (ev.currentTarget as HTMLElement).blur(); void run(action); },
+    });
   const section = (title: string, ...kids: Node[]) => el('section', {}, el('h3', { textContent: title }), ...kids);
 
   const status = el('div', { className: 'note' });
@@ -156,8 +163,23 @@ export async function installDebugPanel(
   };
   /** The sector the party stands in, and where in it. */
   const here = () => ({ sector: univ.party.sector, local: univ.party.locInSec });
+  /**
+   * Squares beside `spot` to act from, best first: in town, ones the party
+   * could stand on with no barrier, fire or force, in the way — standing in
+   * one would hide the party from what the spot does to it.
+   */
+  const approaches = (spot: Location): [number, number, Direction][] => {
+    const town = session.isOutdoors ? null : univ.town;
+    if (!town) return STEP_DIRS;
+    const clear = ([dx, dy]: [number, number, Direction]) => {
+      const at = { x: spot.x + dx, y: spot.y + dy };
+      return town.isOnMap(at.x, at.y) && !session.townIsBlocked(at)
+        && !town.hasField(at.x, at.y, FieldType.BARRIER_FIRE) && !town.hasField(at.x, at.y, FieldType.BARRIER_FORCE);
+    };
+    return [...STEP_DIRS.filter(clear), ...STEP_DIRS.filter((d) => !clear(d))];
+  };
   const step = async (spot: Location) => {
-    for (const [dx, dy, dir] of STEP_DIRS) {
+    for (const [dx, dy, dir] of approaches(spot)) {
       const from = { x: spot.x + dx, y: spot.y + dy };
       if (from.x < 0 || from.y < 0) continue;
       if (session.isOutdoors) {
@@ -171,6 +193,19 @@ export async function installDebugPanel(
       }
       redraw();
       await session.move(dir);
+      return;
+    }
+  };
+  /** Stands beside the spot and uses its square, as the U key does. */
+  const use = async (spot: Location) => {
+    if (session.isOutdoors) return;
+    const town = univ.town!;
+    for (const [dx, dy] of approaches(spot)) {
+      const from = { x: spot.x + dx, y: spot.y + dy };
+      if (!town.isOnMap(from.x, from.y)) continue;
+      placeInTown(from);
+      redraw();
+      await session.handleUseSpace(spot);
       return;
     }
   };
@@ -262,6 +297,7 @@ export async function installDebugPanel(
       spotList.append(el('li', {},
         el('span', { className: `what${s.node < 0 ? ' missing' : ''}`, textContent: label }),
         button('Step', () => step(s), 'walk onto it from beside it'),
+        ...(inTown ? [button('Use', () => use(s), 'stand beside it and use it (the U key)')] : []),
         ...(s.node >= 0 ? [button('Run', () => runNode(s), 'run its node without moving')] : [])));
     }
     if (rows.length === 0) spotList.append(el('li', { className: 'note', textContent: 'none' }));

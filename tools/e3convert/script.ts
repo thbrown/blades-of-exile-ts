@@ -48,6 +48,9 @@ const E3_BUTTONS = [
 
 /** The engine's `Status.DISEASE`, the `ex1c` of an AFFECT_STATUS node. */
 const STATUS_DISEASE = 7;
+const STATUS_POISON = 2;
+/** The engine's `SpellPat.SQUARE`, a 3×3 block. */
+export const PAT_SQUARE = 1;
 
 /** Roughly how much text fits in one dialog on the engine's screen. */
 const PAGE = 700;
@@ -462,6 +465,11 @@ export class SpecBuilder {
     return (next) => this.node('status', { ex1: [n, 1, STATUS_DISEASE] }, next);
   }
 
+  /** `FUN_10b0_933f(pc, n)` for every PC: BoE 1997's `poison_pc`, the engine's own. */
+  poisonAll(n: number): Step {
+    return (next) => this.node('status', { ex1: [n, 1, STATUS_POISON] }, next);
+  }
+
   /** Every PC's disease cleared (E3 zeroes the status word directly). */
   cureDiseaseAll(): Step {
     return (next) => this.node('status', { ex1: [8, 0, STATUS_DISEASE] }, next);
@@ -470,11 +478,12 @@ export class SpecBuilder {
   /**
    * `FUN_10c0_4a61(t, x, y)`: the party goes into town `t` at `(x, y)`,
    * without a word. The engine's `TOWN_GENERIC_STAIR` (opcode
-   * `button-generic`) with `ex2b` 8 asks nothing, and it ends the chain, so it
-   * must be a script's last step.
+   * `button-generic`) with `ex2b` 8 asks nothing, and `ex2c` 3 lets it run
+   * from Use and talk as well as a step (still not in combat). It ends the
+   * chain, so it must be a script's last step.
    */
   changeTown(t: number, x: number, y: number): Step {
-    return () => this.node('button-generic', { ex1: [x, y], ex2: [t, 8] }, -1);
+    return () => this.node('button-generic', { ex1: [x, y], ex2: [t, 8, 3] }, -1);
   }
 
   /**
@@ -550,6 +559,32 @@ export class SpecBuilder {
   /** Every PC forgets mage spell `s` (the target's, after `eachPc`). */
   forgetSpell(s: number): Step {
     return (next) => this.node('spell-mage', { ex1: [s, 1] }, next);
+  }
+
+  /**
+   * `FUN_1070_23b9`: BoE 1997's `make_town_hostile`, every creature turns on
+   * the party. E3's own also makes certain monsters (12–20, 91–98, 149–154)
+   * guards, and ends the game in a few towns (21, 28, 34, 40, 41, 47, 107).
+   * TODO(E3-3): those towns' endings, and E3's guards (the engine boosts the
+   * monsters marked guard instead).
+   */
+  makeTownHostile(): Step {
+    return (next) => this.node('town-attitude', { ex1: [0, -1], ex2: [1] }, next);
+  }
+
+  /** `FUN_1080_1b76(x, y, t)`: the terrain at `(x, y)` becomes `t`. */
+  setTer(x: number, y: number, t: number): Step {
+    return (next) => this.node('change-ter', { ex1: [x, y], ex2: [t] }, next);
+  }
+
+  /**
+   * BoE 1997's `place_spell_pattern(pat, spot, 50 + dice + 40 * type, 0, 7)`
+   * (E3 calls it through `FUN_1018_99f2(spot, dice)` for fire): `dice` d6 of
+   * damage `type` over `pattern` (the engine's `SpellPat`), centred on the
+   * spot the script runs at.
+   */
+  patternBoom(pattern: number, type: number, dice: number): Step {
+    return (next) => this.node('spell-pat-boom', { ex1: [-1, -1, pattern], ex2: [type, dice, 1] }, next);
   }
 
   /** Refuses the step onto the spot (the town handler returning 0). */

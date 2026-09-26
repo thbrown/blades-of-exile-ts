@@ -49,6 +49,9 @@ export interface SpotScript {
 /** A place's own encounters, transcribed (`towns/`): steps by encounter number. */
 export type PlaceScript = (b: SpecBuilder) => Map<number, Step[]>;
 
+/** Blocked terrains a town spot still runs on (water, and three walls). */
+const WALK_INTO = new Set([71, 101, 118, 133]);
+
 export function e3TownMessageBlock(t: number): number {
   if (t < 20) return Math.floor((t - (t % 4)) / 5) + 52;
   if (t < 40) return Math.floor(t / 5) + 52;
@@ -102,6 +105,15 @@ export function e3SpotScript(
       n = terrainAt(s.loc.x, s.loc.y) >= repeatsFrom
         ? b.node('disp-msg', { msg }, -1)
         : b.node('once-disp-msg', { sdf: e3SpotFlag(place, k), msg }, -1);
+    }
+    // E3 runs a town spot only on a square the party could stand on, or on
+    // one of four blocked terrains — water and three walls — which it runs
+    // on walking into (`FUN_10c0_0c97`). The engine runs a chain on a blocked
+    // square when its first node is a CANT_ENTER with `ex2a` set, and that
+    // node's refusal stands unless the chain changes it. Spots on other
+    // blocked terrain are for Use (`use-special-spots`).
+    if (isTown && WALK_INTO.has(terrainAt(s.loc.x, s.loc.y))) {
+      n = b.node('block-move', { ex1: [1], ex2: [1] }, n);
     }
     marks.push({ x: s.loc.x, y: s.loc.y, node: n });
     listed.push({ x: s.loc.x, y: s.loc.y, id: s.id, node: n });

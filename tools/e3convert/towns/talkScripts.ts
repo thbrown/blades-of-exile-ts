@@ -9,6 +9,7 @@
 import { Skill } from '../../../src/universe/skills';
 import { e3DailyFlag } from '../flags';
 import { partyFlag as f, partySpecItem, type SpecBuilder, type Step } from '../script';
+import { SLOAN_RING, RING_HIDDEN } from './sharimik';
 import { ANAMA, ANAMA_RINGS, IRVINE_ASKED, IRVINE_PARCEL } from './shayder';
 
 /** Flags a new day clears (`e3DailyFlag`), for E3's day stamps. */
@@ -20,6 +21,14 @@ const AGROD_SOLD: [number, number] = [291, 10];
 
 /** The fort's four pieces of evidence: special items at party+0x40…+0x46. */
 const EVIDENCE = [0x40, 0x42, 0x44, 0x46].map(partySpecItem);
+
+/** Sharimik's mission for Mayor Knight, 0–3 (talk script 141). */
+const KNIGHT = f(0xe8);
+/** Special items the mayor hands over and asks for (party+0x5e, +0x62). */
+const KNIGHT_PASS = partySpecItem(0x5e);
+const KNIGHT_PROOF = partySpecItem(0x62);
+/** Sloan and Ginny's ring, 0–2 (talk scripts 144–145). */
+const GINNY = f(0xe7);
 
 /** How often the party has said yes, and no, to the Anama's priests. */
 const ANAMA_YES = f(0x57f);
@@ -157,6 +166,46 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
   // Irvine asks the party to fetch a parcel from his chest (Shayder's spot 8).
   [132, (b) => [b.ifSpecItem(IRVINE_PARCEL, [b.reply(0x6b)], [
     b.ifFlagAtLeast(IRVINE_ASKED, 1, [b.reply(0x6e)], [b.setFlag(IRVINE_ASKED, 1), b.reply(0x6c, 0x6d)]),
+  ])]],
+  // Mayor Knight's mission (Sharimik). Flags 0xf1 and 0xf2 are the two
+  // things Levin (143) and Commander Corie (142) must agree to first.
+  // TODO(E3-3): journal entry 0x1c.
+  [141, (b) => [b.ifFlagEq(KNIGHT, 0, [b.reply(0x8c, 0x8d), b.incFlag(KNIGHT)], [
+    b.ifFlagEq(KNIGHT, 1, [b.ifFlagEq(f(0xf1), 0, [b.reply(0x8f)], [
+      b.ifFlagEq(f(0xf2), 0, [b.reply(0x8e)], [b.reply(0x90), b.incFlag(KNIGHT), b.giveSpecItem(KNIGHT_PASS)]),
+    ])], [
+      b.ifFlagEq(KNIGHT, 2, [b.ifSpecItem(KNIGHT_PROOF, [
+        b.reply(0x92, 0x93), b.incFlag(KNIGHT), b.takeSpecItem(KNIGHT_PROOF),
+      ], (() => {
+        // Or the job was done another way: town 28 turned (its flag is 7),
+        // or flag 0xc8a.
+        const other: Step[] = [b.reply(0xd9), b.incFlag(KNIGHT), b.takeSpecItem(KNIGHT_PROOF), b.takeSpecItem(KNIGHT_PASS)];
+        return [b.ifFlagEq(f(0x1a4), 7, other, [b.ifFlagAtLeast(f(0xc8a), 1, other, [b.reply(0x91)])])];
+      })())], [b.reply(0x94)]),
+    ]),
+  ])]],
+  // Commander Corie agrees once flag 0x47f is set.
+  [142, (b) => [b.ifFlagEq(KNIGHT, 0, [b.reply(0x95)], [
+    b.ifFlagEq(f(0xf2), 1, [b.reply(0x99)], [
+      b.ifFlagAtLeast(f(0x47f), 1, [b.reply(0x98), b.setFlag(f(0xf2), 1)], [b.reply(0x96, 0x97)]),
+    ]),
+  ])]],
+  // Levin agrees for a 1000 gold bribe, once he has named his price.
+  [143, (b) => [b.ifFlagEq(KNIGHT, 0, [b.reply(0x9a)], [
+    b.ifFlagAtLeast(f(0xf1), 1, [b.reply(0x9e)], [
+      b.ifFlagAtLeast(f(0xfb), 1, [b.pay(1000, [b.reply(0x9d), b.setFlag(f(0xf1), 1)], [b.reply(0x9f)])],
+        [b.reply(0x9b, 0x9c), b.setFlag(f(0xfb), 1)]),
+    ]),
+  ])]],
+  // Ginny wants her ring back: 500 food and 10 experience each for it.
+  [144, (b) => [b.ifFlagEq(GINNY, 0, [b.reply(0xa0), b.incFlag(GINNY)], [
+    b.ifFlagEq(GINNY, 2, [b.reply(0xa4)], [b.ifSpecItem(SLOAN_RING, [
+      b.reply(0xa2, 0xa3), b.takeSpecItem(SLOAN_RING), b.incFlag(GINNY), b.food(500), b.xp(10),
+    ], [b.reply(0xa1)])]),
+  ])]],
+  // Sloan says where he hid it.
+  [145, (b) => [b.ifFlagEq(GINNY, 2, [b.reply(0xa7)], [
+    b.ifSpecItem(SLOAN_RING, [b.reply(0xa6)], [b.reply(0xa5), b.setFlag(RING_HIDDEN, 1)]),
   ])]],
   // Captain Agrod buys unicorn horns (type flag 111) at 10 gold each.
   [119, (b) => [

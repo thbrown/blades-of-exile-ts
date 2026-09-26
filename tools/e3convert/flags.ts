@@ -63,3 +63,12 @@ export function e3SpotFlag(place: { zone: number } | { town: number }, k: number
 export function e3DailyFlag(k: number): [number, number] {
   return [290, 10 + k];
 }
+
+/**
+ * A converter flag for a creature's death, `(292, 10 + k)`, where E3 asks
+ * whether a creature is alive (`active > 0`) and the engine has no node that
+ * can: the creature's `<sdf>` is set when it dies, and a node tests that.
+ */
+export function e3DeathFlag(k: number): [number, number] {
+  return [292, 10 + k];
+}

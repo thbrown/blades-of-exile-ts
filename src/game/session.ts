@@ -1661,6 +1661,21 @@ export class GameSession {
     const town = this.univ.town;
     this.univ.addStringToBuf('Use...');
 
+    // An exile-js extension, not in BoE or OBoE: a scenario with the feature
+    // flag `use-special-spots` runs a town's special spot when the party uses
+    // its square. Exile 3 does (`FUN_10c0_425c`), and puts spots on furniture
+    // that cannot be walked onto — dressers, shelves, altars — which only Use
+    // can reach. The rest of Use still happens after it; only "Nothing to
+    // use." is left out, since something was.
+    let ranSpot = false;
+    if (town && this.univ.scenario.featureFlags['use-special-spots'] !== undefined) {
+      const spot = this.specialAt(where);
+      if (spot >= 0) {
+        await this.runSpecial(SpecCtx.USE_SPACE, SpecCtxType.TOWN, spot, where);
+        ranSpot = true;
+      }
+    }
+
     // Webs and pushable objects come before the terrain checks: they're what's
     // *in* the space rather than the space itself (boe.specials.cpp:1220).
     if (town) {
@@ -1721,6 +1736,7 @@ export class GameSession {
       await this.runSpecial(SpecCtx.USE_SPACE, type, info.flag1, where);
       return true;
     }
+    if (ranSpot) return true;
     this.univ.addStringToBuf('  Nothing to use.');
     return false;
   }

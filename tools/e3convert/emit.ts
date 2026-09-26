@@ -27,6 +27,7 @@ import { e3SpotScript, type PlaceScript, type SpotScript } from './specials';
 import { town21 } from './towns/town21';
 import { krizsan } from './towns/krizsan';
 import { shayder } from './towns/shayder';
+import { sharimik, SHARIMIK_DEATH_FLAGS } from './towns/sharimik';
 import { ZONE_SCRIPTS } from './towns/zones';
 import { DAILY_FLAGS } from './towns/talkScripts';
 import { SpecBuilder, type ScriptSource } from './script';
@@ -44,6 +45,7 @@ const ENTRANCE_MARK = ['v', '<', '^', '>'];
 const TOWN_SCRIPTS = new Map<number, PlaceScript>([
   [21, town21], ...[0, 1, 2, 3].map((t): [number, PlaceScript] => [t, krizsan(t)]),
   ...[4, 5, 6, 7].map((t): [number, PlaceScript] => [t, shayder(t)]),
+  ...[8, 9, 10, 11].map((t): [number, PlaceScript] => [t, sharimik(t)]),
 ]);
 
 /** E3's special items: strings 1801 on, and the engine's limit too. */
@@ -238,13 +240,16 @@ function creatureTimeXml(c: E3CreatureStart): string {
   }
 }
 
-function creatureXml(c: E3CreatureStart, id: number, personality: number): string {
+/** Death flags the converter gives creatures E3 asks about (`e3DeathFlag`), by `town:slot`. */
+const DEATH_FLAGS = new Map<string, [number, number]>([...SHARIMIK_DEATH_FLAGS]);
+
+function creatureXml(c: E3CreatureStart, id: number, personality: number, deathFlag?: [number, number]): string {
   // `spec1`/`spec2` is the creature's death flag: END_DIE sets it, and a town
   // loading leaves out anyone whose flag is set (`10d8:` town setup, which
   // skips row 0 and 200 up). 200–204 are creatures a script brings in
   // (`FUN_1090_4053`, `SpecBuilder.bringIn`): the loader leaves them absent
   // (`10d8:0d36`), which is what an encounter code does.
-  const sdf = c.spec1 > 0 && c.spec1 < 200 && c.spec2 < 10 ? e3Flag(c.spec1, c.spec2) : null;
+  const sdf = c.spec1 > 0 && c.spec1 < 200 && c.spec2 < 10 ? e3Flag(c.spec1, c.spec2) : deathFlag ?? null;
   const code = c.spec1 >= 200 && c.spec1 < 205 ? c.spec1 : 0;
   return `    <creature id="${id}">
         <type>${c.number}</type>
@@ -283,7 +288,9 @@ function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, st
   const size = townSize(t);
   const r = t.village ? { top: 0, left: 0, bottom: size - 1, right: size - 1 } : t.inTownRect;
   const creatures = townCreatures(t)
-    .map((c, i) => (c.number > 0 ? creatureXml(c, i, personalityOf.get(`${t.number}:${i}`) ?? -1) : '')).join('');
+    .map((c, i) => (c.number > 0
+      ? creatureXml(c, i, personalityOf.get(`${t.number}:${i}`) ?? -1, DEATH_FLAGS.get(`${t.number}:${i}`))
+      : '')).join('');
   // Preset items: the legacy field called `ability` holds the charges, as in
   // BoE (`loadLegacy.ts`); -1 is an empty slot.
   const items = t.presetItems.map((p, i) => (p.itemCode < 0 ? '' : `    <item id="${i}">
@@ -350,9 +357,12 @@ function scenarioXml(
         <name>Jeff Vogel</name>
         <email>Spiderweb Software. Converted from the user's own copy by tools/e3convert.</email>
     </author>
+    <feature-flags>
+        <use-special-spots>exile3</use-special-spots>
+    </feature-flags>
     <text>
         <teaser>Exile III: Ruined World (1997), converted to run in exile-js.</teaser>
-        <teaser>The world and its towns only, so far: no people, monsters or quests yet.</teaser>
+        <teaser>The world, its towns, people and shops; the quests are being transcribed a town at a time.</teaser>
     </text>
     <ratings>
         <content>G</content>
