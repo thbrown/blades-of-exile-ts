@@ -1152,6 +1152,10 @@ Notes for M2 implementer:
     - alchemy is party+0x831e;
     - spot 22 shows the wrong book's text in E3 itself (kept, commented).
     - `try-spot.mjs` gained `--item k` and `--level n`.
+  - **`npx vite-node tools/e3convert/coverage.ts`** reports what is left:
+    each town's and zone's untranscribed spots and the talk scripts to go
+    (after converting). 2026-09-25: 252 spots done, 1,191 to go; 31 of 71
+    talk scripts.
   - Next: the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.
