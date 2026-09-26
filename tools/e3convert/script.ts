@@ -60,6 +60,8 @@ export interface ScriptSource {
   dialogs: Map<number, E3Dialog>;
   /** The town's creatures, by slot, for `bringIn`. */
   creatures?: { number: number; spec1: number }[];
+  /** The engine's number for E3's horse `k` (`vehicleNumbers`). */
+  horse?: (k: number) => number;
   /** The NUL-terminated string at `seg:off` in the EXE (a Ghidra address). */
   exeString?: (seg: number, off: number) => string;
 }
@@ -585,6 +587,21 @@ export class SpecBuilder {
    */
   patternBoom(pattern: number, type: number, dice: number): Step {
     return (next) => this.node('spell-pat-boom', { ex1: [-1, -1, pattern], ex2: [type, dice, 1] }, next);
+  }
+
+  /** E3's horse `k` becomes the party's (its `property` byte cleared). */
+  giveHorse(k: number): Step {
+    const n = this.src.horse?.(k) ?? k;
+    if (n < 0) throw new Error(`E3 horse ${k} is not placed anywhere`);
+    return (next) => this.node('change-horse', { ex1: [n], ex2: [1] }, next);
+  }
+
+  /**
+   * `switch (flag) { case 0: … case n-1: }` over `cases`, for the scripts
+   * that index a table by a counter (the horse dealers).
+   */
+  switchFlag(flag: Flag, cases: Step[][]): Step {
+    return cases.reduceRight<Step>((otherwise, then, v) => this.ifFlagEq(flag, v, then, [otherwise]), (next) => next);
   }
 
   /** Refuses the step onto the spot (the town handler returning 0). */

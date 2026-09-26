@@ -16,7 +16,7 @@ import { buildItemSheet, buildMonsterSheets, buildTerrainSheets, e3TerrainPic } 
 import { readE3Files } from './install';
 import { readDialogs, readNeResources, readNeSegment, readStringTable } from './ne';
 import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor, type E3OutWandering } from './outdoor';
-import { readE3Items, readE3Monsters, readE3Start, readE3Terrain, type E3TerrainType } from './tables';
+import { readE3Items, readE3Monsters, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3Town } from './town';
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
 import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
@@ -27,6 +27,7 @@ import { e3SpotScript, type PlaceScript, type SpotScript } from './specials';
 import { town21 } from './towns/town21';
 import { krizsan } from './towns/krizsan';
 import { shayder } from './towns/shayder';
+import { lorelei } from './towns/lorelei';
 import { sharimik, SHARIMIK_DEATH_FLAGS } from './towns/sharimik';
 import { ZONE_SCRIPTS } from './towns/zones';
 import { DAILY_FLAGS } from './towns/talkScripts';
@@ -46,6 +47,7 @@ const TOWN_SCRIPTS = new Map<number, PlaceScript>([
   [21, town21], ...[0, 1, 2, 3].map((t): [number, PlaceScript] => [t, krizsan(t)]),
   ...[4, 5, 6, 7].map((t): [number, PlaceScript] => [t, shayder(t)]),
   ...[8, 9, 10, 11].map((t): [number, PlaceScript] => [t, sharimik(t)]),
+  ...[12, 13, 14, 15].map((t): [number, PlaceScript] => [t, lorelei(t)]),
 ]);
 
 /** E3's special items: strings 1801 on, and the engine's limit too. */
@@ -319,7 +321,10 @@ ${wandering}${items}${creatures}${rooms}${townSigns(t, strings).map(signXml).joi
 `;
 }
 
-function townMap(t: E3Town, terrain: number[][], strings: Map<number, string>, script: SpotScript): string {
+function townMap(
+  t: E3Town, terrain: number[][], strings: Map<number, string>, script: SpotScript,
+  vehicles: { boats: E3Vehicle[]; horses: E3Vehicle[] },
+): string {
   const size = townSize(t);
   const marks = new Map<string, string>();
   const inside = (l: { x: number; y: number }) => l.x >= 0 && l.x < size && l.y >= 0 && l.y < size;
@@ -339,6 +344,17 @@ function townMap(t: E3Town, terrain: number[][], strings: Map<number, string>, s
   for (const s of townSigns(t, strings)) addMark(marks, s.x, s.y, `!${s.k}`);
   t.wanderingLocs.forEach((l, k) => { if (!isUnusedLoc(l) && inside(l)) addMark(marks, l.x, l.y, `*${k}`); });
   for (const m of script.marks) if (inside(m)) addMark(marks, m.x, m.y, `:${m.node}`);
+  // Vehicles are renumbered (`vehicleNumbers`; the map's are one more), and
+  // scripts name E3's through the same table. `H`/`B` is someone else's.
+  const vehicleMarks = (list: E3Vehicle[], own: string, theirs: string) => {
+    const number = vehicleNumbers(list);
+    list.forEach((v, k) => {
+      const n = number[k]!;
+      if (n >= 0 && v.town === t.number && inside(v.loc)) addMark(marks, v.loc.x, v.loc.y, `${v.property ? theirs : own}${n + 1}`);
+    });
+  };
+  vehicleMarks(vehicles.boats, 'b', 'B');
+  vehicleMarks(vehicles.horses, 'h', 'H');
   return mapFile(terrain, size, marks);
 }
 
@@ -411,8 +427,11 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
   const files = readE3Files(e3Dir);
   const resources = readNeResources(files.exe);
   const strings = readStringTable(resources);
+  const vehicles = readE3Vehicles(files.exe);
+  const horseNumber = vehicleNumbers(vehicles.horses);
   const e3Src: ScriptSource = {
     strings, dialogs: readDialogs(resources),
+    horse: (k) => horseNumber[k] ?? -1,
     exeString: (seg, off) => {
       const bytes = readNeSegment(files.exe, (seg - 0x1000) / 8 + 1);
       const end = bytes.indexOf(0, off);
@@ -512,7 +531,7 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
     const spots = t.specialLocs.map((loc, k) => ({ loc, id: t.specId[k] ?? 255 }));
     const script = e3SpotScript(spots, { town: t.number }, { ...e3Src, creatures: townCreatures(t) },  (x, y) => terrain[x]?.[y] ?? 0, TOWN_SCRIPTS.get(t.number));
     write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf, strings, script));
-    write(`${base}.map`, townMap(t, terrain, strings, script));
+    write(`${base}.map`, townMap(t, terrain, strings, script, vehicles));
     write(`${base}.spec`, script.spec);
     debug.towns[t.number] = script.spots;
     // Talk block b is talk<b>.xml, whichever town its people live in.

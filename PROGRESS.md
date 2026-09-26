@@ -1125,7 +1125,25 @@ Notes for M2 implementer:
       game's log and where the party ended up.
     - Found with it: the panel's buttons kept the keyboard focus, so the
       Enter that closed a message clicked the button again.
-  - Next: Lorelei (12–15), Gale (16–19), the zones
+  - 2026-09-25: **Lorelei** (towns 12–15, `towns/lorelei.ts`,
+    `FUN_1078_0561`, block 54) and talk scripts 146 and 152–157 (Kendra,
+    Geoffrey's Anama ring, Bruskrud's trophies and missions, Dwaine, and the
+    two horse dealers, Lewis and Bryk).
+    - **Boats and horses convert now** (`readE3Vehicles`): E3's starting
+      tables are in DGROUP at 0x2be0 and 0x2d0c, 30 × BoE 1997's
+      `boat_record_type` each, which `FUN_10b0_0b7c` copies into the party
+      (horses at party+0x6a68, `in_boat` at +0x6a66 and `in_horse` at
+      +0x6b94). Record 0 is never used.
+    - **Gotcha, in OBoE's loader and so in the engine: a vehicle number in
+      a map resizes the list to it, shrinking it too**, and entering a
+      scenario copies only vehicles that exist, closing gaps. Numbers must
+      therefore rise in the order the loader meets them (town, x, y) with
+      none missing: `vehicleNumbers` renumbers, and `giveHorse` translates.
+      The first try lost two thirds of E3's vehicles.
+    - `scripts/try-talk.mjs <town> <name> <keyword…>` is try-spot's partner
+      for conversations (`--item k`, `--flag`, `--gold`), and reports gold,
+      food, special items and the vehicles the party owns.
+  - Next: Gale (16–19), the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.
 
@@ -1146,6 +1164,7 @@ Notes for M2 implementer:
 
 ## Findings / gotchas log
 
+- (2026-09-25) **A vehicle number in a `.map` file resizes the scenario's list to it — down as well as up** (`loadTownMapData`, OBoE's too), so a later town naming a lower number deletes every vehicle above it. Number them in load order (town, x, y). E3's converter does (`vehicleNumbers`).
 - (2026-09-25) **Check an opcode name against `SpecType` before using it.** The names are `specials-opcodes.txt`'s lines by position (as in OBoE), and several read wrong: `relocate` is `TOWN_RELOCATE_CREATURE` (party relocation is `set-sector`), `stair-generic` is `TOWN_GENERIC_BUTTON` and `button-generic` is `TOWN_GENERIC_STAIR`, and `town-attitude` is `MAKE_TOWN_HOSTILE` (one creature is `set-attitude`). `buildOpcodeTable` plus `SpecType[...]` is a one-line check.
 - (2026-09-23) **E3 data is big-endian and `[x][y]`.** Read it with `LegacyReader(data, true)`. The terrain byte is `x*48 + y`. *(Corrected 2026-09-24: I first claimed `outdoor-to-json.js`'s output was transposed, but `display.js` draws `map[i*48+j]` at column `i`, so it was right all along.)* Everything that Ghidra shows as `DS:-0x500e + …` is a zone field. The town record is loaded at `DS:0004`, so subtract 4.
 - (2026-09-24) **TOWN.DAT records 120–199 are villages, not variants**: named towns (Delan, Pergies, Inn of Blades …) whose maps E3 builds at load from 8×8 building blocks (`FUN_1040_1600`). A record with no terrain is not a spare. Town names are string `30001 + 20t`.

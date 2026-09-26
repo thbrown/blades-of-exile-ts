@@ -111,6 +111,58 @@ export function readE3Start(exe: Uint8Array): E3Start {
   return { town: 21, loc: { x: ds[0x5f0] ?? 0, y: ds[0x5f1] ?? 0 } };
 }
 
+/**
+ * A boat or horse in E3's starting tables: BoE 1997's `boat_record_type`,
+ * 10 bytes, little-endian in memory. Record `k` is E3's vehicle `k`; record 0
+ * is never used, since `in_boat`/`in_horse` 0 means "none".
+ */
+export interface E3Vehicle {
+  loc: { x: number; y: number };
+  town: number;
+  exists: boolean;
+  /** Someone else's (for sale); false once it is the party's. */
+  property: boolean;
+}
+
+/**
+ * E3's boats and horses as a new game has them: 30 of each, in DGROUP at
+ * 0x2be0 and 0x2d0c, which `FUN_10b0_0b7c` copies into the party record
+ * (party+0x693a and +0x6a68, with `in_boat` and `in_horse` after each).
+ * Outdoor ones (town 200) would need their sector, which the tables leave 0;
+ * the only one is boat 0, which is never used.
+ */
+export function readE3Vehicles(exe: Uint8Array): { boats: E3Vehicle[]; horses: E3Vehicle[] } {
+  const ds = readNeSegment(exe, neAutoDataSegment(exe));
+  const read = (base: number): E3Vehicle[] => Array.from({ length: 30 }, (_, k) => {
+    const r = base + 10 * k;
+    return {
+      loc: { x: ds[r] ?? 0, y: ds[r + 1] ?? 0 },
+      town: (ds[r + 6] ?? 0) | ((ds[r + 7] ?? 0) << 8),
+      exists: ds[r + 8] === 1,
+      property: ds[r + 9] === 1,
+    };
+  });
+  return { boats: read(0x2be0), horses: read(0x2d0c) };
+}
+
+/**
+ * The engine's number for each of E3's vehicles, or -1 for one not placed.
+ *
+ * A map names a vehicle by number, and the loader (OBoE's `loadTownMapData`,
+ * ported as is) resizes the list to that number: **it shrinks as well as
+ * grows**, so a town that places vehicle 2 after one that placed vehicle 8
+ * wipes out 3–8. The engine also copies only the vehicles that exist into
+ * the party, closing any gaps. So the numbers must rise in the order the
+ * loader meets them, with none missing: by town, then x, then y.
+ */
+export function vehicleNumbers(list: E3Vehicle[]): number[] {
+  const placed = list.map((v, k) => ({ v, k })).filter(({ v, k }) => k > 0 && v.exists && v.town < 200)
+    .sort((a, b) => a.v.town - b.v.town || a.v.loc.x - b.v.loc.x || a.v.loc.y - b.v.loc.y || a.k - b.k);
+  const out = list.map(() => -1);
+  placed.forEach(({ k }, i) => { out[k] = i; });
+  return out;
+}
+
 export const E3_MONSTER_COUNT = 190;
 
 /**

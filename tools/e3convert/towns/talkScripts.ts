@@ -30,6 +30,16 @@ const KNIGHT_PROOF = partySpecItem(0x62);
 /** Sloan and Ginny's ring, 0–2 (talk scripts 144–145). */
 const GINNY = f(0xe7);
 
+/**
+ * A horse dealer: while `sold` is under `stock`, `price` gold buys E3's horse
+ * `first + sold` (its property byte cleared). Replies: sold out, too poor,
+ * sold.
+ */
+const horseDealer = (sold: [number, number], stock: number, price: number, first: number, r: [number, number, number]): TalkScript =>
+  (b) => [b.ifFlagBelow(sold, stock, [b.pay(price, [
+    b.reply(r[2]), b.switchFlag(sold, Array.from({ length: stock }, (_, k) => [b.giveHorse(first + k)])), b.incFlag(sold),
+  ], [b.reply(r[1])])], [b.reply(r[0])])];
+
 /** How often the party has said yes, and no, to the Anama's priests. */
 const ANAMA_YES = f(0x57f);
 const ANAMA_NO = f(0x580);
@@ -207,6 +217,39 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
   [145, (b) => [b.ifFlagEq(GINNY, 2, [b.reply(0xa7)], [
     b.ifSpecItem(SLOAN_RING, [b.reply(0xa6)], [b.reply(0xa5), b.setFlag(RING_HIDDEN, 1)]),
   ])]],
+  // Bryk sells the three horses in his stable (E3's horses 4–6), 500 each.
+  [146, horseDealer(f(0x5e7), 3, 500, 4, [0xb9, 0xba, 0xb8])],
+  // Kendra pays 1000 gold for Irvine's parcel.
+  [152, (b) => [b.ifSpecItem(IRVINE_PARCEL, [
+    b.takeSpecItem(IRVINE_PARCEL), b.reply(0xbd, 0xbe), b.setFlag(f(0x119), 1), b.gold(1000),
+  ], [b.ifFlagEq(f(0x119), 0, [b.reply(0xbc)], [b.reply(0xbf)])])]],
+  // Kendra opens the guild's door: terrain 132 at (13,21) becomes 134.
+  [153, (b) => [b.ifTer(13, 21, 0x84, [b.reply(0xc0), b.setTer(13, 21, 0x86)], [b.reply(0xc1)])]],
+  // Geoffrey sells an Anama ring for 2500 gold, to anyone not a member.
+  [154, (b) => [b.ifFlagAtLeast(f(0x123), 1, [b.reply(0xc3)], [
+    b.ifFlagEq(ANAMA, 3, [b.reply(0xc5)], [b.pay(2500, [
+      b.reply(0xc4), b.giveSpecItem(ANAMA_RINGS), b.setFlag(f(0x123), 1),
+    ], [b.reply(0xc2)])]),
+  ])]],
+  // Bruskrud pays 300 for each of four trophies (special items 45–48), and
+  // 500 for each of four missions (flags 0xc3b, 0xc2f, 0xc30, 0xc31 at 1).
+  // TODO(E3-3): journal entry 0x21.
+  [155, (b) => {
+    const mission = (first: number): Step[] => [0xc3b, 0xc2f, 0xc30, 0xc31].reduceRight<Step[]>(
+      (otherwise, flag) => [b.ifFlagEq(f(flag), 1, [b.setFlag(f(flag), 2), b.gold(500), b.reply(first, 0xca)], otherwise)],
+      [b.reply(first, 0xc9)]);
+    const trophies = [0x68, 0x6a, 0x6c, 0x66].map(partySpecItem);
+    const turnIn = trophies.reduceRight<Step[]>(
+      (otherwise, k) => [b.ifSpecItem(k, [b.takeSpecItem(k), b.gold(300), ...mission(0xc8)], otherwise)],
+      mission(0xc7));
+    return [b.ifFlagEq(f(0x122), 0, [b.reply(0xc6, 0xcf), b.setFlag(f(0x122), 1)], turnIn)];
+  }],
+  // Dwaine, on the Empress and Prazac. TODO(E3-3): journal entry 0xf.
+  [156, (b) => [b.ifFlagEq(f(0xc8e), 2, [b.reply(0xce)], [
+    b.ifFlagEq(f(0x10e), 0, [b.reply(0xcb, 0xcc), b.setFlag(f(0xc8e), 1), b.setFlag(f(0x10e), 1)], [b.reply(0xcd)]),
+  ])]],
+  // Lewis sells the four horses in Lorelei's stables (E3's horses 7–10), 600 each.
+  [157, horseDealer(f(0x111), 4, 600, 7, [0xd2, 0xd1, 0xd0])],
   // Captain Agrod buys unicorn horns (type flag 111) at 10 gold each.
   [119, (b) => [
     b.setFlag(AGROD_SOLD, 0),
