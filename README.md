@@ -89,6 +89,7 @@ Blades of Exile's GPL tree. The GPL does not cover:
   GPL. Its own licence (`GAMEINFO.TXT`) allows anyone to redistribute it free
   of charge, **unaltered**. So the repository carries Spiderweb's original
   freeware installer, byte for byte, in `vendor/exile3/` (whose README gives
-  its source, checksum and terms). The GPL converter in `tools/e3convert/`
-  turns it into a scenario when you run `npm run dev`; the converted copy is
-  generated, never committed, and left out of the published site.
+  its source, checksum and terms). The site serves that installer as it is,
+  and your browser converts it with the GPL converter (`tools/e3convert/`)
+  the first time you play, keeping the result locally. A converted copy is
+  never committed or published.

@@ -9,8 +9,6 @@
  * in consecutive cells, where the engine looks for them.
  */
 
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { decodeBmp, type Rgba } from '../../src/fileio/legacy/bmp';
 
 const W = 28;
@@ -34,8 +32,8 @@ function blit(src: Rgba, sx: number, sy: number, dst: Rgba, dx: number, dy: numb
 }
 
 /** Sheets 0–3, in order. */
-export function buildTerrainSheets(e3Dir: string): Rgba[] {
-  const bmp = (name: string) => decodeBmp(new Uint8Array(readFileSync(join(e3Dir, `${name}.BMP`))));
+export function buildTerrainSheets(read: (name: string) => Uint8Array): Rgba[] {
+  const bmp = (name: string) => decodeBmp(read(`${name}.BMP`));
   const stack = (top: Rgba, bottom: Rgba | null): Rgba => {
     const out = blank(10 * W, top.height + (bottom?.height ?? 0));
     blit(top, 0, 0, out, 0, 0, top.width, top.height);
@@ -68,9 +66,9 @@ export function buildTerrainSheets(e3Dir: string): Rgba[] {
  * background and becomes transparent.
  */
 export function buildMonsterSheets(
-  e3Dir: string, monsters: { pic: number; w: number; h: number }[], firstSheet: number,
+  read: (name: string) => Uint8Array, monsters: { pic: number; w: number; h: number }[], firstSheet: number,
 ): { sheets: Rgba[]; pics: number[] } {
-  const src = Array.from({ length: 9 }, (_, i) => decodeBmp(new Uint8Array(readFileSync(join(e3Dir, `MONST${i + 1}.BMP`)))));
+  const src = Array.from({ length: 9 }, (_, i) => decodeBmp(read(`MONST${i + 1}.BMP`)));
   const cells: { sheet: Rgba; x: number; y: number }[] = [];
   const pics: number[] = [];
   const byPic = new Map<string, number>();
@@ -116,8 +114,8 @@ export function buildMonsterSheets(
  * are OBJECTS.BMP's full 28×36 pictures, the rest TINYOBJ.BMP's 18×18 icons
  * set into a cell at (5, 9), where the engine insets a tiny item.
  */
-export function buildItemSheet(e3Dir: string): Rgba {
-  const bmp = (name: string) => decodeBmp(new Uint8Array(readFileSync(join(e3Dir, `${name}.BMP`))));
+export function buildItemSheet(read: (name: string) => Uint8Array): Rgba {
+  const bmp = (name: string) => decodeBmp(read(`${name}.BMP`));
   const objects = bmp('OBJECTS');
   const tiny = bmp('TINYOBJ');
   const out = blank(10 * W, 10 * H);

@@ -10,33 +10,18 @@
  * (`tools/e3convert/`, `src/`), has changed since the stamp was written.
  */
 
-import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { emitScenario } from './emit';
+import { emitScenario } from './emitNode';
 import { findE3Dir } from './install';
-import { E3_INSTALLER_SHA256 } from './installer';
+import { exile3ConversionVersion } from './version';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const OUT = join(ROOT, 'public/scenarios/exile3');
 const STAMP = join(OUT, '.stamp');
 
-function sources(dir: string, into: string[] = []): string[] {
-  for (const e of readdirSync(dir)) {
-    const p = join(dir, e);
-    if (e === 'project' || e === 'node_modules') continue;
-    if (statSync(p).isDirectory()) sources(p, into);
-    else if (/\.(ts|txt|xml)$/.test(e)) into.push(p);
-  }
-  return into;
-}
-
-const hash = createHash('sha256').update(E3_INSTALLER_SHA256);
-for (const f of [...sources(join(ROOT, 'tools/e3convert')), ...sources(join(ROOT, 'src'))].sort()) {
-  hash.update(relative(ROOT, f)).update(readFileSync(f));
-}
-const want = hash.digest('hex');
+const want = exile3ConversionVersion();
 if (!process.argv.includes('--force') && existsSync(STAMP) && readFileSync(STAMP, 'utf8') === want) {
   console.log('Exile III is converted and up to date.');
 } else {

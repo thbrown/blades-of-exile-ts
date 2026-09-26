@@ -19,10 +19,10 @@ the licence in its own `GAMEINFO.TXT`:
 
 So this file is kept complete and unaltered, and nobody may be charged for it.
 
-exile-js never ships a modified copy of the game. `tools/e3convert/` (GPL)
-unpacks this installer and converts it into a scenario on the developer's
-machine (`npm run dev` runs `tools/e3convert/ensure.ts`); the result,
-`public/scenarios/exile3/`, is generated and never committed, and the
-published site's build leaves it out (`vite.config.ts`, `withholdExile3`).
-Offering Exile III on the published site means converting in the player's
-browser from this installer, which the site may serve as it is.
+exile-js never ships a modified copy of the game. The published site serves
+this installer as it is (at `exile3/EXL3INST.EXE`, with this README), and
+the player's browser converts it the first time Exile III is played, with
+the GPL converter in `tools/e3convert/` running in a worker, and keeps the
+result locally (`src/platform/exile3.ts`). For development, `npm run dev`
+converts it into `public/scenarios/exile3/`, which is never committed and
+which the site's build leaves out (`vite.config.ts`, `exile3Installer`).

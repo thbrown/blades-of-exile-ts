@@ -2,6 +2,7 @@ import { cpSync, createReadStream, existsSync, rmSync, statSync } from 'node:fs'
 import { extname, join, normalize } from 'node:path';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
+import { exile3ConversionVersion } from './tools/e3convert/version';
 
 /**
  * The scenario library ships inside the site for now: a build copies
@@ -31,19 +32,33 @@ function embedLibrary(): Plugin {
 }
 
 /**
- * Keeps the converted Exile III out of the built site. It is a modified copy
- * of Spiderweb's game, and the game's licence lets it be redistributed only
- * unaltered (vendor/exile3/README.md), so the published site must not carry
- * it; `npm run dev` converts it locally instead (tools/e3convert/ensure.ts).
+ * Exile III on the published site. The converted copy is a modified one of
+ * Spiderweb's game, and its licence lets it be redistributed only unaltered
+ * (vendor/exile3/README.md), so the build leaves `scenarios/exile3/` out and
+ * ships the installer as it is, at `exile3/`, with its README; the player's
+ * browser converts it (src/platform/exile3.ts). The dev server serves the
+ * installer at the same path, for trying that route locally.
  */
-function withholdExile3(): Plugin {
+function exile3Installer(): Plugin {
+  const vendor = join(process.cwd(), 'vendor', 'exile3');
   let outDir = 'docs';
   return {
-    name: 'withhold-exile3',
-    apply: 'build',
+    name: 'exile3-installer',
     configResolved(config) { outDir = config.build.outDir; },
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const path = (req.url ?? '').split('?')[0]!;
+        if (!path.endsWith('/exile3/EXL3INST.EXE')) { next(); return; }
+        res.setHeader('Content-Type', 'application/octet-stream');
+        createReadStream(join(vendor, 'EXL3INST.EXE')).pipe(res);
+      });
+    },
     closeBundle() {
+      if (!existsSync(join(process.cwd(), outDir))) return;
       rmSync(join(process.cwd(), outDir, 'scenarios', 'exile3'), { recursive: true, force: true });
+      const to = join(process.cwd(), outDir, 'exile3');
+      rmSync(to, { recursive: true, force: true });
+      cpSync(vendor, to, { recursive: true });
     },
   };
 }
@@ -77,7 +92,8 @@ export default defineConfig(({ command }) => ({
   // GitHub Pages serves this repo at /exile-js/; keep the dev server at root
   // so local URLs (and verify-screen.mjs) don't need to change.
   base: command === 'build' ? '/exile-js/' : '/',
-  plugins: [devLibrary(), embedLibrary(), withholdExile3()],
+  plugins: [devLibrary(), embedLibrary(), exile3Installer()],
+  define: { __EXILE3_VERSION__: JSON.stringify(exile3ConversionVersion()) },
   build: {
     outDir: 'docs',
   },

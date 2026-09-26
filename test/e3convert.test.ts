@@ -18,7 +18,7 @@ import { SpecType } from '../src/data/special';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
-import { emitScenario } from '../tools/e3convert/emit';
+import { emitScenario } from '../tools/e3convert/emitNode';
 import { findE3Dir } from '../tools/e3convert/install';
 
 const dir = findE3Dir();
@@ -219,4 +219,33 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(scen.towns[80]?.maxDim).toBe(32);
     expect(scen.towns[120]?.name).toBe('Delan');
   });
+});
+
+/**
+ * What the browser does (src/platform/exile3Worker.ts): unpack the committed
+ * installer, convert in memory, pack a `.boes`, and load it as an installed
+ * package — with its graphics sheets.
+ */
+describe("Exile III converted in memory, as the browser does", () => {
+  it('packs a .boes the engine loads', async () => {
+    const { gzipSync } = await import('fflate');
+    const { convertE3 } = await import('../tools/e3convert/emit');
+    const { E3_INSTALLER, unpackE3Installer } = await import('../tools/e3convert/installer');
+    const { writeTar } = await import('../src/fileio/tarball');
+    const { loadScenarioPackage } = await import('../src/fileio/scenarioPackage');
+    const files = unpackE3Installer(new Uint8Array(readFileSync(E3_INSTALLER)));
+    const entries: { name: string; data: Uint8Array }[] = [];
+    let last = 0;
+    convertE3((n) => files.get(n)!, (path, data) => {
+      entries.push({ name: `scenario/${path}`, data: typeof data === 'string' ? new TextEncoder().encode(data) : data });
+    }, (done) => { last = done; });
+    expect(last).toBe(1);
+    const opcodes = buildOpcodeTable(
+      readFileSync(new URL('../public/data/strings/specials-opcodes.txt', import.meta.url), 'utf8'));
+    const loaded = await loadScenarioPackage(
+      { id: 'exile3', fileName: 'exile3.boes', kind: 'boes', data: gzipSync(writeTar(entries)) }, opcodes);
+    expect(loaded.scenario.title).toBe('Exile III: Ruined World');
+    expect(loaded.scenario.towns.length).toBe(200);
+    expect(loaded.sheets.length).toBe(12);
+  }, 120000);
 });

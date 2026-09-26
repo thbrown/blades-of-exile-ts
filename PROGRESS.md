@@ -1190,10 +1190,24 @@ Notes for M2 implementer:
       into `public/scenarios/exile3/` when the installer or any code
       changed (a hash stamp; about 2 s). `npm run e3` forces it.
     - **The converted copy is a modified one, so it is never committed and
-      never published**: `vite.config.ts`'s `withholdExile3` drops it from
-      the `docs/` build (GitHub Pages), and the startup screen omits a
-      generated scenario whose files are absent. Offering it on the site
-      would mean converting in the player's browser from the installer.
+      never published.** On the site the browser converts it (same day):
+      - the build copies the installer to `docs/exile3/` and drops any
+        `scenarios/exile3/` (`vite.config.ts`, `exile3Installer`, which also
+        serves the installer from the dev server);
+      - choosing Exile III on the startup screen (`src/platform/exile3.ts`)
+        uses served files if there are any (dev), else the copy in the
+        scenario store if its version matches, else fetches the installer,
+        checks its SHA-256, converts it in `exile3Worker.ts` (the same
+        `convertE3` Node runs; `emit.ts` and `unpack.ts` are now free of
+        Node) into a `.boes`, and installs it as `exile3`. Under 4 s the
+        first time, about 2 s after. Progress shows in the status line.
+      - the version is `tools/e3convert/version.ts`'s hash, built in as
+        `__EXILE3_VERSION__` and kept in the package's file name, so a
+        deploy with new converter code reconverts.
+      - the card is fixed (`EXILE3_CARD`) when no `scenario.xml` is served,
+        and the installed copy is kept off the "added" list.
+    - `vite preview` needs `--base /exile-js/` to behave like Pages (the
+      config sets the base only for `build`).
     - Tests no longer skip: the E3 suites always have the game.
   - Next: the zones
     between them, and Marish (128). The talk types are listed by

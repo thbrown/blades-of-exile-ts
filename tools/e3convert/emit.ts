@@ -8,12 +8,9 @@
  * are later milestones, marked `TODO(E3-2)` / `TODO(E3-3)` where they would go.
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { encodePng } from './png';
 import { convertItem, convertMonster, convertPresetField } from '../../src/fileio/legacy/convert';
 import { buildItemSheet, buildMonsterSheets, buildTerrainSheets, e3TerrainPic } from './graphics';
-import { readE3Files } from './install';
 import { readDialogs, readNeResources, readNeSegment, readStringTable } from './ne';
 import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor, type E3OutWandering } from './outdoor';
 import { readE3Items, readE3Monsters, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
@@ -428,8 +425,19 @@ function findTownEntrance(zones: E3Outdoor[], town: number): { sector: { x: numb
 
 export interface EmitSummary { sectors: number; towns: number; sheets: number }
 
-export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
-  const files = readE3Files(e3Dir);
+/** One of the game's files by name (`EXILE3.EXE`, `TER1.BMP`…). */
+export type E3Read = (name: string) => Uint8Array;
+/** Writes one file of the scenario tree, by its path in the tree. */
+export type E3Write = (path: string, data: string | Uint8Array) => void;
+
+/**
+ * Converts Exile III, read file by file through `read`, into a scenario tree
+ * written through `write`. Pure: no file system, so the same code runs in
+ * Node (`emitNode.ts`) and in the player's browser (`src/platform/exile3.ts`).
+ * `progress` hears roughly how far along it is, 0 to 1.
+ */
+export function convertE3(read: E3Read, write: E3Write, progress: (done: number) => void = () => {}): EmitSummary {
+  const files = { exe: read('EXILE3.EXE'), outdoor: read('OUTDOOR.DAT'), town: read('TOWN.DAT') };
   const resources = readNeResources(files.exe);
   const strings = readStringTable(resources);
   const vehicles = readE3Vehicles(files.exe);
@@ -455,20 +463,14 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
   const towns = readE3Towns(files.town);
   const start = readE3Start(files.exe);
 
-  const write = (rel: string, data: string | Uint8Array): void => {
-    const full = join(outDir, rel);
-    mkdirSync(join(full, '..'), { recursive: true });
-    writeFileSync(full, data);
-  };
-
   // header.exs: the OBoE marker every unpacked tree carries.
   write('header.exs', new Uint8Array([0x4f, 0x42, 0x4f, 0x45, 0x01, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00, 0x04]));
   write('terrain.xml', terrainXml(terrain));
   // Monsters: E3's table through the legacy importer, drawn from E3's own
   // sprites cut into custom sheets after the terrain's.
-  const terrainSheets = buildTerrainSheets(e3Dir);
+  const terrainSheets = buildTerrainSheets(read);
   const legacyMonsters = readE3Monsters(files.exe, strings);
-  const monsterArt = buildMonsterSheets(e3Dir,
+  const monsterArt = buildMonsterSheets(read,
     legacyMonsters.map((m) => ({ pic: m.pictureNum, w: m.xWidth, h: m.yWidth })), terrainSheets.length);
   const monsters = legacyMonsters.map((m, n) => {
     const mon = convertMonster(m);
@@ -526,6 +528,7 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
     write(`${base}.map`, sectorMap(z, i, strings, script));
     write(`${base}.spec`, script.spec);
     debug.zones[i] = script.spots;
+    progress(0.1 + 0.3 * (i + 1) / zones.length);
   });
   const template = villageTemplate(towns);
   const villageZone = new Map<number, number>();
@@ -545,6 +548,7 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
     write(`${base}.map`, townMap(t, terrain, strings, script, vehicles));
     write(`${base}.spec`, script.spec);
     debug.towns[t.number] = script.spots;
+    progress(0.4 + 0.5 * (t.number + 1) / towns.length);
     // Talk block b is talk<b>.xml, whichever town its people live in.
     const speech = talk.speeches[t.number];
     write(`towns/talk${t.number}.xml`, speech ? dialogueXml(speech, t.number) : `${XML_HEAD}<dialogue boes="2.0.0">\n</dialogue>\n`);
@@ -553,7 +557,8 @@ export function emitScenario(e3Dir: string, outDir: string): EmitSummary {
   // Last, since the places' scripts may add scenario strings and nodes.
   write('scenario.spec', scen.spec);
   write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town), shops, specialItems, scen.strings, newDay));
-  const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(e3Dir)];
+  const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(read)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
+  progress(1);
   return { sectors: zones.length, towns: towns.length, sheets: sheets.length };
 }

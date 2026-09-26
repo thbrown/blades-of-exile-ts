@@ -59,6 +59,7 @@ import {
 import { fitCanvasToPage } from './platform/pageLayout';
 import { startMapWindow } from './platform/mapWindow';
 import { installDebugPanel } from './platform/debugPanel';
+import { EXILE3_CARD, EXILE3_ID, exile3Served, prepareExile3 } from './platform/exile3';
 import { WorldMapFeed } from './render/worldMap';
 import { GAME_SPEED_PACE, PREFERENCES_DIALOG_DEFS, preferencesDialog } from './dialogs/preferencesDialog';
 import { setTargetLockPref } from './game/targetMode';
@@ -101,7 +102,7 @@ import {
   InstalledScenario, getInstalledScenario, installScenario, listInstalledScenarios,
   scenarioStoreAvailable, setScenarioPreview,
 } from './platform/scenarioStore';
-import { LoadedPackage, identifyScenarioFiles, loadScenarioPackage } from './fileio/scenarioPackage';
+import { LoadedPackage, ScenarioPackage, identifyScenarioFiles, loadScenarioPackage } from './fileio/scenarioPackage';
 import { Scenario } from './data/scenario';
 import { noScenario, readScenarioFromXml } from './fileio/scenarioXml';
 import { parseXmlDoc } from './fileio/xml';
@@ -168,12 +169,11 @@ function scenarioFromQuery(): string | null {
  *
  * `exile3` is generated rather than committed: `tools/e3convert/ensure.ts`
  * converts it from Spiderweb's own installer (`vendor/exile3/`) before
- * `npm run dev`. The published site leaves it out, since the converted copy
- * is a modified one (vendor/exile3/README.md).
+ * `npm run dev`. The published site leaves the converted copy out (it is a
+ * modified one: vendor/exile3/README.md) and serves the installer instead,
+ * which the browser converts on first play (platform/exile3.ts).
  */
 const BUNDLED_SCENARIOS = ['valleydy', 'stealth', 'zakhazi', 'busywork', 'exile3'];
-/** Bundled scenarios that are generated locally and may be absent. */
-const GENERATED_SCENARIOS = new Set(['exile3']);
 
 /**
  * A save for a scenario other than the one running can't be applied in place —
@@ -326,21 +326,23 @@ async function main(): Promise<void> {
           preview: `${import.meta.env.BASE_URL}scenarios/${id}/preview.png`,
         };
       } catch {
-        // Exile III is only there where it has been converted (never on the
-        // published site: vite.config.ts, `withholdExile3`), so it is left
-        // off when it isn't.
-        if (GENERATED_SCENARIOS.has(id)) return null;
+        // Exile III is converted only on the dev server; elsewhere its card
+        // is fixed, and choosing it converts it (platform/exile3.ts).
+        if (id === EXILE3_ID) return EXILE3_CARD;
         // A scenario that won't even parse its header is still offered by id,
         // so the screen never comes up empty because of one bad directory.
         return { id, title: id, blurb: '' };
       }
-    }))).filter((h) => h !== null);
+    })));
     // The player's own library follows the bundled four.
     const added: StartupScenario[] = [];
     const installedIds = new Set<string>();
     const withoutGraphics = new Set<string>();
     if (scenarioStoreAvailable()) {
       for (const scen of await listInstalledScenarios()) {
+        // Exile III's converted copy is kept in the same store, but its card
+        // is the bundled one.
+        if (scen.id === EXILE3_ID) continue;
         added.push(startupEntry(scen));
         installedIds.add(scen.id);
         if (!scen.hasGraphics) withoutGraphics.add(scen.id);
@@ -527,7 +529,17 @@ async function main(): Promise<void> {
   // A bundled scenario is fetched file by file; anything else is a package
   // the player installed, already whole in IndexedDB.
   const bundledUrl = `${import.meta.env.BASE_URL}scenarios/${name}/`;
-  const isBundled = BUNDLED_SCENARIOS.includes(name);
+  let isBundled = BUNDLED_SCENARIOS.includes(name);
+  // Exile III: the dev server serves it converted; anywhere else the browser
+  // converts Spiderweb's installer once and keeps it (platform/exile3.ts).
+  let exile3Package: ScenarioPackage | null = null;
+  if (name === EXILE3_ID && !makingParty && !(await exile3Served())) {
+    isBundled = false;
+    exile3Package = await prepareExile3((what, done) => {
+      status.textContent = done > 0 && done < 1 ? `${what} ${Math.round(done * 100)}%` : what;
+    });
+    status.textContent = '';
+  }
   let scen: Scenario;
   let packageSheets: LoadedPackage['sheets'] = [];
   let installedPreview = true;
@@ -536,7 +548,7 @@ async function main(): Promise<void> {
   } else if (isBundled) {
     scen = await loadScenario(new FetchSource(bundledUrl, tick), opcodes, addTotal);
   } else {
-    const installed = scenarioStoreAvailable() ? await getInstalledScenario(name) : null;
+    const installed = exile3Package ?? (scenarioStoreAvailable() ? await getInstalledScenario(name) : null);
     if (installed === null) throw new Error(`the scenario "${name}" isn't installed`);
     const loaded = await loadScenarioPackage(installed, opcodes, addTotal);
     scen = loaded.scenario;

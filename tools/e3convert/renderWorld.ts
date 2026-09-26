@@ -8,7 +8,8 @@
  * With a zone given, draws only that zone, at full size unless told otherwise.
  */
 
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { buildTerrainSheets, e3TerrainPic } from './graphics';
 import { findE3Dir, readE3Files } from './install';
 import { readNeResources, readStringTable } from './ne';
@@ -23,7 +24,7 @@ if (!dir) throw new Error('no Exile 3 install found');
 const files = readE3Files(dir);
 const terrain = readE3Terrain(files.exe, readStringTable(readNeResources(files.exe)));
 const zones = readE3Outdoors(files.outdoor);
-const sheets = buildTerrainSheets(dir);
+const sheets = buildTerrainSheets((name) => new Uint8Array(readFileSync(join(dir, name))));
 const one = zx !== undefined && zy !== undefined;
 const scale = Number(scaleArg ?? (one ? 1 : 4));
 const zonesWide = one ? 1 : E3_ZONES_WIDE;

@@ -3243,8 +3243,9 @@ const ok =
     && (saved.monsterHealth === null || saved.monsterHealth === 1))) &&
   // The File menu is the only route to Open that works in every browser, so
   // the whole path — menu, picker, load — is driven for real.
-  // The startup screen names all four bundled scenarios and gets out of the way.
-  startupChoices.length === 4 &&
+  // The startup screen names all five bundled scenarios, Exile III among
+  // them, and gets out of the way.
+  startupChoices.length === 5 && startupChoices.includes('Exile III: Ruined World') &&
   startupCanAdd &&
   startupChoices.includes('Valley of Dying Things') &&
   startupGone === true &&
