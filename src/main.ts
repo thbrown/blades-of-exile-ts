@@ -341,8 +341,15 @@ async function main(): Promise<void> {
     if (scenarioStoreAvailable()) {
       for (const scen of await listInstalledScenarios()) {
         // Exile III's converted copy is kept in the same store, but its card
-        // is the bundled one.
-        if (scen.id === EXILE3_ID) continue;
+        // is the bundled one — which takes the picture the game captured the
+        // first time it was played here, if the site has none of its own.
+        if (scen.id === EXILE3_ID) {
+          const card = headers.find((h) => h.id === EXILE3_ID);
+          if (card && !('preview' in card) && scen.preview) {
+            Object.assign(card, { preview: startupEntry(scen).preview });
+          }
+          continue;
+        }
         added.push(startupEntry(scen));
         installedIds.add(scen.id);
         if (!scen.hasGraphics) withoutGraphics.add(scen.id);

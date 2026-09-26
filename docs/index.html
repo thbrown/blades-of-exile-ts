@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>exile-js</title>
+    <title>Blades of Exile</title>
     <link rel="icon" type="image/png" href="/exile-js/data/graphics/icon.png" />
     <style>
       /* The game's own fonts, so panel text measures like the C++ build. */
@@ -33,7 +33,18 @@
         flex-direction: column;
         align-items: center;
         gap: 8px;
-        padding: 12px;
+        /* No top padding: the menu bar sits flush against the top edge. */
+        padding: 0 12px 12px;
+      }
+      /* In play the canvas is the whole window below the menu bar: the game
+         tiles its own background over all of it, so the page's padding and
+         gap would only be a dark frame around it. */
+      body.playing {
+        padding: 0;
+        gap: 0;
+      }
+      body.playing #game-menu-bar {
+        margin: 0;
       }
       #status {
         margin: 0;
@@ -41,7 +52,9 @@
         color: #aaa;
         min-height: 1.2em;
       }
-      /* Drawn at 605x430 and scaled up so the pixel art stays crisp. */
+      /* Drawn in game pixels and scaled up so the pixel art stays crisp.
+         The width is set from the script (platform/pageLayout.ts) to fit
+         the window; 1210px is only the loading screen's. */
       #canvas-wrap {
         position: relative;
         width: 1210px;
@@ -86,25 +99,31 @@
           transform: rotate(360deg);
         }
       }
-      /* Empty until the game is running, and an empty bar looks broken. */
+      /* Empty until the game is running, and an empty bar looks broken. The
+         status line is only for loading; in play it would be a footer. */
       #game-menu-bar:empty,
       body.starting #canvas-wrap,
-      body.starting #status {
+      body.starting #status,
+      body.playing #status {
         display: none;
       }
+      /* A real menu bar: the full width of the window, snug on its top edge,
+         and staying there if the page scrolls. The body's side padding is
+         taken back with negative margins. */
       #game-menu-bar {
-        width: 1210px;
-        max-width: 100%;
-        height: 26px;
+        align-self: stretch;
+        margin: 0 -12px;
+        height: 28px;
+        position: sticky;
+        top: 0;
         background: #2a2a2a;
-        border: 1px solid #444;
-        border-radius: 3px;
+        border-bottom: 1px solid #444;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
         display: flex;
         align-items: stretch;
         font-size: 13px;
         color: #ddd;
         user-select: none;
-        position: relative;
         z-index: 10;
       }
       .menu-item {
@@ -114,6 +133,9 @@
         display: flex;
         align-items: center;
         white-space: nowrap;
+      }
+      .menu-item.menu-right {
+        margin-left: auto;
       }
       .menu-item:hover,
       .menu-item.open {
@@ -171,32 +193,54 @@
       .dropdown li.separator:hover {
         background: none;
       }
+      /* The main menu is set in the game's own text face (DejaVu Sans, the
+         plain and bold that the panels use) throughout; only the title is in
+         Dungeon. */
+      @font-face {
+        font-family: 'BoEText';
+        src: url('/exile-js/data/fonts/plain.ttf') format('truetype');
+        font-weight: normal;
+      }
+      @font-face {
+        font-family: 'BoEText';
+        src: url('/exile-js/data/fonts/bold.ttf') format('truetype');
+        font-weight: bold;
+      }
+      .startup-page,
+      .startup-page button,
+      .startup-page input {
+        font-family: 'BoEText', 'DejaVu Sans', Verdana, sans-serif;
+      }
       .startup {
         width: 1210px;
         max-width: 100%;
         background: #222;
-        border: 1px solid #444;
+        border: 1px solid #000;
         border-radius: 4px;
         padding: 24px 28px 28px;
         box-sizing: border-box;
       }
-      .startup h1 {
-        margin: 0 0 4px;
-        font-size: 22px;
-        font-weight: 600;
+      .startup > h2:first-child {
+        margin-top: 0;
       }
       .startup h2 {
-        margin: 20px 0 8px;
-        font-size: 13px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: #8fa8cd;
+        margin: 20px 0 12px;
+        font-size: 16px;
+        font-weight: bold;
+        color: #000;
       }
       .startup-list {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
         gap: 8px;
+      }
+      /* Every card is a sheet of the game's paper — the marble its text and
+         party panels are drawn on — edged in black like the game's panels. */
+      .startup-choice {
+        background: var(--paper-tile, none) 0 0 / 64px 64px repeat, #e4e4e4;
+        image-rendering: pixelated;
+        border: 1px solid #000;
+        color: #000;
       }
       .startup-choice {
         display: flex;
@@ -205,26 +249,22 @@
         gap: 3px;
         text-align: left;
         padding: 10px 12px;
-        background: #2c2c2c;
-        border: 1px solid #4a4a4a;
         border-radius: 3px;
-        color: #ddd;
-        font: inherit;
+        font-size: 12px;
         cursor: pointer;
       }
       .startup-choice:hover,
       .startup-choice:focus {
-        background: #3a3a55;
-        border-color: #6a8fc7;
-        outline: none;
+        outline: 2px solid #000;
+        outline-offset: 0;
       }
       .startup-choice strong {
-        font-size: 14px;
-        font-weight: 600;
+        font-size: 13px;
+        font-weight: bold;
       }
       .startup-choice small {
         font-size: 11px;
-        color: #999;
+        color: #333;
         line-height: 1.35;
       }
       .startup-cards {
@@ -241,6 +281,8 @@
         width: 100%;
         aspect-ratio: 279 / 200;
         background: #111;
+        border-bottom: 1px solid #000;
+        box-sizing: border-box;
         overflow: hidden;
       }
       .startup-picture img {
@@ -255,17 +297,16 @@
         position: absolute;
         right: 6px;
         bottom: 6px;
-        box-shadow: 0 0 0 1px #000, 0 1px 4px rgba(0, 0, 0, 0.6);
+        box-shadow: 0 0 0 1px #000;
       }
       .startup-picture.icon-only {
         display: flex;
         align-items: center;
         justify-content: center;
-        background: radial-gradient(circle at center, #2e2a22, #141210);
+        background: #1a1a1a;
       }
       .startup-picture.icon-only .startup-icon {
         position: static;
-        box-shadow: none;
       }
       .startup-icon {
         display: inline-block;
@@ -286,31 +327,91 @@
       .startup [hidden] {
         display: none !important;
       }
-      .startup-about {
-        margin: 10px 0 4px;
-        padding: 12px 16px;
-        background: #1c1c1c;
-        border: 1px solid #383838;
+      /* The main menu stands on the game's granite, darkened towards the
+         bottom so the cards and the title read over it. */
+      body.starting {
+        background:
+          linear-gradient(rgba(10, 10, 10, 0.45), rgba(10, 10, 10, 0.82)) fixed,
+          var(--menu-tile, none) 0 0 / 128px 128px repeat,
+          #1a1a1a;
+        image-rendering: pixelated;
+        min-height: 100vh;
+        box-sizing: border-box;
+      }
+      /* Both of the page's cards, the party's and the one holding the
+         lists, are the game's paper too. */
+      body.starting .startup {
+        background: var(--paper-tile, none) 0 0 / 64px 64px repeat, #e4e4e4;
+        color: #000;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55);
+      }
+      body.starting .startup-masthead p {
+        color: #d0d0d0;
+        text-shadow: 0 1px 3px #000, 0 0 8px rgba(0, 0, 0, 0.8);
+      }
+      body.starting .startup-masthead a {
+        color: #e8e8e8;
+      }
+      .startup-page {
+        width: 1210px;
+        max-width: 100%;
+        margin-top: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .startup-header {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        padding: 8px 4px 20px;
+      }
+      .startup-logo {
+        width: 96px;
+        height: 96px;
+        flex: none;
+        image-rendering: pixelated;
+        border: 1px solid #000;
         border-radius: 4px;
-        font-size: 13px;
-        line-height: 1.5;
-        color: #bbb;
-        max-width: 60rem;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
       }
-      .startup-about p {
+      .startup-masthead {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 4px;
+        min-width: 0;
+      }
+      /* The logo on the original's startup screen is the Dungeon face in small
+         capitals, in brushed silver. */
+      .startup-title {
         margin: 0;
+        font-family: 'BoEDungeon', Georgia, serif;
+        font-variant: small-caps;
+        font-weight: normal;
+        font-size: 52px;
+        line-height: 1;
+        letter-spacing: 0.04em;
+        color: #d8d8d8;
+        background: linear-gradient(#ffffff, #9a9a9a);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        filter: drop-shadow(0 2px 1px rgba(0, 0, 0, 0.9)) drop-shadow(0 0 10px rgba(0, 0, 0, 0.7));
       }
-      .startup-about p + p {
-        margin-top: 6px;
+      .startup-masthead p {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.45;
+        color: #aaa;
       }
-      .startup-about a,
-      .startup-source {
-        color: #8fa8cd;
+      .startup-masthead a {
+        color: #ddd;
       }
       .startup-sub {
-        margin: -4px 0 12px;
-        font-size: 13px;
-        color: #999;
+        flex-basis: 100%;
+        margin: 0;
+        font-size: 12px;
       }
       .startup-controls {
         display: flex;
@@ -321,22 +422,21 @@
       }
       .startup-shown {
         font-size: 12px;
-        color: #888;
+        color: #333;
         margin-left: auto;
       }
       .startup-empty {
-        color: #999;
+        color: #333;
         font-size: 13px;
       }
       .startup-filter {
-        font: inherit;
-        font-size: 13px;
+        font-size: 12px;
         padding: 5px 9px;
         min-width: 16rem;
-        background: #1a1a1a;
-        border: 1px solid #4a4a4a;
+        background: #fff;
+        border: 1px solid #000;
         border-radius: 3px;
-        color: #ddd;
+        color: #000;
       }
       .startup-chips {
         display: flex;
@@ -344,31 +444,28 @@
         gap: 6px;
       }
       .startup-chip {
-        font: inherit;
         font-size: 12px;
         padding: 4px 10px;
-        border-radius: 999px;
-        border: 1px solid #4a4a4a;
+        border-radius: 3px;
+        border: 1px solid #888;
         background: transparent;
-        color: #888;
+        color: #666;
         cursor: pointer;
       }
       .startup-chip.on {
-        background: #3a3a55;
-        border-color: #6a8fc7;
-        color: #ddd;
+        background: #fff;
+        border-color: #000;
+        color: #000;
       }
       .startup-badge {
         position: absolute;
         left: 6px;
         top: 6px;
-        padding: 2px 8px;
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
-        border-radius: 999px;
+        padding: 2px 7px;
+        border: 1px solid #000;
+        border-radius: 3px;
         font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
+        font-weight: bold;
       }
       .startup-badge.official {
         background: #6b5418;
@@ -378,32 +475,125 @@
         background: #23425f;
         color: #b9d5f0;
       }
+      .startup-badge.corrupted {
+        background: #6a2323;
+        color: #f2c0c0;
+      }
       .startup-credit {
         margin: 6px 0 12px;
         font-size: 12px;
-        color: #888;
+        color: #333;
       }
+      .startup-party {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 10px;
+        font-size: 12px;
+      }
+      .startup-party-pcs {
+        flex-basis: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .startup-party-pcs li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 12px 6px 6px;
+        border: 1px solid #000;
+        border-radius: 3px;
+      }
+      .startup-party-pcs li.gone {
+        opacity: 0.5;
+      }
+      .startup-pc-picture {
+        display: block;
+        width: 56px;
+        height: 72px;
+        flex: none;
+        background: #5b6b45; /* grass, so the sprite reads as it does in play */
+        border: 1px solid #000;
+      }
+      .startup-pc-picture canvas {
+        display: block;
+        width: 56px;
+        height: 72px;
+        image-rendering: pixelated;
+      }
+      .startup-pc-words {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .startup-pc-words strong {
+        font-size: 13px;
+        font-weight: bold;
+      }
+      .startup-pc-words small {
+        font-size: 11px;
+      }
+      .startup-pc-stats {
+        display: flex;
+        flex-direction: column;
+        font-size: 11px;
+        line-height: 1.35;
+        font-variant-numeric: tabular-nums;
+      }
+      .startup-party-active {
+        flex-basis: 100%;
+        margin: 0 0 2px;
+        font-size: 13px;
+      }
+      .startup-saves {
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      }
+      .startup-party-button {
+        font-size: 12px;
+        padding: 5px 12px;
+        background: #f4f4f4;
+        border: 1px solid #000;
+        border-radius: 3px;
+        color: #000;
+        cursor: pointer;
+      }
+      .startup-party-button.primary {
+        font-weight: bold;
+      }
+      .startup-party-button:hover,
+      .startup-party-button:focus {
+        background: #fff;
+        outline: 1px solid #000;
+      }
+      /* The card's facts (category · difficulty · rating · review) are
+         metadata, not prose: set in italic so they stand apart from the
+         title above and the description below. */
       .startup-facts {
         font-size: 11px;
-        color: #c9b27a;
+        font-style: italic;
+        color: #444;
       }
       .startup-state {
         font-size: 11px;
-        color: #8fcd9a;
+        font-weight: bold;
       }
       .startup-state:empty {
         display: none;
       }
       .startup-source {
         font-size: 11px;
-        color: #7f95b8;
+        color: #333;
       }
       .startup-card.busy {
         cursor: progress;
         opacity: 0.7;
       }
       .startup.dropping {
-        outline: 2px dashed #6a8fc7;
+        outline: 2px dashed #000;
         outline-offset: -10px;
       }
       .startup.busy {
@@ -411,12 +601,12 @@
       }
       .startup-add {
         margin-top: 8px;
-        border-style: dashed;
+        border: 1px dashed #000;
         background: transparent;
       }
       .startup-problem {
         margin: 8px 0 0;
-        color: #e08a7a;
+        color: #8a1c10;
         font-size: 12px;
       }
       #progress-wrap {
@@ -434,7 +624,7 @@
         transition: width 0.15s ease-out;
       }
     </style>
-    <script type="module" crossorigin src="/exile-js/assets/index-CHSslmNL.js"></script>
+    <script type="module" crossorigin src="/exile-js/assets/index-C4Zlh1zr.js"></script>
   </head>
   <body>
     <nav id="game-menu-bar"></nav>

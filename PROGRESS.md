@@ -1208,6 +1208,11 @@ Notes for M2 implementer:
         and the installed copy is kept off the "added" list.
     - `vite preview` needs `--base /exile-js/` to behave like Pages (the
       config sets the base only for `build`).
+    - The card's picture is the one the game captures the first time Exile
+      III is played in that browser (`captureTerrainView`, as for any
+      installed scenario); before that it shows the icon. No screenshot is
+      committed: it would be Spiderweb's art as our renderer altered it.
+    - 2026-09-26: `docs/` rebuilt and committed with all this.
     - Tests no longer skip: the E3 suites always have the game.
   - Next: the zones
     between them, and Marish (128). The talk types are listed by
