@@ -28,6 +28,7 @@ import { town21 } from './towns/town21';
 import { krizsan } from './towns/krizsan';
 import { shayder } from './towns/shayder';
 import { lorelei } from './towns/lorelei';
+import { gale } from './towns/gale';
 import { sharimik, SHARIMIK_DEATH_FLAGS } from './towns/sharimik';
 import { ZONE_SCRIPTS } from './towns/zones';
 import { DAILY_FLAGS } from './towns/talkScripts';
@@ -48,6 +49,7 @@ const TOWN_SCRIPTS = new Map<number, PlaceScript>([
   ...[4, 5, 6, 7].map((t): [number, PlaceScript] => [t, shayder(t)]),
   ...[8, 9, 10, 11].map((t): [number, PlaceScript] => [t, sharimik(t)]),
   ...[12, 13, 14, 15].map((t): [number, PlaceScript] => [t, lorelei(t)]),
+  ...[16, 17, 18, 19].map((t): [number, PlaceScript] => [t, gale(t)]),
 ]);
 
 /** E3's special items: strings 1801 on, and the engine's limit too. */

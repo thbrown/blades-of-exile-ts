@@ -10,6 +10,8 @@
 //   --scenario id   default exile3
 //   --flag r,c=v    set a flag first (repeatable); 0xNNN=v for a party offset
 //   --gold n        the party's gold
+//   --item k        give the party special item k first (repeatable)
+//   --level n       every PC's level
 //   --answer a,b    button labels to press, dialog by dialog; anything else
 //                   is dismissed with Enter (default: Yes/Take/Climb/Pray…,
 //                   whichever is there)
@@ -83,7 +85,16 @@ for (const f of all('flag')) {
   await page.fill('#debug-panel section:has(h3:text("Flags")) input[type=number]', value);
   await page.click('#debug-panel button:text("Set")');
 }
-if (opt('gold') !== undefined) await page.evaluate((g) => { window.__session.univ.party.gold = g; }, Number(opt('gold')));
+await page.evaluate(({ gold, items, level }) => {
+  const p = window.__session.univ.party;
+  if (gold !== null) p.gold = gold;
+  for (const k of items) p.specItems.add(k);
+  if (level !== null) for (const pc of p.pcs) pc.level = level;
+}, {
+  gold: opt('gold') === undefined ? null : Number(opt('gold')),
+  items: all('item').map(Number),
+  level: opt('level') === undefined ? null : Number(opt('level')),
+});
 const logStart = await page.evaluate(() => window.__session.univ.transcript.length);
 
 const row = /^\d+$/.test(spot)

@@ -604,6 +604,34 @@ export class SpecBuilder {
     return cases.reduceRight<Step>((otherwise, then, v) => this.ifFlagEq(flag, v, then, [otherwise]), (next) => next);
   }
 
+  /**
+   * `FUN_10c0_46a4(x, y, 1)`: the party moves to `(x, y)` in this town,
+   * with no fade (`TOWN_MOVE_PARTY`, `ex2a` 0). It refuses the step, as E3's
+   * callers do.
+   */
+  moveParty(x: number, y: number): Step {
+    return (next) => this.node('move-party', { ex1: [x, y], ex2: [0] }, next);
+  }
+
+  /** `if (in_horse > 0) { then } else { otherwise }`: riding any horse. */
+  ifOnHorse(then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-horse', { ex1: [-1, -1, yes] }, no);
+    };
+  }
+
+  /** The party learns alchemy recipe `k` (`party.alchemy[k] = 1`, party+0x831e). */
+  learnAlchemy(k: number): Step {
+    return (next) => this.node('alchemy', { ex1: [k, 0] }, next);
+  }
+
+  /** `if (FUN_10b0_302f() >= value)`: the living PCs' levels, added up. */
+  ifLevelTotal(value: number, then: Step[], otherwise: Step[] = []): Step {
+    return this.ifSkillTotal(104, value, then, otherwise);
+  }
+
   /** Refuses the step onto the spot (the town handler returning 0). */
   blockMove(): Step {
     return (next) => this.node('block-move', { ex1: [1] }, next);

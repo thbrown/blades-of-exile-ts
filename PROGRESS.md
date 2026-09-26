@@ -1143,7 +1143,16 @@ Notes for M2 implementer:
     - `scripts/try-talk.mjs <town> <name> <keyword…>` is try-spot's partner
       for conversations (`--item k`, `--flag`, `--gold`), and reports gold,
       food, special items and the vehicles the party owns.
-  - Next: Gale (16–19), the zones
+  - 2026-09-25: **Gale** (towns 16–19, `towns/gale.ts`, `FUN_1078_07f1`,
+    block 55) and Pasi (165). The four big cities of E3's first region are
+    done. Found on the way:
+    - `FUN_10c0_46a4(x, y, 1)` moves the party within the town
+      (`TOWN_MOVE_PARTY`, no fade);
+    - `can_find_town` is party+0x8485 (talk 103's `0x84dc` is town 87);
+    - alchemy is party+0x831e;
+    - spot 22 shows the wrong book's text in E3 itself (kept, commented).
+    - `try-spot.mjs` gained `--item k` and `--level n`.
+  - Next: the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.
 

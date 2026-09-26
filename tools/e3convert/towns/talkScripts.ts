@@ -250,6 +250,19 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
   ])]],
   // Lewis sells the four horses in Lorelei's stables (E3's horses 7–10), 600 each.
   [157, horseDealer(f(0x111), 4, 600, 7, [0xd2, 0xd1, 0xd0])],
+  // Pasi shows the way in to Gale (flag 0x136, the concealed door) to anyone
+  // who has done something for the fort (0xc85, 0xc87, 0xc8a), or who dealt
+  // with the golems (0xc8c).
+  [165, (b) => {
+    const trusted: Step[] = [b.reply(0xf8, 0xf9), b.setFlag(f(0x136), 1)];
+    return [b.ifFlagAtLeast(f(0xc8c), 1, [b.reply(0xfa), b.setFlag(f(0x136), 1)], [
+      b.ifFlagAtLeast(f(0x136), 1, [b.reply(0xfb)], [
+        b.ifFlagEq(f(0xc85), 0, [b.ifFlagEq(f(0xc87), 0, [
+          b.ifFlagEq(f(0xc8a), 0, [b.reply(0xf6, 0xf7)], trusted),
+        ], trusted)], trusted),
+      ]),
+    ])];
+  }],
   // Captain Agrod buys unicorn horns (type flag 111) at 10 gold each.
   [119, (b) => [
     b.setFlag(AGROD_SOLD, 0),
