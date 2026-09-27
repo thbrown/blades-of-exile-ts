@@ -5,7 +5,7 @@
  * disassembly has them.
  */
 
-import { partyFlag as f, partySpecItem, townSpotFlag, type SpecBuilder, type Step } from '../script';
+import { partyFlag as f, partySpecItem, townSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
 
 const TOWN = 21;
 /** The fort's message block, `21 / 5 + 52`. */
@@ -18,6 +18,44 @@ const MAGE_LORE = 11;
 const AMULET = partySpecItem(0x1a);
 const PRAZAC_SCROLL = partySpecItem(0x3a);
 const ANAX_SCROLL = partySpecItem(0x3c);
+
+/**
+ * Which side of the fort the party is on: 0 the caves, Exile's side, and 1
+ * the surface. E3 reads the column of the party's outdoor block instead
+ * (party+0x12e2: over 5 is the caves, under it the surface), which no node
+ * can. Here, the fort's two outdoor entrances set it as the party steps onto
+ * them (`FORT_ENTRANCES`), and spots 11 and 12 as they move the party.
+ */
+export const FORT_SIDE: Flag = [291, 33];
+const CAVES = 0;
+const SURFACE = 1;
+
+/**
+ * A new game starts on the caves side: the party has just come up from
+ * Exile. Where E3 sets the block at a new game has not been found, but the
+ * fort only works this way round. Its north passage leads out to the side
+ * the party did not come from (spots 11 and 12), so a party on the surface
+ * side would walk north into the caves, and the south gate would lead back
+ * up to the surface. And the other way E3 takes a party to the fort
+ * (`FUN_1040_2c2d(7, 8, 0x54, 0x54)` then town 21, `exile3.c:53796`) puts it
+ * on the caves side.
+ */
+export const FORT_START_ZONE = 89;
+
+/**
+ * The spot id the converter gives the fort's outdoor entrances. No E3 zone
+ * uses it (their ids under 100 go up to 24, and one 72).
+ */
+export const FORT_ENTRANCE_SPOT = 90;
+
+/** The fort's two outdoor entrances, and the side each is on. */
+export const FORT_ENTRANCES = [
+  { zone: 73, loc: { x: 20, y: 25 }, side: SURFACE },
+  { zone: FORT_START_ZONE, loc: { x: 36, y: 36 }, side: CAVES },
+];
+
+/** An entrance's spot: it notes which side the party came in by. */
+export const fortEntrance = (side: number) => (b: SpecBuilder): Step[] => [b.setFlag(FORT_SIDE, side)];
 
 /** Anaximander's office (spot 1): the first briefing, then every report. */
 function anaximander(b: SpecBuilder): Step[] {
@@ -96,12 +134,13 @@ export function town21(b: SpecBuilder): Map<number, Step[]> {
     [4, [b.ifFlagAtLeast(spot(4), 1, [b.msg(BLOCK, 0x10)], [b.msg(BLOCK, 0xe, 0xf), b.blockMove()])]],
     [5, [b.onceMsg(spot(5), BLOCK, 0x13)]],
     [6, [b.onceMsg(spot(6), BLOCK, 4)]],
-    // 11 and 12: the north gate comes out on the surface, and the south one
-    // in the caves. E3 only moves the party when it came in from the other
-    // side (by the zone it was in); each target is the fort's own entrance on
-    // that side, so moving it regardless comes to the same thing.
-    [11, [b.exitTo(1, 8, 20, 25)]],
-    [12, [b.exitTo(7, 8, 84, 84)]],
+    // 11 and 12, both in the north passage: it leads out to the side the
+    // party did not come in by. Walking north, a party from the surface
+    // meets 12 first (30,9) and comes out in the caves; one from the caves
+    // passes it and meets 11 (30,5), which takes it to the surface. Each
+    // target is the fort's own entrance on that side.
+    [11, [b.ifFlagEq(FORT_SIDE, CAVES, [b.setFlag(FORT_SIDE, SURFACE), b.exitTo(1, 8, 20, 25)])]],
+    [12, [b.ifFlagEq(FORT_SIDE, SURFACE, [b.setFlag(FORT_SIDE, CAVES), b.exitTo(7, 8, 84, 84)])]],
     // 14 and 15: runes that teach a mage or priest spell to a party with
     // enough Mage Lore between them (`FUN_10b0_302f` totals skill 11).
     ...([14, 15] as const).map((id): [number, Step[]] => [id, [b.askDialog(0x809, [

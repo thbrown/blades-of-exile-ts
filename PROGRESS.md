@@ -13142,3 +13142,68 @@ chosen first, and a win threw the party away.
   - Every new definition has to be in `main.ts`'s `dialogNames`
     (`CHOICE_DIALOG_DEFS` covers the stock prompts), or `getDialogDef`
     throws and nothing appears.
+
+### E3 play-test notes, second round (2026-09-26)
+
+The user's notes after playing Exile III, and what each turned out to be:
+
+- **Couldn't enter Krizsan: no town could be entered by walking.** E3 enters
+  a town when the party's outdoor square is terrain 217–231
+  (`0xd8 < t && t < 0xe8`, exile3.c:4648) and a zone entrance is there. The
+  engine needs BoE's `town` special for that, and the converter never wrote
+  it, so a party could walk onto Krizsan's gate and stand there. Earlier
+  checks entered towns from the debug panel, which is why nothing caught it.
+  Terrains 217–231 are now `town`. `TODO(E3-3)` in `emit.ts`: straight after
+  that test E3 refuses some town ranges with a message while `DS:3d3c` is
+  clear, and what that byte means is still open.
+- **Roads looked wrong.** E3's road pictures (232 cave, 233 grass, 234 hills)
+  are the ground with only a road *hub* in the middle. The arms are drawn in
+  code, as BoE 1997's `place_road` draws them for its 202–204
+  (GRAPHICS.CPP:2164), which lie over the same three grounds. They now convert
+  the way the legacy importer converts BoE's: the terrain takes the plain
+  ground's picture, and every road square gets the road field (`&25`), which
+  draws hub and arms. Only road-to-road joins so far: BoE's
+  `extend_road_terrain` also reaches into bridges and towns, and E3's own list
+  hasn't been found (`TODO(E3-3)`).
+- **Fort Emergence's south gate led to the surface: the exits were
+  reversed.** Spots 11 (30,5) and 12 (30,9) both sit in the *north* passage,
+  and E3 only fires each when the party's outdoor block is on the other side
+  (party+0x12e2 over or under 5; exile3.c:32910). So the passage leads out to
+  the side the party didn't come in by. The port fired both regardless, so
+  walking north hit 12 first and always came out in the caves, and the south
+  edge went back to the start sector, which `findTownEntrance` had put on the
+  surface. Now:
+  - `FORT_SIDE` (`[291, 33]`, `towns/town21.ts`) stands in for the block
+    test: 0 caves, 1 surface.
+  - Each of the fort's two outdoor entrances has a converter spot
+    (`FORT_ENTRANCE_SPOT`, id 90) that sets it. Outdoor specials run before
+    the town-entrance check (`session.ts:1081`).
+  - A new game starts on the caves side, (8,9) at (36,36). Where E3 sets the
+    block for a new game wasn't found. The fort only works this way round,
+    though, and E3's other way to the fort (`FUN_1040_2c2d(7,8,0x54,0x54)`,
+    exile3.c:53796) also uses the caves block.
+  - `set-sector` only moves where the party will come out. It stays in town,
+    so walking the whole passage can switch sides twice, as in E3.
+- **The dresser's 40 gold was already fixed** by cd74bdf (E3's containers
+  became `box`). The published site was built before that commit, and so
+  was a stale local conversion. Searching (Look) the dresser at (58,4) from
+  (58,5) now offers the gold.
+- **The slime fight's paintings and crossed swords: outdoor combat arenas are
+  BoE's.** `createOutCombatTerrain` (`game/outCombat.ts`) floors and scatters
+  the arena with BoE terrain numbers (grass 2/3/4, trees 112–115, walls 6/9,
+  border 90, …). In E3's terrain list those numbers are other things. E3
+  builds its arena in `FUN_10d8_342b` (exile3.c:66476), BoE's
+  `create_out_combat_terrain` with its own tables, copied from `DS:3850` on:
+  terrain → arena kind, ground, odds, lake/pillar/camp stamps and road strips.
+  A post-pass jump table of 10 terrain values (at `10d8:3bf8`) wasn't
+  recovered by Ghidra. **Open**: needs an engine hook for per-scenario arena
+  tables (or E3's builder behind a scenario flag), and those tables read from
+  the EXE.
+- **The scenario library was never committed.** `.gitignore`'s `library/`
+  (meant for the downloads at the root) also matches `docs/library/`, so
+  commit 74cce62 ("Build the site with the scenario library embedded")
+  committed no library, and the published site has none. **Open**, pending the
+  user's decision on shipping the archive in the repository.
+- Also found, **not fixed**: `scripts/verify-e3.mjs` fails on HEAD as well as
+  with these changes. Its walk out of the fort is blocked on the first step
+  from (59,6), and the ferry and thugs checks fail after it.

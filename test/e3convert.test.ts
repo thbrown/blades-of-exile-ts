@@ -39,9 +39,40 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(scen.title).toBe('Exile III: Ruined World');
     expect(scen.startTown).toBe(21);
     expect(scen.towns[21]?.name).toBe('Fort Emergence');
-    // The sector-level start is the zone exit that leads to the fort.
-    expect(scen.outdoorStart).toEqual({ x: 1, y: 8 });
-    expect(scen.sectorStart).toEqual({ x: 20, y: 25 });
+    // The sector-level start is the fort's entrance on the caves side, so
+    // the south gate leads back down toward Exile (`towns/town21.ts`).
+    expect(scen.outdoorStart).toEqual({ x: 8, y: 9 });
+    expect(scen.sectorStart).toEqual({ x: 36, y: 36 });
+    // Both of the fort's entrances note which side the party came in by.
+    expect(scen.outdoors[8]![9]!.specialLocs.some((s) => s.x === 36 && s.y === 36)).toBe(true);
+    expect(scen.outdoors[1]![8]!.specialLocs.some((s) => s.x === 20 && s.y === 25)).toBe(true);
+  });
+
+  it("enters towns by E3's town terrains, 217 to 231", () => {
+    for (let t = 217; t <= 231; t++) expect(scen.terTypes[t]?.special).toBe(TerSpec.TOWN_ENTRANCE);
+    expect(scen.terTypes[216]?.special).not.toBe(TerSpec.TOWN_ENTRANCE);
+    // Krizsan's gate, (19..21, 33) of zone (2,9).
+    const sector = scen.outdoors[2]![9]!;
+    expect(scen.terTypes[sector.terrain[20]![33]!]?.special).toBe(TerSpec.TOWN_ENTRANCE);
+    expect(sector.cityLocs.find((c) => c.x === 20 && c.y === 33)?.spec).toBe(0);
+  });
+
+  it('draws roads as ground with the road field, as BoE 1997 does', () => {
+    // A grass road takes grass's picture; the hub and arms come from the field.
+    expect(scen.terTypes[233]?.picture).toBe(scen.terTypes[2]?.picture);
+    expect(scen.terTypes[232]?.picture).toBe(scen.terTypes[0]?.picture);
+    expect(scen.terTypes[234]?.picture).toBe(scen.terTypes[36]?.picture);
+    const sector = scen.outdoors[2]![5]!;
+    expect(sector.terrain[46]![1]).toBe(233);
+    expect(sector.roads[46]![1]).toBe(true);
+    expect(sector.roads[45]![1]).toBe(false);
+  });
+
+  it("marks E3's containers, so the dresser in the first room can be searched", () => {
+    expect(scen.terTypes[174]?.name).toBe('Dresser');
+    expect(scen.terTypes[174]?.special).toBe(TerSpec.IS_A_CONTAINER);
+    const gold = scen.towns[21]!.presetItems.find((p) => p.loc.x === 58 && p.loc.y === 4);
+    expect(gold).toMatchObject({ code: 0, charges: 40, contained: true });
   });
 
   it('lays out 90 zones as a 9×10 world with their names', () => {

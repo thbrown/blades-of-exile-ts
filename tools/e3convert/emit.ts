@@ -14,6 +14,7 @@ import { buildItemSheet, buildMonsterSheets, buildTerrainSheets, e3TerrainPic } 
 import { readDialogs, readNeResources, readNeSegment, readStringTable } from './ne';
 import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor, type E3OutWandering } from './outdoor';
 import { ItemAbil } from '../../src/data/item';
+import { FieldType } from '../../src/data/fields';
 import { readE3ItemAbilities, readE3Items, readE3Monsters, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3Town } from './town';
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
@@ -22,7 +23,7 @@ import { readE3ShopTables, standardShops } from './shops';
 import { e3DayReached, e3Event, e3Flag } from './flags';
 import { buildE3Village, villageTemplate } from './village';
 import { e3SpotScript, type PlaceScript, type SpotScript } from './specials';
-import { town21 } from './towns/town21';
+import { FORT_ENTRANCES, FORT_ENTRANCE_SPOT, FORT_START_ZONE, fortEntrance, town21 } from './towns/town21';
 import { krizsan } from './towns/krizsan';
 import { shayder } from './towns/shayder';
 import { lorelei } from './towns/lorelei';
@@ -110,7 +111,15 @@ function specialXml(t: E3TerrainType, id: number): string {
   // A bed (picture 143) shows the party asleep in it, picture 230: BoE 1997's
   // rule, which OBoE's legacy importer keeps as the BED special, and E3's
   // sheet has the same picture there.
-  const [type, f1, f2, f3] = !sp && E3_CONTAINERS.has(id) ? ['box', -1, 0, 0]
+  // E3 enters a town when the party's outdoor square is terrain 217–231
+  // (`0xd8 < t && t < 0xe8`, exile3.c:4648) and one of the zone's town
+  // entrances is there; BoE's `town` special is the same test. flag1 is what
+  // a hidden town shows as, and E3 hides none, so it shows as itself.
+  // TODO(E3-3): right after, E3 refuses towns 8–20, 28–39, 51–79, 99–119
+  // and 146+ with a message while `DS:3d3c` is clear. What that byte is
+  // (perhaps the shareware registration) is still open.
+  const [type, f1, f2, f3] = !sp && id >= 217 && id <= 231 ? ['town', id, 0, 0]
+    : !sp && E3_CONTAINERS.has(id) ? ['box', -1, 0, 0]
     : !sp && t.pic === 143 ? ['bed', e3TerrainPic(230), 0, 0]
     // E3's blockage 2 keeps monsters off (lava, portals, town entrances);
     // BoE's only means that for counters (`is_special`), so the special says it.
@@ -153,10 +162,33 @@ const E3_NOTE_ITEMS: [number, number][] = [[31, 0xb5], [31, 0xb6]];
  */
 const TRANSFORM = new Map<number, number>([[243, 244], [244, 243]]);
 
+/**
+ * E3's roads, by the terrain each is drawn over: cave floor, grass and hills.
+ * Their pictures are that ground with only the hub of a road on it, and the
+ * arms joining neighbouring roads are drawn in code, as BoE 1997's `place_road`
+ * draws them for its own road terrains 202–204 (GRAPHICS.CPP:2164), which are
+ * the same three grounds. So they convert as the legacy importer converts
+ * BoE's: the terrain keeps its number and takes the plain ground's picture,
+ * and every square of it gets the engine's road field, which draws hub and
+ * arms. TODO(E3-3): E3's own list of what a road reaches into (BoE's
+ * `extend_road_terrain` includes bridges and towns); only road-to-road joins.
+ */
+const E3_ROADS = new Map<number, number>([[232, 0], [233, 2], [234, 36]]);
+
+/** The road field's mark on every road square of a map. */
+function addRoadMarks(marks: Map<string, string>, terrain: number[][], size: number): void {
+  for (let x = 0; x < size; x++) {
+    for (let y = 0; y < size; y++) {
+      if (E3_ROADS.has(terrain[x]?.[y] ?? -1)) addMark(marks, x, y, `&${FieldType.SPECIAL_ROAD}`);
+    }
+  }
+}
+
 function terrainXml(types: E3TerrainType[]): string {
   const out = [XML_HEAD, '<terrains boes="2.0.0">\n'];
   types.forEach((t, id) => {
-    const pic = e3TerrainPic(t.pic);
+    const ground = E3_ROADS.get(id);
+    const pic = e3TerrainPic(ground === undefined ? t.pic : types[ground]!.pic);
     out.push(`    <terrain id="${id}">
         <name>${esc(t.name)}</name>
         <pic>${pic}</pic>
@@ -254,6 +286,7 @@ function sectorMap(z: E3Outdoor, zone: number, strings: Map<number, string>, scr
   for (const s of zoneSigns(z, zone, strings)) addMark(marks, s.x, s.y, `!${s.k}`);
   z.wanderingLocs.forEach((l, k) => { if (!isUnusedLoc(l)) addMark(marks, l.x, l.y, `*${k}`); });
   for (const m of script.marks) addMark(marks, m.x, m.y, `:${m.node}`);
+  addRoadMarks(marks, z.terrain, 48);
   return mapFile(z.terrain, 48, marks);
 }
 
@@ -419,6 +452,7 @@ function townMap(
   };
   vehicleMarks(vehicles.boats, 'b', 'B');
   vehicleMarks(vehicles.horses, 'h', 'H');
+  addRoadMarks(marks, terrain, size);
   return mapFile(terrain, size, marks);
 }
 
@@ -471,18 +505,16 @@ ${specStrings.map((str, i) => `        <string id="${i}">${esc(str)}</string>\n`
 `;
 }
 
-/** Where the start town opens onto the world: the zone exit that leads to it. */
-function findTownEntrance(zones: E3Outdoor[], town: number): { sector: { x: number; y: number }; loc: { x: number; y: number } } {
-  for (let i = 0; i < zones.length; i++) {
-    const z = zones[i]!;
-    for (let e = 0; e < z.exitLocs.length; e++) {
-      const l = z.exitLocs[e]!;
-      if (z.exitDests[e] === town && !isUnusedLoc(l)) {
-        return { sector: { x: i % E3_ZONES_WIDE, y: Math.floor(i / E3_ZONES_WIDE) }, loc: l };
-      }
-    }
-  }
-  throw new Error(`no outdoor entrance leads to town ${town}`);
+/**
+ * Where the start town opens onto the world: the exit in zone `zone` that
+ * leads to it. Fort Emergence has one on each side, and a new game starts on
+ * the caves side (`FORT_START_ZONE`).
+ */
+function findTownEntrance(zones: E3Outdoor[], town: number, zone: number): { sector: { x: number; y: number }; loc: { x: number; y: number } } {
+  const z = zones[zone]!;
+  const e = z.exitLocs.findIndex((l, k) => z.exitDests[k] === town && !isUnusedLoc(l));
+  if (e < 0) throw new Error(`no outdoor entrance in zone ${zone} leads to town ${town}`);
+  return { sector: { x: zone % E3_ZONES_WIDE, y: Math.floor(zone / E3_ZONES_WIDE) }, loc: z.exitLocs[e]! };
 }
 
 export interface EmitSummary { sectors: number; towns: number; sheets: number }
@@ -609,7 +641,12 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   zones.forEach((z, i) => {
     const base = `out/out${i % E3_ZONES_WIDE}~${Math.floor(i / E3_ZONES_WIDE)}`;
     const spots = z.specialLocs.map((loc, k) => ({ loc, id: z.specialId[k] ?? 0 }));
-    const script = e3SpotScript(spots, { zone: i }, e3Src, (x, y) => z.terrain[x]?.[y] ?? 0, ZONE_SCRIPTS.get(i));
+    // The converter's own spot on each of Fort Emergence's two entrances.
+    const fort = FORT_ENTRANCES.find((e) => e.zone === i);
+    const own = ZONE_SCRIPTS.get(i);
+    if (fort) spots.push({ loc: fort.loc, id: FORT_ENTRANCE_SPOT });
+    const script = e3SpotScript(spots, { zone: i }, e3Src, (x, y) => z.terrain[x]?.[y] ?? 0, !fort ? own
+      : (b) => new Map([...own?.(b) ?? [], [FORT_ENTRANCE_SPOT, fortEntrance(fort.side)(b)]]));
     write(`${base}.xml`, sectorXml(z, i, strings, script));
     write(`${base}.map`, sectorMap(z, i, strings, script));
     write(`${base}.spec`, script.spec);
@@ -645,7 +682,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   write('scenario.spec', scen.spec);
   // Last, since the places' scripts can add shops of their own.
   shops.push(...talk.shops);
-  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town), shops, specialItems, scen.strings, newDay));
+  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay));
   const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(read)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
   progress(1);
