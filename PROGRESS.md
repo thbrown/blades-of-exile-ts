@@ -1306,7 +1306,8 @@ Notes for M2 implementer:
       buttons toggle flags 0x4c1–0x4c5; each press lists the settings in
       E3's own words (`dialogText`, `exeText` read them at conversion).
     - `show.ts xSEG:OFF` prints a script's literal.
-    - TODO(E3-3): the tower's level 3 (town 60) and basement (108) scripts.
+    - Level 3 (town 60, the pylon that needs all four spires down) and
+      the basement (108) too.
   - Next: the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.

@@ -1,6 +1,8 @@
 /**
  * The Tower of Shifting Floors, the golem factory: level 1 (town 32,
- * `FUN_1078_4491`) and level 2 (town 33, `FUN_1078_45b8`), message block 58.
+ * `FUN_1078_4491`) and level 2 (town 33, `FUN_1078_45b8`), message block 58;
+ * level 3 (town 60, `FUN_1088_4745`, block 62) and the basement (town 108,
+ * `FUN_10b8_3e9d`, block 66).
  * Its floors are conveyor belts (terrains 247–250, `tables.ts`).
  *
  * Level 2's control panel (dialog 0xd06, `FUN_1008_4d3e`, buttons handled by
@@ -85,9 +87,34 @@ function level2(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]>
   ]);
 }
 
+/** The four spires' flags: the pylon is safe once all four are down. */
+const SPIRES = [0x713, 0x71d, 0x727, 0x731].map((o) => f(o));
+
+function level3(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]> {
+  const allDown = SPIRES.reduceRight<Step[]>((then, flag) => [b.ifFlagEq(flag, 0, [b.msg(62, 1), b.blockMove()], then)],
+    [b.msg(62, 2, 3)]);
+  return new Map<number, Step[]>([
+    [1, [b.dialog(0xe13), b.setFlag(spot(1), 20)]],
+    [2, allDown],
+    [11, [b.askDialog(0xd7e, [b.changeTown(33, 0x20, 5)]), b.blockMove()]],
+  ]);
+}
+
+function basement(b: SpecBuilder): Map<number, Step[]> {
+  // TODO(E3-3): E3 also sets party+0x12e6 (`FUN_1080_022e`) on the way up.
+  return new Map<number, Step[]>([
+    [11, [b.dialog(0xff0)]],
+    [12, [b.ifTer(0x17, 0x1a, 0x6d, [b.msg(66, 0x2d), b.setTer(0x17, 0x1a, 0x6c), b.setTer(0x19, 0x1a, 0x6c)])]],
+    [14, [b.askDialog(0xd7f, [b.changeTown(33, 0x20, 0x24)]), b.blockMove()]],
+    [15, [b.askDialog(0xd7f, [b.changeTown(32, 0x17, 0x3c)]), b.blockMove()]],
+  ]);
+}
+
 export function shiftingFloors(town: number) {
   return (b: SpecBuilder): Map<number, Step[]> => {
     const spot = (id: number) => townSpotFlag(town, id);
+    if (town === 60) return level3(b, spot);
+    if (town === 108) return basement(b);
     return town === 32 ? level1(b, spot) : level2(b, spot);
   };
 }
