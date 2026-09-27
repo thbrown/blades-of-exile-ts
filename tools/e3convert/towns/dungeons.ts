@@ -6,6 +6,7 @@
 
 import { DamageType } from '../../../src/data/monster';
 import { FieldType } from '../../../src/data/fields';
+import { e3DeathFlag } from '../flags';
 import { e3TownMessageBlock, type PlaceScript } from '../specials';
 import { partyFlag as f, partySpecItem, townSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
 
@@ -471,6 +472,198 @@ function defiledCrypt(b: SpecBuilder): Map<number, Step[]> {
   ]);
 }
 
+/** The Guarded Tunnel's creature 9, whose being alive sounds the alarm (spot 2). */
+export const TUNNEL_GUARD_DEAD = e3DeathFlag(2);
+
+/** The Guarded Tunnel (town 61), the back way into Blackcrag: `FUN_1088_4f13`, block 62. */
+function guardedTunnel(b: SpecBuilder): Map<number, Step[]> {
+  const B = 62, spot = (id: number) => townSpotFlag(61, id);
+  /** The bridge: 1 while solid (spot 16's button toggles it). */
+  const bridge = spot(1);
+  /** The armour at the portcullis: 1 woken, 2 once the bridge was looked at. */
+  const armour = spot(9);
+  return new Map<number, Step[]>([
+    // The ethereal bridge: whoever is on it falls through (in combat, the active PC).
+    [1, [b.ifFlagEq(bridge, 0, [b.msg(B, 6), b.slayParty(3)])]],
+    // The alarm, unless flag 0x107 says the party is expected.
+    // TODO(E3-3): E3 also spares a party that creature 9 is friendly with.
+    [2, [b.ifFlagEq(f(0x107), 0, [b.ifFlagEq(TUNNEL_GUARD_DEAD, 0, [b.msg(B, 0xa), b.makeTownHostile()])],
+      [b.msg(B, 0xb), b.setFlag(spot(2), 20)])]],
+    [3, [b.onceMsg(spot(3), B, 0xc)]],
+    // Beams of light: two in three of the party turn to stone.
+    ...[4, 5, 6].map((id): [number, Step[]] => [id, [b.askDialog(0xe1c, [
+      b.msg(B, 0xd), b.eachPc(() => [b.ifChance(67, [b.slayParty(4)])]), b.setFlag(spot(id), 20),
+    ], [b.blockMove()])]]),
+    [9, [b.ifFlagEq(armour, 0, [b.msg(B, 9), b.bringIn(200, 1), b.setFlag(armour, 1)],
+      [b.ifFlagEq(armour, 2, [b.setTer(9, 3, 0)])])]],
+    [11, [b.ifOnHorse([b.log(0x1088, 0x4efb)], [b.askDialog(0xe1a, [b.changeTown(0x22, 0x3a, 0xa)])]), b.blockMove()]],
+    [14, [b.ifTer(9, 3, 0, [], [b.msg(B, 5), b.setTer(9, 3, 0)])]],
+    [15, [b.ifFlagEq(bridge, 0, [b.msg(B, 8)], [b.msg(B, 7)]), b.ifFlagEq(armour, 1, [b.setFlag(armour, 2)])]],
+    [16, [b.askDialog(0xe1b, [b.ifFlagEq(bridge, 0, [b.setFlag(bridge, 1)], [b.setFlag(bridge, 0)])])]],
+  ]);
+}
+
+/**
+ * The Great Circle (town 62), where the stone circles lead: `FUN_1088_5233`,
+ * block 62. Smashing the altar frees three haakai, who want everything.
+ */
+function greatCircle(b: SpecBuilder): Map<number, Step[]> {
+  const B = 62, spot = (id: number) => townSpotFlag(62, id);
+  const smash = (): Step[] => [
+    b.setFlag(f(0x867), 1), b.setFlag(spot(1), 20), b.townVisible(62),
+    b.askDialog(0xe27, [
+      // TODO(E3-3): E3 also takes every magic item the party carries, and
+      // those lying here; no node can.
+      b.msg(B, 0xf), (next) => b.node('gold', { ex1: [30000, 1] }, next), b.msg(B, 0x13),
+    ], [b.msg(B, 0x10), b.bringIn(200, 1)]),
+  ];
+  return new Map<number, Step[]>([
+    // After three stone circles (flag 0xb41), the compulsion can't be refused.
+    [1, [b.askDialog(0xe26, smash(), [b.ifFlagBelow(f(0xb41), 3, [b.blockMove()], [b.msg(B, 0x11), ...smash()])])]],
+  ]);
+}
+
+/** The New Factory (town 63), the golems' workshop: `FUN_1088_5402`, block 62. */
+function newFactory(b: SpecBuilder): Map<number, Step[]> {
+  const B = 62, spot = (id: number) => townSpotFlag(63, id);
+  const button = (then: Step[]): Step[] => [b.askDialog(0xe2e, then)];
+  return new Map<number, Step[]>([
+    [1, [b.onceMsg(spot(1), B, 0x15, 0x1d)]],
+    [2, [b.onceMsg(spot(2), B, 0x17)]],
+    [11, [b.ifInCombat([b.blockMove()], [b.askDialog(0xe2e, [b.msg(B, 0x16), b.moveParty(0x28, 0xa), b.blockMove()])])]],
+    // A box of gruel that fills itself again.
+    [12, [b.askDialog(0xe2f, [b.msg(B, 0x19), b.addFood(10)])]],
+    // Buttons that turn the belts: row y 44 east or west, and x 36 north.
+    [14, button([b.msg(B, 0x18), ...Array.from({ length: 0x14 }, (_, k) => b.setTer(0x16 + k, 0x2c, 0xf8))])],
+    [15, button([b.msg(B, 0x18), ...Array.from({ length: 0x14 }, (_, k) => b.setTer(0x16 + k, 0x2c, 0xfa))])],
+    [16, button([b.msg(B, 0x18), ...[0x11, 0x12, 0x13].map((y) => b.setTer(0x24, y, 0xf7))])],
+    [17, button([b.msg(B, 0x1e), b.swapTer(0x24, 0x1c, 0x8c, 0x8d)])],
+    // The floor's fire traps, 20d6 each.
+    ...Array.from({ length: 10 }, (_, k): [number, Step[]] => [20 + k, [b.e3Boom(0x14)]]),
+    // The floor starts to shift, while (39,28) is still floor (E3: terrain below 5).
+    [30, [b.ifTer(0x27, 0x1c, 0xfa, [], [b.msg(B, 0x1a), b.setTer(0x27, 0x1c, 0xfa), b.setTer(0x28, 0x1c, 0xfa)])]],
+  ]);
+}
+
+/** The Generic Dungeon (town 65), behind the pants in Rentar-Ihrno's keep: `FUN_1088_58a1`, block 62. */
+function genericDungeon(b: SpecBuilder): Map<number, Step[]> {
+  const B = 62, spot = (id: number) => townSpotFlag(65, id);
+  return new Map<number, Step[]>([
+    [1, [b.giveItemDialog(0xe42, spot(1), 0x23)]],
+    ...[2, 3, 4].map((id): [number, Step[]] => [id, [b.msg(B, id + 0x21), b.bringIn(id + 0xc6, 1), b.setFlag(spot(id), 20)]]),
+    [5, [b.lever([b.msg(B, 0x28), b.swapTer(0x2a, 9, 0x6c, 0x6d)])]],
+    [6, [b.changeTown(0x26, 0x14, 0x3a)]],
+  ]);
+}
+
+/** The Tower of Zkal (town 70): `FUN_1088_3b05`, block 63. Teleporters everywhere. */
+function zkal(b: SpecBuilder): Map<number, Step[]> {
+  const B = 63, spot = (id: number) => townSpotFlag(70, id);
+  const teleports: [number, number][] = [[9, 9], [0x24, 0xb], [0xc, 0x26], [9, 0x16], [0x1c, 0x2e],
+    [1, 0x2d], [0x1a, 0xf], [0x2a, 0x27], [5, 0x16], [0x1a, 0x16]];
+  return new Map<number, Step[]>([
+    [1, [b.onceMsg(spot(1), B, 0x22, 0x23)]],
+    [11, [b.askDialog(0xd7e, [b.changeTown(0x47, 0xd, 2)]), b.blockMove()]],
+    ...teleports.map(([x, y], k): [number, Step[]] => [14 + k, [b.askDialog(0xe74, [b.moveParty(x, y), b.blockMove()])]]),
+    [24, [b.lever([b.msg(B, 0x26), b.swapTer(0x23, 1, 0x6c, 0x6d)])]],
+  ]);
+}
+
+/**
+ * Zkal's level 2 (town 71): `FUN_1088_3d98`, block 63. Its four teleporters
+ * (spots 20–23) move a maze state (flag (71,8)) through DGROUP 0x1d9c's
+ * table, lighting one of four markers; 5 is the way out.
+ */
+const ZKAL_PADS = [1, 1, 0, 0, 0, 2, 1, 1, 1, 2, 3, 0, 3, 5, 2, 2];
+const ZKAL_MARKERS: [number, number][] = [[0x28, 0x28], [0x28, 0x2c], [0x2c, 0x28], [0x2c, 0x2c]];
+
+function zkal2(b: SpecBuilder): Map<number, Step[]> {
+  const B = 63, spot = (id: number) => townSpotFlag(71, id);
+  const state = spot(8), seen = spot(7);
+  const pad = (p: number): Step[] => [b.askDialog(0xe74, [b.switchFlag(state, [0, 1, 2, 3].map((st) => {
+    const v = ZKAL_PADS[st * 4 + p]!;
+    if (v === 5) return [b.moveParty(0x22, 0x2d)];
+    return [
+      b.ifFlagEq(seen, 0, [b.setFlag(seen, 1), b.msg(B, 0x28)]), b.setFlag(state, v),
+      ...ZKAL_MARKERS.map(([x, y], m) => b.setTer(x, y, m === v ? 1 : 0)),
+    ];
+  }))]), b.blockMove()];
+  const noCombat = (literal: number, then: Step[]): Step[] =>
+    [b.ifInCombat([b.log(0x1088, literal), b.blockMove()], then)];
+  return new Map<number, Step[]>([
+    ...[1, 2, 3, 4].map((id): [number, Step[]] => [id, [b.trap(0xd7a, spot(id), 0x14)]]),
+    // Crushing walls behind a vanished door.
+    [5, noCombat(0x3d5a, [b.msg(B, 0x24), b.setTer(0x1e, 0x2e, 0x75), b.setTer(0x1e, 0x1b, 0x75),
+      b.setFlag(spot(5), 20), b.setTer(0x1f, 0x24, 100)])],
+    [6, noCombat(0x3d79, [b.msg(B, 0x27),
+      ...Array.from({ length: 7 }, (_, k) => 0x28 + k).flatMap((x) => [b.setTer(x, x === 0x2e ? 2 : 1, 0x75), b.setTer(x, 0xa, 0x75)]),
+      b.setFlag(spot(6), 20)])],
+    [11, [b.askDialog(0xe74, [b.moveParty(0x2a, 0x2b), b.blockMove()])]],
+    [12, [b.askDialog(0xe74, [b.moveParty(0xc, 0x1e), b.blockMove()])]],
+    [14, [b.askDialog(0xd7f, [b.changeTown(0x46, 1, 0xe)]), b.blockMove()]],
+    [15, [b.lever([b.msg(B, 0x26), b.swapTer(0x23, 0x17, 0x6c, 0x6d)])]],
+    [16, [b.askDialog(0xe74, [b.moveParty(0xc, 0x1e), b.blockMove()])]],
+    [17, [b.lever([b.msg(B, 0x26), b.swapTer(0x27, 9, 0x6c, 0x6d), b.swapTer(0x26, 0xa, 0x6c, 0x6d)])]],
+    ...[0, 1, 2, 3].map((p): [number, Step[]] => [20 + p, pad(p)]),
+  ]);
+}
+
+/** Converter scratch: how many of the Remote Cave's seven tiles show 150. */
+const TILES_LIT: Flag = [291, 29];
+
+/**
+ * The Remote Cave (town 72), a rakshasa's puzzles: `FUN_1088_488c`, block 63.
+ * Its tiles (spots 20–26) each flip some of seven floor squares on row 38
+ * between 150 and 165; with exactly one showing 150, (38,44) opens.
+ */
+function remoteCave(b: SpecBuilder): Map<number, Step[]> {
+  const B = 63, spot = (id: number) => townSpotFlag(72, id);
+  /** The walk puzzle: spots 17, 16, then 15, in that order (flag (72,8)). */
+  const walk = spot(8);
+  /** The pushing floor (spots 30–31) works while flag (72,7) is 1. */
+  const push = spot(7);
+  const tiles = [0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21];
+  const flips: Record<number, number[]> = {
+    20: [0x1b, 0x1d], 21: [0x1c, 0x20, 0x21], 22: [0x1c, 0x1d], 23: [0x1f, 0x20, 0x21],
+    24: [0x1c, 0x1d], 25: [0x1e], 26: [0x1e, 0x1d, 0x1f],
+  };
+  const tile = (id: number): Step[] => [
+    b.log(0x1088, 0x487e), ...flips[id]!.map((x) => b.swapTer(x, 0x26, 0x96, 0xa5)),
+    b.setFlag(TILES_LIT, 0), ...tiles.map((x) => b.ifTer(x, 0x26, 0x96, [b.incFlag(TILES_LIT)])),
+    b.ifFlagEq(TILES_LIT, 1, [b.setTer(0x26, 0x2c, 0)], [b.setTer(0x26, 0x2c, 0x5f)]),
+  ];
+  const noCombat = (then: Step[]): Step[] => [b.ifInCombat([b.log(0x1088, 0x4854), b.blockMove()], then)];
+  /** The pushing floor moves the party one square along y. */
+  const shove = (id: number, dy: number): Step[] => [b.ifInCombat([], [b.ifFlagEq(push, 1, [
+    b.moveParty(b.spotAt(id).x, b.spotAt(id).y + dy), b.blockMove(),
+  ])])];
+  return new Map<number, Step[]>([
+    ...[1, 2, 3].map((id): [number, Step[]] => [id, [b.msg(B, 0x38), b.bringIn(199 + id, 1), b.setFlag(spot(id), 20)]]),
+    [8, [b.msg(B, 0x3a)]],
+    [9, [b.ifFlagEq(f(0x35d), 0, [b.msg(B, 0x39), b.blockMove()])]],
+    [11, [b.askDialog(0xd7e, [b.changeTown(0x49, 0x12, 0x24)]), b.blockMove()]],
+    [12, [b.askDialog(0xd7e, [b.changeTown(0x49, 0x17, 6)]), b.blockMove()]],
+    [14, [b.setFlag(walk, 0)]],
+    [15, [b.ifFlagEq(walk, 2, noCombat([b.moveParty(0x12, 0x27), b.blockMove()]))]],
+    [16, [b.ifFlagEq(walk, 1, [b.setFlag(walk, 2)])]],
+    [17, [b.ifFlagEq(walk, 0, [b.setFlag(walk, 1)])]],
+    [18, [b.placeFieldRect(2, 0x19, 0x12, 0x27, FieldType.WALL_BLADES)]],
+    [19, noCombat([b.moveParty(8, 0x18), b.blockMove()])],
+    ...[20, 21, 22, 23, 24, 25, 26].map((id): [number, Step[]] => [id, tile(id)]),
+    [28, [b.setTer(0x20, 0xd, 0x5f)]],
+    [29, [b.setTer(0x20, 0xd, 0)]],
+    [30, shove(30, 1)], [31, shove(31, -1)],
+    [32, [b.ifFlagEq(push, 0, [b.setFlag(push, 1)])]],
+    [33, [b.log(0x1088, 0x4885), b.setFlag(push, 2)]],
+  ]);
+}
+
+/**
+ * A town with no case in the town handler's switch (`FUN_10c0_0000`): its
+ * spots below 100 do nothing, and say so here rather than stay unlisted.
+ */
+const noHandler = (): Map<number, Step[]> => new Map(Array.from({ length: 100 }, (_, id): [number, Step[]] => [id, []]));
+
 /** The four plagues' flags: any set means the party has done something. */
 const CLEARED_ANY = [f(0xc85), f(0xc87), f(0xc8a), f(0xc8c)];
 
@@ -496,5 +689,15 @@ export const DUNGEON_SCRIPTS = new Map<number, PlaceScript>([
   [57, sulfrasLair],
   [58, chasmOfScreams],
   [59, defiledCrypt],
+  [61, guardedTunnel],
+  [62, greatCircle],
+  [63, newFactory],
+  [65, genericDungeon],
+  [70, zkal],
+  [71, zkal2],
+  [72, remoteCave],
+  // "Name" and "Anim Data": towns E3's handler has no case for.
+  [66, noHandler],
+  [84, noHandler],
   [97, sacredItem(97)],
 ]);

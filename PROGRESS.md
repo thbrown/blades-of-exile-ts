@@ -1377,6 +1377,17 @@ Notes for M2 implementer:
       cloud. `FUN_1038_0906`/`0cf8`/`0dfc` make force, ice and blade walls.
     - New steps: `giveItemUntilFull` (a loop), `placeFieldRect`;
       `townVisible(t, false)` takes a town off the map.
+  - 2026-09-26: **towns 61–72** (`towns/dungeons.ts`): the Guarded Tunnel,
+    the Great Circle, the New Factory, the Generic Dungeon, both levels of
+    the Tower of Zkal (level 2's teleporter maze: a state and a table at
+    DGROUP 0x1d9c) and the Remote Cave (a walk puzzle, a tile puzzle, a
+    pushing floor). Towns 66 and 84 have no case in E3's town handler, so
+    their spots are registered as doing nothing (`noHandler`).
+    - `slayParty` takes dust (3) and stone (4); aimed at one PC it is
+      `FUN_10b0_9e2d(pc, status)`. New steps: `addFood` (silent, in 8s).
+    - The Guarded Tunnel's creature 9 has a death flag (`e3DeathFlag(2)`).
+    - TODO(E3-3): the Great Circle's demons take the party's magic items
+      as well as its gold; no node can.
   - Next: the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.

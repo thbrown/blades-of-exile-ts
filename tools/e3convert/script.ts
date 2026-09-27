@@ -414,10 +414,13 @@ export class SpecBuilder {
 
   /**
    * `FUN_10b0_95db(mode)`: BoE 1997's `slay_party`, every living PC's
-   * `main_status` becomes `mode` (0 gone, 2 dead), which ends the game.
+   * `main_status` becomes `mode` (0 gone, 2 dead, 3 dust, 4 stone), which
+   * ends the game. Aimed at one PC (after `eachPc`, or the active PC in
+   * combat, the engine's default target) it is `FUN_10b0_9e2d(pc, mode)`.
    */
-  slayParty(mode: 0 | 2): Step {
-    return (next) => this.node('death', { ex1: [mode === 0 ? 5 : 0, 1] }, next);
+  slayParty(mode: 0 | 2 | 3 | 4): Step {
+    const kill: Record<number, number> = { 0: 5, 2: 0, 3: 1, 4: 2 };
+    return (next) => this.node('death', { ex1: [kill[mode]!, 1] }, next);
   }
 
   /**
@@ -1029,6 +1032,19 @@ export class SpecBuilder {
   /** The target loses `n` spell points (AFFECT_SP's take arm), down to 0. */
   drainSp(n: number): Step {
     return (next) => this.node('sp', { ex1: [n, 1] }, next);
+  }
+
+  /**
+   * `food += n` silently, as E3 adds to the word: AFFECT_FOOD's take arm with
+   * negative amounts, at most 9 a node (-10 and less are pointers).
+   */
+  addFood(n: number): Step {
+    const steps: Step[] = [];
+    for (let left = n; left > 0; left -= 8) {
+      const k = Math.min(8, left);
+      steps.push((next) => this.node('food', { ex1: [-k, 1] }, next));
+    }
+    return this.seq(steps);
   }
 
   /** `FUN_1070_09e1(n, 1)`: the party loses `n` food (down to 0), silently. */

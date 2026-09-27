@@ -34,7 +34,7 @@ import { filthFactory } from './towns/filthFactory';
 import { castleTroglo } from './towns/castleTroglo';
 import { cavesOfGiants } from './towns/cavesOfGiants';
 import { shiftingFloors } from './towns/shiftingFloors';
-import { DUNGEON_SCRIPTS } from './towns/dungeons';
+import { DUNGEON_SCRIPTS, TUNNEL_GUARD_DEAD } from './towns/dungeons';
 import { newCotra } from './towns/newCotra';
 import { tinraya } from './towns/tinraya';
 import { PANTS_CLASS, RENTAR_DEATH_FLAGS, rentarKeep } from './towns/rentarKeep';
@@ -288,7 +288,7 @@ function creatureTimeXml(c: E3CreatureStart): string {
 }
 
 /** Death flags the converter gives creatures E3 asks about (`e3DeathFlag`), by `town:slot`. */
-const DEATH_FLAGS = new Map<string, [number, number]>([...SHARIMIK_DEATH_FLAGS, ...RENTAR_DEATH_FLAGS]);
+const DEATH_FLAGS = new Map<string, [number, number]>([...SHARIMIK_DEATH_FLAGS, ...RENTAR_DEATH_FLAGS, ['61:9', TUNNEL_GUARD_DEAD]]);
 
 function creatureXml(c: E3CreatureStart, id: number, personality: number, deathFlag?: [number, number]): string {
   // `spec1`/`spec2` is the creature's death flag: END_DIE sets it, and a town
