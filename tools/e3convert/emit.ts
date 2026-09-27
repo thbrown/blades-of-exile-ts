@@ -204,7 +204,7 @@ function terrainXml(types: E3TerrainType[]): string {
         <trim>none</trim>
         <ground>0</ground>
         <trim-for>-1</trim-for>
-        <arena>0</arena>
+        <arena>${t.arena}</arena>
 ${specialXml(t, id)}
     </terrain>
 `);
@@ -473,6 +473,7 @@ function scenarioXml(
     </author>
     <feature-flags>
         <use-special-spots>exile3</use-special-spots>
+        <outdoor-arena>exile3</outdoor-arena>
     </feature-flags>
     <text>
         <teaser>The surface world is dying. Find out why.</teaser>

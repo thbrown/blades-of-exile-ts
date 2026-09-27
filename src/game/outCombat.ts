@@ -19,6 +19,7 @@ import { defaultTownperson } from '../data/town';
 import { MainStatus, Status } from '../universe/skills';
 import { ItemType } from '../data/item';
 import { placeItem } from './loot';
+import { createE3OutCombatTerrain } from './e3Arena';
 import { Universe } from '../universe/universe';
 import { GameMode } from './modes';
 import { NO_ONE, pickNextPc, setPcMoves, HOR_VERT_PLACE } from './combat';
@@ -267,11 +268,18 @@ export function startOutdoorCombat(
   arenaTown.name = 'Combat';
   arenaTown.inTownRect = { top: 0, left: 0, bottom: 47, right: 47 };
   const terType = univ.out.at(where.x, where.y);
-  createOutCombatTerrain(
-    univ, arenaTown, terType, numWalls, univ.out.isRoad(where.x, where.y));
+  // An exile-js extension: Exile III builds its arenas its own way
+  // (`e3Arena.ts`), and leaves a few items lying in them.
+  const e3 = univ.scenario.featureFlags['outdoor-arena'] === 'exile3';
+  const loot = e3 ? createE3OutCombatTerrain(univ, arenaTown, terType, numWalls) : [];
+  if (!e3) createOutCombatTerrain(univ, arenaTown, terType, numWalls, univ.out.isRoad(where.x, where.y));
   const town = new CurTown(arenaTown, univ);
   univ.town = town;
   session.arena = arenaTown;
+  for (const { item, where: at } of loot) {
+    const stored = univ.scenario.scenItems[item];
+    if (stored) placeItem(univ, { ...stored }, at);
+  }
 
   for (let i = 0; i < 7; i++) {
     const which = encounter.monst[i] ?? 0;

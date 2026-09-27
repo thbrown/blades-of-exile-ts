@@ -20,6 +20,15 @@ import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { emitScenario } from '../tools/e3convert/emitNode';
 import { findE3Dir } from '../tools/e3convert/install';
+import { neAutoDataSegment, readNeSegment } from '../tools/e3convert/ne';
+import { GameRng } from '../src/core/rng';
+import { Town } from '../src/data/town';
+import { Universe } from '../src/universe/universe';
+import { PartyPreset } from '../src/universe/player';
+import {
+  createE3OutCombatTerrain, E3_ARENA_GROUND, E3_ARENA_ODDS, E3_ARENA_STAMP_LOCS, E3_ARENA_WALLS,
+  E3_CAVE_LAKE, E3_CAVE_PILLAR, E3_MNTN_PILLAR, E3_SURF_LAKE,
+} from '../src/game/e3Arena';
 
 const dir = findE3Dir();
 
@@ -94,6 +103,34 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(scen.terTypes[103]?.flag1).toBe(107);
     expect(scen.terTypes[107]?.name).toBe('Open Door');
     expect(scen.terTypes[104]?.special).toBe(TerSpec.UNLOCKABLE);
+  });
+
+  it("builds outdoor arenas from E3's own tables", () => {
+    // The engine's copies of FUN_10d8_342b's tables match EXILE3.EXE's.
+    const exe = new Uint8Array(readFileSync(join(dir as string, 'EXILE3.EXE')));
+    const ds = readNeSegment(exe, neAutoDataSegment(exe));
+    const words = (at: number, n: number) => Array.from({ length: n }, (_, i) => ds[at + 2 * i]! | (ds[at + 2 * i + 1]! << 8));
+    expect(words(0x3a50, 14)).toEqual(E3_ARENA_GROUND);
+    expect(words(0x3a6c, 14)).toEqual(E3_ARENA_WALLS);
+    expect(Array.from({ length: 14 }, (_, a) => words(0x3ae6 + 20 * a, 10))).toEqual(E3_ARENA_ODDS);
+    expect(Array.from({ length: 15 }, (_, i) => [ds[0x3a88 + 2 * i], ds[0x3a89 + 2 * i]])).toEqual(E3_ARENA_STAMP_LOCS);
+    const bytes = (at: number) => Array.from(ds.subarray(at, at + 16));
+    expect([bytes(0x3aa6), bytes(0x3ab6), bytes(0x3ac6), bytes(0x3ad6)])
+      .toEqual([E3_CAVE_PILLAR, E3_MNTN_PILLAR, E3_SURF_LAKE, E3_CAVE_LAKE]);
+    // Each terrain carries its arena kind, and the scenario asks for E3's arenas.
+    expect(scen.featureFlags['outdoor-arena']).toBe('exile3');
+    expect(scen.terTypes.map((t) => t.combatArena)).toEqual(words(0x3850, 256).map((w) => (w << 16) >> 16));
+    // A grass arena is grass and E3's plants inside E3's border, and nothing
+    // from BoE's numbering (BoE's border is 90, E3's swamp).
+    const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
+    const arena = new Town(48);
+    createE3OutCombatTerrain(univ, arena, 2, 0);
+    expect(arena.terrain[0]![5]).toBe(86);
+    const inside = new Set(arena.terrain.slice(9, 35).flatMap((col) => col.slice(9, 35)));
+    for (const t of inside) expect([2, 3, 4, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 61, 90, 91, 93, 94]).toContain(t);
+    // A road is paved with walkway down the middle.
+    createE3OutCombatTerrain(univ, arena, 233, 0);
+    expect(arena.terrain[20]![20]).toBe(245);
   });
 
   it("has E3's monsters, with E3's own stats and sprites", () => {

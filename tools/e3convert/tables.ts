@@ -29,6 +29,11 @@ export interface E3TerrainType {
   boat: boolean;
   /** What happens when the party moves into it; null for nothing. */
   special: E3TerrainSpecial | null;
+  /**
+   * The kind of outdoor combat arena fought on it (`DS:3850`, int16s, read by
+   * `FUN_10d8_342b`): 0–13, an index into `src/game/e3Arena.ts`'s tables.
+   */
+  arena: number;
 }
 
 /**
@@ -88,6 +93,9 @@ function boatPassable(t: number): boolean {
     || t === 0x47 || t === 0x4a || t === 0x4b || t === 0x56;
 }
 
+/** `DS:3850`: each terrain's arena kind, the first of `FUN_10d8_342b`'s tables. */
+export const E3_ARENA_KINDS = 0x3850;
+
 export function readE3Terrain(exe: Uint8Array, strings: Map<number, string>): E3TerrainType[] {
   // `terrain_pic[256]`: segment 33 (`1100:00a0`), little-endian int16s.
   const seg33 = readNeSegment(exe, 33);
@@ -95,11 +103,13 @@ export function readE3Terrain(exe: Uint8Array, strings: Map<number, string>): E3
   // `terrain_blocked[256]` at `DS:1c7e`, read by `FUN_1080_14f9` (blocked if >= 3).
   const ds = readNeSegment(exe, neAutoDataSegment(exe));
   const blocked = ds.subarray(0x1c7e, 0x1c7e + E3_TERRAIN_COUNT);
+  const arenas = new DataView(ds.buffer, ds.byteOffset + E3_ARENA_KINDS, E3_TERRAIN_COUNT * 2);
   return Array.from({ length: E3_TERRAIN_COUNT }, (_, t) => ({
     name: strings.get(301 + t) ?? `Terrain ${t}`,
     pic: pics.getInt16(t * 2, true),
     blockage: blocked[t] ?? 0,
     boat: boatPassable(t),
+    arena: arenas.getInt16(t * 2, true),
     special: SIGN_TERRAINS.has(t) ? { kind: 'sign' }
       : t >= 247 && t <= 250 ? { kind: 'belt', dir: (t - 247) * 2 } : doorSpecial(t),
   }));

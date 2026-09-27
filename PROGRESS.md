@@ -13188,17 +13188,29 @@ The user's notes after playing Exile III, and what each turned out to be:
   became `box`). The published site was built before that commit, and so
   was a stale local conversion. Searching (Look) the dresser at (58,4) from
   (58,5) now offers the gold.
-- **The slime fight's paintings and crossed swords: outdoor combat arenas are
-  BoE's.** `createOutCombatTerrain` (`game/outCombat.ts`) floors and scatters
-  the arena with BoE terrain numbers (grass 2/3/4, trees 112–115, walls 6/9,
-  border 90, …). In E3's terrain list those numbers are other things. E3
-  builds its arena in `FUN_10d8_342b` (exile3.c:66476), BoE's
-  `create_out_combat_terrain` with its own tables, copied from `DS:3850` on:
-  terrain → arena kind, ground, odds, lake/pillar/camp stamps and road strips.
-  A post-pass jump table of 10 terrain values (at `10d8:3bf8`) wasn't
-  recovered by Ghidra. **Open**: needs an engine hook for per-scenario arena
-  tables (or E3's builder behind a scenario flag), and those tables read from
-  the EXE.
+- **The slime fight's paintings and crossed swords: outdoor combat arenas
+  were BoE's.** `createOutCombatTerrain` floors and scatters the arena with
+  BoE terrain numbers, which are other things in E3's list. **Fixed
+  2026-09-27**: `src/game/e3Arena.ts` ports E3's own builder,
+  `FUN_10d8_342b` (exile3.c:66476), behind a new scenario feature flag,
+  `outdoor-arena` = `exile3`. It follows the `use-special-spots` precedent,
+  an exile-js extension. Each E3 terrain's `<arena>` is E3's arena kind (the
+  table at `DS:3850`, read by `tables.ts`). The other tables are copied into
+  `e3Arena.ts`, and `test/e3convert.test.ts` reads them back out of the EXE
+  to check them. How E3's builder differs from BoE's:
+  - 14 arena kinds, and no fumaroles, camps or crops;
+  - road and bridge strips are Walkway (245), and the road test is the
+    party's terrain (232–234);
+  - the east wall stands at x = 32;
+  - walls get corner pieces, though a mountain arena's never do: E3 tests
+    them with the cave pieces;
+  - a last pass leaves rocks (items 9 and 10) and sticks (item 11). This is
+    the "jump table Ghidra couldn't recover": it's a `cs:3d23` value/handler
+    table, read with `nedis.py`.
+  - `TODO(E3-3)`: E3's own wall count (its caller, `1018:0111`) isn't checked
+    against BoE's `count_walls`.
+- **`nedis.py` needs capstone.** `pip install capstone` into a venv works
+  (the system Python is externally managed).
 - **The scenario library was never committed.** `.gitignore`'s `library/`
   (meant for the downloads at the root) also matches `docs/library/`, so
   commit 74cce62 ("Build the site with the scenario library embedded")
