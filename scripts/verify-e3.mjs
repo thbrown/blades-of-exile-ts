@@ -147,9 +147,11 @@ const walkOut = (maxSteps = 1000) => page.evaluate(async (maxSteps) => {
     const rec = s.univ.town.record;
     const r = rec.inTownRect;
     const size = rec.terrain.length;
+    // Blocked squares a step can open: doors (step-change 1, unlock 9).
+    // Not every special: a dresser is a blocked `box`.
     const passable = (x, y) => {
       const t = s.univ.terrainType(rec.terrain[x][y]);
-      return t.blockage < 3 || t.special !== 0;
+      return t.blockage < 3 || t.special === 1 || t.special === 9;
     };
     const start = s.univ.party.townLoc;
     const prev = new Map([[`${start.x},${start.y}`, null]]);

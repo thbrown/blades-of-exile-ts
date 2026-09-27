@@ -13220,6 +13220,8 @@ The user's notes after playing Exile III, and what each turned out to be:
   scenarios" section sets out the fair-use reasoning and the removal policy.
   Removal purges git history, and a request has to be tied to the author,
   since anyone can ask under any name.
-- Also found, **not fixed**: `scripts/verify-e3.mjs` fails on HEAD as well as
-  with these changes. Its walk out of the fort is blocked on the first step
-  from (59,6), and the ferry and thugs checks fail after it.
+- **`scripts/verify-e3.mjs` failed on HEAD too, fixed 2026-09-27.** Its
+  path-finder treated any blocked terrain with a special as a door. Once
+  cd74bdf made dressers `box`, it planned a route through the dresser beside
+  the start, and every later check failed after it. Only step-change and
+  unlock count now.
