@@ -1515,8 +1515,45 @@ Notes for M2 implementer:
       the zone doc comments had copied that; both fixed. The message block
       is still `zone / 10 + 80`: that is E3's own arithmetic.
     - TODO(E3-3): zone 23/2 tests `can_find_town[76]`, like zone 14/1.
-  - Next: zones 45–88 (176 spots), 35 talk scripts, and the demon plot's
-    countdown. The talk types are listed by `listTalkScripts.ts`.
+  - 2026-09-27: **zones 45–79** (`FUN_10a8_0100`, zone switch at
+    `10a8:2910` indexed by zone − 45; zones 52, 53 and 62 have no arm).
+    Coverage: 1,396 done, 47 to go, all in zones 80–88. Not tried in the UI.
+    New:
+    - Shop types 5–9 are the five magic shops (`E3ShopType.MAGIC_SHOPS`);
+      `b.shop` sends them to the scenario's first five, like the talk nodes.
+      **ENTER_SHOP ends the script**, so whatever E3 does after the call
+      (block the step, move the merchant on) goes before it.
+    - The Wandering Merchant (zones 57 and 58) moves through six stops by
+      `zoneSpotFlag(57, 9) % 6`; kept below 6 instead, which differs only
+      once E3's byte wraps.
+    - `b.loop(again => …)` (a `nop` head, for zone 68's dig-again mine),
+      `switchFlag`'s `otherwise`, `ifSpecies` (IF_SPECIES: E3's race word
+      is PC +0x71c, just past the fifteen trait bytes at +0x70d), and
+      `ifTakeItemOfClass` (`FUN_1070_079e` once).
+    - `FUN_10b0_a395` is `a3e3`'s twin for trait 4, Cave Lore (+0x711).
+      `FUN_1070_05a5(item)` is `0564` without the message.
+    - `f(offset)` works below the flags too: zone 48's `es:[0xac]` is `f(0xac)`.
+    - TODO(E3-3): zone 45/8 tests `can_find_town[26]`, like 14/1 and 23/2;
+      zone 68's dig plays sound 39.
+    - Suspected bug #6: the Nephilim village's "you helped us" welcome
+      (zone 76 slot 9 = 1, also tested by the town's entry at `10c0:07c2`)
+      is never set.
+  - 2026-09-27: **zones 80–88** (`FUN_10a8_2acc`, zone switch at
+    `10a8:3b3f` indexed by zone − 80; here `si` is the zone, `di` the spot,
+    and the block is pushed as 0x58). **Every outdoor zone is now
+    transcribed**: coverage 1,438 done, 5 to go, all old town leftovers
+    (towns 20, 22, 23 and 80). Not tried in the UI.
+    - Zone 83/12's food stall is a real shop now, and its overrun farms
+      refuse the step, as E3's do (they didn't).
+    - Zone 86 switches on its spot through a value table (`cs:0x3ac3`: six
+      spot numbers, then six handlers), not a jump table.
+    - `ferry()` for the islands' boat rides; `ifAlchemy` (IF_RECIPE, E3's
+      `party.alchemy[k]` at +0x831e + k); zone 80's hidden channels test the
+      terrain beside the spot with `if-ter`.
+    - TODO(E3-3): zone 84/11 tests `can_find_town[22]`; 84/5 plays sound 54.
+    - Suspected bug #7: zone 85's ferry back is free though it says it charges.
+  - Next: 35 talk scripts, the demon plot's countdown, and the town
+    leftovers above. The talk types are listed by `listTalkScripts.ts`.
 
 ## Key references (do not lose)
 

@@ -14,7 +14,7 @@
 import type { E3Dialog } from './ne';
 import { DamageType } from '../../src/data/monster';
 import { e3Event, e3Flag } from './flags';
-import type { E3ShopType } from './shops';
+import { E3ShopType } from './shops';
 
 export type Flag = [row: number, col: number];
 
@@ -146,6 +146,18 @@ export class SpecBuilder {
   /** Runs steps in order, then `next`. */
   seq(steps: Step[]): Step {
     return (next) => steps.reduceRight((after, step) => step(after), next);
+  }
+
+  /**
+   * A loop: `body` runs, and wherever it places `again` control returns to
+   * its start. (The start is a `nop` node, filled in once the body exists.)
+   */
+  loop(body: (again: Step) => Step[]): Step {
+    return (next) => {
+      const head = this.reserve();
+      this.fill(head, 'nop', {}, this.seq(body(() => head))(next));
+      return head;
+    };
   }
 
   /** Compiles a whole script, which ends the chain. */
@@ -430,6 +442,15 @@ export class SpecBuilder {
     return (next) => this.node('death', { ex1: [kill[mode]!, 1] }, next);
   }
 
+  /** `if (FUN_1070_079e(cls))`: take one item of class `cls`, and if there was one, `then`. */
+  ifTakeItemOfClass(cls: number, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-item-class', { ex1: [cls, yes], ex2: [1] }, no);
+    };
+  }
+
   /**
    * `while (FUN_1070_079e(cls)) { body }`: take items of class `cls` one at
    * a time, running `body` for each, then go on. (E3 names the class by
@@ -519,12 +540,14 @@ export class SpecBuilder {
   /**
    * `FUN_1020_0082(type, first, last, cost, title)`, BoE's `start_shop_mode`,
    * called from a spot: `ENTER_SHOP` on the converted shop, `cost` its price
-   * level, the title an EXE string at `seg:off`.
+   * level, the title an EXE string at `seg:off`. Types 5–9 are the five
+   * magic shops, which are the scenario's first five.
    */
   shop(type: E3ShopType, first: number, last: number, cost: number, seg: number, off: number): Step {
     return (next) => {
       const title = this.src.exeString?.(seg, off) ?? '';
-      const id = this.src.shop?.(type, first, last, title);
+      const magic = type >= E3ShopType.MAGIC_SHOPS && type < E3ShopType.MAGE;
+      const id = magic ? type - E3ShopType.MAGIC_SHOPS : this.src.shop?.(type, first, last, title);
       if (id === undefined) throw new Error('no shops here: ScriptSource.shop is missing');
       return this.node('start-shop', { ex1: [id, 0], ex2: [0, cost], msg: [this.text(title)] }, next);
     };
@@ -786,10 +809,11 @@ export class SpecBuilder {
 
   /**
    * `switch (flag) { case 0: … case n-1: }` over `cases`, for the scripts
-   * that index a table by a counter (the horse dealers).
+   * that index a table by a counter (the horse dealers). Any other value
+   * runs `otherwise`.
    */
-  switchFlag(flag: Flag, cases: Step[][]): Step {
-    return cases.reduceRight<Step>((otherwise, then, v) => this.ifFlagEq(flag, v, then, [otherwise]), (next) => next);
+  switchFlag(flag: Flag, cases: Step[][], otherwise: Step[] = []): Step {
+    return cases.reduceRight<Step>((rest, then, v) => this.ifFlagEq(flag, v, then, [rest]), this.seq(otherwise));
   }
 
   /**
@@ -810,6 +834,15 @@ export class SpecBuilder {
     };
   }
 
+  /** `if (party.alchemy[k])` (party+0x831e + k): IF_RECIPE. */
+  ifAlchemy(k: number, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-alchemy', { ex1: [k, yes] }, no);
+    };
+  }
+
   /** The party learns alchemy recipe `k` (`party.alchemy[k] = 1`, party+0x831e). */
   learnAlchemy(k: number): Step {
     return (next) => this.node('alchemy', { ex1: [k, 0] }, next);
@@ -824,6 +857,15 @@ export class SpecBuilder {
       const yes = this.seq(then)(next);
       const no = this.seq(otherwise)(next);
       return this.node('if-trait', { ex1: [t, yes], ex2: [1, 2] }, no);
+    };
+  }
+
+  /** `if (a living PC is of race r)`, E3's word at PC+0x71c: IF_SPECIES with a count of at least one. */
+  ifSpecies(r: number, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-species', { ex1: [r, yes], ex2: [1, 2] }, no);
     };
   }
 

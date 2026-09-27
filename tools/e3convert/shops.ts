@@ -80,6 +80,8 @@ export function readE3ShopTables(exe: Uint8Array): E3ShopTables {
 /** E3's shop types, as `start_shop_mode` numbers them. */
 export enum E3ShopType {
   WEAPONS = 0, ARMOR = 1, GENERAL = 2, HEALER = 3, FOOD = 4,
+  /** The first of the five magic shops, 5–9. */
+  MAGIC_SHOPS = 5,
   MAGE = 10, PRIEST = 11, ALCHEMY = 12,
 }
 
