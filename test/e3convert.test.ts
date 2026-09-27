@@ -25,6 +25,8 @@ import { GameRng } from '../src/core/rng';
 import { Town } from '../src/data/town';
 import { Universe } from '../src/universe/universe';
 import { PartyPreset } from '../src/universe/player';
+import { GameSession } from '../src/game/session';
+import { Direction } from '../src/core/location';
 import {
   createE3OutCombatTerrain, E3_ARENA_GROUND, E3_ARENA_ODDS, E3_ARENA_STAMP_LOCS, E3_ARENA_WALLS,
   E3_CAVE_LAKE, E3_CAVE_PILLAR, E3_MNTN_PILLAR, E3_SURF_LAKE,
@@ -64,6 +66,33 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     const sector = scen.outdoors[2]![9]!;
     expect(scen.terTypes[sector.terrain[20]![33]!]?.special).toBe(TerSpec.TOWN_ENTRANCE);
     expect(sector.cityLocs.find((c) => c.x === 20 && c.y === 33)?.spec).toBe(0);
+  });
+
+  it('lets the party walk into every town from the world', async () => {
+    // From each square beside an entrance that can be stood on, one step in.
+    // Town 92 (the roaches' pit, zone 46) is ringed by trees in E3's data.
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    const toward: [number, number, Direction][] = [[0, 1, Direction.N], [0, -1, Direction.S], [-1, 0, Direction.E], [1, 0, Direction.W]];
+    const missed: string[] = [];
+    for (let sx = 0; sx < scen.outWidth; sx++) for (let sy = 0; sy < scen.outHeight; sy++) {
+      const sector = scen.outdoors[sx]![sy]!;
+      for (const city of sector.cityLocs) {
+        let entered = false;
+        for (const [dx, dy, dir] of toward) {
+          const x = city.x + dx, y = city.y + dy;
+          if (x < 0 || y < 0 || x > 47 || y > 47 || sector.cityLocs.some((c) => c.x === x && c.y === y)) continue;
+          if (scen.terTypes[sector.terrain[x]![y]!]!.blockage >= TerObstruct.BLOCK_MOVE) continue;
+          session.debugLeaveTown();
+          session.positionParty(sx, sy, x, y);
+          await session.move(dir);
+          if (session.inTown && session.univ.party.townNum === city.spec) { entered = true; break; }
+        }
+        if (!entered) missed.push(`town ${city.spec} at (${sx},${sy}) ${city.x},${city.y}`);
+      }
+    }
+    // Tinraya's gate is two squares wide, and its west one is only reached
+    // through the east.
+    expect(missed).toEqual(['town 35 at (1,1) 28,15', 'town 92 at (1,5) 19,32']);
   });
 
   it('draws roads as ground with the road field, as BoE 1997 does', () => {
