@@ -288,9 +288,8 @@ function convertNode(ctx: Context, raw: E3TalkNodeRaw, personality: number, extr
       break;
     case E3Node.JOB_BANK:
       // E3's node text is the refusal, shown only if the party has failed a
-      // job here; the engine's JOB_BANK shows str2 for that and uses str1 as
-      // the board's title. TODO(E3-3): E3's jobs themselves, and its
-      // failure flag (party+0x847f) in place of the engine's anger.
+      // job here; the engine's JOB_BANK shows str2 for that. With the
+      // `job-boards` flag the node opens E3's own boards (src/game/e3Jobs.ts).
       set(TalkNodeType.JOB_BANK, e1);
       node.str2 = raw.str1;
       node.str1 = '';

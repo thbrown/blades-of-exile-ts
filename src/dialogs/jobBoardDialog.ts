@@ -15,6 +15,7 @@
 
 import { JobBank } from '../data/quest';
 import { dispatcherMood, jobBoardOffers, takeJob } from '../game/jobBank';
+import { JOB_STR, e3JobText, e3Jobs, e3JobsBase, e3JobsFull, takeE3Job } from '../game/e3Jobs';
 import { Universe } from '../universe/universe';
 import { SheetStore } from '../render/sheets';
 import { getDialogDef } from './dialogStore';
@@ -56,6 +57,44 @@ export function jobBoardDialog(
       // why a board you have taken two jobs from no longer tells you its mood.
       dlg.setText('feedback', 'Job accepted.');
       fillJobBank(dlg, univ, bank);
+      return 'stay';
+    });
+  }
+  return dlg;
+}
+
+/**
+ * Exile III's board (`FUN_1008_40cb`, dialog 959, which `job-board.xml`
+ * copies control for control): the day, the board's four jobs with a Take
+ * beside each, and "You have four jobs." along the bottom, with every Take
+ * hidden, once the party's four slots are full.
+ */
+export function e3JobBoardDialog(
+  ctx: CanvasRenderingContext2D, store: SheetStore, univ: Universe, bank: number,
+): XmlDialog {
+  const dlg = new XmlDialog(ctx, store, getDialogDef('job-board'));
+  const state = e3Jobs(univ);
+  const fill = (): void => {
+    dlg.setNum('day', univ.party.calcDay());
+    const full = e3JobsFull(state);
+    dlg.setText('feedback', full ? univ.scenario.specStrs[(e3JobsBase(univ) ?? 0) + JOB_STR.fourJobs] ?? '' : '');
+    for (let i = 0; i < SHOWN_SLOTS; i++) {
+      const job = state.boards[bank]?.[i];
+      if (job && job.kind > 0) {
+        dlg.setText(`job${i + 1}`, e3JobText(univ, job, false).text);
+        if (full) dlg.hide(`take${i + 1}`);
+        else dlg.show(`take${i + 1}`);
+      } else {
+        dlg.setText(`job${i + 1}`, '');
+        dlg.hide(`take${i + 1}`);
+      }
+    }
+  };
+  fill();
+  for (let i = 0; i < SHOWN_SLOTS; i++) {
+    dlg.attachHandler(`take${i + 1}`, () => {
+      takeE3Job(univ, state, bank, i);
+      fill();
       return 'stay';
     });
   }

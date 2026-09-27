@@ -12,6 +12,7 @@
  */
 
 import { QuestStatus } from '../data/quest';
+import { e3JobsTick } from './e3Jobs';
 import { Universe } from '../universe/universe';
 import { isCombat } from './modes';
 import type { GameSession } from './session';
@@ -130,4 +131,7 @@ export function specialIncreaseAge(session: GameSession, length = 1, queue = fal
     } else slot.time -= length;
   }
   party.age = currentAge;
+
+  // Exile III's job boards keep their own calendar (e3Jobs.ts).
+  e3JobsTick(session, ageBefore);
 }

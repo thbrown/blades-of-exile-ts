@@ -23,6 +23,7 @@ import {
 } from './game/spellCombatTarget';
 import { takeAp } from './game/combat';
 import { openJobBank } from './game/jobBank';
+import { e3JobsBase } from './game/e3Jobs';
 import { alchemyChoices, makePotion } from './game/alchemy';
 import { getDialogDef, hasDialogDef, loadDialogDefs } from './dialogs/dialogStore';
 import { XmlDialog } from './dialogs/xmlDialog';
@@ -32,7 +33,7 @@ import { STR_DIALOG_DEFS, pictTypeOf, strDialog } from './dialogs/strDialog';
 import { CHOICE_DIALOG_DEFS, threeChoiceDialog } from './dialogs/threeChoiceDialog';
 import { storyDialog } from './dialogs/storyDialog';
 import { monsterInfoDialog } from './dialogs/monsterInfoDialog';
-import { jobBoardDialog } from './dialogs/jobBoardDialog';
+import { e3JobBoardDialog, jobBoardDialog } from './dialogs/jobBoardDialog';
 import { pickPotionDialog, potionSlot } from './dialogs/pickPotionDialog';
 import { questInfoDialog } from './dialogs/questInfoDialog';
 import { NOTES_DIALOG_DEFS, adventureNotesDialog, talkNotesDialog } from './dialogs/notesDialogs';
@@ -1238,6 +1239,11 @@ async function main(): Promise<void> {
    */
   session.onJobBank = (which, title, personality) => {
     if (dialogs.active) return;
+    // Exile III's own boards (game/e3Jobs.ts).
+    if (e3JobsBase(univ) !== null) {
+      void dialogs.runScreen(e3JobBoardDialog(ctx, store, univ, which)).then(() => redraw());
+      return;
+    }
     const bank = openJobBank(univ, which);
     void dialogs.runScreen(jobBoardDialog(ctx, store, univ, bank, personality))
       .then(() => redraw());

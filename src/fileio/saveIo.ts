@@ -43,6 +43,7 @@ import {
   Ability, MonstAbil, MonstAbilCat, NUM_MONST_ABIL, abilityCategory, defaultAbilities,
 } from '../data/monsterAbility';
 import { OutWandering } from '../data/outdoors';
+import { E3_JOBS_HELD, E3_JOBS_PER_BOARD, E3_JOB_BANKS, type E3JobState } from '../game/e3Jobs';
 import { QuestStatus, makeJobBank } from '../data/quest';
 import { Scenario } from '../data/scenario';
 import { Vehicle } from '../data/vehicle';
@@ -712,6 +713,17 @@ export function writeParty(file: TagFile, party: Party, scenarioId: string): voi
     if (!bank.inited) continue;
     for (let j = 0; j < 6; j++) jobPage.add('JOB', j, bank.jobs[j]!);
   }
+  // Exile III's job boards (exile-js; game/e3Jobs.ts): one page, a line a job.
+  if (party.e3Jobs) {
+    const e3Page = file.add();
+    e3Page.add('E3JOBS');
+    // Every slot, empty ones too: an empty one keeps the target it rolled.
+    party.e3Jobs.boards.forEach((board, b) => board.forEach((j, k) => {
+      e3Page.add('BOARD', b, k, j.kind, j.extra, j.days, j.target);
+    }));
+    party.e3Jobs.held.forEach((j, k) => e3Page.add('HELD', k, j.kind, j.extra, j.days, j.target, j.bank));
+    party.e3Jobs.failed.forEach((f, b) => { if (f) e3Page.add('FAILED', b); });
+  }
   for (let i = 0; i < party.outC.length; i++) {
     const group = party.outC[i]!;
     if (!group.exists) continue;
@@ -940,6 +952,26 @@ export function readParty(file: TagFile, party: Party): void {
         const slot = job.int(0, -1);
         if (slot >= 0 && slot < bank.jobs.length) bank.jobs[slot] = job.int(1, -1);
       }
+    } else if (page.firstKey() === 'E3JOBS') {
+      const state: E3JobState = {
+        boards: Array.from({ length: E3_JOB_BANKS }, (_, bank) => Array.from({ length: E3_JOBS_PER_BOARD },
+          () => ({ kind: 0, extra: 0, days: 0, target: 0, bank }))),
+        held: Array.from({ length: E3_JOBS_HELD }, () => ({ kind: 0, extra: 0, days: 0, target: 0, bank: 0 })),
+        failed: new Array<boolean>(E3_JOB_BANKS).fill(false),
+      };
+      for (const tag of page.list('BOARD')) {
+        const job = state.boards[tag.int(0, -1)]?.[tag.int(1, -1)];
+        if (job) Object.assign(job, { kind: tag.int(2), extra: tag.int(3), days: tag.int(4), target: tag.int(5) });
+      }
+      for (const tag of page.list('HELD')) {
+        const job = state.held[tag.int(0, -1)];
+        if (job) Object.assign(job, { kind: tag.int(1), extra: tag.int(2), days: tag.int(3), target: tag.int(4), bank: tag.int(5) });
+      }
+      for (const tag of page.list('FAILED')) {
+        const b = tag.int(0, -1);
+        if (b >= 0 && b < E3_JOB_BANKS) state.failed[b] = true;
+      }
+      party.e3Jobs = state;
     } else if (page.firstKey() === 'ENCOUNTER') {
       const i = page.first('ENCOUNTER')!.int(0, -1);
       if (i < 0 || i >= party.outC.length) continue;

@@ -9,6 +9,7 @@
  * it as a global beside `stat_window`, and it is what the row buttons index.
  */
 
+import { E3_JOBS_ON_PANEL, e3HeldJobs, e3JobsBase } from './e3Jobs';
 import { QuestStatus } from '../data/quest';
 import { NUM_INVEN_SLOTS } from '../universe/player';
 import { MainStatus } from '../universe/skills';
@@ -86,6 +87,12 @@ export class ItemWindow {
         this.scrollMax = Math.max(0, arrayPos - LINES_IN_ITEM_WIN);
         break;
       case ItemWinMode.QUESTS:
+        // Exile III lists its jobs instead, two at a time (e3Jobs.ts).
+        if (e3JobsBase(univ) !== null) {
+          this.specItemArray = e3HeldJobs(univ);
+          this.scrollMax = Math.max(0, this.specItemArray.length - E3_JOBS_ON_PANEL);
+          break;
+        }
         for (let i = 0; i < univ.scenario.quests.length; i++) {
           // An absent record reads as AVAILABLE, which shows nothing — see the
           // note on `active_quests` in specialIncreaseAge.ts.

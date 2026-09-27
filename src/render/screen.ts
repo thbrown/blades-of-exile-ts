@@ -5,6 +5,7 @@
  * independently as its underlying systems land.
  */
 
+import { E3_JOBS_ON_PANEL, JOB_STR, e3HeldJobs, e3JobText, e3JobsBase } from '../game/e3Jobs';
 import { Direction, dist } from '../core/location';
 import { ItemAbil, ItemType, canUse } from '../data/item';
 import { variety } from '../data/itemVariety';
@@ -1476,6 +1477,15 @@ export class Screen {
     let title = service ? ITEM_SHOP_TITLES[service.mode] : `${pc.name} inventory:`;
     if (!service && win.mode === ItemWinMode.SPECIAL) title = 'Special items:';
     if (!service && win.mode === ItemWinMode.QUESTS) title = 'Quests/Jobs:';
+    const e3Base = e3JobsBase(session.univ);
+    if (!service && win.mode === ItemWinMode.QUESTS && e3Base !== null) {
+      title = session.univ.scenario.specStrs[e3Base + JOB_STR.panelTitle] ?? title;
+      // A job can be delivered or failed with the page up, so its list is
+      // read afresh on every draw.
+      win.specItemArray = e3HeldJobs(session.univ);
+      win.scrollMax = Math.max(0, win.specItemArray.length - E3_JOBS_ON_PANEL);
+      win.scroll = Math.min(win.scroll, win.scrollMax);
+    }
     // White, not OBoE's yellow: `ForeColor(whiteColor)` (text.c:327). The
     // yellow "Party stats:" above it is baked into the original's panel art.
     drawStringEllipsis(this.ctx, at(ITEM_PANEL.title), title, {
@@ -1596,6 +1606,10 @@ export class Screen {
   ): void {
     const win = this.itemWindow;
     const scen = session.univ.scenario;
+    if (win.mode === ItemWinMode.QUESTS && e3JobsBase(session.univ) !== null) {
+      this.drawE3Jobs(session, at);
+      return;
+    }
     const icon = (src: UiRect, dest: UiRect): void => {
       if (!btnSheet) return;
       this.ctx.drawImage(
@@ -1644,6 +1658,29 @@ export class Screen {
         }
         icon(ITEM_BTN_ICONS.info, at(row.info));
       }
+    }
+  }
+
+  /**
+   * Exile III's jobs on the Quests page (`FUN_10d0_0b5b`): each job's whole
+   * text, "You must … by Day n", wrapped into the height of four rows, two
+   * jobs to a page.
+   */
+  private drawE3Jobs(session: GameSession, at: (rect: UiRect) => UiRect): void {
+    const win = this.itemWindow;
+    const held = session.univ.party.e3Jobs?.held ?? [];
+    const style = { size: 10, colour: Colours.BLACK } as const;
+    const rowsPerJob = LINES_IN_ITEM_WIN / E3_JOBS_ON_PANEL;
+    for (let k = 0; k < E3_JOBS_ON_PANEL; k++) {
+      const slot = win.specItemArray[win.scroll + k];
+      const job = slot === undefined ? undefined : held[slot];
+      if (!job) continue;
+      const first = at(ITEM_ROWS[k * rowsPerJob]!.name);
+      const right = at(ITEM_ROWS[0]!.info).right;
+      const lines = wrapLines(this.ctx, e3JobText(session.univ, job, true).text, right - first.left, style);
+      lines.slice(0, rowsPerJob).forEach((line, i) => {
+        drawString(this.ctx, { ...first, top: first.top + 13 * i, bottom: first.bottom + 13 * i, right }, line, style);
+      });
     }
   }
 
@@ -1698,7 +1735,7 @@ export class Screen {
     }
 
     blit(sheet, ITEM_BOTTOM_ICONS.special, at(ITEM_BOTTOM_BUTTONS[6]!));
-    if (session.univ.scenario.quests.length > 0) {
+    if (session.univ.scenario.quests.length > 0 || e3JobsBase(session.univ) !== null) {
       this.itemBottomActive[7] = true;
       blit(sheet, ITEM_BOTTOM_ICONS.quests, at(ITEM_BOTTOM_BUTTONS[7]!));
     }

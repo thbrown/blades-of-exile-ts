@@ -14,6 +14,7 @@ import { Attitude } from '../data/monster';
 import { Universe } from '../universe/universe';
 import { Creature, CreatureStatus } from '../universe/creature';
 import { ItemShopMode } from './itemShop';
+import { JOB_STR, e3Jobs, e3JobsBase } from './e3Jobs';
 import { receiveQuest } from './jobBank';
 import { giveHelp, livingSound } from '../universe/living';
 import { showError } from './showError';
@@ -415,6 +416,22 @@ export class TalkState {
         this.onTrain?.();
         break;
       case TalkNodeType.JOB_BANK: {
+        // Exile III's boards (e3Jobs.ts, `1020:2c0a`): one the party failed
+        // turns it away with the node's own text, which the converter put in
+        // str2; otherwise the board opens, and the reply is E3's closing line.
+        if (e3JobsBase(this.univ) !== null) {
+          if (e3Jobs(this.univ).failed[a]) {
+            useSecond();
+            break;
+          }
+          // TODO(E3-3): E3 first shows its one-time hint about job boards
+          // (`FUN_1008_38d6(0x33)`, string 3051); none of E3's hints is ported.
+          this.canRecord = false;
+          str1 = this.univ.scenario.specStrs[e3JobsBase(this.univ)! + JOB_STR.business] ?? '';
+          str2 = '';
+          this.onJobBank?.(a, '');
+          break;
+        }
         // A board too angry to deal with the party doesn't open at all — it
         // just gives the brush-off in str2 (boe.dlgutil.cpp:1016). Note the
         // test reads the list without growing it, so a board that has never

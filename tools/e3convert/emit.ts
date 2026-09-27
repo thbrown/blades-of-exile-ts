@@ -8,6 +8,8 @@
  * are later milestones, marked `TODO(E3-2)` / `TODO(E3-3)` where they would go.
  */
 
+import { e3JobStrings } from './jobs';
+import { E3_JOB_TARGET_PERSONALITY } from '../../src/game/e3Jobs';
 import { encodePng } from './png';
 import { convertItem, convertMonster, convertPresetField } from '../../src/fileio/legacy/convert';
 import { buildItemSheet, buildMonsterSheets, buildTerrainSheets, e3TerrainPic } from './graphics';
@@ -462,6 +464,7 @@ function scenarioXml(
   start: { town: number; loc: { x: number; y: number } },
   outStart: { sector: { x: number; y: number }; loc: { x: number; y: number } },
   shops: Shop[], specialItems: SpecItem[], specStrings: string[], newDay: number, roadJoins: number[],
+  jobBase: number,
 ): string {
   return `${XML_HEAD}<scenario boes="2.0.0">
     <title>Exile III: Ruined World</title>
@@ -477,6 +480,7 @@ function scenarioXml(
         <use-special-spots>exile3</use-special-spots>
         <outdoor-arena>exile3</outdoor-arena>
         <road-joins>${roadJoins.join(',')}</road-joins>
+        <job-boards>exile3:${jobBase}</job-boards>
     </feature-flags>
     <text>
         <teaser>The surface world is dying. Find out why.</teaser>
@@ -682,11 +686,22 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     write(`towns/talk${t.number}.xml`, speech ? dialogueXml(speech, t.number) : `${XML_HEAD}<dialogue boes="2.0.0">\n</dialogue>\n`);
   });
   write('debug.json', JSON.stringify(debug));
+  // E3's job boards (src/game/e3Jobs.ts): their text, as scenario strings.
+  // Deliveries match the target's engine personality, E3's less one, so no
+  // target may have been cloned for a shop.
+  for (const p of E3_JOB_TARGET_PERSONALITY) {
+    for (const s of speakers) {
+      if (s.personality === p && talk.personalityOf.get(`${s.town}:${s.index}`) !== p - 1)
+        throw new Error(`job target personality ${p} was cloned; e3Jobs.ts matches E3's number`);
+    }
+  }
+  const jobBase = scen.strings.length;
+  for (const str of e3JobStrings((id) => strings.get(id) ?? '', e3Src.exeString!)) scen.text(str);
   // Last, since the places' scripts may add scenario strings and nodes.
   write('scenario.spec', scen.spec);
   // Last, since the places' scripts can add shops of their own.
   shops.push(...talk.shops);
-  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe)));
+  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase));
   const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(read)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
   progress(1);

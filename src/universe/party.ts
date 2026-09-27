@@ -10,6 +10,7 @@
  * position within that sector (0..47).
  */
 
+import type { E3JobState } from '../game/e3Jobs';
 import { Direction, Location, loc } from '../core/location';
 import { GameRng } from '../core/rng';
 import { Job, JobBank, makeJobBank } from '../data/quest';
@@ -262,6 +263,11 @@ export class Party {
    * site), so `jobBank()` below does the same.
    */
   jobBanks: JobBank[] = [];
+  /**
+   * Exile III's job boards and the party's jobs (`game/e3Jobs.ts`), in a
+   * scenario that has them; null until first needed, and in any other.
+   */
+  e3Jobs: E3JobState | null = null;
   /**
    * `cParty::party_event_timers` — one-shot countdowns a special node started.
    * Unlike town and scenario timers these are *not* periodic: they fire once

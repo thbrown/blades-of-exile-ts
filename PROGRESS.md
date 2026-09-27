@@ -13234,6 +13234,9 @@ The user's notes after playing Exile III, and what each turned out to be:
 
 ### E3's job boards, reverse-engineered but not ported (2026-09-27)
 
+> **Ported later the same day**: see "E3's job boards, ported" below. The
+> notes here are kept as they were; the section below corrects them.
+
 A talk node of type 25 is a job board (`talkarms.s`, `1020:2c0a`). Board `e1`
 is closed if the party failed a job there (party+0x847f + bank), and is
 otherwise `FUN_1008_40cb(bank)`. At the moment the converter maps it to the
@@ -13293,5 +13296,54 @@ position from inside a town (party+0x12e2 on). Two use it:
 1,447 and none left. The last three were no-ops: encounter 0 on both Slime
 Pit levels falls below the switch's table (`dec bx; cmp bx, 0x19; ja`), and
 town 20 ("Name:") has no case in `FUN_10c0_0000` (index 20 → `054c`), so it
-joins 66 and 84 under `noHandler`. **Next**: E3's job boards (the section
-above).
+joins 66 and 84 under `noHandler`. E3's job boards followed the same day
+("E3's job boards, ported", below).
+
+### E3's job boards, ported (2026-09-27)
+
+`src/game/e3Jobs.ts`, behind a new scenario feature flag, `job-boards` =
+`exile3:<n>`, where `n` is the first of the 81 scenario strings the converter
+writes for it (`tools/e3convert/jobs.ts`, laid out by `JOB_STR`). E3's text
+stays out of `src/`; the three numeric tables are copied into it, and
+`test/e3convert.test.ts` reads them back out of the EXE. What the earlier
+notes left open, now traced:
+
+- **Generation** (`FUN_1008_3c91`), exact bounds from the disassembly: kind
+  `get_ran(1,0,5)`, target `get_ran(1,0,39)`; no job if the target's
+  personality (`1100:0000`) is < 0 or the zone distance board→target is 0.
+  Days: message `get_ran(1,0,3) + (d+1)*3`; delivery goods `get_ran(1,0,9)`,
+  days `get_ran(1,0,4) + (d+1)*3`; supplies monster as noted, days
+  `get_ran(2,1,6) + (d+1)*5 + 10`; rush goods `get_ran(1,10,15)`, days
+  `get_ran(1,0,1) + d`.
+- **The tables**: `1100:0000` is each target's **talk personality** (E3's,
+  1-based; the engine's is one less, and the converter throws if a target was
+  ever cloned for a shop), `1100:0050` the target's zone (x, y), `DS:02ae` the
+  six boards' zones. Distance (`FUN_1080_0000`) is `trunc(sqrt(dx²+dy²))`.
+- **Who refills**: a new party (`FUN_10b0_053c`, which also clears the four
+  jobs and the six failure flags), every `age % 4000 == 0` in the per-tick
+  clock (`FUN_1010_5889`), and the debug key W.
+- **Deadlines**, same function, on each change of day: first each board has a
+  `get_ran(1,0,50) == 25` chance of forgiving (party+0x847f cleared), then
+  each job with `calc_day() > deadline` fails: string 5770, the board's flag
+  set, the job cleared. E3's day is `age / 3700 + 1`, as BoE's.
+- **Delivery** is at the start of any conversation (`FUN_1020_1484`, E3's
+  `start_talk_mode`): each held job whose target personality is the
+  speaker's pays `FUN_10d0_2540`'s price with string `5760 + kind`, and
+  ends. A supplies job still wanting its monster says 5771 instead.
+- **The board's talk node**: refused with the node's text if failed;
+  otherwise the board (dialog 959, which `job-board.xml` copies control for
+  control), then the reply "You conclude your business." (`1020:1d00`).
+  "You have four jobs." shows, and every Take hides, once the party holds four.
+- **The item panel** titles the Quests page "Your current jobs:" and shows
+  two jobs at a time in full ("You must … by Day n"), wrapped.
+- Ported as "was the mark crossed": the port's clock can jump several ticks,
+  where E3 steps one move at a time and tests `% 4000 == 0` exactly.
+- **Not ported**: E3's one-time hint on first opening a board (string 3051,
+  `FUN_1008_38d6`; E3 has a list of these hints and none is ported), and
+  `FUN_1070_41a4`, which runs beside every refill and resets what looks like
+  the shops' stock (5 × 10 records at `+0x6ccc`). Not looked into.
+- Saved on an `E3JOBS` page: every board slot and held job, and the failed
+  boards. `verify-e3.mjs` opens a board, takes a job and shoots the Quests
+  page (`e3-08-job-board`, `e3-09-jobs-panel`).
+- Corpus unchanged after the port (1,231,440 draws, 51 of 87): everything
+  is behind the flag, and the talk-start delivery is awaited.

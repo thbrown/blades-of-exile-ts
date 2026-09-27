@@ -81,6 +81,7 @@ import { SpecType, SpecialNode } from '../data/special';
 import { SpecCtx, SpecCtxType, SpecialHost } from './specials/context';
 import { SpecialsEngine } from './specials/vm';
 import { specialIncreaseAge } from './specialIncreaseAge';
+import { deliverE3Jobs } from './e3Jobs';
 import { alterSpace } from './specials/general';
 import { pushThings } from './pushThings';
 import { ONCE_DONE } from './specials/oneshot';
@@ -3528,6 +3529,9 @@ export class GameSession {
     // A creature's own face overrides its monster template's default one.
     const template = this.univ.scenario.scenMonsters[monst.number];
     const face = monst.facialPic >= 0 ? monst.facialPic : (template?.defaultFacialPic ?? -1);
+    // Exile III pays for its jobs' deliveries as a conversation starts
+    // (e3Jobs.ts); nothing happens in any other scenario.
+    await deliverE3Jobs(this, monst.personality);
     this.startTalkMode(town.monsters.indexOf(monst), monst.personality, monst.number, face);
     return true;
   }

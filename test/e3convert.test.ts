@@ -32,6 +32,13 @@ import {
   E3_CAVE_LAKE, E3_CAVE_PILLAR, E3_MNTN_PILLAR, E3_SURF_LAKE,
 } from '../src/game/e3Arena';
 
+import {
+  E3_JOB_BANK_LOCS, E3_JOB_TARGET_LOCS, E3_JOB_TARGET_PERSONALITY, deliverE3Jobs, e3JobKill, e3JobText,
+  e3Jobs, e3JobsBase, e3JobsTick, e3ZoneDistance, takeE3Job,
+} from '../src/game/e3Jobs';
+import { readE3JobTables } from '../tools/e3convert/jobs';
+import { loadSave, saveGame } from '../src/fileio/saveIo';
+
 const dir = findE3Dir();
 
 describe.skipIf(!dir)('Exile 3 converted', () => {
@@ -164,6 +171,69 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     // A road is paved with walkway down the middle.
     createE3OutCombatTerrain(univ, arena, 233, 0);
     expect(arena.terrain[20]![20]).toBe(245);
+  });
+
+  it("runs E3's job boards: generated jobs, taken, delivered and failed", async () => {
+    // The engine's copies of E3's tables match EXILE3.EXE's.
+    const exe = new Uint8Array(readFileSync(join(dir as string, 'EXILE3.EXE')));
+    const tables = readE3JobTables(exe);
+    expect(tables.personality).toEqual(E3_JOB_TARGET_PERSONALITY);
+    expect(tables.targetLocs).toEqual(E3_JOB_TARGET_LOCS);
+    expect(tables.bankLocs).toEqual(E3_JOB_BANK_LOCS);
+
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    const univ = session.univ;
+    expect(e3JobsBase(univ)).not.toBeNull();
+    const state = e3Jobs(univ);
+    const offered = state.boards.flat().filter((j) => j.kind > 0);
+    expect(offered.length).toBeGreaterThan(8);
+    for (const j of offered) {
+      expect(E3_JOB_TARGET_PERSONALITY[j.target]).toBeGreaterThan(0);
+      expect(e3ZoneDistance(E3_JOB_BANK_LOCS[j.bank]!, E3_JOB_TARGET_LOCS[j.target]!)).toBeGreaterThan(0);
+      expect(e3JobText(univ, j, false).text).toMatch(/^(Rush )?(Message|Delivery|Magical Supplies): We need someone to .* within \d+ days\. .*Pay is \d+ gold\.$/);
+    }
+
+    // A message job, taken from board 0 on day 1, to Kessle in Krizsan.
+    Object.assign(state.boards[0]![0]!, { kind: 1, target: 0, days: 10 });
+    expect(e3JobText(univ, state.boards[0]![0]!, false).text).toBe(
+      'Message: We need someone to convey an important message to Kessle the Innkeeper, in Krizsan, within 10 days. Pay is 60 gold.');
+    expect(takeE3Job(univ, state, 0, 0)).toBe(true);
+    expect(state.boards[0]![0]!.kind).toBe(0);
+    expect(state.held[0]).toMatchObject({ kind: 1, days: 11, bank: 0 });
+    expect(e3JobText(univ, state.held[0]!, true).text).toContain('You must convey an important message to Kessle');
+
+    // It saves and loads.
+    const loaded = loadSave(saveGame(univ), scen, new GameRng());
+    expect(loaded.party.e3Jobs).toEqual(state);
+
+    // Talking to Kessle pays for it.
+    const gold = univ.party.gold;
+    await deliverE3Jobs(session, E3_JOB_TARGET_PERSONALITY[0]! - 1);
+    expect(univ.party.gold).toBe(gold + 60);
+    expect(state.held[0]!.kind).toBe(0);
+
+    // A supplies job wants its monster slain first.
+    state.held[1] = { kind: 3, extra: 58, days: 30, target: 0, bank: 1 };
+    await deliverE3Jobs(session, E3_JOB_TARGET_PERSONALITY[0]! - 1);
+    expect(state.held[1]!.kind).toBe(3);
+    e3JobKill(session, 58);
+    expect(state.held[1]!.extra).toBe(-1);
+    await deliverE3Jobs(session, E3_JOB_TARGET_PERSONALITY[0]! - 1);
+    expect(state.held[1]!.kind).toBe(0);
+
+    // A job past its last day fails, and its board turns the party away.
+    state.held[2] = { kind: 2, extra: 3, days: univ.party.calcDay(), target: 5, bank: 2 };
+    const before = univ.party.age;
+    univ.party.age += 3700;
+    e3JobsTick(session, before);
+    expect(state.held[2]!.kind).toBe(0);
+    expect(state.failed[2]).toBe(true);
+    // Crossing 4,000 ticks rolls the boards afresh.
+    const boards = JSON.stringify(state.boards);
+    const at = univ.party.age;
+    univ.party.age = Math.ceil((at + 1) / 4000) * 4000;
+    e3JobsTick(session, at);
+    expect(JSON.stringify(state.boards)).not.toBe(boards);
   });
 
   it("has E3's monsters, with E3's own stats and sprites", () => {

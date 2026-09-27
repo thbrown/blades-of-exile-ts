@@ -125,6 +125,54 @@ await shot('01d-shop');
 if (!shop.rows?.length || shop.rows.some((r) => !r.name || !(r.cost > 0))) errors.push(`Jinx's shop is empty or free: ${JSON.stringify(shop)}`);
 await page.evaluate(() => { window.__session.endShopMode(); window.__redraw(); });
 
+// E3's job boards (src/game/e3Jobs.ts): a board opens with E3's generated
+// jobs; Take moves one to the party, and the Quests page lists it.
+const canvasPoint = async (x, y) => page.evaluate(({ x, y }) => {
+  const c = document.querySelector('canvas');
+  const r = c.getBoundingClientRect();
+  return { x: r.left + (x + 0.5) * (r.width / c.width), y: r.top + (y + 0.5) * (r.height / c.height) };
+}, { x, y });
+const clickDialogButton = async (name) => {
+  const rect = await page.evaluate((n) => {
+    const d = window.__dialogs.active;
+    const c = d?.def?.controls.find((x) => x.name === n);
+    return c && d.isVisible(n) ? d.screenRect(c) : null;
+  }, name);
+  if (!rect) return false;
+  const at = await canvasPoint((rect.left + rect.right) / 2 - 0.5, (rect.top + rect.bottom) / 2 - 0.5);
+  await page.mouse.click(at.x, at.y);
+  return true;
+};
+let boardBefore = { job1: null };
+for (let bank = 0; bank < 6; bank++) {
+  await page.evaluate((b) => window.__session.onJobBank(b, '', 0), bank);
+  await page.waitForTimeout(200);
+  boardBefore = await page.evaluate(() => {
+    const d = window.__dialogs.active;
+    return { job1: ['job1', 'job2', 'job3', 'job4'].map((n) => d?.getText?.(n) ?? '').find((t) => t) ?? null };
+  });
+  // The jobs are random: a board with none on it is rare, but try the next.
+  if (boardBefore.job1) break;
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+}
+await shot('08-job-board');
+let took = false;
+for (const n of ['take1', 'take2', 'take3', 'take4']) if (!took) took = await clickDialogButton(n);
+await page.waitForTimeout(200);
+await page.keyboard.press('Escape');
+await page.waitForTimeout(200);
+await page.keyboard.press('0');
+await page.waitForTimeout(200);
+const jobs = await page.evaluate(() => {
+  const held = window.__univ.party.e3Jobs?.held.filter((j) => j.kind > 0) ?? [];
+  return { held: held.length, page: window.__screen.itemWindow.specItemArray };
+});
+console.log('JOBS:', JSON.stringify({ boardBefore, took, jobs }));
+await shot('09-jobs-panel');
+if (!/Pay is \d+ gold/.test(boardBefore.job1 ?? '') && !took) errors.push(`the job board showed no jobs: ${JSON.stringify(boardBefore)}`);
+if (took && jobs.held !== 1) errors.push(`taking a job did not give the party one: ${JSON.stringify(jobs)}`);
+
 // Walk out of the fort: a breadth-first path to the nearest square off the
 // town's active area, through doors (moving into one opens it, and the step is
 // then taken again).

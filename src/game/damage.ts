@@ -9,6 +9,7 @@
  * what the C++'s `short` return means at every call site.
  */
 
+import { e3JobKill } from './e3Jobs';
 import { Location, dist } from '../core/location';
 import { SIGHT_BLOCKED } from '../core/sight';
 import { FieldType } from '../data/fields';
@@ -624,6 +625,9 @@ export function killMonst(
     if (field !== null) town.setField(monst.curLoc.x, monst.curLoc.y, field);
     if (monst.summonTime === 0) town.record.monstersKilled++;
   }
+
+  // Exile III's "magical supplies" jobs want the body (e3Jobs.ts).
+  e3JobKill(session, monst.number);
 
   monst.spec1 = 0;
   monst.active = CreatureStatus.DEAD;

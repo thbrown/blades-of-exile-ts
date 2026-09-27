@@ -220,6 +220,8 @@ export class Universe {
     }
     party.keyTimes.clear();
     party.partyEventTimers = [];
+    // A new scenario starts E3's job boards afresh (exile-js; see e3Jobs.ts).
+    party.e3Jobs = null;
     party.specItems.clear();
     for (let i = 0; i < scenario.specialItems.length; i++) {
       if (specItemStartWith(scenario.specialItems[i]!)) party.specItems.add(i);
