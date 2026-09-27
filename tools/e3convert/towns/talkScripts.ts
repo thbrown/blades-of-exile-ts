@@ -18,8 +18,27 @@ import { HAWKE_DAY } from './dungeons2';
 export const LEVY_PAID = e3DailyFlag(0);
 export const ELISA_FED = e3DailyFlag(1);
 export const DAILY_FLAGS = [LEVY_PAID, ELISA_FED, HAWKE_DAY];
-/** A scratch flag of the converter's for a count E3 keeps on the stack. */
-const AGROD_SOLD: [number, number] = [291, 10];
+/** A scratch flag of the converter's: whether a buyer (119, 137, 150) took anything. */
+const SOLD_ANY: [number, number] = [291, 10];
+/** Gointz's boat sold (talk script 116), for E3's party+0x1307. */
+const GOINTZ_SOLD: [number, number] = [291, 20];
+/**
+ * Creatures killed in the ursagi's caves (town 51), for Delenn (135). E3
+ * counts every non-summoned creature killed there (`m_killed[51]`,
+ * party+0x7988); the converter counts the town's own creatures as they die
+ * (`KILL_SCRIPTS`), so a wandering one killed there does not count.
+ */
+const URSAGI_KILLED: [number, number] = [291, 32];
+
+/** What killing one of a town's creatures does, by town (`<onkill>`). */
+export const KILL_SCRIPTS = new Map<number, (b: SpecBuilder) => Step[]>([
+  [51, (b) => [b.incFlag(URSAGI_KILLED)]],
+]);
+
+/** Crisper's reply by flag 0x22e (0x35 + it). */
+const crisper = (b: SpecBuilder): Step => b.switchFlag(f(0x22e), [[b.reply(0x35)], [b.reply(0x36)], [b.reply(0x37)]]);
+/** Feral's sale: 1000 gold for E3's horse 1. */
+const feral = (b: SpecBuilder): Step[] => [b.pay(1000, [b.reply(0x46), b.giveHorse(1), b.incFlag(f(0x53d))], [b.reply(0x45)])];
 
 /** The fort's four pieces of evidence: special items at party+0x40…+0x46. */
 const EVIDENCE = [0x40, 0x42, 0x44, 0x46].map(partySpecItem);
@@ -268,8 +287,236 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
   }],
   // Captain Agrod buys unicorn horns (type flag 111) at 10 gold each.
   [119, (b) => [
-    b.setFlag(AGROD_SOLD, 0),
-    b.eachItemOfClass(111, [b.gold(10), b.setFlag(AGROD_SOLD, 1)]),
-    b.ifFlagEq(AGROD_SOLD, 0, [b.reply(0x3b, 0x3c)], [b.reply(0x3d)]),
+    b.setFlag(SOLD_ANY, 0),
+    b.eachItemOfClass(111, [b.gold(10), b.setFlag(SOLD_ANY, 1)]),
+    b.ifFlagEq(SOLD_ANY, 0, [b.reply(0x3b, 0x3c)], [b.reply(0x3d)]),
   ]],
+  // Seles, who keeps the portal down to the Tower of Magi, on the demon
+  // plot's stage (0xc91): 1–2 go down and retake it; later, 0x1f (nothing to
+  // connect to) unless the war is late (0xc92) and special item 6 is not in
+  // hand (0x20, the Sphere); before, permission once any mission is done.
+  // A stage past 5 keeps E3's default reply, 1.
+  [108, (b) => {
+    const later: Step[] = [b.ifFlagAtLeast(f(0xc92), 1, [b.ifSpecItem(6, [b.reply(0x1f)], [b.reply(0x20)])], [b.reply(0x1f)])];
+    const permitted: Step[] = [0xc85, 0xc87, 0xc8a, 0xc8c].reduceRight<Step[]>(
+      (otherwise, flag) => [b.ifFlagAtLeast(f(flag), 1, [b.reply(0x1e)], otherwise)], [b.reply(0x1d)]);
+    const start: Step[] = [b.ifFlagAtLeast(f(0xc92), 1, [b.ifSpecItem(6, permitted, [b.reply(0x20)])], permitted)];
+    return [b.switchFlag(f(0xc91), [start, [b.reply(0x24)], [b.reply(0x24)], later, later, later], [b.reply(1)])];
+  }],
+  // Denise's amulet (special item 30) for a scroll (item 0xd3); flag 0x21c
+  // picks the reply otherwise (0x21 + it).
+  [109, (b) => [b.ifSpecItem(30, [
+    b.reply(0x22), b.giveItem(0xd3, [b.setFlag(f(0x21c), 2), b.takeSpecItem(30)]),
+  ], [b.switchFlag(f(0x21c), [[b.reply(0x21)], [b.reply(0x22)], [b.reply(0x23)]])])]],
+  // Koriba's crystal statue (special item 31) for a Soul Crystal (item 25).
+  [110, (b) => [b.ifSpecItem(31, [
+    b.reply(0x26), b.giveSpecItem(25), b.takeSpecItem(31), b.setFlag(f(0x223), 2),
+  ], [b.switchFlag(f(0x223), [[b.reply(0x25)], [b.reply(0x26)], [b.reply(0x27)]])])]],
+  // Gointz sells his boat for 500 gold. E3 marks it sold in party+0x1307, a
+  // byte of the first saved town's creatures, and never frees the boat (E3's
+  // boat 2, New Cotra's), so the party pays and cannot board it
+  // (E3-SUSPECTED-BUGS.md #8). GOINTZ_SOLD stands in for that byte, read as
+  // not yet zero.
+  [116, (b) => [b.ifFlagEq(GOINTZ_SOLD, 1, [b.reply(0x3a)], [
+    b.ifGold(500, [b.reply(0x39), b.takeGold(500), b.setFlag(GOINTZ_SOLD, 1)], [b.reply(0x38)]),
+  ])]],
+  // Crisper pays 300 gold for the ice pudding (zone 88's spot 5 flag).
+  [117, (b) => [b.ifFlagAtLeast(f(0xbc9), 1, [
+    b.ifFlagEq(f(0x22e), 0, [b.setFlag(f(0x22e), 2), b.reply(0x36), b.gold(300)], [crisper(b)]),
+  ], [crisper(b)])]],
+  // Feral sells his horse (E3's horse 1) for 1000 gold, once he has named
+  // the price.
+  [120, (b) => [b.switchFlag(f(0x53d), [
+    [b.reply(0x44), b.incFlag(f(0x53d))],
+    feral(b),
+  ], [b.ifFlagEq(f(0x53d), 2, [b.reply(0x47)], feral(b))])]],
+  // Paulo's herbs (0x549, set by his village's spot 1): Summon Spirit and
+  // Charm Foe, taught again whenever asked after.
+  [121, (b) => [b.ifFlagAtLeast(f(0x549), 1, [
+    b.reply(0x4a, 0x4b), b.setFlag(f(0x549), 0), b.teachSpell(0x73), b.teachSpell(0x75), b.setFlag(f(0x548), 2),
+  ], [b.ifFlagBelow(f(0x548), 2, [b.reply(0x48, 0x49), b.setFlag(f(0x548), 1)], [
+    b.reply(0x4c), b.teachSpell(0x73), b.teachSpell(0x75),
+  ])])]],
+  // The ghost teaches Move Mountains.
+  [122, (b) => [b.teachSpell(0x74), b.reply(0x4d)]],
+  // Erika's amulet (special item 36): once it is fetched (0x262 is 2), she
+  // asks to enchant it; refused, she destroys it. TODO(E3-3): journal entry
+  // 0x1f on yes. Past 3 keeps E3's default reply, 1.
+  [123, (b) => [b.switchFlag(f(0x262), [
+    [b.reply(0x4e, 0x4f), b.incFlag(f(0x262))],
+    [b.reply(0x50)],
+    [b.askDialog(0xd91, [b.reply(0x51, 0x52)], [b.reply(0x53), b.takeSpecItem(36)]), b.setFlag(f(0x262), 3)],
+    [b.ifSpecItem(36, [b.reply(0x54)], [b.reply(0x55)])],
+  ], [b.reply(1)])]],
+  // Arion's metal (special item 37) for Summon Beast and Conflagration,
+  // taught again whenever asked after; asking first marks zone 74's cache
+  // (spot 7).
+  [124, (b) => [b.ifFlagAtLeast(f(0x55b), 1, [b.reply(0x5a), b.teachSpell(0x10), b.teachSpell(0x11)], [
+    b.ifSpecItem(37, [
+      b.reply(0x58, 0x59), b.teachSpell(0x10), b.teachSpell(0x11), b.setFlag(f(0x55b), 1), b.takeSpecItem(37),
+    ], [b.reply(0x56, 0x57), b.setFlag(f(0xb3f), 1)]),
+  ])]],
+  // The spider chief tells the way to the roach lair (town 92) once the
+  // spiders' fight (zone 55's spot 9 flag: 2 helped, 3 did not) is over.
+  [133, (b) => [b.ifFlagBelow(f(0xa83), 2, [b.reply(0x71), b.setFlag(f(0xa83), 1)], [
+    // (E3's reply is 0x70 + the flag, which is never past 3.)
+    b.switchFlag(f(0xa83), [[], [], [b.reply(0x72, 0x74)], [b.reply(0x73, 0x74)]]),
+    b.townVisible(92),
+  ])]],
+  // Delenn's two jobs (0x5e8): the lizard chief (flag 0x281) for 1000 gold,
+  // then the ursagi's caves, which count as cleared past 37 kills, for a
+  // sword (item 0x58). Past 4 keeps E3's default reply, 1.
+  [135, (b) => [b.switchFlag(f(0x5e8), [
+    [b.reply(0x78, 0x79), b.incFlag(f(0x5e8))],
+    [b.ifFlagAtLeast(f(0x281), 1, [b.reply(0x7b), b.incFlag(f(0x5e8)), b.gold(1000)], [b.reply(0x7a)])],
+    [b.reply(0x7c, 0x7d), b.incFlag(f(0x5e8))],
+    [b.ifFlagAtLeast(URSAGI_KILLED, 38, [b.giveItem(0x58), b.reply(0x7f, 0x80), b.incFlag(f(0x5e8))], [b.reply(0x7e)])],
+    [b.reply(0x80)],
+  ], [b.reply(1)])]],
+  // Ivanova teaches Identify for Ernest's book (special item 34); asking
+  // first marks his hut (0x3df).
+  [136, (b) => {
+    const ask: Step[] = [b.reply(0x81, 0x82), b.setFlag(f(0x5e9), 1), b.setFlag(f(0x3df), 1)];
+    return [b.ifFlagAtLeast(f(0x5e9), 2, [b.reply(0x85)], [b.ifFlagEq(f(0x5e9), 1, [b.ifSpecItem(34, [
+      b.takeSpecItem(34), b.setFlag(f(0x5e9), 2), b.teachSpell(6), b.reply(0x83, 0x84),
+    ], ask)], ask)])];
+  }],
+  // Mervin buys herb packages (type flag 132) at 100 gold each.
+  [137, (b) => [
+    b.setFlag(SOLD_ANY, 0),
+    b.eachItemOfClass(0x84, [b.gold(100), b.setFlag(SOLD_ANY, 1)]),
+    b.ifFlagEq(SOLD_ANY, 0, [b.reply(0x87)], [b.reply(0x86)]),
+  ]],
+  // The two gremlins open the way: terrain 2 at (26,8) and at (14,21), which
+  // E3 writes straight into the town's terrain.
+  [138, (b) => [b.reply(0x88), b.setTer(26, 8, 2)]],
+  [139, (b) => [b.reply(0x89), b.setTer(14, 21, 2)]],
+  // Vahkohs frees his undead: the town turns, he moves from his throne
+  // (17,24) to the altar at (30,24), and the town's spots 5 and 6 are spent.
+  [140, (b) => [
+    b.reply(0x8a), b.makeTownHostile(), b.moveCreature({ x: 17, y: 24 }, { x: 30, y: 24 }, 68),
+    b.setFlag(f(0x291), 20), b.setFlag(f(0x292), 20),
+  ]],
+  // Zamora says where the map is for 500 gold.
+  [147, (b) => [b.ifFlagEq(f(0x5e6), 1, [b.reply(0xb7)], [
+    b.ifGold(500, [b.takeGold(500), b.reply(0xb5), b.setFlag(f(0x5e6), 1)], [b.reply(0xb6)]),
+  ])]],
+  // Carmine forges a sword (item 0x198) from Arion's metal (special item 37)
+  // for 1000 gold. The work (0x654) counts down from 100 at random, a turn
+  // in eleven; at 1 the sword is ready. 0x655: he has asked for the metal.
+  [148, (b) => [b.ifFlagEq(f(0x654), 1, [
+    b.reply(0xad, 0xae), b.giveItem(0x198, [b.setFlag(f(0x654), 0)]),
+  ], [b.ifFlagAtLeast(f(0x654), 2, [b.reply(0xac)], [
+    b.ifFlagEq(f(0x655), 0, [b.reply(0xa8), b.setFlag(f(0x655), 1)], [
+      b.ifSpecItem(37, [b.ifGold(1000, [
+        b.reply(0xab), b.slowCountdown(f(0x654), 100), b.takeGold(1000), b.takeSpecItem(37),
+      ], [b.reply(0xaa)])], [b.reply(0xa9)]),
+    ]),
+  ])])]],
+  // Masok sells the scroll (item 0x1f, 179 charges) for 2000 gold. E3 sets
+  // the reply to 0xb1 and then to 0xb2 over it, so 0xb1 is never shown
+  // (E3-SUSPECTED-BUGS.md #9). TODO(E3-3): the 179 charges, as villages.ts's
+  // item 31.
+  [149, (b) => [b.ifFlagEq(f(0x64b), 1, [b.reply(0xb4)], [
+    b.ifGold(2000, [b.takeGold(2000), b.reply(0xb2), b.giveItem(0x1f), b.setFlag(f(0x64b), 1)], [b.reply(0xb3)]),
+  ])]],
+  // Shirley buys trade goods (type flag 103) at 50 gold each.
+  [150, (b) => [
+    b.setFlag(SOLD_ANY, 0),
+    b.eachItemOfClass(0x67, [b.gold(50), b.setFlag(SOLD_ANY, 1)]),
+    b.ifFlagEq(SOLD_ANY, 0, [b.reply(0xb0)], [b.reply(0xaf)]),
+  ]],
+  // The hermit teaches the Ritual of Sanctification.
+  [151, (b) => [b.reply(0xbb), b.teachSpell(0x6c)]],
+  // Mia's ring (special item 44).
+  [158, (b) => [b.ifFlagAtLeast(f(0x691), 1, [b.reply(0xd5)], [
+    b.ifSpecItem(44, [b.reply(0xd4), b.takeSpecItem(44), b.setFlag(f(0x691), 1)], [b.reply(0xd3)]),
+  ])]],
+  // A prisoner of the giants escapes once the party has found the hidden
+  // way out (0x1b0), and counts as the first of Bruskrud's four missions
+  // still to do. TODO(E3-3): E3 also takes the prisoner out of the town
+  // (`active` 0) and sets his death flag, (30,6)–(30,9) by which prisoner,
+  // so he stays gone; the engine can't name the creature being talked to,
+  // so he stays, and asking again counts again.
+  [159, (b) => [b.ifFlagEq(f(0x1b0), 0, [b.reply(0xd6)], [
+    b.reply(0xd7, 0xd8),
+    [0xc3b, 0xc2f, 0xc30, 0xc31].reduceRight<Step>((otherwise, flag) =>
+      b.ifFlagEq(f(flag), 0, [b.setFlag(f(flag), 1)], [otherwise]), b.seq([])),
+  ])]],
+  // Rabellino's Nephilim raids (zone 28's spot 9 flag): 3 dealt with them
+  // peaceably (500 gold), 5 slew them.
+  [160, (b) => [b.switchFlag(f(0x975), [
+    [b.reply(0xe0, 0xe1), b.setFlag(f(0x975), 1)],
+    [b.reply(0xe2)], [b.reply(0xe2)],
+    [b.reply(0xe3), b.gold(500), b.setFlag(f(0x975), 4)],
+    [b.reply(0xe5)],
+    [b.reply(0xe4)],
+  ], [b.reply(0xe2)])]],
+  // Yale's undead and lizards (0x58d, 2 once the Chasm of Screams is
+  // cleared): a helmet (item 0x178).
+  [161, (b) => [b.switchFlag(f(0x58d), [
+    [b.reply(0xda, 0xdb), b.incFlag(f(0x58d))],
+    [b.reply(0xdc)],
+    [b.reply(0xdd, 0xde), b.giveItem(0x178, [b.incFlag(f(0x58d))])],
+  ], [b.reply(0xdf)])]],
+  // Bohen-Ihrno's ruin (0x2da): once its crystals are found (0x2d7), Word of
+  // Recall.
+  [162, (b) => [b.ifFlagEq(f(0x2da), 0, [b.reply(0xe6, 0xe7), b.incFlag(f(0x2da))], [
+    b.ifFlagEq(f(0x2d7), 0, [b.reply(0xec)], [
+      b.ifFlagEq(f(0x2da), 1, [b.reply(0xe9, 0xed), b.teachSpell(0xa0), b.incFlag(f(0x2da))], [b.reply(0xe9)]),
+    ]),
+  ])]],
+  // Bohen-Ihrno and Abra leave (creatures 15 and 16, the town's only
+  // monsters of types 91 and 96).
+  [163, (b) => [b.ifFlagAtLeast(f(0x2da), 2, [
+    b.reply(0xea), b.setFlag(f(0x2db), 1), b.removeCreatures(91), b.removeCreatures(96),
+  ], [b.reply(0xeb)])]],
+  // Sulfras forges the Alien Beast slayer (item 0x199) from Arion's metal
+  // (special item 37) and Khoth's spell (0x4a4). E3 gives it with a word
+  // and, if nobody has room, again without one (`FUN_1070_0464`), which can
+  // only fail the same way. TODO(E3-3): journal entry 0x1e.
+  [164, (b) => [b.ifFlagEq(f(0x2c5), 2, [b.reply(0xf5)], [
+    b.ifFlagEq(f(0x2c5), 0, [b.reply(0xee, 0xef), b.setFlag(f(0x2c5), 1)], [
+      b.ifSpecItem(37, [b.ifFlagAtLeast(f(0x4a4), 1, [
+        b.giveItem(0x199), b.takeSpecItem(37), b.setFlag(f(0x2c5), 2), b.reply(0xf3, 0xf4),
+      ], [b.reply(0xf2)])], [
+        b.ifFlagAtLeast(f(0x4a4), 1, [b.reply(0xf1)], [b.reply(0xf0, 0xef)]),
+      ]),
+    ]),
+  ])]],
+  // Craswell sells three horses (E3's horses 12–14), 750 each.
+  [166, horseDealer(f(0x6c3), 3, 750, 12, [0xfe, 0xfd, 0xfc])],
+  // Sydow teaches Light Heal All.
+  [167, (b) => [b.reply(0xff), b.teachSpell(0x79)]],
+  // Cerulian lets the party into the library for 4000 gold.
+  [168, (b) => [b.ifFlagAtLeast(f(0x73b), 1, [b.reply(0x102)], [
+    b.pay(4000, [b.setFlag(f(0x73b), 1), b.reply(0x100)], [b.reply(0x101)]),
+  ])]],
+  // Vladimir opens the throne room's door (terrain 124 at (51,40)) once the
+  // golems or the giants are dealt with (0xc8c, 0xc8a).
+  [169, (b) => {
+    const open: Step[] = [b.reply(0x106), b.setTer(0x33, 0x28, 0x7c)];
+    return [b.ifFlagAtLeast(f(0xc8a), 1, open, [b.ifFlagAtLeast(f(0xc8c), 1, open, [
+      b.ifFlagEq(f(0x1e0), 0, [b.reply(0x103, 0x104), b.setFlag(f(0x1e0), 1)], [b.reply(0x105)]),
+    ])])];
+  }],
+  // Empress Prazac's missive for Anaximander (special item 23), and his
+  // answer (24), for which she opens Footracer Province (0xc8f). She takes
+  // the answer without asking whether the party has it. TODO(E3-3): journal
+  // entries 0x10 and 0x12.
+  [170, (b) => [b.ifSpecItem(23, [b.reply(0x109)], [
+    b.ifFlagEq(f(0xc94), 0, [b.reply(0x107, 0x108), b.giveSpecItem(23), b.setFlag(f(0xc94), 1)], [
+      b.ifFlagEq(f(0x925), 0, [
+        b.reply(0x10a, 0x10b), b.setFlag(f(0x925), 1), b.takeSpecItem(24), b.setFlag(f(0xc8f), 1),
+      ], [b.reply(0x10c)]),
+    ]),
+  ])]],
+  // Purgatos gives the Phoenix Egg (special item 38), once.
+  // TODO(E3-3): E3 gives it only once `can_find_town[26]` (+0x849f) is set,
+  // the Filth Factory showing on the map (0x75 until then), and no node
+  // tests a town's visibility. Every E3 town shows from the start in the
+  // port, so this takes the answer the port's map gives: found.
+  [134, (b) => [b.ifFlagAtLeast(f(0x5ce), 1, [b.reply(0x77)], [
+    b.reply(0x76), b.setFlag(f(0x5ce), 1), b.giveSpecItem(38),
+  ])]],
 ]);

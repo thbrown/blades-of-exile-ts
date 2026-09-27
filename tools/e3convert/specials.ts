@@ -46,6 +46,8 @@ export interface SpotScript {
   spots: { x: number; y: number; id: number; node: number }[];
   /** The town's entry node (`<onenter>`), or -1. */
   entry: number;
+  /** The node every placed creature runs when killed (`<onkill>`), or -1. */
+  kill: number;
 }
 
 /** A place's own encounters, transcribed (`towns/`): steps by encounter number. */
@@ -75,6 +77,7 @@ export function e3ZoneMessageBlock(zone: number): number {
 export function e3SpotScript(
   spots: E3Spot[], place: { zone: number } | { town: number },
   src: ScriptSource, terrainAt: (x: number, y: number) => number, own?: PlaceScript, onEntry?: EntryScript,
+  onKill?: EntryScript,
 ): SpotScript {
   const isTown = 'town' in place;
   const block = isTown ? e3TownMessageBlock(place.town) : e3ZoneMessageBlock(place.zone);
@@ -128,5 +131,6 @@ export function e3SpotScript(
     listed.push({ x: s.loc.x, y: s.loc.y, id: s.id, node: n });
   });
   const entry = onEntry ? b.compile(onEntry(b)) : -1;
-  return { spec: b.spec, strings: b.strings, marks, spots: listed, entry };
+  const kill = onKill ? b.compile(onKill(b)) : -1;
+  return { spec: b.spec, strings: b.strings, marks, spots: listed, entry, kill };
 }

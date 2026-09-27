@@ -1552,8 +1552,41 @@ Notes for M2 implementer:
       terrain beside the spot with `if-ter`.
     - TODO(E3-3): zone 84/11 tests `can_find_town[22]`; 84/5 plays sound 54.
     - Suspected bug #7: zone 85's ferry back is free though it says it charges.
-  - Next: 35 talk scripts, the demon plot's countdown, and the town
-    leftovers above. The talk types are listed by `listTalkScripts.ts`.
+  - 2026-09-27: **the last 35 talk scripts** (108–110, 116, 117, 120–124,
+    133–140, 147–151, 158–164, 166–170; `towns/talkScripts.ts`, cases of
+    `FUN_1020_2eb0`, jump table `1020:4a5f`; the reply is `si`, its second
+    part `di`, strings 4500 + n). **Every talk script is transcribed**:
+    coverage says 71 of 71. Tried with `try-talk.mjs`: Carmine, Delenn,
+    Feral, Gointz, Bohen-Ihrno, Vahkohs, the prisoner.
+    - **`<onkill>` for converted creatures** (`KILL_SCRIPTS`, emitted on
+      every placed creature of the town): Delenn's ursagi job reads E3's
+      `m_killed[51]` (party+0x7922 + 2·town, 200 words), which no node
+      can; the town's creatures count themselves into a converter flag
+      instead (wandering ones don't).
+    - `slowCountdown`: E3's `FUN_10c0_61c4` lowers some flags one turn in
+      eleven, anywhere (`get_ran(1,0,10) == 5`); Carmine's sword (0x654,
+      from 100) is one. A self-rearming one-tick scenario timer rolls
+      IF_RANDOM `< 10` for it.
+    - `moveCreature`: E3 writes a creature's `m_loc` (+5/+6 of the 0x5c
+      record) directly; TOWN_RELOCATE_CREATURE can only move to the node's
+      own spot, so it's destroy-monst plus a forced place-monst.
+    - Gotchas: **party+0x12ea–0x6939 is `creature_save[4]`** (4 × 5,524
+      bytes: 60 × 0x5c creatures and two words), which is what makes
+      Gointz's 0x1307 a bug (#8). **Town-segment writes are terrain** at
+      0x2abe + 64x + y (the gremlins, 138/139) or creature fields from
+      0x1427 (Bohen-Ihrno's pair, 163; Vahkohs, 140). `FUN_1070_0464(item,
+      charges)` is give-item with a charges override (-1: none).
+    - TODO(E3-3): Purgatos (134) tests `can_find_town[26]`, and like the zones
+      that test it, no node can; here the port takes the found answer,
+      since every E3 town shows from the start in the port (E3's initial
+      `can_find_town` isn't converted — a gap of its own). The prisoner
+      (159) isn't removed, since no node can name the creature being talked
+      to. Journal entries, as before.
+    - Suspected bugs #8 (Gointz's boat is never freed) and #9 (Masok's
+      reply overwritten).
+  - Next: the demon plot's countdown (for Ghidra), the town leftovers above,
+    and E3's initial town visibility (`can_find_town`, party+0x8485, 120
+    bytes; set by BUY_TOWN_LOC nodes too, so a shadow flag would need them).
 
 ## Key references (do not lose)
 

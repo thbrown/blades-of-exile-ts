@@ -767,6 +767,18 @@ export class SpecBuilder {
     return (next) => this.node('town-attitude', { ex1: [0, -1], ex2: [1] }, next);
   }
 
+  /**
+   * E3 writing a creature's `m_loc`: the creature standing at `from`, of
+   * monster type `type`, moves to `to`. The engine's TOWN_RELOCATE_CREATURE
+   * moves to the node's own spot and can't be pointed elsewhere, so the
+   * creature is destroyed and a new one of its type placed (forced, and
+   * hostile, as `place_monster` makes it).
+   */
+  moveCreature(from: { x: number; y: number }, to: { x: number; y: number }, type: number): Step {
+    return (next) => this.node('destroy-monst', { ex1: [from.x, from.y] },
+      this.node('place-monst', { ex1: [to.x, to.y], ex2: [type, 1] }, next));
+  }
+
   /** `FUN_1080_1b76(x, y, t)`: the terrain at `(x, y)` becomes `t`. */
   setTer(x: number, y: number, t: number): Step {
     return (next) => this.node('change-ter', { ex1: [x, y], ex2: [t] }, next);
@@ -1279,6 +1291,22 @@ export class SpecBuilder {
     return this.seq([this.setFlag(flag, value), this.ifFlagEq(running, 0, [
       this.setFlag(running, 1), (next) => this.node('start-timer-scen', { ex1: [1, chain] }, next),
     ])]);
+  }
+
+  /**
+   * E3's slow countdowns (`FUN_10c0_61c4`, every turn anywhere): while
+   * `flag` is above 1, it falls by one when `get_ran(1, 0, 10)` is 5, one
+   * turn in eleven. A one-tick scenario timer, rearming itself while the flag
+   * is above 1, rolls IF_RANDOM's `< 10` for it: nine in a hundred.
+   * Returns the step that sets the flag to `value` and starts the timer; the
+   * caller starts it only once the last one has stopped.
+   */
+  slowCountdown(flag: Flag, value: number): Step {
+    const tick = this.reserve();
+    const rearm = (next: number) => this.node('start-timer-scen', { ex1: [1, tick] }, next);
+    const body = this.seq([this.ifChance(10, [this.decFlag(flag)]), this.ifFlagAtLeast(flag, 2, [rearm])])(-1);
+    this.fill(tick, 'nop', {}, body);
+    return this.seq([this.setFlag(flag, value), rearm]);
   }
 
   /** The scenario chain behind `townCountdown`, returning its first node. */

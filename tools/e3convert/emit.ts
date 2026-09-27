@@ -42,7 +42,7 @@ import { tinraya } from './towns/tinraya';
 import { PANTS_CLASS, RENTAR_DEATH_FLAGS, rentarKeep } from './towns/rentarKeep';
 import { sharimik, SHARIMIK_DEATH_FLAGS } from './towns/sharimik';
 import { ZONE_SCRIPTS } from './towns/zones';
-import { DAILY_FLAGS } from './towns/talkScripts';
+import { DAILY_FLAGS, KILL_SCRIPTS } from './towns/talkScripts';
 import { dailyPlot } from './towns/plot';
 import { SpecBuilder, type ScriptSource } from './script';
 import { BASIC_BUTTONS } from '../../src/game/specials/oneshot';
@@ -309,7 +309,7 @@ function creatureTimeXml(c: E3CreatureStart): string {
 /** Death flags the converter gives creatures E3 asks about (`e3DeathFlag`), by `town:slot`. */
 const DEATH_FLAGS = new Map<string, [number, number]>([...SHARIMIK_DEATH_FLAGS, ...RENTAR_DEATH_FLAGS, ['61:9', TUNNEL_GUARD_DEAD]]);
 
-function creatureXml(c: E3CreatureStart, id: number, personality: number, deathFlag?: [number, number]): string {
+function creatureXml(c: E3CreatureStart, id: number, personality: number, deathFlag?: [number, number], onKill = -1): string {
   // `spec1`/`spec2` is the creature's death flag: END_DIE sets it, and a town
   // loading leaves out anyone whose flag is set (`10d8:` town setup, which
   // skips row 0 and 200 up). 200–204 are creatures a script brings in
@@ -322,7 +322,7 @@ function creatureXml(c: E3CreatureStart, id: number, personality: number, deathF
         <attitude>${ATTITUDE[c.startAttitude] ?? 'docile'}</attitude>
         <mobility>${c.mobile}</mobility>
 ${sdf ? `        <sdf x="${sdf[0]}" y="${sdf[1]}" />\n` : ''}${code ? `        <encounter>${code}</encounter>\n` : ''}${creatureTimeXml(c)}        <personality>${personality}</personality>
-    </creature>
+${onKill >= 0 ? `        <onkill>${onKill}</onkill>\n` : ''}    </creature>
 `;
 }
 
@@ -355,7 +355,7 @@ function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, st
   const r = t.village ? { top: 0, left: 0, bottom: size - 1, right: size - 1 } : t.inTownRect;
   const creatures = townCreatures(t)
     .map((c, i) => (c.number > 0
-      ? creatureXml(c, i, personalityOf.get(`${t.number}:${i}`) ?? -1, DEATH_FLAGS.get(`${t.number}:${i}`))
+      ? creatureXml(c, i, personalityOf.get(`${t.number}:${i}`) ?? -1, DEATH_FLAGS.get(`${t.number}:${i}`), script.kill)
       : '')).join('');
   // Preset items: the legacy field called `ability` holds the charges, as in
   // BoE (`loadLegacy.ts`); -1 is an empty slot.
@@ -629,7 +629,8 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     const terrain = t.village ? buildE3Village(template, t.village, underground, t.number) : t.terrain;
     const spots = t.specialLocs.map((loc, k) => ({ loc, id: t.specId[k] ?? 255 }));
     const script = e3SpotScript(spots, { town: t.number }, { ...e3Src, creatures: townCreatures(t), terrain },
-      (x, y) => terrain[x]?.[y] ?? 0, TOWN_SCRIPTS.get(t.number), ENTRY_SCRIPTS.get(t.number));
+      (x, y) => terrain[x]?.[y] ?? 0, TOWN_SCRIPTS.get(t.number), ENTRY_SCRIPTS.get(t.number),
+      KILL_SCRIPTS.get(t.number));
     write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf, strings, script));
     write(`${base}.map`, townMap(t, terrain, strings, script, vehicles));
     write(`${base}.spec`, script.spec);
