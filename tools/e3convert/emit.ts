@@ -25,7 +25,8 @@ import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
 import { readE3ShopTables, standardShops } from './shops';
 import { e3DayReached, e3Event, e3Flag } from './flags';
 import { buildE3Village, villageTemplate } from './village';
-import { ENTRANCE_MARK_SPOT, e3SpotScript, type PlaceScript, type SpotScript } from './specials';
+import { ENTRANCE_MARK_SPOT, e3SpotScript, type KillScript, type PlaceScript, type SpotScript } from './specials';
+import { e3KillAfter, e3KillCase } from './towns/kills';
 import { FORT_ENTRANCES, FORT_START_ZONE, town21 } from './towns/town21';
 import { krizsan } from './towns/krizsan';
 import { shayder } from './towns/shayder';
@@ -393,7 +394,7 @@ function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, st
   const r = t.village ? { top: 0, left: 0, bottom: size - 1, right: size - 1 } : t.inTownRect;
   const creatures = townCreatures(t)
     .map((c, i) => (c.number > 0
-      ? creatureXml(c, i, personalityOf.get(`${t.number}:${i}`) ?? -1, DEATH_FLAGS.get(`${t.number}:${i}`), script.kill)
+      ? creatureXml(c, i, personalityOf.get(`${t.number}:${i}`) ?? -1, DEATH_FLAGS.get(`${t.number}:${i}`), script.kills[i])
       : '')).join('');
   // Preset items: the legacy field called `ability` holds the charges, as in
   // BoE (`loadLegacy.ts`); -1 is an empty slot.
@@ -469,6 +470,23 @@ function townMap(
 export const E3_JOURNAL_ENTRIES = 0x22;
 function e3JournalStrings(str: (id: number) => string): string[] {
   return Array.from({ length: E3_JOURNAL_ENTRIES + 1 }, (_, e) => (e === 0 ? '' : str(5100 + e)));
+}
+
+/**
+ * A town's kill scripts: the town's own (`KILL_SCRIPTS`), then E3's
+ * `kill_monst` cases for the creature's `spec1`/`spec2` (`towns/kills.ts`).
+ */
+function townKillScript(town: number, creatures: E3CreatureStart[]): KillScript {
+  const own = KILL_SCRIPTS.get(town);
+  return (b, slot) => {
+    const c = creatures[slot];
+    if (!c || c.number <= 0) return null;
+    const boss = e3KillCase(b, town, c.spec1, c.spec2);
+    const after = e3KillAfter(b, c.spec1);
+    if (!own && !boss && !after.length) return null;
+    const key = boss || after.length ? `${c.spec1}:${c.spec2}` : '';
+    return { key, steps: [...own?.(b) ?? [], ...boss ?? [], ...after] };
+  };
 }
 
 function scenarioXml(
@@ -693,9 +711,10 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     const underground = villageZone.get(t.number) !== undefined && villageZone.get(t.number)! % E3_ZONES_WIDE >= 7;
     const terrain = t.village ? buildE3Village(template, t.village, underground, t.number) : t.terrain;
     const spots = t.specialLocs.map((loc, k) => ({ loc, id: t.specId[k] ?? 255 }));
-    const script = e3SpotScript(spots, { town: t.number }, { ...e3Src, creatures: townCreatures(t), terrain },
+    const creatures = townCreatures(t);
+    const script = e3SpotScript(spots, { town: t.number }, { ...e3Src, creatures, terrain },
       (x, y) => terrain[x]?.[y] ?? 0, TOWN_SCRIPTS.get(t.number), ENTRY_SCRIPTS.get(t.number),
-      KILL_SCRIPTS.get(t.number));
+      townKillScript(t.number, creatures));
     write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf, strings, script));
     write(`${base}.map`, townMap(t, terrain, strings, script, vehicles));
     write(`${base}.spec`, script.spec);

@@ -13427,7 +13427,9 @@ DIVERGENCES.md §10 says why and what differs.
 
 ### E3's boss kills: `kill_monst`'s special cases are not ported (2026-09-27)
 
-**Next session starts here.** Found while placing the journal's last three
+> **Ported later the same day**: see "E3's boss kills, ported" below.
+
+Found while placing the journal's last three
 call sites. `FUN_10c0_5051`, E3's `kill_monst`, ends with a switch on the dead
 creature's `+0x57` byte, through a 12-entry value table at `cs:57e2` with
 handlers at `+0x18`, plus tests on `+0x56`. **Nothing in the converter sets
@@ -13452,4 +13454,41 @@ Handlers seen, each still to be matched to its creature:
   gives a message (`5767`).
 - The engine's hook is `<onkill>` (`KILL_SCRIPTS`, talkScripts.ts), which
   already runs per town creature.
+
+### E3's boss kills, ported (2026-09-27)
+
+`tools/e3convert/towns/kills.ts`: `e3KillCase(spec1, spec2)` is E3's
+switch, and `e3KillAfter` is the naga check after it. `emit.ts`'s
+`townKillScript` puts the town's own `KILL_SCRIPTS` first and gives each
+creature its own `<onkill>`, shared between creatures with the same case.
+`SpotScript.kill` became `kills[slot]`. Table values → handlers:
+`8`→55b1, `9`→55df, `c8`→5309, `c9`→5336, `ca`→538a, `cb`→540c,
+`cd`→5455, `ce`→5490, `cf`→54a9, `d0`→54d8, `d1`→550f, `d2`→5560. `spec2`
+8 and 9 are ordinary death flags, and act only for particular `spec1`. 31
+creatures in 20 towns carry a case. The main ones:
+- the Alien Slime (town 23): 0xc85, and every creature in the lair is gone;
+- the golems' crystal (town 60): 0xc8c, special item 0x46, event 3;
+- Erika (town 47): quickfire, her tower off the map, 0x263, amulets taken;
+- Marjorie (town 102): the Curse of the Manse ends the game, as in E3;
+- the dragonling (town 104): the brood leave and the town turns;
+- towns 36 and 62: the third kill clears them.
+
+The last three journal entries (6, 0x1b, 0xd) came with them, so **all 33
+are in**. Offsets decoded on the way:
+- `party+0x84fd + 2k` is `key_times[k]`, so Barrier Cavern's "+0x8501,
+  unread" is `setEvent(2)`;
+- `party+0x8485 + t` is `can_find_town[t]`, so the Caves of Giants' "+0x84bb,
+  reader unknown" is town 54 appearing when the rune door opens. Several
+  other `TODO(E3-3)`s name `can_find_town` offsets and can use this;
+- town `+0x2abe + 64x + y` is the terrain, and `+0x1427 + 0x5c·slot` is a
+  creature's `active`.
+
+`test/e3convert.test.ts` kills the Alien Slime headless and checks the flag,
+the journal and the empty lair.
+
+**Next session starts here.** Nothing is queued. The honest list is
+`grep -rn "TODO(E3-3)" src tools` (52 as of this entry). Many are small, and
+several are now easy with the offsets above. The bigger ones are
+`emit.ts:281`'s zone encounters below 100, `talk.ts:311`'s talk types not
+yet transcribed, and `script.ts:772`'s town-hostile endings.
 

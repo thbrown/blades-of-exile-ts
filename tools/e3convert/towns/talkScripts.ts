@@ -31,9 +31,8 @@ const GOINTZ_SOLD: [number, number] = [291, 20];
 const URSAGI_KILLED: [number, number] = [291, 32];
 
 /**
- * What killing one of a town's creatures does, by town (`<onkill>`).
- * TODO(E3-3): E3's `kill_monst` (`FUN_10c0_5051`) has boss cases of its own,
- * including journal entries 6, 0x1b and 0xd; see PROGRESS.md.
+ * What killing one of a town's creatures does, by town (`<onkill>`), before
+ * E3's own `kill_monst` cases (`kills.ts`).
  */
 export const KILL_SCRIPTS = new Map<number, (b: SpecBuilder) => Step[]>([
   [51, (b) => [b.incFlag(URSAGI_KILLED)]],

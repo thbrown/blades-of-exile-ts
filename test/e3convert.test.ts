@@ -25,7 +25,9 @@ import { GameRng } from '../src/core/rng';
 import { Town } from '../src/data/town';
 import { Universe } from '../src/universe/universe';
 import { PartyPreset } from '../src/universe/player';
-import { GameSession } from '../src/game/session';
+import { FORCED_ENTRY, GameSession } from '../src/game/session';
+import { killMonst } from '../src/game/damage';
+import { MainStatus } from '../src/universe/skills';
 import { Direction } from '../src/core/location';
 import {
   createE3OutCombatTerrain, E3_ARENA_GROUND, E3_ARENA_ODDS, E3_ARENA_STAMP_LOCS, E3_ARENA_WALLS,
@@ -259,6 +261,37 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     // Once only.
     await session.runSpecial(SpecCtx.SEE_MONST, SpecCtxType.SCEN, slime, { x: 0, y: 0 });
     expect(said).toHaveLength(1);
+  });
+
+  it("runs E3's boss kills: the Alien Slime's death is what Anaximander hears of", async () => {
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    const dialogs: number[] = [];
+    session.attachSpecials(new Proxy({}, {
+      get: (_, k) => (k === 'message' ? () => Promise.resolve() : () => Promise.resolve(0)),
+    }) as never);
+    session.startTownMode(23, FORCED_ENTRY);
+    const univ = session.univ;
+    // E3's spec2 0xc9, on the slime in slot 41 alone.
+    const slime = univ.town!.monsters[41]!;
+    expect(slime.number).toBe(0x8e);
+    expect(slime.specialOnKill).toBeGreaterThanOrEqual(0);
+    expect(univ.town!.monsters.filter((m) => m.specialOnKill === slime.specialOnKill)).toHaveLength(1);
+    killMonst(univ, slime, 0, MainStatus.DEAD, session);
+    await session.settled();
+    await new Promise((r) => { setTimeout(r, 0); });
+    expect(univ.party.getSdf(...partyFlag(0xc85))).toBe(1);
+    expect(univ.party.journal.map((e) => e.theStr)).toEqual([expect.stringMatching(/^Destroyed magical creature/)]);
+    // Every other creature in the lair is gone with it.
+    expect(univ.town!.monsters.filter((m) => m.isAlive)).toHaveLength(0);
+    void dialogs;
+  });
+
+  it('gives the other kill cases to the creatures that carry them', () => {
+    const onKill = (t: number) => scen.towns[t]!.creatures.filter((c) => c.specialOnKill >= 0).length;
+    expect(onKill(60)).toBe(1); // the golems' crystal
+    expect(onKill(58)).toBe(4); // the four whose last death says so
+    expect(onKill(36)).toBe(4); // the third kill clears the town
+    expect(onKill(1)).toBe(0); // ordinary death flags only
   });
 
   it("has E3's monsters, with E3's own stats and sprites", () => {

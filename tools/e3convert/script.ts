@@ -69,8 +69,8 @@ export interface ScriptSource {
   dialogs: Map<number, E3Dialog>;
   /** The town's terrain as converted, `[x][y]`, for `replaceTerrain`. */
   terrain?: number[][];
-  /** The town's creatures, by slot, for `bringIn`. */
-  creatures?: { number: number; spec1: number }[];
+  /** The town's creatures, by slot, for `bringIn` and the kill scripts. */
+  creatures?: { number: number; spec1: number; spec2: number }[];
   /**
    * Adds a string to the *scenario's* list, returning its index: a few
    * nodes (IF_NUM_RESPONSE's prompt) read theirs from there, wherever they run.

@@ -46,8 +46,8 @@ export interface SpotScript {
   spots: { x: number; y: number; id: number; node: number }[];
   /** The town's entry node (`<onenter>`), or -1. */
   entry: number;
-  /** The node every placed creature runs when killed (`<onkill>`), or -1. */
-  kill: number;
+  /** Each creature slot's `<onkill>` node, or -1 (`KillScript`). */
+  kills: number[];
 }
 
 /** A place's own encounters, transcribed (`towns/`): steps by encounter number. */
@@ -78,6 +78,12 @@ export const ENTRANCE_MARK_SPOT = 90;
 /** What a town does as the party enters it (`towns/entry.ts`). */
 export type EntryScript = (b: SpecBuilder) => Step[];
 
+/**
+ * What killing the creature in a slot does. Creatures with the same key
+ * share a node; a key of null means no `<onkill>`.
+ */
+export type KillScript = (b: SpecBuilder, slot: number) => { key: string; steps: Step[] } | null;
+
 /** Blocked terrains a town spot still runs on (water, and three walls). */
 const WALK_INTO = new Set([71, 101, 118, 133]);
 
@@ -99,7 +105,7 @@ export function e3ZoneMessageBlock(zone: number): number {
 export function e3SpotScript(
   spots: E3Spot[], place: { zone: number } | { town: number },
   src: ScriptSource, terrainAt: (x: number, y: number) => number, own?: PlaceScript, onEntry?: EntryScript,
-  onKill?: EntryScript,
+  onKill?: KillScript,
 ): SpotScript {
   const isTown = 'town' in place;
   const block = isTown ? e3TownMessageBlock(place.town) : e3ZoneMessageBlock(place.zone);
@@ -153,6 +159,13 @@ export function e3SpotScript(
     listed.push({ x: s.loc.x, y: s.loc.y, id: s.id, node: n });
   });
   const entry = onEntry ? b.compile(onEntry(b)) : -1;
-  const kill = onKill ? b.compile(onKill(b)) : -1;
-  return { spec: b.spec, strings: b.strings, marks, spots: listed, entry, kill };
+  const killNodes = new Map<string, number>();
+  const kills = (src.creatures ?? []).map((_, slot) => {
+    const k = onKill?.(b, slot);
+    if (!k) return -1;
+    const n = killNodes.get(k.key) ?? b.compile(k.steps);
+    killNodes.set(k.key, n);
+    return n;
+  });
+  return { spec: b.spec, strings: b.strings, marks, spots: listed, entry, kills };
 }

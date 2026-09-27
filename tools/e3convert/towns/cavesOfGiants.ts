@@ -61,8 +61,8 @@ function lower(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]> 
   /** All seven runes lit opens (54,23); any dark closes it again. */
   const runeDoor = (): Step => RUNES.reduceRight<Step>(
     (inner, flag) => b.ifFlagEq(flag, 1, [inner], [b.ifTer(0x36, 0x17, 0x8d, [b.setTer(0x36, 0x17, 0x8c)])]),
-    // TODO(E3-3): party+0x84bb is set too; what reads it is not known yet.
-    b.ifTer(0x36, 0x17, 0x8c, [b.setTer(0x36, 0x17, 0x8d)]));
+    // Opening it also puts town 54 on the map (party+0x84bb, `can_find_town[54]`).
+    b.ifTer(0x36, 0x17, 0x8c, [b.setTer(0x36, 0x17, 0x8d), b.townVisible(54)]));
   /** E3 lights the runes on its panel; here each press lists them. */
   const showRunes = (): Step[] => RUNES.map((flag, k) =>
     b.ifFlagEq(flag, 1, [b.say(`Rune ${k + 1} glows.`)], [b.say(`Rune ${k + 1} is dark.`)]));
