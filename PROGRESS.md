@@ -13231,3 +13231,48 @@ The user's notes after playing Exile III, and what each turned out to be:
   cd74bdf made dressers `box`, it planned a route through the dresser beside
   the start, and every later check failed after it. Only step-change and
   unlock count now.
+
+### E3's job boards, reverse-engineered but not ported (2026-09-27)
+
+A talk node of type 25 is a job board (`talkarms.s`, `1020:2c0a`). Board `e1`
+is closed if the party failed a job there (party+0x847f + bank), and is
+otherwise `FUN_1008_40cb(bank)`. At the moment the converter maps it to the
+engine's JOB_BANK, which shows an empty board: E3 has no scenario quests.
+**E3's jobs are generated, not authored**, so OBoE's quest model can't hold
+them without losing the randomness. A port is an engine extension behind a
+scenario flag, with E3's job state in the party record, and so in saves.
+What is known so far:
+
+- **Storage** (party record, segment 1158). Six boards × four jobs at
+  `+0x835f` (`bank*0x30 + job*0xc`), and the party's four jobs at `+0x832f`.
+  A job is 12 bytes: `+0` kind (0 none), `+4` extra, `+6` days (the
+  deadline, made absolute when taken by adding `calc_day`, `FUN_10d0_548b`),
+  `+8` target (index into the town table at `DS:0x50`), `+10` bank.
+- **Generation** `FUN_1008_3c91`, all six boards. Per job, in this order:
+  kind `get_ran(1,0,5)`, target `get_ran(1,0,39)`. No job if the target's
+  town is `< 0`, or if `FUN_1080_0000(bankTown[bank] at DS:0x2ae,
+  town[target])`, a distance, is 0. Then by kind:
+  - 1, a message: days `get_ran(1,0,?) + 12`;
+  - 2, a delivery: goods `get_ran(1,0,9)`, days `+ 15`;
+  - 3, magical supplies: a monster, `get_ran(1,0x3a,0x58)` or
+    `(0x73,0x89)` on a coin flip, days `get_ran(2,1,?) + 45`;
+  - 4 and 5, rush jobs: `get_ran(1,10,15)`, days `get_ran(1,0,?) + 1`.
+  - Some `get_ran` bounds are pushed args Ghidra dropped; read them in
+    `nedis.py 1008:3c91`. Who calls it, and when boards refill, is not yet
+    known.
+- **Text** `FUN_10d0_2540`, format strings in segment 10d0 at `0x2308`
+  on. "Message: %s an important message to %s %s. Pay is %d gold.",
+  "Delivery: …", "Magical Supplies: %s slay a %s and take its body to %s %s",
+  "Rush Delivery", "Rush Message", plus "within %d days" / "by Day %d".
+  **Pay by kind** is distance × 60 + 60, × 70 + 75, × 150 + 400, × 140 + 200
+  and × 120 + 150.
+- **Taking** `FUN_1008_3e97`, buttons 5/7/9/11 for jobs 0–3. The job is
+  copied into the first free slot of the party's four, its deadline is made
+  absolute, and it is cleared from the board.
+- **Kind 3's monster**: `FUN_10c0_5051`, E3's `kill_monst`. Killing a
+  monster of the job's type, with the job at `+4`, shows a message
+  (`FUN_1008_3b3f(0x13,0x48,…)`) and sets `+4` to -1, the body carried.
+- **The item panel lists the jobs** (`FUN_10d0_0b5b`). Delivery on arrival,
+  pay, and the failure flag at a missed deadline are not traced yet. Start
+  from the other two readers of `+0x832f`: `1010:5971` (in
+  `FUN_1010_5889`) and `1020:16ee` (in `FUN_1020_1484`).
