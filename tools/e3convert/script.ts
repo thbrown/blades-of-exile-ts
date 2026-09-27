@@ -785,6 +785,19 @@ export class SpecBuilder {
     return (next) => this.node('rect-place-field', { sdf: [100, field], ex1: [y, x], ex2: [y, x] }, next);
   }
 
+  /**
+   * Field `field` is gone from every square of the rect: RECT_PLACE_FIELD
+   * with `100 + field`, an exile-js extension (`src/game/specials/rect.ts`).
+   */
+  removeField(x1: number, y1: number, x2: number, y2: number, field: number): Step {
+    return (next) => this.node('rect-place-field', { sdf: [100, 100 + field], ex1: [y1, x1], ex2: [y2, x2] }, next);
+  }
+
+  /** A line in the text area in the converter's own words, where E3 shows state the engine can't. */
+  say(text: string): Step {
+    return (next) => this.node('disp-sm-msg', { msg: [this.text(text)] }, next);
+  }
+
   /** E3's `key_times[k] = calc_day()`: plot event `k` happened today (`e3Event`). */
   setEvent(k: number): Step {
     return (next) => this.node('set-event', { ex1: [e3Event(k)] }, next);

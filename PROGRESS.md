@@ -1283,6 +1283,18 @@ Notes for M2 implementer:
       `ifTerAtSpot`/`setTerAtSpot` (the spot's own square: `e3SpotScript`
       passes `spotLoc`).
     - FORMATS.md now lists every town's handler function.
+  - 2026-09-26: **the Caves of the Giants** (towns 30–31,
+    `towns/cavesOfGiants.ts`, `FUN_1078_3c6f`/`4089`, block 58), with the
+    lights-out runes (`FUN_1008_48d9`: seven buttons toggle flags
+    0xc28–0xc2e by a table at DGROUP 0x2ba; all lit opens (54,23)).
+    - **Engine extension: RECT_PLACE_FIELD with `100 + f` removes field
+      `f`**, for E3's loops that clear quickfire over a whole town
+      (`FUN_1038_0896`). `removeField`, tested in `specials.test.ts`.
+    - `FUN_1018_99f2(loc, n)` is `place_spell_pattern(…, n + 50)`, so its
+      `n` is 1997's damage code less 50: 0–30 fire, 40–70 cold, 80–110
+      magic (the chest's 0x62 is 18d6 of magic).
+    - New step `say`: a line in the converter's own words, where E3 shows
+      state the engine can't (the runes' lights, after each press).
   - Next: the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.

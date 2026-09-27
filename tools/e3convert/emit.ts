@@ -32,6 +32,7 @@ import { slimePit } from './towns/slimePit';
 import { towerOfMagi } from './towns/towerOfMagi';
 import { filthFactory } from './towns/filthFactory';
 import { castleTroglo } from './towns/castleTroglo';
+import { cavesOfGiants } from './towns/cavesOfGiants';
 import { sharimik, SHARIMIK_DEATH_FLAGS } from './towns/sharimik';
 import { ZONE_SCRIPTS } from './towns/zones';
 import { DAILY_FLAGS } from './towns/talkScripts';
@@ -57,6 +58,7 @@ const TOWN_SCRIPTS = new Map<number, PlaceScript>([
   [24, towerOfMagi(24)], [25, towerOfMagi(25)],
   [26, filthFactory(26)], [27, filthFactory(27)],
   [28, castleTroglo(28)], [29, castleTroglo(29)],
+  [30, cavesOfGiants(30)], [31, cavesOfGiants(31)],
 ]);
 
 /** E3's special items: strings 1801 on, and the engine's limit too. */

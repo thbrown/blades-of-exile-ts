@@ -95,6 +95,14 @@ export async function rectSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
 
         case SpecType.RECT_PLACE_FIELD: {
           if (!town) return;
+          // An exile-js extension, not in OBoE: 100 + f takes field f away
+          // (always, and nothing else), as Exile 3's scripts clear
+          // quickfire (tools/e3convert, `removeField`). The C++ has no
+          // field numbered 100 or more, so no BoE scenario uses these.
+          if (spec.sd2 >= 100 && spec.sd2 < 100 + FieldType.FIELD_DISPEL) {
+            town.setField(x, y, (spec.sd2 - 100) as FieldType, false);
+            break;
+          }
           const field = spec.sd2 as FieldType;
           // sd1 is a percentage chance per square; a dispel always applies.
           if (field !== FieldType.FIELD_DISPEL && univ.rng.getRan(1, 1, 100) > spec.sd1) break;

@@ -2036,6 +2036,19 @@ describe("Exile 3's per-PC scripts", () => {
     }
   });
 
+  it('takes one kind of field away with RECT_PLACE_FIELD 100 + f', async () => {
+    const b = new SpecBuilder({ strings: new Map(), dialogs: new Map() }, () => 0);
+    const entry = b.compile([b.removeField(0, 0, 63, 63, FieldType.FIELD_WEB)]);
+    const { univ, run } = withNodes(Object.fromEntries(parseSpecials(b.spec, opcodes)));
+    const { x, y } = univ.party.townLoc;
+    univ.town!.setField(x, y, FieldType.FIELD_WEB, true);
+    univ.town!.setField(x + 1, y, FieldType.CLOUD_STINK, true);
+    expect(univ.town!.hasField(x, y, FieldType.FIELD_WEB)).toBe(true);
+    await run(entry);
+    expect(univ.town!.hasField(x, y, FieldType.FIELD_WEB)).toBe(false);
+    expect(univ.town!.hasField(x + 1, y, FieldType.CLOUD_STINK)).toBe(true);
+  });
+
   it('reads the terrain under the party at (-1, -1)', async () => {
     const b = new SpecBuilder({ strings: new Map(), dialogs: new Map() }, () => 0);
     const entry = b.compile([b.ifPartyOnTer(71, [b.gold(1)], [b.gold(2)])]);
