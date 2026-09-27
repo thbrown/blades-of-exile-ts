@@ -1456,9 +1456,28 @@ Notes for M2 implementer:
     - Still to do from the notes: E3's own sounds (the town-entry and start
       sounds are BoE's; E3 has 100 WAVs in its resources) and E3's icons
       (the interface sheets are BoE's).
-  - Next: the villages' own switches (120–177; FORMATS.md lists their
-    handlers), the zones, 35 talk scripts, and the demon plot's countdown.
-    The talk types are listed by `listTalkScripts.ts`.
+  - 2026-09-27: **the villages, 120–177** (`towns/villages.ts`): the
+    fourteen switches FORMATS.md lists, plus Delan (120), which has a spot
+    and no code. Checked in the UI with `try-spot.mjs`: Erox's wine (173/2,
+    slowed and asleep), Dellskeep's rune (176/3, on the second step), Moon's
+    books (171/14, 17), a trapped box in Pergies (122/2). New builders
+    `slow`, `curse` and `sleep`. Coverage: 1,131 spots done, 312 to go, all
+    of them in the zones. TODO(E3-3), in the file: Aminro's item's 178
+    charges (146/7), the Isolated Inn's write to party+0x8520 (155/2), and
+    `sleep`'s saving roll (E3's is against level).
+    - Gotcha: **party+0x6a99 is horse 4's `property` byte, not a boat's.**
+      Boats run from +0x693a and horses from +0x6a68 (`tables.ts`); a first
+      reading had Gidrik's spot 1 giving boats 0–2, which the converter
+      rejected as unplaced. Check a party offset against `tables.ts` and
+      FORMATS.md before naming it.
+    - `nedis.py --all` disassembles the whole EXE for grepping (a partial
+      cross-reference: direct addresses only), and `--str SEG:OFF` prints a
+      literal. `show.ts` already prints dialogs (`d0x1216`) and strings
+      (`68:5`): use it rather than writing another.
+    - Spots on impassable squares (chests, shelves) fire on Use, not on a
+      step; `try-spot.mjs --use` is the way to test them.
+  - Next: the zones (312 spots), 35 talk scripts, and the demon plot's
+    countdown. The talk types are listed by `listTalkScripts.ts`.
 
 ## Key references (do not lose)
 

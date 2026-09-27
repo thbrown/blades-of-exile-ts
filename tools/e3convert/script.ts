@@ -54,6 +54,9 @@ const SPLIT: Flag = e3Flag(0, 0xc64 - 0x84);
 const STATUS_DISEASE = 7;
 const STATUS_POISON = 2;
 const STATUS_DUMB = 9;
+const STATUS_CURSE = 1;
+const STATUS_SLOW = 3;
+const STATUS_ASLEEP = 11;
 /** The engine's `SpellPat.SQUARE`, a 3×3 block. */
 export const PAT_SQUARE = 1;
 
@@ -563,6 +566,31 @@ export class SpecBuilder {
    */
   dumbfound(n: number): Step {
     return (next) => this.node('status', { ex1: [n, 1, STATUS_DUMB] }, next);
+  }
+
+  /**
+   * `FUN_10b0_1bec(pc, n)`: BoE 1997's `slow_pc`, the target (every PC
+   * unless one is picked) slowed by `n`. E3 slows and then curses each PC
+   * in turn where the pair of nodes does every PC for one, then the other;
+   * neither rolls, so only the order of the log lines differs.
+   */
+  slow(n: number): Step {
+    return (next) => this.node('status', { ex1: [n, 1, STATUS_SLOW] }, next);
+  }
+
+  /**
+   * `FUN_10b0_19dd(pc, n, 11, adjust)`: `sleep_pc`, the target put to sleep
+   * for `n`. TODO(E3-3): E3's saving roll is `get_ran(1, 0, 100) + adjust`
+   * against `30 + 2 × level`; the engine's node rolls `get_ran(1, 1, 100) + 10`
+   * against `30 + 2 × free action`, so who resists differs.
+   */
+  sleep(n: number): Step {
+    return (next) => this.node('status', { ex1: [n, 1, STATUS_ASLEEP] }, next);
+  }
+
+  /** `FUN_10b0_1606(pc, n)`: BoE 1997's `curse_pc`, the target cursed by `n`. */
+  curse(n: number): Step {
+    return (next) => this.node('status', { ex1: [n, 1, STATUS_CURSE] }, next);
   }
 
   /**

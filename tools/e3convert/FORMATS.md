@@ -264,7 +264,14 @@ arguments of far calls, so read them from the disassembly (`Disasm.java`).
 | `FUN_10d8_3d5b(kind, row, col)` | if flag `(row, col)` is set, every creature of `kind` is gone |
 | `FUN_10b0_16e6(pc, n)` | BoE 1997's `dumbfound_pc` |
 | `FUN_1038_1185(x, y, type)` | a decal on the floor (`make_sfx`) |
+| `FUN_10b0_1bec(pc, n)` / `FUN_10b0_1606(pc, n)` | BoE 1997's `slow_pc` / `curse_pc` |
+| `FUN_10b0_19dd(pc, n, type, adjust)` | `sleep_pc`: resisted if `get_ran(1, 0, 100) + adjust < 30 + 2 × level` |
+| `FUN_1070_0464(item, charges)` | give `item` with `charges` to the first PC with room |
 | `FUN_10d0_4c8d(far str)` | a line in the text area; a script's literal is in its own code segment (`PUSH CS; PUSH off`) |
+
+DGROUP `0x3d3c` is the registered-copy flag; the shareware build refuses
+some crossings without it ("You need to be registered."). Horses' records
+are 10 bytes from party+0x6a68, `property` at +9: 0x6a99 is horse 4's.
 
 Town terrain is in segment 1160 at `0x2abe + 64x + y`, a stride of 64
 whatever the town's size.

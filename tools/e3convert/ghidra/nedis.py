@@ -6,6 +6,8 @@ Disassembles EXILE3.EXE without Ghidra, for machines that can't install it.
     python3 tools/e3convert/ghidra/nedis.py 10b8:0b0c          # one function
     python3 tools/e3convert/ghidra/nedis.py 10b8:0b0c 10b8:1000 # a range
     python3 tools/e3convert/ghidra/nedis.py --table 10b8:0c40 20  # a jump table
+    python3 tools/e3convert/ghidra/nedis.py --str 10b8:1326       # a literal string
+    python3 tools/e3convert/ghidra/nedis.py --all > all.asm       # everything, to grep
 
 Addresses are Ghidra's (segment n is `0x1000 + (n-1)*8`), so the names in
 FORMATS.md and the scripts' comments work unchanged. The NE relocations are
@@ -195,6 +197,21 @@ def main():
         data = ne.data(seg_number(s))
         for i in range(count):
             print(f'{i:3d}: {s:04x}:{struct.unpack_from("<H", data, o + 2 * i)[0]:04x}')
+        return
+    if args and args[0] == '--all':
+        # Every code segment, for grepping: who else writes `es:[0x6a99]`?
+        n = 1
+        while n <= len(ne.fix):
+            data = ne.data(n)
+            if data:
+                disasm(ne, 0x1000 + (n - 1) * 8, 0, len(data))
+            n += 1
+        return
+    if args and args[0] == '--str':
+        # A C string in a segment: a script's literal (`PUSH CS; PUSH off`) or DGROUP's.
+        s, o = (int(x, 16) for x in args[1].split(':'))
+        data = ne.data(seg_number(s))
+        print(data[o:data.index(0, o)].decode('latin-1'))
         return
     if not args:
         print(__doc__)

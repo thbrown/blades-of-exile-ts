@@ -36,6 +36,7 @@ import { cavesOfGiants } from './towns/cavesOfGiants';
 import { shiftingFloors } from './towns/shiftingFloors';
 import { DUNGEON_SCRIPTS, TUNNEL_GUARD_DEAD } from './towns/dungeons';
 import { DUNGEON2_SCRIPTS } from './towns/dungeons2';
+import { VILLAGE_SCRIPTS } from './towns/villages';
 import { newCotra } from './towns/newCotra';
 import { tinraya } from './towns/tinraya';
 import { PANTS_CLASS, RENTAR_DEATH_FLAGS, rentarKeep } from './towns/rentarKeep';
@@ -68,6 +69,7 @@ const TOWN_SCRIPTS = new Map<number, PlaceScript>([
   [30, cavesOfGiants(30)], [31, cavesOfGiants(31)],
   ...DUNGEON_SCRIPTS,
   ...DUNGEON2_SCRIPTS,
+  ...VILLAGE_SCRIPTS,
   [42, newCotra],
   [35, tinraya(35)], [36, tinraya(36)],
   [38, rentarKeep(38)], [64, rentarKeep(64)],

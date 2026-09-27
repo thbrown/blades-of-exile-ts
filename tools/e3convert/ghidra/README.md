@@ -57,8 +57,11 @@ a `cmp bx, N; jmp word ptr cs:[bx + T]` are printed at the end, indexed by
 
 That covers the town and zone switches, which were always read from the
 disassembly anyway (the decompiler drops far calls' arguments). What it
-can't do is Ghidra's other job: finding code. There is no decompiled
-`exile3.c` to grep, no cross-references, and no function list beyond the
-prologue scan. For the long, stateful code still to do — the demon plot's
+can't do well is Ghidra's other job: finding code. There is no decompiled
+`exile3.c` to grep and no function list beyond the prologue scan. `--all`
+prints every segment (390,000 lines) for a poor man's cross-reference —
+`grep 'es:\[0x6a99\]'` finds every direct write to a party byte — but it
+misses indexed and pointer access, which Ghidra's references follow. `--str
+SEG:OFF` prints a script's literal string. For the long, stateful code still to do — the demon plot's
 countdown, the turn code (`FUN_1010_5889`), the job bank — run Ghidra where
 it installs and keep `project/exile3.c` beside the scripts.
