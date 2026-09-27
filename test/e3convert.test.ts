@@ -27,7 +27,7 @@ import { Universe } from '../src/universe/universe';
 import { PartyPreset } from '../src/universe/player';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
 import { killMonst } from '../src/game/damage';
-import { MainStatus } from '../src/universe/skills';
+import { MainStatus, Race } from '../src/universe/skills';
 import { Direction } from '../src/core/location';
 import {
   createE3OutCombatTerrain, E3_ARENA_GROUND, E3_ARENA_ODDS, E3_ARENA_STAMP_LOCS, E3_ARENA_WALLS,
@@ -284,6 +284,46 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     // Every other creature in the lair is gone with it.
     expect(univ.town!.monsters.filter((m) => m.isAlive)).toHaveLength(0);
     void dialogs;
+  });
+
+  it("runs E3's outdoor group scripts: the Nephilim patrol, and a lair's loot", async () => {
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    const said: string[] = [];
+    session.attachSpecials(new Proxy({}, {
+      get: (_, k) => (k === 'message' ? (s: string) => { said.push(s); return Promise.resolve(); } : () => Promise.resolve(0)),
+    }) as never);
+    const univ = session.univ;
+    session.debugLeaveTown();
+    // Zone 76, (4,8): both wandering groups are script 0x6e.
+    session.positionParty(4, 8, 24, 24);
+    const meet = async () => {
+      const slot = univ.party.outC[0]!;
+      slot.exists = true;
+      slot.whatMonst = scen.outdoors[4]![8]!.wandering[0]!;
+      slot.mLoc = { x: univ.party.outLoc.x + 1, y: univ.party.outLoc.y };
+      return session.checkOutdoorEncounter();
+    };
+    // A Nephil among the living: the patrol lets the party be.
+    univ.party.pcs[0]!.race = Race.NEPHIL;
+    expect(await meet()).toBe(false);
+    expect(said.pop()).toMatch(/see you have a Nephil/);
+    // Without one, it attacks.
+    for (const pc of univ.party.pcs) pc.race = Race.HUMAN;
+    expect(await meet()).toBe(true);
+    expect(said.pop()).toMatch(/perfectly understandable that they attack/);
+
+    // Zone 5's special group (script 0x8c) pays out when beaten.
+    const lair = scen.outdoors[5]![0]!.specialEnc[0]!;
+    expect(lair.specOnWin).toBeGreaterThanOrEqual(0);
+    expect(lair.forced).toBe(false);
+    session.positionParty(5, 0, 24, 24);
+    const gold = univ.party.gold;
+    await session.runSpecial(SpecCtx.WIN_ENCOUNTER, SpecCtxType.OUTDOOR, lair.specOnWin, univ.party.locInSec);
+    expect(univ.party.gold).toBe(gold + 600);
+    expect(said.pop()).toMatch(/You search the bodies. You find gold/);
+    expect(univ.party.pcs.flatMap((pc) => pc.items).some((it) => it.fullName === 'Orb of Sight')).toBe(true);
+    // Zone 74's special group (script 99) comes for the party from anywhere.
+    expect(scen.outdoors[2]![8]!.specialEnc[0]!.forced).toBe(true);
   });
 
   it('gives the other kill cases to the creatures that carry them', () => {

@@ -162,9 +162,19 @@ to `(y*9+x)*0xc94` and reads into `zones[2][2]` at `DS:-0x500e`.
 
 **Wandering group, 24 B** (BoE `out_wandering_type` is 22): `monst[7]`,
 `friendly[3]`, then swapped int16s at +10, +14, +16, +18, +20 and +22, with
-2 unswapped bytes at +12 (often 1). **Open**: which int16 is which. BoE's six
-are `spec_on_meet, spec_on_win, spec_on_flee, cant_flee, end_spec1,
-end_spec2`, but the +12 gap means E3's do not line up with them by position.
+2 unswapped bytes at +12 (often 1). BoE's six are `spec_on_meet,
+spec_on_win, spec_on_flee, cant_flee, end_spec1, end_spec2`, but E3's do not
+line up with them by position. Pinned 2026-09-27:
+
+| offset | meaning |
+|---|---|
+| +10 | script, `FUN_10c0_06c3(script, phase)`: phase 0 meeting, 1 won, 2 fled. 2–99 also meet the party from anywhere (BoE's `forced`) |
+| +12 | byte: 1 = won't run from a stronger party (`cant_flee`) |
+| +14, +16 | flag that, once set, stops the group being placed |
+| +18, +20 | message: string `block*300 + i` |
+| +22 | when the message shows: 0 at the meeting, and no fight; 1 at the meeting, then the fight; 2 on winning |
+
+The scripts are transcribed in `towns/encounters.ts`.
 Slot `monst[0]` is empty in every shipped group.
 
 ## TOWN.DAT: 200 records — pinned (`town.ts`)

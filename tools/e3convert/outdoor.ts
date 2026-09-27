@@ -24,10 +24,10 @@ export interface E3OutWandering {
    * The six 16-bit fields the loader byte-swaps, at +10, +14, +16, +18, +20
    * and +22. Pinned from the code: `(+14, +16)` is the flag that, once set,
    * stops the group being placed (`FUN_1090_07e7`; both must be above 0).
-   * A `+10` from 2 to 99 starts the meeting even when the group is not
-   * beside the party (the outdoor turn, `exile3.c` near line 5278), which
-   * suggests an encounter script. Still open: `(+18, +20)`, often `(87, n)`,
-   * and `+22`.
+   * `+10` is the group's script (`FUN_10c0_06c3`; 2 to 99 also meet the
+   * party from anywhere), `(+18, +20)` a message, string `block*300 + i`,
+   * and `+22` when it shows: 0 at the meeting instead of a fight, 1 before
+   * the fight, 2 on winning. See `towns/encounters.ts`.
    */
   words: number[];
   /**

@@ -48,7 +48,11 @@ export interface SpotScript {
   entry: number;
   /** Each creature slot's `<onkill>` node, or -1 (`KillScript`). */
   kills: number[];
+  /** Each outdoor group's `<onmeet>`, `<onwin>` and `<onflee>` nodes, or -1 (`GroupScript`). */
+  groups: GroupNodes[];
 }
+
+export interface GroupNodes { meet: number; win: number; flee: number }
 
 /** A place's own encounters, transcribed (`towns/`): steps by encounter number. */
 export type PlaceScript = (b: SpecBuilder) => Map<number, Step[]>;
@@ -84,6 +88,13 @@ export type EntryScript = (b: SpecBuilder) => Step[];
  */
 export type KillScript = (b: SpecBuilder, slot: number) => { key: string; steps: Step[] } | null;
 
+/**
+ * What meeting, beating and running from each of a zone's outdoor groups
+ * does (`towns/encounters.ts`): one entry a group, null where nothing
+ * happens. Entries with the same key share nodes.
+ */
+export type GroupScript = (b: SpecBuilder) => ({ key: string; meet: Step[] | null; win: Step[] | null; flee: Step[] | null })[];
+
 /** Blocked terrains a town spot still runs on (water, and three walls). */
 const WALK_INTO = new Set([71, 101, 118, 133]);
 
@@ -105,7 +116,7 @@ export function e3ZoneMessageBlock(zone: number): number {
 export function e3SpotScript(
   spots: E3Spot[], place: { zone: number } | { town: number },
   src: ScriptSource, terrainAt: (x: number, y: number) => number, own?: PlaceScript, onEntry?: EntryScript,
-  onKill?: KillScript,
+  onKill?: KillScript, onGroups?: GroupScript,
 ): SpotScript {
   const isTown = 'town' in place;
   const block = isTown ? e3TownMessageBlock(place.town) : e3ZoneMessageBlock(place.zone);
@@ -167,5 +178,12 @@ export function e3SpotScript(
     killNodes.set(k.key, n);
     return n;
   });
-  return { spec: b.spec, strings: b.strings, marks, spots: listed, entry, kills };
+  const groupNodes = new Map<string, GroupNodes>();
+  const groups = (onGroups?.(b) ?? []).map((g) => {
+    const compile = (steps: Step[] | null) => (steps ? b.compile(steps) : -1);
+    const n = groupNodes.get(g.key) ?? { meet: compile(g.meet), win: compile(g.win), flee: compile(g.flee) };
+    groupNodes.set(g.key, n);
+    return n;
+  });
+  return { spec: b.spec, strings: b.strings, marks, spots: listed, entry, kills, groups };
 }

@@ -25,7 +25,8 @@ import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
 import { readE3ShopTables, standardShops } from './shops';
 import { e3DayReached, e3Event, e3Flag } from './flags';
 import { buildE3Village, villageTemplate } from './village';
-import { ENTRANCE_MARK_SPOT, e3SpotScript, type KillScript, type PlaceScript, type SpotScript } from './specials';
+import { ENTRANCE_MARK_SPOT, e3SpotScript, type GroupNodes, type GroupScript, type KillScript, type PlaceScript, type SpotScript } from './specials';
+import { e3GroupForced, e3GroupSteps } from './towns/encounters';
 import { e3KillAfter, e3KillCase } from './towns/kills';
 import { FORT_ENTRANCES, FORT_START_ZONE, town21 } from './towns/town21';
 import { krizsan } from './towns/krizsan';
@@ -245,21 +246,20 @@ function areaXml(r: { top: number; left: number; bottom: number; right: number }
 
 /**
  * A zone's monster group: `<wandering>` ones turn up at random, and
- * `<encounter>` ones are placed by scripts. TODO(E3-3): the meeting script
- * (`+10`), and `(+18, +20)` and `+22`, whose meaning is still open
- * (outdoor.ts).
+ * `<encounter>` ones are placed by scripts. Its script and message are the
+ * three nodes (`towns/encounters.ts`).
  */
-function outGroupXml(tag: 'wandering' | 'encounter', g: E3OutWandering): string {
+function outGroupXml(tag: 'wandering' | 'encounter', g: E3OutWandering, nodes: GroupNodes): string {
   const [, end1 = 0, end2 = 0] = g.words;
   const sdf = end1 > 0 && end2 > 0 ? e3Flag(end1, end2) : [-1, -1];
   const monsters = [
     ...g.monst.map((m) => `        <monster>${m}</monster>\n`),
     ...g.friendly.map((m) => `        <monster friendly="true">${m}</monster>\n`),
   ].join('');
-  return `    <${tag} can-flee="${g.gap[0] === 1 ? 'false' : 'true'}" force="false">
-${monsters}        <onmeet>-1</onmeet>
-        <onwin>-1</onwin>
-        <onflee>-1</onflee>
+  return `    <${tag} can-flee="${g.gap[0] === 1 ? 'false' : 'true'}" force="${e3GroupForced(g)}">
+${monsters}        <onmeet>${nodes.meet}</onmeet>
+        <onwin>${nodes.win}</onwin>
+        <onflee>${nodes.flee}</onflee>
         <sdf x="${sdf[0]}" y="${sdf[1]}" />
     </${tag}>
 `;
@@ -278,8 +278,10 @@ function sectorXml(z: E3Outdoor, zone: number, strings: Map<number, string>, scr
     .map((r, i) => ({ r, name: z.areaNames[i] ?? '' }))
     .filter((a) => a.name !== '')
     .map((a) => areaXml(a.r, a.name));
-  // TODO(E3-3): the encounters below 100, which are each zone's own code.
-  const groups = [...z.specialEnc.map((g) => outGroupXml('encounter', g)), ...z.wandering.map((g) => outGroupXml('wandering', g))];
+  const groups = [
+    ...z.specialEnc.map((g, k) => outGroupXml('encounter', g, script.groups[k]!)),
+    ...z.wandering.map((g, k) => outGroupXml('wandering', g, script.groups[z.specialEnc.length + k]!)),
+  ];
   return `${XML_HEAD}<sector boes="2.0.0">\n    <name>${esc(z.name)}</name>\n${groups.join('')}${areas.join('')}${zoneSigns(z, zone, strings).map(signXml).join('')}${specStringsXml(script)}</sector>\n`;
 }
 
@@ -691,8 +693,12 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     const marks = [...FORT_ENTRANCES, ...WOLF_PIT_ENTRANCES].filter((e) => e.zone === i);
     const own = ZONE_SCRIPTS.get(i);
     marks.forEach((m, k) => spots.push({ loc: m.loc, id: ENTRANCE_MARK_SPOT + k }));
+    // The groups in `sectorXml`'s order: special encounters, then wandering.
+    const groupScripts: GroupScript = (b) => [...z.specialEnc, ...z.wandering]
+      .map((g) => ({ key: [g.words[0], ...g.words.slice(3)].join(), ...e3GroupSteps(b, g) }));
     const script = e3SpotScript(spots, { zone: i }, e3Src, (x, y) => z.terrain[x]?.[y] ?? 0, !marks.length ? own
-      : (b) => new Map([...own?.(b) ?? [], ...marks.map((m, k): [number, Step[]] => [ENTRANCE_MARK_SPOT + k, [b.setFlag(m.flag, m.value)]])]));
+      : (b) => new Map([...own?.(b) ?? [], ...marks.map((m, k): [number, Step[]] => [ENTRANCE_MARK_SPOT + k, [b.setFlag(m.flag, m.value)]])]),
+    undefined, undefined, groupScripts);
     write(`${base}.xml`, sectorXml(z, i, strings, script));
     write(`${base}.map`, sectorMap(z, i, strings, script));
     write(`${base}.spec`, script.spec);

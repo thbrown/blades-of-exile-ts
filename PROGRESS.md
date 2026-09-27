@@ -13492,3 +13492,41 @@ several are now easy with the offsets above. The bigger ones are
 `emit.ts:281`'s zone encounters below 100, `talk.ts:311`'s talk types not
 yet transcribed, and `script.ts:772`'s town-hostile endings.
 
+
+### E3's outdoor group scripts, ported (2026-09-27)
+
+The "zone encounters below 100" TODO in `emit.ts` wasn't about spots (every
+spot was already transcribed). It was the outdoor monster groups, whose
+`<onmeet>`/`<onwin>`/`<onflee>` were all -1. Their 24 bytes are now
+fully pinned (FORMATS.md, "Wandering group"):
+- `+10` is a script for `FUN_10c0_06c3(script, phase)`, E3's
+  `handle_wandering_specials`. Phase 0 is called from the outdoor turn
+  (`1010:38e1`) and a 1 back means fight. Phase 1 follows "End combat"
+  (`1010:1b20`) and phase 2 a rout (`1010:37cc`, `3aa6`).
+- `(+18, +20)` is a message, string `block*300 + i`. `+22` says when it
+  shows: 0 at the meeting with no fight, 1 at the meeting and then the fight,
+  2 on winning.
+- A script from 2 to 99 meets the party from anywhere, which is BoE's
+  `force`. E3 uses only 99, on 29 special groups.
+
+`towns/encounters.ts` transcribes the three phases. `e3SpotScript` has
+a new `GroupScript` hook beside `KillScript`. Where E3 returns 0 at a
+meeting, the chain ends in `blockMove`, which is how an engine
+`spec_on_meet` calls the fight off. What it brings:
+- meeting scripts: Empire troops and guards who leave the party alone once
+  the slime is dead (or the Filth Factory burned), and a Nephilim patrol that
+  spares a party with a Nephil in it, or one that helped against the ursagi
+  (0xb55);
+- about 20 win scripts with loot, gold and flags (e.g. 0xbc9, 0xa83, which
+  talk scripts read). Two flee scripts;
+- on about 80 wandering groups, the meeting or victory message E3 shows.
+
+`test/e3convert.test.ts` meets the Nephilim patrol with and without a Nephil
+and beats zone 5's lair. `TODO(E3-3)`: two rewards give an item with a set
+`charges` byte (the troglodytes' map, 180; Steel Plate, 77), which no node
+can do, the same gap as Aminro's map in `villages.ts`.
+
+The talk-types TODO (`talk.ts`) was stale: all 71 scripted types are
+transcribed, and every type below 100 has a case. **Next session starts
+here**: `grep -rn "TODO(E3-3)" src tools` (50 now). The bigger ones left
+are `script.ts`'s town-hostile endings and the `entry.ts` list.

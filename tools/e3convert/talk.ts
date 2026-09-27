@@ -308,7 +308,8 @@ function convertNode(ctx: Context, raw: E3TalkNodeRaw, personality: number, extr
       break;
     default: {
       // The scripted replies (`towns/talkScripts.ts`) run as scenario
-      // specials. TODO(E3-3): the types not transcribed yet show nothing.
+      // specials. Every type E3 uses has one (`coverage.ts` counts them), so
+      // the plain node below is only a fallback.
       const script = TALK_SCRIPTS.get(raw.type);
       if (!script) {
         set(TalkNodeType.REGULAR);
