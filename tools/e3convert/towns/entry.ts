@@ -15,8 +15,11 @@
  *   (10d8:1b32), when it also closes two squares unless the troglodytes are
  *   already at war; past stage 1 it opens a door by the cell.
  *   TODO(E3-3): E3 also makes everyone docile below stage 7.
- * - TODO(E3-3): the others — towns 21, 31–33, 36, 38, 41, 46, 57, 64,
- *   78/79, 82, 89, 90, 103–105, 107, 108 and the 26-town jump table at
+ * - The Tower of Shifting Floors turns its belts as its control panel left
+ *   them (10d8:1d0f): level 2 (33) by Belt Alpha and Belt Star, the
+ *   basement (108) by Belt Beta.
+ * - TODO(E3-3): the others — towns 21, 31, 36, 38, 41, 46, 57, 64,
+ *   78/79, 82, 89, 90, 103–105, 107 and the 26-town jump table at
  *   10d8:2333 — as those towns are transcribed.
  */
 
@@ -25,6 +28,7 @@ import { partyFlag as f, type SpecBuilder, type Step } from '../script';
 import { ANAMA } from './shayder';
 import { PEDESTAL } from './slimePit';
 import { TROGLO_STAGE, TROGLO_WAR } from './castleTroglo';
+import { BELT_ALPHA, BELT_BETA, BELT_STAR } from './shiftingFloors';
 
 const SEG = 0x10d8;
 
@@ -45,6 +49,9 @@ export const ENTRY_SCRIPTS = new Map<number, EntryScript>([
     ...clearedBy(0xc85)(b),
     b.switchFlag(PEDESTAL, PORTCULLISES.map(([x, y]) => [b.setTer(x, y, 109)])),
   ]],
+  [33, (b) => [BELT_ALPHA, BELT_STAR].map((belt) =>
+    b.ifFlagAtLeast(belt.flag, 1, belt.squares.map(([x, y]) => b.setTer(x, y, 249))))],
+  [108, (b) => [b.ifFlagAtLeast(BELT_BETA, 1, [7, 8, 9, 10, 11, 12].flatMap((y) => [b.setTer(12, y, 248), b.setTer(13, y, 250)]))]],
   [28, (b) => [
     b.ifFlagAtLeast(TROGLO_STAGE, 7, [b.makeTownHostile(), b.ifFlagEq(TROGLO_WAR, 0, [b.setTer(37, 53, 108), b.setTer(38, 53, 108)])]),
     b.ifFlagAtLeast(TROGLO_STAGE, 2, [b.setTer(52, 51, 101)]),

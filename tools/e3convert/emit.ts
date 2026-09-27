@@ -33,6 +33,7 @@ import { towerOfMagi } from './towns/towerOfMagi';
 import { filthFactory } from './towns/filthFactory';
 import { castleTroglo } from './towns/castleTroglo';
 import { cavesOfGiants } from './towns/cavesOfGiants';
+import { shiftingFloors } from './towns/shiftingFloors';
 import { sharimik, SHARIMIK_DEATH_FLAGS } from './towns/sharimik';
 import { ZONE_SCRIPTS } from './towns/zones';
 import { DAILY_FLAGS } from './towns/talkScripts';
@@ -59,6 +60,7 @@ const TOWN_SCRIPTS = new Map<number, PlaceScript>([
   [26, filthFactory(26)], [27, filthFactory(27)],
   [28, castleTroglo(28)], [29, castleTroglo(29)],
   [30, cavesOfGiants(30)], [31, cavesOfGiants(31)],
+  [32, shiftingFloors(32)], [33, shiftingFloors(33)],
 ]);
 
 /** E3's special items: strings 1801 on, and the engine's limit too. */
@@ -87,6 +89,7 @@ function specialXml(t: E3TerrainType): string {
   const sp = t.special;
   const [type, f1, f2, f3] = !sp ? ['none', -1, 0, 0]
     : sp.kind === 'sign' ? ['sign', 0, 0, 0]
+    : sp.kind === 'belt' ? ['belt', sp.dir, 0, 0]
     : sp.kind === 'step-change' ? ['step-change', sp.to, sp.sound, 0]
     // BoE's `unlock`: flag2 is the difficulty, 5 and up beyond picking and
     // bashing; flag3 1 lets it be bashed. TODO(E3-3): E3 rolls its own pick

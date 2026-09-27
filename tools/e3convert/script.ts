@@ -793,6 +793,18 @@ export class SpecBuilder {
     return (next) => this.node('rect-place-field', { sdf: [100, 100 + field], ex1: [y1, x1], ex2: [y2, x2] }, next);
   }
 
+  /** The text of control `control` of E3 dialog `id`, for building a prompt from. */
+  dialogText(id: number, control: number): string {
+    const c = this.src.dialogs.get(id)?.controls.find((k) => k.id === control);
+    if (!c) throw new Error(`E3 dialog ${id} has no control ${control}`);
+    return c.text.replace(/^\*/, '');
+  }
+
+  /** The literal at `seg:off` in the EXE (what `log` shows), for building a line from. */
+  exeText(seg: number, off: number): string {
+    return this.src.exeString?.(seg, off) ?? '';
+  }
+
   /** A line in the text area in the converter's own words, where E3 shows state the engine can't. */
   say(text: string): Step {
     return (next) => this.node('disp-sm-msg', { msg: [this.text(text)] }, next);

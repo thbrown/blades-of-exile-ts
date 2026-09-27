@@ -1295,6 +1295,18 @@ Notes for M2 implementer:
       magic (the chest's 0x62 is 18d6 of magic).
     - New step `say`: a line in the converter's own words, where E3 shows
       state the engine can't (the runes' lights, after each press).
+  - 2026-09-26: **the Tower of Shifting Floors**, levels 1–2 (towns 32–33,
+    `towns/shiftingFloors.ts`, `FUN_1078_4491`/`45b8`, block 58), and its
+    belts in towns 33 and 108's entry scripts.
+    - **E3's conveyor belts (terrains 247–250) convert to BoE's `belt`**
+      special, north/east/south/west: E3's move code refuses a step
+      against them and its per-turn code carries the party, as BoE 1997's
+      legacy terrain specials 16–19 do.
+    - The golem panel (dialog 0xd06, `FUN_1008_4b58`): five of its ten
+      buttons toggle flags 0x4c1–0x4c5; each press lists the settings in
+      E3's own words (`dialogText`, `exeText` read them at conversion).
+    - `show.ts xSEG:OFF` prints a script's literal.
+    - TODO(E3-3): the tower's level 3 (town 60) and basement (108) scripts.
   - Next: the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.

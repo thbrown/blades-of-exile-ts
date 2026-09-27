@@ -37,6 +37,13 @@ export interface E3TerrainType {
  * and the lock-pick code on another (`FUN_10d8_3f67`, `10d8:4182`).
  */
 export type E3TerrainSpecial =
+  /**
+   * A conveyor belt carrying the party toward `dir` (eDirection: 0 N, 2 E,
+   * 4 S, 6 W). E3's move code (near `exile3.c:59327`) refuses a step against
+   * 247–250, and its per-turn code carries the party along them, as BoE
+   * 1997's legacy terrain specials 16–19 do.
+   */
+  | { kind: 'belt'; dir: number }
   /** Bumping it turns it into `to` and plays sound `sound`. */
   | { kind: 'step-change'; to: number; sound: number }
   /**
@@ -93,7 +100,8 @@ export function readE3Terrain(exe: Uint8Array, strings: Map<number, string>): E3
     pic: pics.getInt16(t * 2, true),
     blockage: blocked[t] ?? 0,
     boat: boatPassable(t),
-    special: SIGN_TERRAINS.has(t) ? { kind: 'sign' } : doorSpecial(t),
+    special: SIGN_TERRAINS.has(t) ? { kind: 'sign' }
+      : t >= 247 && t <= 250 ? { kind: 'belt', dir: (t - 247) * 2 } : doorSpecial(t),
   }));
 }
 
