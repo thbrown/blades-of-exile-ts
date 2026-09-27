@@ -1388,6 +1388,15 @@ Notes for M2 implementer:
     - The Guarded Tunnel's creature 9 has a death flag (`e3DeathFlag(2)`).
     - TODO(E3-3): the Great Circle's demons take the party's magic items
       as well as its gold; no node can.
+  - 2026-09-26: **towns 73–79** (`towns/dungeons.ts`): the Rakshasa Lair,
+    both levels of the Lair of Drakos (a 7×3 floor whose rows rotate: the
+    engine can't copy one square's terrain to another, but these squares are
+    only ever 150 or 160, so a rotation is per-square tests), both levels of
+    the Pit of the Wyrm (a floor grid that charges and makes a path safe),
+    and both levels of the Monastery of Madness (the Hall of Duels).
+    - TODO(E3-3): three of the Wyrm Pit's squares halve each PC's health;
+      no node can (`heal` does nothing to a PC at full health).
+    - New steps: `terrainAt`, `hasSpot`.
   - Next: the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.

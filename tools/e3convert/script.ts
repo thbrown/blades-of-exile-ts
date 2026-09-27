@@ -1083,6 +1083,18 @@ export class SpecBuilder {
     return this.ifFlagEq(flag, 0, [...steps, this.setFlag(flag, 1)]);
   }
 
+  /** The terrain at `(x, y)` as converted (the map before any script changes it). */
+  terrainAt(x: number, y: number): number {
+    const t = this.src.terrain?.[x]?.[y];
+    if (t === undefined) throw new Error(`no terrain at (${x},${y})`);
+    return t;
+  }
+
+  /** Whether this place has a spot `id` at all. */
+  hasSpot(id: number): boolean {
+    return this.src.spotLoc?.(id) !== undefined;
+  }
+
   /** Where spot `id` is (`FUN_10e0_07b7`). */
   spotAt(id: number): { x: number; y: number } {
     const at = this.src.spotLoc?.(id);

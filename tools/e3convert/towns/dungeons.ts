@@ -658,6 +658,185 @@ function remoteCave(b: SpecBuilder): Map<number, Step[]> {
   ]);
 }
 
+/** The Rakshasa Lair (town 73): `FUN_1088_4ceb`, block 63. */
+function rakshasaLair(b: SpecBuilder): Map<number, Step[]> {
+  const B = 63, spot = (id: number) => townSpotFlag(73, id);
+  return new Map<number, Step[]>([
+    ...[1, 2, 3].map((id): [number, Step[]] => [id, [b.trap(0xd7a, spot(id), 0x14)]]),
+    // The room's walls sink away, once.
+    [4, [b.ifTer(0xa, 7, 0x96, [], [b.msg(B, 0x3b),
+      ...[0, 1, 2, 3].flatMap((k) => [b.setTer(0xa, 7 + k, 0x96), b.setTer(0x10, 7 + k, 0x96)])])]],
+    [5, [b.onceMsg(spot(5), B, 0x3c)]],
+    [11, [b.askDialog(0xd7f, [b.changeTown(0x48, 0x18, 0x17)]), b.blockMove()]],
+    [14, [b.moveParty(0x17, 6), b.blockMove()]],
+    [15, [b.setTer(0x16, 0x24, 0x75)]],
+    [16, [b.ifLevelTotal(13, [b.msg(B, 0x3d), b.teachSpell(0xa0)], [b.msg(B, 0x3e)])]],
+    [17, [b.ifLevelTotal(17, [b.msg(B, 0x3f), b.teachSpell(0x3d)], [b.msg(B, 0x3e)])]],
+  ]);
+}
+
+/** Converter scratch: the tile that wraps round in the Drakos rotation. */
+const WRAP_TILE: Flag = [291, 30];
+
+/**
+ * The Lair of Drakos (town 74): `FUN_1088_34c3`, block 63. A floor of 7×3
+ * tiles, 150 and 160, whose rows spots 14–16 rotate and 17 resets; and
+ * squares that move the party a set step (21–36).
+ */
+function drakosLair(b: SpecBuilder): Map<number, Step[]> {
+  const B = 63, spot = (id: number) => townSpotFlag(74, id);
+  const ON = 0x96, OFF = 0xa0;
+  /** Row `y` of x 19–25 moves one square (`dir` −1 left, +1 right), wrapping. */
+  const rotate = (y: number, dir: -1 | 1, literal: number): Step[] => {
+    const xs = dir < 0 ? [19, 20, 21, 22, 23, 24] : [25, 24, 23, 22, 21, 20];
+    const wrapFrom = dir < 0 ? 19 : 25, wrapTo = dir < 0 ? 25 : 19;
+    return [
+      b.log(0x1088, literal),
+      b.ifTer(wrapFrom, y, ON, [b.setFlag(WRAP_TILE, 1)], [b.setFlag(WRAP_TILE, 0)]),
+      ...xs.map((x) => b.ifTer(x - dir, y, ON, [b.setTer(x, y, ON)], [b.setTer(x, y, OFF)])),
+      b.ifFlagEq(WRAP_TILE, 1, [b.setTer(wrapTo, y, ON)], [b.setTer(wrapTo, y, OFF)]),
+    ];
+  };
+  /** Moved from the spot by (dx, dy). */
+  const step = (id: number, dx: number, dy: number): Step[] =>
+    [b.moveParty(b.spotAt(id).x + dx, b.spotAt(id).y + dy), b.blockMove()];
+  const moves: [number, number, number][] = [
+    [21, 0, 3], [22, 0, 3], [23, 0, -3], [24, 0, -3], [25, 5, 0], [26, 5, 0], [27, -5, 0], [28, -5, 0],
+    ...[30, 31, 32, 33, 34, 35, 36].map((id): [number, number, number] => [id, 0, 2]),
+  ];
+  return new Map<number, Step[]>([
+    [1, [b.msg(B, 0x1a), b.bringIn(200, 1), b.setFlag(spot(1), 20)]],
+    [2, [b.msg(B, 0x1c), b.bringIn(202, 1), b.setFlag(spot(2), 20)]],
+    [3, [b.msg(B, 0x1d), b.bringIn(201, 1), b.setFlag(spot(3), 20)]],
+    [4, [b.lever([b.log(0x1088, 0x3499), b.swapTer(0x1e, 0x1f, ON, OFF), b.swapTer(0x1e, 0x21, ON, OFF)])]],
+    [9, [b.askDialog(0xcc5, [b.moveParty(0x2b, 4), b.blockMove()])]],
+    [11, [b.log(0x1088, 0x34a0), b.setTer(0x16, 0xb, OFF), b.setTer(0x1a, 0xb, OFF)]],
+    [12, [b.askDialog(0xd7e, [b.changeTown(0x4b, 0x2a, 2)]), b.blockMove()]],
+    [14, rotate(0x1c, -1, 0x34a7)],
+    [15, rotate(0x1b, 1, 0x34ae)],
+    [16, rotate(0x1a, -1, 0x34b5)],
+    [17, [b.log(0x1088, 0x34bc), b.rectTer(0x13, 0x1a, 0x19, 0x1c, OFF),
+      b.setTer(0x13, 0x1a, ON), b.setTer(0x13, 0x1c, ON), b.setTer(0x19, 0x1b, ON)]],
+    ...moves.filter(([id]) => b.hasSpot(id)).map(([id, dx, dy]): [number, Step[]] => [id, step(id, dx, dy)]),
+    // Past the end of the switch's table: nothing.
+    [38, []],
+  ]);
+}
+
+/** The Lair of Drakos, level 2 (town 75): `FUN_1088_3993`, block 63. */
+function drakosLair2(b: SpecBuilder): Map<number, Step[]> {
+  const B = 63, spot = (id: number) => townSpotFlag(75, id);
+  return new Map<number, Step[]>([
+    // Drakos's illusions fall away (creatures of kinds 58–69 go) and the
+    // real guards come.
+    [1, [b.dialog(0xea6), ...Array.from({ length: 12 }, (_, k) => b.removeCreatures(58 + k)),
+      b.bringIn(200, 1), b.setFlag(spot(1), 20), b.blockMove()]],
+    [2, []], [4, []],
+    [3, [b.onceMsg(spot(3), B, 0x21)]],
+    [11, [b.askDialog(0xd7f, [b.changeTown(0x4a, 0x1b, 0x1a)]), b.blockMove()]],
+  ]);
+}
+
+/** The Pit of the Wyrm (town 76): `FUN_1088_4188`, block 63. */
+function wyrmPit(b: SpecBuilder): Map<number, Step[]> {
+  const B = 63, spot = (id: number) => townSpotFlag(76, id);
+  return new Map<number, Step[]>([
+    ...[1, 2, 3, 4].map((id): [number, Step[]] => [id, [b.onceMsg(spot(id), B, 0x2a + id)]]),
+    [5, [b.msg(B, 0x2f, 0x30), b.bringIn(200, 1), b.setFlag(spot(5), 20)]],
+    [11, [b.askDialog(0xeb1, [b.changeTown(0x4d, 5, 0x2d)]), b.blockMove()]],
+  ]);
+}
+
+/**
+ * The Pit of the Wyrm, level 2 (town 77): `FUN_1088_4336`, block 63. Its
+ * floor puzzle is a 6×3 grid (spots 20–37 at x 16–21, y 40–42): stepping on
+ * a square charged (193) zaps; otherwise the grid charges again and only
+ * the squares the spot names go safe (186); three squares throw the party
+ * back.
+ */
+function wyrmPit2(b: SpecBuilder): Map<number, Step[]> {
+  const B = 63, spot = (id: number) => townSpotFlag(77, id);
+  const CHARGED = 0xc1, SAFE = 0xba;
+  /** The squares each spot makes safe, as (dx, dy) from it (the arms from 1088:454c on). */
+  const safe: Record<number, [number, number][]> = {
+    20: [[1, 0], [0, 1]], 21: [[1, 0], [0, 1]], 24: [[1, 0], [0, 1]],
+    22: [[1, 0], [-1, 0]], 34: [[1, 0], [-1, 0]],
+    25: [[-1, 0]], 26: [[0, 1], [0, -1]], 27: [[1, 0], [-1, 0], [0, 1]], 28: [[0, 1], [0, -1], [1, 0]],
+    29: [[-1, 0], [0, -1]], 30: [[1, 0], [-1, 0], [0, -1]], 35: [[1, 0], [-1, 0], [0, -1]],
+    36: [[1, 0], [-1, 0], [0, -1]], 32: [[1, 0], [0, -1]], 37: [[0, -1]],
+  };
+  /** The bier's first visit (flag (77,9)) decides where the throw lands. */
+  const bier = f(0x38f);
+  const thrown = (): Step[] => [
+    // TODO(E3-3): E3 also halves each PC's health; no node can (heal does
+    // nothing to a PC at full health, and damage can kill).
+    b.msg(B, 0x37),
+    b.ifFlagEq(bier, 0, [b.moveParty(0xf, 0x2a)], [b.moveParty(0x15, 0x27)]),
+    b.setTer(0x10, 0x2a, SAFE), b.setTer(0x15, 0x28, SAFE), b.blockMove(),
+  ];
+  const floor = (id: number): Step[] => {
+    const at = b.spotAt(id);
+    return [b.ifInCombat([b.log(0x1088, 0x4317), b.blockMove()], [b.ifTer(at.x, at.y, CHARGED,
+      [b.msg(B, 0x36), b.e3Boom(99), b.blockMove()],
+      [b.rectTer(0x10, 0x28, 0x15, 0x2a, CHARGED),
+        ...(safe[id] ? safe[id].map(([dx, dy]) => b.setTer(at.x + dx, at.y + dy, SAFE)) : thrown())])])];
+  };
+  return new Map<number, Step[]>([
+    ...[1, 2, 3, 4, 5].map((id): [number, Step[]] => [id, []]),
+    [11, [b.askDialog(0xeb2, [b.changeTown(0x4c, 0x12, 0x2c)]), b.blockMove()]],
+    [14, [b.ifFlagEq(bier, 0, [b.msg(B, 0x31), b.setFlag(bier, 1)]), b.setTer(0xb, 0x2d, 0xa), b.setTer(6, 0x2e, 0x10)]],
+    [15, [b.lever([b.msg(B, 0x32), b.setTer(0xf, 0x2a, 0x87)])]],
+    [16, [b.ifTer(0xf, 0x11, 0x8a, [b.msg(B, 0x34), ...[0x11, 0x13, 0x17, 0x19].map((y) => b.setTer(0xf, y, 0x87))])]],
+    ...Array.from({ length: 18 }, (_, k): [number, Step[]] => [20 + k, floor(20 + k)]),
+  ]);
+}
+
+/** The Monastery of Madness (town 78): `FUN_1088_251e`, block 63. */
+function madMonastery(b: SpecBuilder): Map<number, Step[]> {
+  const B = 63, spot = (id: number) => townSpotFlag(78, id);
+  const click = (literal: number, x: number, y: number, t: number): Step[] => [b.log(0x1088, literal), b.setTer(x, y, t)];
+  return new Map<number, Step[]>([
+    // Martial arts books: +1 dexterity (to 19) for a party of 15 levels.
+    [1, [b.ifLevelTotal(15, [b.eachPc(() => [b.ifStat(1, 19, [], [b.addStat(1, 1)])]), b.msg(B, 9), b.setFlag(spot(1), 20)],
+      [b.msg(B, 0xa)])]],
+    // TODO(E3-3): E3 also sets every creature here active (2), hunting the party.
+    [2, [b.msg(B, 0xb, 0xc), b.setFlag(spot(2), 20)]],
+    [3, [b.giveItemDialog(0xec6, spot(3), 0x8c)]],
+    ...[4, 5, 6].map((id): [number, Step[]] => [id, [b.setFlag(spot(id), 20), b.msg(B, 0x11), b.bringIn(id + 0xc4, 1)]]),
+    [11, [b.askDialog(0xec4, [b.msg(B, 2)])]],
+    [14, [b.askDialog(0xd7f, [b.changeTown(0x4f, 0x12, 5)]), b.blockMove()]],
+    [15, [b.askDialog(0xd7f, [b.changeTown(0x4f, 0x1d, 5)]), b.blockMove()]],
+    [16, [b.askDialog(0xec5, [b.msg(B, 0xe), b.drainXp(0x14)])]],
+    [20, click(0x2509, 0x18, 0x14, 2)],
+    [21, click(0x2510, 0x1d, 5, 0x96)],
+    [22, click(0x2517, 7, 5, 2)],
+  ]);
+}
+
+/** The Monastery of Madness, level 2 (town 79), the Hall of Duels: `FUN_1088_2822`, block 63. */
+function madMonastery2(b: SpecBuilder): Map<number, Step[]> {
+  const B = 63, spot = (id: number) => townSpotFlag(79, id);
+  /** The duel is won (flag (79,3)). */
+  const won = spot(3);
+  const doors: [number, number, number][] = [[8, 9, 0x65], [9, 0xa, 0x6c]];
+  return new Map<number, Step[]>([
+    // One champion enters the hall: the doors change behind them (undone if nobody goes).
+    [1, [b.askDialog(0xece, [
+      ...doors.map(([x, y, t]) => b.setTer(x, y, t)),
+      b.splitParty(0xa, 0xa, doors.map(([x, y]) => b.setTer(x, y, b.terrainAt(x, y)))),
+    ]), b.blockMove()]],
+    [2, [b.ifFlagEq(won, 0, [b.msg(B, 0x19)], [
+      b.msg(B, 0x14), b.reuniteParty(), b.setFlag(spot(1), 20), b.setFlag(spot(2), 20),
+    ]), b.blockMove()]],
+    [3, [b.msg(B, 0x17), b.bringIn(200, 1), b.setFlag(won, 20), b.setTer(0x11, 0xa, 0x67)]],
+    [4, [b.ifFlagEq(spot(4), 0, [b.setFlag(spot(4), 1)], [b.setFlag(spot(4), 20), b.msg(B, 0x18), b.bringIn(201, 1)])]],
+    // A recipe among the ravings (alchemy 16, party+0x832e).
+    [11, [b.dialog(0xecf), b.learnAlchemy(16)]],
+    [14, [b.askDialog(0xd7e, [b.changeTown(0x4e, 0xc, 6)]), b.blockMove()]],
+    [15, [b.askDialog(0xd7e, [b.changeTown(0x4e, 0x25, 6)]), b.blockMove()]],
+  ]);
+}
+
 /**
  * A town with no case in the town handler's switch (`FUN_10c0_0000`): its
  * spots below 100 do nothing, and say so here rather than stay unlisted.
@@ -696,6 +875,13 @@ export const DUNGEON_SCRIPTS = new Map<number, PlaceScript>([
   [70, zkal],
   [71, zkal2],
   [72, remoteCave],
+  [73, rakshasaLair],
+  [74, drakosLair],
+  [75, drakosLair2],
+  [76, wyrmPit],
+  [77, wyrmPit2],
+  [78, madMonastery],
+  [79, madMonastery2],
   // "Name" and "Anim Data": towns E3's handler has no case for.
   [66, noHandler],
   [84, noHandler],
