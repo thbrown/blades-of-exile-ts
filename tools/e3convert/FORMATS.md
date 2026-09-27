@@ -276,3 +276,121 @@ converter writes the code as the creature's `<encounter>`.
 
 Flags are addressed as party-record offsets, and flag `(a, b)` is byte
 `0x84 + 10a + b`. Special items are the int16s at party+0xc.
+
+## Town script handlers (E3-3)
+
+The town encounter handler `FUN_10c0_0000` switches on the town number for
+spots below 100. Each town's (or group of towns') own code, as parsed from
+that switch (2026-09-26). Towns not listed have no code of their own.
+
+| towns | handler |
+|---|---|
+| 0–3 | `FUN_1078_0000` |
+| 4–7 | `FUN_1078_01af` |
+| 8–11 | `FUN_1078_2f0c` |
+| 12–15 | `FUN_1078_0561` |
+| 16–19 | `FUN_1078_07f1` |
+| 21 | `FUN_1078_0b66` |
+| 22 | `FUN_1078_155e` |
+| 23 | `FUN_1078_19df` |
+| 24 | `FUN_1078_1e05` |
+| 25 | `FUN_1078_222d` |
+| 26 | `FUN_1078_259e` |
+| 27 | `FUN_1078_294f` |
+| 28 | `FUN_1078_3303` |
+| 29 | `FUN_1078_37c4` |
+| 30 | `FUN_1078_3c6f` |
+| 31 | `FUN_1078_4089` |
+| 32 | `FUN_1078_4491` |
+| 33 | `FUN_1078_45b8` |
+| 34 | `FUN_1078_4918` |
+| 35 | `FUN_1078_4a82` |
+| 36 | `FUN_1078_4cde` |
+| 37 | `FUN_1078_52ae` |
+| 38 | `FUN_1078_55ff` |
+| 40 | `FUN_1088_0000` |
+| 41 | `FUN_1088_0586` |
+| 42 | `FUN_1088_08c7` |
+| 43 | `FUN_1088_0ab5` |
+| 44 | `FUN_1088_0305` |
+| 45 | `FUN_1088_040d` |
+| 46 | `FUN_1088_0c28` |
+| 47 | `FUN_1088_0f24` |
+| 48 | `FUN_1088_1231` |
+| 49, 97 | `FUN_1088_1362` |
+| 50 | `FUN_1088_1807` |
+| 51 | `FUN_1088_1959` |
+| 52 | `FUN_1088_1b0d` |
+| 53 | `FUN_1088_1e4d` |
+| 54 | `FUN_1088_2248` |
+| 55 | `FUN_1088_1fe8` |
+| 56 | `FUN_1088_2f08` |
+| 57 | `FUN_1088_325a` |
+| 58 | `FUN_1088_2a45` |
+| 59 | `FUN_1088_2c12` |
+| 60 | `FUN_1088_4745` |
+| 61 | `FUN_1088_4f13` |
+| 62 | `FUN_1088_5233` |
+| 63 | `FUN_1088_5402` |
+| 64 | `FUN_1088_56f5` |
+| 65 | `FUN_1088_58a1` |
+| 70 | `FUN_1088_3b05` |
+| 71 | `FUN_1088_3d98` |
+| 72 | `FUN_1088_488c` |
+| 73 | `FUN_1088_4ceb` |
+| 74 | `FUN_1088_34c3` |
+| 75 | `FUN_1088_3993` |
+| 76 | `FUN_1088_4188` |
+| 77 | `FUN_1088_4336` |
+| 78 | `FUN_1088_251e` |
+| 79 | `FUN_1088_2822` |
+| 80 | `FUN_10b8_0000` |
+| 81 | `FUN_10b8_02e2` |
+| 82 | `FUN_10b8_1169` |
+| 85 | `FUN_10b8_039c` |
+| 86 | `FUN_10b8_0117` |
+| 87 | `FUN_10b8_1097` |
+| 88 | `FUN_10b8_0608` |
+| 89 | `FUN_10b8_0856` |
+| 90 | `FUN_10b8_0b0c` |
+| 91 | `FUN_10b8_18cc` |
+| 92, 127, 129, 131–132, 135 | `FUN_10b8_153b` |
+| 93 | `FUN_10b8_1bfa` |
+| 94 | `FUN_10b8_1d23` |
+| 96 | `FUN_10b8_1ae1` |
+| 98, 142–145 | `FUN_10b8_1f49` |
+| 99 | `FUN_10b8_2220` |
+| 101 | `FUN_10b8_2848` |
+| 102 | `FUN_10b8_2a00` |
+| 103 | `FUN_10b8_2def` |
+| 104 | `FUN_10b8_3288` |
+| 105 | `FUN_10b8_3477` |
+| 106–107 | `FUN_10b8_3941` |
+| 108 | `FUN_10b8_3e9d` |
+| 109 | `FUN_10b8_44ed` |
+| 110 | `FUN_10b8_4437` |
+| 111 | `FUN_10b8_46db` |
+| 121 | `FUN_10b8_0dc4` |
+| 122 | `FUN_10b8_0e93` |
+| 123 | `FUN_10b8_10eb` |
+| 124 | `FUN_10b8_0f46` |
+| 125 | `FUN_10b8_0ff1` |
+| 126 | `FUN_10b8_1341` |
+| 128, 156–158 | `FUN_10b8_3077` |
+| 133, 137, 147–149 | `FUN_10b8_2549` |
+| 138–141 | `FUN_10b8_1dbe` |
+| 146 | `FUN_10b8_2761` |
+| 150–155 | `FUN_10b8_2bf3` |
+| 159–162 | `FUN_10b8_382d` |
+| 163, 171 | `FUN_10b8_3b6e` |
+| 164–166 | `FUN_10b8_3a04` |
+| 173 | `FUN_10b8_41f4` |
+| 174–177 | `FUN_10b8_3fc5` |
+
+Each is a `switch` on the spot's number, usually through a jump table right
+after the function (`show.ts wSEG:OFF:N` prints one): read the table, since
+Ghidra's C mislabels arms when it loses track of arguments. The handler
+returns 0 to refuse the step.
+
+Towns also have **per-turn code**, at the tail of `FUN_10c0_61c4` (from
+10c0:65bf): countdowns in flags for towns 26, 27 and 28 so far.

@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { TerObstruct, TerSpec } from '../src/data/terrain';
 import type { Scenario } from '../src/data/scenario';
-import { ItemType } from '../src/data/item';
+import { ItemAbil, ItemType } from '../src/data/item';
 import { MonstTime } from '../src/data/monster';
 import { ShopItemType, ShopPrompt } from '../src/data/shop';
 import { TalkNodeType } from '../src/data/talking';
@@ -80,8 +80,11 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
   });
 
   it("has E3's items, and the things lying about its towns", () => {
-    // E3's 415, then the fifteen food records its food shops sell from.
-    expect(scen.scenItems).toHaveLength(430);
+    // E3's 415, then the fifteen food records its food shops sell from,
+    // then the notes its scripts make readable (E3_NOTE_ITEMS), which show
+    // their dialog through a scenario special.
+    expect(scen.scenItems).toHaveLength(432);
+    expect(scen.scenItems[430]).toMatchObject({ fullName: 'Piece of Paper', ability: ItemAbil.CALL_SPECIAL });
     expect(scen.scenItems[415]).toMatchObject({ fullName: 'Crude Rations', variety: ItemType.FOOD, itemLevel: 10, value: 24 });
     const knife = scen.scenItems[41]!;
     expect(knife.fullName).toBe('Bronze Knife');

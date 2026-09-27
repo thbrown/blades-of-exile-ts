@@ -13,7 +13,8 @@ import { convertItem, convertMonster, convertPresetField } from '../../src/filei
 import { buildItemSheet, buildMonsterSheets, buildTerrainSheets, e3TerrainPic } from './graphics';
 import { readDialogs, readNeResources, readNeSegment, readStringTable } from './ne';
 import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor, type E3OutWandering } from './outdoor';
-import { readE3Items, readE3Monsters, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
+import { ItemAbil } from '../../src/data/item';
+import { readE3ItemAbilities, readE3Items, readE3Monsters, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3Town } from './town';
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
 import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
@@ -30,6 +31,7 @@ import { ENTRY_SCRIPTS } from './towns/entry';
 import { slimePit } from './towns/slimePit';
 import { towerOfMagi } from './towns/towerOfMagi';
 import { filthFactory } from './towns/filthFactory';
+import { castleTroglo } from './towns/castleTroglo';
 import { sharimik, SHARIMIK_DEATH_FLAGS } from './towns/sharimik';
 import { ZONE_SCRIPTS } from './towns/zones';
 import { DAILY_FLAGS } from './towns/talkScripts';
@@ -54,6 +56,7 @@ const TOWN_SCRIPTS = new Map<number, PlaceScript>([
   [22, slimePit(22)], [23, slimePit(23)],
   [24, towerOfMagi(24)], [25, towerOfMagi(25)],
   [26, filthFactory(26)], [27, filthFactory(27)],
+  [28, castleTroglo(28)], [29, castleTroglo(29)],
 ]);
 
 /** E3's special items: strings 1801 on, and the engine's limit too. */
@@ -94,6 +97,22 @@ function specialXml(t: E3TerrainType): string {
             <flag>${f3}</flag>
         </special>`;
 }
+
+/**
+ * E3's readable items: the dialog using one shows, by E3 ability
+ * (`FUN_10c0_2c92`'s cases 0xb0–0xb6). TODO(E3-3): 0xb1 also sets
+ * party+0x84bb.
+ */
+const E3_NOTE_DIALOGS = new Map<number, number>([
+  [0xb0, 0xeb0], [0xb1, 0xcf3], [0xb2, 0x116d], [0xb3, 0x3ba], [0xb4, 0x161f], [0xb5, 0xcd5], [0xb6, 0xcd6],
+]);
+
+/**
+ * Items E3's scripts make by giving a table item a readable ability
+ * (`FUN_1070_0464(item, ability)`, `FUN_1070_18fd`): `[item, ability]`,
+ * appended to items.xml after the food. `ScriptSource.noteItem` finds them.
+ */
+const E3_NOTE_ITEMS: [number, number][] = [[31, 0xb5], [31, 0xb6]];
 
 /**
  * Terrains that turn into one another: E3's lever (`FUN_10e0_0a49` flips 243
@@ -462,6 +481,11 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
       return scen.text(text);
     },
     horse: (k) => horseNumber[k] ?? -1,
+    noteItem: (item, ability) => {
+      const k = E3_NOTE_ITEMS.findIndex(([i, a]) => i === item && a === ability);
+      if (k < 0) throw new Error(`no note item ${item} with ability ${ability}: add it to E3_NOTE_ITEMS`);
+      return noteBase + k;
+    },
     scenNode: (build) => {
       if (!scen) throw new Error('scenario nodes are not ready');
       return build(scen);
@@ -500,12 +524,26 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   const shopTables = readE3ShopTables(files.exe);
   const e3Items = readE3Items(files.exe);
   const foodBase = e3Items.length;
-  const items = [...e3Items, ...shopTables.food].map((old) => {
+  // After the food, the notes E3's scripts make by stamping a readable
+  // ability onto a table item.
+  const noteBase = foodBase + shopTables.food.length;
+  const e3Abilities = [...readE3ItemAbilities(files.exe), ...shopTables.food.map(() => 0), ...E3_NOTE_ITEMS.map(([, a]) => a)];
+  scen = new SpecBuilder(e3Src, (label) => Math.max(0, BASIC_BUTTONS.indexOf(label)));
+  const noteNodes = new Map<number, number>();
+  const items = [...e3Items, ...shopTables.food, ...E3_NOTE_ITEMS.map(([k]) => e3Items[k]!)].map((old, k) => {
     const it = convertItem(old);
     it.graphicNum = 1000 + itemSheetNum * 100 + old.graphicNum;
     // E3's scripts name kinds of item by `type_flag` (unicorn horns are 111);
     // the engine's item-class nodes read the special class.
     if (old.typeFlag > 0) it.specialClass = old.typeFlag;
+    // A readable item shows its dialog when used: a scenario node, through
+    // OBoE's CALL_SPECIAL ability.
+    const dlg = E3_NOTE_DIALOGS.get(e3Abilities[k] ?? 0);
+    if (dlg !== undefined) {
+      if (!noteNodes.has(dlg)) noteNodes.set(dlg, scen!.compile([scen!.dialog(dlg)]));
+      it.ability = ItemAbil.CALL_SPECIAL;
+      it.abilStrength = noteNodes.get(dlg)!;
+    }
     return it;
   });
   write('items.xml', itemsXml(items));
@@ -517,7 +555,6 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   const shops = standardShops();
   // The scenario's own specials: scripted replies, and the daily reset their
   // day stamps need.
-  scen = new SpecBuilder(e3Src, (label) => Math.max(0, BASIC_BUTTONS.indexOf(label)));
   const talk = convertE3Talk(readE3Talk(strings), speakers, shopTables, E3_TOWN_COUNT, shops.length, foodBase, scen);
   const newDay = scen.dailyReset(DAILY_FLAGS);
   shops.push(...talk.shops);

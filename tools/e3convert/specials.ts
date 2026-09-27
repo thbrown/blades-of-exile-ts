@@ -79,7 +79,8 @@ export function e3SpotScript(
   const isTown = 'town' in place;
   const block = isTown ? e3TownMessageBlock(place.town) : e3ZoneMessageBlock(place.zone);
   const repeatsFrom = isTown ? 237 : 209;
-  const b = new SpecBuilder(src, (label) => Math.max(0, BASIC_BUTTONS.indexOf(label)));
+  const spotLoc = (id: number) => spots.find((s) => s.id === id && !(s.loc.x === 0 && s.loc.y === 0))?.loc;
+  const b = new SpecBuilder({ ...src, spotLoc }, (label) => Math.max(0, BASIC_BUTTONS.indexOf(label)));
   const scripts = own?.(b) ?? new Map<number, Step[]>();
   const compiled = new Map<number, number>();
   const marks: SpotScript['marks'] = [];

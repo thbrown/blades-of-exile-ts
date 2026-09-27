@@ -233,6 +233,12 @@ const WEAPON_VARIETIES = new Set([1, 2, 4, 5, 6, 23, 24, 25]);
  * with the level as strength. TODO(E3-3): E3's own ability semantics.
  * `graphicNum` is E3's picture, for `buildItemSheet` to replace.
  */
+/** Each E3 item's own ability byte (+10), which `readE3Items` maps to BoE's. */
+export function readE3ItemAbilities(exe: Uint8Array): number[] {
+  const t = readNeSegment(exe, 38);
+  return Array.from({ length: E3_ITEM_COUNT }, (_, i) => t[i * 59 + 10] ?? 0);
+}
+
 export function readE3Items(exe: Uint8Array): LegacyItem[] {
   const t = readNeSegment(exe, 38);
   const v = new DataView(t.buffer, t.byteOffset, t.byteLength);

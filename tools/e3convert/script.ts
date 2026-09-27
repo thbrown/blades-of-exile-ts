@@ -76,6 +76,10 @@ export interface ScriptSource {
    * builder, returning its first node: for scenario timers a town starts.
    */
   scenNode?: (build: (s: SpecBuilder) => number) => number;
+  /** The engine's item for E3's `item` given readable `ability` (`E3_NOTE_ITEMS`). */
+  noteItem?: (item: number, ability: number) => number;
+  /** Where this place's spot `id` is (`FUN_10e0_07b7`), for scripts that test its square. */
+  spotLoc?: (id: number) => { x: number; y: number } | undefined;
 }
 
 export class SpecBuilder {
@@ -744,16 +748,28 @@ export class SpecBuilder {
    * One of E3's LED panels (BoE 1997's `cd_set_led` dialogs): dialog `id`
    * has a heading and a button per action, more than the engine's dialogs
    * show, so the player types the number (as the Slime Pit's pedestal
-   * does). The prompt is built from the dialog's own labels, in the order
-   * of their control ids; `scratch` holds the answer.
+   * does). E3's panel stays open until Leave, so this asks again after each
+   * action, and 0 leaves. The prompt is built from the dialog's own labels
+   * in the order of their control ids, or from `labels` (the converter's
+   * words) where the dialog's don't name each button. `scratch` holds the
+   * answer.
    */
-  ledPanel(id: number, actions: Step[][], scratch: Flag): Step {
+  ledPanel(id: number, actions: Step[][], scratch: Flag, labels?: string[]): Step {
     const d = this.src.dialogs.get(id);
     if (!d) throw new Error(`E3 dialog ${id} not found`);
     const texts = d.controls.filter((c) => c.text && !/^\d+_\d+$/.test(c.text)).sort((a, b) => a.id - b.id);
-    const [heading, ...labels] = texts.map((c) => c.text.replace(/^\*/, ''));
-    const prompt = `${heading ?? ''} ${labels.map((l, i) => `${i + 1} ${l}`).join(', ')} (0 to leave)`;
-    return this.seq([this.askNumber(prompt, 0, actions.length, scratch), this.switchFlag(scratch, [[], ...actions])]);
+    const [heading, ...own] = texts.map((c) => c.text.replace(/^\*/, ''));
+    const names = labels ?? own;
+    const prompt = `${heading ?? ''} ${names.map((l, i) => `${i + 1} ${l}`).join(', ')} (0 to leave)`;
+    return (next) => {
+      const m = this.src.scenString?.(prompt);
+      if (m === undefined) throw new Error('ledPanel needs ScriptSource.scenString');
+      const ask = this.reserve();
+      const again: Step = () => ask;
+      const chosen = this.switchFlag(scratch, [[], ...actions.map((a) => [...a, again])])(next);
+      this.fill(ask, 'if-num-response', { sdf: scratch, msg: [m, 0, actions.length] }, chosen);
+      return ask;
+    };
   }
 
   /** RECT_CHANGE_TER: every square from `(x1, y1)` to `(x2, y2)` becomes `t`. */
@@ -851,17 +867,58 @@ export class SpecBuilder {
     return (next) => this.node('unite-party', { ex1: [10] }, next);
   }
 
+  /** The engine's item number for E3's `item` made readable with `ability` (`E3_NOTE_ITEMS`). */
+  note(item: number, ability: number): number {
+    const n = this.src.noteItem?.(item, ability);
+    if (n === undefined) throw new Error('note needs ScriptSource.noteItem');
+    return n;
+  }
+
+  /** `FUN_1070_18fd`: item `item` (the engine's number) lies at `(x, y)` (TOWN_PLACE_ITEM). */
+  placeItem(x: number, y: number, item: number): Step {
+    return (next) => this.node('place-item', { ex1: [x, y], ex2: [item, 0] }, next);
+  }
+
+  /** Every PC's spell points go to 0 (E3 writes `cur_sp` directly). */
+  drainSpAll(): Step {
+    return (next) => this.node('sp', { ex1: [255, 1] }, next);
+  }
+
+  /** `if (FUN_1038_018d())`: in combat. IF_CONTEXT on COMBAT_MOVE, which lets the step through. */
+  ifInCombat(then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-context', { ex1: [2, 0, yes] }, no);
+    };
+  }
+
+  /** `if (terrain under spot id == t)`, the spot's square as `FUN_10e0_07b7` finds it. */
+  ifTerAtSpot(id: number, t: number, then: Step[], otherwise: Step[] = []): Step {
+    const at = this.src.spotLoc?.(id);
+    if (!at) throw new Error(`spot ${id} has no location`);
+    return this.ifTer(at.x, at.y, t, then, otherwise);
+  }
+
+  /** The terrain under spot `id` becomes `t`. */
+  setTerAtSpot(id: number, t: number): Step {
+    const at = this.src.spotLoc?.(id);
+    if (!at) throw new Error(`spot ${id} has no location`);
+    return this.setTer(at.x, at.y, t);
+  }
+
   /**
    * E3's per-turn town countdowns (the tail of `FUN_10c0_61c4`): while the
    * party is in `town`, `flag` falls by one a turn, and `at.get(v)` runs as
-   * it reaches `v`; anywhere else E3 zeroes it. Here a scenario timer of one
+   * it reaches `v`; anywhere else E3 zeroes it (or, with `zeroAway` false,
+   * leaves it, and it counts on only once restarted). Here a scenario timer of one
    * tick, rearming itself while `flag` is above 0, does the counting;
    * `running` says a timer is set, so starting twice doesn't count double.
    * Returns the step that starts it at `value`, for the town's script.
    */
   townCountdown(town: number, flag: Flag, value: number, running: Flag,
-    at: (s: SpecBuilder) => Map<number, Step[]>): Step {
-    const chain = this.src.scenNode?.((s) => s.countdownChain(town, flag, running, at(s)));
+    at: (s: SpecBuilder) => Map<number, Step[]>, zeroAway = true): Step {
+    const chain = this.src.scenNode?.((s) => s.countdownChain(town, flag, running, at(s), zeroAway));
     if (chain === undefined) throw new Error('townCountdown needs ScriptSource.scenNode');
     return this.seq([this.setFlag(flag, value), this.ifFlagEq(running, 0, [
       this.setFlag(running, 1), (next) => this.node('start-timer-scen', { ex1: [1, chain] }, next),
@@ -869,7 +926,7 @@ export class SpecBuilder {
   }
 
   /** The scenario chain behind `townCountdown`, returning its first node. */
-  countdownChain(town: number, flag: Flag, running: Flag, at: Map<number, Step[]>): number {
+  countdownChain(town: number, flag: Flag, running: Flag, at: Map<number, Step[]>, zeroAway = true): number {
     const start = this.reserve();
     const stop = this.setFlag(running, 0);
     const inTown = this.compile([this.ifFlagAtLeast(flag, 1, [
@@ -877,7 +934,8 @@ export class SpecBuilder {
       ...[...at].map(([v, steps]) => this.ifFlagEq(flag, v, steps)),
       this.ifFlagAtLeast(flag, 1, [(next) => this.node('start-timer-scen', { ex1: [1, start] }, next)], [stop]),
     ], [stop])]);
-    const away = this.compile([this.setFlag(flag, 0), stop]);
+    // Some countdowns E3 zeroes away from the town; others only pause.
+    const away = this.compile(zeroAway ? [this.setFlag(flag, 0), stop] : [stop]);
     this.fill(start, 'if-town', { ex1: [town, inTown] }, away);
     return start;
   }

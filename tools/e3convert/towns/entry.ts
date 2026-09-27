@@ -11,7 +11,11 @@
  *   first. TODO(E3-3): the rest of the list, and after-death creatures.
  * - Towns 4–7 turn on a party the Anama caught robbing them (flag 0xac 2).
  * - Town 23 opens the portcullis the Slime Pit's pedestal chose.
- * - TODO(E3-3): the others — towns 21, 28, 31–33, 36, 38, 41, 46, 57, 64,
+ * - Castle Troglo (28) turns on the party past stage 6 of Vothkaro's story
+ *   (10d8:1b32), when it also closes two squares unless the troglodytes are
+ *   already at war; past stage 1 it opens a door by the cell.
+ *   TODO(E3-3): E3 also makes everyone docile below stage 7.
+ * - TODO(E3-3): the others — towns 21, 31–33, 36, 38, 41, 46, 57, 64,
  *   78/79, 82, 89, 90, 103–105, 107, 108 and the 26-town jump table at
  *   10d8:2333 — as those towns are transcribed.
  */
@@ -20,6 +24,7 @@ import type { EntryScript } from '../specials';
 import { partyFlag as f, type SpecBuilder, type Step } from '../script';
 import { ANAMA } from './shayder';
 import { PEDESTAL } from './slimePit';
+import { TROGLO_STAGE, TROGLO_WAR } from './castleTroglo';
 
 const SEG = 0x10d8;
 
@@ -39,5 +44,9 @@ export const ENTRY_SCRIPTS = new Map<number, EntryScript>([
   [23, (b) => [
     ...clearedBy(0xc85)(b),
     b.switchFlag(PEDESTAL, PORTCULLISES.map(([x, y]) => [b.setTer(x, y, 109)])),
+  ]],
+  [28, (b) => [
+    b.ifFlagAtLeast(TROGLO_STAGE, 7, [b.makeTownHostile(), b.ifFlagEq(TROGLO_WAR, 0, [b.setTer(37, 53, 108), b.setTer(38, 53, 108)])]),
+    b.ifFlagAtLeast(TROGLO_STAGE, 2, [b.setTer(52, 51, 101)]),
   ]],
 ]);

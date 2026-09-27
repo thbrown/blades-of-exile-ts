@@ -1262,6 +1262,27 @@ Notes for M2 implementer:
     - `try-spot.mjs` gained `--number n` (a number prompt's answer) and
       `--wait n` (turns to pass afterwards, for countdowns); `show.ts`
       gained `gOFF:N` (DGROUP bytes) and `wSEG:OFF:N` (a jump table).
+  - 2026-09-26: **Castle Troglo** (towns 28–29, `towns/castleTroglo.ts`,
+    `FUN_1078_3303`/`37c4`, block 57): King Vothkaro's story as flag
+    (28,4), stages 0–7, the cell door's per-turn countdown (which E3 pauses
+    rather than zeroes away from the town: `townCountdown(…, false)`), the
+    caves' combination gate (six dials, flags 0xc32–0xc37), and town 28's
+    entry script.
+    - **Readable items.** E3's item-use handler `FUN_10c0_2c92` shows a
+      dialog for abilities 0xb0–0xb6 (0xeb0, 0xcf3, 0x116d, 0x3ba, 0x161f,
+      0xcd5, 0xcd6). They convert to OBoE's CALL_SPECIAL ability with a
+      scenario node that shows the dialog (`E3_NOTE_DIALOGS`). Scripts make
+      notes by stamping one onto a table item (`FUN_1070_0464(item, abil)`
+      gives one; `FUN_1068_0045` loads an item record, stride 0x3b); each
+      such pair is an extra record after the food (`E3_NOTE_ITEMS`,
+      `ScriptSource.noteItem`, `b.note`).
+    - `ledPanel` now asks again after each press until 0, as E3's panels
+      stay open, and takes the converter's own labels where the dialog's
+      don't name each button.
+    - New steps: `placeItem`, `drainSpAll`, `ifInCombat` (IF_CONTEXT),
+      `ifTerAtSpot`/`setTerAtSpot` (the spot's own square: `e3SpotScript`
+      passes `spotLoc`).
+    - FORMATS.md now lists every town's handler function.
   - Next: the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.
