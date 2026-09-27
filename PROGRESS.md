@@ -13276,3 +13276,18 @@ What is known so far:
   pay, and the failure flag at a missed deadline are not traced yet. Start
   from the other two readers of `+0x832f`: `1010:5971` (in
   `FUN_1010_5889`) and `1020:16ee` (in `FUN_1020_1484`).
+
+### Entrance marks: E3's "which side did the party come in by" (2026-09-27)
+
+Fort Emergence's fix is now general. An `EntranceMark` (`specials.ts`) is a
+converter spot on a zone's town entrance, with ids from 90 per zone, that sets
+a flag as the party steps on. It stands in where E3 tests the party's outdoor
+position from inside a town (party+0x12e2 on). Two use it:
+- Fort Emergence (`FORT_SIDE`, `[291, 33]`);
+- the Wolf Pit (town 80, `WOLF_SIDE`, `[291, 34]`). Its spots 12 and 16 lead
+  out by the other way: to the Goblin Lair's entrance (zone (8,9) at (44,14))
+  or the Bandit Hideout's (zone (8,8) at (44,41)). E3 tests party+0x12e9,
+  the party's y in its sector, against 20.
+
+`coverage.ts` has 3 spots left. **Next session**: those 3 spots, then E3's
+job boards (the section above).

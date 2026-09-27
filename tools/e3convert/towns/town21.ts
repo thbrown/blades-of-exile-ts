@@ -5,6 +5,7 @@
  * disassembly has them.
  */
 
+import type { EntranceMark } from '../specials';
 import { partyFlag as f, partySpecItem, townSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
 
 const TOWN = 21;
@@ -42,20 +43,11 @@ const SURFACE = 1;
  */
 export const FORT_START_ZONE = 89;
 
-/**
- * The spot id the converter gives the fort's outdoor entrances. No E3 zone
- * uses it (their ids under 100 go up to 24, and one 72).
- */
-export const FORT_ENTRANCE_SPOT = 90;
-
 /** The fort's two outdoor entrances, and the side each is on. */
-export const FORT_ENTRANCES = [
-  { zone: 73, loc: { x: 20, y: 25 }, side: SURFACE },
-  { zone: FORT_START_ZONE, loc: { x: 36, y: 36 }, side: CAVES },
+export const FORT_ENTRANCES: EntranceMark[] = [
+  { zone: 73, loc: { x: 20, y: 25 }, flag: FORT_SIDE, value: SURFACE },
+  { zone: FORT_START_ZONE, loc: { x: 36, y: 36 }, flag: FORT_SIDE, value: CAVES },
 ];
-
-/** An entrance's spot: it notes which side the party came in by. */
-export const fortEntrance = (side: number) => (b: SpecBuilder): Step[] => [b.setFlag(FORT_SIDE, side)];
 
 /** Anaximander's office (spot 1): the first briefing, then every report. */
 function anaximander(b: SpecBuilder): Step[] {

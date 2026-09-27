@@ -22,8 +22,8 @@ import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
 import { readE3ShopTables, standardShops } from './shops';
 import { e3DayReached, e3Event, e3Flag } from './flags';
 import { buildE3Village, villageTemplate } from './village';
-import { e3SpotScript, type PlaceScript, type SpotScript } from './specials';
-import { FORT_ENTRANCES, FORT_ENTRANCE_SPOT, FORT_START_ZONE, fortEntrance, town21 } from './towns/town21';
+import { ENTRANCE_MARK_SPOT, e3SpotScript, type PlaceScript, type SpotScript } from './specials';
+import { FORT_ENTRANCES, FORT_START_ZONE, town21 } from './towns/town21';
 import { krizsan } from './towns/krizsan';
 import { shayder } from './towns/shayder';
 import { lorelei } from './towns/lorelei';
@@ -35,7 +35,7 @@ import { filthFactory } from './towns/filthFactory';
 import { castleTroglo } from './towns/castleTroglo';
 import { cavesOfGiants } from './towns/cavesOfGiants';
 import { shiftingFloors } from './towns/shiftingFloors';
-import { DUNGEON_SCRIPTS, TUNNEL_GUARD_DEAD } from './towns/dungeons';
+import { DUNGEON_SCRIPTS, TUNNEL_GUARD_DEAD, WOLF_PIT_ENTRANCES } from './towns/dungeons';
 import { DUNGEON2_SCRIPTS } from './towns/dungeons2';
 import { VILLAGE_SCRIPTS } from './towns/villages';
 import { newCotra } from './towns/newCotra';
@@ -45,7 +45,7 @@ import { sharimik, SHARIMIK_DEATH_FLAGS } from './towns/sharimik';
 import { ZONE_SCRIPTS } from './towns/zones';
 import { DAILY_FLAGS, KILL_SCRIPTS } from './towns/talkScripts';
 import { dailyPlot } from './towns/plot';
-import { SpecBuilder, type ScriptSource } from './script';
+import { SpecBuilder, type ScriptSource, type Step } from './script';
 import { BASIC_BUTTONS } from '../../src/game/specials/oneshot';
 import { makeSpecItem, type SpecItem } from '../../src/data/quest';
 import type { Shop } from '../../src/data/shop';
@@ -645,12 +645,12 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   zones.forEach((z, i) => {
     const base = `out/out${i % E3_ZONES_WIDE}~${Math.floor(i / E3_ZONES_WIDE)}`;
     const spots = z.specialLocs.map((loc, k) => ({ loc, id: z.specialId[k] ?? 0 }));
-    // The converter's own spot on each of Fort Emergence's two entrances.
-    const fort = FORT_ENTRANCES.find((e) => e.zone === i);
+    // The converter's own spots on town entrances (`EntranceMark`).
+    const marks = [...FORT_ENTRANCES, ...WOLF_PIT_ENTRANCES].filter((e) => e.zone === i);
     const own = ZONE_SCRIPTS.get(i);
-    if (fort) spots.push({ loc: fort.loc, id: FORT_ENTRANCE_SPOT });
-    const script = e3SpotScript(spots, { zone: i }, e3Src, (x, y) => z.terrain[x]?.[y] ?? 0, !fort ? own
-      : (b) => new Map([...own?.(b) ?? [], [FORT_ENTRANCE_SPOT, fortEntrance(fort.side)(b)]]));
+    marks.forEach((m, k) => spots.push({ loc: m.loc, id: ENTRANCE_MARK_SPOT + k }));
+    const script = e3SpotScript(spots, { zone: i }, e3Src, (x, y) => z.terrain[x]?.[y] ?? 0, !marks.length ? own
+      : (b) => new Map([...own?.(b) ?? [], ...marks.map((m, k): [number, Step[]] => [ENTRANCE_MARK_SPOT + k, [b.setFlag(m.flag, m.value)]])]));
     write(`${base}.xml`, sectorXml(z, i, strings, script));
     write(`${base}.map`, sectorMap(z, i, strings, script));
     write(`${base}.spec`, script.spec);

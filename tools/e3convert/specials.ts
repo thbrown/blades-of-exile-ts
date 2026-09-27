@@ -27,7 +27,7 @@
 
 import { BASIC_BUTTONS } from '../../src/game/specials/oneshot';
 import { e3SpotFlag } from './flags';
-import { SpecBuilder, townSpotFlag, zoneSpotFlag, type ScriptSource, type Step } from './script';
+import { SpecBuilder, townSpotFlag, zoneSpotFlag, type Flag, type ScriptSource, type Step } from './script';
 
 export interface E3Spot { loc: { x: number; y: number }; id: number }
 
@@ -52,6 +52,28 @@ export interface SpotScript {
 
 /** A place's own encounters, transcribed (`towns/`): steps by encounter number. */
 export type PlaceScript = (b: SpecBuilder) => Map<number, Step[]>;
+
+/**
+ * A spot the converter adds on a zone's town entrance, setting `flag` to
+ * `value` as the party steps onto it. It stands in where E3 tests the party's
+ * outdoor position from inside a town (party+0x12e2 on), which no node can
+ * read: a tunnel whose far end leads out on the side the party didn't come
+ * in by. Outdoor specials run before the town-entrance check
+ * (`session.ts`, `outdMoveParty`), so the flag is set by the time the town's
+ * scripts can read it.
+ */
+export interface EntranceMark {
+  zone: number;
+  loc: { x: number; y: number };
+  flag: Flag;
+  value: number;
+}
+
+/**
+ * The spot ids entrance marks take, one after another in each zone. No E3
+ * zone uses them: its ids under 100 go up to 24, and one 72.
+ */
+export const ENTRANCE_MARK_SPOT = 90;
 
 /** What a town does as the party enters it (`towns/entry.ts`). */
 export type EntryScript = (b: SpecBuilder) => Step[];

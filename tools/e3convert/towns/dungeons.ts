@@ -7,7 +7,7 @@
 import { DamageType } from '../../../src/data/monster';
 import { FieldType } from '../../../src/data/fields';
 import { e3DeathFlag } from '../flags';
-import { e3TownMessageBlock, type PlaceScript } from '../specials';
+import { e3TownMessageBlock, type EntranceMark, type PlaceScript } from '../specials';
 import { partyFlag as f, partySpecItem, townSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
 
 /** Blackcrag Fortress (town 34): `FUN_1078_4918`, block 58. */
@@ -838,18 +838,34 @@ function madMonastery2(b: SpecBuilder): Map<number, Step[]> {
 }
 
 /**
- * The Wolf Pit (town 80): `FUN_10b8_0000`, block 64.
- *
- * TODO(E3-3): spots 12 and 16 leave for zone (7,8) at (92,62) or (92,41)
- * depending on party+0x12e9 (above or below 20), a byte beside the party's
- * outdoor position (party+0x12e6) whose meaning isn't pinned yet.
+ * Which way the party came to the Wolf Pit: by the Goblin Lair (town 44,
+ * zone (8,9) at (44,14)) or by the Bandit Hideout (town 45, zone (8,8) at
+ * (44,41)). E3 reads the party's y in its sector instead (party+0x12e9,
+ * under or over 20), which no node can, so each entrance sets this
+ * (`EntranceMark`).
+ */
+export const WOLF_SIDE: Flag = [291, 34];
+const BY_GOBLINS = 0;
+const BY_BANDITS = 1;
+
+export const WOLF_PIT_ENTRANCES: EntranceMark[] = [
+  { zone: 89, loc: { x: 44, y: 14 }, flag: WOLF_SIDE, value: BY_GOBLINS },
+  { zone: 80, loc: { x: 44, y: 41 }, flag: WOLF_SIDE, value: BY_BANDITS },
+];
+
+/**
+ * The Wolf Pit (town 80): `FUN_10b8_0000`, block 64. Spots 12 and 16 lead
+ * out by the other way: from the bandits' side to the Goblin Lair's entrance,
+ * and from the goblins' side to the Bandit Hideout's.
  */
 function wolfPit(b: SpecBuilder): Map<number, Step[]> {
   const up = (dlg: number, town: number, x: number, y: number): Step[] =>
     [b.askDialog(dlg, [b.changeTown(town, x, y)]), b.blockMove()];
   return new Map<number, Step[]>([
+    [12, [b.ifFlagEq(WOLF_SIDE, BY_BANDITS, [b.setFlag(WOLF_SIDE, BY_GOBLINS), b.exitTo(7, 8, 0x5c, 0x3e)])]],
     [14, up(0xed8, 0x2d, 8, 0xe)],
     [15, up(0xed8, 0x2c, 2, 0x18)],
+    [16, [b.ifFlagEq(WOLF_SIDE, BY_GOBLINS, [b.setFlag(WOLF_SIDE, BY_BANDITS), b.exitTo(7, 8, 0x5c, 0x29)])]],
     [17, up(0xd7f, 0x2d, 0x10, 0xc)],
   ]);
 }
