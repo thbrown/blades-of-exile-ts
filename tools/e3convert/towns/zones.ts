@@ -7,7 +7,6 @@
  */
 
 import type { PlaceScript } from '../specials';
-import { e3DayReached } from '../flags';
 import { partyFlag as f, partySpecItem, zoneSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
 import { Race, Skill, Trait } from '../../../src/universe/skills';
 import { E3ShopType } from '../shops';
@@ -522,7 +521,7 @@ function zone39(b: SpecBuilder): Map<number, Step[]> {
     [b.msg(B, 7), b.blockMove()])])]];
   /** A farm, flattened from E3's day `day` (`FUN_10d0_54b8(day, 2)`). */
   const farm = (day: number, then: Step[]): Step[] =>
-    [b.blockMove(), b.ifDayReached(e3DayReached(day, 2).day, [b.msg(B, 0xc)], then)];
+    [b.blockMove(), b.ifE3DayReached(day, 2, [b.msg(B, 0xc)], then)];
   return new Map<number, Step[]>([
     checkpoint(1), checkpoint(2), checkpoint(3),
     [4, farm(150, [b.askDialog(0x150f, [b.shop(E3ShopType.FOOD, 0, 9, 0, 0x10a0, 0x157b)])])],
@@ -667,7 +666,7 @@ function zone54(b: SpecBuilder): Map<number, Step[]> {
   const Z = 54, B = block(Z), spot = (id: number) => zoneSpotFlag(Z, id);
   /** A farm, abandoned from E3's day `2 * id + 0x41` (`FUN_10d0_54b8(day, 1)`); ringed visitors get 3 food. */
   const farm = (id: number): [number, Step[]] => [id, [b.askDialog(0x15a4, [
-    b.ifDayReached(e3DayReached(2 * id + 0x41, 1).day, [b.msg(B, 4)],
+    b.ifE3DayReached(2 * id + 0x41, 1, [b.msg(B, 4)],
       [b.ifSpecItem(partySpecItem(0x5a), [b.food(3), b.msg(B, 6)], [b.msg(B, 5)])]),
   ])]];
   return new Map<number, Step[]>([
@@ -1101,7 +1100,7 @@ function zone83(b: SpecBuilder): Map<number, Step[]> {
   const Z = 83, B = block(Z), spot = (id: number) => zoneSpotFlag(Z, id);
   /** A farm the monsters overrun (and block) from E3's day `day` (`FUN_10d0_54b8(day, 0)`). */
   const farm = (day: number, then: Step[]): Step[] =>
-    [b.ifDayReached(e3DayReached(day, 0).day, [b.msg(B, 0x35), b.blockMove()], then)];
+    [b.ifE3DayReached(day, 0, [b.msg(B, 0x35), b.blockMove()], then)];
   return new Map<number, Step[]>([
     [1, [b.askDialog(0x16c6, [b.onceEncounter(spot(1), B, 0x31, 0, 0)])]],
     [2, [b.giveItemDialog(0x16c9, spot(2), 0x102)]],

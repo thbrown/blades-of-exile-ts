@@ -576,6 +576,15 @@ function zkal(b: SpecBuilder): Map<number, Step[]> {
 const ZKAL_PADS = [1, 1, 0, 0, 0, 2, 1, 1, 1, 2, 3, 0, 3, 5, 2, 2];
 const ZKAL_MARKERS: [number, number][] = [[0x28, 0x28], [0x28, 0x2c], [0x2c, 0x28], [0x2c, 0x2c]];
 
+/**
+ * Entering level 2 (`towns/entry.ts`): E3's loader zeroes the maze state
+ * (10d8:04d6) and reloads the map, which shows marker 0 lit. The engine
+ * keeps a town's terrain between visits, so the markers are set back here.
+ */
+export function zkal2Entry(b: SpecBuilder): Step[] {
+  return [b.setFlag(townSpotFlag(71, 8), 0), ...ZKAL_MARKERS.map(([x, y], m) => b.setTer(x, y, m === 0 ? 1 : 0))];
+}
+
 function zkal2(b: SpecBuilder): Map<number, Step[]> {
   const B = 63, spot = (id: number) => townSpotFlag(71, id);
   const state = spot(8), seen = spot(7);

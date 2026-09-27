@@ -209,6 +209,9 @@ village's grass is re-rolled on every load (cosmetic, and it uses the RNG).
 
 Towns also change state without a village record: records 0–3 are Krizsan and
 its later states (0 and 1 differ in "Small Shipyard" vs "Ruined Shipyard").
+So are 4–7 (Shayder), 8–11 (Sharimik), 12–15 (Lorelei) and 16–19 (Gale):
+the town loader swaps in a later record by day and plot event
+(`towns/townStates.ts`).
 
 **Town names** are string `30001 + 20t`, the first of a 20-string block per
 town.

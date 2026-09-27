@@ -20,6 +20,7 @@
 import { partyFlag as f, type SpecBuilder, type Step } from '../script';
 import { DEMON_PLOT } from './towerOfMagi';
 import { ostothDay } from './newCotra';
+import { townStatesPlot } from './townStates';
 
 export const ROACHES_DONE = f(0xc90);
 export const LATE_WAR = f(0xc92);
@@ -39,5 +40,8 @@ export function dailyPlot(b: SpecBuilder): Step[] {
     b.ifFlagEq(DEMON_PLOT, 0, [b.ifDayReached(160, [b.ifTown(24, [], [b.setFlag(DEMON_PLOT, 1)])])]),
     // Not E3's own: the converter's day counts (`towns/newCotra.ts`).
     ostothDay(b),
+    // Not the turn code's: E3's town loader tests these as the party enters
+    // (`towns/townStates.ts`).
+    ...townStatesPlot(b),
   ];
 }

@@ -348,6 +348,27 @@ export class SpecBuilder {
     };
   }
 
+  /**
+   * E3's own `day_reached(day, event)` (`FUN_10d0_54b8`): true once
+   * `calc_day() >= day + 20`, unless plot event `event` happened *before*
+   * that day. An event that never happened (key time 30000) stops nothing,
+   * and event 8 is none. The engine's IF_EVENT_OCCURRED reads an unset event
+   * as "no" (DIVERGENCES.md #9), so the test is built from two of them:
+   * "happened no earlier than the day", else "happened at all".
+   */
+  ifE3DayReached(day: number, event: number, then: Step[], otherwise: Step[] = []): Step {
+    const d = day + 20;
+    if (event === 8) return this.ifDayReached(d, then, otherwise);
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      const key = e3Event(event);
+      const happenedAtAll = this.node('if-event', { ex1: [0, key], ex2: [-1, no] }, yes);
+      const notBefore = this.node('if-event', { ex1: [d, key], ex2: [-1, yes] }, happenedAtAll);
+      return this.node('if-day', { ex1: [d, notBefore] }, no);
+    };
+  }
+
   /** `if (the party has special item k) { then } else { otherwise }`. */
   ifSpecItem(k: number, then: Step[], otherwise: Step[] = []): Step {
     return (next) => {

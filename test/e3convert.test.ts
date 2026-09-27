@@ -163,7 +163,8 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
       .toEqual([E3_CAVE_PILLAR, E3_MNTN_PILLAR, E3_SURF_LAKE, E3_CAVE_LAKE]);
     // Each terrain carries its arena kind, and the scenario asks for E3's arenas.
     expect(scen.featureFlags['outdoor-arena']).toBe('exile3');
-    expect(scen.terTypes.map((t) => t.combatArena)).toEqual(words(0x3850, 256).map((w) => (w << 16) >> 16));
+    // (256 is the converter's copy of 255, which only towns use.)
+    expect(scen.terTypes.slice(0, 256).map((t) => t.combatArena)).toEqual(words(0x3850, 256).map((w) => (w << 16) >> 16));
     // A grass arena is grass and E3's plants inside E3's border, and nothing
     // from BoE's numbering (BoE's border is 90, E3's swamp).
     const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
@@ -324,6 +325,43 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(univ.party.pcs.flatMap((pc) => pc.items).some((it) => it.fullName === 'Orb of Sight')).toBe(true);
     // Zone 74's special group (script 99) comes for the party from anywhere.
     expect(scen.outdoors[2]![8]!.specialEnc[0]!.forced).toBe(true);
+  });
+
+  it("swaps in a declining town's later record by day, as E3's loader does", async () => {
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    session.attachSpecials(new Proxy({}, { get: () => () => Promise.resolve(0) }) as never);
+    const univ = session.univ;
+    expect(scen.townMods.map((m) => m.spec)).toEqual([0, 4, 8, 12, 16]);
+    const newDay = scen.scenarioTimers[0]!.node;
+    /** Day `day` begins, and the party walks into Krizsan (record 0). */
+    const krizsanOn = async (day: number): Promise<number> => {
+      univ.party.age = (day - 1) * 3700;
+      await session.runSpecial(SpecCtx.SCEN_TIMER, SpecCtxType.SCEN, newDay, univ.party.outLoc);
+      session.startTownMode(0, FORCED_ENTRY);
+      return univ.party.townNum;
+    };
+    // E3's days 10, 25 and 55, plus day_reached's 20.
+    expect(await krizsanOn(29)).toBe(0);
+    expect(await krizsanOn(30)).toBe(1);
+    expect(await krizsanOn(45)).toBe(2);
+    // The slime dies (event 0) on day 50: the decline stops there.
+    univ.party.keyTimes.set(1, 50);
+    expect(await krizsanOn(80)).toBe(2);
+    // Had it died after day 75, it would have been too late.
+    univ.party.keyTimes.set(1, 76);
+    expect(await krizsanOn(80)).toBe(3);
+
+    // Lorelei marks itself visited, for Anaximander's report.
+    session.startTownMode(12, FORCED_ENTRY);
+    await session.settled();
+    expect(univ.party.getSdf(...partyFlag(0x105))).toBe(1);
+    // Terrain 255 blocks sight in most of the towns that have it, not in the Slime Pit.
+    const has255 = (t: number, ter: number) => scen.towns[t]!.terrain.some((col) => col.includes(ter));
+    expect(has255(23, 255)).toBe(true);
+    expect(has255(26, 256)).toBe(true);
+    expect(has255(26, 255)).toBe(false);
+    expect(scen.terTypes[255]!.blockage).toBe(TerObstruct.BLOCK_MOVE_AND_SHOOT);
+    expect(scen.terTypes[256]!.blockage).toBe(TerObstruct.BLOCK_MOVE_AND_SIGHT);
   });
 
   it('gives the other kill cases to the creatures that carry them', () => {

@@ -13530,3 +13530,54 @@ The talk-types TODO (`talk.ts`) was stale: all 71 scripted types are
 transcribed, and every type below 100 has a case. **Next session starts
 here**: `grep -rn "TODO(E3-3)" src tools` (50 now). The bigger ones left
 are `script.ts`'s town-hostile endings and the `entry.ts` list.
+
+### E3's declining towns, and the town loader's table (2026-09-27)
+
+**A quest gap: Krizsan, Shayder, Sharimik, Lorelei and Gale never declined.**
+Each is four town records (0–3, 4–7, 8–11, 12–15, 16–19) and every entrance
+names the first. E3's town loader (`FUN_10d8_0107`) swaps the record before
+loading it, through the 26-town table at 10d8:2333 that `entry.ts` had left
+as a TODO. `nedis.py` reads the cases Ghidra's listing skipped:
+
+- **The swap**: three `day_reached(day, event)` tests in order, each passing
+  one choosing the next record. Krizsan: days 10/25/55, event 0 (the Alien
+  Slime). Shayder 50/70/105, event 1 (the Filth Factory). Sharimik
+  95/130/170 and Lorelei 120/165/210, event 2 (Barrier Cavern). Gale
+  140/200/250, event 3 (the golems' crystal). So killing the plot's monster
+  **halts** the town where it stands. The party's horses stabled in any of
+  the four records move to the chosen one (the list at party+0x6a68 is the
+  horses; +6 `which_town`, +8 `exists`).
+- Ported (`tools/e3convert/towns/townStates.ts`) with no engine change: a
+  state flag per town, `(294, k)`, set by the daily plot, and a
+  `<town-flag>` per town that adds it to the record, OBoE's town replacement.
+  `TODO(E3-3)`: the engine re-homes horses *and boats* from the first record
+  only, so Krizsan's two shipyard boats follow into the ruins, which E3 does
+  not do.
+- **E3's `day_reached` is now exact in scripts** (`SpecBuilder.ifE3DayReached`).
+  `FUN_10d0_54b8(day, event)`: `calc_day() >= day + 20`, unless `key_times[event]
+  < day + 20`; 30000 (never) stops nothing, event 8 is none. It's built from
+  `if-day` and two `if-event` nodes, since the engine reads an unset event as
+  "no" (DIVERGENCES.md #9). The four plot events are scripted now, so the
+  zone farms and village tests that had dropped their event
+  (`zones.ts`, `villages.ts`) keep it. A creature's time flag, a town's chop and
+  DEP_ON_TIME still drop it (`flags.ts`), because those are the engine's own tests.
+- **Lorelei marks itself visited** (party+0x105, for Anaximander's report
+  0xb, which `town21.ts` already had and nothing could reach).
+- **Zkal level 2 (71)** zeroes its maze state on entry. E3 also reloads the
+  map, so the entry script sets the four markers back.
+- **`DS:1d7d` is `blockage[255]`** (`DS:1c7e + 0xff`). The loader sets it to 4
+  in towns 22, 23 and 46 and 5 in the other 16 with terrain 255 (the Filth
+  Factory's walls, among others); `1040:0a04` does the same for a loaded game.
+  The terrain table's 3 was never what a player met. The converter now writes
+  255 as 4 and a copy, **terrain 256**, as 5, and maps 255 → 256 in those 16
+  towns (`withTer255`, emit.ts). No script names terrain 255. The converter
+  throws if another town ever has it.
+- Open: town 37 (the Great Walls) sets party+0x138a/b to (0x39, 5), and no
+  code reads either byte directly.
+
+`test/e3convert.test.ts` walks into Krizsan on days 29, 30, 45 and 80, with
+the slime dead before and after the last change. All checks pass: 1,377
+tests, both sweeps, verify-e3/screen/party. **Next session starts here**:
+`grep -rn "TODO(E3-3)" src tools` (51). The bigger ones left are
+`script.ts`'s town-hostile endings and the rest of `entry.ts`'s list (towns
+31, 41, 46, 57, 78/79, 82, 90, 103–105, 107).

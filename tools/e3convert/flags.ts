@@ -33,12 +33,16 @@ export function e3Event(k: number): number {
  * terms. E3 adds 20 days, as BoE 1997's Windows build did; OBoE's does not,
  * so the day moves here. Event 8 is "none".
  *
+ * This is for the engine's own day tests (a creature's time flag, a town's
+ * chop). A script's test is `SpecBuilder.ifE3DayReached`, which keeps the
+ * event with E3's meaning.
+ *
  * TODO(E3-3): the event is dropped. E3 skips the change if the event happened
  * *before* the day, and an event that never happened (30000) does not stop
  * it. The engine agrees on the first and not the second — it reads an unset
  * key as "no" (DIVERGENCES.md #9) — so keeping the key would freeze every
- * such change until E3-3's scripts set it. Dropped, the change happens on its
- * day, which is what E3 does until the event is scripted.
+ * such change until the event happens. Dropped, the change happens on its
+ * day even after the event, where E3 would have spared it.
  */
 export function e3DayReached(day: number, _event: number): { day: number; event: number } {
   return { day: day + 20, event: 0 };
@@ -80,4 +84,14 @@ export function e3DeathFlag(k: number): [number, number] {
  */
 export function e3DayCount(k: number): [number, number] {
   return [293, k];
+}
+
+/**
+ * A converter flag holding a changing town's state, `(294, k)` for the
+ * `k`th of `towns/townStates.ts`'s groups: 0–3, how many records past the
+ * first the party walks into. A scenario `<town-flag>` adds it to the town
+ * number, which is how E3's loader swaps the record (`FUN_10d8_0107`).
+ */
+export function e3TownState(k: number): [number, number] {
+  return [294, k];
 }

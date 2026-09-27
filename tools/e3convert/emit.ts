@@ -18,7 +18,7 @@ import { readDialogs, readNeResources, readNeSegment, readStringTable } from './
 import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor, type E3OutWandering } from './outdoor';
 import { ItemAbil } from '../../src/data/item';
 import { FieldType } from '../../src/data/fields';
-import { readE3ItemAbilities, readE3Items, readE3Monsters, readE3RoadJoins, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
+import { E3_TERRAIN_COUNT, readE3ItemAbilities, readE3Items, readE3Monsters, readE3RoadJoins, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3Town } from './town';
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
 import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
@@ -50,6 +50,7 @@ import { sharimik, SHARIMIK_DEATH_FLAGS } from './towns/sharimik';
 import { ZONE_SCRIPTS } from './towns/zones';
 import { DAILY_FLAGS, KILL_SCRIPTS } from './towns/talkScripts';
 import { dailyPlot } from './towns/plot';
+import { townStatesXml } from './towns/townStates';
 import { SpecBuilder, type ScriptSource, type Step } from './script';
 import { BASIC_BUTTONS } from '../../src/game/specials/oneshot';
 import { makeSpecItem, type SpecItem } from '../../src/data/quest';
@@ -189,6 +190,32 @@ function addRoadMarks(marks: Map<string, string>, terrain: number[][], size: num
       if (E3_ROADS.has(terrain[x]?.[y] ?? -1)) addMark(marks, x, y, `&${FieldType.SPECIAL_ROAD}`);
     }
   }
+}
+
+/**
+ * Terrain 255's blockage is not the table's: E3's town loader sets
+ * `blockage[255]` (`DS:1d7d`) for the towns that have it, 4 (stops movement
+ * and missiles) in 22, 23 and 46 and 5 (stops sight too) in the rest
+ * (10d8:04b8–04c9; 1040:0a04 does the same for a loaded game). The setting
+ * outlives the town, but every town with the terrain sets it, so it is
+ * per town. The engine's blockage is per terrain, so 255 takes 4 and the
+ * other towns get a copy of it that blocks sight, `E3_TER_255_OPAQUE`.
+ */
+const E3_TER_255_OPAQUE = E3_TERRAIN_COUNT;
+const TER_255_SEE_THROUGH = new Set([22, 23, 46]);
+const TER_255_TOWNS = new Set([22, 23, 26, 27, 28, 29, 30, 31, 32, 33, 38, 46, 54, 60, 63, 92, 103, 104, 108]);
+
+function withTer255(types: E3TerrainType[]): E3TerrainType[] {
+  const t = types[255]!;
+  return [...types.slice(0, 255), { ...t, blockage: 4 }, { ...t, blockage: 5 }];
+}
+
+/** Town `town`'s map as the engine gets it, with terrain 255 as the loader set it. */
+function townTer255(town: number, terrain: number[][]): number[][] {
+  const has = terrain.some((col) => col.includes(255));
+  if (has && !TER_255_TOWNS.has(town)) throw new Error(`town ${town} has terrain 255 but the loader never sets its blockage`);
+  if (!has || TER_255_SEE_THROUGH.has(town)) return terrain;
+  return terrain.map((col) => col.map((t) => (t === 255 ? E3_TER_255_OPAQUE : t)));
 }
 
 function terrainXml(types: E3TerrainType[]): string {
@@ -540,7 +567,7 @@ function scenarioXml(
         <outdoor-start x="${outStart.sector.x}" y="${outStart.sector.y}" />
         <sector-start x="${outStart.loc.x}" y="${outStart.loc.y}" />
 ${shops.map(shopXml).join('')}${specialItems.map(specialItemXml).join('')}        <timer freq="3700">${newDay}</timer>
-${specStrings.map((str, i) => `        <string id="${i}">${esc(str)}</string>\n`).join('')}${journal.map((str, i) => (str ? `        <journal id="${i}">${esc(str)}</journal>\n` : '')).join('')}    </game>
+${townStatesXml()}${specStrings.map((str, i) => `        <string id="${i}">${esc(str)}</string>\n`).join('')}${journal.map((str, i) => (str ? `        <journal id="${i}">${esc(str)}</journal>\n` : '')).join('')}    </game>
 </scenario>
 `;
 }
@@ -608,7 +635,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
 
   // header.exs: the OBoE marker every unpacked tree carries.
   write('header.exs', new Uint8Array([0x4f, 0x42, 0x4f, 0x45, 0x01, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00, 0x04]));
-  write('terrain.xml', terrainXml(terrain));
+  write('terrain.xml', terrainXml(withTer255(terrain)));
   // Monsters: E3's table through the legacy importer, drawn from E3's own
   // sprites cut into custom sheets after the terrain's.
   const terrainSheets = buildTerrainSheets(read);
@@ -715,7 +742,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     // A village is built from its record (village.ts), in the caves if its
     // entrance is: E3 decides by the party's zone column.
     const underground = villageZone.get(t.number) !== undefined && villageZone.get(t.number)! % E3_ZONES_WIDE >= 7;
-    const terrain = t.village ? buildE3Village(template, t.village, underground, t.number) : t.terrain;
+    const terrain = townTer255(t.number, t.village ? buildE3Village(template, t.village, underground, t.number) : t.terrain);
     const spots = t.specialLocs.map((loc, k) => ({ loc, id: t.specId[k] ?? 255 }));
     const creatures = townCreatures(t);
     const script = e3SpotScript(spots, { town: t.number }, { ...e3Src, creatures, terrain },

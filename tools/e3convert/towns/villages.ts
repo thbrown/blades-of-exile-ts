@@ -7,7 +7,6 @@
  * town switch (`FUN_10c0_0000`, table at 10c0:055f) skips them.
  */
 
-import { e3DayReached } from '../flags';
 import { e3TownMessageBlock, type PlaceScript } from '../specials';
 import { partyFlag as f, townSpotFlag, type SpecBuilder, type Step } from '../script';
 
@@ -18,7 +17,7 @@ const on = (t: number) => ({ B: e3TownMessageBlock(t), spot: (id: number) => tow
 
 /** A day test as E3 writes it, `FUN_10d0_54b8(day, event)`. */
 function ifDay(b: SpecBuilder, day: number, event: number, then: Step[], otherwise: Step[] = []): Step {
-  return b.ifDayReached(e3DayReached(day, event).day, then, otherwise);
+  return b.ifE3DayReached(day, event, then, otherwise);
 }
 
 /** Delis (121): `FUN_10b8_0dc4`. Spot 1 is the package the party is sent for. */

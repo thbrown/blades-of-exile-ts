@@ -28,9 +28,17 @@
  * - Guhkbar's Pit (89) keeps the dryad's cell open once she is free
  *   (10d8:1bf0), and Fort Emergence (21) changes (19,12) once 0xc92 is set
  *   (10d8:1c20).
+ * - The 26-town table at 10d8:2333 runs before the record is loaded, on the
+ *   town asked for. Its cases:
+ *   - 0, 4, 8, 12, 16 swap in a later record by day (`towns/townStates.ts`);
+ *     12 also marks Lorelei visited (below);
+ *   - 22–33, 38, 46, 54, 60, 63, 92, 103, 104, 108 set terrain 255's
+ *     blockage (emit.ts, `withTer255`);
+ *   - 71, Zkal's level 2, zeroes its maze state (`zkal2Entry`);
+ *   - 37, the Great Walls, sets party+0x138a/b to (0x39, 5). Nothing reads
+ *     either byte directly, so what it is is **open**.
  * - TODO(E3-3): the others — towns 31, 41, 46, 57,
- *   78/79, 82, 90, 103–105, 107 and the 26-town jump table at
- *   10d8:2333 — as those towns are transcribed.
+ *   78/79, 82, 90, 103–105, 107 — as those towns are transcribed.
  */
 
 import type { EntryScript } from '../specials';
@@ -40,10 +48,11 @@ import { PEDESTAL } from './slimePit';
 import { TROGLO_STAGE, TROGLO_WAR } from './castleTroglo';
 import { BELT_ALPHA, BELT_BETA, BELT_STAR } from './shiftingFloors';
 import { PANEL_DOORS, SOULS_FOUGHT } from './tinraya';
-import { WALLS_SIDE } from './dungeons';
+import { WALLS_SIDE, zkal2Entry } from './dungeons';
 import { UP_STAIR_14, openChannels } from './rentarKeep';
 
 const SEG = 0x10d8;
+const LORELEI_SEEN = f(0x105);
 
 /** The town is cleared once `flag` is set. */
 const clearedBy = (flag: number) => (b: SpecBuilder): Step[] =>
@@ -55,8 +64,18 @@ const PORTCULLISES: [number, number][] = [[5, 60], [10, 60], [33, 43], [48, 30],
 const shayder: EntryScript = (b) =>
   [b.ifFlagEq(ANAMA, 2, [b.log(SEG, 0x57), b.log(SEG, 0x77), b.makeTownHostile()])];
 
+/**
+ * Lorelei marks itself visited (10d8:0354), for Anaximander's report
+ * (`towns/town21.ts`), which moves the flag on to 2. E3 does this before the
+ * state swap, so for record 12 as asked for; here each of the four records
+ * does it, which differs only if a script sent the party straight into a
+ * later record.
+ */
+const lorelei: EntryScript = (b) => [b.ifFlagBelow(LORELEI_SEEN, 2, [b.setFlag(LORELEI_SEEN, 1)])];
+
 export const ENTRY_SCRIPTS = new Map<number, EntryScript>([
   ...[4, 5, 6, 7].map((t): [number, EntryScript] => [t, shayder]),
+  ...[12, 13, 14, 15].map((t): [number, EntryScript] => [t, lorelei]),
   [22, clearedBy(0xc85)],
   [23, (b) => [
     ...clearedBy(0xc85)(b),
@@ -68,6 +87,7 @@ export const ENTRY_SCRIPTS = new Map<number, EntryScript>([
   // Not E3's: the Great Walls forget which end the party came in by.
   [37, (b) => [b.setFlag(WALLS_SIDE, 0)]],
   [64, (b) => openChannels(b)],
+  [71, zkal2Entry],
   [89, (b) => [b.ifFlagAtLeast(f(0x406), 1, [b.setTer(0xe, 3, 0x67), b.setTer(0x16, 0x13, 0x6d)])]],
   [21, (b) => [b.ifFlagAtLeast(f(0xc92), 1, [b.setTer(0x13, 0xc, 0x4f)])]],
   [38, (b) => [b.ifFlagAtLeast(UP_STAIR_14, 1, [b.setTer(41, 1, 141), b.setFlag(UP_STAIR_14, 0)])]],
