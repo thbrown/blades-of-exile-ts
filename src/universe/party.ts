@@ -48,6 +48,14 @@ export interface EncNote {
   where: string;
 }
 
+/** `cParty::cJournal` — one entry of the events journal. */
+export interface JournalEntry {
+  day: number;
+  theStr: string;
+  /** `cParty::scen_name` at the time, which this port calls `scenario.id`. */
+  inScen: string;
+}
+
 /**
  * `cParty::cConvers` (party.hpp:71, formerly `talk_save_type`) — one saved
  * reply. The original kept string *numbers* and a personality id and looked
@@ -293,6 +301,27 @@ export class Party {
       (n) => n.type === type && n.theStr === what && n.where === where);
     if (already) return false;
     this.specialNotes.push({ type, theStr: what, where });
+    return true;
+  }
+
+  /**
+   * `cParty::journal` — the events journal, Options > Journal. Nothing in the
+   * 1997 original or OBoE adds to it; the exile-js opcode `journal` does, for
+   * Exile III, whose journal this is (E3's `FUN_1008_3780`).
+   */
+  journal: JournalEntry[] = [];
+
+  /**
+   * `cParty::add_to_journal` (party.cpp:399) — add an entry dated `day`,
+   * refusing an exact duplicate (same text, day and scenario). E3 appends
+   * duplicates; the port takes OBoE's rule, which only differs if one entry
+   * is added twice on one day.
+   */
+  addToJournal(theStr: string, day: number, inScen: string): boolean {
+    const already = this.journal.some(
+      (e) => e.day === day && e.theStr === theStr && e.inScen === inScen);
+    if (already) return false;
+    this.journal.push({ day, theStr, inScen });
     return true;
   }
 

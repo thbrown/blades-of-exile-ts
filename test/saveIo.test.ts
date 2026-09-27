@@ -206,6 +206,14 @@ describe('.exg round trip', () => {
     expect(roundTrip(univ).party.talkSave).toEqual(univ.party.talkSave);
   });
 
+  it('restores the events journal (OBoE\'s JOURNAL pages)', () => {
+    univ.party.addToJournal('Arrived at the fort.', 1, 'exile3');
+    univ.party.addToJournal('Saw a slime.', 3, 'exile3');
+    const text = serialiseSave(univ).text('save/party.txt');
+    expect(text).toContain('JOURNAL 1 exile3\n');
+    expect(roundTrip(univ).party.journal).toEqual(univ.party.journal);
+  });
+
   it('loses which soul-crystal slot a monster was in, as the C++ does', () => {
     // cParty::readFrom reads the slot number and then stores into the *loop
     // counter* instead (party.cpp:993), so a crystal whose earlier slots are

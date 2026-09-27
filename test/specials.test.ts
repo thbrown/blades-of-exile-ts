@@ -283,6 +283,24 @@ describe('general nodes', () => {
     expect(host.messages[0]!.str1).toBe('first string 42');
   });
 
+  it('adds an events-journal entry, dated today, once a day (ADD_JOURNAL)', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.ADD_JOURNAL, ex1a: 2, jumpto: 1 },
+      1: { type: SpecType.ADD_JOURNAL, ex1a: 2, jumpto: 2 },
+      // No such entry: nothing added.
+      2: { type: SpecType.ADD_JOURNAL, ex1a: 9 },
+    });
+    univ.scenario.journalStrs = ['', 'first', 'Met the mayor.'];
+    univ.party.age = 3700 * 4;
+    univ.transcript.length = 0;
+    await run();
+    expect(univ.party.journal).toEqual([{ day: 5, theStr: 'Met the mayor.', inScen: univ.scenario.id }]);
+    expect(univ.transcript.filter((m) => m === 'Something was added to your journal.')).toHaveLength(1);
+    univ.party.age += 3700;
+    await run();
+    expect(univ.party.journal.map((e) => e.day)).toEqual([5, 6]);
+  });
+
   it('blocks the step for a CANT_ENTER node', async () => {
     const { run } = withNodes({ 0: { type: SpecType.CANT_ENTER, ex1a: 1 } });
     expect((await run()).a).toBe(1);

@@ -782,6 +782,11 @@ export function writeParty(file: TagFile, party: Party, scenarioId: string): voi
       if (writeAbility(abilPage, key, party.summons[i]!.abil[key]!)) abilPage = null;
     }
   }
+  for (const entry of party.journal) {
+    const journalPage = file.add();
+    journalPage.add('JOURNAL', entry.day, entry.inScen);
+    journalPage.add('STRING', entry.theStr);
+  }
   for (const note of party.specialNotes) {
     const notePage = file.add();
     notePage.add('ENCNOTE', writeEnumTag(encNoteTypes, note.type, 'SCEN'), note.where, '');
@@ -1017,6 +1022,13 @@ export function readParty(file: TagFile, party: Party): void {
       const abil = defaultAbilities()[0]!;
       const key = readAbility(page, abil);
       if (key !== MonstAbil.NO_ABIL) party.summons[monstI]!.abil[key] = abil;
+    } else if (page.firstKey() === 'JOURNAL') {
+      const tag = page.first('JOURNAL')!;
+      party.journal.push({
+        day: tag.int(0, 0),
+        inScen: tag.str(1),
+        theStr: page.first('STRING')?.str(0) ?? '',
+      });
     } else if (page.firstKey() === 'ENCNOTE') {
       const tag = page.first('ENCNOTE')!;
       party.specialNotes.push({

@@ -173,6 +173,40 @@ await shot('09-jobs-panel');
 if (!/Pay is \d+ gold/.test(boardBefore.job1 ?? '') && !took) errors.push(`the job board showed no jobs: ${JSON.stringify(boardBefore)}`);
 if (took && jobs.held !== 1) errors.push(`taking a job did not give the party one: ${JSON.stringify(jobs)}`);
 
+// The events journal (the exile-js opcode `journal`): Anaximander's first
+// briefing (the fort's spot 1, at (5,7)) adds entry 2, and Options > Journal
+// shows it with its day. The party goes back afterwards, for the walk out.
+const beforeJournal = await page.evaluate(() => ({ ...window.__univ.party.townLoc }));
+await page.evaluate(() => {
+  const s = window.__session;
+  s.univ.party.townLoc = { x: 5, y: 8 }; s.center = { x: 5, y: 8 };
+  window.__redraw();
+  void s.move(0);
+});
+for (let i = 0; i < 6; i++) {
+  await page.waitForTimeout(300);
+  if (!(await page.evaluate(() => !!window.__dialogs?.active))) break;
+  await page.keyboard.press('Enter');
+}
+await page.click('#game-menu-bar .menu-item:nth-child(3)'); // Options
+await page.locator('#game-menu-bar .menu-item:nth-child(3) .dropdown li', { hasText: 'Journal' }).click();
+await page.waitForTimeout(300);
+const journal = await page.evaluate(() => ({
+  entries: window.__univ.party.journal.length,
+  day: window.__dialogs.active?.getText?.('day1') ?? null,
+  text: window.__dialogs.active?.getText?.('str1') ?? null,
+}));
+console.log('JOURNAL:', JSON.stringify(journal));
+await shot('10-journal');
+if (journal.entries < 1 || !journal.day?.startsWith('Day: ') || !journal.text)
+  errors.push(`Anaximander's briefing left no journal entry on screen: ${JSON.stringify(journal)}`);
+await clickDialogButton('done');
+await page.waitForTimeout(200);
+if (await page.evaluate(() => !!window.__dialogs?.active)) errors.push('Done did not close the journal');
+await page.evaluate((at) => {
+  window.__univ.party.townLoc = at; window.__session.center = { ...at }; window.__redraw();
+}, beforeJournal);
+
 // Walk out of the fort: a breadth-first path to the nearest square off the
 // town's active area, through doors (moving into one opens it, and the step is
 // then taken again).

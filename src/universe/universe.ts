@@ -209,6 +209,9 @@ export class Universe {
     party.mSeen.clear(); // the original's; OBoE keeps them
     party.specialNotes = [];
     party.talkSave = [];
+    // The original's `journal_str` wipe (PARTY.CPP:373); OBoE has its clear
+    // commented out. DIVERGENCES.md §7.
+    party.journal = [];
     party.mNoted.clear();
     party.direction = Direction.N;
     party.atWhichSaveSlot = 0;

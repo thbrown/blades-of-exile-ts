@@ -43,7 +43,7 @@ export enum SpecCat {
  * category is a contiguous run of type numbers, so a range check is enough.
  */
 const CATEGORY_RANGES: [SpecCat, SpecType, SpecType][] = [
-  [SpecCat.GENERAL, SpecType.NONE, SpecType.STR_BUF_TO_SIGN],
+  [SpecCat.GENERAL, SpecType.NONE, SpecType.ADD_JOURNAL],
   [SpecCat.ONCE, SpecType.ONCE_GIVE_ITEM, SpecType.ONCE_TRAP],
   [SpecCat.AFFECT, SpecType.SELECT_TARGET, SpecType.UNSTORE_PC],
   [SpecCat.IF_THEN, SpecType.IF_SDF, SpecType.IF_QUEST],

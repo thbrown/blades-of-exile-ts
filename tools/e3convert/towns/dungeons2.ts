@@ -252,8 +252,7 @@ function hawkesManse(b: SpecBuilder): Map<number, Step[]> {
  * The Barrier Cavern (town 103): `FUN_10b8_2def`, block 66. Smashing the
  * crystal drops the barriers and restarts the war between the troglodytes
  * and the giants (0xc8a), and closes a handful of spots in their towns.
- * TODO(E3-3): E3 also stamps the day into party+0x8501 (unread so far) and
- * writes journal entry 0xb.
+ * TODO(E3-3): E3 also stamps the day into party+0x8501 (unread so far).
  */
 function barrierCavern(b: SpecBuilder): Map<number, Step[]> {
   const B = 66, spot = (id: number) => townSpotFlag(103, id);
@@ -261,7 +260,7 @@ function barrierCavern(b: SpecBuilder): Map<number, Step[]> {
     // Afterwards, shards for the fort (special item 28, party+0x44).
     [1, [b.ifFlagAtLeast(spot(1), 1, [b.msg(B, 0x15), b.giveSpecItem(partySpecItem(0x44)), b.setFlag(spot(1), 20)], [
       b.askDialog(0xfbf, [
-        b.setFlag(spot(1), 1), b.dialog(0xfc0), b.damageAll(0x32, 3), b.dialog(0xfc1), b.xp(25),
+        b.setFlag(spot(1), 1), b.dialog(0xfc0), b.damageAll(0x32, 3), b.dialog(0xfc1), b.xp(25), b.journal(0xb),
         b.bringIn(200, 1), b.setFlag(f(0xc8a), 1),
         ...[0x1bd, 0x1a1, 0x19f, 0x19e, 0x1ab].map((a) => b.setFlag(f(a), 20)),
         b.replaceTerrain(0xff, 0),

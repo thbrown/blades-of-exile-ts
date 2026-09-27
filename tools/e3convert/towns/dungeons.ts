@@ -254,8 +254,7 @@ function sacredItem(town: number) {
       // The cultists' portal: the Orb of Thralni first, then home once re-energised.
       [12, [b.ifFlagEq(portal, 1, [b.msg(B, 0x81)], [b.askDialog(0xda4, [b.ifSpecItem(orb, [
         b.ifFlagAtLeast(portal, 1, [
-          // TODO(E3-3): journal entry 0x15.
-          b.setFlag(f(0xc92), 3), b.msg(B, 0x80), b.exitTo(7, 8, 0x5c, 0x29), b.changeTown(0x2d, 0x1f, 4),
+          b.setFlag(f(0xc92), 3), b.journal(0x15), b.msg(B, 0x80), b.exitTo(7, 8, 0x5c, 0x29), b.changeTown(0x2d, 0x1f, 4),
         ], [b.msg(B, 0x7e, 0x7f), b.setFlag(portal, 1), b.bringIn(200, 1)]),
       ], [b.msg(B, 0x7d)])])]), b.blockMove()]],
       ...[14, 15, 16].map((id): [number, Step[]] => [id, [b.ifFlagEq(washed(id - 13), 0,
@@ -938,8 +937,8 @@ function murderCave(b: SpecBuilder): Map<number, Step[]> {
     [6, ambush(6, b.msg(B, 8), 202)],
     // The evidence of the murders: the key (special item 10), and the
     // roaches' time is up (flag 0xc90 to 4).
-    // TODO(E3-3): journal entry 0x14.
-    [7, [b.dialog(0xf15), b.giveSpecItem(partySpecItem(0x20)), b.setFlag(spot(7), 20), b.setFlag(f(0xc90), 4)]],
+    [7, [b.dialog(0xf15), b.giveSpecItem(partySpecItem(0x20)), b.setFlag(spot(7), 20), b.journal(0x14),
+      b.setFlag(f(0xc90), 4)]],
     [11, [b.dialog(0xf14)]],
   ]);
 }

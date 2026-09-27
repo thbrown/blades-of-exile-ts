@@ -13372,7 +13372,10 @@ the same function with its cases taken out ("this rule has been changed").
 
 ### E3's events journal: found, not ported yet (2026-09-27)
 
-**Next session starts here.** E3 has an events journal: 120 entries of
+> **Ported later the same day**: see "E3's events journal, ported" below.
+> The notes here are kept as they were.
+
+E3 has an events journal: 120 entries of
 (entry, day) at party+0x7bb2/+0x7c2a, added by `FUN_1008_3780(entry)`,
 which prints "Something was added to your journal." Entry `e`'s text is
 string `5100 + e`; the dialog is 962, three to a page, "Day: %d". This is
@@ -13399,4 +13402,54 @@ three; E3 pages correctly (`FUN_1008_3507`). Porting it needs:
   `TODO(E3-3): journal entry` where they go.
 - E3 appends duplicates; OBoE's `add_to_journal` refuses an entry already
   there with the same day. Check whether any site can fire twice.
+
+### E3's events journal, ported (2026-09-27)
+
+The decision the notes above left open was made as they suggested:
+**an exile-js opcode, `journal` = 48** (`SpecType.ADD_JOURNAL`), in the gap
+inside GENERAL's range. `specials-opcodes.txt` line 48 names it, and
+DIVERGENCES.md §10 says why and what differs.
+- Engine: `Scenario.journalStrs` (`<journal id>` in `<game>`, and strings
+  10–59 of a legacy scenario), `Party.journal` and `addToJournal` (OBoE's
+  same-day dedupe), `JOURNAL` save pages as OBoE writes them, and
+  `eventJournalDialog` on `event-journal.xml`, from Options > Journal. The
+  paging rule is `EventJournalPager` in `game/notes.ts`, which the replay
+  driver shares. It pages properly, where OBoE's `fill_journal` shows page
+  one on every page.
+- `enterScenario` empties the journal, as 1997 does (DIVERGENCES.md §7).
+- Converter: `<journal>` 1–34 from strings 5101–5134
+  (`e3JournalStrings`, emit.ts), and `SpecBuilder.journal(e)`. 30 of the 33
+  call sites are in, each placed where the disassembly puts it relative to
+  its neighbours. `verify-e3.mjs` steps onto Anaximander's office, opens the
+  journal from the menu and shoots it (`e3-10-journal`).
+- **The other three are in E3's `kill_monst`, which was never ported**
+  (see the next entry).
+
+### E3's boss kills: `kill_monst`'s special cases are not ported (2026-09-27)
+
+**Next session starts here.** Found while placing the journal's last three
+call sites. `FUN_10c0_5051`, E3's `kill_monst`, ends with a switch on the dead
+creature's `+0x57` byte, through a 12-entry value table at `cs:57e2` with
+handlers at `+0x18`, plus tests on `+0x56`. **Nothing in the converter sets
+0xc85 (the Alien Slime dead) or 0xc8c (the golems' crystal)**, and
+Anaximander's reports, Levy's rewards, Solberg's spells, Pasi and Vladimir
+all wait on them. Before this, `+0x56`/`+0x57` set party flag
+`0x84 + 10*a + b` when both are in range. That is BoE's creature
+`spec1`/`spec2` kill flag; check that the converter already emits it.
+Handlers seen, each still to be matched to its creature:
+- `533b`: 0xc85 = 1, dialog 0xca5, xp 25, every town creature's `+0x1427`
+  cleared (all creatures gone), **journal 6**, and the day into +0x84fd.
+- `538a`: dialog 0xd90, five `FUN_1038_0788` terrain changes, **journal
+  0x1b**, 0x84b4 = 0, 0x263 = 1, special items 0x4c and 0x54 cleared.
+- `56b1`–`5722`: dialogs by `+0x56` (0x1c, 0x1d → 0x1a4 = 6, 0x47 → 0x353,
+  0xa7–0xaa → 0xe12). `+0x56 == 0x3c`: dialogs 0xe10 and 0xe11, special
+  item 0x46, the day into +0x8503, all creatures gone, 0xc8c = 1, **journal
+  0xd**, xp 25.
+- Others: a message and 0x84dd = 0 (`5309`); flags 0x46b/0x465/0x46a/0x469
+  (`540c`); 0x28f/0x295/0xb0f and `FUN_10d8_43ab` (`5455`); two counters
+  (0x1f5 → dialogs 0xd20/0xd21, 0x2f8 → 0xe24/0xe25) that clear the town at
+  3; dialog 0xfc8. After the switch, `+0x56 == 0x3a` with four flags set
+  gives a message (`5767`).
+- The engine's hook is `<onkill>` (`KILL_SCRIPTS`, talkScripts.ts), which
+  already runs per town creature.
 

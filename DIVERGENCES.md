@@ -256,9 +256,10 @@ The code is in `Universe.enterScenario` and `GameSession.enterWithParty`.
 | Stored items, on "yes" | all of them, as many as the party can carry | the player picks | all of them |
 | `PSD[306][4]` | survives the SDF wipe | wiped | moot: it held the "no instant help" preference, which is a preference here |
 
-- **The journal agrees.** 1997 empties `journal_str`, and OBoE has the clear
-  commented out ("Now uncertain if the journal should really persist"). This
-  port has no events journal yet, so there's nothing to clear.
+- **The journal is emptied.** 1997 empties `journal_str` (PARTY.CPP:373),
+  and OBoE has the clear commented out ("Now uncertain if the journal should
+  really persist"). The events journal landed 2026-09-27 (§10), and
+  `enterScenario` empties it, as the original does.
 - **Kept from OBoE, as a likely bug:** `enter_scenario` adds the new
   scenario's auto-start quests without removing the last scenario's, and job
   banks keep their anger. The original has no quests to compare with.
@@ -308,6 +309,33 @@ original reads an unset event as "no".
 - **Related:** the travelling-NPC rota (time flags 4–6) turns every 1,000
   ticks of age in 1997 (`party.age / 1000 % 3`) and E3. OBoE turns it by the
   day.
+
+---
+
+### 10. The events journal (2026-09-27)
+
+**DECIDED: OBoE's journal, E3's paging, and an exile-js opcode to fill it.**
+The 1997 original keeps `journal_str` in the party record and clears it, but
+has no dialog that shows it and nothing that adds to it. OBoE ports the rest
+(`journal()`, `add_to_journal`, `event-journal.xml`, `<journal>` strings,
+`JOURNAL` save pages), but no special node reaches `add_to_journal`, so its
+journal is always empty. Exile III's journal is the one that works
+(`FUN_1008_3780` adds, `FUN_1008_3507` shows), and E3 adds entries from 33
+places in its scripts.
+
+- **The opcode is an exile-js one**: `journal` (48, `SpecType.ADD_JOURNAL`),
+  in the gap after `STR_BUF_TO_SIGN` and inside GENERAL's range. `ex1a` is
+  the `<journal>` string. OBoE would read a scenario using it as having an
+  unknown opcode, which is the same as for every other exile-js extension.
+- **Paging follows E3.** OBoE's `fill_journal` indexes `journal[i]` without
+  the page, so every page shows the first three entries. Nobody could see
+  that in OBoE; a player would see it in E3.
+- **Duplicates follow OBoE.** E3 appends every time; `cParty::add_to_journal`
+  refuses the same text on the same day. That only matters where an entry
+  can fire twice in one day. Zone 73's goblin outpost (entry 3) fires on
+  every visit.
+- **Replays are unaffected.** Every recording has an empty journal, so the
+  driver still takes the early return.
 
 ---
 

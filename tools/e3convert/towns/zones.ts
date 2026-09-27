@@ -938,8 +938,7 @@ function zone73(b: SpecBuilder): Map<number, Step[]> {
     [1, [b.ifFlagAtLeast(spot(8), 1, [b.msg(B, 0x1c)]), b.giveItemDialog(0x1662, spot(8), 0x180)]],
     [2, [b.onceMsg(spot(2), B, 0x1d)]],
     // The goblin outpost: every visit shows the dialog and marks it found.
-    // TODO(E3-3): journal entry 3.
-    [3, [b.dialog(0x1663), b.setFlag(f(0xc95), 1), b.setFlag(spot(3), 20)]],
+    [3, [b.journal(3), b.dialog(0x1663), b.setFlag(f(0xc95), 1), b.setFlag(spot(3), 20)]],
     [4, [b.onceEncounter(spot(4), B, 0x1e, 0, 0)]],
     [5, [b.onceEncounter(spot(5), B, 0x21, 0, 1)]],
     [6, [b.onceMsg(spot(6), B, 0x22)]],

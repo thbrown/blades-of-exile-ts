@@ -179,6 +179,15 @@ export class SpecBuilder {
     return (next) => this.node('once-disp-msg', { sdf: flag, msg: [this.e3(block, a), b > 0 ? this.e3(block, b) : -1] }, next);
   }
 
+  /**
+   * `FUN_1008_3780(e)`: events-journal entry `e`, dated today, with "Something
+   * was added to your journal." The engine's `journal` opcode is an exile-js
+   * one (`SpecType.ADD_JOURNAL`); the text is the scenario's `<journal>`.
+   */
+  journal(e: number): Step {
+    return (next) => this.node('journal', { ex1: [e] }, next);
+  }
+
   setFlag(flag: Flag, value: number): Step {
     return (next) => this.node('set-sdf', { sdf: flag, ex1: [value] }, next);
   }

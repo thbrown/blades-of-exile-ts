@@ -1,18 +1,18 @@
 /**
- * The party's two journals — `talk_notes` and `adventure_notes`
- * (boe.infodlg.cpp:594 and :530) — running on `talk-notes.xml` and
- * `adventure-notes.xml`. Options > Talk Notes and Options > Encounter Notes
- * open them. The paging and deleting rules are `game/notes.ts`'s; this is only
+ * The party's three journals — `talk_notes`, `adventure_notes` and `journal`
+ * (boe.infodlg.cpp:594, :530 and :653) — running on `talk-notes.xml`,
+ * `adventure-notes.xml` and `event-journal.xml`. Options > Talk Notes,
+ * Encounter Notes and Journal open them. The paging and deleting rules are `game/notes.ts`'s; this is only
  * the screen.
  */
 
 import { Universe } from '../universe/universe';
 import { SheetStore } from '../render/sheets';
-import { EncounterNotesPager, TalkNotesPager } from '../game/notes';
+import { EncounterNotesPager, EventJournalPager, TalkNotesPager } from '../game/notes';
 import { getDialogDef } from './dialogStore';
 import { XmlDialog } from './xmlDialog';
 
-export const NOTES_DIALOG_DEFS = ['talk-notes', 'adventure-notes'];
+export const NOTES_DIALOG_DEFS = ['talk-notes', 'adventure-notes', 'event-journal'];
 
 export function talkNotesDialog(
   ctx: CanvasRenderingContext2D, store: SheetStore, univ: Universe,
@@ -55,6 +55,32 @@ export function adventureNotesDialog(
     });
   };
   for (const id of ['left', 'right', 'del1', 'del2', 'del3']) {
+    dlg.attachHandler(id, () => {
+      if (pager.click(id)) return 'close';
+      fill();
+      return 'stay';
+    });
+  }
+  fill();
+  if (!pager.arrows) {
+    dlg.hide('left');
+    dlg.hide('right');
+  }
+  return dlg;
+}
+
+export function eventJournalDialog(
+  ctx: CanvasRenderingContext2D, store: SheetStore, univ: Universe,
+): XmlDialog {
+  const pager = new EventJournalPager(univ.party.journal);
+  const dlg = new XmlDialog(ctx, store, getDialogDef('event-journal'));
+  const fill = (): void => {
+    pager.rows.forEach((entry, i) => {
+      dlg.setText(`str${i + 1}`, entry?.theStr ?? '');
+      dlg.setText(`day${i + 1}`, entry ? `Day: ${entry.day}` : '');
+    });
+  };
+  for (const id of ['left', 'right']) {
     dlg.attachHandler(id, () => {
       if (pager.click(id)) return 'close';
       fill();

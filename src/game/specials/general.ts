@@ -306,6 +306,17 @@ export async function generalSpec(
       break;
     }
 
+    case SpecType.ADD_JOURNAL: {
+      // `add_to_journal` (boe.infodlg.cpp:681), which no OBoE node reaches.
+      // An entry number with no string adds nothing: the C++ would index
+      // past `journal_strs`.
+      const str = univ.scenario.journalStrs[spec.ex1a];
+      if (spec.ex1a < 0 || str === undefined) break;
+      if (univ.party.addToJournal(str, univ.party.calcDay(), univ.scenario.id))
+        univ.addStringToBuf('Something was added to your journal.');
+      break;
+    }
+
     case SpecType.PAUSE:
       // The C++ sleeps the whole game; here the frame loop keeps running, so
       // there is nothing to do but let the redraw happen.

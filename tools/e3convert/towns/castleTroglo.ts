@@ -124,7 +124,7 @@ function caves(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]> 
     [18, [b.askDialog(0xd7f, [
       b.ifFlagEq(TROGLO_STAGE, 6, [
         b.dialog(0xcd7), b.setFlag(TROGLO_STAGE, 7), b.takeSpecItem(PAPERS), b.giveSpecItem(VOTHKARO_SCROLL),
-        // TODO(E3-3): journal entry 0x22.
+        b.journal(0x22),
       ]),
       b.changeTown(28, 0x33, 0x33),
     ]), b.blockMove()]],

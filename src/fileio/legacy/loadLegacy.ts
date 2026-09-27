@@ -154,6 +154,7 @@ export function loadLegacyScenario(data: Uint8Array, id: string, opts: LegacyOpt
     scenarioTimers: old.scenarioTimerTimes.map((time, i) => ({ time, node: old.scenarioTimerSpecs[i]! })),
     initSpec: -1,
     specStrs: strs.slice(160, 260),
+    journalStrs: strs.slice(10, 60),
     townMods: old.townToAddTo.map((spec, i) => ({
       spec, x: old.flagToAddToTown[i]![0]!, y: old.flagToAddToTown[i]![1]!,
     })),

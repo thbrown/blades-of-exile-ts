@@ -95,8 +95,7 @@ function fortress(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[
     // The hall of the Crystal Souls: captured.
     [7, [b.ifFlagEq(SOULS_FOUGHT, 0, [
       b.ifFlagEq(MET_RENTAR, 0, [
-        // TODO(E3-3): journal entry 0x19.
-        b.dialog(0xd24), b.takeSpecItem(partySpecItem(0x46)), b.setFlag(MET_RENTAR, 1),
+        b.dialog(0xd24), b.journal(0x19), b.takeSpecItem(partySpecItem(0x46)), b.setFlag(MET_RENTAR, 1),
         b.townVisible(87), b.setFlag(f(0x225), 1),
       ], [b.dialog(0xd23)]),
       b.moveParty(0x28, 0x3d), b.msg(BLOCK, 0xe), imprison, b.blockMove(),

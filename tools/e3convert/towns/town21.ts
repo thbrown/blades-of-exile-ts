@@ -54,9 +54,7 @@ function anaximander(b: SpecBuilder): Step[] {
   const report = (flag: number, a: number, bb = 0, ...after: Step[]) =>
     b.ifFlagEq(f(flag), 1, [b.msg(ANAX, a, bb), ...after, b.setFlag(f(flag), 2)]);
   return [
-    // TODO(E3-3): E3 also adds journal entries here (`FUN_1008_3780`, 2 and
-    // 0x11); the engine has no events journal yet.
-    b.ifFlagEq(f(0xc82), 0, [b.dialog(0x802), b.msg(ANAX, 1), b.setFlag(f(0xc82), 2)]),
+    b.ifFlagEq(f(0xc82), 0, [b.dialog(0x802), b.msg(ANAX, 1), b.setFlag(f(0xc82), 2), b.journal(2)]),
     report(0xc83, 2, 3),
     report(0xc84, 4, 5),
     report(0xc85, 6, 7, b.msg(ANAX, 8, 9), b.setFlag(f(0xc9a), 1)),
@@ -74,7 +72,7 @@ function anaximander(b: SpecBuilder): Step[] {
       const deliver = [
         b.msg(ANAX, 0x2b, 0x2c), b.msg(ANAX, 0x2d, 0x2e),
         b.takeSpecItem(PRAZAC_SCROLL), b.giveSpecItem(ANAX_SCROLL),
-        b.addAge(2500), b.setFlag(f(0xc94), 2),
+        b.addAge(2500), b.setFlag(f(0xc94), 2), b.journal(0x11),
       ];
       return [b.ifFlagEq(f(0xc94), 1, deliver, [b.ifSpecItem(PRAZAC_SCROLL, deliver)])];
     })(),

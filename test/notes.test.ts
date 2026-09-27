@@ -6,7 +6,7 @@ import { Scenario } from '../src/data/scenario';
 import { TalkNodeType, emptyTalkNode } from '../src/data/talking';
 import { Vehicle } from '../src/data/vehicle';
 import { GameMode } from '../src/game/modes';
-import { EncounterNotesPager, TalkNotesPager, notesRefusal } from '../src/game/notes';
+import { EncounterNotesPager, EventJournalPager, TalkNotesPager, notesRefusal } from '../src/game/notes';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
 import { TalkAction } from '../src/game/talk';
 import { loadScenario } from '../src/fileio/loadScenario';
@@ -184,6 +184,25 @@ describe('the journals', () => {
     expect(pager.rows.map((n) => n?.theStr)).toEqual(['1', '2', '3']);
     pager.click('left');
     expect(pager.rows).toEqual([undefined, undefined, undefined]);
+    expect(pager.click('done')).toBe(true);
+  });
+});
+
+describe('the events journal', () => {
+  it('refuses when empty, and pages three at a time where OBoE shows page one', () => {
+    const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
+    expect(notesRefusal(univ, GameMode.TOWN, 'events')).toBe('Nothing in your events journal.');
+    for (let i = 1; i <= 4; i++) univ.party.addToJournal(`entry ${i}`, i, 'valleydy');
+    expect(notesRefusal(univ, GameMode.TALKING, 'events')).toBeNull();
+    const pager = new EventJournalPager(univ.party.journal);
+    expect(pager.arrows).toBe(true);
+    expect(pager.rows.map((e) => e?.theStr)).toEqual(['entry 1', 'entry 2', 'entry 3']);
+    pager.click('right');
+    expect(pager.rows.map((e) => e?.theStr)).toEqual(['entry 4', undefined, undefined]);
+    pager.click('right');
+    expect(pager.page).toBe(0);
+    pager.click('left');
+    expect(pager.page).toBe(1);
     expect(pager.click('done')).toBe(true);
   });
 });

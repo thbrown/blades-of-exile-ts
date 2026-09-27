@@ -30,7 +30,11 @@ const GOINTZ_SOLD: [number, number] = [291, 20];
  */
 const URSAGI_KILLED: [number, number] = [291, 32];
 
-/** What killing one of a town's creatures does, by town (`<onkill>`). */
+/**
+ * What killing one of a town's creatures does, by town (`<onkill>`).
+ * TODO(E3-3): E3's `kill_monst` (`FUN_10c0_5051`) has boss cases of its own,
+ * including journal entries 6, 0x1b and 0xd; see PROGRESS.md.
+ */
 export const KILL_SCRIPTS = new Map<number, (b: SpecBuilder) => Step[]>([
   [51, (b) => [b.incFlag(URSAGI_KILLED)]],
 ]);
@@ -116,15 +120,15 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
   }],
   // Elisa's rations: 8 food once a day (E3's stamp is flag (21,8)).
   [102, (b) => [b.ifFlagEq(ELISA_FED, 1, [b.reply(8)], [b.food(8), b.setFlag(ELISA_FED, 1), b.reply(9)])]],
-  // Berra takes the evidence, one piece at a time.
-  // TODO(E3-3): each also adds a journal entry (0x16–0x19).
+  // Berra takes the evidence, one piece at a time, each with its journal
+  // entry (0x16–0x19).
   [103, (b) => {
     const [rune, scales, shards, hotShards] = EVIDENCE as [number, number, number, number];
-    return [b.ifSpecItem(rune, [b.takeSpecItem(rune), b.setFlag(f(0xc96), 1), b.reply(10)], [
-      b.ifSpecItem(scales, [b.takeSpecItem(scales), b.setFlag(f(0xc97), 1), b.reply(11)], [
-        b.ifSpecItem(shards, [b.takeSpecItem(shards), b.setFlag(f(0xc9e), 1), b.reply(12)], [
+    return [b.ifSpecItem(rune, [b.journal(0x16), b.takeSpecItem(rune), b.setFlag(f(0xc96), 1), b.reply(10)], [
+      b.ifSpecItem(scales, [b.journal(0x17), b.takeSpecItem(scales), b.setFlag(f(0xc97), 1), b.reply(11)], [
+        b.ifSpecItem(shards, [b.journal(0x18), b.takeSpecItem(shards), b.setFlag(f(0xc9e), 1), b.reply(12)], [
           b.ifSpecItem(hotShards, [
-            b.takeSpecItem(hotShards), b.setFlag(f(0xc93), 1), b.dialog(0x808),
+            b.journal(0x19), b.takeSpecItem(hotShards), b.setFlag(f(0xc93), 1), b.dialog(0x808),
             b.townVisible(87), b.setFlag(f(0x225), 1), b.reply(0x1b),
           ], [b.reply(0x1a)]),
         ]),
@@ -161,8 +165,8 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
   ]],
   // Mayor Arbuckle's slime mission (Krizsan). The first ask sets it
   // (0xc84), reporting back after Anaximander's report (0xc85) pays 1500 gold
-  // and 10 experience each. TODO(E3-3): journal entry 5.
-  [118, (b) => [b.ifFlagEq(f(0xa3), 0, [b.incFlag(f(0xa3)), b.setFlag(f(0xc84), 1), b.reply(0x3e, 0x3f)], [
+  // and 10 experience each.
+  [118, (b) => [b.ifFlagEq(f(0xa3), 0, [b.incFlag(f(0xa3)), b.setFlag(f(0xc84), 1), b.journal(5), b.reply(0x3e, 0x3f)], [
     b.ifFlagAtLeast(f(0xc85), 1, [
       b.ifFlagEq(f(0xa3), 1, [b.xp(10), b.gold(1500), b.setFlag(f(0xa3), 2), b.reply(0x41, 0x42)], [b.reply(0x43)]),
     ], [b.reply(0x40)]),
@@ -172,10 +176,9 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
   // it say yes, and never once it has said no three times. Joining turns each
   // PC's mage skill into priest skill (at least 2, at most 7), forgets the
   // mage spells from 30 up, and adds 6 spell points.
-  // TODO(E3-3): journal entry 0x20.
   [130, (b) => {
     const join: Step[] = [
-      b.dialog(0xbe8), b.setFlag(ANAMA, 3), b.giveSpecItem(ANAMA_RINGS),
+      b.dialog(0xbe8), b.setFlag(ANAMA, 3), b.giveSpecItem(ANAMA_RINGS), b.journal(0x20),
       anamaConversion(b),
       ...Array.from({ length: 32 }, (_, i) => b.forgetSpell(30 + i)),
       b.reply(0x70),
@@ -189,9 +192,8 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
     return [b.ifFlagEq(ANAMA, 0, notYet, [b.ifFlagEq(ANAMA, 3, [b.reply(0x61)], [b.reply(0x62)])])];
   }],
   // Mayor Bernathy's mission, and a reward (item 0x136) once flag 0xc87 is set.
-  // TODO(E3-3): journal entry 0x1a.
   [131, (b) => [b.ifFlagEq(f(0xc87), 0, [
-    b.ifFlagEq(f(0xca), 0, [b.reply(0x65, 0x66), b.setFlag(f(0xca), 1)], [b.reply(0x67)]),
+    b.ifFlagEq(f(0xca), 0, [b.journal(0x1a), b.reply(0x65, 0x66), b.setFlag(f(0xca), 1)], [b.reply(0x67)]),
   ], [
     b.ifFlagBelow(f(0xca), 2, [b.giveItem(0x136, [b.setFlag(f(0xca), 2)]), b.reply(0x68, 0x69)], [b.reply(0x6a)]),
   ])]],
@@ -201,10 +203,9 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
   ])]],
   // Mayor Knight's mission (Sharimik). Flags 0xf1 and 0xf2 are the two
   // things Levin (143) and Commander Corie (142) must agree to first.
-  // TODO(E3-3): journal entry 0x1c.
   [141, (b) => [b.ifFlagEq(KNIGHT, 0, [b.reply(0x8c, 0x8d), b.incFlag(KNIGHT)], [
     b.ifFlagEq(KNIGHT, 1, [b.ifFlagEq(f(0xf1), 0, [b.reply(0x8f)], [
-      b.ifFlagEq(f(0xf2), 0, [b.reply(0x8e)], [b.reply(0x90), b.incFlag(KNIGHT), b.giveSpecItem(KNIGHT_PASS)]),
+      b.ifFlagEq(f(0xf2), 0, [b.reply(0x8e)], [b.reply(0x90), b.incFlag(KNIGHT), b.giveSpecItem(KNIGHT_PASS), b.journal(0x1c)]),
     ])], [
       b.ifFlagEq(KNIGHT, 2, [b.ifSpecItem(KNIGHT_PROOF, [
         b.reply(0x92, 0x93), b.incFlag(KNIGHT), b.takeSpecItem(KNIGHT_PROOF),
@@ -255,7 +256,6 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
   ])]],
   // Bruskrud pays 300 for each of four trophies (special items 45–48), and
   // 500 for each of four missions (flags 0xc3b, 0xc2f, 0xc30, 0xc31 at 1).
-  // TODO(E3-3): journal entry 0x21.
   [155, (b) => {
     const mission = (first: number): Step[] => [0xc3b, 0xc2f, 0xc30, 0xc31].reduceRight<Step[]>(
       (otherwise, flag) => [b.ifFlagEq(f(flag), 1, [b.setFlag(f(flag), 2), b.gold(500), b.reply(first, 0xca)], otherwise)],
@@ -264,11 +264,11 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
     const turnIn = trophies.reduceRight<Step[]>(
       (otherwise, k) => [b.ifSpecItem(k, [b.takeSpecItem(k), b.gold(300), ...mission(0xc8)], otherwise)],
       mission(0xc7));
-    return [b.ifFlagEq(f(0x122), 0, [b.reply(0xc6, 0xcf), b.setFlag(f(0x122), 1)], turnIn)];
+    return [b.ifFlagEq(f(0x122), 0, [b.reply(0xc6, 0xcf), b.setFlag(f(0x122), 1), b.journal(0x21)], turnIn)];
   }],
-  // Dwaine, on the Empress and Prazac. TODO(E3-3): journal entry 0xf.
+  // Dwaine, on the Empress and Prazac.
   [156, (b) => [b.ifFlagEq(f(0xc8e), 2, [b.reply(0xce)], [
-    b.ifFlagEq(f(0x10e), 0, [b.reply(0xcb, 0xcc), b.setFlag(f(0xc8e), 1), b.setFlag(f(0x10e), 1)], [b.reply(0xcd)]),
+    b.ifFlagEq(f(0x10e), 0, [b.reply(0xcb, 0xcc), b.journal(0xf), b.setFlag(f(0xc8e), 1), b.setFlag(f(0x10e), 1)], [b.reply(0xcd)]),
   ])]],
   // Lewis sells the four horses in Lorelei's stables (E3's horses 7–10), 600 each.
   [157, horseDealer(f(0x111), 4, 600, 7, [0xd2, 0xd1, 0xd0])],
@@ -340,12 +340,12 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
   // The ghost teaches Move Mountains.
   [122, (b) => [b.teachSpell(0x74), b.reply(0x4d)]],
   // Erika's amulet (special item 36): once it is fetched (0x262 is 2), she
-  // asks to enchant it; refused, she destroys it. TODO(E3-3): journal entry
-  // 0x1f on yes. Past 3 keeps E3's default reply, 1.
+  // asks to enchant it (journal entry 0x1f on yes); refused, she destroys it.
+  // Past 3 keeps E3's default reply, 1.
   [123, (b) => [b.switchFlag(f(0x262), [
     [b.reply(0x4e, 0x4f), b.incFlag(f(0x262))],
     [b.reply(0x50)],
-    [b.askDialog(0xd91, [b.reply(0x51, 0x52)], [b.reply(0x53), b.takeSpecItem(36)]), b.setFlag(f(0x262), 3)],
+    [b.askDialog(0xd91, [b.reply(0x51, 0x52), b.journal(0x1f)], [b.reply(0x53), b.takeSpecItem(36)]), b.setFlag(f(0x262), 3)],
     [b.ifSpecItem(36, [b.reply(0x54)], [b.reply(0x55)])],
   ], [b.reply(1)])]],
   // Arion's metal (special item 37) for Summon Beast and Conflagration,
@@ -474,11 +474,11 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
   // Sulfras forges the Alien Beast slayer (item 0x199) from Arion's metal
   // (special item 37) and Khoth's spell (0x4a4). E3 gives it with a word
   // and, if nobody has room, again without one (`FUN_1070_0464`), which can
-  // only fail the same way. TODO(E3-3): journal entry 0x1e.
+  // only fail the same way.
   [164, (b) => [b.ifFlagEq(f(0x2c5), 2, [b.reply(0xf5)], [
     b.ifFlagEq(f(0x2c5), 0, [b.reply(0xee, 0xef), b.setFlag(f(0x2c5), 1)], [
       b.ifSpecItem(37, [b.ifFlagAtLeast(f(0x4a4), 1, [
-        b.giveItem(0x199), b.takeSpecItem(37), b.setFlag(f(0x2c5), 2), b.reply(0xf3, 0xf4),
+        b.giveItem(0x199), b.takeSpecItem(37), b.journal(0x1e), b.setFlag(f(0x2c5), 2), b.reply(0xf3, 0xf4),
       ], [b.reply(0xf2)])], [
         b.ifFlagAtLeast(f(0x4a4), 1, [b.reply(0xf1)], [b.reply(0xf0, 0xef)]),
       ]),
@@ -502,12 +502,12 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
   }],
   // Empress Prazac's missive for Anaximander (special item 23), and his
   // answer (24), for which she opens Footracer Province (0xc8f). She takes
-  // the answer without asking whether the party has it. TODO(E3-3): journal
-  // entries 0x10 and 0x12.
+  // the answer without asking whether the party has it. Each adds a journal
+  // entry (0x10, 0x12).
   [170, (b) => [b.ifSpecItem(23, [b.reply(0x109)], [
-    b.ifFlagEq(f(0xc94), 0, [b.reply(0x107, 0x108), b.giveSpecItem(23), b.setFlag(f(0xc94), 1)], [
+    b.ifFlagEq(f(0xc94), 0, [b.reply(0x107, 0x108), b.giveSpecItem(23), b.journal(0x10), b.setFlag(f(0xc94), 1)], [
       b.ifFlagEq(f(0x925), 0, [
-        b.reply(0x10a, 0x10b), b.setFlag(f(0x925), 1), b.takeSpecItem(24), b.setFlag(f(0xc8f), 1),
+        b.reply(0x10a, 0x10b), b.setFlag(f(0x925), 1), b.journal(0x12), b.takeSpecItem(24), b.setFlag(f(0xc8f), 1),
       ], [b.reply(0x10c)]),
     ]),
   ])]],

@@ -92,6 +92,11 @@ export interface Scenario {
   initSpec: number;
   specStrs: string[];
   /**
+   * `cScenario::journal_strs` — the events journal's entries. OBoE reads them
+   * and never adds one; the exile-js opcode `journal` (48) does.
+   */
+  journalStrs: string[];
+  /**
    * `cScenario::town_mods` — up to ten `<town-flag>` entries, each redirecting
    * one town number by the value of a Stuff Done Flag (boe.town.cpp:99).
    */

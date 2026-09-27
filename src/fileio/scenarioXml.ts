@@ -2,8 +2,7 @@
  * scenario.xml reader — partial port of readScenarioFromXml
  * (fileio_scen.cpp:781). Parses the header text, the <game> geometry block,
  * the shop list, the special items, the quests and the scenario timers.
- * Deferred sections (journals, town flags) are skipped by name and picked up
- * in later milestones.
+ * Deferred sections are skipped by name and picked up in later milestones.
  */
 
 import { Scenario } from '../data/scenario';
@@ -21,9 +20,7 @@ const DEFERRED_TOP = new Set([
   'icon', 'id', 'version', 'language', 'author', 'creator',
   'editor',
 ]);
-const DEFERRED_GAME = new Set([
-  'journal',
-]);
+const DEFERRED_GAME = new Set<string>([]);
 
 /** The entry tags that carry a single number and map straight to a type. */
 const SIMPLE_ENTRIES: Record<string, ShopItemType> = {
@@ -154,6 +151,8 @@ export interface ScenarioHeader {
   initSpec: number;
   /** spec_strs — the scenario-level message strings specials print. */
   specStrs: string[];
+  /** journal_strs — the events journal's entries, which `journal` nodes add. */
+  journalStrs: string[];
   /** town_mods — `<town-flag>`, an SDF-driven redirect of a town number. */
   townMods: { spec: number; x: number; y: number }[];
   /** store_item_rects — where each town's shops keep sold-back goods. */
@@ -246,6 +245,7 @@ function blankScenarioHeader(): ScenarioHeader {
     scenarioTimers: [],
     initSpec: -1,
     specStrs: [],
+    journalStrs: [],
     townMods: [],
     storeItemRects: new Map(),
   };
@@ -300,6 +300,11 @@ export function readScenarioFromXml(root: Element, fname = 'scenario.xml'): Scen
           const id = intAttr(g, 'id');
           while (hdr.specStrs.length <= id) hdr.specStrs.push('');
           hdr.specStrs[id] = text(g);
+        }
+        else if (gt === 'journal') {
+          const id = intAttr(g, 'id');
+          while (hdr.journalStrs.length <= id) hdr.journalStrs.push('');
+          hdr.journalStrs[id] = text(g);
         }
         else if (gt === 'town-flag') {
           // `<town-flag town="17" add-x="15" add-y="1" />` — a **town

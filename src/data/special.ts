@@ -54,6 +54,12 @@ export enum SpecType {
   UPDATE_QUEST = 45,
   SWAP_STR_BUF = 46,
   STR_BUF_TO_SIGN = 47,
+  /**
+   * An exile-js opcode, not in BoE or OBoE: add journal string `ex1a` to the
+   * events journal, dated today. OBoE has the journal and `add_to_journal`
+   * but no node that calls it; Exile III adds entries from its scripts.
+   */
+  ADD_JOURNAL = 48,
 
   ONCE_GIVE_ITEM = 50,
   ONCE_GIVE_SPEC_ITEM = 51,

@@ -61,7 +61,7 @@ import {
 import { makeReplayHost, popClick, typeInto } from './host';
 import { PcGraphicPick, RaceAbilPick, SpendXp, XpMode, newPc, pcNameOk } from '../game/createPc';
 import { STARTUP_ACTIONS, decodeReplayFile } from './startup';
-import { EncounterNotesPager, TalkNotesPager, notesRefusal } from '../game/notes';
+import { EncounterNotesPager, EventJournalPager, TalkNotesPager, notesRefusal } from '../game/notes';
 
 /**
  * `easter_egg_messages` (boe.actions.cpp:2588). Recorded, its comment says,
@@ -308,7 +308,7 @@ export async function runReplay(
    * `left`/`right` and delete entries with `del` — so it takes the `done` that
    * closes them rather than the first click that arrives.
    */
-  let notesDialog: TalkNotesPager | EncounterNotesPager | null = null;
+  let notesDialog: TalkNotesPager | EncounterNotesPager | EventJournalPager | null = null;
   /**
    * The preferences dialog (`pick_preferences`, boe.dlgutil.cpp:1463), open
    * mid-run. It is modal and stays up across many clicks, and **two of its
@@ -1377,15 +1377,19 @@ export async function runReplay(
           receivedHelp.add(numberFromAction(action));
           popClick(source, 'the Help menu box', () => { result.answered++; });
           break;
-        case 'journal':
-          // `journal()` (boe.infodlg.cpp:653). **It is always empty in this
-          // build**: `add_to_journal(short)` exists and nothing calls it — no
-          // special opcode reaches it — so the function takes its early return
-          // every time, prints one line and opens no dialog. Ported as the
-          // early return, with the entries themselves left out: a `<journal>`
-          // node in a scenario is parsed and never fired.
-          session.univ.addStringToBuf('Nothing in your events journal.');
+        case 'journal': {
+          // `journal()` (boe.infodlg.cpp:653). **It is always empty in the
+          // recordings**: nothing in OBoE calls `add_to_journal`, so the C++
+          // takes its early return every time, prints one line and opens no
+          // dialog. Only the exile-js opcode `journal` fills it.
+          const refusal = notesRefusal(session.univ, session.mode, 'events');
+          if (refusal !== null) {
+            session.univ.addStringToBuf(refusal);
+            break;
+          }
+          notesDialog = new EventJournalPager(session.univ.party.journal);
           break;
+        }
         case 'show_debug_help':
           // boe.actions.cpp:2627 — the panel of debug keys. **Every button
           // toasts and does nothing else while replaying** — the C++'s own

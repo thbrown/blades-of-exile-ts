@@ -1,15 +1,16 @@
 /**
- * The rules behind the party's two journals — `talk_notes_event_filter` and
- * `adventure_notes_event_filter` (boe.infodlg.cpp:573 and :499) — apart from
+ * The rules behind the party's three journals — `talk_notes_event_filter`,
+ * `adventure_notes_event_filter` and `journal_event_filter`
+ * (boe.infodlg.cpp:573, :499 and :624) — apart from
  * any screen, so that the dialogs and the replay driver run the same code.
  * They are two ports of one C++ function otherwise, and have drifted before.
  */
 
 import { GameMode } from './modes';
 import { Universe } from '../universe/universe';
-import { EncNote, TalkNote } from '../universe/party';
+import { EncNote, JournalEntry, TalkNote } from '../universe/party';
 
-export type NotesKind = 'talk' | 'encounter';
+export type NotesKind = 'talk' | 'encounter' | 'events';
 
 /**
  * Why a journal will not open, or null when it will. Both only open when there
@@ -22,6 +23,8 @@ export function notesRefusal(univ: Universe, mode: GameMode, which: NotesKind): 
     if (univ.party.talkSave.length === 0) return 'Nothing in your talk journal.';
     return null;
   }
+  if (which === 'events')
+    return univ.party.journal.length === 0 ? 'Nothing in your events journal.' : null;
   if (univ.party.specialNotes.length === 0) return 'Nothing in your journal.';
   return null;
 }
@@ -106,6 +109,42 @@ export class EncounterNotesPager {
       const n = Number(id.slice(3)) - 1;
       this.notes.splice(this.page * 3 + n, 1);
     }
+    return false;
+  }
+}
+
+/**
+ * `journal` (boe.infodlg.cpp:653) — the events journal, three entries to a
+ * page, each with its day. Left and right wrap; there is no Delete.
+ *
+ * OBoE's `fill_journal` indexes `journal[i]` without the page, so every page
+ * shows the first three entries. Nothing in OBoE ever adds one, so nobody
+ * could see that; Exile III, whose journal this is, pages properly
+ * (`FUN_1008_3507`), and so does this. See DIVERGENCES.md.
+ */
+export class EventJournalPager {
+  page = 0;
+  readonly count: number;
+  readonly arrows: boolean;
+
+  constructor(private entries: JournalEntry[]) {
+    this.count = entries.length;
+    this.arrows = this.count > 3;
+  }
+
+  private get lastPage(): number {
+    return Math.floor((this.count - 1) / 3);
+  }
+
+  /** The three rows of the page shown; undefined is a blank row. */
+  get rows(): (JournalEntry | undefined)[] {
+    return [0, 1, 2].map((i) => this.entries[this.page * 3 + i]);
+  }
+
+  click(id: string): boolean {
+    if (id === 'done') return true;
+    if (id === 'left') this.page = this.page === 0 ? this.lastPage : this.page - 1;
+    else if (id === 'right') this.page = this.page === this.lastPage ? 0 : this.page + 1;
     return false;
   }
 }

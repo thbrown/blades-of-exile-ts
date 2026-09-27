@@ -36,7 +36,7 @@ import { monsterInfoDialog } from './dialogs/monsterInfoDialog';
 import { e3JobBoardDialog, jobBoardDialog } from './dialogs/jobBoardDialog';
 import { pickPotionDialog, potionSlot } from './dialogs/pickPotionDialog';
 import { questInfoDialog } from './dialogs/questInfoDialog';
-import { NOTES_DIALOG_DEFS, adventureNotesDialog, talkNotesDialog } from './dialogs/notesDialogs';
+import { NOTES_DIALOG_DEFS, adventureNotesDialog, eventJournalDialog, talkNotesDialog } from './dialogs/notesDialogs';
 import {
   INPUT_DIALOG_DEFS, errorDialog, numOfItemsDialog, numResponseDialog, textResponseDialog,
 } from './dialogs/inputDialogs';
@@ -64,7 +64,7 @@ import { EXILE3_CARD, EXILE3_ID, exile3Served, prepareExile3 } from './platform/
 import { WorldMapFeed } from './render/worldMap';
 import { GAME_SPEED_PACE, PREFERENCES_DIALOG_DEFS, preferencesDialog } from './dialogs/preferencesDialog';
 import { setTargetLockPref } from './game/targetMode';
-import { notesRefusal } from './game/notes';
+import { NotesKind, notesRefusal } from './game/notes';
 import { ItemWinMode, QUEST_COMPLETED_OFFSET } from './game/itemWindow';
 import { BASIC_BUTTON_KEYS } from './game/specials/oneshot';
 import { specItemUseable } from './data/quest';
@@ -1342,7 +1342,7 @@ async function main(): Promise<void> {
    * menu. An empty journal, or talk notes asked for mid-conversation, is one
    * line in the message buffer rather than a dialog.
    */
-  const notesFlow = async (which: 'talk' | 'encounter'): Promise<void> => {
+  const notesFlow = async (which: NotesKind): Promise<void> => {
     if (dialogs.active) return;
     const refusal = notesRefusal(univ, session.mode, which);
     if (refusal !== null) {
@@ -1350,9 +1350,9 @@ async function main(): Promise<void> {
       redraw();
       return;
     }
-    await dialogs.runScreen(which === 'talk'
-      ? talkNotesDialog(ctx, store, univ)
-      : adventureNotesDialog(ctx, store, univ));
+    await dialogs.runScreen(which === 'talk' ? talkNotesDialog(ctx, store, univ)
+      : which === 'events' ? eventJournalDialog(ctx, store, univ)
+        : adventureNotesDialog(ctx, store, univ));
     redraw();
   };
 
@@ -2997,12 +2997,9 @@ async function main(): Promise<void> {
         MENU_SEPARATOR,
         { label: 'Talk Notes', action: () => { void notesFlow('talk'); } },
         { label: 'Encounter Notes', action: () => { void notesFlow('encounter'); } },
-        {
-          // `journal` (boe.infodlg.cpp:653). Nothing in the C++ ever calls
-          // `add_to_journal`, so this is all the Journal ever says.
-          label: 'Journal',
-          action: () => { univ.addStringToBuf('Nothing in your events journal.'); redraw(); },
-        },
+        // `journal` (boe.infodlg.cpp:653). Nothing in OBoE adds an entry; the
+        // exile-js opcode `journal` does.
+        { label: 'Journal', action: () => { void notesFlow('events'); } },
         { label: 'Party Statistics', action: printPartyStats },
       ],
     }, {

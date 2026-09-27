@@ -84,8 +84,7 @@ export function towerOfMagi(town: number) {
       // Linda's gate: OK, Attack or Step In. Only the athame cuts it.
       [2, [b.choiceDialog(0xcb3,
         [b.ifSpecItem(ATHAME, [
-          b.setTer(0xc, 0xb, 0), b.dialog(0xcb4),
-          // TODO(E3-3): journal entry 0x13.
+          b.setTer(0xc, 0xb, 0), b.dialog(0xcb4), b.journal(0x13),
           b.xp(50), b.setFlag(DEMON_PLOT, 3), toPortalFortress(b),
         ], [b.msg(B, 0x17)])],
         [b.msg(B, 0x18), b.slayParty(0)],

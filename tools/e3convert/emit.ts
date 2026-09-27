@@ -461,11 +461,21 @@ function townMap(
   return mapFile(terrain, size, marks);
 }
 
+/**
+ * The events journal's entries (`FUN_1008_3780`): entry `e` is string
+ * `5100 + e`, and E3 adds 1 to 0x22. Indexed by entry, so a `journal` node's
+ * `ex1a` is E3's own number.
+ */
+export const E3_JOURNAL_ENTRIES = 0x22;
+function e3JournalStrings(str: (id: number) => string): string[] {
+  return Array.from({ length: E3_JOURNAL_ENTRIES + 1 }, (_, e) => (e === 0 ? '' : str(5100 + e)));
+}
+
 function scenarioXml(
   start: { town: number; loc: { x: number; y: number } },
   outStart: { sector: { x: number; y: number }; loc: { x: number; y: number } },
   shops: Shop[], specialItems: SpecItem[], specStrings: string[], newDay: number, roadJoins: number[],
-  jobBase: number,
+  jobBase: number, journal: string[],
 ): string {
   return `${XML_HEAD}<scenario boes="2.0.0">
     <title>Exile III: Ruined World</title>
@@ -510,7 +520,7 @@ function scenarioXml(
         <outdoor-start x="${outStart.sector.x}" y="${outStart.sector.y}" />
         <sector-start x="${outStart.loc.x}" y="${outStart.loc.y}" />
 ${shops.map(shopXml).join('')}${specialItems.map(specialItemXml).join('')}        <timer freq="3700">${newDay}</timer>
-${specStrings.map((str, i) => `        <string id="${i}">${esc(str)}</string>\n`).join('')}    </game>
+${specStrings.map((str, i) => `        <string id="${i}">${esc(str)}</string>\n`).join('')}${journal.map((str, i) => (str ? `        <journal id="${i}">${esc(str)}</journal>\n` : '')).join('')}    </game>
 </scenario>
 `;
 }
@@ -711,7 +721,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   write('scenario.spec', scen.spec);
   // Last, since the places' scripts can add shops of their own.
   shops.push(...talk.shops);
-  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase));
+  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, e3JournalStrings((id) => strings.get(id) ?? '')));
   const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(read)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
   progress(1);

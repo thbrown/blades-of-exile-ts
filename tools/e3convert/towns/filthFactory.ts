@@ -99,9 +99,9 @@ function level2(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]>
   return new Map<number, Step[]>([
     [1, [b.dialog(0xcc8), b.setFlag(spot(1), 20)]],
     // The heart of the roach pit, where the Phoenix Egg burns it all.
-    // TODO(E3-3): journal entry 8, and party+0x849f, which E3 zeroes here.
+    // TODO(E3-3): party+0x849f, which E3 zeroes here.
     [2, [b.ifSpecItem(PHOENIX_EGG, [b.askDialog(0xcca, [
-      b.dialog(0xccb), b.setFlag(spot(2), 20), b.setFlag(FACTORY_BURNED, 1),
+      b.dialog(0xccb), b.setFlag(spot(2), 20), b.setFlag(FACTORY_BURNED, 1), b.journal(8),
       b.placeField(0x1d, 0x1f, FieldType.FIELD_QUICKFIRE), b.xp(25), b.takeSpecItem(PHOENIX_EGG),
       b.removeCreatures(), b.setEvent(1),
     ])], [b.dialog(0xcc9)]), b.blockMove()]],
