@@ -36,6 +36,8 @@ export function slimePit(town: number) {
       [b.askDialog(dlg, [b.changeTown(to, x, y)]), b.blockMove()];
     if (town === 22) {
       return new Map<number, Step[]>([
+        // 0 is below the switch's table: nothing.
+        [0, []],
         [1, [b.giveItemDialog(0xc95, spot(1), 0x160)]],
         [2, fountain(0xc96, f(0x162), 0x1f, 0x20, 0x21, b.heal(20))],
         [3, [b.msg(BLOCK, 0x31), b.bringIn(200, 1), b.setFlag(f(0x163), 20)]],
@@ -60,6 +62,7 @@ export function slimePit(town: number) {
       ]);
     }
     return new Map<number, Step[]>([
+      [0, []],
       [1, [b.trap(0xc9f, spot(1), 3)]],
       [2, [b.dialog(0xca0), b.setFlag(f(0x16c), 20)]],
       [3, [b.msg(BLOCK, 0x36, 0x37), b.blockMove()]],

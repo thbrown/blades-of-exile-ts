@@ -1053,6 +1053,7 @@ export const DUNGEON_SCRIPTS = new Map<number, PlaceScript>([
   [88, spiralCrypt],
   [89, guhkbarsPit],
   // "Name" and "Anim Data": towns E3's handler has no case for.
+  [20, noHandler],
   [66, noHandler],
   [84, noHandler],
   [97, sacredItem(97)],

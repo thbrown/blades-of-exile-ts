@@ -13289,5 +13289,9 @@ position from inside a town (party+0x12e2 on). Two use it:
   or the Bandit Hideout's (zone (8,8) at (44,41)). E3 tests party+0x12e9,
   the party's y in its sector, against 20.
 
-`coverage.ts` has 3 spots left. **Next session**: those 3 spots, then E3's
-job boards (the section above).
+**Every scripted spot is transcribed (2026-09-27)**: `coverage.ts` reports
+1,447 and none left. The last three were no-ops: encounter 0 on both Slime
+Pit levels falls below the switch's table (`dec bx; cmp bx, 0x19; ja`), and
+town 20 ("Name:") has no case in `FUN_10c0_0000` (index 20 → `054c`), so it
+joins 66 and 84 under `noHandler`. **Next**: E3's job boards (the section
+above).
