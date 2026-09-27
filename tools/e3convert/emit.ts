@@ -95,10 +95,25 @@ function addMark(marks: Map<string, string>, x: number, y: number, mark: string)
   marks.set(key, (marks.get(key) ?? '') + mark);
 }
 
+/**
+ * E3's containers, the terrain list `FUN_1080_0a87` checks (DGROUP 0x1d80):
+ * desk, chest, dresser, crystal box, case, box and body. Using one that
+ * holds contained items opens it; BoE's `box` special does it on Look.
+ */
+const E3_CONTAINERS = new Set([155, 167, 174, 197, 199, 208, 209]);
+
 /** A terrain's `<special>`: its E3 door behaviour, in BoE's terms. */
-function specialXml(t: E3TerrainType): string {
+function specialXml(t: E3TerrainType, id: number): string {
   const sp = t.special;
-  const [type, f1, f2, f3] = !sp ? ['none', -1, 0, 0]
+  // A bed (picture 143) shows the party asleep in it, picture 230: BoE 1997's
+  // rule, which OBoE's legacy importer keeps as the BED special, and E3's
+  // sheet has the same picture there.
+  const [type, f1, f2, f3] = !sp && E3_CONTAINERS.has(id) ? ['box', -1, 0, 0]
+    : !sp && t.pic === 143 ? ['bed', e3TerrainPic(230), 0, 0]
+    // E3's blockage 2 keeps monsters off (lava, portals, town entrances);
+    // BoE's only means that for counters (`is_special`), so the special says it.
+    : !sp && t.blockage === 2 ? ['monst-block', -1, 0, 0]
+    : !sp ? ['none', -1, 0, 0]
     : sp.kind === 'sign' ? ['sign', 0, 0, 0]
     : sp.kind === 'belt' ? ['belt', sp.dir, 0, 0]
     : sp.kind === 'step-change' ? ['step-change', sp.to, sp.sound, 0]
@@ -156,7 +171,7 @@ function terrainXml(types: E3TerrainType[]): string {
         <ground>0</ground>
         <trim-for>-1</trim-for>
         <arena>0</arena>
-${specialXml(t)}
+${specialXml(t, id)}
     </terrain>
 `);
   });

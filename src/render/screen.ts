@@ -1244,6 +1244,16 @@ export class Screen {
         img, r.left, r.top, r.width, r.height, pos.x, pos.y, TILE_W, TILE_H);
       return;
     }
+    // A party in a bed (terrain special BED) is drawn as the bed with someone
+    // in it: the terrain picture in the bed's `flag1`, in place of the leader.
+    const town = session.inTown ? univ.town : null;
+    if (town) {
+      const bed = univ.terrainType(town.record.terrain[univ.party.townLoc.x]?.[univ.party.townLoc.y] ?? 0);
+      if (bed.special === TerSpec.BED && bed.flag1 >= 0) {
+        this.drawTerrainSpot(bed.flag1, pos.x, pos.y);
+        return;
+      }
+    }
     const g = pcGraphic(leader.whichGraphic, dir);
     if (!g) return;
     const img = this.store.get(g.sheetName);

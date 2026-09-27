@@ -29,6 +29,9 @@ export const EXILE3_CARD = {
   id: EXILE3_ID,
   title: 'Exile III: Ruined World',
   blurb: 'The surface world is dying. Find out why.',
+  // A committed picture of the game's first screen (the user's decision,
+  // 2026-09-27), so the card has one before anyone has played.
+  preview: `${import.meta.env.BASE_URL}exile3-preview.png`,
 };
 
 /** Whether this site serves a converted copy as plain files (the dev server does). */

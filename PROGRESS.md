@@ -1431,6 +1431,31 @@ Notes for M2 implementer:
       image has 1194. A directory of that name linking 1194's `chrome-linux`
       (with `chrome-headless-shell` → `headless_shell`) made `try-spot.mjs`
       run; it is outside the repo.
+  - 2026-09-27: **the user's play-test notes**, first batch.
+    - Fixed: right-click no longer opens the browser's menu on the game.
+    - Fixed: **the party in a bed** draws as the bed with someone in it, for
+      every scenario: the engine never drew BoE's `BED` special (`flag1` is
+      the picture). E3's beds (picture 143) get `bed` with picture 1230, the
+      occupied bed on E3's sheet, as BoE 1997's rule has it.
+    - Fixed: **townspeople walked on lava.** E3's blockage 2 keeps monsters
+      off (lava, portals, town entrances, encounter markers); BoE's only
+      means that for counters (`is_special`). Those terrains now carry
+      `monst-block`.
+    - Fixed: **chests could not be looked in.** E3's containers are the
+      terrain list at DGROUP 0x1d80 (`FUN_1080_0a87`): desk, chest,
+      dresser, crystal box, case, box, body. They are BoE `box` terrain now,
+      so Look opens them. TODO(E3-3): E3 opens them on Use
+      (`FUN_10c0_425c` → `FUN_1070_2197`), and its Use also finds secret
+      doors (terrains 101, 118, 133 become the next one: "You find a secret
+      door!") and says "Search: You don't find anything." otherwise. **E3
+      has no closing doors by Use** — the note that it should is answered by
+      the same function.
+    - The startup card has a committed picture of the first screen
+      (`public/exile3-preview.png`, the user's decision), replacing the one
+      captured on first play.
+    - Still to do from the notes: E3's own sounds (the town-entry and start
+      sounds are BoE's; E3 has 100 WAVs in its resources) and E3's icons
+      (the interface sheets are BoE's).
   - Next: the villages' own switches (120–177; FORMATS.md lists their
     handlers), the zones, 35 talk scripts, and the demon plot's countdown.
     The talk types are listed by `listTalkScripts.ts`.

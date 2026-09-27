@@ -323,7 +323,7 @@ async function main(): Promise<void> {
         return {
           id, title: hdr.title, blurb: hdr.teasers.find((t) => t !== '') ?? '', icon: hdr.introPic,
           // Made by scripts/scenario-previews.mjs; the card drops it if missing.
-          preview: `${import.meta.env.BASE_URL}scenarios/${id}/preview.png`,
+          preview: id === EXILE3_ID ? EXILE3_CARD.preview : `${import.meta.env.BASE_URL}scenarios/${id}/preview.png`,
         };
       } catch {
         // Exile III is converted only on the dev server; elsewhere its card
@@ -341,15 +341,8 @@ async function main(): Promise<void> {
     if (scenarioStoreAvailable()) {
       for (const scen of await listInstalledScenarios()) {
         // Exile III's converted copy is kept in the same store, but its card
-        // is the bundled one — which takes the picture the game captured the
-        // first time it was played here, if the site has none of its own.
-        if (scen.id === EXILE3_ID) {
-          const card = headers.find((h) => h.id === EXILE3_ID);
-          if (card && !('preview' in card) && scen.preview) {
-            Object.assign(card, { preview: startupEntry(scen).preview });
-          }
-          continue;
-        }
+        // is the bundled one, with its committed picture.
+        if (scen.id === EXILE3_ID) continue;
         added.push(startupEntry(scen));
         installedIds.add(scen.id);
         if (!scen.hasGraphics) withoutGraphics.add(scen.id);

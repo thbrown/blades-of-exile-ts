@@ -63,6 +63,8 @@ export class InputRouter {
   attach(): void {
     window.addEventListener('keydown', (ev) => this.onKeyDown(ev));
     this.canvas.addEventListener('mousedown', (ev) => this.onMouseDown(ev));
+    // The original has no context menu; a right-click on the game is just a click.
+    this.canvas.addEventListener('contextmenu', (ev) => ev.preventDefault());
     this.canvas.addEventListener('mousemove', (ev) => this.onMouseMove(ev));
     this.canvas.addEventListener('mouseleave', () => this.handlers.onHoverEnd?.());
     this.canvas.addEventListener('wheel', (ev) => {
