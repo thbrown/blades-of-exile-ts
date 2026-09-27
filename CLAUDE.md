@@ -25,7 +25,8 @@ and **read `DIVERGENCES.md` before assuming which C++ is right.**
 - **Faithful port.** Same mechanics, the original 605×430 UI, the original
   assets. Where the C++ does something that looks like a bug, keep it and say
   so in a comment — a silent "fix" is a divergence, and replays depend on
-  matching behaviour. `get_ran`'s *call order* is part of the spec.
+  matching behaviour. Suspected bugs in Exile III's own content are also
+  listed in `E3-SUSPECTED-BUGS.md`, for a later fixing pass. `get_ran`'s *call order* is part of the spec.
 - **Numeric enum values are ported verbatim** where they appear in save or
   scenario files. Don't renumber or reorder them.
 - **Original over OBoE where a player could tell, OBoE where only the dice

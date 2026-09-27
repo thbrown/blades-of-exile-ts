@@ -38,7 +38,8 @@ function zone1(b: SpecBuilder): Map<number, Step[]> {
     [1, pull(1, 0x23, 0x22)],
     [2, pull(2, 0x25, 0x24)],
     // The whispering turns the party back. E3 marks the spot only once slot 9
-    // is set, which is the other way round from its neighbours; kept.
+    // is set, which is the other way round from its neighbours; kept
+    // (E3-SUSPECTED-BUGS.md #3).
     [3, [b.ifFlagEq(spot(9), 0, [b.ifFlagAtLeast(f(0xb41), 4, [b.msg(B, 0x26), b.blockMove()])], [b.setFlag(spot(3), 20)])]],
     [4, pull(4, 0x28, 0x27)],
   ]);
@@ -97,7 +98,8 @@ function zone5(b: SpecBuilder): Map<number, Step[]> {
     // (4,0) at 3) shut its gates; a second visit is only a welcome; the
     // first costs 5,000 gold for two priest spells and, for each PC with the
     // skill from 1 to 6, a coin flip's rise in Alchemy (skill 12, +0x2e) —
-    // which the message calls Mage Lore. E3 flips `get_ran(1, 0, 1)`.
+    // which the message calls Mage Lore (E3-SUSPECTED-BUGS.md #1). E3 flips
+    // `get_ran(1, 0, 1)`.
     [1, [b.askDialog(0x13ba, [
       b.ifFlagEq(f(0xac), 3, [b.msg(B, 9)], [
         b.ifFlagAtLeast(spot(1), 1, [b.msg(B, 7)], [b.askDialog(0x13bb, [b.pay(5000, [
@@ -172,7 +174,8 @@ function zone10(b: SpecBuilder): Map<number, Step[]> {
     // Three groups in turn, the flag cleared between so that each fires.
     [1, [b.onceEncounter(spot(1), B, 0x1f, 0x20, 0), b.setFlag(spot(1), 0),
       b.onceEncounter(spot(1), B, 0, 0, 1), b.setFlag(spot(1), 0), b.onceEncounter(spot(1), B, 0, 0, 2)]],
-    // Block 80's line, as E3 pushes it, though this zone's block is 81.
+    // Block 80's line, as E3 pushes it, though this zone's block is 81
+    // (E3-SUSPECTED-BUGS.md #4).
     [2, [b.askDialog(0x139d, [b.onceEncounter(spot(2), 80, 0x2a, 0, 3)], [b.blockMove()])]],
   ]);
 }

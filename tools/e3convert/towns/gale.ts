@@ -44,7 +44,7 @@ export function gale(town: number) {
       [20, book(15, [b.msg(BLOCK, 9), b.learnAlchemy(13)])],
       [21, book(12, [b.msg(BLOCK, 10), b.teachSpell(0x33)])],
       // E3 shows string 12 here, the start of Pachtar's book (spot 23),
-      // rather than a spell book's; kept.
+      // rather than a spell book's; kept (E3-SUSPECTED-BUGS.md #2).
       [22, book(17, [b.msg(BLOCK, 0xc), b.teachSpell(0x38)])],
       // Pachtar's book puts the drake lair (town 74) on the map.
       [23, book(17, [b.msg(BLOCK, 0xc, 0xd), b.townVisible(74)])],
