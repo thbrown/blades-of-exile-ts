@@ -1538,9 +1538,22 @@ Notes for M2 implementer:
     - Suspected bug #6: the Nephilim village's "you helped us" welcome
       (zone 76 slot 9 = 1, also tested by the town's entry at `10c0:07c2`)
       is never set.
-  - Next: zones 80–88 (47 spots, `FUN_10a8_2acc`, including zone 83/12's
-    food stall), 35 talk scripts, and the demon plot's countdown. The talk
-    types are listed by `listTalkScripts.ts`.
+  - 2026-09-27: **zones 80–88** (`FUN_10a8_2acc`, zone switch at
+    `10a8:3b3f` indexed by zone − 80; here `si` is the zone, `di` the spot,
+    and the block is pushed as 0x58). **Every outdoor zone is now
+    transcribed**: coverage 1,438 done, 5 to go, all old town leftovers
+    (towns 20, 22, 23 and 80). Not tried in the UI.
+    - Zone 83/12's food stall is a real shop now, and its overrun farms
+      refuse the step, as E3's do (they didn't).
+    - Zone 86 switches on its spot through a value table (`cs:0x3ac3`: six
+      spot numbers, then six handlers), not a jump table.
+    - `ferry()` for the islands' boat rides; `ifAlchemy` (IF_RECIPE, E3's
+      `party.alchemy[k]` at +0x831e + k); zone 80's hidden channels test the
+      terrain beside the spot with `if-ter`.
+    - TODO(E3-3): zone 84/11 tests `can_find_town[22]`; 84/5 plays sound 54.
+    - Suspected bug #7: zone 85's ferry back is free though it says it charges.
+  - Next: 35 talk scripts, the demon plot's countdown, and the town
+    leftovers above. The talk types are listed by `listTalkScripts.ts`.
 
 ## Key references (do not lose)
 

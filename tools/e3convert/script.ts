@@ -834,6 +834,15 @@ export class SpecBuilder {
     };
   }
 
+  /** `if (party.alchemy[k])` (party+0x831e + k): IF_RECIPE. */
+  ifAlchemy(k: number, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-alchemy', { ex1: [k, yes] }, no);
+    };
+  }
+
   /** The party learns alchemy recipe `k` (`party.alchemy[k] = 1`, party+0x831e). */
   learnAlchemy(k: number): Step {
     return (next) => this.node('alchemy', { ex1: [k, 0] }, next);

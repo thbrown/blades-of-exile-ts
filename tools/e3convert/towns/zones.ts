@@ -1036,19 +1036,158 @@ function zone79(b: SpecBuilder): Map<number, Step[]> {
   ]);
 }
 
+/**
+ * A boat ride between islands (`FUN_10c0_4652`): `paid` for the 10-gold
+ * crossing (dialog 0x16e4) with its two EXE lines, or the free way back
+ * (0x16e5). Either way the step is refused.
+ */
+function ferry(b: SpecBuilder, x: number, y: number, line: number, poor?: number): Step[] {
+  const go = [b.log(0x10a8, line), b.outMoveParty(x, y)];
+  return [b.blockMove(), poor === undefined
+    ? b.askDialog(0x16e5, go)
+    : b.askDialog(0x16e4, [b.pay(10, go, [b.log(0x10a8, poor)])])];
+}
+
+/** Zone 80 (8,8): the Vahnatai hunters, Silverlocke's potions, and hidden channels. */
+function zone80(b: SpecBuilder): Map<number, Step[]> {
+  const Z = 80, B = block(Z), spot = (id: number) => zoneSpotFlag(Z, id);
+  /**
+   * The rocks beside the boat, a square west (`dx` -1) or east of the spot,
+   * part to show a channel (terrain 0x4a becomes 0x47).
+   */
+  const channel = (id: number, dx: number): [number, Step[]] => {
+    const at = b.spotAt(id);
+    return [id, [b.ifTer(at.x + dx, at.y, 0x4a, [b.msg(B, 0x1e), b.setTer(at.x + dx, at.y, 0x47)])]];
+  };
+  return new Map<number, Step[]>([
+    // Help the hunters, or not; either way it happens once. Not after 0xc93.
+    [1, [b.ifFlagEq(f(0xc93), 0, [b.askDialog(0x16aa, [b.onceEncounter(spot(1), B, 0, 0, 0)], [b.msg(B, 0x1c)])]),
+      b.setFlag(spot(1), 20)]],
+    [2, [b.giveItemDialog(0x16ab, spot(2), 0x65)]],
+    [11, [b.askDialog(0x16a8, [b.askDialog(0x16a9,
+      [b.shop(E3ShopType.GENERAL, 0xc5, 0xca, 3, 0x10a8, 0x2956)], [b.msg(B, 0x1b)])])]],
+    channel(12, -1),
+    [14, [b.dialog(0x16ac)]],
+    channel(15, 1),
+  ]);
+}
+
+/** Zone 81 (0,9). */
+function zone81(b: SpecBuilder): Map<number, Step[]> {
+  const Z = 81, B = block(Z), spot = (id: number) => zoneSpotFlag(Z, id);
+  return new Map<number, Step[]>([
+    [1, [b.askDialog(0x16b2, [b.setFlag(spot(1), 20), b.msg(B, 0x27), b.diseaseAll(8)])]],
+    [2, [b.askDialog(0x16b3, [b.msg(B, 0x2a), b.blockMove()])]],
+    // The same first dialog as spot 2, then a weapon shop.
+    [3, [b.askDialog(0x16b3, [b.askDialog(0x16b4, [b.blockMove(),
+      b.shop(E3ShopType.WEAPONS, 0x32, 0x3e, 0, 0x10a8, 0x296c)])])]],
+    [4, [b.askDialog(0x16b5, [b.onceEncounter(spot(4), B, 0x2c, 0, 0), b.setFlag(spot(5), 1)], [b.msg(B, 0x2b)]),
+      b.setFlag(spot(4), 20)]],
+  ]);
+}
+
+/** Zone 82 (1,9). */
+function zone82(b: SpecBuilder): Map<number, Step[]> {
+  const Z = 82, B = block(Z), spot = (id: number) => zoneSpotFlag(Z, id);
+  return new Map<number, Step[]>([
+    [1, [b.onceEncounter(spot(1), B, 0x20, 0, 0)]],
+    [2, [b.onceEncounter(spot(2), B, 0x20, 0, 0)]],
+    [3, [b.onceEncounter(spot(3), B, 0x25, 0x26, 1)]],
+    [4, [b.onceEncounter(spot(4), B, 0x25, 0x26, 2)]],
+  ]);
+}
+
 /** Zone 83 (2,9): the farms around Krizsan, which the plague reaches by day. */
 function zone83(b: SpecBuilder): Map<number, Step[]> {
   const Z = 83, B = block(Z), spot = (id: number) => zoneSpotFlag(Z, id);
-  /** A farm the monsters overrun on E3's day `day` (`FUN_10d0_54b8(day, 0)`). */
+  /** A farm the monsters overrun (and block) from E3's day `day` (`FUN_10d0_54b8(day, 0)`). */
   const farm = (day: number, then: Step[]): Step[] =>
-    [b.ifDayReached(e3DayReached(day, 0).day, [b.msg(B, 0x35)], then)];
+    [b.ifDayReached(e3DayReached(day, 0).day, [b.msg(B, 0x35), b.blockMove()], then)];
   return new Map<number, Step[]>([
     [1, [b.askDialog(0x16c6, [b.onceEncounter(spot(1), B, 0x31, 0, 0)])]],
     [2, [b.giveItemDialog(0x16c9, spot(2), 0x102)]],
     [11, farm(35, [b.askDialog(0x16c7, [b.msg(B, 0x32, 0x33)])])],
-    // TODO(E3-3): the second dialog's yes opens a food stall (food record 9).
-    [12, farm(25, [b.askDialog(0x16c7, [b.dialog(0x16c8)])])],
+    // A food stall (food record 9).
+    [12, farm(25, [b.askDialog(0x16c7, [b.askDialog(0x16c8, [b.blockMove(),
+      b.shop(E3ShopType.FOOD, 9, 9, 0, 0x10a8, 0x297e)])])])],
     [14, farm(15, [b.askDialog(0x16c7, [b.msg(B, 0x34)])])],
+  ]);
+}
+
+/** Zone 84 (3,9): goblin wolf-riders, the hill dwellers, and the slime valley. */
+function zone84(b: SpecBuilder): Map<number, Step[]> {
+  const Z = 84, B = block(Z), spot = (id: number) => zoneSpotFlag(Z, id);
+  const wolves: Step[] = [b.onceEncounter(spot(1), B, 0x37, 0, 0)];
+  return new Map<number, Step[]>([
+    // 50 gold, or a fight.
+    [1, [b.blockMove(), b.askDialog(0x16d0, [b.ifGold(50, [b.takeGold(50), b.msg(B, 0x36)], wolves)], wolves)]],
+    // The shanty town trades only after `f(0xc85)`.
+    [2, [b.blockMove(), b.askDialog(0x16d1, [b.ifFlagEq(f(0xc85), 0, [b.msg(B, 0x3a)], [
+      b.askDialog(0x16d2, [b.shop(E3ShopType.GENERAL, 0xb8, 0xb8, 1, 0x10a8, 0x2991)], [b.msg(B, 0x3b)]),
+    ])])]],
+    [3, [b.askDialog(0x16d4, [b.onceEncounter(spot(3), B, 0x3d, 0, 2)], [b.blockMove()])]],
+    [4, [b.askDialog(0x16d3, [b.onceEncounter(spot(4), B, 0x3d, 0, 1)], [b.blockMove()])]],
+    // TODO(E3-3): E3 plays sound 54 here rather than its usual 57.
+    [5, [b.onceMsg(spot(5), B, 0x3e)]],
+    // TODO(E3-3): E3 says this only while `can_find_town[22]` (+0x849b) is
+    // clear, which no node can test; this is the new game's answer.
+    [11, [b.msg(B, 0x3c, 0x41)]],
+  ]);
+}
+
+/** Zone 85 (4,9): a ferry across the river. */
+function zone85(b: SpecBuilder): Map<number, Step[]> {
+  const Z = 85, B = block(Z), spot = (id: number) => zoneSpotFlag(Z, id);
+  return new Map<number, Step[]>([
+    [1, [b.askDialog(0x16db, [b.onceEncounter(spot(1), B, 0xb, 0, 0)],
+      [b.askDialog(0x16dc, [b.onceEncounter(spot(1), B, 0x44, 0x46, 1)])])]],
+    [11, [b.blockMove(), b.askDialog(0x16da, [b.pay(10, [b.msg(B, 0x47), b.outMoveParty(0x26, 0x12)], [b.log(0x10a8, 0x299f)])])]],
+    // The way back asks the same 10 gold and says it's paid, but takes
+    // nothing (E3-SUSPECTED-BUGS.md #7).
+    [12, [b.blockMove(), b.askDialog(0x16da, [b.msg(B, 0x47), b.outMoveParty(0x22, 0x15)])]],
+  ]);
+}
+
+/** Zone 86 (5,9): the boat people's islands. */
+function zone86(b: SpecBuilder): Map<number, Step[]> {
+  const Z = 86, B = block(Z), spot = (id: number) => zoneSpotFlag(Z, id);
+  return new Map<number, Step[]>([
+    // Its guardians (slot 9, which blocks the way), then the nettle.
+    [1, [b.ifFlagEq(spot(9), 0, [b.askDialog(0x16e6, [b.onceEncounter(spot(9), B, 0, 0, 0)]), b.blockMove()],
+      [herb(b, B, 0xc54, 0x42, 0x16e7, 0x186)])]],
+    [2, [b.onceMsg(spot(2), B, 0x43)]],
+    [14, ferry(b, 0x1b, 0xb, 0x29e7)],
+    [15, ferry(b, 0xe, 0x1b, 0x2a2c)],
+    [20, ferry(b, 0x1d, 0x18, 0x29d1, 0x29b8)],
+    [21, ferry(b, 0x12, 0x10, 0x2a16, 0x29fd)],
+  ]);
+}
+
+/** Zone 87 (6,9): more islands. */
+function zone87(b: SpecBuilder): Map<number, Step[]> {
+  const Z = 87, B = block(Z), spot = (id: number) => zoneSpotFlag(Z, id);
+  return new Map<number, Step[]>([
+    [1, [b.onceEncounter(spot(1), B, 0x4e, 0, 0)]],
+    [2, [b.onceEncounter(spot(2), B, 0x4e, 0, 0)]],
+    // Only for a party that knows alchemy recipe 16 (party+0x832e).
+    [3, [b.ifAlchemy(16, [b.onceEncounter(spot(3), B, 0x4b, 0x4c, 1)])]],
+    [14, ferry(b, 0x19, 0x13, 0x2a71)],
+    [15, ferry(b, 0x11, 8, 0x2ab6)],
+    [20, ferry(b, 0x17, 0xb, 0x2a5b, 0x2a42)],
+    [21, ferry(b, 0xd, 0x15, 0x2aa0, 0x2a87)],
+    // On the map, but E3's switch has no case for it.
+    [72, []],
+  ]);
+}
+
+/** Zone 88 (7,9). */
+function zone88(b: SpecBuilder): Map<number, Step[]> {
+  const Z = 88, B = block(Z), spot = (id: number) => zoneSpotFlag(Z, id);
+  return new Map<number, Step[]>([
+    [1, [b.askDialog(0x16f8, [b.onceEncounter(spot(1), B, 0x10, 0, 2)])]],
+    [2, [b.giveItemDialog(0x16f9, spot(2), 0x93)]],
+    [3, [herb(b, B, 0xc50, 0x12, 0x16fa, 0x181)]],
+    [4, [b.onceEncounter(spot(4), B, 0x15, 0x16, 0), b.onceEncounter(spot(6), B, 0, 0, 1)]],
   ]);
 }
 
@@ -1064,4 +1203,4 @@ function zone89(b: SpecBuilder): Map<number, Step[]> {
   ]);
 }
 
-export const ZONE_SCRIPTS = new Map<number, PlaceScript>([[0, zone0], [1, zone1], [2, zone2], [3, zone3], [4, zone4], [5, zone5], [6, zone6], [7, zone7], [8, zone8], [9, zone9], [10, zone10], [11, zone11], [12, zone12], [13, zone13], [14, zone14], [15, zone15], [16, zone16], [17, zone17], [18, zone18], [19, zone19], [20, zone20], [23, zone23], [24, zone24], [27, zone27], [28, zone28], [29, zone29], [30, zone30], [31, zone31], [32, zone32], [33, zone33], [36, zone36], [37, zone37], [38, zone38], [39, zone39], [40, zone40], [41, zone41], [42, zone42], [45, zone45], [46, zone46], [47, zone47], [48, zone48], [49, zone49], [50, zone50], [51, zone51], [54, zone54], [55, zone55], [56, zone56], [57, zone57], [58, zone58], [59, zone59], [60, zone60], [61, zone61], [63, zone63], [64, zone64], [65, zone65], [66, zone66], [67, zone67], [68, zone68], [69, zone69], [70, zone70], [71, zone71], [72, zone72], [73, zone73], [74, zone74], [75, zone75], [76, zone76], [77, zone77], [78, zone78], [79, zone79], [83, zone83], [89, zone89]]);
+export const ZONE_SCRIPTS = new Map<number, PlaceScript>([[0, zone0], [1, zone1], [2, zone2], [3, zone3], [4, zone4], [5, zone5], [6, zone6], [7, zone7], [8, zone8], [9, zone9], [10, zone10], [11, zone11], [12, zone12], [13, zone13], [14, zone14], [15, zone15], [16, zone16], [17, zone17], [18, zone18], [19, zone19], [20, zone20], [23, zone23], [24, zone24], [27, zone27], [28, zone28], [29, zone29], [30, zone30], [31, zone31], [32, zone32], [33, zone33], [36, zone36], [37, zone37], [38, zone38], [39, zone39], [40, zone40], [41, zone41], [42, zone42], [45, zone45], [46, zone46], [47, zone47], [48, zone48], [49, zone49], [50, zone50], [51, zone51], [54, zone54], [55, zone55], [56, zone56], [57, zone57], [58, zone58], [59, zone59], [60, zone60], [61, zone61], [63, zone63], [64, zone64], [65, zone65], [66, zone66], [67, zone67], [68, zone68], [69, zone69], [70, zone70], [71, zone71], [72, zone72], [73, zone73], [74, zone74], [75, zone75], [76, zone76], [77, zone77], [78, zone78], [79, zone79], [80, zone80], [81, zone81], [82, zone82], [83, zone83], [84, zone84], [85, zone85], [86, zone86], [87, zone87], [88, zone88], [89, zone89]]);
