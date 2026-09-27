@@ -12,9 +12,10 @@ tools/cppharness/build/
 # corpus run of them is hundreds of megabytes
 tools/cppharness/traces/
 
-# Community scenario archive downloads and conversion output (Part 1b) —
-# third-party works, fetched by scripts, never committed
-library/
+# Community scenario archive downloads and conversion output (Part 1b),
+# fetched by scripts. Rooted, so the built library the site serves
+# (docs/library/) is committed: README.md, "Community scenarios".
+/library/
 
 # Scenario dumps from dump-scen.sh, cached by test/legacyImport.test.ts
 tools/cppharness/scendumps/

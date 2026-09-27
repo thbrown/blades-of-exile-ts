@@ -38,8 +38,8 @@ A from-scratch TypeScript port of the game player of **Blades of Exile**, Jeff
 Vogel's 1997 fantasy role-playing game for Spiderweb Software, running in the
 browser. It keeps the original rules, the 605×430 screen and the original
 art. Besides the three scenarios the game shipped with, it plays the
-community's own: 168 of them from Spiderweb's scenario archive are built in,
-and you can add others from their `.zip`, `.exs` or `.boes` files.
+community's own: 341 of them from the scenario archives are built in, and
+you can add others from their `.zip`, `.exs` or `.boes` files.
 
 ## Running it
 
@@ -81,8 +81,8 @@ The GPL covers the code, and the Blades of Exile data this repository ships
 (graphics, sounds, fonts, dialogs and the bundled scenarios) is taken from Open
 Blades of Exile's GPL tree. The GPL does not cover:
 
-- **Community scenarios.** Each belongs to its author. They are fetched from
-  the archive by script and never committed.
+- **Community scenarios.** Each belongs to its author. They are included in
+  this repository under fair use (see below), not under the GPL.
 - **Exile III: Ruined World.** It is Spiderweb's copyright, and it is not
   GPL. Its own licence (`GAMEINFO.TXT`) allows anyone to redistribute it free
   of charge, **unaltered**. So the repository carries Spiderweb's original
@@ -91,3 +91,44 @@ Blades of Exile's GPL tree. The GPL does not cover:
   and your browser converts it with the GPL converter (`tools/e3convert/`)
   the first time you play, keeping the result locally. A converted copy is
   never committed or published.
+
+### Community scenarios: fair use, and removal on request
+
+The community scenarios in the library (`docs/library/`) are included in this
+repository and on the site under the fair use doctrine. Copyright in each one
+stays with its author. We include them because:
+
+- **The purpose is preservation, and it is non-commercial.** The scenarios are
+  free to play here, as they always were. Nothing is sold, and there are no
+  ads.
+- **They were made to be shared freely.** Their authors released them free of
+  charge through public archives. Keeping them playable takes nothing from
+  anyone and keeps their work in front of new players.
+- **They are unaltered.** Each download is the author's own file as
+  published. It is only trimmed to the scenario, its graphics and the
+  author's documents, and it is credited with a link to its listing.
+
+The [cboe-scenarios](https://github.com/NQNStudios/cboe-scenarios) archive
+takes the same approach.
+
+**If you wrote one of these scenarios and want it removed,** open an issue on
+this repository saying which scenario. We will take it out of the library and
+purge it from the repository's git history, not just from the current
+version. Copies other people have already made (forks, clones, caches) are
+out of our hands.
+
+**We have no reliable way to confirm who you are.** Many scenarios were
+published under handles, most of the email addresses in them stopped working
+long ago, and anyone can open an issue under any name. So we will ask for
+something that ties you to the scenario. For example:
+
+- a message from the address given in the scenario's own documents or
+  archive listing;
+- a post from the Spiderweb forum account the scenario was released or
+  discussed under;
+- or anything else that reasonably shows you are the author.
+
+We decide in good faith, and we may decline a request we can't connect to the
+scenario's author. That applies especially to a single request covering many
+scenarios by different authors.
+

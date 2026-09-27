@@ -13202,8 +13202,12 @@ The user's notes after playing Exile III, and what each turned out to be:
 - **The scenario library was never committed.** `.gitignore`'s `library/`
   (meant for the downloads at the root) also matches `docs/library/`, so
   commit 74cce62 ("Build the site with the scenario library embedded")
-  committed no library, and the published site has none. **Open**, pending the
-  user's decision on shipping the archive in the repository.
+  committed no library, and the published site has none. **Resolved
+  2026-09-27**: the user decided to ship it under fair use. The rule is now
+  `/library/`, `docs/library/` is committed, and README.md's "Community
+  scenarios" section sets out the fair-use reasoning and the removal policy.
+  Removal purges git history, and a request has to be tied to the author,
+  since anyone can ask under any name.
 - Also found, **not fixed**: `scripts/verify-e3.mjs` fails on HEAD as well as
   with these changes. Its walk out of the fort is blocked on the first step
   from (59,6), and the ferry and thugs checks fail after it.
