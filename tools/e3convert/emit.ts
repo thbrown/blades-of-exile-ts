@@ -115,9 +115,11 @@ function specialXml(t: E3TerrainType, id: number): string {
   // (`0xd8 < t && t < 0xe8`, exile3.c:4648) and one of the zone's town
   // entrances is there; BoE's `town` special is the same test. flag1 is what
   // a hidden town shows as, and E3 hides none, so it shows as itself.
-  // TODO(E3-3): right after, E3 refuses towns 8–20, 28–39, 51–79, 99–119
-  // and 146+ with a message while `DS:3d3c` is clear. What that byte is
-  // (perhaps the shareware registration) is still open.
+  // Right after, E3 refuses towns 8–20, 28–39, 51–79, 99–119 and 146+ while
+  // `DS:3d3c` is clear, with "You need to be registered to enter."
+  // (`1010:2231`, string `1010:0a3a`): the shareware lock, which a
+  // registration key lifted (`1020:4f27`). Spiderweb has made the game free
+  // to play, so the port plays it registered and leaves the lock out.
   const [type, f1, f2, f3] = !sp && id >= 217 && id <= 231 ? ['town', id, 0, 0]
     : !sp && E3_CONTAINERS.has(id) ? ['box', -1, 0, 0]
     : !sp && t.pic === 143 ? ['bed', e3TerrainPic(230), 0, 0]

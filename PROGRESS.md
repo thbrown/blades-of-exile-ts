@@ -13153,9 +13153,10 @@ The user's notes after playing Exile III, and what each turned out to be:
   engine needs BoE's `town` special for that, and the converter never wrote
   it, so a party could walk onto Krizsan's gate and stand there. Earlier
   checks entered towns from the debug panel, which is why nothing caught it.
-  Terrains 217–231 are now `town`. `TODO(E3-3)` in `emit.ts`: straight after
-  that test E3 refuses some town ranges with a message while `DS:3d3c` is
-  clear, and what that byte means is still open.
+  Terrains 217–231 are now `town`. Straight after that test E3 refuses some
+  town ranges while `DS:3d3c` is clear, with "You need to be registered to
+  enter.": the shareware lock. The game is free now, so the port plays it
+  registered and leaves the lock out.
 - **Roads looked wrong.** E3's road pictures (232 cave, 233 grass, 234 hills)
   are the ground with only a road *hub* in the middle. The arms are drawn in
   code, as BoE 1997's `place_road` draws them for its 202–204
