@@ -82,6 +82,8 @@ export interface ScriptSource {
   scenNode?: (build: (s: SpecBuilder) => number) => number;
   /** The engine's item for E3's `item` given readable `ability` (`E3_NOTE_ITEMS`). */
   noteItem?: (item: number, ability: number) => number;
+  /** Spot `id`'s own converter flag (`e3SpotFlag`), for `eraseSpot`. */
+  spotFlag?: (id: number) => Flag;
   /** Where this place's spot `id` is (`FUN_10e0_07b7`), for scripts that test its square. */
   spotLoc?: (id: number) => { x: number; y: number } | undefined;
 }
@@ -744,6 +746,18 @@ export class SpecBuilder {
     };
   }
 
+  /**
+   * Every square of terrain `from` in the rect (inclusive) becomes `to`, as
+   * found in the converted map: right while nothing else has changed them.
+   */
+  rectReplace(x1: number, y1: number, x2: number, y2: number, from: number, to: number): Step {
+    const steps: Step[] = [];
+    for (let x = x1; x <= x2; x++)
+      for (let y = y1; y <= y2; y++)
+        if (this.src.terrain?.[x]?.[y] === from) steps.push(this.setTer(x, y, to));
+    return this.seq(steps);
+  }
+
   /** TOWN_NUKE_MONSTS: every creature here (0), or of one kind, is gone. */
   removeCreatures(kind = 0): Step {
     return (next) => this.node('nuke-monsts', { ex1: [kind] }, next);
@@ -963,6 +977,11 @@ export class SpecBuilder {
     return this.seq(kinds.map((n) => this.removeCreatures(n)));
   }
 
+  /** The target loses `n` spell points (AFFECT_SP's take arm), down to 0. */
+  drainSp(n: number): Step {
+    return (next) => this.node('sp', { ex1: [n, 1] }, next);
+  }
+
   /** `FUN_1070_09e1(n, 1)`: the party loses `n` food (down to 0), silently. */
   takeFood(n: number): Step {
     return (next) => this.node('food', { ex1: [n, 1] }, next);
@@ -987,6 +1006,16 @@ export class SpecBuilder {
     const at = this.src.spotLoc?.(id);
     if (!at) throw new Error(`spot ${id} has no location`);
     return this.ifTer(at.x, at.y, t, then, otherwise);
+  }
+
+  /**
+   * `FUN_1038_0282`: spot `id` is erased once `steps` have run, so it never
+   * runs again. The engine keeps the spot and marks it done in its own flag.
+   */
+  onceSpot(id: number, steps: Step[]): Step {
+    const flag = this.src.spotFlag?.(id);
+    if (!flag) throw new Error('onceSpot needs ScriptSource.spotFlag');
+    return this.ifFlagEq(flag, 0, [...steps, this.setFlag(flag, 1)]);
   }
 
   /** The terrain under spot `id` becomes `t`. */

@@ -36,6 +36,7 @@ import { cavesOfGiants } from './towns/cavesOfGiants';
 import { shiftingFloors } from './towns/shiftingFloors';
 import { DUNGEON_SCRIPTS } from './towns/dungeons';
 import { tinraya } from './towns/tinraya';
+import { PANTS_CLASS, RENTAR_DEATH_FLAGS, rentarKeep } from './towns/rentarKeep';
 import { sharimik, SHARIMIK_DEATH_FLAGS } from './towns/sharimik';
 import { ZONE_SCRIPTS } from './towns/zones';
 import { DAILY_FLAGS } from './towns/talkScripts';
@@ -64,6 +65,7 @@ const TOWN_SCRIPTS = new Map<number, PlaceScript>([
   [30, cavesOfGiants(30)], [31, cavesOfGiants(31)],
   ...DUNGEON_SCRIPTS,
   [35, tinraya(35)], [36, tinraya(36)],
+  [38, rentarKeep(38)], [64, rentarKeep(64)],
   [32, shiftingFloors(32)], [33, shiftingFloors(33)], [60, shiftingFloors(60)], [108, shiftingFloors(108)],
 ]);
 
@@ -283,7 +285,7 @@ function creatureTimeXml(c: E3CreatureStart): string {
 }
 
 /** Death flags the converter gives creatures E3 asks about (`e3DeathFlag`), by `town:slot`. */
-const DEATH_FLAGS = new Map<string, [number, number]>([...SHARIMIK_DEATH_FLAGS]);
+const DEATH_FLAGS = new Map<string, [number, number]>([...SHARIMIK_DEATH_FLAGS, ...RENTAR_DEATH_FLAGS]);
 
 function creatureXml(c: E3CreatureStart, id: number, personality: number, deathFlag?: [number, number]): string {
   // `spec1`/`spec2` is the creature's death flag: END_DIE sets it, and a town
@@ -545,6 +547,8 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     // E3's scripts name kinds of item by `type_flag` (unicorn horns are 111);
     // the engine's item-class nodes read the special class.
     if (old.typeFlag > 0) it.specialClass = old.typeFlag;
+    // Pants (variety 22), which a spot in Rentar-Ihrno's keep looks for.
+    else if (old.variety === 22) it.specialClass = PANTS_CLASS;
     // A readable item shows its dialog when used: a scenario node, through
     // OBoE's CALL_SPECIAL ability.
     const dlg = E3_NOTE_DIALOGS.get(e3Abilities[k] ?? 0);

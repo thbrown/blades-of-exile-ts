@@ -17,6 +17,7 @@
 //                   whichever is there)
 //   --number n      the answer to a number prompt (repeatable, in order)
 //   --wait n        then pass n turns (Space), answering what comes up
+//   --show where    print a flag's value at the end (r,c or 0xNNN; repeatable)
 //   --use           use the square from beside it (the U key) instead
 //   --run           run the spot's node instead of stepping onto it
 //
@@ -168,6 +169,15 @@ const after = await page.evaluate((from) => {
   };
 }, logStart);
 console.log('LOG:', after.log.map((l) => l.trim()).filter(Boolean).join(' / '));
+for (const where of all('show')) {
+  const v = await page.evaluate((w) => {
+    const p = window.__session.univ.party;
+    const [r, c] = /^0x/i.test(w) ? (() => { const i = parseInt(w, 16) - 0x84; return [Math.floor(i / 10), i % 10]; })()
+      : w.split(',').map(Number);
+    return `${r},${c} = ${p.getSdf(r, c)}`;
+  }, where);
+  console.log(`FLAG ${where}: ${v}`);
+}
 console.log('NOW:', JSON.stringify({ place: after.place, ...after.where, gold: after.gold, food: after.food }));
 console.log(`shots: ${SHOTS}/try-${town}-${spot}-*.png`);
 await browser.close();

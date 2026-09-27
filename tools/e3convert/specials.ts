@@ -80,7 +80,10 @@ export function e3SpotScript(
   const block = isTown ? e3TownMessageBlock(place.town) : e3ZoneMessageBlock(place.zone);
   const repeatsFrom = isTown ? 237 : 209;
   const spotLoc = (id: number) => spots.find((s) => s.id === id && !(s.loc.x === 0 && s.loc.y === 0))?.loc;
-  const b = new SpecBuilder({ ...src, spotLoc }, (label) => Math.max(0, BASIC_BUTTONS.indexOf(label)));
+  // A spot's own converter flag, as the generic message spots use: for E3's
+  // scripts that erase the spot they ran from (`FUN_1038_0282`).
+  const spotFlag = (id: number) => e3SpotFlag(place, spots.findIndex((s) => s.id === id));
+  const b = new SpecBuilder({ ...src, spotLoc, spotFlag }, (label) => Math.max(0, BASIC_BUTTONS.indexOf(label)));
   const scripts = own?.(b) ?? new Map<number, Step[]>();
   const compiled = new Map<number, number>();
   const marks: SpotScript['marks'] = [];

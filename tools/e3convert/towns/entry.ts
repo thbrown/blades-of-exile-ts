@@ -20,7 +20,12 @@
  *   basement (108) by Belt Beta.
  * - Under Tinraya (36), after the Crystal Souls, has every door of the
  *   cell panel and both rune doors open (10d8:1ec4).
- * - TODO(E3-3): the others — towns 21, 31, 36, 38, 41, 46, 57, 64,
+ * - Rentar-Ihrno's keep: level 2 (64) opens the channels whose levers are
+ *   pulled (10d8:1eb2, `FUN_10d8_239b`); level 1 (38) opens the portcullis
+ *   at (41,1) for a party that came up stair 14 (E3 sets it just after the
+ *   move, which ends a chain here). TODO(E3-3): E3 also scatters something
+ *   at four squares of 38 (`FUN_1038_1185(x, y, 3)`, 10d8:1f2a).
+ * - TODO(E3-3): the others — towns 21, 31, 41, 46, 57,
  *   78/79, 82, 89, 90, 103–105, 107 and the 26-town jump table at
  *   10d8:2333 — as those towns are transcribed.
  */
@@ -32,6 +37,8 @@ import { PEDESTAL } from './slimePit';
 import { TROGLO_STAGE, TROGLO_WAR } from './castleTroglo';
 import { BELT_ALPHA, BELT_BETA, BELT_STAR } from './shiftingFloors';
 import { PANEL_DOORS, SOULS_FOUGHT } from './tinraya';
+import { WALLS_SIDE } from './dungeons';
+import { UP_STAIR_14, openChannels } from './rentarKeep';
 
 const SEG = 0x10d8;
 
@@ -55,6 +62,10 @@ export const ENTRY_SCRIPTS = new Map<number, EntryScript>([
   [33, (b) => [BELT_ALPHA, BELT_STAR].map((belt) =>
     b.ifFlagAtLeast(belt.flag, 1, belt.squares.map(([x, y]) => b.setTer(x, y, 249))))],
   [108, (b) => [b.ifFlagAtLeast(BELT_BETA, 1, [7, 8, 9, 10, 11, 12].flatMap((y) => [b.setTer(12, y, 248), b.setTer(13, y, 250)]))]],
+  // Not E3's: the Great Walls forget which end the party came in by.
+  [37, (b) => [b.setFlag(WALLS_SIDE, 0)]],
+  [64, (b) => openChannels(b)],
+  [38, (b) => [b.ifFlagAtLeast(UP_STAIR_14, 1, [b.setTer(41, 1, 141), b.setFlag(UP_STAIR_14, 0)])]],
   [36, (b) => [...clearedBy(0x1f3)(b), b.ifFlagAtLeast(SOULS_FOUGHT, 1, [
     ...PANEL_DOORS.map(([x, y]) => b.setTer(x, y, 141)), b.setTer(28, 7, 0x87), b.setTer(12, 32, 0x87),
   ])]],

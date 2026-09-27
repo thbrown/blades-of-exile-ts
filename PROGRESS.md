@@ -1323,6 +1323,31 @@ Notes for M2 implementer:
       `splitParty` shows its message itself and takes a `cancelled` branch.
     - `ledPanel` takes `closing` buttons (the alarm).
     - `try-spot.mjs` picks the first PC at a select-PC prompt.
+  - 2026-09-26: **the Great Walls** (37, `towns/dungeons.ts`) and **the
+    Keep of Rentar-Ihrno** (38 and 64, `towns/rentarKeep.ts`): **Exile III
+    can be won.** The ten channel levers below, Rentar-Ihrno and Erika's
+    duel, the reading crystals, the teleports, and the pedestal whose
+    Release, Power Up and Begin end the game (END_SCENARIO). Checked in the
+    UI with `try-spot.mjs 38 26` and every channel flag set.
+    - Town 64's entry opens the channels already pulled
+      (`FUN_10d8_239b`, rects at DGROUP 0x37f2); new step `rectReplace`
+      (squares of one terrain in a rect, found in the converted map).
+    - Party+0x12e2 is the party's outdoor zone column. The Great Walls send
+      the party out the far end only if it came in by the other; no node
+      can read the column, so a converter flag records which end column was
+      crossed first after entering (the entry script clears it).
+    - E3's pants (variety 22) get special class 222, for a secret in the
+      keep: a pair dropped at (17,58) opens the way to town 65.
+    - `FUN_1038_0282` erases the spot that ran (`onceSpot`, keyed by the
+      spot's own converter flag through `ScriptSource.spotFlag`).
+    - Erika (town 38, creature 14) has a death flag (`e3DeathFlag(1)`).
+    - **Gotcha: a vite dev server left running across `npm run e3` can
+      answer some scenario files with `index.html`** (a MapParseError on a
+      `.map` in the browser). Restart it.
+    - **Gotcha (zsh): `$F` holding several `--flag` arguments is not split**,
+      so `try-spot.mjs` sees one argument and sets nothing. Use an array:
+      `F+=(--flag 0x305=1)` and `"${F[@]}"`. `try-spot.mjs --show r,c` (or
+      `0xNNN`) prints a flag at the end.
   - Next: the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.
