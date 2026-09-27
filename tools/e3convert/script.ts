@@ -14,6 +14,7 @@
 import type { E3Dialog } from './ne';
 import { DamageType } from '../../src/data/monster';
 import { e3Event, e3Flag } from './flags';
+import type { E3ShopType } from './shops';
 
 export type Flag = [row: number, col: number];
 
@@ -90,6 +91,8 @@ export interface ScriptSource {
   spotFlag?: (id: number) => Flag;
   /** Where this place's spot `id` is (`FUN_10e0_07b7`), for scripts that test its square. */
   spotLoc?: (id: number) => { x: number; y: number } | undefined;
+  /** The engine's number for an E3 shop (`E3TalkConversion.shop`). */
+  shop?: (type: E3ShopType, first: number, last: number, title: string) => number;
 }
 
 export class SpecBuilder {
@@ -457,6 +460,20 @@ export class SpecBuilder {
     return (next) => this.node('gold', { ex1: [n, 0] }, next);
   }
 
+  /** `party.gold -= n` without a word (AFFECT_GOLD's take, which stops at 0). */
+  takeGold(n: number): Step {
+    return (next) => this.node('gold', { ex1: [n, 1] }, next);
+  }
+
+  /** `if (party.gold >= n)`, taking nothing (IF_HAS_GOLD with `ex2a` 0). */
+  ifGold(n: number, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-gold', { ex1: [n, yes], ex2: [0] }, no);
+    };
+  }
+
   food(n: number): Step {
     return (next) => this.node('food', { ex1: [n, 0] }, next);
   }
@@ -497,6 +514,28 @@ export class SpecBuilder {
   /** A reply that is a literal in E3's code (`strcpy` into the reply), not a string. */
   replyLiteral(seg: number, off: number): Step {
     return (next) => this.node('disp-msg', { msg: [this.text(this.src.exeString?.(seg, off) ?? '')] }, next);
+  }
+
+  /**
+   * `FUN_1020_0082(type, first, last, cost, title)`, BoE's `start_shop_mode`,
+   * called from a spot: `ENTER_SHOP` on the converted shop, `cost` its price
+   * level, the title an EXE string at `seg:off`.
+   */
+  shop(type: E3ShopType, first: number, last: number, cost: number, seg: number, off: number): Step {
+    return (next) => {
+      const title = this.src.exeString?.(seg, off) ?? '';
+      const id = this.src.shop?.(type, first, last, title);
+      if (id === undefined) throw new Error('no shops here: ScriptSource.shop is missing');
+      return this.node('start-shop', { ex1: [id, 0], ex2: [0, cost], msg: [this.text(title)] }, next);
+    };
+  }
+
+  /**
+   * `FUN_10c0_4652(x, y)`: outdoors, the party moves to `(x, y)` in the
+   * sector it stands in (OUT_MOVE_PARTY, whose coordinates are the same).
+   */
+  outMoveParty(x: number, y: number): Step {
+    return (next) => this.node('out-move-party', { ex1: [x, y] }, next);
   }
 
   /** `can_find_town[t] = 1`: town `t` shows on the map (or, `on` false, stops showing). */

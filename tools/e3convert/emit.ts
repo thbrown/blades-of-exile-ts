@@ -592,7 +592,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   // day stamps need.
   const talk = convertE3Talk(readE3Talk(strings), speakers, shopTables, E3_TOWN_COUNT, shops.length, foodBase, scen);
   const newDay = scen.dailyReset(DAILY_FLAGS, dailyPlot(scen));
-  shops.push(...talk.shops);
+  e3Src.shop = talk.shop;
   // Special items: a name and a description each, from string 1801.
   const specialItems = Array.from({ length: E3_SPECIAL_ITEMS }, (_, k) => {
     const item = makeSpecItem();
@@ -642,6 +642,8 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   write('debug.json', JSON.stringify(debug));
   // Last, since the places' scripts may add scenario strings and nodes.
   write('scenario.spec', scen.spec);
+  // Last, since the places' scripts can add shops of their own.
+  shops.push(...talk.shops);
   write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town), shops, specialItems, scen.strings, newDay));
   const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(read)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));

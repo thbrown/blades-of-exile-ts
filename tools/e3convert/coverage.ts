@@ -11,6 +11,7 @@
 import { readFileSync } from 'node:fs';
 import { findE3Dir, readE3Files } from './install';
 import { readNeResources, readStringTable } from './ne';
+import { E3_ZONES_WIDE } from './outdoor';
 import { readE3Talk } from './talk';
 import { TALK_SCRIPTS } from './towns/talkScripts';
 
@@ -34,7 +35,7 @@ const report = (label: string, spots: Spot[]) => {
   }
 };
 for (const [t, spots] of Object.entries(debug.towns)) report(`town ${t} ${townName(Number(t))}`, spots);
-for (const [z, spots] of Object.entries(debug.zones)) report(`zone ${z} (${Number(z) % 10},${Math.floor(Number(z) / 10)})`, spots);
+for (const [z, spots] of Object.entries(debug.zones)) report(`zone ${z} (${Number(z) % E3_ZONES_WIDE},${Math.floor(Number(z) / E3_ZONES_WIDE)})`, spots);
 
 const talk = readE3Talk(strings);
 const types = [...new Set(talk.nodes.filter((n) => n.type >= 100).map((n) => n.type))];

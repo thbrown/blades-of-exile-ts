@@ -172,6 +172,11 @@ export interface E3TalkConversion {
   shops: Shop[];
   /** The engine personality of each speaker, keyed `town:index`. */
   personalityOf: Map<string, number>;
+  /**
+   * The engine's number for an E3 shop, adding it to `shops` if new: for the
+   * specials that open one (`FUN_1020_0082` called from a spot).
+   */
+  shop: (type: E3ShopType, first: number, last: number, title: string) => number;
 }
 
 interface Context {
@@ -364,5 +369,8 @@ export function convertE3Talk(
     // Nobody speaks for it, but its words stay where E3 kept them.
     if (list.length === 0) emit(p, p - 1, [0, 0]);
   }
-  return { speeches, shops: ctx.shops, personalityOf };
+  return {
+    speeches, shops: ctx.shops, personalityOf,
+    shop: (type, first, last, title) => shopFor(ctx, type, first, last, title),
+  };
 }

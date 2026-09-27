@@ -1490,7 +1490,32 @@ Notes for M2 implementer:
       0's. Fixed addresses (`es:[0x8af]`) are the same flags folded.
     - Zone 5/1, Vilovsky's temple, raises **Alchemy** (+0x2e, skill 12)
       while its text says Mage Lore; kept.
-  - Next: zones 21–88 (246 spots), 35 talk scripts, and the demon plot's
+  - 2026-09-27: **`E3-SUSPECTED-BUGS.md`** lists what looks wrong in Exile
+    III itself and is kept, for a later fixing pass. Add to it whenever a
+    transcription keeps something odd, and point the site's comment at it.
+  - 2026-09-27: **zones 21–44** (`FUN_10a0_1595`, zone switch at
+    `10a0:2b1c` indexed by zone − 22; zones 21, 25, 26, 34, 35 and 43–44 have
+    no arm). Coverage: 1,267 done, 176 to go. Not tried in the UI. New:
+    - `stoneCircle` (`FUN_10c0_482d`, shared with zones 30, 32, 74 and two
+      later ones): `f(0xb41)` counts the altars knelt at and picks the boon;
+      it also filled zone 74's TODO.
+    - **Shops from specials**: `FUN_1020_0082(type, first, last, cost,
+      title)` is `start_shop_mode`, called from a spot. `b.shop()` emits
+      ENTER_SHOP; the shop comes from the talk converter's registry
+      (`E3TalkConversion.shop`, reached through `ScriptSource.shop`), so
+      `emit.ts` now appends the talk shops *after* the places are built.
+      Eleven more calls wait in zones 45–88.
+    - `outMoveParty` (`FUN_10c0_4652(x, y)`, OUT_MOVE_PARTY: sector-local
+      coordinates in both), `ifGold` (IF_HAS_GOLD, taking nothing),
+      `takeGold`.
+    - A party word below the flags, like `es:[0x6e]`, is a special item:
+      `(offset − 0xc) / 2` (`partySpecItem`).
+    - Gotcha: **the outdoor map is 9 sectors wide** (`E3_ZONES_WIDE`), so
+      zone z is `(z % 9, z / 9)`. `coverage.ts` labelled zones with 10, and
+      the zone doc comments had copied that; both fixed. The message block
+      is still `zone / 10 + 80`: that is E3's own arithmetic.
+    - TODO(E3-3): zone 23/2 tests `can_find_town[76]`, like zone 14/1.
+  - Next: zones 45–88 (176 spots), 35 talk scripts, and the demon plot's
     countdown. The talk types are listed by `listTalkScripts.ts`.
 
 ## Key references (do not lose)
