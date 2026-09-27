@@ -13347,3 +13347,56 @@ notes left open, now traced:
   page (`e3-08-job-board`, `e3-09-jobs-panel`).
 - Corpus unchanged after the port (1,231,440 draws, 51 of 87): everything
   is behind the flag, and the talk-start delivery is awaited.
+
+### E3's first sightings, ported (2026-09-27)
+
+A quest gap, found while mapping E3's journal: **the first-sighting events
+were never ported**, so the flags Anaximander's reports wait for
+(`towns/town21.ts`: 0xc83 slimes, 0xc86 roaches, 0xc88 troglodytes, 0xc89
+hill giants, 0xc8b golems, 0xc8d alien beasts) were never set by seeing one.
+E3's `draw_monsters` (`FUN_1060_032d`) calls `FUN_1060_0a1e(monster)` for
+every creature drawn in town or combat, and that says what the creature is,
+once per guard flag. BoE 1997's `check_if_monst_seen` (GUTILS.CPP:1034) is
+the same function with its cases taken out ("this rule has been changed").
+
+- The converter gives each plague monster OBoE's `<onsight>` special
+  (`see_spec`), one node per range (`tools/e3convert/towns/sightings.ts`).
+- OBoE only checks sightings in town (`play_ambient_sound`). E3 checks in
+  combat too, and slimes are mostly met in outdoor fights, so a new flag,
+  `monster-sightings` = `exile3`, adds a combat sweep
+  (`GameSession.seeMonstersInCombat`): after each action in a fight and as
+  an outdoor fight begins. It rolls no ambient sound, so it makes no draws.
+- Not ported: E3 also sets DGROUP 0x5cac–0x5cb0 for monsters 0x6d–0x72;
+  they are cleared at the top of every `draw_monsters`, so they look like
+  drawing state.
+
+### E3's events journal: found, not ported yet (2026-09-27)
+
+**Next session starts here.** E3 has an events journal: 120 entries of
+(entry, day) at party+0x7bb2/+0x7c2a, added by `FUN_1008_3780(entry)`,
+which prints "Something was added to your journal." Entry `e`'s text is
+string `5100 + e`; the dialog is 962, three to a page, "Day: %d". This is
+OBoE's `journal()`/`add_to_journal`/`event-journal.xml`/`journal_strs`
+exactly: vestigial E3 code that BoE never calls. OBoE's `fill_journal` also
+indexes `journal[i]` and never adds the page, so every page shows the first
+three; E3 pages correctly (`FUN_1008_3507`). Porting it needs:
+- `Party.journal` and OBoE's `JOURNAL` save pages; the dialog, replacing
+  the early return that prints "Nothing in your events journal.";
+- the converter's `<journal>` strings (5100 on, entries 1–0x22);
+- a way for a special to add an entry. No opcode does, in BoE or OBoE, so
+  it is an exile-js opcode. The obvious slot is 48 (the gap after
+  `STR_BUF_TO_SIGN`, inside GENERAL's range), which needs the range, the
+  opcode file and DIVERGENCES.md updated. Decide before starting.
+- The 33 call sites, entry pushed first (`nedis.py --all`, then grep
+  `call FUN_1008_3780`): talk scripts 1020:3062 (0x16), 3094 (0x17),
+  30c6 (0x18), 30f7 (0x19), 35b1 (5), 3772 (0x1f), 3920 (0x20), 3a1d (0x1a),
+  3d3d (0x1c), 4238 (0x21), 43d3 (0xf), 47aa (0x1e), 4991 (0x10), 49c4
+  (0x12); sightings 1060:0afa (4), 0b34 (9), 0b6e (7), 0ba8 (0xa), 0be2
+  (0xc), 0c1c (0xe); towns 1078:0f2a (2), 119f (0x11), 2367 (0x13), 29f5
+  (8), 3ba3 (0x22), 4e65 (0x19); 1088:162f (0x15); 10a8:1f76 (3); 10b8:0268
+  (0x14), 2eff (0xb); kill_monst 10c0:5373 (6), 53d5 (0x1b), 5714 (0xd).
+  Entries 1 and 0x1d are never added. Most already have a
+  `TODO(E3-3): journal entry` where they go.
+- E3 appends duplicates; OBoE's `add_to_journal` refuses an entry already
+  there with the same day. Check whether any site can fire twice.
+

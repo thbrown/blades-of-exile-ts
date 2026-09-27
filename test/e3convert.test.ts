@@ -38,6 +38,8 @@ import {
 } from '../src/game/e3Jobs';
 import { readE3JobTables } from '../tools/e3convert/jobs';
 import { loadSave, saveGame } from '../src/fileio/saveIo';
+import { SpecCtx, SpecCtxType } from '../src/game/specials/context';
+import { partyFlag } from '../tools/e3convert/script';
 
 const dir = findE3Dir();
 
@@ -234,6 +236,29 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     univ.party.age = Math.ceil((at + 1) / 4000) * 4000;
     e3JobsTick(session, at);
     expect(JSON.stringify(state.boards)).not.toBe(boards);
+  });
+
+  it('says what a plague monster is the first time the party sees one', async () => {
+    expect(scen.featureFlags['monster-sightings']).toBe('exile3');
+    // Every slime shares one sighting; an ordinary monster has none.
+    const slime = scen.scenMonsters[0x8a]!.seeSpec;
+    expect(slime).toBeGreaterThanOrEqual(0);
+    expect(scen.scenMonsters[0x8d]!.seeSpec).toBe(slime);
+    expect(scen.scenMonsters[1]!.seeSpec).toBe(-1);
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    const said: string[] = [];
+    session.attachSpecials(new Proxy({}, {
+      get: (_, k) => (k === 'message' ? (s: string) => { said.push(s); return Promise.resolve(); } : () => Promise.resolve(0)),
+    }) as never);
+    const party = session.univ.party;
+    // Anaximander's report waits on party+0xc83, which the sighting sets.
+    await session.runSpecial(SpecCtx.SEE_MONST, SpecCtxType.SCEN, slime, { x: 0, y: 0 });
+    expect(party.getSdf(...partyFlag(0xc83))).toBe(1);
+    expect(said).toHaveLength(1);
+    expect(said[0]).toMatch(/^This is very odd/);
+    // Once only.
+    await session.runSpecial(SpecCtx.SEE_MONST, SpecCtxType.SCEN, slime, { x: 0, y: 0 });
+    expect(said).toHaveLength(1);
   });
 
   it("has E3's monsters, with E3's own stats and sprites", () => {

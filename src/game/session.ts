@@ -795,6 +795,7 @@ export class GameSession {
     // on to the PC behind her.
     if (isCombat(this.mode) && this.mode !== GameMode.LOOK_COMBAT) {
       this.playAmbientSound();
+      await this.seeMonstersInCombat();
       // The C++'s own guard (:1946): a wiped party ends the fight instead of
       // stepping it. `checkGameOver` in the caller's `finally` is this port's
       // end of that path.
@@ -903,6 +904,7 @@ export class GameSession {
     // last line, and the same call `debug_fight_encounter` makes.
     setUpCombat(this);
     this.onRedraw?.();
+    await this.seeMonstersInCombat();
     return true;
   }
 
@@ -5059,6 +5061,27 @@ export class GameSession {
       ? this.univ.party.summons[monstNum - 10000]?.ambientSound ?? -1
       : this.univ.scenario.scenMonsters[monstNum]?.ambientSound ?? -1;
     if (sound > 0 && this.univ.rng.getRan(1, 1, 100) < 10) this.sound?.play(sound);
+  }
+
+  /**
+   * Exile III counts a creature as seen whenever it is drawn, in combat as in
+   * town (`FUN_1060_032d`); OBoE's sweep is the town one below. With the
+   * scenario flag `monster-sightings` = `exile3` (an exile-js extension) a
+   * fight sweeps too, after each action and as an outdoor fight begins. It
+   * fires `see_spec` as `check_if_monst_seen` does, but rolls no ambient
+   * sound, so it makes no draws.
+   */
+  async seeMonstersInCombat(): Promise<void> {
+    if (this.univ.scenario.featureFlags['monster-sightings'] !== 'exile3') return;
+    const town = this.univ.town;
+    if (!town) return;
+    for (const m of town.monsters) {
+      if (!m.isAlive || m.number >= 10000 || this.univ.party.mSeen.has(m.number)) continue;
+      if (!this.partyCanSeeMonst(m)) continue;
+      this.univ.party.mSeen.add(m.number);
+      const seeSpec = this.univ.scenario.scenMonsters[m.number]?.seeSpec ?? -1;
+      if (seeSpec > -1) await this.runSpecial(SpecCtx.SEE_MONST, SpecCtxType.SCEN, seeSpec, m.curLoc);
+    }
   }
 
   /**

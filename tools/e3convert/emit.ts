@@ -8,6 +8,7 @@
  * are later milestones, marked `TODO(E3-2)` / `TODO(E3-3)` where they would go.
  */
 
+import { sightingScripts } from './towns/sightings';
 import { e3JobStrings } from './jobs';
 import { E3_JOB_TARGET_PERSONALITY } from '../../src/game/e3Jobs';
 import { encodePng } from './png';
@@ -481,6 +482,7 @@ function scenarioXml(
         <outdoor-arena>exile3</outdoor-arena>
         <road-joins>${roadJoins.join(',')}</road-joins>
         <job-boards>exile3:${jobBase}</job-boards>
+        <monster-sightings>exile3</monster-sightings>
     </feature-flags>
     <text>
         <teaser>The surface world is dying. Find out why.</teaser>
@@ -588,7 +590,6 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     mon.pictureNum = monsterArt.pics[n]!;
     return mon;
   });
-  write('monsters.xml', monstersXml(monsters));
   // Items: E3's table through the legacy importer, pictured from one custom
   // sheet after the monsters'.
   const itemSheetNum = terrainSheets.length + monsterArt.sheets.length;
@@ -602,6 +603,15 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   const noteBase = foodBase + shopTables.food.length;
   const e3Abilities = [...readE3ItemAbilities(files.exe), ...shopTables.food.map(() => 0), ...E3_NOTE_ITEMS.map(([, a]) => a)];
   scen = new SpecBuilder(e3Src, (label) => Math.max(0, BASIC_BUTTONS.indexOf(label)));
+  // First sightings (towns/sightings.ts): each plague monster's onsight node.
+  // A range of monsters shares one script, so one node.
+  const sightNodes = new Map<unknown, number>();
+  for (const [m, steps] of sightingScripts(scen)) {
+    if (!sightNodes.has(steps)) sightNodes.set(steps, scen.compile(steps));
+    const mon = monsters[m];
+    if (mon) mon.seeSpec = sightNodes.get(steps)!;
+  }
+  write('monsters.xml', monstersXml(monsters));
   const noteNodes = new Map<number, number>();
   const items = [...e3Items, ...shopTables.food, ...E3_NOTE_ITEMS.map(([k]) => e3Items[k]!)].map((old, k) => {
     const it = convertItem(old);
