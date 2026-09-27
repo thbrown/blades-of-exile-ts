@@ -1476,7 +1476,21 @@ Notes for M2 implementer:
       (`68:5`): use it rather than writing another.
     - Spots on impassable squares (chests, shelves) fire on Use, not on a
       step; `try-spot.mjs --use` is the way to test them.
-  - Next: the zones (312 spots), 35 talk scripts, and the demon plot's
+  - 2026-09-27: **zones 0–20** (`towns/zones.ts`), the arms of
+    `FUN_10a0_0062`'s switch at `10a0:1501`. Not tried in the UI:
+    `try-spot.mjs` drives town spots only. New builders `ifTrait` (IF_TRAIT,
+    for zone 14's Woodsman test, `FUN_10b0_a3e3`), `ifTakeFood` and
+    `takeAllFood` (zone 9's gremlins; food is the dword at party+8).
+    `onceEncounter` with message 0 now shows none. Coverage: 1,197 done, 246
+    to go. TODO(E3-3): zone 14/1 tests `can_find_town[32]`, which no node
+    can.
+    - Gotcha: **in a zone arm the flag address is `zone*10 + id + 0x854`,
+      computed from `si` with `imul ax, ax, 0xa`** — a filter that drops
+      `imul` (as the town-era `d2.sh` did) turns zone 9's spots into zone
+      0's. Fixed addresses (`es:[0x8af]`) are the same flags folded.
+    - Zone 5/1, Vilovsky's temple, raises **Alchemy** (+0x2e, skill 12)
+      while its text says Mage Lore; kept.
+  - Next: zones 21–88 (246 spots), 35 talk scripts, and the demon plot's
     countdown. The talk types are listed by `listTalkScripts.ts`.
 
 ## Key references (do not lose)

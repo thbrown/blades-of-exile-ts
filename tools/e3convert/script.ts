@@ -449,7 +449,7 @@ export class SpecBuilder {
    */
   onceEncounter(flag: Flag, block: number, a: number, b: number, group: number): Step {
     return (next) => this.node('once-out-encounter', {
-      sdf: flag, msg: [this.e3(block, a), b > 0 ? this.e3(block, b) : -1], ex1: [group],
+      sdf: flag, msg: [a > 0 ? this.e3(block, a) : -1, b > 0 ? this.e3(block, b) : -1], ex1: [group],
     }, next);
   }
 
@@ -774,6 +774,32 @@ export class SpecBuilder {
   /** The party learns alchemy recipe `k` (`party.alchemy[k] = 1`, party+0x831e). */
   learnAlchemy(k: number): Step {
     return (next) => this.node('alchemy', { ex1: [k, 0] }, next);
+  }
+
+  /**
+   * `if (a living PC has trait t)`, as `FUN_10b0_a3e3` counts Woodsman (the
+   * trait byte at +0x712): IF_TRAIT with a count of at least one.
+   */
+  ifTrait(t: number, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-trait', { ex1: [t, yes], ex2: [1, 2] }, no);
+    };
+  }
+
+  /** `if (party.food >= n) { food -= n; then } else { otherwise }`, silently. */
+  ifTakeFood(n: number, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq([(after) => this.node('food', { ex1: [n, 1] }, after), ...then])(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-food', { ex1: [n, yes] }, no);
+    };
+  }
+
+  /** `party.food = 0`: AFFECT_FOOD takes the most the engine keeps. */
+  takeAllFood(): Step {
+    return (next) => this.node('food', { ex1: [25000, 1] }, next);
   }
 
   /** `if (FUN_10b0_302f() >= value)`: the living PCs' levels, added up. */
