@@ -53,6 +53,7 @@ const SPLIT: Flag = e3Flag(0, 0xc64 - 0x84);
 /** The engine's `Status.DISEASE`, the `ex1c` of an AFFECT_STATUS node. */
 const STATUS_DISEASE = 7;
 const STATUS_POISON = 2;
+const STATUS_DUMB = 9;
 /** The engine's `SpellPat.SQUARE`, a 3×3 block. */
 export const PAT_SQUARE = 1;
 
@@ -554,6 +555,24 @@ export class SpecBuilder {
   /** `FUN_10b0_933f(pc, n)` for every PC: BoE 1997's `poison_pc`, the engine's own. */
   poisonAll(n: number): Step {
     return (next) => this.node('status', { ex1: [n, 1, STATUS_POISON] }, next);
+  }
+
+  /**
+   * `FUN_10b0_16e6(pc, n)`: BoE 1997's `dumbfound_pc`, the target (every PC
+   * unless one is picked) dumbfounded by `n`, with the engine's saving roll.
+   */
+  dumbfound(n: number): Step {
+    return (next) => this.node('status', { ex1: [n, 1, STATUS_DUMB] }, next);
+  }
+
+  /**
+   * `switch (get_ran(1, 0, n - 1))` over `cases` (fewer than `n` leave the
+   * rest doing nothing): case k with odds 1 in n − k once the ones before it
+   * missed, so each is equally likely.
+   */
+  randomCase(n: number, cases: Step[][]): Step {
+    return cases.reduceRight<Step>((otherwise, then, k) =>
+      this.ifChance(Math.round(100 / (n - k)), then, [otherwise]), (next) => next);
   }
 
   /** Every PC's disease cleared (E3 zeroes the status word directly). */

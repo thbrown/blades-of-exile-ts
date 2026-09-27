@@ -12,11 +12,12 @@ import { partyFlag as f, partySpecItem, type SpecBuilder, type Step } from '../s
 import { SLOAN_RING, RING_HIDDEN } from './sharimik';
 import { ANAMA, ANAMA_RINGS, IRVINE_ASKED, IRVINE_PARCEL } from './shayder';
 import { OSTOTH_TALK } from './newCotra';
+import { HAWKE_DAY } from './dungeons2';
 
 /** Flags a new day clears (`e3DailyFlag`), for E3's day stamps. */
 export const LEVY_PAID = e3DailyFlag(0);
 export const ELISA_FED = e3DailyFlag(1);
-export const DAILY_FLAGS = [LEVY_PAID, ELISA_FED];
+export const DAILY_FLAGS = [LEVY_PAID, ELISA_FED, HAWKE_DAY];
 /** A scratch flag of the converter's for a count E3 keeps on the stack. */
 const AGROD_SOLD: [number, number] = [291, 10];
 

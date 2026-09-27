@@ -1403,9 +1403,37 @@ Notes for M2 implementer:
     which read party+0x12e9 (meaning not pinned). Coverage: 941 spots done,
     502 to go. Left: towns 90–111, the villages (120–177), the zones, 35
     talk scripts, and the demon plot's countdown.
-  - Next: the zones
-    between them, and Marish (128). The talk types are listed by
-    `listTalkScripts.ts`.
+  - 2026-09-27: **towns 90–111** (`towns/dungeons2.ts`), with the two
+    ferry switches the villages share (`FUN_10b8_153b` for 92, 127, 129,
+    131, 132, 135; `FUN_10b8_1f49` for 98, 142–145): the Agate Tower's
+    grounds, the Anama Temple's library, the Point of Contemplation, the
+    lighthouse, Shayder's sewers, the Dryad Grove, the Troglo Temple's lower
+    level, Hawke's Manse (a daily chore, `HAWKE_DAY` in `DAILY_FLAGS`), the
+    Barrier Cavern (which starts the troglodyte–giant war, 0xc8a), the Lairs
+    of Athron and Khoth, the two aeries, the Vahnatai home and crypt, and
+    the House on the Hill. Coverage: 1,042 spots done, 401 to go.
+    - **Done without Ghidra**: this session's container could not download
+      it. `tools/e3convert/ghidra/nedis.py` (Python + capstone) disassembles
+      a function by its Ghidra address with the NE relocations applied (far
+      calls print as `FUN_SSSS_OOOO`) and prints its jump tables. It was
+      checked against town 89's existing transcription. It does not
+      decompile: see the Ghidra README for when that matters.
+    - Memory, pinned from the disassembly: town terrain is segment 1160 at
+      `0x2abe + 64x + y` (stride 64 whatever the town's size); the party
+      record's age is +0 (a long). `FUN_10d8_3d5b(kind, row, col)` removes
+      every creature of `kind` if flag `(row, col)` is set;
+      `FUN_10b0_16e6(pc, n)` is `dumbfound_pc`; `FUN_1038_1185(x, y, type)`
+      is a decal (`make_sfx`), skipped.
+    - New steps: `dumbfound`, `randomCase` (`switch (get_ran(1, 0, n-1))`).
+    - TODO(E3-3): the Dryad Grove's ogre's health (creature +9), and the
+      Barrier Cavern's day stamp at party+0x8501.
+    - Gotcha: Playwright here wanted `chromium_headless_shell-1228`, and the
+      image has 1194. A directory of that name linking 1194's `chrome-linux`
+      (with `chrome-headless-shell` → `headless_shell`) made `try-spot.mjs`
+      run; it is outside the repo.
+  - Next: the villages' own switches (120–177; FORMATS.md lists their
+    handlers), the zones, 35 talk scripts, and the demon plot's countdown.
+    The talk types are listed by `listTalkScripts.ts`.
 
 ## Key references (do not lose)
 

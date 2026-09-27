@@ -261,7 +261,13 @@ arguments of far calls, so read them from the disassembly (`Disasm.java`).
 | `FUN_1070_0623(n, redraw)` | pay `n` gold; false if the party has too little |
 | `FUN_10b0_183a(pc, n)` | BoE 1997's `disease_pc` (save against level, frailty, sound 66) |
 | `FUN_1048_011f(a, b)` | `max(a, b)` |
+| `FUN_10d8_3d5b(kind, row, col)` | if flag `(row, col)` is set, every creature of `kind` is gone |
+| `FUN_10b0_16e6(pc, n)` | BoE 1997's `dumbfound_pc` |
+| `FUN_1038_1185(x, y, type)` | a decal on the floor (`make_sfx`) |
 | `FUN_10d0_4c8d(far str)` | a line in the text area; a script's literal is in its own code segment (`PUSH CS; PUSH off`) |
+
+Town terrain is in segment 1160 at `0x2abe + 64x + y`, a stride of 64
+whatever the town's size.
 
 The PC record (stride 0x722, PC `i` at `i*0x722 - 0x7ada` in segment 1158) is
 BoE's `pc_record_type`: `main_status` (+0), `name[20]`, `skills[30]` (+0x16;

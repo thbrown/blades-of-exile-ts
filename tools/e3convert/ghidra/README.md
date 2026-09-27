@@ -37,3 +37,28 @@ never reached that code, the script walks back to the nearest Win16 far
 prologue (`8c d0 90 45 55 8b ec`) and creates the function itself. The bytes
 to search for are usually `68 lo hi`, i.e. `push imm16` of a dialog or string
 ID taken from the resource extractors (see `../FORMATS.md`).
+
+## Without Ghidra: `nedis.py`
+
+Where Ghidra can't be installed (a cloud container whose network policy blocks
+its download), `nedis.py` disassembles EXILE3.EXE with capstone
+(`pip install capstone`):
+
+```
+python3 tools/e3convert/ghidra/nedis.py 10b8:0b0c      # one function, by Ghidra address
+python3 tools/e3convert/ghidra/nedis.py --table 10b8:0d8b 18
+```
+
+It applies the NE relocations, so far calls print under Ghidra's names
+(`call FUN_1008_37de`) and segment fixups say which segment (`; seg 1158` is
+the party record, `1160` the current town, `1178` DGROUP). Jump tables after
+a `cmp bx, N; jmp word ptr cs:[bx + T]` are printed at the end, indexed by
+`bx / 2` (the handlers `dec bx` first, so index `k` is spot `k + 1`).
+
+That covers the town and zone switches, which were always read from the
+disassembly anyway (the decompiler drops far calls' arguments). What it
+can't do is Ghidra's other job: finding code. There is no decompiled
+`exile3.c` to grep, no cross-references, and no function list beyond the
+prologue scan. For the long, stateful code still to do — the demon plot's
+countdown, the turn code (`FUN_1010_5889`), the job bank — run Ghidra where
+it installs and keep `project/exile3.c` beside the scripts.
