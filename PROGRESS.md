@@ -1308,6 +1308,21 @@ Notes for M2 implementer:
     - `show.ts xSEG:OFF` prints a script's literal.
     - Level 3 (town 60, the pylon that needs all four spires down) and
       the basement (108) too.
+  - 2026-09-26: **Blackcrag Fortress** (34, in the new `towns/dungeons.ts`
+    for small places) and **the Keep of Tinraya** (35–36,
+    `towns/tinraya.ts`): Rentar-Ihrno's cell, its per-turn countdown (food
+    runs out, then a voice), the one-PC teleporter out, the cell panel of
+    lettered doors, and the Crystal Souls. Town 36's entry script.
+    - `FUN_1018_9a2b` (the damage codes) confirmed: fire 50–79, cold 90–119,
+      magic 130–159, as 1997. New step `e3Boom(n)` for `FUN_1018_99f2`.
+    - `FUN_1090_03f3` is `create_wand_monst` (`wanderingMonster`),
+      `FUN_1070_09e1(n)` takes food (`takeFood`), `FUN_1070_3301` asks for
+      a PC (`choosePc`).
+    - **E3's split flag is party+0xc64**: `splitParty`/`reuniteParty` keep
+      it, and `ifSplit` reads it. A split that happens ends the chain, so
+      `splitParty` shows its message itself and takes a `cancelled` branch.
+    - `ledPanel` takes `closing` buttons (the alarm).
+    - `try-spot.mjs` picks the first PC at a select-PC prompt.
   - Next: the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.

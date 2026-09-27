@@ -18,6 +18,8 @@
  * - The Tower of Shifting Floors turns its belts as its control panel left
  *   them (10d8:1d0f): level 2 (33) by Belt Alpha and Belt Star, the
  *   basement (108) by Belt Beta.
+ * - Under Tinraya (36), after the Crystal Souls, has every door of the
+ *   cell panel and both rune doors open (10d8:1ec4).
  * - TODO(E3-3): the others — towns 21, 31, 36, 38, 41, 46, 57, 64,
  *   78/79, 82, 89, 90, 103–105, 107 and the 26-town jump table at
  *   10d8:2333 — as those towns are transcribed.
@@ -29,6 +31,7 @@ import { ANAMA } from './shayder';
 import { PEDESTAL } from './slimePit';
 import { TROGLO_STAGE, TROGLO_WAR } from './castleTroglo';
 import { BELT_ALPHA, BELT_BETA, BELT_STAR } from './shiftingFloors';
+import { PANEL_DOORS, SOULS_FOUGHT } from './tinraya';
 
 const SEG = 0x10d8;
 
@@ -52,6 +55,9 @@ export const ENTRY_SCRIPTS = new Map<number, EntryScript>([
   [33, (b) => [BELT_ALPHA, BELT_STAR].map((belt) =>
     b.ifFlagAtLeast(belt.flag, 1, belt.squares.map(([x, y]) => b.setTer(x, y, 249))))],
   [108, (b) => [b.ifFlagAtLeast(BELT_BETA, 1, [7, 8, 9, 10, 11, 12].flatMap((y) => [b.setTer(12, y, 248), b.setTer(13, y, 250)]))]],
+  [36, (b) => [...clearedBy(0x1f3)(b), b.ifFlagAtLeast(SOULS_FOUGHT, 1, [
+    ...PANEL_DOORS.map(([x, y]) => b.setTer(x, y, 141)), b.setTer(28, 7, 0x87), b.setTer(12, 32, 0x87),
+  ])]],
   [28, (b) => [
     b.ifFlagAtLeast(TROGLO_STAGE, 7, [b.makeTownHostile(), b.ifFlagEq(TROGLO_WAR, 0, [b.setTer(37, 53, 108), b.setTer(38, 53, 108)])]),
     b.ifFlagAtLeast(TROGLO_STAGE, 2, [b.setTer(52, 51, 101)]),

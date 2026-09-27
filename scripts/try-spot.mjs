@@ -130,6 +130,14 @@ for (let k = 0; k < 30; k++, n++) {
   }
   await page.screenshot({ path: `${SHOTS}/try-${town}-${spot}-${n}.png` });
   const want = answers[0];
+  // A select-PC prompt (select-pc.xml): the first PC's button.
+  const isSelectPc = await page.evaluate(() => window.__dialogs.active.def.byName.has('pick1'));
+  if (isSelectPc) {
+    console.log(`DIALOG ${n}: ${d.text.join(' | ').slice(0, 300)}\n  -> pick1`);
+    await press('pick1');
+    await page.waitForTimeout(500);
+    continue;
+  }
   const pick = d.buttons.find((b) => b.label === want)
     ?? (answers.length === 0 ? d.buttons.find((b) => DEFAULT_YES.includes(b.label)) : undefined);
   if (pick && d.buttons.length > 1) {

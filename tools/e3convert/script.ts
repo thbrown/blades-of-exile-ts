@@ -12,6 +12,7 @@
  */
 
 import type { E3Dialog } from './ne';
+import { DamageType } from '../../src/data/monster';
 import { e3Event, e3Flag } from './flags';
 
 export type Flag = [row: number, col: number];
@@ -45,6 +46,9 @@ const E3_BUTTONS = [
   '17', 'Push', 'Pray', 'Wait', '', '', 'Delete', 'Graphic', 'Create', 'Give',
   'Destroy', 'Pay', 'Free', 'Next Tip', 'Touch',
 ];
+
+/** E3's split-party flag, party+0xc64 (`FUN_10e0_0806` sets it). */
+const SPLIT: Flag = e3Flag(0, 0xc64 - 0x84);
 
 /** The engine's `Status.DISEASE`, the `ex1c` of an AFFECT_STATUS node. */
 const STATUS_DISEASE = 7;
@@ -641,6 +645,24 @@ export class SpecBuilder {
     return (next) => this.node('spell-pat-boom', { ex1: [-1, -1, pattern], ex2: [type, dice, 1] }, next);
   }
 
+  /**
+   * `FUN_1018_99f2(spot, n)`: `place_spell_pattern(3×3, spot, n + 50)`. E3
+   * reads the code as 1997's does (`FUN_1018_9a2b`): 50–79 is `code - 50`
+   * d6 of fire, 90–119 cold and 130–159 magic.
+   */
+  e3Boom(n: number): Step {
+    const code = n + 50;
+    const [type, dice] = code < 80 ? [DamageType.FIRE, code - 50] : code < 120 ? [DamageType.COLD, code - 90]
+      : [DamageType.MAGIC, code - 130];
+    if (dice < 0 || code >= 160) throw new Error(`E3 boom ${n} is outside 1997's codes`);
+    return this.patternBoom(PAT_SQUARE, type, dice);
+  }
+
+  /** TOWN_CREATE_WANDERING: `FUN_1090_03f3`, BoE 1997's `create_wand_monst`. */
+  wanderingMonster(): Step {
+    return (next) => this.node('make-wandering', {}, next);
+  }
+
   /** E3's horse `k` becomes the party's (its `property` byte cleared). */
   giveHorse(k: number): Step {
     const n = this.src.horse?.(k) ?? k;
@@ -752,9 +774,10 @@ export class SpecBuilder {
    * action, and 0 leaves. The prompt is built from the dialog's own labels
    * in the order of their control ids, or from `labels` (the converter's
    * words) where the dialog's don't name each button. `scratch` holds the
-   * answer.
+   * answer. A button in `closing` (1-based) runs its action and closes the
+   * panel, as E3's do by clearing the dialog's loop flag.
    */
-  ledPanel(id: number, actions: Step[][], scratch: Flag, labels?: string[]): Step {
+  ledPanel(id: number, actions: Step[][], scratch: Flag, labels?: string[], closing: number[] = []): Step {
     const d = this.src.dialogs.get(id);
     if (!d) throw new Error(`E3 dialog ${id} not found`);
     const texts = d.controls.filter((c) => c.text && !/^\d+_\d+$/.test(c.text)).sort((a, b) => a.id - b.id);
@@ -766,7 +789,7 @@ export class SpecBuilder {
       if (m === undefined) throw new Error('ledPanel needs ScriptSource.scenString');
       const ask = this.reserve();
       const again: Step = () => ask;
-      const chosen = this.switchFlag(scratch, [[], ...actions.map((a) => [...a, again])])(next);
+      const chosen = this.switchFlag(scratch, [[], ...actions.map((a, k) => (closing.includes(k + 1) ? a : [...a, again]))])(next);
       this.fill(ask, 'if-num-response', { sdf: scratch, msg: [m, 0, actions.length] }, chosen);
       return ask;
     };
@@ -881,15 +904,24 @@ export class SpecBuilder {
 
   /**
    * `FUN_10e0_0806(x, y)`: one PC (the engine asks which) goes alone to
-   * `(x, y)`, BoE's TOWN_SPLIT_PARTY. It refuses the step.
+   * `(x, y)`, BoE's TOWN_SPLIT_PARTY. It refuses the step. The node's own
+   * message, `msg`, shows only if someone went; a split that happened ends
+   * the chain, and a cancelled one runs `cancelled`.
    */
-  splitParty(x: number, y: number): Step {
-    return (next) => this.node('split-party', { ex1: [x, y], ex2: [10] }, next);
+  splitParty(x: number, y: number, cancelled: Step[] = [], msg?: [block: number, i: number]): Step {
+    return this.seq([this.setFlag(SPLIT, 1), (next) => this.node('split-party', {
+      ex1: [x, y], ex2: [10], ...(msg ? { msg: [this.e3(msg[0], msg[1])] as [number] } : {}),
+    }, this.seq([this.setFlag(SPLIT, 0), ...cancelled])(next))]);
+  }
+
+  /** `if (party+0xc64)`: the party is split (E3's own flag, which the split steps keep). */
+  ifSplit(then: Step[], otherwise: Step[] = []): Step {
+    return this.ifFlagAtLeast(SPLIT, 1, then, otherwise);
   }
 
   /** `FUN_10e0_0907`: the party is whole again where it split (TOWN_REUNITE_PARTY). */
   reuniteParty(): Step {
-    return (next) => this.node('unite-party', { ex1: [10] }, next);
+    return this.seq([this.setFlag(SPLIT, 0), (next) => this.node('unite-party', { ex1: [10] }, next)]);
   }
 
   /** The engine's item number for E3's `item` made readable with `ability` (`E3_NOTE_ITEMS`). */
@@ -902,6 +934,38 @@ export class SpecBuilder {
   /** `FUN_1070_18fd`: item `item` (the engine's number) lies at `(x, y)` (TOWN_PLACE_ITEM). */
   placeItem(x: number, y: number, item: number): Step {
     return (next) => this.node('place-item', { ex1: [x, y], ex2: [item, 0] }, next);
+  }
+
+  /**
+   * `FUN_1070_3301(1, …)`: a living PC chosen by the player becomes the
+   * target of what follows (SELECT_TARGET, mode 1); cancelling runs
+   * `cancelled` instead.
+   */
+  choosePc(then: Step[], cancelled: Step[] = []): Step {
+    return (next) => {
+      const no = this.seq(cancelled)(next);
+      return this.node('select-pc', { ex1: [1, no] }, this.seq(then)(next));
+    };
+  }
+
+  /** The target is poisoned by `n` (AFFECT_STATUS, with the engine's saving roll), or cured by `-n`. */
+  poison(n: number): Step {
+    return (next) => this.node('status', { ex1: [Math.abs(n), n > 0 ? 1 : 0, STATUS_POISON] }, next);
+  }
+
+  /**
+   * Creatures in slots `slots` are gone (E3 clears their `active`). The
+   * engine removes by kind, so this nukes each slot's kind: right where no
+   * other creature of that kind is in the town.
+   */
+  removeCreatureSlots(slots: number[]): Step {
+    const kinds = [...new Set(slots.map((k) => this.src.creatures?.[k]?.number ?? 0))].filter((n) => n > 0);
+    return this.seq(kinds.map((n) => this.removeCreatures(n)));
+  }
+
+  /** `FUN_1070_09e1(n, 1)`: the party loses `n` food (down to 0), silently. */
+  takeFood(n: number): Step {
+    return (next) => this.node('food', { ex1: [n, 1] }, next);
   }
 
   /** Every PC's spell points go to 0 (E3 writes `cur_sp` directly). */

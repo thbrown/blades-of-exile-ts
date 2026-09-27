@@ -34,6 +34,8 @@ import { filthFactory } from './towns/filthFactory';
 import { castleTroglo } from './towns/castleTroglo';
 import { cavesOfGiants } from './towns/cavesOfGiants';
 import { shiftingFloors } from './towns/shiftingFloors';
+import { DUNGEON_SCRIPTS } from './towns/dungeons';
+import { tinraya } from './towns/tinraya';
 import { sharimik, SHARIMIK_DEATH_FLAGS } from './towns/sharimik';
 import { ZONE_SCRIPTS } from './towns/zones';
 import { DAILY_FLAGS } from './towns/talkScripts';
@@ -60,6 +62,8 @@ const TOWN_SCRIPTS = new Map<number, PlaceScript>([
   [26, filthFactory(26)], [27, filthFactory(27)],
   [28, castleTroglo(28)], [29, castleTroglo(29)],
   [30, cavesOfGiants(30)], [31, cavesOfGiants(31)],
+  ...DUNGEON_SCRIPTS,
+  [35, tinraya(35)], [36, tinraya(36)],
   [32, shiftingFloors(32)], [33, shiftingFloors(33)], [60, shiftingFloors(60)], [108, shiftingFloors(108)],
 ]);
 
