@@ -15,6 +15,8 @@
 //   --answer a,b    button labels to press, dialog by dialog; anything else
 //                   is dismissed with Enter (default: Yes/Take/Climb/Pray…,
 //                   whichever is there)
+//   --number n      the answer to a number prompt (repeatable, in order)
+//   --wait n        then pass n turns (Space), answering what comes up
 //   --use           use the square from beside it (the U key) instead
 //   --run           run the spot's node instead of stepping onto it
 //
@@ -111,10 +113,21 @@ await row.locator(`button:text("${how}")`).click();
 await page.waitForTimeout(700);
 
 // Answer whatever comes up.
+const numbers = all('number');
 let n = 0;
-for (; n < 30; n++) {
+const answerAll = async () => {
+for (let k = 0; k < 30; k++, n++) {
   const d = await dialog();
   if (!d) break;
+  const isNum = await page.evaluate(() => window.__dialogs.active.def.byName.has('number'));
+  if (isNum && numbers.length > 0) {
+    const v = numbers.shift();
+    await page.evaluate((v) => window.__dialogs.active.setNum('number', Number(v)), v);
+    console.log(`DIALOG ${n}: ${d.text.join(' | ').slice(0, 300)}\n  -> ${v}`);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(500);
+    continue;
+  }
   await page.screenshot({ path: `${SHOTS}/try-${town}-${spot}-${n}.png` });
   const want = answers[0];
   const pick = d.buttons.find((b) => b.label === want)
@@ -128,6 +141,13 @@ for (; n < 30; n++) {
     await page.keyboard.press('Enter');
   }
   await page.waitForTimeout(500);
+}
+};
+await answerAll();
+for (let t = Number(opt('wait') ?? 0); t > 0; t--) {
+  await page.keyboard.press('Space');
+  await page.waitForTimeout(60);
+  if (await dialog()) await answerAll();
 }
 await page.screenshot({ path: `${SHOTS}/try-${town}-${spot}-end.png` });
 const after = await page.evaluate((from) => {

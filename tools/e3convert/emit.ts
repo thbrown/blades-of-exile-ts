@@ -29,6 +29,7 @@ import { gale } from './towns/gale';
 import { ENTRY_SCRIPTS } from './towns/entry';
 import { slimePit } from './towns/slimePit';
 import { towerOfMagi } from './towns/towerOfMagi';
+import { filthFactory } from './towns/filthFactory';
 import { sharimik, SHARIMIK_DEATH_FLAGS } from './towns/sharimik';
 import { ZONE_SCRIPTS } from './towns/zones';
 import { DAILY_FLAGS } from './towns/talkScripts';
@@ -52,6 +53,7 @@ const TOWN_SCRIPTS = new Map<number, PlaceScript>([
   ...[16, 17, 18, 19].map((t): [number, PlaceScript] => [t, gale(t)]),
   [22, slimePit(22)], [23, slimePit(23)],
   [24, towerOfMagi(24)], [25, towerOfMagi(25)],
+  [26, filthFactory(26)], [27, filthFactory(27)],
 ]);
 
 /** E3's special items: strings 1801 on, and the engine's limit too. */
@@ -93,6 +95,12 @@ function specialXml(t: E3TerrainType): string {
         </special>`;
 }
 
+/**
+ * Terrains that turn into one another: E3's lever (`FUN_10e0_0a49` flips 243
+ * and 244), which BoE's TOWN_LEVER does through `transform`.
+ */
+const TRANSFORM = new Map<number, number>([[243, 244], [244, 243]]);
+
 function terrainXml(types: E3TerrainType[]): string {
   const out = [XML_HEAD, '<terrains boes="2.0.0">\n'];
   types.forEach((t, id) => {
@@ -102,7 +110,7 @@ function terrainXml(types: E3TerrainType[]): string {
         <pic>${pic}</pic>
         <map>${pic}</map>
         <blockage>${BLOCKAGE[t.blockage] ?? 'none'}</blockage>
-        <transform>${id}</transform>
+        <transform>${TRANSFORM.get(id) ?? id}</transform>
         <fly>false</fly>
         <boat>${t.boat}</boat>
         <ride>${t.blockage < 3}</ride>
@@ -454,6 +462,10 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
       return scen.text(text);
     },
     horse: (k) => horseNumber[k] ?? -1,
+    scenNode: (build) => {
+      if (!scen) throw new Error('scenario nodes are not ready');
+      return build(scen);
+    },
     exeString: (seg, off) => {
       const bytes = readNeSegment(files.exe, (seg - 0x1000) / 8 + 1);
       const end = bytes.indexOf(0, off);

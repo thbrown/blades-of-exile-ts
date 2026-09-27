@@ -2020,6 +2020,34 @@ describe("Exile 3's per-PC scripts", () => {
       .toEqual([[0, 2], [0, 5], [0, 4], [0, 7], [0, 2], [0, 7]]);
     expect(univ.party.pcs.map((pc, i) => pc.maxSp - sp[i]!)).toEqual([6, 6, 6, 6, 6, 6]);
   });
+
+  it('halves the food, as the Filth Factory\'s roaches do', async () => {
+    const b = new SpecBuilder({ strings: new Map(), dialogs: new Map() }, () => 0);
+    const bits = Array.from({ length: 15 }, (_, k): [number, number] => [291, 20 + k]);
+    const entry = b.compile([b.halveFood(bits, [291, 15])]);
+    const nodes = Object.fromEntries(parseSpecials(b.spec, opcodes));
+    const { univ, run } = withNodes(nodes);
+    for (const [food, half] of [[100, 50], [101, 50], [1, 0], [0, 0], [5000, 2500], [25000, 12500]]) {
+      univ.party.food = food!;
+      await run(entry);
+      expect(univ.party.food).toBe(half);
+      expect(bits.every(([r, c]) => univ.party.getSdf(r, c) === 0)).toBe(true);
+      expect(univ.transcript.some((l) => l.includes('food'))).toBe(false);
+    }
+  });
+
+  it('reads the terrain under the party at (-1, -1)', async () => {
+    const b = new SpecBuilder({ strings: new Map(), dialogs: new Map() }, () => 0);
+    const entry = b.compile([b.ifPartyOnTer(71, [b.gold(1)], [b.gold(2)])]);
+    const { univ, run } = withNodes(Object.fromEntries(parseSpecials(b.spec, opcodes)));
+    const { x, y } = univ.party.townLoc;
+    univ.party.gold = 0;
+    univ.town!.record.terrain[x]![y] = 71;
+    await run(entry);
+    univ.town!.record.terrain[x]![y] = 0;
+    await run(entry);
+    expect(univ.party.gold).toBe(3);
+  });
 });
 
 /**

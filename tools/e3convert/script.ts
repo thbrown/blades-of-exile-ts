@@ -12,7 +12,7 @@
  */
 
 import type { E3Dialog } from './ne';
-import { e3Flag } from './flags';
+import { e3Event, e3Flag } from './flags';
 
 export type Flag = [row: number, col: number];
 
@@ -71,6 +71,11 @@ export interface ScriptSource {
   horse?: (k: number) => number;
   /** The NUL-terminated string at `seg:off` in the EXE (a Ghidra address). */
   exeString?: (seg: number, off: number) => string;
+  /**
+   * Builds a chain in the *scenario's* specials with the scenario's own
+   * builder, returning its first node: for scenario timers a town starts.
+   */
+  scenNode?: (build: (s: SpecBuilder) => number) => number;
 }
 
 export class SpecBuilder {
@@ -721,6 +726,160 @@ export class SpecBuilder {
   /** Refuses the step onto the spot (the town handler returning 0). */
   blockMove(): Step {
     return (next) => this.node('block-move', { ex1: [1] }, next);
+  }
+
+  /**
+   * `FUN_10e0_09e5`: E3's lever, dialog 0x3fc (Leave or Pull). Pulled, it
+   * flips the lever's terrain, 243 and 244 (the converter makes each the
+   * other's `transform`), and runs `then`. It is BoE's own TOWN_LEVER.
+   */
+  lever(then: Step[]): Step {
+    return (next) => {
+      const { pages } = this.dialogPages(0x3fc);
+      return this.leadPages(pages, this.node('lever', { msg: [pages[pages.length - 1]!, -1], ex1: [-1, this.seq(then)(next)] }, next));
+    };
+  }
+
+  /**
+   * One of E3's LED panels (BoE 1997's `cd_set_led` dialogs): dialog `id`
+   * has a heading and a button per action, more than the engine's dialogs
+   * show, so the player types the number (as the Slime Pit's pedestal
+   * does). The prompt is built from the dialog's own labels, in the order
+   * of their control ids; `scratch` holds the answer.
+   */
+  ledPanel(id: number, actions: Step[][], scratch: Flag): Step {
+    const d = this.src.dialogs.get(id);
+    if (!d) throw new Error(`E3 dialog ${id} not found`);
+    const texts = d.controls.filter((c) => c.text && !/^\d+_\d+$/.test(c.text)).sort((a, b) => a.id - b.id);
+    const [heading, ...labels] = texts.map((c) => c.text.replace(/^\*/, ''));
+    const prompt = `${heading ?? ''} ${labels.map((l, i) => `${i + 1} ${l}`).join(', ')} (0 to leave)`;
+    return this.seq([this.askNumber(prompt, 0, actions.length, scratch), this.switchFlag(scratch, [[], ...actions])]);
+  }
+
+  /** RECT_CHANGE_TER: every square from `(x1, y1)` to `(x2, y2)` becomes `t`. */
+  rectTer(x1: number, y1: number, x2: number, y2: number, t: number): Step {
+    // The rect nodes run x over ex1b..ex2b and y over ex1a..ex2a
+    // (boe.specials.cpp's `location l(i, j)`); sd1 is the terrain, sd2 the
+    // percentage chance.
+    return (next) => this.node('rect-change-ter', { sdf: [t, 100], ex1: [y1, x1], ex2: [y2, x2] }, next);
+  }
+
+  /** RECT_PLACE_FIELD on one square: `field` (the engine's `FieldType`) at `(x, y)`. */
+  placeField(x: number, y: number, field: number): Step {
+    return (next) => this.node('rect-place-field', { sdf: [100, field], ex1: [y, x], ex2: [y, x] }, next);
+  }
+
+  /** E3's `key_times[k] = calc_day()`: plot event `k` happened today (`e3Event`). */
+  setEvent(k: number): Step {
+    return (next) => this.node('set-event', { ex1: [e3Event(k)] }, next);
+  }
+
+  /** `if ((is_town() || is_combat()) && town_num == t)`. */
+  ifTown(t: number, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-town', { ex1: [t, yes] }, no);
+    };
+  }
+
+  /**
+   * `if (the terrain under the party is t)`: IF_TER_TYPE at (-1, -1), an
+   * exile-js extension (`src/game/specials/ifthen.ts`).
+   */
+  ifPartyOnTer(t: number, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-ter', { ex1: [-1, -1], ex2: [t, yes] }, no);
+    };
+  }
+
+  /** `get_ran(n, 1, sides)` damage of `type`, rolled once, to every PC. */
+  damageDice(n: number, sides: number, type: number): Step {
+    return (next) => this.node('damage', { ex1: [n, sides], ex2: [0, type] }, next);
+  }
+
+  /**
+   * `party.food /= 2`. No node halves, so this takes the food away a power
+   * of two at a time from 16384 down (the engine keeps at most 25000),
+   * remembering each in `bits` (15 flags),
+   * and then gives half of each back.
+   *
+   * Giving back uses AFFECT_FOOD's *take* arm with a negative amount, which
+   * adds silently where the give arm prints a line each time. A field of -10
+   * or less is a pointer (`resolvePointers`), so no node can add more than 9:
+   * the larger halves go back 8 at a time, counted down in `counter`.
+   */
+  halveFood(bits: Flag[], counter: Flag): Step {
+    const powers = [16384, 8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1];
+    if (bits.length !== powers.length) throw new Error('halveFood needs 15 flags');
+    const take = (n: number) => (next: number) => this.node('food', { ex1: [n, 1] }, next);
+    const ifFood = (n: number, then: Step[]) => (next: number) =>
+      this.node('if-food', { ex1: [n, this.seq(then)(next)] }, next);
+    /** Adds `n` food silently: `n / 8` rounds of 8 (at most 255 a loop). */
+    const addFood = (n: number): Step[] => {
+      const out: Step[] = [];
+      for (let left = Math.floor(n / 8); left > 0; left -= 255) {
+        const rounds = Math.min(left, 255);
+        out.push(this.setFlag(counter, rounds), (next) => {
+          const check = this.reserve();
+          const body = this.seq([take(-8), this.decFlag(counter)])(check);
+          this.fill(check, 'if-sdf', { sdf: counter, ex1: [1, body] }, next);
+          return body;
+        });
+      }
+      if (n % 8 > 0) out.push(take(-(n % 8)));
+      return out;
+    };
+    return this.seq([
+      ...powers.map((p, k) => ifFood(p, [take(p), this.setFlag(bits[k]!, 1)])),
+      ...powers.map((p, k) => this.ifFlagEq(bits[k]!, 1, [...addFood(Math.floor(p / 2)), this.setFlag(bits[k]!, 0)])),
+    ]);
+  }
+
+  /**
+   * `FUN_10e0_0806(x, y)`: one PC (the engine asks which) goes alone to
+   * `(x, y)`, BoE's TOWN_SPLIT_PARTY. It refuses the step.
+   */
+  splitParty(x: number, y: number): Step {
+    return (next) => this.node('split-party', { ex1: [x, y], ex2: [10] }, next);
+  }
+
+  /** `FUN_10e0_0907`: the party is whole again where it split (TOWN_REUNITE_PARTY). */
+  reuniteParty(): Step {
+    return (next) => this.node('unite-party', { ex1: [10] }, next);
+  }
+
+  /**
+   * E3's per-turn town countdowns (the tail of `FUN_10c0_61c4`): while the
+   * party is in `town`, `flag` falls by one a turn, and `at.get(v)` runs as
+   * it reaches `v`; anywhere else E3 zeroes it. Here a scenario timer of one
+   * tick, rearming itself while `flag` is above 0, does the counting;
+   * `running` says a timer is set, so starting twice doesn't count double.
+   * Returns the step that starts it at `value`, for the town's script.
+   */
+  townCountdown(town: number, flag: Flag, value: number, running: Flag,
+    at: (s: SpecBuilder) => Map<number, Step[]>): Step {
+    const chain = this.src.scenNode?.((s) => s.countdownChain(town, flag, running, at(s)));
+    if (chain === undefined) throw new Error('townCountdown needs ScriptSource.scenNode');
+    return this.seq([this.setFlag(flag, value), this.ifFlagEq(running, 0, [
+      this.setFlag(running, 1), (next) => this.node('start-timer-scen', { ex1: [1, chain] }, next),
+    ])]);
+  }
+
+  /** The scenario chain behind `townCountdown`, returning its first node. */
+  countdownChain(town: number, flag: Flag, running: Flag, at: Map<number, Step[]>): number {
+    const start = this.reserve();
+    const stop = this.setFlag(running, 0);
+    const inTown = this.compile([this.ifFlagAtLeast(flag, 1, [
+      this.decFlag(flag),
+      ...[...at].map(([v, steps]) => this.ifFlagEq(flag, v, steps)),
+      this.ifFlagAtLeast(flag, 1, [(next) => this.node('start-timer-scen', { ex1: [1, start] }, next)], [stop]),
+    ], [stop])]);
+    const away = this.compile([this.setFlag(flag, 0), stop]);
+    this.fill(start, 'if-town', { ex1: [town, inTown] }, away);
+    return start;
   }
 }
 

@@ -1235,6 +1235,33 @@ Notes for M2 implementer:
     - `ghidra/DisasmSeg.java <out> <seg>…` disassembles every function in
       some segments at once: `project/towns.s` (1078, 1088, 10b8) and
       `project/zones.s` (10a0, 10a8) are made with it.
+  - 2026-09-26: **the Filth Factory** (towns 26–27, `towns/filthFactory.ts`,
+    `FUN_1078_259e`/`294f`, block 57): the Phoenix Egg burns the roach pit
+    (flag 0xc87, event 1, quickfire at (29,31)).
+    - **Per-turn town code** is at the tail of `FUN_10c0_61c4` (10c0:65bf
+      on): countdowns kept in flags that fall by one a turn while the party
+      is in the town, and are zeroed anywhere else. New step
+      `townCountdown`: a one-tick *scenario* timer that rearms itself while
+      the flag is above 0, with a converter flag saying one is running. Town
+      scripts reach the scenario's builder through `ScriptSource.scenNode`.
+    - **Engine extension: IF_TER_TYPE at (-1, -1) reads the party's own
+      square** (the slime flow drowns a party standing in its trench).
+      OBoE reads off the map there and never matches.
+    - `FUN_10e0_09e5` is E3's lever (dialog 0x3fc, flips terrains 243/244):
+      BoE's TOWN_LEVER, with the converter making the two each other's
+      `transform`. `FUN_10e0_0806`/`0907` are BoE's split and reunite
+      party. `FUN_1038_0788` is `make_quickfire`. Party+8 is **food** (a
+      long; gold is +4).
+    - E3's LED panels with more than three buttons: `ledPanel` asks for a
+      number, with a prompt built from the dialog's own labels.
+    - **Gotcha: a node field of -10 or less is a pointer**
+      (`resolvePointers`), so no field can hold a literal below -9.
+      `halveFood` (the roaches) first tried to add food back silently with
+      a negative *take*, and every half over 9 read a pointer instead; it
+      now adds 8 at a time in a loop. Tested in `specials.test.ts`.
+    - `try-spot.mjs` gained `--number n` (a number prompt's answer) and
+      `--wait n` (turns to pass afterwards, for countdowns); `show.ts`
+      gained `gOFF:N` (DGROUP bytes) and `wSEG:OFF:N` (a jump table).
   - Next: the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.

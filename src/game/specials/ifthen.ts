@@ -128,9 +128,14 @@ export async function ifThenSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
 
     case SpecType.IF_TER_TYPE: {
       const town = univ.town;
+      // An exile-js extension, not in OBoE: (-1, -1) is the party's own
+      // square. The C++ reads the terrain at (-1, -1), which is off every map
+      // and never matches, so no BoE scenario can mean anything by it. Exile 3
+      // needs it for its flooding trench (tools/e3convert, `ifPartyOnTer`).
+      const here = spec.ex1a === -1 && spec.ex1b === -1 ? party.getLoc() : { x: spec.ex1a, y: spec.ex1b };
       const at = town
-        ? town.record.terrain[spec.ex1a]?.[spec.ex1b]
-        : univ.out.at(spec.ex1a, spec.ex1b);
+        ? town.record.terrain[here.x]?.[here.y]
+        : univ.out.at(here.x, here.y);
       if (at === spec.ex2a) ctx.nextSpec = spec.ex2b;
       break;
     }
