@@ -72,3 +72,12 @@ export function e3DailyFlag(k: number): [number, number] {
 export function e3DeathFlag(k: number): [number, number] {
   return [292, 10 + k];
 }
+
+/**
+ * A converter flag counting days, `(293, k)`: where E3 stamps a day and
+ * later subtracts, the daily timer advances one of these instead
+ * (`towns/plot.ts`).
+ */
+export function e3DayCount(k: number): [number, number] {
+  return [293, k];
+}

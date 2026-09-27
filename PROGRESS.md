@@ -1348,6 +1348,24 @@ Notes for M2 implementer:
       so `try-spot.mjs` sees one argument and sets nothing. Use an array:
       `F+=(--flag 0x305=1)` and `"${F[@]}"`. `try-spot.mjs --show r,c` (or
       `0xNNN`) prints a flag at the end.
+  - 2026-09-26: **towns 40–49 and 97** (`towns/dungeons.ts`, and
+    `towns/newCotra.ts` with Ostoth's talk scripts 111–115): the Portal
+    Fortress, Ghikra, New Cotra, New Formello, the Goblin Lair, the Bandit
+    Hideout, the Agate Tower, Erika's Tower, the spiders, and the Cult of
+    the Sacred Item (whose handler town 97 shares).
+    - **E3's plot clock** (`towns/plot.ts`, run by the daily timer): what
+      its turn code (`FUN_1010_5889`) does when the day changes — flags
+      0xc90 (day 75, or the factory burned), 0xc92 (day 110, or war with
+      the troglodytes) and 0xc91 (day 160: the demon plot). TODO(E3-3) in
+      the file for the rest (job deadlines, the demon countdown).
+    - **Day counts**: where E3 stamps the day and later subtracts, a
+      converter flag in row 293 (`e3DayCount`) counts days since, advanced
+      by the daily timer. Ostoth's weapon is ready after four.
+    - New steps: `ifChance`, `atRandomPc` (a random PC as the target, odds
+      1 in 6 − k), `disease`, `replyLiteral` (a talk reply that is a literal
+      in the code), `spotAt`.
+    - Party+0x849b is can_find_town for town 22 (the Slime Pit), which
+      Jordan's notes reveal.
   - Next: the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.

@@ -11,6 +11,7 @@ import { e3DailyFlag } from '../flags';
 import { partyFlag as f, partySpecItem, type SpecBuilder, type Step } from '../script';
 import { SLOAN_RING, RING_HIDDEN } from './sharimik';
 import { ANAMA, ANAMA_RINGS, IRVINE_ASKED, IRVINE_PARCEL } from './shayder';
+import { OSTOTH_TALK } from './newCotra';
 
 /** Flags a new day clears (`e3DailyFlag`), for E3's day stamps. */
 export const LEVY_PAID = e3DailyFlag(0);
@@ -75,6 +76,7 @@ const anamaQuestion = (type: number): TalkScript => (b) => {
 };
 
 export const TALK_SCRIPTS = new Map<number, TalkScript>([
+  ...OSTOTH_TALK,
   // Levy, Fort Emergence's paymaster: 25 gold once a day. E3 stamps the day
   // in flag (21,7); the converter's daily flag does the same job.
   [100, (b) => [b.ifFlagEq(LEVY_PAID, 1, [b.reply(2)], [b.gold(25), b.setFlag(LEVY_PAID, 1), b.reply(1)])]],

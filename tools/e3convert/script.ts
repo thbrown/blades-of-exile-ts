@@ -474,18 +474,23 @@ export class SpecBuilder {
     return this.msg(15, a, b);
   }
 
+  /** A reply that is a literal in E3's code (`strcpy` into the reply), not a string. */
+  replyLiteral(seg: number, off: number): Step {
+    return (next) => this.node('disp-msg', { msg: [this.text(this.src.exeString?.(seg, off) ?? '')] }, next);
+  }
+
   /** `can_find_town[t] = 1`: town `t` shows on the map. */
   townVisible(t: number): Step {
     return (next) => this.node('town-visible', { ex1: [t], ex2: [1] }, next);
   }
 
   /**
-   * A node that clears `flags` at the start of every day, for a scenario
-   * `<timer>` of 3700 ticks: a scenario timer fires once, so the node rearms
-   * itself as a party timer each time.
+   * A node that clears `flags` at the start of every day, and runs `also`,
+   * for a scenario `<timer>` of 3700 ticks: a scenario timer fires once, so
+   * the node rearms itself as a party timer each time.
    */
-  dailyReset(flags: Flag[]): number {
-    const clear = this.seq(flags.map((f) => this.setFlag(f, 0)))(-1);
+  dailyReset(flags: Flag[], also: Step[] = []): number {
+    const clear = this.seq([...flags.map((f) => this.setFlag(f, 0)), ...also])(-1);
     const self = this.nodes.length;
     return this.node('start-timer-scen', { ex1: [3700, self] }, clear);
   }
@@ -522,6 +527,11 @@ export class SpecBuilder {
    * against level, frailty, sound 66), which is the engine's own.
    */
   diseaseAll(n: number): Step {
+    return (next) => this.node('status', { ex1: [n, 1, STATUS_DISEASE] }, next);
+  }
+
+  /** The target is diseased by `n` (AFFECT_STATUS, BoE's `disease_pc` with its saving roll). */
+  disease(n: number): Step {
     return (next) => this.node('status', { ex1: [n, 1, STATUS_DISEASE] }, next);
   }
 
@@ -756,6 +766,27 @@ export class SpecBuilder {
       for (let y = y1; y <= y2; y++)
         if (this.src.terrain?.[x]?.[y] === from) steps.push(this.setTer(x, y, to));
     return this.seq(steps);
+  }
+
+  /** `if (random chance of pct in 100)`: IF_RANDOM passes `get_ran(1,1,100) < ex1a`. */
+  ifChance(pct: number, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-rand', { ex1: [pct + 1, yes] }, no);
+    };
+  }
+
+  /**
+   * `body(pc)` aimed at one PC picked at random, `get_ran(1, 0, 5)`: PC k
+   * with odds 1 in 6 − k after the ones before it missed, so each is equally
+   * likely. The party is the target again afterwards.
+   */
+  atRandomPc(body: Step[]): Step {
+    const pick = (pc: number): Step[] => [(next) => this.node('select-pc', { ex1: [10 + pc] }, next), ...body];
+    const chain = [0, 1, 2, 3, 4].reduceRight<Step[]>(
+      (otherwise, pc) => [this.ifChance(Math.round(100 / (6 - pc)), pick(pc), otherwise)], pick(5));
+    return this.seq([...chain, (next) => this.node('select-pc', { ex1: [2] }, next)]);
   }
 
   /** TOWN_NUKE_MONSTS: every creature here (0), or of one kind, is gone. */
@@ -1016,6 +1047,13 @@ export class SpecBuilder {
     const flag = this.src.spotFlag?.(id);
     if (!flag) throw new Error('onceSpot needs ScriptSource.spotFlag');
     return this.ifFlagEq(flag, 0, [...steps, this.setFlag(flag, 1)]);
+  }
+
+  /** Where spot `id` is (`FUN_10e0_07b7`). */
+  spotAt(id: number): { x: number; y: number } {
+    const at = this.src.spotLoc?.(id);
+    if (!at) throw new Error(`spot ${id} has no location`);
+    return at;
   }
 
   /** The terrain under spot `id` becomes `t`. */

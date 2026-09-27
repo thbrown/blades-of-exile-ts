@@ -35,11 +35,13 @@ import { castleTroglo } from './towns/castleTroglo';
 import { cavesOfGiants } from './towns/cavesOfGiants';
 import { shiftingFloors } from './towns/shiftingFloors';
 import { DUNGEON_SCRIPTS } from './towns/dungeons';
+import { newCotra } from './towns/newCotra';
 import { tinraya } from './towns/tinraya';
 import { PANTS_CLASS, RENTAR_DEATH_FLAGS, rentarKeep } from './towns/rentarKeep';
 import { sharimik, SHARIMIK_DEATH_FLAGS } from './towns/sharimik';
 import { ZONE_SCRIPTS } from './towns/zones';
 import { DAILY_FLAGS } from './towns/talkScripts';
+import { dailyPlot } from './towns/plot';
 import { SpecBuilder, type ScriptSource } from './script';
 import { BASIC_BUTTONS } from '../../src/game/specials/oneshot';
 import { makeSpecItem, type SpecItem } from '../../src/data/quest';
@@ -64,6 +66,7 @@ const TOWN_SCRIPTS = new Map<number, PlaceScript>([
   [28, castleTroglo(28)], [29, castleTroglo(29)],
   [30, cavesOfGiants(30)], [31, cavesOfGiants(31)],
   ...DUNGEON_SCRIPTS,
+  [42, newCotra],
   [35, tinraya(35)], [36, tinraya(36)],
   [38, rentarKeep(38)], [64, rentarKeep(64)],
   [32, shiftingFloors(32)], [33, shiftingFloors(33)], [60, shiftingFloors(60)], [108, shiftingFloors(108)],
@@ -569,7 +572,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   // The scenario's own specials: scripted replies, and the daily reset their
   // day stamps need.
   const talk = convertE3Talk(readE3Talk(strings), speakers, shopTables, E3_TOWN_COUNT, shops.length, foodBase, scen);
-  const newDay = scen.dailyReset(DAILY_FLAGS);
+  const newDay = scen.dailyReset(DAILY_FLAGS, dailyPlot(scen));
   shops.push(...talk.shops);
   // Special items: a name and a description each, from string 1801.
   const specialItems = Array.from({ length: E3_SPECIAL_ITEMS }, (_, k) => {
