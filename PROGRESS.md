@@ -1366,6 +1366,17 @@ Notes for M2 implementer:
       in the code), `spotAt`.
     - Party+0x849b is can_find_town for town 22 (the Slime Pit), which
       Jordan's notes reveal.
+  - 2026-09-26: **towns 50–59** (`towns/dungeons.ts`): the Golddale Mines,
+    the Lair of the Ursagi, the Tomb of Vahkohs, the Troglo Temple, the
+    Concealed Tunnel, the Giant's Forge, the Woodsy Tower, the Lair of
+    Sulfras, the Chasm of Screams and the Defiled Crypt.
+    - BoE 1997's field bits, which E3 shares: `misc_i` (DGROUP -0x19e4) 4
+      web, 8 crate, 16 barrel, 32 fire barrier, 64 force barrier, 128
+      quickfire; `c_town.explored` (+0x426) 2 force wall, 4 fire wall, 8
+      antimagic, 16 stinking cloud, 32 ice wall, 64 blade wall, 128 sleep
+      cloud. `FUN_1038_0906`/`0cf8`/`0dfc` make force, ice and blade walls.
+    - New steps: `giveItemUntilFull` (a loop), `placeFieldRect`;
+      `townVisible(t, false)` takes a town off the map.
   - Next: the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.

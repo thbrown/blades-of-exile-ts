@@ -455,6 +455,19 @@ export class SpecBuilder {
   }
 
   /**
+   * `while (FUN_1070_0401(item) && n < max)`: the party is given `item` again
+   * and again until nobody has room, at most `max` times, counted in `count`.
+   */
+  giveItemUntilFull(item: number, max: number, count: Flag): Step {
+    return (next) => {
+      const head = this.reserve();
+      const again = this.seq([this.incFlag(count), this.ifFlagBelow(count, max, [() => head])])(next);
+      this.fill(head, 'once-give-item', { ex1: [item, 0], ex2: [0, next] }, again);
+      return this.setFlag(count, 0)(head);
+    };
+  }
+
+  /**
    * `FUN_1070_0564`: the party is given `item` (the first PC with room);
    * `then` runs if it was taken and `otherwise` if nobody had room.
    */
@@ -479,9 +492,9 @@ export class SpecBuilder {
     return (next) => this.node('disp-msg', { msg: [this.text(this.src.exeString?.(seg, off) ?? '')] }, next);
   }
 
-  /** `can_find_town[t] = 1`: town `t` shows on the map. */
-  townVisible(t: number): Step {
-    return (next) => this.node('town-visible', { ex1: [t], ex2: [1] }, next);
+  /** `can_find_town[t] = 1`: town `t` shows on the map (or, `on` false, stops showing). */
+  townVisible(t: number, on = true): Step {
+    return (next) => this.node('town-visible', { ex1: [t], ex2: [on ? 1 : 0] }, next);
   }
 
   /**
@@ -850,7 +863,12 @@ export class SpecBuilder {
 
   /** RECT_PLACE_FIELD on one square: `field` (the engine's `FieldType`) at `(x, y)`. */
   placeField(x: number, y: number, field: number): Step {
-    return (next) => this.node('rect-place-field', { sdf: [100, field], ex1: [y, x], ex2: [y, x] }, next);
+    return this.placeFieldRect(x, y, x, y, field);
+  }
+
+  /** RECT_PLACE_FIELD: `field` on every square from `(x1, y1)` to `(x2, y2)`. */
+  placeFieldRect(x1: number, y1: number, x2: number, y2: number, field: number): Step {
+    return (next) => this.node('rect-place-field', { sdf: [100, field], ex1: [y1, x1], ex2: [y2, x2] }, next);
   }
 
   /**

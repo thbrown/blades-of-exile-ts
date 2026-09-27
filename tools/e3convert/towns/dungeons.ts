@@ -266,6 +266,211 @@ function sacredItem(town: number) {
   };
 }
 
+/** The Golddale Mines (town 50), taken by sliths: `FUN_1088_1807`, block 61. */
+function golddaleMines(b: SpecBuilder): Map<number, Step[]> {
+  const B = 61, spot = (id: number) => townSpotFlag(50, id);
+  /** How many fireballs the slith has thrown (flag (50,6)); it stops at 12, or once flags (50,7) and (50,8) are both set. */
+  const thrown = f(0x27e);
+  const fireball = (): Step => b.ifFlagBelow(thrown, 12, [b.ifFlagEq(f(0x27f), 0, [throwIt()], [b.ifFlagEq(f(0x280), 0, [throwIt()])])]);
+  const throwIt = (): Step => b.seq([b.msg(B, 4), b.incFlag(thrown), b.e3Boom(0xf)]);
+  return new Map<number, Step[]>([
+    [1, [b.ifFlagEq(f(0x281), 0, [b.msg(B, 2), b.setFlag(spot(1), 20)])]],
+    [2, [b.onceMsg(spot(2), B, 3)]],
+    // The slith with a wand of fireballs, always in town mode and one time
+    // in six in combat.
+    ...[14, 15, 16, 17, 18, 19, 20, 21].map((id): [number, Step[]] =>
+      [id, [b.ifInCombat([b.ifChance(17, [fireball()])], [fireball()])]]),
+  ]);
+}
+
+/** Converter scratch: how much ore the party has picked up. */
+const ORE_COUNT: Flag = [291, 27];
+
+/** The Lair of the Ursagi (town 51): `FUN_1088_1959`, block 61. */
+function ursagiLair(b: SpecBuilder): Map<number, Step[]> {
+  const B = 61, spot = (id: number) => townSpotFlag(51, id);
+  return new Map<number, Step[]>([
+    // Gold ore (item 404), as much as the party can carry, up to 99.
+    [1, [b.askDialog(0xdb6, [b.setFlag(spot(1), 20), b.giveItemUntilFull(0x194, 0x63, ORE_COUNT)])]],
+    // The avalanche behind the party.
+    [2, [b.msg(B, 9), ...[0x2a, 0x2b, 0x2c].map((y) => b.setTer(7, y, 0x5f)), b.setFlag(spot(2), 20), b.setFlag(spot(3), 20)]],
+    [3, [b.onceMsg(spot(3), B, 8)]],
+    [4, [b.onceMsg(spot(4), B, 0xa)]],
+    [5, [b.msg(B, 0xc), b.bringIn(200, 1), b.setFlag(spot(5), 20)]],
+    [6, [b.dialog(0xdb7)]],
+  ]);
+}
+
+/** The Tomb of Vahkohs (town 52), a vampire's: `FUN_1088_1b0d`, block 61. */
+function vahkohsTomb(b: SpecBuilder): Map<number, Step[]> {
+  const B = 61, spot = (id: number) => townSpotFlag(52, id);
+  const lever = (x: number, y: number): Step[] => [b.lever([b.msg(B, 0x11), b.swapTer(x, y, 0x7d, 0x7e)])];
+  const spellbook = (reads: number, spell: number): Step[] => [b.askDialog(0xdc2,
+    [b.ifLevelTotal(10, [b.msg(B, reads), b.teachSpell(spell)], [b.msg(B, 0x13)])])];
+  return new Map<number, Step[]>([
+    // The vampire's end: the tomb counts as cleared (0x295 is `towns/entry.ts`'s).
+    [1, [b.askDialog(0xdc0, [b.msg(B, 0xe, 0xf), b.setFlag(f(0x295), 2), b.setFlag(spot(1), 20), b.xp(10)])]],
+    [2, [b.onceMsg(spot(2), B, 0x10)]],
+    // A fiery barrier.
+    ...[3, 5, 6].map((id): [number, Step[]] =>
+      [id, [b.askDialog(0xdc1, [b.msg(B, 0x12), b.damageAll(100, 1)]), b.blockMove()]]),
+    [4, [b.onceMsg(spot(4), B, 0x16, 0x17)]],
+    [14, lever(0x1c, 0x13)], [15, lever(0x1c, 0x1d)], [16, lever(0xf, 0xf)], [17, lever(0xf, 0x20)],
+    [18, spellbook(0x14, 0x33)],
+    [19, spellbook(0x15, 0x3b)],
+  ]);
+}
+
+/** The Troglo Temple (town 53): `FUN_1088_1e4d`, block 61. */
+function trogloTemple(b: SpecBuilder): Map<number, Step[]> {
+  const B = 61, spot = (id: number) => townSpotFlag(53, id);
+  const down = (x: number, y: number): Step[] => [b.askDialog(0xdcb, [b.changeTown(0x65, x, y)]), b.blockMove()];
+  return new Map<number, Step[]>([
+    [1, [b.onceMsg(spot(1), B, 0x1b, 0x1c)]],
+    [2, [b.trap(0x107e, spot(2), 0x14)]],
+    // The alarm: more come, hostile. TODO(E3-3): E3 also sets every
+    // creature here active (2), hunting the party.
+    [3, [b.setFlag(spot(3), 20), b.bringIn(200, 3)]],
+    [4, [b.giveItemDialog(0xdca, spot(4), 0x5f)]],
+    [5, [b.onceMsg(spot(5), B, 0x1d)]],
+    [11, down(5, 9)], [12, down(5, 0xf)],
+  ]);
+}
+
+/** The Concealed Tunnel's barrels are gone (spot 14): a converter flag, see below. */
+const TUNNEL_CLEARED: Flag = [291, 28];
+
+/** The Concealed Tunnel (town 54): `FUN_1088_2248`, block 61. */
+function concealedTunnel(b: SpecBuilder): Map<number, Step[]> {
+  const B = 61, spot = (id: number) => townSpotFlag(54, id);
+  const lever = (x: number): Step[] => [b.lever([b.msg(B, 0x27), b.swapTer(x, 0x12, 0x6c, 0x6d), b.swapTer(x, 0x13, 0x6c, 0x6d)])];
+  const teleport = (x: number, y: number): Step[] => [b.askDialog(0xdd5, [b.msg(B, 0x25), b.moveParty(x, y)])];
+  return new Map<number, Step[]>([
+    [1, [b.msg(B, 0x24), b.setFlag(spot(1), 20), b.bringIn(200, 1)]],
+    // An invisible barrier while any barrel is left in the tunnel (E3 looks
+    // at every square; here, whether spot 14 has cleared them).
+    [2, [b.ifFlagEq(TUNNEL_CLEARED, 0, [b.msg(B, 0x28), b.blockMove()])]],
+    [11, teleport(0x28, 6)], [12, teleport(5, 0x2b)],
+    // Every barrel vanishes and the portcullises open, once ((7,18) opened says so).
+    [14, [b.ifTer(7, 0x12, 0x6d, [], [
+      b.removeField(0, 0, 63, 63, FieldType.OBJECT_BARREL), b.setFlag(TUNNEL_CLEARED, 1),
+      ...[[7, 0x12], [7, 0x13], [0xa, 0x12], [0xa, 0x13]].map(([x, y]) => b.setTer(x!, y!, 0x6d)), b.msg(B, 0x26),
+    ])]],
+    [15, [b.askDialog(0xdd4, [b.changeTown(0x67, 0x1a, 0x11)]), b.blockMove()]],
+    [18, lever(0xa)], [19, lever(7)],
+  ]);
+}
+
+/** The Giant's Forge (town 55): `FUN_1088_1fe8`, block 61. */
+function giantsForge(b: SpecBuilder): Map<number, Step[]> {
+  const B = 61, spot = (id: number) => townSpotFlag(55, id);
+  return new Map<number, Step[]>([
+    [1, [b.msg(B, 0x1f)]],
+    [2, [b.onceMsg(spot(2), B, 0x20)]],
+    [3, [b.trap(0xdde, spot(3), 0x14)]],
+    [4, [b.trap(0xdde, spot(4), 0x14)]],
+    // The crater's fireballs, and the altar's ball lightning.
+    [11, [b.msg(B, 0x22), b.e3Boom(0xf)]],
+    [12, [b.msg(B, 0x23), b.e3Boom(0x62)]],
+    // Kills zone 49's spot 2 (flag (249,2)).
+    [14, [b.setFlag(f(0xa40), 20)]],
+    // The long passage back to the Caves of the Giants.
+    [15, [b.askDialog(0xddf, [
+      b.msg(58, 0xb), b.onceMsg(f(0x1c2), 58, 7, 8), b.exitTo(4, 5, 0x1e, 0x22), b.changeTown(0x1f, 5, 0x2b),
+    ]), b.blockMove()]],
+  ]);
+}
+
+/** The Woodsy Tower (town 56), which fades once its exit is reached: `FUN_1088_2f08`, block 61. */
+function woodsyTower(b: SpecBuilder): Map<number, Step[]> {
+  const B = 61, spot = (id: number) => townSpotFlag(56, id);
+  /** The six fountains: each asked, and each refuses the step. */
+  const fountain = (drunk: Step[]): Step[] => [b.askDialog(0xde8, drunk), b.blockMove()];
+  return new Map<number, Step[]>([
+    // The exit: the portcullises open and the tower leaves the map
+    // (can_find_town[56] = 0, party+0x84bd).
+    [1, [b.ifTer(0x16, 0x26, 0x6c, [
+      b.msg(B, 0x47), b.townVisible(56, false),
+      ...[0x16, 0x17, 0x18].map((x) => b.setTer(x, 0x26, 0x6d)), b.setFlag(spot(1), 1),
+    ])]],
+    [2, [b.dialog(0xde9), b.bringIn(200, 1), b.setFlag(spot(2), 20)]],
+    [3, [b.msg(B, 0x49), b.blockMove()]],
+    [4, [b.trap(0xd7a, spot(4), 0x14)]],
+    [5, [b.trap(0xd7a, spot(5), 0x14)]],
+    // The wall that swings shut behind the party, and the quickfire alcove.
+    [11, [b.ifInCombat([], [b.ifTer(0x10, 0x1f, 0x96, [], [b.msg(B, 0x40), b.setTer(0x10, 0x1f, 0x96), b.setTer(0x11, 0x1e, 100)])])]],
+    [14, fountain([b.msg(B, 0x41), b.heal(200)])],
+    [15, fountain([b.msg(B, 0x42), b.eachPc(() => [b.disease(6)])])],
+    [16, fountain([b.msg(B, 0x43)])],
+    [17, fountain([b.msg(B, 0x44), b.drainXp(0x19)])],
+    [18, fountain([b.msg(B, 0x45), b.teachSpell(0x9a)])],
+    [19, fountain([b.msg(B, 0x46), b.restoreSp(100)])],
+    [20, [b.ifTer(0x16, 0x26, 0x6c, [b.msg(B, 0x48)])]],
+  ]);
+}
+
+/** The Lair of Sulfras (town 57), the dragon: `FUN_1088_325a`, block 61. */
+function sulfrasLair(b: SpecBuilder): Map<number, Step[]> {
+  const B = 61, spot = (id: number) => townSpotFlag(57, id);
+  // TODO(E3-3): E3 also sets party+0x12e6 (`FUN_1080_022e`) going through.
+  const passage = (town: number, x: number, y: number): Step[] =>
+    [b.askDialog(0xdf2, [b.changeTown(town, x, y)]), b.blockMove()];
+  return new Map<number, Step[]>([
+    [0, []],
+    [1, [b.askDialog(0xfca, [b.msg(B, 0x4a), b.setFlag(spot(1), 20), b.bringIn(200, 1)], [b.blockMove()])]],
+    // Sulfras grants an audience once the party has ended a plague (the
+    // slimes or the roaches).
+    [2, [b.ifFlagEq(f(0xc85), 0, [b.ifFlagEq(f(0xc87), 0, [b.msg(B, 0x4c)], [audience(b, B)])], [audience(b, B)])]],
+    [3, [b.onceMsg(spot(3), B, 0x4e)]],
+    [11, passage(0x68, 3, 8)], [12, passage(0x69, 0x1a, 5)],
+    [14, [b.msg(B, 0x4f), b.blockMove()]],
+  ]);
+}
+
+function audience(b: SpecBuilder, B: number): Step {
+  return b.ifTer(0x16, 6, 0x7d, [
+    b.msg(B, 0x4d), ...[6, 10].flatMap((y) => [0x15, 0x16, 0x17].map((x) => b.setTer(x, y, 0x7e))),
+  ]);
+}
+
+/** The Chasm of Screams (town 58): `FUN_1088_2a45`, block 61. */
+function chasmOfScreams(b: SpecBuilder): Map<number, Step[]> {
+  const B = 61, spot = (id: number) => townSpotFlag(58, id);
+  return new Map<number, Step[]>([
+    [1, [b.onceMsg(spot(1), B, 0x2b)]],
+    [2, [b.msg(B, 0x2d), b.bringIn(201, 1), b.setFlag(spot(2), 20)]],
+    [3, [b.msg(B, 0x2e), b.bringIn(200, 1), b.setFlag(spot(3), 20)]],
+    [4, [b.onceMsg(spot(4), B, 0x2f, 0x30)]],
+  ]);
+}
+
+/** The Defiled Crypt (town 59): `FUN_1088_2c12`, block 61. */
+function defiledCrypt(b: SpecBuilder): Map<number, Step[]> {
+  const B = 61, spot = (id: number) => townSpotFlag(59, id);
+  const platinumKey = partySpecItem(0x30);
+  /** A pressure plate: a click (sound 34), and a square changes. */
+  const plate = (x: number, y: number, from: number, to: number, literal: number): Step[] =>
+    [b.ifTer(x, y, from, [b.log(0x1088, literal), b.setTer(x, y, to)])];
+  /** A trap over the whole west of the crypt: E3's field over x 1–19, y 21–47. */
+  const trap = (literal: number, field: number): Step[] =>
+    [b.log(0x1088, literal), b.placeFieldRect(1, 0x15, 0x13, 0x2f, field)];
+  return new Map<number, Step[]>([
+    [1, [b.giveItemDialog(0xdfc, spot(1), 0, 300 + platinumKey)]],
+    ...[2, 3, 4].map((id): [number, Step[]] => [id, [b.msg(B, 0x3a), b.bringIn(id + 0xc6, 1), b.setFlag(spot(id), 20)]]),
+    [5, [b.onceMsg(spot(5), B, 0x3d, 0x3e)]],
+    [11, [b.ifTer(0x1c, 0x2a, 0x7b, [b.ifSpecItem(platinumKey,
+      [b.setTer(0x1c, 0x2a, 0x78), b.msg(B, 0x35)], [b.msg(B, 0x34)])])]],
+    [20, plate(0x15, 0x2a, 0xc2, 0xc1, 0x2b5e)],
+    [21, plate(0x15, 0x2a, 0xc1, 0xc2, 0x2b75)],
+    [22, plate(0x16, 0x2a, 0xc2, 0xc1, 0x2b8c)],
+    [23, plate(0x16, 0x2a, 0xc1, 0xc2, 0x2ba3)],
+    [24, plate(0x28, 0x2e, 0x75, 0xc1, 0x2bba)],
+    [25, trap(0x2bd1, FieldType.WALL_FORCE)],
+    [26, trap(0x2be4, FieldType.WALL_ICE)],
+    [27, trap(0x2bf2, FieldType.WALL_BLADES)],
+  ]);
+}
+
 /** The four plagues' flags: any set means the party has done something. */
 const CLEARED_ANY = [f(0xc85), f(0xc87), f(0xc8a), f(0xc8c)];
 
@@ -281,5 +486,15 @@ export const DUNGEON_SCRIPTS = new Map<number, PlaceScript>([
   [47, erikasTower],
   [48, spiders],
   [49, sacredItem(49)],
+  [50, golddaleMines],
+  [51, ursagiLair],
+  [52, vahkohsTomb],
+  [53, trogloTemple],
+  [54, concealedTunnel],
+  [55, giantsForge],
+  [56, woodsyTower],
+  [57, sulfrasLair],
+  [58, chasmOfScreams],
+  [59, defiledCrypt],
   [97, sacredItem(97)],
 ]);
