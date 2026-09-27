@@ -232,7 +232,7 @@ in the disassembly are these offsets + 4.
 | 0x0b6 | `exit_specs[4]` | BoE has `exit_locs` first |
 | 0x0be | 4 locations | **open**: probably `exit_locs`, but a cross around (20,33) in town 0 |
 | 0x0c6 | `in_town_rect` | same |
-| 0x0ce | `preset_items[64]` × 10 B | same layout |
+| 0x0ce | `preset_items[64]` × 10 B | same layout, but `ability` (i16) is gold's or food's amount and otherwise the item's ability byte (+10); `charges` (u8) is its own (town loader `10d8:1531`, `notes.ts`) |
 | 0x34e | `max_num_monst` | same |
 | 0x350 | int16 | **open** |
 | 0x352 | `preset_fields[50]` × 4 B | same |
@@ -279,7 +279,7 @@ arguments of far calls, so read them from the disassembly (`Disasm.java`).
 | `FUN_1038_1185(x, y, type)` | a decal on the floor (`make_sfx`) |
 | `FUN_10b0_1bec(pc, n)` / `FUN_10b0_1606(pc, n)` | BoE 1997's `slow_pc` / `curse_pc` |
 | `FUN_10b0_19dd(pc, n, type, adjust)` | `sleep_pc`: resisted if `get_ran(1, 0, 100) + adjust < 30 + 2 × level` |
-| `FUN_1070_0464(item, charges)` | give `item` with `charges` to the first PC with room |
+| `FUN_1070_0464(item, ability)` | give `item`, with its ability byte (+10) set to `ability` when > 0, to the first PC with room (`notes.ts`) |
 | `FUN_10d0_4c8d(far str)` | a line in the text area; a script's literal is in its own code segment (`PUSH CS; PUSH off`) |
 
 DGROUP `0x3d3c` is the registered-copy flag; the shareware build refuses

@@ -18,8 +18,8 @@ import { readDialogs, readNeResources, readNeSegment, readStringTable } from './
 import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor, type E3OutWandering } from './outdoor';
 import { ItemAbil } from '../../src/data/item';
 import { FieldType } from '../../src/data/fields';
-import { E3_TERRAIN_COUNT, readE3ItemAbilities, readE3Items, readE3Monsters, readE3RoadJoins, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
-import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3Town } from './town';
+import { E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3ItemAbilities, readE3Items, readE3Monsters, readE3RoadJoins, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
+import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3PresetItem, type E3Town } from './town';
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
 import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
 import { readE3ShopTables, standardShops } from './shops';
@@ -48,6 +48,7 @@ import { tinraya } from './towns/tinraya';
 import { PANTS_CLASS, RENTAR_DEATH_FLAGS, rentarKeep } from './towns/rentarKeep';
 import { sharimik, SHARIMIK_DEATH_FLAGS } from './towns/sharimik';
 import { ZONE_SCRIPTS } from './towns/zones';
+import { e3NoteItems, e3NoteSteps, isE3NoteAbility } from './notes';
 import { DAILY_FLAGS, KILL_SCRIPTS } from './towns/talkScripts';
 import { dailyPlot } from './towns/plot';
 import { townStatesXml } from './towns/townStates';
@@ -112,7 +113,7 @@ function addMark(marks: Map<string, string>, x: number, y: number, mark: string)
 const E3_CONTAINERS = new Set([155, 167, 174, 197, 199, 208, 209]);
 
 /** A terrain's `<special>`: its E3 door behaviour, in BoE's terms. */
-function specialXml(t: E3TerrainType, id: number): string {
+function specialXml(t: E3TerrainType, id: number, hiddenAs: Map<number, number>): string {
   const sp = t.special;
   // A bed (picture 143) shows the party asleep in it, picture 230: BoE 1997's
   // rule, which OBoE's legacy importer keeps as the BED special, and E3's
@@ -120,13 +121,15 @@ function specialXml(t: E3TerrainType, id: number): string {
   // E3 enters a town when the party's outdoor square is terrain 217–231
   // (`0xd8 < t && t < 0xe8`, exile3.c:4648) and one of the zone's town
   // entrances is there; BoE's `town` special is the same test. flag1 is what
-  // a hidden town shows as, and E3 hides none, so it shows as itself.
+  // a hidden town shows as (`readE3HiddenEntrances`). E3's table stops at
+  // 228; it would read past it for 229–231, which no hidden town stands on,
+  // so those show as themselves.
   // Right after, E3 refuses towns 8–20, 28–39, 51–79, 99–119 and 146+ while
   // `DS:3d3c` is clear, with "You need to be registered to enter."
   // (`1010:2231`, string `1010:0a3a`): the shareware lock, which a
   // registration key lifted (`1020:4f27`). Spiderweb has made the game free
   // to play, so the port plays it registered and leaves the lock out.
-  const [type, f1, f2, f3] = !sp && id >= 217 && id <= 231 ? ['town', id, 0, 0]
+  const [type, f1, f2, f3] = !sp && id >= 217 && id <= 231 ? ['town', hiddenAs.get(id) ?? id, 0, 0]
     : !sp && E3_CONTAINERS.has(id) ? ['box', -1, 0, 0]
     : !sp && t.pic === 143 ? ['bed', e3TerrainPic(230), 0, 0]
     // E3's blockage 2 keeps monsters off (lava, portals, town entrances);
@@ -147,22 +150,6 @@ function specialXml(t: E3TerrainType, id: number): string {
             <flag>${f3}</flag>
         </special>`;
 }
-
-/**
- * E3's readable items: the dialog using one shows, by E3 ability
- * (`FUN_10c0_2c92`'s cases 0xb0–0xb6). TODO(E3-3): 0xb1 also sets
- * party+0x84bb.
- */
-const E3_NOTE_DIALOGS = new Map<number, number>([
-  [0xb0, 0xeb0], [0xb1, 0xcf3], [0xb2, 0x116d], [0xb3, 0x3ba], [0xb4, 0x161f], [0xb5, 0xcd5], [0xb6, 0xcd6],
-]);
-
-/**
- * Items E3's scripts make by giving a table item a readable ability
- * (`FUN_1070_0464(item, ability)`, `FUN_1070_18fd`): `[item, ability]`,
- * appended to items.xml after the food. `ScriptSource.noteItem` finds them.
- */
-const E3_NOTE_ITEMS: [number, number][] = [[31, 0xb5], [31, 0xb6]];
 
 /**
  * Terrains that turn into one another: E3's lever (`FUN_10e0_0a49` flips 243
@@ -218,7 +205,7 @@ function townTer255(town: number, terrain: number[][]): number[][] {
   return terrain.map((col) => col.map((t) => (t === 255 ? E3_TER_255_OPAQUE : t)));
 }
 
-function terrainXml(types: E3TerrainType[]): string {
+function terrainXml(types: E3TerrainType[], hiddenAs: Map<number, number>): string {
   const out = [XML_HEAD, '<terrains boes="2.0.0">\n'];
   types.forEach((t, id) => {
     const ground = E3_ROADS.get(id);
@@ -239,7 +226,7 @@ function terrainXml(types: E3TerrainType[]): string {
         <ground>0</ground>
         <trim-for>-1</trim-for>
         <arena>${t.arena}</arena>
-${specialXml(t, id)}
+${specialXml(t, id, hiddenAs)}
     </terrain>
 `);
   });
@@ -418,18 +405,35 @@ function townSigns(t: E3Town, strings: Map<number, string>) {
   return signs(t.signLocs, strings, 30005 + 20 * t.number).filter((s) => s.x < size && s.y < size);
 }
 
-function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, strings: Map<number, string>, script: SpotScript): string {
+/**
+ * What a town's XML needs from the tables built beside it. A preset item is
+ * laid down as E3's town loader lays it down (`10d8:1531`). Its
+ * `ability`, when not -1, is gold's or food's amount and any other item's
+ * ability byte (+10), which for a book, note or map says which one it is
+ * (`notes.ts`); `charges`, when not 0, replaces the item's own. The engine's
+ * preset has one number, `<charges>`, which it reads as gold's and food's
+ * amount, so the ability goes there for those and E3's charges otherwise.
+ * TODO(E3-3): seven presets give some other item an ability of its own
+ * (a Book 65, Iron Gauntlets and a Crude Buckler 14, Robes 16, razordisks
+ * 65 and 92, Bronze Chain Mail 0); they come out as the table's item.
+ */
+interface TownTables {
+  type(p: E3PresetItem): number;
+  charges(p: E3PresetItem): number;
+  /** Whether town `t` starts off the map (`readE3HiddenTowns`). */
+  hidden(t: number): boolean;
+}
+
+function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, strings: Map<number, string>, script: SpotScript, tables: TownTables): string {
   const size = townSize(t);
   const r = t.village ? { top: 0, left: 0, bottom: size - 1, right: size - 1 } : t.inTownRect;
   const creatures = townCreatures(t)
     .map((c, i) => (c.number > 0
       ? creatureXml(c, i, personalityOf.get(`${t.number}:${i}`) ?? -1, DEATH_FLAGS.get(`${t.number}:${i}`), script.kills[i])
       : '')).join('');
-  // Preset items: the legacy field called `ability` holds the charges, as in
-  // BoE (`loadLegacy.ts`); -1 is an empty slot.
   const items = t.presetItems.map((p, i) => (p.itemCode < 0 ? '' : `    <item id="${i}">
-        <type>${p.itemCode}</type>
-        <charges>${p.ability}</charges>
+        <type>${tables.type(p)}</type>
+        <charges>${tables.charges(p)}</charges>
         <always>${p.alwaysThere !== 0}</always>
         <property>${p.property !== 0}</property>
         <contained>${p.contained !== 0}</contained>
@@ -448,7 +452,7 @@ function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, st
     <difficulty>0</difficulty>
     <lighting>${LIGHTING[t.lighting] ?? 'lit'}</lighting>
 ${script.entry >= 0 ? `    <onenter condition="alive">${script.entry}</onenter>\n    <onenter condition="dead">${script.entry}</onenter>\n` : ''}    <flags>
-${chopXml(t)}    </flags>
+${chopXml(t)}${tables.hidden(t.number) ? '        <hidden>true</hidden>\n' : ''}    </flags>
 ${wandering}${items}${creatures}${rooms}${townSigns(t, strings).map(signXml).join('')}${specStringsXml(script)}</town>
 `;
 }
@@ -614,8 +618,8 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     },
     horse: (k) => horseNumber[k] ?? -1,
     noteItem: (item, ability) => {
-      const k = E3_NOTE_ITEMS.findIndex(([i, a]) => i === item && a === ability);
-      if (k < 0) throw new Error(`no note item ${item} with ability ${ability}: add it to E3_NOTE_ITEMS`);
+      const k = noteItems.findIndex(([i, a]) => i === item && a === ability);
+      if (k < 0) throw new Error(`no note item ${item} with ability ${ability}: add it to notes.ts's SCRIPT_NOTES`);
       return noteBase + k;
     },
     scenNode: (build) => {
@@ -635,7 +639,8 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
 
   // header.exs: the OBoE marker every unpacked tree carries.
   write('header.exs', new Uint8Array([0x4f, 0x42, 0x4f, 0x45, 0x01, 0x00, 0x00, 0x01, 0x02, 0x00, 0x00, 0x04]));
-  write('terrain.xml', terrainXml(withTer255(terrain)));
+  write('terrain.xml', terrainXml(withTer255(terrain), readE3HiddenEntrances(files.exe)));
+  const hiddenTowns = new Set(readE3HiddenTowns(files.exe));
   // Monsters: E3's table through the legacy importer, drawn from E3's own
   // sprites cut into custom sheets after the terrain's.
   const terrainSheets = buildTerrainSheets(read);
@@ -658,7 +663,17 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   // After the food, the notes E3's scripts make by stamping a readable
   // ability onto a table item.
   const noteBase = foodBase + shopTables.food.length;
-  const e3Abilities = [...readE3ItemAbilities(files.exe), ...shopTables.food.map(() => 0), ...E3_NOTE_ITEMS.map(([, a]) => a)];
+  const isGoldOrFood = (item: number) => e3Items[item]?.variety === 3 || e3Items[item]?.variety === 11;
+  const noteItems = e3NoteItems(towns, isGoldOrFood);
+  const townTables: TownTables = {
+    type: (p) => {
+      if (isGoldOrFood(p.itemCode) || !isE3NoteAbility(p.ability)) return p.itemCode;
+      return noteBase + noteItems.findIndex(([i, a]) => i === p.itemCode && a === p.ability);
+    },
+    charges: (p) => (isGoldOrFood(p.itemCode) ? p.ability : p.charges > 0 ? p.charges : -1),
+    hidden: (t) => hiddenTowns.has(t),
+  };
+  const e3Abilities = [...readE3ItemAbilities(files.exe), ...shopTables.food.map(() => 0), ...noteItems.map(([, a]) => a)];
   scen = new SpecBuilder(e3Src, (label) => Math.max(0, BASIC_BUTTONS.indexOf(label)));
   // First sightings (towns/sightings.ts): each plague monster's onsight node.
   // A range of monsters shares one script, so one node.
@@ -670,7 +685,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   }
   write('monsters.xml', monstersXml(monsters));
   const noteNodes = new Map<number, number>();
-  const items = [...e3Items, ...shopTables.food, ...E3_NOTE_ITEMS.map(([k]) => e3Items[k]!)].map((old, k) => {
+  const items = [...e3Items, ...shopTables.food, ...noteItems.map(([k]) => e3Items[k]!)].map((old, k) => {
     const it = convertItem(old);
     it.graphicNum = 1000 + itemSheetNum * 100 + old.graphicNum;
     // E3's scripts name kinds of item by `type_flag` (unicorn horns are 111);
@@ -678,13 +693,13 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     if (old.typeFlag > 0) it.specialClass = old.typeFlag;
     // Pants (variety 22), which a spot in Rentar-Ihrno's keep looks for.
     else if (old.variety === 22) it.specialClass = PANTS_CLASS;
-    // A readable item shows its dialog when used: a scenario node, through
-    // OBoE's CALL_SPECIAL ability.
-    const dlg = E3_NOTE_DIALOGS.get(e3Abilities[k] ?? 0);
-    if (dlg !== undefined) {
-      if (!noteNodes.has(dlg)) noteNodes.set(dlg, scen!.compile([scen!.dialog(dlg)]));
+    // A readable item runs its case of E3's switch when used (`notes.ts`):
+    // a scenario node, through OBoE's CALL_SPECIAL ability.
+    const ability = e3Abilities[k] ?? 0;
+    if (isE3NoteAbility(ability)) {
+      if (!noteNodes.has(ability)) noteNodes.set(ability, scen!.compile(e3NoteSteps(scen!, ability)));
       it.ability = ItemAbil.CALL_SPECIAL;
-      it.abilStrength = noteNodes.get(dlg)!;
+      it.abilStrength = noteNodes.get(ability)!;
     }
     return it;
   });
@@ -748,7 +763,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     const script = e3SpotScript(spots, { town: t.number }, { ...e3Src, creatures, terrain },
       (x, y) => terrain[x]?.[y] ?? 0, TOWN_SCRIPTS.get(t.number), ENTRY_SCRIPTS.get(t.number),
       townKillScript(t.number, creatures));
-    write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf, strings, script));
+    write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf, strings, script, townTables));
     write(`${base}.map`, townMap(t, terrain, strings, script, vehicles));
     write(`${base}.spec`, script.spec);
     debug.towns[t.number] = script.spots;

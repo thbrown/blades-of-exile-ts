@@ -85,7 +85,7 @@ export interface ScriptSource {
    * builder, returning its first node: for scenario timers a town starts.
    */
   scenNode?: (build: (s: SpecBuilder) => number) => number;
-  /** The engine's item for E3's `item` given readable `ability` (`E3_NOTE_ITEMS`). */
+  /** The engine's item for E3's `item` given readable `ability` (`notes.ts`). */
   noteItem?: (item: number, ability: number) => number;
   /** Spot `id`'s own converter flag (`e3SpotFlag`), for `eraseSpot`. */
   spotFlag?: (id: number) => Flag;
@@ -1186,7 +1186,7 @@ export class SpecBuilder {
     return this.seq([this.setFlag(SPLIT, 0), (next) => this.node('unite-party', { ex1: [10] }, next)]);
   }
 
-  /** The engine's item number for E3's `item` made readable with `ability` (`E3_NOTE_ITEMS`). */
+  /** The engine's item number for E3's `item` made readable with `ability` (`notes.ts`). */
   note(item: number, ability: number): number {
     const n = this.src.noteItem?.(item, ability);
     if (n === undefined) throw new Error('note needs ScriptSource.noteItem');

@@ -13581,3 +13581,48 @@ tests, both sweeps, verify-e3/screen/party. **Next session starts here**:
 `grep -rn "TODO(E3-3)" src tools` (51). The bigger ones left are
 `script.ts`'s town-hostile endings and the rest of `entry.ts`'s list (towns
 31, 41, 46, 57, 78/79, 82, 90, 103–105, 107).
+
+### E3's books and hidden towns, and presets' charges (2026-09-27)
+
+Three conversion bugs a player would see, found while chasing the
+"no node tests a town's visibility" TODOs:
+
+- **E3's books, notes and maps could not be read.** Using an item whose
+  ability byte (+10) is 0xa0–0xb7 runs a case of `FUN_10c0_2c92` (jump table
+  `cs:3cb1`, index = ability − 3): twelve books (two strings of block 16
+  each, "MAGIC FOR DUMMIES" and on), map and letter dialogs, and three with
+  effects: 0xa9 Jordan's map shows town 22, 0xb1 Zalvax's note shows town 54,
+  and 0xaf "You may proceed." sets party+0x35d, **the only way to open the
+  remote cave's passage** (`dungeons.ts` spot 9). None is used up. The
+  ability comes from a town's preset or a script, not the table, so the Book
+  is a dozen books. `tools/e3convert/notes.ts` gives each (item, ability)
+  pair its own item (47 of them, after the food) whose CALL_SPECIAL runs the
+  case. Aminro's (0xb2), Masok's (0xb3) and the troglodytes' (0xb4) maps,
+  which the TODOs had read as "178/179/180 charges", are these too.
+- **Presets' charges were dropped.** E3's town loader (`10d8:1531`) reads the
+  preset's `ability` as gold's or food's amount and otherwise as the item's
+  ability byte, and its `charges` byte as charges. The converter wrote
+  `ability` as `<charges>`, right for the 487 gold and food presets, and lost
+  the other 75's charges: 50 Iron Darts came out as 8, 14 Weak Healing
+  Potions as 1. `TODO(E3-3)`: seven presets stamp a real ability (a Book 65,
+  Robes 16, razordisks 65 and 92…), and come out as the table's item.
+- **E3 hides 15 towns, and the port showed them all.** A new party copies
+  `can_find_town` from `DS:29b2` (120 bytes): 22, 26, 32, 54, 70, 71, 74–79,
+  86, 87 and 92 start off the map. The outdoor loader (`10d8:4532`) shows a
+  hidden town's entrance as the ground in `DS:3c0a`, indexed by terrain −
+  217, which is BoE's `flag1`. Now `<hidden>` and `flag1` carry them
+  (`readE3HiddenTowns`, `readE3HiddenEntrances`). All eleven with an outdoor
+  entrance have a way to show: scripts, the two maps above, or a paid answer
+  (BUY_TOWN_LOC: 26, 32, 70, 76). The towns E3's scripts hide again (47, 56,
+  88) now vanish properly too.
+- The note items make BoE's `pull_item_of_type` (uniform over the whole item
+  list) draw differently, so random treasure and the job boards changed.
+  In `verify-e3.mjs` a townsperson then stood in Fort Emergence's doorway,
+  so its walker now waits a turn for someone in the way.
+- Still open: no node *tests* a town's visibility, so zones 14, 23, 45 and
+  84 and Purgatos keep their `TODO(E3-3)`. An exile-js `if-town-visible`
+  opcode, like `journal`, would close all five.
+
+`grep -rn "TODO(E3-3)" src tools`: 48. **Next session starts here**: the
+`if-town-visible` opcode above, then `script.ts`'s town-hostile endings and
+`entry.ts`'s list.

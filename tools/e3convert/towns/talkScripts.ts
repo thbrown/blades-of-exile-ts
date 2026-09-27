@@ -412,12 +412,11 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
       ], [b.reply(0xaa)])], [b.reply(0xa9)]),
     ]),
   ])])]],
-  // Masok sells the scroll (item 0x1f, 179 charges) for 2000 gold. E3 sets
-  // the reply to 0xb1 and then to 0xb2 over it, so 0xb1 is never shown
-  // (E3-SUSPECTED-BUGS.md #9). TODO(E3-3): the 179 charges, as villages.ts's
-  // item 31.
+  // Masok sells the map to Black Halberd (item 0x1f made readable with
+  // 0xb3, `notes.ts`) for 2000 gold. E3 sets the reply to 0xb1 and then to
+  // 0xb2 over it, so 0xb1 is never shown (E3-SUSPECTED-BUGS.md #9).
   [149, (b) => [b.ifFlagEq(f(0x64b), 1, [b.reply(0xb4)], [
-    b.ifGold(2000, [b.takeGold(2000), b.reply(0xb2), b.giveItem(0x1f), b.setFlag(f(0x64b), 1)], [b.reply(0xb3)]),
+    b.ifGold(2000, [b.takeGold(2000), b.reply(0xb2), b.giveItem(b.note(31, 0xb3)), b.setFlag(f(0x64b), 1)], [b.reply(0xb3)]),
   ])]],
   // Shirley buys trade goods (type flag 103) at 50 gold each.
   [150, (b) => [
@@ -513,8 +512,8 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
   // Purgatos gives the Phoenix Egg (special item 38), once.
   // TODO(E3-3): E3 gives it only once `can_find_town[26]` (+0x849f) is set,
   // the Filth Factory showing on the map (0x75 until then), and no node
-  // tests a town's visibility. Every E3 town shows from the start in the
-  // port, so this takes the answer the port's map gives: found.
+  // tests a town's visibility. The factory starts hidden (`readE3HiddenTowns`),
+  // but this takes the answer of a party that has found it.
   [134, (b) => [b.ifFlagAtLeast(f(0x5ce), 1, [b.reply(0x77)], [
     b.reply(0x76), b.setFlag(f(0x5ce), 1), b.giveSpecItem(38),
   ])]],

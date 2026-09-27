@@ -79,17 +79,15 @@ function win(b: SpecBuilder, script: number): Step[] | null {
       return [b.msg(0x57, 0x2e), b.giveItem(0x152)];
     case 0x67:
       return [b.msg(0x56, 0xf), b.gold(2000), b.giveItem(0x58), b.giveItem(0xc6)];
-    // TODO(E3-3): `FUN_1070_0464(0x1f, 180)` gives the map with 180 charges,
-    // as Aminro's does with 178 (`villages.ts`); the engine gives it as the
-    // scenario defines it.
+    // `FUN_1070_0464(0x1f, 0xb4)`: the map on a dead troglodyte (`notes.ts`).
     case 0x68:
-      return [b.msg(0x56, 0xe), b.giveItem(0x1f)];
+      return [b.msg(0x56, 0xe), b.giveItem(b.note(31, 0xb4))];
     case 0x69:
       return [b.msg(0x56, 0x11), b.giveItem(0x10a)];
     case 0x6a:
       return [b.msg(0x55, 0xc), b.setFlag(f(0xa83), 2)];
-    // TODO(E3-3): the plate is `FUN_1070_0464(0x89, 77)`, 77 in the byte
-    // that charges live in; what it means for armour is not known.
+    // TODO(E3-3): the plate is `FUN_1070_0464(0x89, 77)`: E3's ability 77
+    // (BoE's 34) stamped on it, which no node can give.
     case 0x6f:
       return [b.msg(0x58, 0x48), b.giveItem(0x89)];
     case 0x70:

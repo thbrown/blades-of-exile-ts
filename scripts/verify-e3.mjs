@@ -263,6 +263,14 @@ const walkOut = (maxSteps = 1000) => page.evaluate(async (maxSteps) => {
     let res = await step(d);
     if (res === STALLED) return { steps, stalled: 'move' };
     if (!res && s.inTown) res = await step(d); // a door opened; walk through it
+    // Someone standing in the way: wait a turn for them to move on.
+    for (let wait = 0; wait < 10 && !res && s.inTown; wait++) {
+      const at = s.univ.party.townLoc, [dx, dy] = DIRS[d];
+      const there = { x: at.x + dx, y: at.y + dy };
+      if (!s.univ.town.monsters.some((m) => m.isAlive && m.curLoc.x === there.x && m.curLoc.y === there.y)) break;
+      await s.pause();
+      res = await step(d);
+    }
     if (!res && s.inTown) return { steps, stalled: `blocked at ${JSON.stringify(s.univ.party.townLoc)}` };
     steps++;
   }

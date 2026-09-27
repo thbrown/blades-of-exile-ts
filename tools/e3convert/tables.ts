@@ -105,6 +105,29 @@ export function readE3RoadJoins(exe: Uint8Array): number[] {
   return [...new Set(ds.subarray(0x1608, 0x1608 + 0x2c))];
 }
 
+/**
+ * `DS:29b2`: `can_find_town` for a new party, which `FUN_10b0_053c` copies
+ * to party+0x8485. The towns whose byte is 0 start off the map: E3 hides 15
+ * (22, 26, 32, 54, 70, 71, 74–79, 86, 87, 92) until a script, a map or a
+ * paid answer shows them. Only towns below 120 have a byte.
+ */
+export function readE3HiddenTowns(exe: Uint8Array): number[] {
+  const ds = readNeSegment(exe, neAutoDataSegment(exe));
+  const t = ds.subarray(0x29b2, 0x29b2 + 120);
+  return [...t.keys()].filter((i) => t[i] === 0);
+}
+
+/**
+ * What a hidden town's entrance shows as. The outdoor loader (`10d8:4532`)
+ * swaps each entrance whose town isn't found for this 12-byte table
+ * (`DS:3c0a`, copied to the stack), indexed by terrain − 217, and back once it
+ * is. BoE keeps the same thing in a town terrain's `flag1`.
+ */
+export function readE3HiddenEntrances(exe: Uint8Array): Map<number, number> {
+  const ds = readNeSegment(exe, neAutoDataSegment(exe));
+  return new Map([...ds.subarray(0x3c0a, 0x3c0a + 12)].map((t, i) => [217 + i, t]));
+}
+
 /** `DS:3850`: each terrain's arena kind, the first of `FUN_10d8_342b`'s tables. */
 export const E3_ARENA_KINDS = 0x3850;
 

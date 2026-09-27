@@ -83,6 +83,8 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     // From each square beside an entrance that can be stood on, one step in.
     // Town 92 (the roaches' pit, zone 46) is ringed by trees in E3's data.
     const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    // Every town found, so the hidden ones' entrances are there to walk into.
+    for (const town of scen.towns) town.canFind = true;
     const toward: [number, number, Direction][] = [[0, 1, Direction.N], [0, -1, Direction.S], [-1, 0, Direction.E], [1, 0, Direction.W]];
     const missed: string[] = [];
     for (let sx = 0; sx < scen.outWidth; sx++) for (let sy = 0; sy < scen.outHeight; sy++) {
@@ -104,6 +106,27 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     // Tinraya's gate is two squares wide, and its west one is only reached
     // through the east.
     expect(missed).toEqual(['town 35 at (1,1) 28,15', 'town 92 at (1,5) 19,32']);
+  });
+
+  it("hides E3's fifteen towns until something shows them", async () => {
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    const hidden = scen.towns.flatMap((t, i) => (t.canFind ? [] : [i]));
+    expect(hidden).toEqual([22, 26, 32, 54, 70, 71, 74, 75, 76, 77, 78, 79, 86, 87, 92]);
+    // Town 22's entrance, zone 84 (3,9) at (22,41), is terrain 223, which
+    // shows as 26 while hidden (DS:3c0a) and can't be walked into.
+    expect(scen.terTypes[223]!.flag1).toBe(26);
+    const party = session.univ.party;
+    const walkIn = async (): Promise<number> => {
+      session.debugLeaveTown();
+      session.positionParty(3, 9, 22, 42);
+      const shown = session.univ.out.at(48 * (3 - party.outdoorCorner.x) + 22, 48 * (9 - party.outdoorCorner.y) + 41);
+      await session.move(Direction.N);
+      return session.inTown ? party.townNum : shown;
+    };
+    expect(await walkIn()).toBe(26);
+    scen.towns[22]!.canFind = true;
+    expect(await walkIn()).toBe(22);
+    scen.towns[22]!.canFind = false;
   });
 
   it('draws roads as ground with the road field, as BoE 1997 does', () => {
@@ -388,9 +411,9 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
 
   it("has E3's items, and the things lying about its towns", () => {
     // E3's 415, then the fifteen food records its food shops sell from,
-    // then the notes its scripts make readable (E3_NOTE_ITEMS), which show
-    // their dialog through a scenario special.
-    expect(scen.scenItems).toHaveLength(432);
+    // then the books, notes and maps its scripts and towns make readable
+    // (notes.ts), which show their text through a scenario special.
+    expect(scen.scenItems.length).toBeGreaterThan(470);
     expect(scen.scenItems[430]).toMatchObject({ fullName: 'Piece of Paper', ability: ItemAbil.CALL_SPECIAL });
     expect(scen.scenItems[415]).toMatchObject({ fullName: 'Crude Rations', variety: ItemType.FOOD, itemLevel: 10, value: 24 });
     const knife = scen.scenItems[41]!;
@@ -400,6 +423,31 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     const krizsan = scen.towns[0]!;
     expect(krizsan.presetItems[0]).toMatchObject({ code: 9, loc: { x: 6, y: 19 }, alwaysThere: true });
     expect(krizsan.presetFields.length).toBeGreaterThan(0);
+    // A preset's `ability` is gold's amount; its charges byte is its own.
+    const darts = scen.towns.flatMap((t) => t.presetItems).filter((p) => scen.scenItems[p.code]?.fullName === 'Iron Darts');
+    expect(darts.map((p) => p.charges)).toContain(50);
+  });
+
+  it("reads E3's books, notes and maps, which the towns' presets name", async () => {
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    const said: unknown[] = [];
+    session.attachSpecials(new Proxy({}, {
+      get: (_, k) => (k === 'message' ? (...a: unknown[]) => { said.push(a); return Promise.resolve(); } : () => Promise.resolve(0)),
+    }) as never);
+    const notes = scen.scenItems.filter((it) => it.ability === ItemAbil.CALL_SPECIAL);
+    expect(notes.length).toBeGreaterThan(40);
+    // The scroll in town 72 (a Piece of Paper made 0xaf): "You may proceed.",
+    // and the remote cave's passage opens (party+0x35d).
+    const scroll = scen.towns[72]!.presetItems.map((p) => scen.scenItems[p.code]!).find((it) => it.ability === ItemAbil.CALL_SPECIAL)!;
+    await session.runSpecial(SpecCtx.USE_SPEC_ITEM, SpecCtxType.SCEN, scroll.abilStrength, { x: 0, y: 0 });
+    expect(JSON.stringify(said)).toContain('You may proceed.');
+    expect(session.univ.party.getSdf(...partyFlag(0x35d))).toBe(1);
+    // Jordan's map (0xa9, town 46) puts town 22 on the map.
+    const map = scen.towns[46]!.presetItems.map((p) => scen.scenItems[p.code]!).find((it) => it.fullName === scroll.fullName && it.ability === ItemAbil.CALL_SPECIAL)!;
+    expect(session.univ.scenario.towns[22]!.canFind).toBe(false);
+    await session.runSpecial(SpecCtx.USE_SPEC_ITEM, SpecCtxType.SCEN, map.abilStrength, { x: 0, y: 0 });
+    expect(session.univ.scenario.towns[22]!.canFind).toBe(true);
+    session.univ.scenario.towns[22]!.canFind = false;
   });
 
   it("has E3's conversations, keyed to its people", () => {

@@ -183,9 +183,8 @@ function aminro(b: SpecBuilder): Map<number, Step[]> {
   return new Map<number, Step[]>([
     ...[1, 2, 3, 4, 5].map((id): [number, Step[]] => [id, [b.trap(0x107c, spot(id), 0xb)]]),
     [6, [ifDay(b, 0x6e, 2, [], [b.onceMsg(spot(6), B, 0x12)])]],
-    // TODO(E3-3): `FUN_1070_0464(0x1f, 178)` gives item 31 with 178 charges;
-    // the engine's node gives it as the scenario defines it.
-    [7, [b.askDialog(0x116c, [b.giveItem(0x1f), b.setFlag(f(0x63f), 20)])]],
+    // `FUN_1070_0464(0x1f, 0xb2)`: the smeared map (`notes.ts`).
+    [7, [b.askDialog(0x116c, [b.giveItem(b.note(31, 0xb2)), b.setFlag(f(0x63f), 20)])]],
   ]);
 }
 
