@@ -1397,6 +1397,12 @@ Notes for M2 implementer:
     - TODO(E3-3): three of the Wyrm Pit's squares halve each PC's health;
       no node can (`heal` does nothing to a PC at full health).
     - New steps: `terrainAt`, `hasSpot`.
+  - 2026-09-26: **towns 80–89** (`towns/dungeons.ts`) and entry scripts for
+    21 and 89. Typechecked and converted; the full test suite was not rerun
+    after this last batch. TODO(E3-3): the Wolf Pit's exits (spots 12, 16),
+    which read party+0x12e9 (meaning not pinned). Coverage: 941 spots done,
+    502 to go. Left: towns 90–111, the villages (120–177), the zones, 35
+    talk scripts, and the demon plot's countdown.
   - Next: the zones
     between them, and Marish (128). The talk types are listed by
     `listTalkScripts.ts`.

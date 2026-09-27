@@ -25,8 +25,11 @@
  *   at (41,1) for a party that came up stair 14 (E3 sets it just after the
  *   move, which ends a chain here). TODO(E3-3): E3 also scatters something
  *   at four squares of 38 (`FUN_1038_1185(x, y, 3)`, 10d8:1f2a).
- * - TODO(E3-3): the others — towns 21, 31, 41, 46, 57,
- *   78/79, 82, 89, 90, 103–105, 107 and the 26-town jump table at
+ * - Guhkbar's Pit (89) keeps the dryad's cell open once she is free
+ *   (10d8:1bf0), and Fort Emergence (21) changes (19,12) once 0xc92 is set
+ *   (10d8:1c20).
+ * - TODO(E3-3): the others — towns 31, 41, 46, 57,
+ *   78/79, 82, 90, 103–105, 107 and the 26-town jump table at
  *   10d8:2333 — as those towns are transcribed.
  */
 
@@ -65,6 +68,8 @@ export const ENTRY_SCRIPTS = new Map<number, EntryScript>([
   // Not E3's: the Great Walls forget which end the party came in by.
   [37, (b) => [b.setFlag(WALLS_SIDE, 0)]],
   [64, (b) => openChannels(b)],
+  [89, (b) => [b.ifFlagAtLeast(f(0x406), 1, [b.setTer(0xe, 3, 0x67), b.setTer(0x16, 0x13, 0x6d)])]],
+  [21, (b) => [b.ifFlagAtLeast(f(0xc92), 1, [b.setTer(0x13, 0xc, 0x4f)])]],
   [38, (b) => [b.ifFlagAtLeast(UP_STAIR_14, 1, [b.setTer(41, 1, 141), b.setFlag(UP_STAIR_14, 0)])]],
   [36, (b) => [...clearedBy(0x1f3)(b), b.ifFlagAtLeast(SOULS_FOUGHT, 1, [
     ...PANEL_DOORS.map(([x, y]) => b.setTer(x, y, 141)), b.setTer(28, 7, 0x87), b.setTer(12, 32, 0x87),

@@ -838,6 +838,152 @@ function madMonastery2(b: SpecBuilder): Map<number, Step[]> {
 }
 
 /**
+ * The Wolf Pit (town 80): `FUN_10b8_0000`, block 64.
+ *
+ * TODO(E3-3): spots 12 and 16 leave for zone (7,8) at (92,62) or (92,41)
+ * depending on party+0x12e9 (above or below 20), a byte beside the party's
+ * outdoor position (party+0x12e6) whose meaning isn't pinned yet.
+ */
+function wolfPit(b: SpecBuilder): Map<number, Step[]> {
+  const up = (dlg: number, town: number, x: number, y: number): Step[] =>
+    [b.askDialog(dlg, [b.changeTown(town, x, y)]), b.blockMove()];
+  return new Map<number, Step[]>([
+    [14, up(0xed8, 0x2d, 8, 0xe)],
+    [15, up(0xed8, 0x2c, 2, 0x18)],
+    [17, up(0xd7f, 0x2d, 0x10, 0xc)],
+  ]);
+}
+
+/** The Unicorn Grotto (town 81): `FUN_10b8_02e2`, block 64. */
+function unicornGrotto(b: SpecBuilder): Map<number, Step[]> {
+  const B = 64, spot = (id: number) => townSpotFlag(81, id);
+  return new Map<number, Step[]>([
+    [1, [b.askDialog(0xee2, [b.setFlag(spot(1), 20), b.msg(B, 0x15, 0x16), b.bringIn(200, 1)])]],
+  ]);
+}
+
+/** The Wolfrider Warren (town 82): `FUN_10b8_1169`, block 64. */
+function wolfriderWarren(b: SpecBuilder): Map<number, Step[]> {
+  const B = 64, spot = (id: number) => townSpotFlag(82, id);
+  return new Map<number, Step[]>([
+    [1, [b.onceMsg(spot(1), B, 0x2f)]],
+    [2, [b.trap(0xd7a, spot(2), 0)]],
+    [3, [b.onceMsg(spot(3), B, 0x32)]],
+    [4, [b.trap(0xeec, spot(4), 0)]],
+    [5, [b.trap(0xeec, spot(5), 0)]],
+    [6, [b.onceMsg(spot(6), B, 0x30)]],
+    [11, [b.lever([b.msg(B, 0x31), b.swapTer(0xb, 0x19, 0x8c, 0x8d), b.swapTer(0xb, 0x1a, 0x8c, 0x8d)])]],
+    [12, [b.lever([b.msg(B, 0x31), b.swapTer(4, 0x14, 0x8c, 0x8d)])]],
+  ]);
+}
+
+/**
+ * The Distant Hut (town 85), Ernest the teleporter's: `FUN_10b8_039c`,
+ * block 64. Paid (flag (85,8), set in conversation), each portal sends the
+ * party to one of the five cities, and the fee is spent; a party that stole
+ * his book (spot 1) goes to the Fiery Pit instead, once.
+ */
+function distantHut(b: SpecBuilder): Map<number, Step[]> {
+  const B = 64, spot = (id: number) => townSpotFlag(85, id);
+  const paid = spot(8), bookTaken = spot(1), punished = spot(7);
+  /** Portal id: zone, outdoor square, then town and square. E3's shareware refused 16 on (`Not until you're registered.`); this is the freeware release. */
+  const portals: Record<number, [number, number, number, number, number, number, number]> = {
+    14: [1, 8, 0x44, 0x51, 0, 0x3b, 0x20], 15: [0, 6, 0xb, 0x1a, 4, 0x3b, 0x20], 16: [3, 6, 0x18, 0x1e, 8, 0x20, 5],
+    17: [3, 4, 0x1c, 0x1a, 0xc, 0x22, 8], 18: [5, 2, 0x47, 0x3a, 0x10, 0x20, 4],
+  };
+  const portal = (id: number): Step[] => {
+    const [zx, zy, ox, oy, t, x, y] = portals[id]!;
+    return [b.askDialog(0xf0b, [b.ifFlagEq(punished, 0, [b.ifFlagAtLeast(bookTaken, 1, [
+      b.msg(B, 0x17, 0x12), b.setFlag(punished, 1), b.exitTo(5, 7, 0x3c, 0x13), b.changeTown(0x62, 8, 1),
+    ], [go()])], [go()])]), b.blockMove()];
+    function go(): Step {
+      return b.seq([b.msg(B, 0x12), b.setFlag(paid, 0), b.exitTo(zx, zy, ox, oy), b.changeTown(t, x, y)]);
+    }
+  };
+  return new Map<number, Step[]>([
+    // Ernest's teleportation book, once the flag (85,9) says it's there.
+    [1, [b.ifFlagAtLeast(spot(9), 1, [b.giveItemDialog(0xf0a, bookTaken, 0, 334)], [b.msg(B, 0x11)])]],
+    [2, [b.ifFlagEq(paid, 0, [b.msg(B, 0x14), b.blockMove()], [b.msg(B, 0x13)])]],
+    ...[14, 15, 16, 17, 18].map((id): [number, Step[]] => [id, portal(id)]),
+  ]);
+}
+
+/** The Murder Cave (town 86), near New Formello: `FUN_10b8_0117`, block 64. */
+function murderCave(b: SpecBuilder): Map<number, Step[]> {
+  const B = 64, spot = (id: number) => townSpotFlag(86, id);
+  /** An ambush, once: messages, and a group brought in. */
+  const ambush = (id: number, text: Step, code: number): Step[] =>
+    [b.ifFlagEq(spot(id), 0, [text, b.setFlag(spot(id), 20), b.bringIn(code, 1)])];
+  return new Map<number, Step[]>([
+    [1, ambush(1, b.msg(B, 3, 4), 200)],
+    [2, ambush(2, b.msg(B, 6), 201)],
+    // Fireball traps, (id + 2)d6.
+    ...[3, 4, 5].map((id): [number, Step[]] => [id, [b.log(0x10b8, 0x108), b.e3Boom(id + 2)]]),
+    [6, ambush(6, b.msg(B, 8), 202)],
+    // The evidence of the murders: the key (special item 10), and the
+    // roaches' time is up (flag 0xc90 to 4).
+    // TODO(E3-3): journal entry 0x14.
+    [7, [b.dialog(0xf15), b.giveSpecItem(partySpecItem(0x20)), b.setFlag(spot(7), 20), b.setFlag(f(0xc90), 4)]],
+    [11, [b.dialog(0xf14)]],
+  ]);
+}
+
+/** The Crystal Tunnel (town 87): `FUN_10b8_1097`, block 64. */
+function crystalTunnel(b: SpecBuilder): Map<number, Step[]> {
+  return new Map<number, Step[]>([1, 2, 3].map((id): [number, Step[]] => [id, [b.dialog(id + 0xf1d)]]));
+}
+
+/** The Spiral Crypt (town 88), Gorvifal's: `FUN_10b8_0608`, block 64. */
+function spiralCrypt(b: SpecBuilder): Map<number, Step[]> {
+  const B = 64, spot = (id: number) => townSpotFlag(88, id);
+  /** How many of the four switches have been trodden on (flag (88,2)); Gorvifal taunts at 2 and 5. */
+  const count = spot(2);
+  const doors: Record<number, [[number, number], [number, number]]> = {
+    6: [[2, 0xb], [9, 0x1d]], 7: [[0x11, 4], [2, 0xb]], 8: [[9, 0x1d], [0x1d, 0x14]], 9: [[0x1d, 0x14], [0x11, 4]],
+  };
+  const button = (x: number, y: number, t: number): Step[] =>
+    [b.askDialog(0xf28, [b.msg(B, 0x1f), b.setTer(x, y, t)])];
+  return new Map<number, Step[]>([
+    [1, [b.onceMsg(spot(1), B, 0x22)]],
+    [2, []], [3, []],
+    // Each switch closes one door and opens the next.
+    ...[6, 7, 8, 9].map((id): [number, Step[]] => {
+      const [[cx, cy], [ox, oy]] = doors[id]!;
+      return [id, [b.setTer(cx, cy, 0x6c), b.setTer(ox, oy, 0x6d), b.incFlag(count),
+        b.ifFlagEq(count, 2, [b.msg(B, 0x23)]), b.ifFlagEq(count, 5, [b.msg(B, 0x24)])]];
+    }),
+    [14, button(0x11, 7, 0x96)],
+    [15, button(7, 0xc, 0x96)],
+    [16, button(3, 0x10, 0xf5)],
+  ]);
+}
+
+/** Guhkbar's Pit (town 89), a giant's, with the dryad Illyree in a cell: `FUN_10b8_0856`, block 64. */
+function guhkbarsPit(b: SpecBuilder): Map<number, Step[]> {
+  const B = 64, spot = (id: number) => townSpotFlag(89, id);
+  const rustyKey = partySpecItem(0x22);
+  return new Map<number, Step[]>([
+    // A tiny glowing person: leave, attack, or talk (which opens a way).
+    [1, [b.ifTer(0x16, 7, 0xa, [], [b.choiceDialog(0xf32,
+      [b.msg(B, 0x26), b.setFlag(spot(1), 20)],
+      [b.msg(B, 0x27, 0x28), b.setTer(4, 0x1b, 0xa), b.setTer(6, 0x1a, 0)],
+      [b.msg(B, 0x25)])])]],
+    [2, [b.onceMsg(spot(2), B, 0x2d, 0x2e)]],
+    // TODO(E3-3): the alarm also wakes the giant (creature 0 active, 2).
+    ...[3, 4].map((id): [number, Step[]] => [id, [b.askDialog(0xf33,
+      [b.setFlag(spot(id), 20), b.msg(B, 0x2b)], [b.blockMove()])]]),
+    [5, [b.askDialog(0xf33, [b.askDialog(0xf34, [b.setFlag(spot(5), 20), b.giveSpecItem(rustyKey)])])]],
+    // The cell: the key frees Illyree, who deals with the giant herself
+    // (creature 0 takes 1000, `FUN_10c0_4af4`) and leaves (creature 25).
+    [11, [b.ifTer(0xe, 3, 0x6a, [b.ifSpecItem(rustyKey, [
+      b.setTer(0xe, 3, 0x67), b.setTer(0x16, 0x13, 0x6d), b.dialog(0xf35),
+      b.setFlag(spot(8), 1), b.setFlag(spot(1), 20), b.setFlag(spot(2), 20),
+      b.removeCreatureSlots([0, 25]), b.xp(10),
+    ], [b.msg(B, 0x29)])])]],
+  ]);
+}
+
+/**
  * A town with no case in the town handler's switch (`FUN_10c0_0000`): its
  * spots below 100 do nothing, and say so here rather than stay unlisted.
  */
@@ -882,6 +1028,14 @@ export const DUNGEON_SCRIPTS = new Map<number, PlaceScript>([
   [77, wyrmPit2],
   [78, madMonastery],
   [79, madMonastery2],
+  [80, wolfPit],
+  [81, unicornGrotto],
+  [82, wolfriderWarren],
+  [85, distantHut],
+  [86, murderCave],
+  [87, crystalTunnel],
+  [88, spiralCrypt],
+  [89, guhkbarsPit],
   // "Name" and "Anim Data": towns E3's handler has no case for.
   [66, noHandler],
   [84, noHandler],
