@@ -93,6 +93,18 @@ function boatPassable(t: number): boolean {
     || t === 0x47 || t === 0x4a || t === 0x4b || t === 0x56;
 }
 
+/**
+ * What a road reaches into: E3's `place_road` (`1050:5460`, BoE 1997's with
+ * the same rectangles) draws an arm toward a neighbour whose terrain is on
+ * this list, the 44 bytes at `DS:1608` that `1050:5417` searches. Bridges,
+ * doors, portcullises, towns, roads, walkways and special encounters. BoE
+ * tests pictures instead (`extend_road_terrain`), OBoE trims.
+ */
+export function readE3RoadJoins(exe: Uint8Array): number[] {
+  const ds = readNeSegment(exe, neAutoDataSegment(exe));
+  return [...new Set(ds.subarray(0x1608, 0x1608 + 0x2c))];
+}
+
 /** `DS:3850`: each terrain's arena kind, the first of `FUN_10d8_342b`'s tables. */
 export const E3_ARENA_KINDS = 0x3850;
 

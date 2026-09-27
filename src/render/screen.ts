@@ -804,6 +804,17 @@ export class Screen {
     return session.univ.out.isRoad(x, y);
   }
 
+  private roadJoinsCache: { flag: string; set: Set<number> } | null = null;
+
+  /** The scenario's `road-joins` list, or null when it has none. */
+  private roadJoins(session: GameSession): Set<number> | null {
+    const flag = session.univ.scenario.featureFlags['road-joins'];
+    if (flag === undefined) return null;
+    if (this.roadJoinsCache?.flag !== flag)
+      this.roadJoinsCache = { flag, set: new Set(flag.split(',').map((n) => parseInt(n, 10))) };
+    return this.roadJoinsCache.set;
+  }
+
   /**
    * extend_road_terrain (boe.graphics.cpp:1304): a road stub reaches into the
    * neighbouring tile when that tile is also road-like — a road flag, a city
@@ -816,9 +827,13 @@ export class Screen {
       ? town.isOnMap(x, y)
       : session.univ.out.isOnMap(x, y);
     if (!inBounds) return false;
-    const ter = session.univ.terrainType(
-      town ? town.record.terrain[x]![y]! : session.univ.out.at(x, y),
-    );
+    const terNum = town ? town.record.terrain[x]![y]! : session.univ.out.at(x, y);
+    // An exile-js extension: a scenario can list the terrains a road reaches
+    // into, as the feature flag `road-joins` (comma-separated numbers).
+    // Exile III's converter does, with E3's own list; it replaces the trim test.
+    const joins = this.roadJoins(session);
+    if (joins) return joins.has(terNum);
+    const ter = session.univ.terrainType(terNum);
     return (
       ter.trimType === TrimType.CITY ||
       ter.trimType === TrimType.WALKWAY ||

@@ -13162,9 +13162,14 @@ The user's notes after playing Exile III, and what each turned out to be:
   (GRAPHICS.CPP:2164), which lie over the same three grounds. They now convert
   the way the legacy importer converts BoE's: the terrain takes the plain
   ground's picture, and every road square gets the road field (`&25`), which
-  draws hub and arms. Only road-to-road joins so far: BoE's
-  `extend_road_terrain` also reaches into bridges and towns, and E3's own list
-  hasn't been found (`TODO(E3-3)`).
+  draws hub and arms. **Arms, 2026-09-27**: E3's `place_road` is `1050:5460`
+  (BoE 1997's, same rectangles). Its extend test `1050:5417` searches 44
+  terrain numbers at `DS:1608`: bridges, doors, portcullises, towns, roads,
+  walkways and special encounters. The converter reads the list
+  (`readE3RoadJoins`) and hands it over as a new scenario feature flag,
+  `road-joins` (comma-separated). When present, it replaces the trim test in
+  `Screen.extendRoad`. The terrain XML reader is strict, as OBoE's is, so a
+  per-terrain tag would have been a format change.
 - **Fort Emergence's south gate led to the surface: the exits were
   reversed.** Spots 11 (30,5) and 12 (30,9) both sit in the *north* passage,
   and E3 only fires each when the party's outdoor block is on the other side

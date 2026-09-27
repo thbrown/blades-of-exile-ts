@@ -75,6 +75,10 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(sector.terrain[46]![1]).toBe(233);
     expect(sector.roads[46]![1]).toBe(true);
     expect(sector.roads[45]![1]).toBe(false);
+    // Arms reach into what E3's list names: bridges, doors, towns, walkways.
+    const joins = scen.featureFlags['road-joins']!.split(',').map(Number);
+    for (const t of [65, 103, 219, 221, 232, 233, 234, 245]) expect(joins).toContain(t);
+    expect(joins).not.toContain(2);
   });
 
   it("marks E3's containers, so the dresser in the first room can be searched", () => {

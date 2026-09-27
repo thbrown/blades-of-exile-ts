@@ -15,7 +15,7 @@ import { readDialogs, readNeResources, readNeSegment, readStringTable } from './
 import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor, type E3OutWandering } from './outdoor';
 import { ItemAbil } from '../../src/data/item';
 import { FieldType } from '../../src/data/fields';
-import { readE3ItemAbilities, readE3Items, readE3Monsters, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
+import { readE3ItemAbilities, readE3Items, readE3Monsters, readE3RoadJoins, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3Town } from './town';
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
 import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
@@ -170,8 +170,8 @@ const TRANSFORM = new Map<number, number>([[243, 244], [244, 243]]);
  * the same three grounds. So they convert as the legacy importer converts
  * BoE's: the terrain keeps its number and takes the plain ground's picture,
  * and every square of it gets the engine's road field, which draws hub and
- * arms. TODO(E3-3): E3's own list of what a road reaches into (BoE's
- * `extend_road_terrain` includes bridges and towns); only road-to-road joins.
+ * arms. What an arm reaches into is E3's own list (`readE3RoadJoins`),
+ * given to the engine as the feature flag `road-joins`.
  */
 const E3_ROADS = new Map<number, number>([[232, 0], [233, 2], [234, 36]]);
 
@@ -459,7 +459,7 @@ function townMap(
 function scenarioXml(
   start: { town: number; loc: { x: number; y: number } },
   outStart: { sector: { x: number; y: number }; loc: { x: number; y: number } },
-  shops: Shop[], specialItems: SpecItem[], specStrings: string[], newDay: number,
+  shops: Shop[], specialItems: SpecItem[], specStrings: string[], newDay: number, roadJoins: number[],
 ): string {
   return `${XML_HEAD}<scenario boes="2.0.0">
     <title>Exile III: Ruined World</title>
@@ -474,6 +474,7 @@ function scenarioXml(
     <feature-flags>
         <use-special-spots>exile3</use-special-spots>
         <outdoor-arena>exile3</outdoor-arena>
+        <road-joins>${roadJoins.join(',')}</road-joins>
     </feature-flags>
     <text>
         <teaser>The surface world is dying. Find out why.</teaser>
@@ -683,7 +684,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   write('scenario.spec', scen.spec);
   // Last, since the places' scripts can add shops of their own.
   shops.push(...talk.shops);
-  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay));
+  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe)));
   const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(read)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
   progress(1);
