@@ -164,6 +164,28 @@ ever executed. The rule is "no chia mining on the bucket".
    startup screen lists the catalog and downloads a scenario into the step 1
    store on demand.
 
+# Queued: Rewind (after the TODO inventory is cleared)
+
+**Decided with the user 2026-09-28**: build it, but only once every `TODO(`
+in `src/` and `tools/` is done. Not in either original.
+
+- **What it is.** A history of the game, taken every turn, that the player can
+  step back through: File → Rewind… shows a timeline (thumbnail, day, place)
+  and a key steps back one turn. It replaces the need to "make a manual save
+  first" — history starts with the game. Named saves stay as they are.
+- **Taken where the resume record is** (`keepResume` in `main.ts`, 2026-09-28):
+  only where a save could be made (not mid-action, under a dialog, or in
+  combat), so the same rules hold.
+- **Storage by content.** A save is a tarball of many small files and most of
+  them don't change between turns, so each distinct file is stored once
+  (keyed by hash) and a snapshot is a list of hashes. 1,000 turns should then
+  cost little more than a few full saves. Measure a save's size and the
+  per-turn delta before settling the numbers.
+- **Thinning with age:** every turn for the last ~200, then one per 10 turns,
+  then one per game day, with files no snapshot uses dropped.
+- **Open:** whether it replaces BoE's five-slot autosave (`doAutoSave`) or
+  sits beside it — ask the user when this starts.
+
 # Part 2: Playing Exile 3 in exile-js
 
 ## Context
