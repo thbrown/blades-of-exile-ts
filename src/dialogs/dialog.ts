@@ -301,7 +301,7 @@ export class Dialog {
         // No room for the button frame; the key just prefixes the label.
         drawString(
           ctx, { ...label, left: textLeft2, top: label.top + 3 }, `${row.key}.`,
-          { size: TEXT_SIZE, colour: row.disabled ? Colours.GREY : Colours.WHITE },
+          { size: TEXT_SIZE, colour: row.disabled ? Colours.GREY : DIALOG_TEXT() },
         );
         ctx.font = `${TEXT_SIZE}px BoEPlain, sans-serif`;
         textLeft2 += ctx.measureText(`${row.key}. `).width;
@@ -339,11 +339,14 @@ export class Dialog {
         }
         textLeft2 += 22;
       }
+      // Light blue and green are for BoE's dark pattern; on E3's light one
+      // they all but vanish, so rows go dark there, as its text goes black.
+      const dark = dialogTextIsWhite();
       const colour = row.disabled
         ? Colours.GREY
         : row.highlight
-          ? Colours.LIGHT_GREEN
-          : Colours.LIGHT_BLUE;
+          ? (dark ? Colours.LIGHT_GREEN : Colours.DARK_GREEN)
+          : (dark ? Colours.LIGHT_BLUE : Colours.DARK_BLUE);
       let lineTop = label.top + (row.dense ? 3 : 5);
       for (const line of row.lines) {
         drawString(

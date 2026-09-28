@@ -117,11 +117,39 @@ export async function setPartyActiveScenario(id: string | null): Promise<void> {
   });
 }
 
+/**
+ * The game this browser was last playing, kept current as it is played so a
+ * reload goes straight back into it (`main.ts`: a `?play=` URL). Not a slot:
+ * the picker never shows it, and nothing but a reload reads it. It holds the
+ * manual slot the game came from too, so the autosave keeps rotating beside
+ * the same one.
+ */
+const RESUME = '\u0000resume';
+
+export async function putResume(data: Uint8Array, slot: string | null): Promise<void> {
+  const record: SaveRecord & { slot?: string } = {
+    name: RESUME, savedAt: Date.now(), preview: readSavePreview(data), data: new Uint8Array(data),
+    ...(slot !== null ? { slot } : {}),
+  };
+  await withStore('readwrite', (store) => run(store.put(record)));
+}
+
+export async function getResume(): Promise<{ data: Uint8Array; scenarioId: string; slot: string | null } | null> {
+  const row = await withStore('readonly',
+    (store) => run(store.get(RESUME) as IDBRequest<(SaveRecord & { slot?: string }) | undefined>));
+  if (row === undefined) return null;
+  return { data: new Uint8Array(row.data), scenarioId: row.preview.scenarioId, slot: row.slot ?? null };
+}
+
+export async function clearResume(): Promise<void> {
+  await deleteSave(RESUME);
+}
+
 /** The slots, newest first, without their bytes. */
 export async function listSaves(): Promise<SaveSlot[]> {
   const rows = await withStore('readonly', (store) => run(store.getAll() as IDBRequest<SaveRecord[]>));
   return rows
-    .filter((row) => row.name !== PARTY_IN_MEMORY)
+    .filter((row) => row.name !== PARTY_IN_MEMORY && row.name !== RESUME)
     .map(({ name, savedAt, preview, thumb }) => ({ name, savedAt, preview, ...(thumb ? { thumb } : {}) }))
     .sort((a, b) => b.savedAt - a.savedAt);
 }

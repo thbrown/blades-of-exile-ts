@@ -70,6 +70,27 @@ await page.keyboard.press('Enter');
 await page.waitForTimeout(800);
 check('the game has a URL of its own', new URL(page.url()).searchParams.get('play') === 'valleydy', page.url());
 
+// Reload goes back into the game where it was, not to the main menu.
+for (const key of ['ArrowDown', 'ArrowDown', 'ArrowRight']) {
+  await page.keyboard.press(key);
+  await page.waitForTimeout(300);
+}
+await page.evaluate(() => { window.__univ.party.gold = 4321; });
+const before = await page.evaluate(() => ({
+  loc: { ...window.__univ.party.townLoc }, age: window.__univ.party.age, gold: window.__univ.party.gold,
+}));
+await page.waitForTimeout(2600); // keepResume's interval
+await page.reload();
+await inGame();
+await page.waitForTimeout(1000);
+const after = await page.evaluate(() => ({
+  loc: { ...window.__univ.party.townLoc }, age: window.__univ.party.age, gold: window.__univ.party.gold,
+  dialog: !!window.__dialogs?.active,
+}));
+check('Reload picks the game back up', JSON.stringify(before.loc) === JSON.stringify(after.loc)
+  && before.age === after.age && after.gold === 4321 && !after.dialog, { before, after });
+check('and keeps its URL', new URL(page.url()).searchParams.get('play') === 'valleydy', page.url());
+
 // Back leaves the game for the main menu, which says where the party is.
 // A save made in the scenario is offered from there, with its picture.
 await page.evaluate(async () => {

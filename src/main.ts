@@ -87,9 +87,12 @@ import { TerSpec } from './data/terrain';
 import { GameSession } from './game/session';
 import { TalkAction } from './game/talk';
 import { loadOpcodes, loadScenario } from './fileio/loadScenario';
-import { applyPartySave, applySave, readSavePreview, saveGame } from './fileio/saveIo';
+import { applyPartySave, applySave, readSavePreview, saveGame, serialiseSave } from './fileio/saveIo';
+import { gzipSync } from 'fflate';
+import { aroundWaitFade } from './platform/waitFade';
 import {
-  SaveSlot, exportSave, getPartyInMemory, getSave, importSave, listSaves, putSave, saveStoreAvailable,
+  SaveSlot, clearResume, exportSave, getPartyInMemory, getResume, getSave, importSave, listSaves, putResume, putSave,
+  saveStoreAvailable,
   setPartyActiveScenario, setPartyInMemory,
 } from './platform/saveStore';
 import {
@@ -148,9 +151,10 @@ const DEFAULT_SCENARIO = 'valleydy';
  */
 /**
  * The URL a game gets once the startup screen hands it over, so the browser's
- * Back button leaves the game for the main menu. A game isn't kept across a
- * page load, so opening one of these URLs (Reload, or Forward after Back)
- * shows the main menu, and the parameter is dropped.
+ * Back button leaves the game for the main menu. Reloading `?play=<id>` goes
+ * back into the game (the resume record, `keepResume`); with nothing kept for
+ * that scenario, or on `?party=`, it shows the main menu and drops the
+ * parameter.
  */
 const GAME_PARAMS = ['play', 'party'] as const;
 
@@ -314,6 +318,22 @@ async function main(): Promise<void> {
   let makingParty = false;
   /** The party in memory, when the startup screen is taking it into a scenario. */
   let enteringParty: Uint8Array | null = null;
+  /**
+   * A reload of a game's page (`?play=<id>`) goes back into that game as it
+   * was last kept (`keepResume`, below), rather than to the main menu.
+   */
+  let resume: { data: Uint8Array; slot: string | null } | null = null;
+  const playing = new URLSearchParams(window.location.search).get('play');
+  // A save parked by a cross-scenario load names its scenario the same way.
+  if (name === null && openSlot !== null && playing !== null) name = playing;
+  if (name === null && openSlot === null && playing !== null && saveStoreAvailable()) {
+    const kept = await getResume().catch(() => null);
+    if (kept !== null && kept.scenarioId !== '' && kept.scenarioId === playing) {
+      resume = kept;
+      name = playing;
+      window.addEventListener('popstate', () => { window.location.reload(); });
+    }
+  }
   if (name === null) {
     if (GAME_PARAMS.some((p) => new URLSearchParams(window.location.search).has(p))) {
       window.history.replaceState(null, '', urlWith(null));
@@ -443,6 +463,8 @@ async function main(): Promise<void> {
       window.location.reload();
       return;
     }
+    // Whatever was kept for a reload belongs to the game being left.
+    if (saveStoreAvailable()) await clearResume().catch(() => undefined);
     // A history entry for the game, so Back returns to this menu. The page
     // reloads to get there, which is how this port gets a clean Universe.
     window.history.pushState(null, '', choice.party === 'make'
@@ -632,7 +654,8 @@ async function main(): Promise<void> {
   // C++'s `start_new_game`, which runs before a scenario is entered — so
   // `startNewGame` (put_party_in_scen) waits for the editor, further down.
   // A direct `?scenario=` link and a saved game skip the editor.
-  const buildParty = scenarioFromQuery() === null && openSlot === null && enteringParty === null;
+  const buildParty = scenarioFromQuery() === null && openSlot === null && enteringParty === null
+    && resume === null;
   if (!buildParty && enteringParty === null) session.startNewGame();
   const screen = new Screen(ctx, store);
   // The windows' title bars: each game's own, by the scenario's look.
@@ -1621,8 +1644,7 @@ async function main(): Promise<void> {
           return false;
         }
         window.sessionStorage.setItem(PENDING_SAVE_KEY, picked.slice('slot:'.length));
-        window.location.href =
-          `${import.meta.env.BASE_URL}?scenario=${encodeURIComponent(preview.scenarioId)}`;
+        window.location.href = urlWith('play', preview.scenarioId);
         return true;
       }
       applySave(data, univ);
@@ -2128,6 +2150,34 @@ async function main(): Promise<void> {
    * screen if the player cannot act.
    */
   const midAction = (): boolean => acting || session.busy || animPending() > 0;
+
+  /**
+   * Keep the game's state where a reload finds it (`getResume`, at the top of
+   * `main`). Only at a moment the game could be saved — never mid-action or
+   * under a dialog, and never in combat, which a save can't hold — so a reload
+   * in a fight goes back to the moment before it. Every two seconds when
+   * something has changed, and whenever the page is hidden.
+   */
+  const keepResume = (): void => {
+    if (!saveStoreAvailable()) return;
+    let last: Uint8Array | null = null;
+    let writing = false;
+    const keep = (): void => {
+      if (writing || dialogs.active || midAction() || canSaveNow() !== null) return;
+      if (!univ.party.pcs.some((pc) => pc.isAlive)) return;
+      const raw = serialiseSave(univ).serialise();
+      if (last !== null && last.length === raw.length && last.every((b, i) => b === raw[i])) return;
+      last = raw;
+      writing = true;
+      putResume(gzipSync(raw), univ.saveSlot)
+        .catch(() => undefined)
+        .finally(() => { writing = false; });
+    };
+    setInterval(keep, 2000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') keep();
+    });
+  };
 
   /**
    * Whether a click on the terrain is a *shot* rather than a step: a loaded
@@ -2785,7 +2835,18 @@ async function main(): Promise<void> {
           // **w is `handle_wait`, not `handle_pause`** (boe.actions.cpp:3094).
           // They were both wired to `pause` here, so the long wait — up to
           // eighty turns of standing still in town — had no key at all.
-          await session.wait();
+          // Only a wait that will pass time gets the night; the refusals are
+          // one line and no fade.
+          if (session.mode === GameMode.TOWN && !session.partySeesAMonst()) {
+            acting = true;
+            try {
+              await aroundWaitFade(canvas, () => session.wait(), redraw);
+            } finally {
+              acting = false;
+            }
+          } else {
+            await session.wait();
+          }
           break;
         case 'd': case 'D':
           if (inCombat) void session.parry();
@@ -3075,6 +3136,19 @@ async function main(): Promise<void> {
       univ.addStringToBuf(`Load failed: ${String(err)}`);
     }
   }
+
+  if (resume !== null) {
+    try {
+      applySave(resume.data, univ);
+      univ.saveSlot = resume.slot;
+      resumeAfterLoad();
+    } catch (err) {
+      univ.addStringToBuf(`Couldn't pick the game back up: ${String(err)}`);
+    }
+  }
+  // Only a game the main menu started: a `?scenario=` link (the verifiers,
+  // the debug panel) starts afresh on every load and mustn't overwrite it.
+  if (new URLSearchParams(window.location.search).has('play')) keepResume();
 
   hideLoadingUi();
   refitDesktop();

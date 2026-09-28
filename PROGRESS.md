@@ -14257,7 +14257,36 @@ the rest of the TODO(E3-3) list.
       under touch controls, or the browser takes the slide as a pan and
       cancels the pointer.
 
-All checks pass: 1,419 tests, both sweeps, verify-screen (with TOUCH)/party
+- [x] **Play-test round: forum links, E3 save dialogs, the wait's night,
+      reload resumes (2026-09-28).** From the user's notes:
+      - **Forum links were all dead.** The review board answers
+        `/topic/13817/` with "Sorry, we could not find that!" (error
+        2U431/1) but takes `/topic/13817-<any slug>/` and redirects to its
+        own. `build-library.ts` now appends a slug made from the title; the
+        rebuilt catalog differs only in those URLs. **The bucket still has
+        the old catalog** until `publish-library.sh` is run again.
+      - **Save/Load rows on E3's light pattern** were light blue and white.
+        `DialogHost` rows now go dark blue (dark green highlighted) when
+        `dialogTextIsWhite()` is false, as the text goes black.
+      - **The town wait fades** (`platform/waitFade.ts`): the terrain view
+        closes to black from the edges, holds, and opens on the new time. A
+        CSS veil over the canvas, so no draw moves; opacity alone where
+        `CSS.registerProperty` is missing, and a plain fade under reduced
+        motion. Only a wait that will pass time gets it. Not in either
+        original as drawn — OBoE draws the rest screen, E3 flashes black.
+      - **Reload goes back into the game.** A `?play=<id>` page keeps the
+        game in a hidden `\u0000resume` record (`putResume`), written every
+        2s when it changed and on `visibilitychange`, but only when the game
+        could be saved (not mid-action, under a dialog, or in combat — a
+        reload mid-fight goes back to before it). Choosing anything on the
+        main menu clears it. A cross-scenario load now moves to `?play=`
+        too, so a reload there resumes. `?scenario=` links still start
+        afresh and never write it. `verify-party.mjs` checks the reload.
+      - Not done: importing Exile III's own `.sav` files (the party record
+        is mapped in FORMATS.md, the rest is not), and a rewind history.
+
+All checks pass: 1,420 tests, both sweeps, verify-screen (with TOUCH)/party
+(this round). Before it: 1,419 tests, both sweeps, verify-screen (with TOUCH)/party
 (corpus not re-run: none of today's changes touches an RNG call, and the
 replay driver doesn't use `main.ts`'s key handler). **Next session starts here**: E3's
 remaining screen chrome (see "Not done" above), then the TODO(E3-3) list.

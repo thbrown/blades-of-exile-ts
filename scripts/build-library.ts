@@ -176,10 +176,16 @@ const OTHER_ARCHIVES: { dir: string; home: string; names: () => ReturnType<typeo
  * spiderwebforums, "Blades of Exile Scenario Reviews", one topic per
  * scenario). The forum sits behind Cloudflare, so the table was read in a
  * browser and committed rather than fetched here. Refresh it the same way.
+ *
+ * A link needs a slug after the number: the board answers `/topic/13817/`
+ * with "Sorry, we could not find that!", but takes any slug at all and
+ * redirects to its own, so one made from the title is enough.
  */
 const FORUM_TOPIC = 'https://spiderwebforums.ipbhost.com/topic/';
 interface ForumRow { title: string; difficulty: string; rating: string; entry: NonNullable<LibraryEntry['forum']> }
 const forumRows = new Map<string, ForumRow>();
+const forumSlug = (title: string): string =>
+  title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'topic';
 /** A title as the forum and the archives both write it: no articles, punctuation or "(Utility)". */
 const titleKey = (s: string): string => s.toLowerCase()
   .replace(/\(utility\)|\(creator\)/g, '')
@@ -197,7 +203,7 @@ for (const line of readFileSync('scripts/forum-reviews.tsv', 'utf8').split('\n')
   const sum = counts.reduce((a, c, i) => a + c * (5 - i), 0);
   forumRows.set(titleKey(title), {
     title, difficulty: difficulty ?? '', rating: rating ?? '',
-    entry: { url: `${FORUM_TOPIC}${topic}/`, score: n > 0 ? Math.round((sum / n) * 100) / 100 : null, votes: n },
+    entry: { url: `${FORUM_TOPIC}${topic}-${forumSlug(title)}/`, score: n > 0 ? Math.round((sum / n) * 100) / 100 : null, votes: n },
   });
 }
 const forumReview = (...titles: string[]): ForumRow | undefined =>
