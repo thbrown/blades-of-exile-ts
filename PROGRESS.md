@@ -13999,6 +13999,36 @@ the rest of the TODO(E3-3) list.
         "You emerge from Fort Emergence..."), walks round lava and town
         entrances, and the script fails if anyone walks through lava.
 
+### E3 play-test notes, fourth round (2026-09-28)
+
+- [x] **spell dialog text colours.** `castDialog.ts` tiled BoE's dark 5 with
+      white text whatever the scenario; it now tiles `dialogBackground()`
+      with the text colour to match. Under `backgrounds` = `exile3` it also
+      takes Exile III's colours from its own screen: nothing is greyed (the
+      LEDs say what can be cast, as in 1997) and the chosen caster's name is
+      red. OBoE's greying stays for everything else.
+- [x] **no click sound in the spell dialog.** No dialog in the port played
+      `cd_press_button`'s click (DLOGTOOL.CPP:1498/1514: 34 for an LED, 37
+      for anything else). The spell dialog does now, plus 1997's
+      `force_play_sound(45)` with " Now pick a target." Other dialogs are
+      still silent.
+- [x] **message text too high.** 1997's `cd_draw_item` draws a text item
+      taller than 20px inset 4px on every side (DLOGTOOL.CPP:1266, E3 the
+      same); OBoE dropped that, so the text started at y=2, against the top
+      border. `threeChoiceDialog.ts`, whose layout is 1997's
+      `cd_create_custom_dialog`, puts the inset back. Definitions from
+      dialogxml files are OBoE's layout and keep OBoE's drawing.
+- [x] **the map window's background.** 1997 tiles it with the dialog
+      pattern (`paint_pattern(hdc2, 2, ...)`, TOWN.CPP:1613), and so does
+      E3. Under `backgrounds` = `exile3` the map tiles `BG_LIGHT` with black
+      text; BoE keeps OBoE's bg[4].
+- [ ] **"Use to shut door not working."** Not a bug, as far as the
+      decompile says: E3's Use/Search (`FUN_10c0_425c`, reached only from
+      the search command at exile3.c:4692) runs spots, opens containers
+      and finds secret doors (101/118/133 +1), and has no door branch;
+      E3's open door (107) carries no special. Closing doors is BoE's. Left
+      as it is until the user decides whether to add it anyway.
+
 All checks pass: 1,403 tests, both sweeps, verify-screen/e3/party, corpus
 unchanged at 51 of 87, 1,231,440 draws. **Next session starts here**: E3's
 remaining screen chrome (see "Not done" above), then the TODO(E3-3) list.

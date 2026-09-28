@@ -23,7 +23,7 @@ import { customGraphic } from './customPics';
 import { SheetStore } from './sheets';
 import { terrainGraphic } from './terrainPics';
 import { drawString } from './text';
-import { tilePattern } from './tiling';
+import { BG_LIGHT, tilePattern } from './tiling';
 
 /** Sheets the map needs on top of the main screen's set. */
 export const MAP_SHEETS = ['termap', 'dlogpics'];
@@ -173,7 +173,7 @@ export class MapScreen {
       canMap = false;
     }
 
-    this.drawFrame(title);
+    this.drawFrame(title, session);
     if (!canMap) return;
 
     const view = mapViewRect(session, outMode);
@@ -218,11 +218,14 @@ export class MapScreen {
   }
 
   /** The window's chrome: background, icon, title and the escape hint. */
-  private drawFrame(title: string): void {
+  private drawFrame(title: string, session: GameSession): void {
     const { ctx } = this;
     const pats = this.store.get('pixpats');
     // tileImage(mini_map(), the_rect, bg[4]) — bg[4], not the panel pattern.
-    if (pats) tilePattern(ctx, pats, 4, this.window);
+    // Exile III's is 1997's `paint_pattern(hdc2, 2, ...)` (TOWN.CPP:1613),
+    // the dialogs' pattern, which is E3's light one.
+    const e3 = session.univ.scenario.featureFlags['backgrounds'] === 'exile3';
+    if (pats) tilePattern(ctx, pats, e3 ? BG_LIGHT : 4, this.window);
     else {
       ctx.fillStyle = Colours.GREY;
       ctx.fillRect(
@@ -247,7 +250,7 @@ export class MapScreen {
         DLOG_PIC,
       );
     }
-    const style = { font: 'bold' as const, size: 10, colour: Colours.WHITE };
+    const style = { font: 'bold' as const, size: 10, colour: e3 ? Colours.BLACK : Colours.WHITE };
     drawString(ctx, this.offset(MAP_TITLE_RECT), title, style);
     drawString(ctx, this.offset(MAP_BAR_RECT), '(Hit Escape to close.)', style);
   }

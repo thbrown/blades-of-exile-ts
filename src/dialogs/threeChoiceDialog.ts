@@ -25,6 +25,8 @@ export const CHOICE_DIALOG_DEFS = [
 
 /** `TextStyle`'s defaults (render_text.hpp:41): bold, 10 point. */
 const STYLE = { font: 'bold', size: 10 } as const;
+/** `InflateRect(&item_rect, -4, -4)` — see `init_strings` below. */
+const TEXT_INSET = 4;
 /** How `drawText` spaces lines at that size. */
 const LINE_HEIGHT = STYLE.size + 2;
 
@@ -77,10 +79,17 @@ export async function threeChoiceDialog(
     // port's wraps differently, so a string that would overflow the estimate
     // gets the height its lines actually need rather than being cut off.
     const estimate = Math.trunc((lengths[j]! + 60) / strWidth) * 12 + 16;
-    const needed = wrapLines(ctx, s, strWidth, STYLE).length * LINE_HEIGHT + 4;
+    // 1997's `cd_draw_item` draws a text item taller than 20px inset by
+    // `TEXT_INSET` on every side (DLOGTOOL.CPP:1266, and Exile III's drawer
+    // is the same code). OBoE dropped the inset, which leaves the first line
+    // touching the top of the window; this layout is 1997's, so it gets
+    // 1997's drawing.
+    const needed = wrapLines(ctx, s, strWidth - 2 * TEXT_INSET, STYLE).length * LINE_HEIGHT
+      + 4 + 2 * TEXT_INSET;
     const height = Math.max(estimate, needed);
-    controls.push(`<text name='str${j + 1}' size='10' top='${top}' left='${left}'`
-      + ` width='${strWidth}' height='${height}'/>`);
+    controls.push(`<text name='str${j + 1}' size='10' top='${top + TEXT_INSET}'`
+      + ` left='${left + TEXT_INSET}' width='${strWidth - 2 * TEXT_INSET}'`
+      + ` height='${height - 2 * TEXT_INSET}'/>`);
     top += height + 8;
   });
 

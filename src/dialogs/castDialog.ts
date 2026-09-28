@@ -16,7 +16,7 @@
 import { STATUS_ICONS, statIconRect, statusIconFor } from '../data/statusIcons';
 import { SPELLS, Spell, spellName } from '../data/spell';
 import { pcCanCastType, CastStatus } from '../game/spellCast';
-import { CastChoice, SPELL_SLOTS, SpellPick } from '../game/spellPick';
+import { CastChoice, NO_TARGET, SPELL_SLOTS, SpellPick } from '../game/spellPick';
 import type { GameSession } from '../game/session';
 import { Colours } from '../render/colours';
 import { centreOnDesktop } from '../render/desktop';
@@ -25,14 +25,17 @@ import { SheetStore } from '../render/sheets';
 import {
   drawString, drawStringCentre, drawStringEllipsis, drawStringRight,
 } from '../render/text';
-import { tilePattern } from '../render/tiling';
+import { dialogBackground, dialogTextIsWhite, tilePattern } from '../render/tiling';
 import { MainStatus, Skill, Status } from '../universe/skills';
 import type { ModalScreen } from './dialog';
 
 /** The dialog fills nearly the whole 605x430 screen, as the original's does. */
 const FRAME: UiRect = { top: 2, left: 2, bottom: 428, right: 603 };
-const BG = 5;
-const TEXT = Colours.WHITE;
+/**
+ * The scenario's dialog background (BoE's dark 5, Exile III's light one), and
+ * the text colour that goes with it (dialog.cpp:406).
+ */
+let TEXT: string = Colours.WHITE;
 
 // --- the six PC rows -------------------------------------------------------
 const HEAD_Y = 60;
@@ -104,6 +107,11 @@ export class CastDialog implements ModalScreen {
    */
   private readonly origin = centreOnDesktop(BOE_WIDTH, BOE_HEIGHT);
 
+  /** Exile III's look (`backgrounds` = `exile3`): 1997's label colours. */
+  private get e3(): boolean {
+    return this.session.univ.scenario.featureFlags['backgrounds'] === 'exile3';
+  }
+
   get choice(): CastChoice { return this.pick.choice; }
 
   /** `finish_pick_spell`'s tail — see `SpellPick.finish`. */
@@ -173,7 +181,17 @@ export class CastDialog implements ModalScreen {
     // Every arm is the same two lines: work out which of the C++'s controls
     // was hit, and hand the id to `SpellPick`.
     const hit = (id: string): string | null => {
+      const sound = this.session.sound;
+      // `cd_press_button` (DLOGTOOL.CPP:1498/1514): an LED clicks with 34,
+      // anything else with 37.
+      const led = id.startsWith('spell');
+      sound?.play(led ? 34 : 37);
+      const slot = led ? this.spellAt(Number(id.slice(5)) - 1) : Spell.NONE;
+      const lit = slot !== Spell.NONE && this.castable(slot);
       const action = this.pick.click(id);
+      // `pick_spell_event_filter`: a spell that wants a target and hasn't one
+      // says " Now pick a target." with `force_play_sound(45)` (PARTY.CPP).
+      if (lit && this.needsTarget(slot) && this.target === NO_TARGET) sound?.play(45);
       return action === 'stay' ? null : action;
     };
     if (inside(btns.cancel)) return hit('cancel');
@@ -226,8 +244,9 @@ export class CastDialog implements ModalScreen {
 
   private drawInGameCoords(): void {
     const { ctx } = this;
+    TEXT = dialogTextIsWhite() ? Colours.WHITE : Colours.BLACK;
     const pats = this.store.get('pixpats');
-    if (pats) tilePattern(ctx, pats, BG, FRAME);
+    if (pats) tilePattern(ctx, pats, dialogBackground(), FRAME);
     else {
       ctx.fillStyle = Colours.BLACK;
       ctx.fillRect(FRAME.left, FRAME.top, FRAME.right - FRAME.left, FRAME.bottom - FRAME.top);
@@ -265,8 +284,11 @@ export class CastDialog implements ModalScreen {
       // Caster button: lit for the chosen caster, greyed where they can't cast.
       this.drawSmallButton(rects.caster, String(i + 1),
         this.caster === i, !canCast || !this.canChooseCaster);
-      drawStringEllipsis(ctx, at(X_NAME, y + 4, 112), pc.name,
-        { size: 12, colour: canCast ? TEXT : Colours.GREY });
+      // Exile III greys nobody and shows the caster's name in red (its
+      // screen; 1997's frames it); OBoE greys whoever can't cast.
+      const nameColour = this.e3 ? (this.caster === i ? Colours.RED : TEXT)
+        : canCast ? TEXT : Colours.GREY;
+      drawStringEllipsis(ctx, at(X_NAME, y + 4, 112), pc.name, { size: 12, colour: nameColour });
 
       // Target button and the green arrow that marks the pick.
       this.drawSmallButton(rects.target, String(i + 1), this.target === i, false);
@@ -331,7 +353,9 @@ export class CastDialog implements ModalScreen {
         left: rect.left + LED_W + 3, top: rect.top - 1,
         right: rect.right, bottom: rect.top + LED_PITCH,
       }, `${spellName(spell)} (${cost})`, {
-        size: 10, font: 'bold', colour: usable ? TEXT : Colours.GREY,
+        // OBoE's DISABLED_COLOUR; 1997 and Exile III leave the label alone
+        // and let the LED say it.
+        size: 10, font: 'bold', colour: usable || this.e3 ? TEXT : Colours.GREY,
       });
     }
   }
