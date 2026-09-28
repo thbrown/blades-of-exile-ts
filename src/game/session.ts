@@ -4808,6 +4808,7 @@ export class GameSession {
       record.lightingType === Lighting.LIGHT_NORMAL ? Snd.ENTER_TOWN : Snd.ENTER_DUNGEON,
     );
     const town = new CurTown(record, this.univ);
+    town.entryDir = entryDir;
     this.univ.town = town;
     // The town that was kept only for the leave-town chain is superseded now.
     this.univ.departedTown = null;

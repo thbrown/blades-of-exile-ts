@@ -104,8 +104,14 @@ export interface E3Town {
   /** The byte-swapped word after `max_num_monst`. */
   unknown350: number;
   presetFields: E3PresetField[];
-  /** The four byte-swapped words that end the record. */
-  tail: number[];
+  /**
+   * The four byte-swapped words that end the record: the message (block, i)
+   * the town loader shows a party that walks in, and the one it shows
+   * instead once the town is cleared out (`10d8:2281`, `FUN_1008_37de`).
+   * 0 for none. 33 towns have one or the other (`towns/entry.ts`).
+   */
+  entryMsg: [number, number];
+  deadMsg: [number, number];
   /** terrain[x][y]; empty for a village. */
   terrain: number[][];
   roomRects: LegacyRect[];
@@ -156,7 +162,8 @@ export function readE3Town(data: Uint8Array, town: number): E3Town {
     maxNumMonst: r.i16(),
     unknown350: r.i16(),
     presetFields: Array.from({ length: 50 }, (): E3PresetField => ({ loc: r.loc(), fieldType: r.i16() })),
-    tail: r.i16s(4),
+    entryMsg: [r.i16(), r.i16()] as [number, number],
+    deadMsg: [r.i16(), r.i16()] as [number, number],
   };
   r.expect(start, E3_TOWN_RECORD_SIZE, 'E3 town record');
 

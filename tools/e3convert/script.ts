@@ -13,6 +13,7 @@
 
 import type { E3Dialog } from './ne';
 import { DamageType } from '../../src/data/monster';
+import { FieldType } from '../../src/data/fields';
 import { e3Event, e3Flag } from './flags';
 import { E3ShopType } from './shops';
 
@@ -71,7 +72,7 @@ export interface ScriptSource {
   /** The town's terrain as converted, `[x][y]`, for `replaceTerrain`. */
   terrain?: number[][];
   /** The town's creatures, by slot, for `bringIn` and the kill scripts. */
-  creatures?: { number: number; spec1: number; spec2: number }[];
+  creatures?: { number: number; spec1: number; spec2: number; mobile?: number; startLoc?: { x: number; y: number } }[];
   /**
    * Adds a string to the *scenario's* list, returning its index: a few
    * nodes (IF_NUM_RESPONSE's prompt) read theirs from there, wherever they run.
@@ -605,6 +606,24 @@ export class SpecBuilder {
     };
   }
 
+  /**
+   * The town loader's `entry_dir` (its second argument) is from `lo` to `hi`:
+   * 0–3 an entrance, 9 a script's move (`FUN_10c0_4a61`). The engine's
+   * `if-entry-dir` is an exile-js opcode (`SpecType.IF_ENTRY_DIR`).
+   */
+  ifEntryDir(lo: number, hi: number, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-entry-dir', { ex1: [lo, hi, yes] }, no);
+    };
+  }
+
+  /** `if (entry_dir < 9)`: the party walked in, rather than a script putting it here. */
+  ifWalkedIn(then: Step[]): Step {
+    return this.ifEntryDir(0, 8, then);
+  }
+
   /** `can_find_town[t] = 1`: town `t` shows on the map (or, `on` false, stops showing). */
   townVisible(t: number, on = true): Step {
     return (next) => this.node('town-visible', { ex1: [t], ex2: [on ? 1 : 0] }, next);
@@ -832,6 +851,22 @@ export class SpecBuilder {
    * (`towns/hostile.ts`), and which monsters move and which are boosted is
    * the `hostile-movers` flag and `<guard>` (`emit.ts`).
    */
+  /**
+   * Every creature of the town gets `attitude` (E3's active ones: the town
+   * loader's loops write `active` slots). With `mobile` given it also stops
+   * or starts moving: TOWN_SET_ATTITUDE's `10 + a` and `20 + a`, an exile-js
+   * extension (`src/game/specials/town.ts`). `'record'` moves as the town
+   * record says, as E3 has it on a fresh load.
+   */
+  setAttitudes(attitude: number, mobile?: boolean | 'record'): Step {
+    const slots = (this.src.creatures ?? []).flatMap((c, i) => (c.number > 0 ? [i] : []));
+    return this.seq(slots.map((i) => {
+      const moves = mobile === 'record' ? (this.src.creatures![i]!.mobile ?? 1) > 0 : mobile;
+      const code = moves === undefined ? attitude : (moves ? 20 : 10) + attitude;
+      return (next: number) => this.node('set-attitude', { ex1: [i, code] }, next);
+    }));
+  }
+
   makeTownHostile(): Step {
     return (next) => this.node('town-attitude', { ex1: [0, -1], ex2: [1] }, next);
   }
@@ -1104,9 +1139,40 @@ export class SpecBuilder {
     return this.placeFieldRect(x, y, x, y, field);
   }
 
-  /** RECT_PLACE_FIELD: `field` on every square from `(x1, y1)` to `(x2, y2)`. */
-  placeFieldRect(x1: number, y1: number, x2: number, y2: number, field: number): Step {
-    return (next) => this.node('rect-place-field', { sdf: [100, field], ex1: [y1, x1], ex2: [y2, x2] }, next);
+  /** RECT_PLACE_FIELD: `field` on every square from `(x1, y1)` to `(x2, y2)`, each with `pct` percent chance. */
+  placeFieldRect(x1: number, y1: number, x2: number, y2: number, field: number, pct = 100): Step {
+    return (next) => this.node('rect-place-field', { sdf: [pct, field], ex1: [y1, x1], ex2: [y2, x2] }, next);
+  }
+
+  /**
+   * `FUN_1038_1185(x, y, type)`, BoE 1997's `make_sfx`: a decal, type 1–8
+   * (small, medium and large blood, small and large slime, ash, bones,
+   * rubble), the engine's `SFX_SMALL_BLOOD + type - 1`. E3 skips a square
+   * whose `sight_obscurity` is above 0; the converter doesn't place any there.
+   */
+  decal(x: number, y: number, type: number): Step {
+    return this.placeField(x, y, FieldType.SFX_SMALL_BLOOD + type - 1);
+  }
+
+  /**
+   * `FUN_1038_1270(type, pct)`: decal `type` on each square of plain ground
+   * (terrain under 5), each with `pct` percent chance. The squares come from
+   * the converted map, a run of them in a column to a node.
+   */
+  scatterDecals(type: number, pct: number): Step {
+    const runs: Step[] = [];
+    (this.src.terrain ?? []).forEach((col, x) => {
+      let from = -1;
+      col.forEach((t, y) => {
+        if (t < 5 && from < 0) from = y;
+        if (t < 5 && y === col.length - 1) runs.push(this.placeFieldRect(x, from, x, y, FieldType.SFX_SMALL_BLOOD + type - 1, pct));
+        else if (t >= 5 && from >= 0) {
+          runs.push(this.placeFieldRect(x, from, x, y - 1, FieldType.SFX_SMALL_BLOOD + type - 1, pct));
+          from = -1;
+        }
+      });
+    });
+    return this.seq(runs);
   }
 
   /**

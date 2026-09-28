@@ -159,7 +159,7 @@ if-boat
 if-horse
 if-quest
 if-town-visible
-
+if-entry-dir
 
 
 

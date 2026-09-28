@@ -44,8 +44,10 @@ export interface SpotScript {
    * panel (`debug.json`, `src/platform/debugPanel.ts`).
    */
   spots: { x: number; y: number; id: number; node: number }[];
-  /** The town's entry node (`<onenter>`), or -1. */
+  /** The town's entry node (`<onenter condition="alive">`), or -1. */
   entry: number;
+  /** The same for a town cleared out (`<onenter condition="dead">`), or -1. */
+  entryDead: number;
   /** The node run as the town turns hostile (`<onoffend>`), or -1. */
   hostile: number;
   /** Each creature slot's `<onkill>` node, or -1 (`KillScript`). */
@@ -81,8 +83,14 @@ export interface EntranceMark {
  */
 export const ENTRANCE_MARK_SPOT = 90;
 
-/** What a town does as the party enters it (`towns/entry.ts`). */
+/** A script with no arguments: what a town does as it turns hostile (`towns/hostile.ts`), or a town's own entry case. */
 export type EntryScript = (b: SpecBuilder) => Step[];
+
+/**
+ * What a town does as the party enters it (`towns/entry.ts`): `dead` is
+ * the engine's "cleared out", which runs a node of its own.
+ */
+export type TownEntryScript = (b: SpecBuilder, dead: boolean) => Step[];
 
 /**
  * What killing the creature in a slot does. Creatures with the same key
@@ -117,7 +125,7 @@ export function e3ZoneMessageBlock(zone: number): number {
  */
 export function e3SpotScript(
   spots: E3Spot[], place: { zone: number } | { town: number },
-  src: ScriptSource, terrainAt: (x: number, y: number) => number, own?: PlaceScript, onEntry?: EntryScript,
+  src: ScriptSource, terrainAt: (x: number, y: number) => number, own?: PlaceScript, onEntry?: TownEntryScript,
   onKill?: KillScript, onGroups?: GroupScript, onHostile?: EntryScript,
 ): SpotScript {
   const isTown = 'town' in place;
@@ -171,7 +179,8 @@ export function e3SpotScript(
     marks.push({ x: s.loc.x, y: s.loc.y, node: n });
     listed.push({ x: s.loc.x, y: s.loc.y, id: s.id, node: n });
   });
-  const entry = onEntry ? b.compile(onEntry(b)) : -1;
+  const entry = onEntry ? b.compile(onEntry(b, false)) : -1;
+  const entryDead = onEntry ? b.compile(onEntry(b, true)) : -1;
   const hostile = onHostile ? b.compile(onHostile(b)) : -1;
   const killNodes = new Map<string, number>();
   const kills = (src.creatures ?? []).map((_, slot) => {
@@ -188,5 +197,5 @@ export function e3SpotScript(
     groupNodes.set(g.key, n);
     return n;
   });
-  return { spec: b.spec, strings: b.strings, marks, spots: listed, entry, hostile, kills, groups };
+  return { spec: b.spec, strings: b.strings, marks, spots: listed, entry, entryDead, hostile, kills, groups };
 }

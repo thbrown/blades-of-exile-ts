@@ -439,6 +439,15 @@ export async function ifThenSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       break;
     }
 
+    case SpecType.IF_ENTRY_DIR: {
+      // Exile III's town loader shows a town's greeting only to a party that
+      // walked in (`entry_dir < 9`), and Wolfrider Warren opens a door for
+      // one that came in from the west. BoE never kept the direction.
+      const dir = univ.town?.entryDir;
+      if (dir !== undefined && dir >= spec.ex1a && dir <= spec.ex1b) ctx.nextSpec = spec.ex1c;
+      break;
+    }
+
     case SpecType.IF_QUEST: {
       if (spec.ex1a < 0 || spec.ex1a >= univ.scenario.quests.length) {
         univ.addStringToBuf('The scenario tried to update a non-existent quest.');

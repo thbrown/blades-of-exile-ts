@@ -142,6 +142,13 @@ export enum SpecType {
    * reads it; Exile III's scripts test it (`can_find_town[t]`).
    */
   IF_TOWN_VISIBLE = 161,
+  /**
+   * An exile-js opcode, not in BoE or OBoE: jump to `ex1c` if the party came
+   * into the current town with an entry direction from `ex1a` to `ex1b`
+   * (`start_town_mode`'s `entry_dir`: 0–3 an entrance, 9 put there by a
+   * script). Exile III's town loader tests it.
+   */
+  IF_ENTRY_DIR = 162,
 
   MAKE_TOWN_HOSTILE = 170,
   TOWN_RUN_MISSILE = 171,

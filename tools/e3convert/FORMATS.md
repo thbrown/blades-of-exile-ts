@@ -236,7 +236,8 @@ in the disassembly are these offsets + 4.
 | 0x34e | `max_num_monst` | same |
 | 0x350 | int16 | **open** |
 | 0x352 | `preset_fields[50]` × 4 B | same |
-| 0x41a | 4 × int16 | **open** (BoE continues with `spec_on_entry` …, then specials E3 doesn't have) |
+| 0x41a | 2 × int16 | the message (block, i) shown to a party that walks in (`entry_dir < 9`; `10d8:2281`) |
+| 0x41e | 2 × int16 | the same once the town is cleared out; BoE has `spec_on_entry` here, and E3 its own messages instead |
 
 **Creature, 14 B** (BoE 24): `number, start_attitude, start_loc, mobile,
 time_flag, extra1, extra2, spec1, spec2` (bytes), then an int16 time code at
@@ -277,6 +278,8 @@ arguments of far calls, so read them from the disassembly (`Disasm.java`).
 | `FUN_10d8_3d5b(kind, row, col)` | if flag `(row, col)` is set, every creature of `kind` is gone |
 | `FUN_10b0_16e6(pc, n)` | BoE 1997's `dumbfound_pc` |
 | `FUN_1038_1185(x, y, type)` | a decal on the floor (`make_sfx`) |
+| `FUN_1038_1270(type, pct)` | decal `type` on each square of terrain under 5, each with `pct`% chance |
+| `FUN_1080_0917(x, y)` | `sight_obscurity` |
 | `FUN_10b0_1bec(pc, n)` / `FUN_10b0_1606(pc, n)` | BoE 1997's `slow_pc` / `curse_pc` |
 | `FUN_10b0_19dd(pc, n, type, adjust)` | `sleep_pc`: resisted if `get_ran(1, 0, 100) + adjust < 30 + 2 × level` |
 | `FUN_1070_0464(item, ability)` | give `item`, with its ability byte (+10) set to `ability` when > 0, to the first PC with room (`notes.ts`) |

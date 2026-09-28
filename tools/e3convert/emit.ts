@@ -33,7 +33,7 @@ import { krizsan } from './towns/krizsan';
 import { shayder } from './towns/shayder';
 import { lorelei } from './towns/lorelei';
 import { gale } from './towns/gale';
-import { ENTRY_SCRIPTS } from './towns/entry';
+import { townEntryScript } from './towns/entry';
 import { HOSTILE_SCRIPTS } from './towns/hostile';
 import { slimePit } from './towns/slimePit';
 import { towerOfMagi } from './towns/towerOfMagi';
@@ -460,7 +460,7 @@ function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, st
     <bounds top="${r.top}" left="${r.left}" bottom="${r.bottom}" right="${r.right}" />
     <difficulty>0</difficulty>
     <lighting>${LIGHTING[t.lighting] ?? 'lit'}</lighting>
-${script.entry >= 0 ? `    <onenter condition="alive">${script.entry}</onenter>\n    <onenter condition="dead">${script.entry}</onenter>\n` : ''}${script.hostile >= 0 ? `    <onoffend>${script.hostile}</onoffend>\n` : ''}    <flags>
+${script.entry >= 0 ? `    <onenter condition="alive">${script.entry}</onenter>\n    <onenter condition="dead">${script.entryDead}</onenter>\n` : ''}${script.hostile >= 0 ? `    <onoffend>${script.hostile}</onoffend>\n` : ''}    <flags>
 ${chopXml(t)}${tables.hidden(t.number) ? '        <hidden>true</hidden>\n' : ''}    </flags>
 ${wandering}${items}${creatures}${rooms}${townSigns(t, strings).map(signXml).join('')}${specStringsXml(script)}</town>
 `;
@@ -774,7 +774,9 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     const spots = t.specialLocs.map((loc, k) => ({ loc, id: t.specId[k] ?? 255 }));
     const creatures = townCreatures(t);
     const script = e3SpotScript(spots, { town: t.number }, { ...e3Src, creatures, terrain },
-      (x, y) => terrain[x]?.[y] ?? 0, TOWN_SCRIPTS.get(t.number), ENTRY_SCRIPTS.get(t.number),
+      (x, y) => terrain[x]?.[y] ?? 0, TOWN_SCRIPTS.get(t.number),
+      townEntryScript(t.number, new Set(creatures.map((c) => c.number)),
+        creatures.filter((c) => c.number >= 138 && c.number <= 141).map((c) => c.startLoc), t.entryMsg, t.deadMsg),
       townKillScript(t.number, creatures), undefined, HOSTILE_SCRIPTS.get(t.number));
     write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf, strings, script, townTables));
     write(`${base}.map`, townMap(t, terrain, strings, script, vehicles));

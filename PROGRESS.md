@@ -13678,3 +13678,60 @@ rerun, because everything is behind the flag and the E3-only `<onoffend>`.
 `grep -rn "TODO(E3-3)" src tools`: 42. **Next session starts here**:
 `entry.ts`'s list (towns 31, 41, 46, 57, 78/79, 82, 90, 103–105, 107), and
 Castle Troglo's "docile below stage 7".
+
+### E3's town entry: greetings, Castle Troglo, and the rest of the loader (2026-09-27)
+
+The rest of the town loader's cases (`FUN_10d8_0107`, `townentry.s`) are
+ported. `towns/entry.ts` now builds each town's entry nodes with
+`townEntryScript`, in E3's order, and gives the engine's cleared-out case its
+own `dead` node:
+
+- **Greetings.** The town record's last four words, which FORMATS.md had
+  listed as **open**, are two messages: one for a party that walks in and
+  one for when the town is cleared out (`10d8:2281`, `FUN_1008_37de`).
+  33 towns have one or both, among them the Slime Pit, Portal Fortress,
+  Ghikra and a dozen villages. None was shown before. E3 shows them only
+  when `entry_dir < 9`, not after a script's move, so there is a new
+  exile-js opcode, **`if-entry-dir` (162)**, with `CurTown.entryDir`
+  (DIVERGENCES.md §13).
+- **Castle Troglo was hostile on arrival.** Every creature in its record is
+  hostile. E3 makes them all docile *and still* below stage 7 of Vothkaro's
+  story, and hostile from stage 7. The port had only the stage-7 half,
+  as a `makeTownHostile` that E3 doesn't call. TOWN_SET_ATTITUDE now takes
+  `10 + a` and `20 + a`, which also stop or start the creature
+  (`SpecBuilder.setAttitudes`; §13).
+- **Cleared out by a flag**, where only 22, 23 and 36 had been: 50 (0x281),
+  52 (0x295), and 46 and 90 (0x257 and 0x259 both).
+- **The plagues' creatures** (`FUN_10d8_3d5b`): once the slime is dead
+  (0xc85), slimes 138–141 are gone from every town but the Tower of Magi;
+  after the Filth Factory (0xc87), roaches 143–147 are gone everywhere;
+  after the golems' crystal (0xc8c), kinds 159–163 are gone from the
+  Shifting Floors (32, 33, 60).
+- The dragons' lairs (57, 104, 105) turn on a party that killed a dragon, and
+  Athron's also on one that angered him. Wolfrider Warren (82) opens (4,20)
+  to a party that came in by entrance 3. Terrain 255 becomes ground in 29,
+  31 and 103 once 0xc8a is set. Ghikra (41) and the Lower Caves (31) each have
+  one more flagged line. 46 opens (24,41).
+- **Decals** (`SpecBuilder.decal`, `scatterDecals`): slime under every
+  slime, slime scattered at 20% in the Slime Pit, blood at 5% in the Monastery
+  of Madness (78, 79), and four fixed blood decals in Rentar-Ihrno's keep (38).
+  `FUN_1038_1270` scatters decals over terrain under 5; the converter emits
+  one RECT_PLACE_FIELD per run of ground in a column.
+- **Found, not ported:** the Tower of Shifting Floors' level 1 has sixteen
+  golem generators (tables at 1140:0190/01a4). Every eighth turn it picks
+  one and makes a golem beside it unless the generator's flag (0xc0a+i,
+  0xc00+i) is set (10c0:71cb). The entry half, which turns destroyed
+  generators to ground, is in `entry.ts`. The spawner, and whatever sets
+  the flags, is a `TODO(E3-3)`.
+- `FUN_1080_0917` is `sight_obscurity`; `FUN_1038_1270(type, pct)` scatters
+  decals. Both are now in FORMATS.md's tables. On this machine `nedis.py`
+  runs from a venv (`python3 -m venv …; pip install capstone`), because
+  Homebrew's Python refuses a global pip install.
+
+`test/e3convert.test.ts` walks into the Slime Pit (greeting, none after a
+script's move, then the cleared-out message), Castle Troglo before and after
+stage 7, and Wolfrider Warren by two entrances. All checks pass: 1,384
+tests, both sweeps, verify-screen/e3/party. `grep -rn "TODO(E3-3)" src tools`:
+40. **Next session starts here**: the rest of the TODO(E3-3) list, for
+example the golem generators above, E3's after-death creatures and the chop's
+spared creatures.

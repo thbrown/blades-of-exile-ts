@@ -63,6 +63,12 @@ export class CurTown {
    * presets the next time it is walked into. Copied deliberately.
    */
   monstWhichTown = 200;
+  /**
+   * `start_town_mode`'s `entry_dir`: 0–3 the entrance the party came in by, 9
+   * put here by a script. The C++ forgets it once the town is loaded; this
+   * port keeps it for IF_ENTRY_DIR, an exile-js opcode. A loaded game says 9.
+   */
+  entryDir = 9;
   /** Explored flags for the current town, [x][y]. */
   explored: Uint8Array[];
   /**

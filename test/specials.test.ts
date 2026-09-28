@@ -417,6 +417,20 @@ describe('if-then nodes', () => {
       town.canFind = was;
     }
   });
+  it('branches on how the party came into the town (IF_ENTRY_DIR)', async () => {
+    const { univ, run } = withNodes({
+      // Walked in: any entrance, 0 to 8.
+      0: { type: SpecType.IF_ENTRY_DIR, ex1a: 0, ex1b: 8, ex1c: 10, jumpto: -1 },
+      10: { type: SpecType.SET_SDF, sd1: 15, sd2: 0, ex1a: 1 },
+    });
+    // withNodes puts the party in by FORCED_ENTRY, as a script would.
+    expect(univ.town!.entryDir).toBe(FORCED_ENTRY);
+    await run();
+    expect(univ.party.getSdf(15, 0)).toBe(0);
+    univ.town!.entryDir = 3;
+    await run();
+    expect(univ.party.getSdf(15, 0)).toBe(1);
+  });
 });
 
 describe('one-shot nodes', () => {

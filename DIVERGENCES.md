@@ -369,6 +369,25 @@ change: they are OBoE's `spec_on_hostile` (`<onoffend>`), whose comment,
 
 ---
 
+### 13. How the party came into a town, and a creature's mobility (2026-09-27)
+
+**DECIDED: an exile-js opcode, `if-entry-dir` (162, `SpecType.IF_ENTRY_DIR`),
+and TOWN_SET_ATTITUDE values 10–13 and 20–23.** Exile III's town loader reads
+its `entry_dir` argument twice: the town's greeting shows only to a party that
+walked in (`entry_dir < 9`, not a script's move), and Wolfrider Warren opens a
+door to one that came in by entrance 3. BoE uses `entry_dir` to choose a start
+square and then forgets it, so the live town now keeps it
+(`CurTown.entryDir`, 9 for a loaded game) and the opcode jumps to `ex1c` when
+it is from `ex1a` to `ex1b`. It sits after `if-town-visible` (§11).
+
+Castle Troglo's entry sets every creature docile *and still* below stage 7 of
+Vothkaro's story, and hostile with its record's mobility from it. No BoE node
+touches `mobile`, so TOWN_SET_ATTITUDE takes `10 + a` (attitude `a`, stands
+still) and `20 + a` (attitude `a`, moves). OBoE says "Invalid attitude (0-3)."
+to both, so no BoE scenario uses them, as with RECT_PLACE_FIELD's `100 + f`.
+
+---
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

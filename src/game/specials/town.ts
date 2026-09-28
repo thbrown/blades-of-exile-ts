@@ -397,11 +397,19 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
           `Tried to change the attitude of nonexistent monster ${spec.ex1a} of 0...${monsters.length}`);
         break;
       }
-      if (spec.ex1b < 0 || spec.ex1b > 3) {
+      // An exile-js extension, not in OBoE: 10 + a also stops the creature
+      // moving, and 20 + a starts it, as Exile III's Castle Troglo does on
+      // entry (tools/e3convert, `setAttitude`). OBoE refuses anything past
+      // 3, so no BoE scenario uses these.
+      const mobility = spec.ex1b >= 20 && spec.ex1b <= 23 ? true
+        : spec.ex1b >= 10 && spec.ex1b <= 13 ? false : undefined;
+      const attitude = mobility === undefined ? spec.ex1b : spec.ex1b % 10;
+      if (attitude < 0 || attitude > 3) {
         univ.addStringToBuf('Invalid attitude (0-3).');
         break;
       }
-      monsters[spec.ex1a]!.attitude = spec.ex1b as Attitude;
+      monsters[spec.ex1a]!.attitude = attitude as Attitude;
+      if (mobility !== undefined) monsters[spec.ex1a]!.mobile = mobility;
       ctx.redraw = true;
       break;
     }

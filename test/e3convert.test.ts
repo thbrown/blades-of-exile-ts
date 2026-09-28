@@ -382,6 +382,53 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(erika.party.isAlive()).toBe(true);
   });
 
+  it("greets a party that walks in, and runs E3's other entry cases", async () => {
+    const setUp = () => {
+      const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+      const said: string[] = [];
+      session.attachSpecials(new Proxy({}, {
+        get: (_, k) => (k === 'message' ? (s: string) => { said.push(s); return Promise.resolve(); } : () => Promise.resolve(0)),
+      }) as never);
+      const enter = async (town: number, dir: number): Promise<string> => {
+        said.length = 0;
+        session.startTownMode(town, dir);
+        await vi.waitFor(() => expect(session.specials!.busy).toBe(false));
+        return said.join(' ');
+      };
+      return { session, enter, party: session.univ.party };
+    };
+    // The Slime Pit (22): its greeting, and none for a party a script put
+    // there; once the slime is dead (0xc85), the cleared-out message.
+    const pit = setUp();
+    const greeting = await pit.enter(22, 0);
+    expect(greeting).not.toBe('');
+    expect(await pit.enter(22, FORCED_ENTRY)).toBe('');
+    pit.party.setSdf(...partyFlag(0xc85), 1);
+    const cleared = await pit.enter(22, 0);
+    expect(cleared).not.toBe('');
+    expect(cleared).not.toBe(greeting);
+    expect(pit.session.univ.transcript).toContain('Area has been cleaned out.');
+    expect(pit.session.univ.town!.monsters.some((m) => m.isAlive)).toBe(false);
+
+    // Castle Troglo (28): docile and still until stage 7, hostile after.
+    const troglo = setUp();
+    await troglo.enter(28, 0);
+    const living = () => troglo.session.univ.town!.monsters.filter((m) => m.isAlive);
+    expect(living().length).toBeGreaterThan(0);
+    expect(living().every((m) => m.attitude === 0 && !m.mobile)).toBe(true);
+    troglo.party.setSdf(...partyFlag(0x1a4), 7);
+    await troglo.enter(28, 0);
+    expect(living().every((m) => m.attitude === 3)).toBe(true);
+    expect(living().some((m) => m.mobile)).toBe(true);
+
+    // Wolfrider Warren (82) opens (4,20) only to a party that came in by entrance 3.
+    const warren = setUp();
+    await warren.enter(82, 0);
+    expect(warren.session.univ.town!.record.terrain[4]![20]).not.toBe(0x8d);
+    await warren.enter(82, 3);
+    expect(warren.session.univ.town!.record.terrain[4]![20]).toBe(0x8d);
+  });
+
   it("tests whether a town shows on the map, as E3's scripts do", async () => {
     const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
     const said: string[] = [];
@@ -421,6 +468,9 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
       univ.party.age = (day - 1) * 3700;
       await session.runSpecial(SpecCtx.SCEN_TIMER, SpecCtxType.SCEN, newDay, univ.party.outLoc);
       session.startTownMode(0, FORCED_ENTRY);
+      // Its entry chain (the slimes' decals) runs on its own; the next
+      // day's timer would queue behind it.
+      while (session.specials!.busy) await new Promise((r) => setTimeout(r, 0));
       return univ.party.townNum;
     };
     // E3's days 10, 25 and 55, plus day_reached's 20.
