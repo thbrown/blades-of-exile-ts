@@ -80,6 +80,21 @@ export function dialogBackground(): number {
   return defaultDialogBg;
 }
 
+let exile3Dialogs = false;
+
+/**
+ * Whether dialogs take Exile III's look (`backgrounds` = `exile3`): 1997's
+ * text layout and frames, which E3's dialog code shares, where BoE's follow
+ * OBoE. See `XmlDialog.drawText`.
+ */
+export function setExile3Dialogs(on: boolean): void {
+  exile3Dialogs = on;
+}
+
+export function dialogsAreExile3(): boolean {
+  return exile3Dialogs;
+}
+
 /** The default text colour on the default dialog background. */
 export function dialogTextIsWhite(): boolean {
   return defaultDialogBg === BG_DARK;

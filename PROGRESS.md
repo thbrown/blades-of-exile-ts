@@ -14136,6 +14136,24 @@ the rest of the TODO(E3-3) list.
       - `38d6`, the block-10 routine with picture 24, is E3's hints, which
         this port answers with its own instant help.
       - Not checked: the seven `if-num-response` prompts.
+- [x] **E3's dialog insides (2026-09-28).** Under `backgrounds` = `exile3`
+      (`setExile3Dialogs`), measured against the 1:1 north-gate capture:
+      - **Frames** round a text or a picture are E3's sunken one
+        (`cd_frame_item`, as the spell dialog's boxes): mid grey top and
+        left, white bottom and right. OBoE's near-black and light grey read
+        as a black box with its bottom edge missing on E3's light pattern.
+        A picture's sits 3px out, a text's 2.
+      - **Framed text** is laid out as 1997's `cd_draw_item`
+        (DLOGTOOL.CPP:1257): taller than 20, inset 4 all round and wrapped
+        to the narrower width; shorter, indented 3 and centred on its line.
+        E3's small bold font runs wider and 13px apart, so it also gets
+        0.6px letter spacing (`TextStyle.spacing`) and a pixel more leading
+        — the north gate now breaks its lines at the same words as E3.
+        Unframed text keeps OBoE's layout, which its shared definitions
+        were drawn for.
+      - **Button labels** are navy, `rgb(0,0,100)`, sampled.
+      - The caption's gradient starts greyer (`#b3b9bf`) than the capture's
+        far left, at the user's word.
 
 All checks pass: 1,403 tests, both sweeps, verify-screen/e3/party, corpus
 unchanged at 51 of 87, 1,231,440 draws. **Next session starts here**: E3's

@@ -56,7 +56,9 @@ const STYLES: Record<ChromeFlavour, { edge: string; active: CaptionStyle; inacti
   // pale blue that brightens to the right, inside a dark grey edge.
   exile3: {
     edge: '#616468',
-    active: { from: '#bdcfdc', to: '#d5e3f0', text: '#000000', font: PLAIN },
+    // The capture reads `#bdcfdc` at the far left; the user remembers it
+    // greyer there, so it starts from a grey and warms into the blue.
+    active: { from: '#b3b9bf', to: '#d5e3f0', text: '#000000', font: PLAIN },
     inactive: { from: '#d4d8dc', to: '#e6e9ec', text: '#6d6d6d', font: PLAIN },
   },
 };

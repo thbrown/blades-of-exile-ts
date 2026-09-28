@@ -14,6 +14,8 @@ export interface TextStyle {
   size?: number;
   colour?: string;
   italic?: boolean;
+  /** Extra pixels between letters (canvas `letterSpacing`). */
+  spacing?: number;
 }
 
 const FAMILIES: Record<FontName, string> = {
@@ -30,6 +32,8 @@ function applyStyle(ctx: CanvasRenderingContext2D, style: TextStyle): void {
   ctx.font = `${style.italic ? 'italic ' : ''}${weight} ${size}px ${family}`;
   ctx.fillStyle = style.colour ?? Colours.BLACK;
   ctx.textBaseline = 'alphabetic';
+  // Set every time, since the context keeps it between draws.
+  if ('letterSpacing' in ctx) ctx.letterSpacing = `${style.spacing ?? 0}px`;
 }
 
 /** string_length (render_text.cpp) — how wide `text` is in `style`, in pixels. */

@@ -20,7 +20,7 @@ import { SheetStore, calcRect } from '../render/sheets';
 import { statIconRect } from '../data/statusIcons';
 import { terrainGraphic } from '../render/terrainPics';
 import { drawString, drawStringCentre, measureString, wrapLines } from '../render/text';
-import { dialogBackground, dialogTextIsWhite, tilePattern } from '../render/tiling';
+import { dialogBackground, dialogTextIsWhite, dialogsAreExile3, tilePattern } from '../render/tiling';
 import {
   ButtonControl, ButtonType, DialogControl, DialogDef, FieldControl, FieldType, FontSpec,
   KEY_PLACEHOLDER, LedControl, LedState, PaneControl, PictControl, PictType, TextControl, measureDialog,
@@ -98,10 +98,26 @@ function textStyle(font: FontSpec): { font: 'plain' | 'bold' | 'dungeon' | 'maid
   return { font: font.font === 'bold' ? 'bold' : font.font, size: font.size, colour: defText() };
 }
 
+/**
+ * A framed text under Exile III's look, laid out as 1997's `cd_draw_item`
+ * lays out E3's message text (DLOGTOOL.CPP:1257): a text taller than 20 is
+ * inset 4 on every side and wrapped, one shorter is indented 3 and centred
+ * on its line. E3's small bold font also runs wider than this port's, and
+ * its lines 13 apart: measured against a 1:1 capture of the north-gate
+ * dialog, 0.6px more between letters and a pixel more between lines break
+ * its lines where E3 does.
+ */
+const E3_TEXT = { inset: 4, indent: 3, spacing: 0.6, leading: 1 };
+
+function e3Framed(control: TextControl): boolean {
+  return dialogsAreExile3() && control.framed;
+}
+
 /** A text's lines, wrapped to its written width when it has one. */
 function wrapControlText(ctx: CanvasRenderingContext2D, control: TextControl, text: string): string[] {
-  const style = textStyle(control.font);
-  const w = width(control.fileRect);
+  const e3 = e3Framed(control);
+  const style = { ...textStyle(control.font), spacing: e3 ? E3_TEXT.spacing : 0 };
+  const w = width(control.fileRect) - (e3 && height(control.fileRect) >= 20 ? 2 * E3_TEXT.inset : 0);
   const lines: string[] = [];
   // A '|' is a hard line break (render_text.cpp:159), except in text written
   // into the definition itself, where the C++ shows pipes literally
@@ -136,6 +152,30 @@ export function measureDialogDef(ctx: CanvasRenderingContext2D, def: DialogDef):
 /** A scroll pane's scrollbar width, and how far one wheel notch or arrow moves it. */
 const PANE_BAR = 8;
 const PANE_STEP = 12;
+
+/** An Exile III button's label colour. */
+const E3_BUTTON_TEXT = 'rgb(0,0,100)';
+
+/**
+ * Exile III's sunken frame round a text or a picture (`cd_frame_item`), the
+ * one the spell dialog's boxes use: mid grey along the top and left, white
+ * along the bottom and right, one pixel each, on the edge of `r`.
+ */
+function e3SunkenFrame(ctx: CanvasRenderingContext2D, r: UiRect): void {
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgb(128,128,128)';
+  ctx.beginPath();
+  ctx.moveTo(r.left + 0.5, r.bottom - 0.5);
+  ctx.lineTo(r.left + 0.5, r.top + 0.5);
+  ctx.lineTo(r.right - 0.5, r.top + 0.5);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgb(255,255,255)';
+  ctx.beginPath();
+  ctx.moveTo(r.right - 0.5, r.top + 1.5);
+  ctx.lineTo(r.right - 0.5, r.bottom - 0.5);
+  ctx.lineTo(r.left + 1.5, r.bottom - 0.5);
+  ctx.stroke();
+}
 
 /** cControl::drawFrame's two greys (control.cpp:443). */
 const FRAME_DARK = 'rgb(48,48,48)';
@@ -885,6 +925,10 @@ export class XmlDialog implements ModalScreen {
   private drawFrame(rect: UiRect): void {
     const { ctx } = this;
     const r = { top: rect.top - 2, left: rect.left - 2, bottom: rect.bottom + 2, right: rect.right + 2 };
+    if (dialogsAreExile3()) {
+      e3SunkenFrame(ctx, r);
+      return;
+    }
     ctx.strokeStyle = FRAME_DARK;
     ctx.lineWidth = 1;
     ctx.strokeRect(r.left + 0.5, r.top + 0.5, width(r) - 1, height(r) - 1);
@@ -905,9 +949,14 @@ export class XmlDialog implements ModalScreen {
   }
 
   private drawText(control: TextControl): void {
-    const rect = this.screenRect(control);
-    if (control.framed) this.drawFrame(rect);
-    const style = this.style(control.font, control.name);
+    const full = this.screenRect(control);
+    if (control.framed) this.drawFrame(full);
+    const e3 = e3Framed(control);
+    const oneLine = height(full) < 20;
+    const rect = !e3 ? full : oneLine ? { ...full, left: full.left + E3_TEXT.indent }
+      : { top: full.top + E3_TEXT.inset, left: full.left + E3_TEXT.inset,
+        bottom: full.bottom - E3_TEXT.inset, right: full.right - E3_TEXT.inset };
+    const style = { ...this.style(control.font, control.name), spacing: e3 ? E3_TEXT.spacing : 0 };
     const text = this.fillKey(control, this.getText(control.name) || control.text);
     if (!text) return;
     // A message wraps inside its own rect, which is what gives the multi-line
@@ -918,8 +967,9 @@ export class XmlDialog implements ModalScreen {
     const inPane = this.def.controls.some((c) => c.kind === 'pane' && c.children.includes(control));
     const fixedHeight = height(rect) > 0 && !control.autoHeight && !inPane;
     const lines = this.wrapText(control, text);
-    const lineHeight = style.size + 2;
-    let y = rect.top;
+    const lineHeight = style.size + 2 + (e3 ? E3_TEXT.leading : 0);
+    // A one-line E3 text sits in the middle of its box (`DT_VCENTER`).
+    let y = e3 && oneLine ? rect.top + Math.floor((height(rect) - style.size) / 2) - 1 : rect.top;
     for (const line of lines) {
       if (fixedHeight && y > rect.bottom) break;
       const box = { ...rect, top: y, bottom: y + lineHeight };
@@ -957,7 +1007,8 @@ export class XmlDialog implements ModalScreen {
     // otherwise (a tiny button is 9, a push button 10).
     const size = control.textSize
       ?? (control.type === 'tiny' ? 9 : control.type === 'push' ? 10 : 12);
-    const style = { size, colour: Colours.BLACK, font: 'bold' as const };
+    // E3's are navy (sampled from its own dialog: rgb(0,0,100)).
+    const style = { size, colour: dialogsAreExile3() ? E3_BUTTON_TEXT : Colours.BLACK, font: 'bold' as const };
     if (control.type === 'tiny') {
       // A tiny button's label sits *beside* it (TINY_TEXT_OFFSET = 18).
       drawString(this.ctx, { ...rect, left: rect.left + 18, top: rect.top - 1 },
@@ -1029,6 +1080,11 @@ export class XmlDialog implements ModalScreen {
     // pixels out, round the picture as it now is rather than as it was read.
     const size = pictNaturalSize(type, num, large);
     const rect = size ? { ...at, right: at.left + size.w, bottom: at.top + size.h } : at;
+    if (dialogsAreExile3()) {
+      // E3 frames a picture as it frames text (`cd_frame_item`): sunken.
+      e3SunkenFrame(ctx, { top: rect.top - 3, left: rect.left - 3, bottom: rect.bottom + 3, right: rect.right + 3 });
+      return;
+    }
     ctx.strokeStyle = FRAME_DARK;
     ctx.lineWidth = 1;
     ctx.strokeRect(rect.left - 2 + 0.5, rect.top - 2 + 0.5, width(rect) + 3, height(rect) + 3);
