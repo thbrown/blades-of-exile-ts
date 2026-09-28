@@ -27,7 +27,7 @@ import {
 } from '../render/text';
 import { dialogBackground, dialogTextIsWhite, tilePattern } from '../render/tiling';
 import { MainStatus, Skill, Status } from '../universe/skills';
-import type { ModalScreen } from './dialog';
+import type { ClickMods, ModalScreen } from './dialog';
 import { drawPictAt } from './pict';
 
 const SPELL_KEYS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKL';
@@ -248,12 +248,45 @@ export class CastDialog implements ModalScreen {
     return action === 'stay' ? null : action;
   }
 
-  onClick(atX: number, atY: number): string | null {
+  /**
+   * Opens `display_spells` on a spell, over this dialog — the host sets it,
+   * since only the host can stack a dialog. `num` is the spell's number in
+   * its school.
+   */
+  onDescribe: ((kind: 'mage' | 'priest', num: number) => void) | null = null;
+
+  /**
+   * Whether a click on a spell asks for its description rather than picking
+   * it. OBoE's is alt (`mod_alt`, `pick_spell_select_led`). 1997's and E3's
+   * dialog code both mark **ctrl**-click (`MK_CONTROL` adds 100 to the item:
+   * DLOGTOOL.CPP:812, E3's `FUN_1028_1551`) — but E3's own help promises a
+   * right-click, and no right-button route to it was found in E3's code, so
+   * under E3's look both answer.
+   */
+  private describes(mods: ClickMods | undefined): boolean {
+    if (!mods) return false;
+    return this.e3 ? Boolean(mods.right || mods.ctrl) : Boolean(mods.alt);
+  }
+
+  onClick(atX: number, atY: number, mods?: ClickMods): string | null {
     const x = atX - this.origin.x;
     const y = atY - this.origin.y;
     const btns = this.buttonRects();
     const inside = (r: UiRect): boolean =>
       x >= r.left && x < r.right && y >= r.top && y < r.bottom;
+
+    if (this.describes(mods)) {
+      for (let i = 0; i < SPELL_SLOTS; i++) {
+        if (!inside(this.ledRect(i)) || this.spellAt(i) === Spell.NONE) continue;
+        // The LED still clicks (1997 presses it before the filter runs), and
+        // the feedback line and the choice stay as they were.
+        this.session.sound?.play(34);
+        this.onDescribe?.(this.type === Skill.MAGE_SPELLS ? 'mage' : 'priest', this.pick.numAt(i));
+        return null;
+      }
+    }
+    // A right-click is not a left-click: off a spell it does nothing.
+    if (mods?.right) return null;
 
     const hit = (id: string): string | null => this.press(id);
     if (inside(btns.cancel)) return hit('cancel');

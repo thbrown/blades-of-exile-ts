@@ -28,8 +28,11 @@ export const KEY_DIRECTIONS: Record<string, Direction> = {
 
 export interface InputHandlers {
   onMove(dir: Direction, key?: string): void;
-  /** `right` is the right button: a quick look on the terrain view. */
-  onClick(x: number, y: number, right?: boolean): void;
+  /**
+   * `right` is the right button: a quick look on the terrain view. `alt` and
+   * `ctrl` are the keys held, which a dialog may read (`ClickMods`).
+   */
+  onClick(x: number, y: number, right?: boolean, held?: { alt: boolean; ctrl: boolean }): void;
   onKey(key: string, event: KeyboardEvent): void;
   /**
    * Where the pointer is, in canvas coordinates, or null once it leaves. The
@@ -101,7 +104,7 @@ export class InputRouter {
   private onMouseDown(ev: MouseEvent): void {
     if (this.blocked) return;
     const at = this.toCanvas(ev);
-    this.handlers.onClick(at.x, at.y, ev.button === 2);
+    this.handlers.onClick(at.x, at.y, ev.button === 2, { alt: ev.altKey, ctrl: ev.ctrlKey });
   }
 
   private onMouseMove(ev: MouseEvent): void {

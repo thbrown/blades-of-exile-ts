@@ -1732,6 +1732,9 @@ async function main(): Promise<void> {
     }
 
     const dialog = new CastDialog(ctx, store, session, type, !inFight);
+    dialog.onDescribe = (kind, num) => {
+      void dialogs.runNested(spellInfoDialog(ctx, store, univ, kind, num)).then(redraw);
+    };
     const picked = await dialogs.runScreen(dialog);
     if (picked !== 'cast') { redraw(); return; }
     // finish_pick_spell's tail: the two refusals, and the bookkeeping the M/P
@@ -2302,8 +2305,8 @@ async function main(): Promise<void> {
     // The router speaks desktop coordinates. Dialogs and the map live there;
     // everything else is on the game screen and is offset from it.
     onWheel: (dx, dy, deltaY) => dialogs.handleWheel(dx, dy, deltaY),
-    onClick: (dx, dy, right = false) => {
-      if (dialogs.handleClick(dx, dy)) return;
+    onClick: (dx, dy, right = false, held) => {
+      if (dialogs.handleClick(dx, dy, { right, ...held })) return;
       // The map is a separate window in the original, so a click that lands on
       // it never reaches the game screen underneath.
       if (screen.mapVisible && screen.mapScreen.contains(dx, dy)) {

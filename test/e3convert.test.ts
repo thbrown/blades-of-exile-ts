@@ -231,6 +231,7 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     for (const base of [101, 118, 133]) {
       expect(scen.terTypes[base + 6]?.special).toBe(TerSpec.CHANGE_WHEN_USED);
       expect(scen.terTypes[base + 6]?.flag1).toBe(base + 2);
+      expect(scen.terTypes[base + 6]?.flag2).toBe(59);
     }
   });
 

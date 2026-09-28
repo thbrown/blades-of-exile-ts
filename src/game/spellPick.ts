@@ -232,9 +232,18 @@ export class SpellPick {
 
   /** The spell in grid slot `i` on the current page, or NONE for an empty slot. */
   spellAt(i: number): Spell {
-    const num = this.page === 0 ? i : (SPELL_INDEX[i] ?? 90);
+    const num = this.numAt(i);
     if (num >= 90 || num >= NUM_NORMAL_SPELLS) return Spell.NONE;
     return spellFromNum(this.type, num);
+  }
+
+  /**
+   * Grid slot `i`'s spell number within its school — what
+   * `pick_spell_select_led` hands `display_spells` for an alt-click. 90 is an
+   * empty slot.
+   */
+  numAt(i: number): number {
+    return this.page === 0 ? i : (SPELL_INDEX[i] ?? 90);
   }
 
   /** Whether the chosen caster could cast it — what lights the slot's LED. */

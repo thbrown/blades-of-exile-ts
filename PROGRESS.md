@@ -14028,8 +14028,10 @@ the rest of the TODO(E3-3) list.
       containers and finds secret doors (101/118/133 +1), and no door arm was
       found in it. The user is sure Exile III closed doors, so each open door
       (107, 124, 139) is now `use-change` back to its closed door (103, 120,
-      135), with E3's door sound 58, since E3 has no closing sound to point to
-      (tables.ts `doorSpecial`).
+      135) (tables.ts `doorSpecial`). **Sound fixed 2026-09-28**: it first
+      played E3's door sound 58, the opening one. E3 ships a sound 59
+      byte-for-byte BoE's door closing, which BoE's own open doors play on
+      Use (`use-change`, flag 59), so the close is 59 now.
 
 - [x] **the spell dialog's picture, boxes, help and border** (second
       pass). E3's dialog 1098 is 1997's (GAMEDLOG.RC), read out of
@@ -14049,8 +14051,17 @@ the rest of the TODO(E3-3) list.
       - The spell LEDs' keys, a–z then A–L, work (they didn't at all), and E3
         labels spells "name key cost", as 1997's `put_spell_list` does.
       - E3's dialog has a black edge instead of the white line.
-      - Not done: the help text promises right-click (E3) or alt-click (OBoE)
-        for a spell's description, which this dialog doesn't answer.
+      - **The description click (2026-09-28).** Alt-click on a spell under
+        OBoE's look (`pick_spell_select_led`'s `mod_alt`) and right- or
+        ctrl-click under E3's opens `display_spells` on it, nested over the
+        picker, without picking it. *Gotcha*: E3's help promises a
+        right-click, but E3's dialog click (`FUN_1028_1551`) is 1997's
+        `cd_process_click` (DLOGTOOL.CPP:812), which adds 100 to the item for
+        `MK_CONTROL` — a **ctrl**-click. No route from the right button to it
+        was found, so E3's look answers both. Clicks now carry `ClickMods`
+        (right/alt/ctrl) through `DialogHost.handleClick` to a `ModalScreen`;
+        a right-click elsewhere in the picker does nothing, where before it
+        counted as a left-click. `test/castDialog.test.ts`.
 
 All checks pass: 1,403 tests, both sweeps, verify-screen/e3/party, corpus
 unchanged at 51 of 87, 1,231,440 draws. **Next session starts here**: E3's

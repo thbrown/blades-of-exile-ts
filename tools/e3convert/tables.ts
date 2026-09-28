@@ -71,6 +71,12 @@ const SIGN_TERRAINS = new Set([110, 127, 142, 213, 214, 252]);
 
 /** Door sound: `play_sound(-58)` in both door arms. */
 const DOOR_SOUND = 58;
+/**
+ * Closing sound: E3's code never closes a door (see `base + 6` below), but it
+ * ships a sound 59 byte-for-byte BoE's door closing, which is what BoE's own
+ * open doors play on Use.
+ */
+const DOOR_CLOSE_SOUND = 59;
 
 function doorSpecial(t: number): E3TerrainSpecial | null {
   // Three styles of wall (stone, basalt, adobe), each with the same run of
@@ -88,9 +94,8 @@ function doorSpecial(t: number): E3TerrainSpecial | null {
     // `base + 6`, open: Use closes it again (`base + 2`), as BoE's open door
     // does. **Not found in E3's code**: its Use (`FUN_10c0_425c`) has no door
     // arm, but the user remembers closing doors in Exile III, so it is here
-    // on their word (2026-09-28). E3 has no closing sound to point to, so it
-    // is the opening one.
-    if (t === base + 6) return { kind: 'use-change', to: base + 2, sound: DOOR_SOUND };
+    // on their word (2026-09-28), with BoE's closing sound, which E3 ships.
+    if (t === base + 6) return { kind: 'use-change', to: base + 2, sound: DOOR_CLOSE_SOUND };
   }
   return null;
 }

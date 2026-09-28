@@ -411,9 +411,20 @@ export class Dialog {
  * `onClick`/`onKey` return the name to close with, or null to stay open — a
  * screen that only changed its own selection returns null and gets redrawn.
  */
+/**
+ * What was held with a click. Most screens ignore it; the spell picker reads
+ * it for a spell's description (OBoE's `mod_alt`, 1997's `MK_CONTROL`, E3's
+ * right-click).
+ */
+export interface ClickMods {
+  right?: boolean;
+  alt?: boolean;
+  ctrl?: boolean;
+}
+
 export interface ModalScreen {
   draw(): void;
-  onClick(x: number, y: number): string | null;
+  onClick(x: number, y: number, mods?: ClickMods): string | null;
   onKey(key: string): string | null;
   /** The mouse wheel; true if it scrolled something. */
   onWheel?(x: number, y: number, deltaY: number): boolean;
@@ -533,9 +544,9 @@ export class DialogHost {
     this.screen?.draw();
   }
 
-  handleClick(x: number, y: number): boolean {
+  handleClick(x: number, y: number, mods?: ClickMods): boolean {
     if (this.screen) {
-      const name = this.screen.onClick(x, y);
+      const name = this.screen.onClick(x, y, mods);
       if (name === null) this.redraw();
       else this.close(name);
       return true;
