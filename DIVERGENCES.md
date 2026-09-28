@@ -339,6 +339,20 @@ places in its scripts.
 
 ---
 
+### 11. Testing a town's visibility (2026-09-27)
+
+**DECIDED: an exile-js opcode, `if-town-visible` (161,
+`SpecType.IF_TOWN_VISIBLE`).** BoE, in 1997 and in OBoE, can hide and show a
+town (`town-visible`, SET_TOWN_VISIBILITY) but has no node that reads the
+flag back. Exile III's scripts read `can_find_town[t]` in five places: zones
+14, 23, 45 and 84 and Purgatos's Phoenix Egg. The opcode jumps to `ex1b` when
+town `ex1a` shows, as the other if-then nodes do. It sits in the gap after
+`IF_QUEST`, inside IF_THEN's range. A town out of range says "Town out of
+range." as the setter does, and doesn't branch. As with `journal` (§10), OBoE
+would read a scenario using it as having an unknown opcode.
+
+---
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

@@ -509,12 +509,10 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
       ], [b.reply(0x10c)]),
     ]),
   ])]],
-  // Purgatos gives the Phoenix Egg (special item 38), once.
-  // TODO(E3-3): E3 gives it only once `can_find_town[26]` (+0x849f) is set,
-  // the Filth Factory showing on the map (0x75 until then), and no node
-  // tests a town's visibility. The factory starts hidden (`readE3HiddenTowns`),
-  // but this takes the answer of a party that has found it.
-  [134, (b) => [b.ifFlagAtLeast(f(0x5ce), 1, [b.reply(0x77)], [
+  // Purgatos gives the Phoenix Egg (special item 38), once, and only once
+  // the Filth Factory (town 26) shows on the map; until then, 0x75
+  // (1020:3afd).
+  [134, (b) => [b.ifFlagAtLeast(f(0x5ce), 1, [b.reply(0x77)], [b.ifTownVisible(26, [
     b.reply(0x76), b.setFlag(f(0x5ce), 1), b.giveSpecItem(38),
-  ])]],
+  ], [b.reply(0x75)])])]],
 ]);

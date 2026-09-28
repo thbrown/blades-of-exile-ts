@@ -350,6 +350,34 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(scen.outdoors[2]![8]!.specialEnc[0]!.forced).toBe(true);
   });
 
+  it("tests whether a town shows on the map, as E3's scripts do", async () => {
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    const said: string[] = [];
+    session.attachSpecials(new Proxy({}, {
+      get: (_, k) => (k === 'message' ? (s: string) => { said.push(s); return Promise.resolve(); } : () => Promise.resolve(0)),
+    }) as never);
+    const univ = session.univ;
+    session.debugLeaveTown();
+    // Zone 45 (0,5), spot 8 at (31,37): the roaches' hills, which find the
+    // lair once the Filth Factory (town 26) shows on the map.
+    session.positionParty(0, 5, 31, 37);
+    const step = async (): Promise<string> => {
+      said.length = 0;
+      await session.runSpecial(SpecCtx.OUT_MOVE, SpecCtxType.OUTDOOR, 23, univ.party.locInSec);
+      return said.join(' ');
+    };
+    const hidden = await step();
+    expect(hidden).not.toBe('');
+    scen.towns[26]!.canFind = true;
+    try {
+      const shown = await step();
+      expect(shown).not.toBe('');
+      expect(shown).not.toBe(hidden);
+    } finally {
+      scen.towns[26]!.canFind = false;
+    }
+  });
+
   it("swaps in a declining town's later record by day, as E3's loader does", async () => {
     const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
     session.attachSpecials(new Proxy({}, { get: () => () => Promise.resolve(0) }) as never);

@@ -392,6 +392,31 @@ describe('if-then nodes', () => {
     await run();
     expect(univ.party.getSdf(14, 0)).toBe(1);
   });
+  it('branches on a town showing on the map (IF_TOWN_VISIBLE)', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.IF_TOWN_VISIBLE, ex1a: 1, ex1b: 10, jumpto: -1 },
+      10: { type: SpecType.SET_SDF, sd1: 15, sd2: 0, ex1a: 1 },
+      // No such town: says so, and doesn't branch.
+      20: { type: SpecType.IF_TOWN_VISIBLE, ex1a: 999, ex1b: 10, jumpto: -1 },
+    });
+    const town = univ.scenario.towns[1]!;
+    const was = town.canFind;
+    try {
+      town.canFind = false;
+      await run();
+      expect(univ.party.getSdf(15, 0)).toBe(0);
+      town.canFind = true;
+      await run();
+      expect(univ.party.getSdf(15, 0)).toBe(1);
+      univ.party.setSdf(15, 0, 0);
+      univ.transcript.length = 0;
+      await run(20);
+      expect(univ.party.getSdf(15, 0)).toBe(0);
+      expect(univ.transcript).toContain('Town out of range.');
+    } finally {
+      town.canFind = was;
+    }
+  });
 });
 
 describe('one-shot nodes', () => {

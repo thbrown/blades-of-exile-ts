@@ -429,6 +429,16 @@ export async function ifThenSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       break;
     }
 
+    case SpecType.IF_TOWN_VISIBLE: {
+      // The reading half of SET_TOWN_VISIBILITY, which BoE never had: Exile
+      // III's scripts test `can_find_town[t]`. Out of range, it says so as
+      // the setter does, and doesn't branch.
+      const town = univ.scenario.towns[spec.ex1a];
+      if (!town) univ.addStringToBuf('Town out of range.');
+      else if (town.canFind) ctx.nextSpec = spec.ex1b;
+      break;
+    }
+
     case SpecType.IF_QUEST: {
       if (spec.ex1a < 0 || spec.ex1a >= univ.scenario.quests.length) {
         univ.addStringToBuf('The scenario tried to update a non-existent quest.');

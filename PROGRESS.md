@@ -13626,3 +13626,24 @@ Three conversion bugs a player would see, found while chasing the
 `grep -rn "TODO(E3-3)" src tools`: 48. **Next session starts here**: the
 `if-town-visible` opcode above, then `script.ts`'s town-hostile endings and
 `entry.ts`'s list.
+
+### E3's town-visibility tests, ported (2026-09-27)
+
+**An exile-js opcode, `if-town-visible` = 161** (`SpecType.IF_TOWN_VISIBLE`,
+DIVERGENCES.md §11), the reading half of `town-visible`, and
+`SpecBuilder.ifTownVisible(t, then, else)`. The five E3 sites, each checked
+against the disassembly:
+- zone 14 spot 1 (`10a0:0ee4`): town 32 shown → 0x13 and the spot's flag to
+  20 (party+0x8e1); otherwise 0x14;
+- zone 23 spot 2 (`10a0:17c9`): town 76 shown → the slime valley's warning
+  0x1b, once; otherwise nothing;
+- zone 45 spot 8 (`10a8:0318`): before the factory burns, 0x17 if town 26
+  shows, else 0x16;
+- zone 84 spot 11 (`10a8:338e`): 0x3c/0x41 only while town 22 is hidden;
+- Purgatos (`1020:3afd`): the egg only once town 26 shows; 0x75 until then.
+
+`test/e3convert.test.ts` steps on zone 45's spot with the factory hidden and
+shown. All checks pass: 1,382 tests, both sweeps, verify-screen/e3/party.
+`grep -rn "TODO(E3-3)" src tools`: 43. **Next session starts here**:
+`script.ts`'s town-hostile endings, then `entry.ts`'s list (towns 31, 41, 46,
+57, 78/79, 82, 90, 103–105, 107).

@@ -246,11 +246,9 @@ function zone14(b: SpecBuilder): Map<number, Step[]> {
     [b.onceEncounter(spot(id), B, 0, 0, 0), b.blockMove()],
     [b.blockMove()])];
   return new Map<number, Step[]>([
-    // TODO(E3-3): E3 tests `can_find_town[32]` (+0x84a5), the Tower of
-    // Shifting Floors showing on the map: if so, the party makes it out (0x13)
-    // and the spot is marked. No node tests a town's visibility, so this
-    // always gives the hidden tower's text, which is how a new game starts.
-    [1, [b.msg(B, 0x14)]],
+    // Once the Tower of Shifting Floors (town 32) shows on the map, the
+    // party makes it out (0x13) and the spot is marked (10a0:0ee4).
+    [1, [b.ifTownVisible(32, [b.msg(B, 0x13), b.setFlag(spot(1), 20)], [b.msg(B, 0x14)])]],
     [2, guards(2)],
     [3, guards(3)],
   ]);
@@ -330,10 +328,9 @@ function zone23(b: SpecBuilder): Map<number, Step[]> {
     // The deserters' fort: fight them (slot 9), then loot it (food 150).
     [1, [b.ifFlagEq(spot(9), 0, [b.askDialog(0x146e, [b.onceEncounter(spot(9), B, 0, 0, 0)])],
       [b.giveItemDialog(0x146f, spot(1), 0x4d, 0x47e)])]],
-    // TODO(E3-3): E3 shows the slime valley's warning (0x1b, once) only when
-    // `can_find_town[76]` (+0x84d1) is set, and no node tests a town's
-    // visibility; like zone 14's, this takes the new game's answer and is quiet.
-    [2, []],
+    // The slime valley's warning (0x1b, once), only once town 76 shows on
+    // the map (10a0:17c9).
+    [2, [b.ifTownVisible(76, [b.onceMsg(spot(2), B, 0x1b)])]],
     [3, [b.blockMove(), b.choiceDialog(0x1470, [b.pay(300, [b.msg(B, 0x1c)], eyeBeasts)], eyeBeasts, eyeBeasts)]],
     [4, [b.onceEncounter(spot(4), B, 0x1e, 0, 2)]],
     // Dervish Merchant's camp (spot 5's flag): 1 carrying his scroll to
@@ -572,10 +569,9 @@ function zone45(b: SpecBuilder): Map<number, Step[]> {
     haunt(1), haunt(2), haunt(3), haunt(4),
     [6, [b.blockMove(), b.askDialog(0x154a, [b.onceEncounter(spot(6), B, 0, 0, 2)])]],
     [7, [b.blockMove(), b.askDialog(0x154b, [b.onceEncounter(spot(7), B, 0, 0, 3)])]],
-    // Until the Filth Factory burns, the roaches' hissing. TODO(E3-3): E3
-    // finds the lair (0x17) once `can_find_town[26]` (+0x849f) is set, which
-    // no node can test; like zone 14's, this gives the new game's 0x16.
-    [8, [b.ifFlagEq(f(0xc87), 0, [b.msg(B, 0x16)])]],
+    // Until the Filth Factory burns, the roaches' hissing (0x16), or, once
+    // the factory (town 26) shows on the map, the lair found (0x17; 10a8:0318).
+    [8, [b.ifFlagEq(f(0xc87), 0, [b.ifTownVisible(26, [b.msg(B, 0x17)], [b.msg(B, 0x16)])])]],
   ]);
 }
 
@@ -1127,9 +1123,8 @@ function zone84(b: SpecBuilder): Map<number, Step[]> {
     [4, [b.askDialog(0x16d3, [b.onceEncounter(spot(4), B, 0x3d, 0, 1)], [b.blockMove()])]],
     // TODO(E3-3): E3 plays sound 54 here rather than its usual 57.
     [5, [b.onceMsg(spot(5), B, 0x3e)]],
-    // TODO(E3-3): E3 says this only while `can_find_town[22]` (+0x849b) is
-    // clear, which no node can test; this is the new game's answer.
-    [11, [b.msg(B, 0x3c, 0x41)]],
+    // Only while town 22 is off the map (10a8:338e).
+    [11, [b.ifTownVisible(22, [], [b.msg(B, 0x3c, 0x41)])]],
   ]);
 }
 

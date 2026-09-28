@@ -136,6 +136,12 @@ export enum SpecType {
   IF_IN_BOAT = 158,
   IF_ON_HORSE = 159,
   IF_QUEST = 160,
+  /**
+   * An exile-js opcode, not in BoE or OBoE: jump to `ex1b` if town `ex1a`
+   * shows on the map (`can_find`). SET_TOWN_VISIBILITY sets it, but no node
+   * reads it; Exile III's scripts test it (`can_find_town[t]`).
+   */
+  IF_TOWN_VISIBLE = 161,
 
   MAKE_TOWN_HOSTILE = 170,
   TOWN_RUN_MISSILE = 171,

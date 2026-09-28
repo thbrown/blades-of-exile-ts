@@ -591,6 +591,19 @@ export class SpecBuilder {
     return (next) => this.node('out-move-party', { ex1: [x, y] }, next);
   }
 
+  /**
+   * `if (can_find_town[t])`, a byte test at party+0x8485+t: town `t` shows on
+   * the map. The engine's `if-town-visible` is an exile-js opcode
+   * (`SpecType.IF_TOWN_VISIBLE`), the reading half of `town-visible`.
+   */
+  ifTownVisible(t: number, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-town-visible', { ex1: [t, yes] }, no);
+    };
+  }
+
   /** `can_find_town[t] = 1`: town `t` shows on the map (or, `on` false, stops showing). */
   townVisible(t: number, on = true): Step {
     return (next) => this.node('town-visible', { ex1: [t], ex2: [on ? 1 : 0] }, next);
