@@ -51,6 +51,8 @@ export type E3TerrainSpecial =
   | { kind: 'belt'; dir: number }
   /** Bumping it turns it into `to` and plays sound `sound`. */
   | { kind: 'step-change'; to: number; sound: number }
+  /** Using it turns it into `to` and plays sound `sound`. */
+  | { kind: 'use-change'; to: number; sound: number }
   /**
    * Locked: picking (or bashing) it turns it into `to`. `pickable` false is a
    * door E3's lock-pick code refuses outright.
@@ -83,6 +85,12 @@ function doorSpecial(t: number): E3TerrainSpecial | null {
     if (t === base + 3) return { kind: 'unlock', to: base + 6, pickable: true };
     // `base + 4`, `base + 5`: locked past picking.
     if (t === base + 4 || t === base + 5) return { kind: 'unlock', to: base + 6, pickable: false };
+    // `base + 6`, open: Use closes it again (`base + 2`), as BoE's open door
+    // does. **Not found in E3's code**: its Use (`FUN_10c0_425c`) has no door
+    // arm, but the user remembers closing doors in Exile III, so it is here
+    // on their word (2026-09-28). E3 has no closing sound to point to, so it
+    // is the opening one.
+    if (t === base + 6) return { kind: 'use-change', to: base + 2, sound: DOOR_SOUND };
   }
   return null;
 }

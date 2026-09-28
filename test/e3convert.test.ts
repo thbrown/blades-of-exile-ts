@@ -227,6 +227,23 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(scen.terTypes[103]?.flag1).toBe(107);
     expect(scen.terTypes[107]?.name).toBe('Open Door');
     expect(scen.terTypes[104]?.special).toBe(TerSpec.UNLOCKABLE);
+    // And Use closes an open one again, in all three styles of wall.
+    for (const base of [101, 118, 133]) {
+      expect(scen.terTypes[base + 6]?.special).toBe(TerSpec.CHANGE_WHEN_USED);
+      expect(scen.terTypes[base + 6]?.flag1).toBe(base + 2);
+    }
+  });
+
+  it('closes an open door when the party uses it', async () => {
+    const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
+    const session = new GameSession(univ);
+    session.startTownMode(21, FORCED_ENTRY);
+    const town = univ.town!;
+    const at = univ.party.townLoc;
+    const door = { x: at.x + 1, y: at.y };
+    town.record.terrain[door.x]![door.y] = 107;
+    expect(await session.handleUseSpace(door)).toBe(true);
+    expect(town.record.terrain[door.x]![door.y]).toBe(103);
   });
 
   it("builds outdoor arenas from E3's own tables", () => {

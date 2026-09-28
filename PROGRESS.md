@@ -14022,12 +14022,35 @@ the rest of the TODO(E3-3) list.
       pattern (`paint_pattern(hdc2, 2, ...)`, TOWN.CPP:1613), and so does
       E3. Under `backgrounds` = `exile3` the map tiles `BG_LIGHT` with black
       text; BoE keeps OBoE's bg[4].
-- [ ] **"Use to shut door not working."** Not a bug, as far as the
-      decompile says: E3's Use/Search (`FUN_10c0_425c`, reached only from
-      the search command at exile3.c:4692) runs spots, opens containers
-      and finds secret doors (101/118/133 +1), and has no door branch;
-      E3's open door (107) carries no special. Closing doors is BoE's. Left
-      as it is until the user decides whether to add it anyway.
+- [x] **"Use to shut door not working."** Added **on the user's word**
+      (2026-09-28), not the code's: E3's Use/Search (`FUN_10c0_425c`, reached
+      only from the search command at exile3.c:4692) runs spots, opens
+      containers and finds secret doors (101/118/133 +1), and no door arm was
+      found in it. The user is sure Exile III closed doors, so each open door
+      (107, 124, 139) is now `use-change` back to its closed door (103, 120,
+      135), with E3's door sound 58, since E3 has no closing sound to point to
+      (tables.ts `doorSpecial`).
+
+- [x] **the spell dialog's picture, boxes, help and border** (second
+      pass). E3's dialog 1098 is 1997's (GAMEDLOG.RC), read out of
+      EXILE3.EXE's resources and compared.
+      - The picture was missing everywhere: it is dialog picture 14 + the
+        book, which OBoE sets (boe.party.cpp:2247) and so does E3
+        (`0x2ca + situation`, exile3.c:54677). The definition's `5_712` is
+        what 1997 left in place.
+      - Under `backgrounds` = `exile3` the party rows take 1997's columns
+        (names 88, targets 235, HP 265, SP 304) and every name, HP and SP
+        sits in E3's sunken box (`cd_text_frame` flag 1, inflated 2). Flag 11
+        (the caster's name, the target's HP and SP, exile3.c:54333) makes the
+        text red, which is E3's target marker in place of OBoE's arrow.
+      - Both looks now have the keyboard help (item 78) and the framed
+        feedback line (item 36: "Pick spell to cast.", " Now pick a target.",
+        " Spell not available.", " Target selected.").
+      - The spell LEDs' keys, a–z then A–L, work (they didn't at all), and E3
+        labels spells "name key cost", as 1997's `put_spell_list` does.
+      - E3's dialog has a black edge instead of the white line.
+      - Not done: the help text promises right-click (E3) or alt-click (OBoE)
+        for a spell's description, which this dialog doesn't answer.
 
 All checks pass: 1,403 tests, both sweeps, verify-screen/e3/party, corpus
 unchanged at 51 of 87, 1,231,440 draws. **Next session starts here**: E3's

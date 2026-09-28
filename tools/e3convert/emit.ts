@@ -213,6 +213,7 @@ function specialXml(t: E3TerrainType, id: number, hiddenAs: Map<number, number>)
     : sp.kind === 'sign' ? ['sign', 0, 0, 0]
     : sp.kind === 'belt' ? ['belt', sp.dir, 0, 0]
     : sp.kind === 'step-change' ? ['step-change', sp.to, sp.sound, 0]
+    : sp.kind === 'use-change' ? ['use-change', sp.to, sp.sound, 0]
     // BoE's `unlock`: flag2 is the difficulty, 5 and up beyond picking.
     // flag3 is E3's bash limit, under the `bash` = `exile3` flag: E3's bash
     // (`10d8:4224`) breaks the lock at or under 25, or 10 for the basalt door
