@@ -3174,6 +3174,46 @@ await tp.waitForTimeout(1200);
 touch.combatSet = await tp.evaluate(() => [...document.querySelectorAll('.touch-actions .touch-button')]
   .map((b) => b.dataset.button ?? b.dataset.key).join(' '));
 await tp.screenshot({ path: `${SHOTS}/61-touch-combat.png` });
+// Casting by finger: the Mage button opens the cast dialog with the touch
+// panel over it; Spark and Cast go through the dialog's own controls; the
+// aim cursor starts on the nearest of two hostiles, the pad moves it, and
+// the middle of the pad fires at it.
+touch.aimFoes = await tp.evaluate(() => {
+  const s = window.__session; const univ = s.univ;
+  univ.curPc = 3;
+  const pc = univ.party.pcs[3]; pc.ap = 10;
+  const mons = univ.town.monsters.filter((m) => m.isAlive).slice(0, 2);
+  const spots = [{ x: 9, y: 9 }, { x: 8, y: 8 }];
+  mons.forEach((m, i) => { m.attitude = 1; m.curLoc = spots[i]; m.maxHealth = 400; m.health = 400; });
+  window.__redraw();
+  return { pc: { ...pc.combatPos }, n: mons.length };
+});
+await tp.tap('.touch-actions [data-button="MAGE"]');
+await tp.waitForTimeout(400);
+touch.panel = await tp.evaluate(() => document.querySelector('#touch-spells')?.hidden === false
+  && [...document.querySelectorAll('.ts-spell')].some((b) => b.textContent === 'Spark'));
+await tp.screenshot({ path: `${SHOTS}/63-touch-spells.png` });
+await tp.tap('.ts-spell:text-is("Spark")');
+await tp.waitForTimeout(150);
+await tp.tap('.ts-cast');
+await tp.waitForTimeout(500);
+touch.aimStart = await tp.evaluate(() => window.__screen.aimAt && { ...window.__screen.aimAt });
+await tp.tap('.touch-dpad .touch-button[title="South"]');
+await tp.waitForTimeout(150);
+touch.aimMoved = await tp.evaluate(() => window.__screen.aimAt && { ...window.__screen.aimAt });
+await tp.tap('.touch-dpad .touch-button[title="North"]');
+await tp.waitForTimeout(150);
+touch.fireLabel = await tp.evaluate(() => document.querySelector('.touch-button.centre').textContent);
+await tp.screenshot({ path: `${SHOTS}/64-touch-aim.png` });
+const tLines = await tp.evaluate(() => window.__univ.transcript.length);
+await tp.tap('.touch-dpad .touch-button.centre');
+// At the original's pace the spark's flight takes its time; wait for the word.
+await tp.waitForFunction((from) => window.__univ.transcript.slice(from)
+  .some((l) => /takes|miss|resist/i.test(l)), tLines, { timeout: 10000 }).catch(() => undefined);
+touch.fired = await tp.evaluate((from) => ({
+  mode: window.__session.mode, aim: window.__screen.aimAt,
+  said: window.__univ.transcript.slice(from),
+}), tLines);
 // View → Touch Controls turns them off, and says so with its tick.
 await tp.locator('#game-menu-bar .menu-item', { hasText: 'View' }).first().click();
 touch.menuTicked = (await tp.locator('#game-menu-bar .menu-item.open .dropdown li', { hasText: 'Touch Controls' }).first().textContent())?.startsWith('✓') === true;
@@ -3198,7 +3238,11 @@ const touchOk = touch.desktopHidden && touch.townSet === 'MAGE PRIEST LOOK TALK 
   touch.moved && touch.look.startsWith('Look:') && touch.esc.includes('Cancelled') &&
   touch.longPress && touch.stayed &&
   touch.combatSet === 'MAGE PRIEST LOOK SHIELD BAG WAIT SHOOT END ACT Escape' && touch.cover &&
-  touch.menuTicked && touch.menuOff;
+  touch.menuTicked && touch.menuOff &&
+  touch.aimFoes.n === 2 && touch.panel &&
+  touch.aimStart?.x === 8 && touch.aimStart?.y === 8 &&
+  touch.aimMoved?.x === 8 && touch.aimMoved?.y === 9 && touch.fireLabel === '◎' &&
+  touch.fired.mode === 9 && touch.fired.aim === null && touch.fired.said.some((l) => /takes|miss|resist/i.test(l));
 
 console.log('ERRORS:', errors.length ? errors.join(' | ') : 'none');
 await browser.close();

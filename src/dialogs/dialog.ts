@@ -665,6 +665,17 @@ export class DialogHost {
     return this.screen !== null || this.current !== null;
   }
 
+  /**
+   * Answer `screen` as one of its own controls would — null leaves it open —
+   * for something outside the canvas pressing its controls (the touch spell
+   * panel). Ignored unless that screen is the one on top.
+   */
+  answerScreen(screen: ModalScreen, name: string | null): void {
+    if (this.current || this.screen !== screen) return;
+    if (name === null) this.redraw();
+    else this.close(name);
+  }
+
   handleKey(key: string): boolean {
     if (this.screen) {
       const name = this.screen.onKey(key);

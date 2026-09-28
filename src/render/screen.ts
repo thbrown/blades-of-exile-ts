@@ -6,7 +6,7 @@
  */
 
 import { E3_JOBS_ON_PANEL, JOB_STR, e3HeldJobs, e3JobText, e3JobsBase } from '../game/e3Jobs';
-import { Direction, dist } from '../core/location';
+import { Direction, Location, dist } from '../core/location';
 import { ItemAbil, ItemType, canUse } from '../data/item';
 import { variety } from '../data/itemVariety';
 import { EffectPattern, SpellPat, WALL_ROTATIONS, getBuiltinPattern } from '../data/pattern';
@@ -508,6 +508,13 @@ export class Screen {
   hover: { x: number; y: number } | null = null;
 
   /**
+   * The square a spell or missile is aimed at from the keyboard or the touch
+   * pad (`game/aimCursor.ts`), drawn when the pointer isn't on the view —
+   * a mouse over the terrain still aims as the original does.
+   */
+  aimAt: Location | null = null;
+
+  /**
    * What the game is currently aiming, if anything: the pattern that will land
    * and how far it reaches. Missiles and the two combat targeting modes all
    * draw the same overlay as a town spell does.
@@ -545,21 +552,37 @@ export class Screen {
    * reach that" feedback.
    */
   private drawTargetingLine(session: GameSession): void {
-    const aim = this.hover === null ? null : this.aiming(session);
-    if (!aim || !this.hover) return;
+    const keyed = this.hover === null && this.aimAt !== null;
+    const aim = this.hover === null && !keyed ? null : this.aiming(session);
+    if (!aim) return;
     // Outdoors the C++ skips it entirely (`if(!is_out()) draw_targeting_line()`).
     if (!session.univ.town) return;
 
-    const cell = this.terrainCellAt(this.hover.x, this.hover.y);
-    if (!cell) return;
     const center = session.center;
-    const at = { x: center.x + cell.q - 4, y: center.y + cell.r - 4 };
+    let at: Location;
+    let point: { x: number; y: number };
+    if (this.hover) {
+      const cell = this.terrainCellAt(this.hover.x, this.hover.y);
+      if (!cell) return;
+      at = { x: center.x + cell.q - 4, y: center.y + cell.r - 4 };
+      point = this.hover;
+    } else {
+      at = this.aimAt!;
+      const q = at.x - center.x + 4;
+      const r = at.y - center.y + 4;
+      if (q < 0 || r < 0 || q >= TER_VIEW_TILES || r >= TER_VIEW_TILES) return;
+      const spot = terrainSpotPos(q, r);
+      point = { x: spot.x + TILE_W / 2, y: spot.y + TILE_H / 2 };
+    }
 
     const from = isCombat(session.mode) || session.missile !== null
       ? session.univ.currentPc.combatPos
       : session.univ.party.townLoc;
-    if (session.canSeeLight(from, at) >= 5) return;
-    if (dist(from, at) > aim.range) return;
+    const reachable = session.canSeeLight(from, at) < 5 && dist(from, at) <= aim.range;
+    // The keyboard's cursor is always drawn, so it can be seen and moved
+    // off a square it can't reach; the mouse's has no need, being the mouse.
+    if (keyed) this.drawAimCursor(point, reachable);
+    if (!reachable) return;
 
     const { ctx } = this;
     ctx.save();
@@ -577,7 +600,7 @@ export class Screen {
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(fromSpot.x + TILE_W / 2, fromSpot.y + TILE_H / 2);
-    ctx.lineTo(this.hover.x, this.hover.y);
+    ctx.lineTo(point.x, point.y);
     ctx.stroke();
 
     // Then the footprint: every cell of the 9x9 pattern that is set, framed.
@@ -602,6 +625,16 @@ export class Screen {
             { size: 12, colour: Colours.WHITE });
         }
       }
+    ctx.restore();
+  }
+
+  /** The keyboard aim's own frame: yellow on a square a shot can land on, red where it can't. */
+  private drawAimCursor(point: { x: number; y: number }, reachable: boolean): void {
+    const { ctx } = this;
+    ctx.save();
+    ctx.strokeStyle = reachable ? 'rgb(255,220,0)' : 'rgb(220,40,40)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(point.x - TILE_W / 2 + 1, point.y - TILE_H / 2 + 1, TILE_W - 2, TILE_H - 2);
     ctx.restore();
   }
 

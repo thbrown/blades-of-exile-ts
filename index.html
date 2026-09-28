@@ -730,6 +730,13 @@
       .touch-button.centre {
         font-size: 16px;
       }
+      /* Aiming: the middle fires, and the button for Space stands out. */
+      .touch-button.centre.fire,
+      .touch-button.aim {
+        background: rgba(120, 90, 10, 0.55);
+        border-color: rgba(255, 220, 0, 0.8);
+        color: #ffe680;
+      }
       .touch-button.text {
         font-size: 13px;
       }
@@ -741,6 +748,128 @@
       }
       .touch-icon.wide {
         width: 80%;
+      }
+      /* The spell picker for a finger (platform/touchSpells.ts), over the
+         cast dialog: the game's paper, its fonts, and buttons a thumb can
+         hit. */
+      #touch-spells {
+        position: fixed;
+        inset: 28px 0 0 0;
+        z-index: 6;
+        display: flex;
+        align-items: stretch;
+        justify-content: center;
+        padding: 6px;
+        box-sizing: border-box;
+        background: rgba(0, 0, 0, 0.55);
+      }
+      #touch-spells[hidden] {
+        display: none;
+      }
+      .ts-panel {
+        width: 100%;
+        max-width: 900px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px 10px;
+        box-sizing: border-box;
+        background: var(--paper-tile, none) 0 0 / 64px 64px repeat, #e4e4e4;
+        image-rendering: pixelated;
+        border: 1px solid #000;
+        border-radius: 6px;
+        color: #000;
+        font: 13px 'BoEText', system-ui, sans-serif;
+        min-height: 0;
+      }
+      .ts-head,
+      .ts-row,
+      .ts-foot {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 5px;
+      }
+      .ts-title {
+        font-size: 15px;
+        margin-right: 6px;
+      }
+      .ts-tabs {
+        display: flex;
+        gap: 4px;
+      }
+      .ts-feedback {
+        margin-left: auto;
+        font-size: 12px;
+        font-style: italic;
+        color: #333;
+      }
+      .ts-label {
+        width: 48px;
+        font-size: 11px;
+        font-weight: bold;
+      }
+      .ts-btn {
+        font: inherit;
+        color: #000;
+        background: #f4f4f4;
+        border: 1px solid #000;
+        border-radius: 4px;
+        padding: 0 10px;
+        min-height: 34px;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .ts-btn:disabled {
+        opacity: 0.45;
+      }
+      .ts-btn.on {
+        background: #23425f;
+        color: #fff;
+      }
+      .ts-chip small {
+        font-size: 10px;
+        opacity: 0.8;
+      }
+      .ts-grid {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 6px;
+        align-items: start;
+      }
+      .ts-col {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .ts-level {
+        font-size: 11px;
+        font-weight: bold;
+        border-bottom: 1px solid #000;
+        padding-bottom: 1px;
+      }
+      .ts-none {
+        font-size: 12px;
+        color: #666;
+      }
+      .ts-spell {
+        text-align: left;
+      }
+      .ts-spell.dim {
+        color: #777;
+        border-color: #999;
+      }
+      .ts-spacer {
+        flex: 1;
+      }
+      .ts-cast {
+        font-weight: bold;
+        background: #6b5418;
+        color: #f3dc98;
+        min-width: 110px;
       }
       /* A finger on the canvas: no double-tap zoom, no text selection, no
          iOS callout on a long press (which is the right button here). */

@@ -126,6 +126,31 @@ const SMALL = 23;
  */
 export { NO_TARGET, type CastChoice } from '../game/spellPick';
 
+/** One spell in the grid, for the touch panel. */
+export interface CastSlot {
+  slot: number;
+  spell: Spell;
+  name: string;
+  level: number;
+  /** In the caster's book at all. */
+  known: boolean;
+  /** Lit: the caster can cast it now. */
+  castable: boolean;
+}
+
+export interface CastView {
+  priest: boolean;
+  page: number;
+  caster: number;
+  target: number;
+  spell: Spell;
+  needsTarget: boolean;
+  canChooseCaster: boolean;
+  feedback: string;
+  party: { name: string; present: boolean; alive: boolean; canCast: boolean; hp: number; sp: number; index: number }[];
+  slots: CastSlot[];
+}
+
 export class CastDialog implements ModalScreen {
   private readonly pick: SpellPick;
 
@@ -332,6 +357,56 @@ export class CastDialog implements ModalScreen {
 
   private castable(spell: Spell): boolean {
     return this.pick.castable(spell);
+  }
+
+  /**
+   * A control pressed by its C++ id from outside the canvas — the touch spell
+   * panel (`platform/touchSpells.ts`). The same path as a click or a key:
+   * the sound, the feedback line, then `SpellPick`. The caller hands the
+   * answer to `DialogHost.answerScreen`.
+   */
+  pressControl(id: string): string | null {
+    return this.press(id);
+  }
+
+  /** Describe the spell in slot `i` (`display_spells`), as an alt-click on it does. */
+  describeSlot(i: number): void {
+    if (this.spellAt(i) === Spell.NONE) return;
+    this.onDescribe?.(this.type === Skill.MAGE_SPELLS ? 'mage' : 'priest', this.pick.numAt(i));
+  }
+
+  /** What the touch panel shows: everything the canvas dialog draws, as data. */
+  get view(): CastView {
+    const { univ } = this.session;
+    const pc = univ.party.pcs[this.caster];
+    const known = this.type === Skill.MAGE_SPELLS ? pc?.mageSpells : pc?.priestSpells;
+    const slots: CastSlot[] = [];
+    for (let i = 0; i < SPELL_SLOTS; i++) {
+      const spell = this.spellAt(i);
+      if (spell === Spell.NONE) continue;
+      slots.push({
+        slot: i, spell, name: spellName(spell), level: SPELLS[spell]?.level ?? 0,
+        known: known?.[this.pick.numAt(i)] === true, castable: this.castable(spell),
+      });
+    }
+    return {
+      priest: this.type === Skill.PRIEST_SPELLS,
+      page: this.page,
+      caster: this.caster,
+      target: this.target,
+      spell: this.spell,
+      needsTarget: this.spell !== Spell.NONE && this.needsTarget(this.spell),
+      canChooseCaster: this.canChooseCaster,
+      feedback: this.feedback.trim(),
+      party: univ.party.pcs.map((p, i) => ({
+        name: p.name,
+        present: p.mainStatus !== MainStatus.ABSENT,
+        alive: p.mainStatus === MainStatus.ALIVE,
+        canCast: pcCanCastType(this.session, p, this.type) === CastStatus.OK,
+        hp: p.curHealth, sp: p.curSp, index: i,
+      })),
+      slots,
+    };
   }
 
   // ------------------------------------------------------------------- draw

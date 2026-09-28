@@ -18,6 +18,7 @@
 import { ToolbarButton, buttonIconRect, placeButtons } from '../render/layout';
 import type { ToolbarMode } from '../render/screen';
 import { getBoolPref, setPref } from './prefs';
+import { TouchSpellPanel, type TouchSpellHost } from './touchSpells';
 
 const PREF = 'TouchControls';
 
@@ -44,6 +45,13 @@ export interface TouchPadHost {
   press(which: ToolbarButton): void;
   /** `buttons.png`, or the scenario's own, once it's loaded. */
   sheet(): ImageBitmap | undefined;
+  /**
+   * A spell or missile being aimed with the cursor (`game/aimCursor.ts`), and
+   * what Space would do to it; null when nothing is.
+   */
+  aiming(): { space: 'cast' | 'rotate' | null } | null;
+  /** The cast dialog, for the spell panel (`touchSpells.ts`). */
+  spells: TouchSpellHost;
 }
 
 /** A key the toolbar has no button for, and the modes it's offered in. */
@@ -84,10 +92,14 @@ export class TouchControls {
   /** What the left pad was last built for, so a redraw that changes nothing is free. */
   private shownMode: ToolbarMode | null = null;
   private shownSheet: ImageBitmap | undefined;
+  private shownAim = '';
+  private centre: HTMLButtonElement | null = null;
   private repeat: { timer: number; pointer: number } | null = null;
   private triedLandscape = false;
+  private readonly spells: TouchSpellPanel;
 
   constructor(private readonly host: TouchPadHost) {
+    this.spells = new TouchSpellPanel(host.spells);
     this.root = document.createElement('div');
     this.root.id = 'touch-pads';
     this.left = document.createElement('div');
@@ -115,29 +127,45 @@ export class TouchControls {
   sync(): void {
     const on = touchControlsOn();
     document.body.classList.toggle('touch-controls', on);
+    this.spells.sync(on);
     const mode = on ? this.host.mode() : null;
     this.root.hidden = mode === null;
     if (mode === null) {
       this.stopRepeat();
       return;
     }
+    const aiming = this.host.aiming();
+    // While aiming, the middle of the pad fires at the cursor (Enter), not Space.
+    if (this.centre) {
+      this.centre.textContent = aiming ? '◎' : '•';
+      this.centre.title = aiming ? 'Fire at the target (Enter)' : 'Pause / stand ready (Space)';
+      this.centre.classList.toggle('fire', aiming !== null);
+    }
+    const aimKey = aiming ? `aim:${aiming.space}` : '';
     const sheet = this.host.sheet();
-    if (mode === this.shownMode && sheet === this.shownSheet) return;
+    if (mode === this.shownMode && sheet === this.shownSheet && aimKey === this.shownAim) return;
     this.shownMode = mode;
     this.shownSheet = sheet;
-    this.buildActions(mode, sheet);
+    this.shownAim = aimKey;
+    this.buildActions(mode, sheet, aiming?.space ?? null);
   }
 
   private buildDpad(): void {
     for (const [key, arrow, title] of DPAD) {
       const b = this.padButton(title);
       b.textContent = arrow;
-      if (key === ' ') b.classList.add('centre');
+      if (key === ' ') {
+        b.classList.add('centre');
+        this.centre = b;
+      }
       b.addEventListener('pointerdown', (ev) => {
         ev.preventDefault();
         this.stopRepeat();
+        if (key === ' ') {
+          sendKey(this.host.aiming() ? 'Enter' : ' ');
+          return;
+        }
         sendKey(key);
-        if (key === ' ') return;
         // Moves repeat while held, as a held arrow key does. A move that
         // arrives mid-step is dropped by the game (`midAction`), so the
         // rate only has to be about right.
@@ -158,8 +186,21 @@ export class TouchControls {
     }
   }
 
-  private buildActions(mode: ToolbarMode, sheet: ImageBitmap | undefined): void {
+  private buildActions(mode: ToolbarMode, sheet: ImageBitmap | undefined, space: 'cast' | 'rotate' | null): void {
     this.left.replaceChildren();
+    // Space while aiming: a multi-target spell goes off with what it has, a
+    // wall turns. First, since it's what the player is in the middle of.
+    if (space) {
+      const b = this.padButton(space === 'cast' ? 'Cast now (Space)' : 'Rotate the wall (Space)');
+      b.classList.add('text', 'aim');
+      b.dataset['key'] = ' ';
+      b.textContent = space === 'cast' ? 'Cast' : 'Rotate';
+      b.addEventListener('pointerdown', (ev) => {
+        ev.preventDefault();
+        sendKey(' ');
+      });
+      this.left.append(b);
+    }
     for (const placed of placeButtons(this.host.buttons(mode))) {
       const b = this.padButton(ToolbarButton[placed.btn].toLowerCase());
       b.dataset['button'] = ToolbarButton[placed.btn];

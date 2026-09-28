@@ -493,6 +493,18 @@ launch sound's length: 660 for sound 11, 410 for 12, 200 for 14, 1000 for 53,
 bursts before its sound has finished. Timing only, with no draws, so no flag:
 `holdForSound` in `src/game/missileAnim.ts`.
 
+### 20. The arrows while a spell or missile is aimed (2026-09-28)
+
+**DECIDED: this port's own, at the user's request; a UI change, not a rule.**
+In both the original and OBoE an arrow key during targeting is a click on the
+square next to the caster, so a spell can only be aimed by mouse. Here the
+target starts on the nearest hostile the party can see and reach (skipping
+squares a multi-target spell has already picked), the arrows move it, and
+Enter — or the middle of the touch pad — takes that square exactly as a click
+on it would. A mouse over the view still aims as it always has. What reaches
+the rules is the same click, so recordings can't tell, and finding the target
+draws no dice (`test/aimCursor.test.ts`). `src/game/aimCursor.ts`.
+
 ---
 
 ## Agreements worth recording

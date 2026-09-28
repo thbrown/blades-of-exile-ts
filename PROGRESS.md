@@ -14209,7 +14209,35 @@ the rest of the TODO(E3-3) list.
       - `verify-screen.mjs` has a TOUCH step on an emulated phone.
       - Not done: typing into the canvas dialogs (PC names, numbers) doesn't
         bring up a phone's keyboard; the menu bar could fold away sideways.
+- [x] **Casting by finger, and aiming by key (2026-09-28).** At the user's
+      request:
+      - **The touch spell panel** (`platform/touchSpells.ts`): with touch
+        controls on, the cast dialog gets a panel over it — casters, targets
+        when the spell wants one, the caster's own spells by level (dim when
+        they can't cast them now), Describe, Cancel, Cast. Every tap is one
+        of the dialog's controls by its C++ id (`CastDialog.pressControl` →
+        `SpellPick.click`, the replay driver's route), answered through
+        `DialogHost.answerScreen`. A second tap on the chosen spell casts it.
+      - **The aim cursor** (`game/aimCursor.ts`, DIVERGENCES #20): with a
+        spell or missile armed, the target starts on the nearest visible,
+        reachable hostile; the arrows (or the pad) move it; Enter (or the
+        pad's middle, which turns into ◎) fires at it — `actOn` on the
+        square, which is all a click does. Each multi-target pick moves it
+        to the next enemy not yet picked. It's drawn yellow where a shot can
+        land, red where not; a mouse over the view aims as before. Outdoors
+        and for dropping items there's no cursor. The pad gains a Cast or
+        Rotate button while Space would do one of those.
+      - **Found on the way: Space never fired a multi-target spell or turned
+        a wall.** `main.ts` had two `case ' '` arms in one switch, and only
+        the first (pause) ever ran — so "(Hit space to cast.)" was a lie, and
+        Space with a spell or missile in the air spent the turn instead.
+        Merged in the C++'s order (boe.actions.cpp:3010): fancy cast, wall
+        rotate, `cancel_item_target` (which the live game had no route to at
+        all), and pause only in town, combat or outdoors.
+      - Summoning spells are multi-target too and aim at empty squares; the
+        cursor still starts on an enemy for them, and is moved off.
 
-All checks pass: 1,413 tests, both sweeps, verify-screen (with TOUCH)/party
-(corpus not re-run: neither the inept fix nor the pads touch an RNG call). **Next session starts here**: E3's
+All checks pass: 1,419 tests, both sweeps, verify-screen (with TOUCH)/party
+(corpus not re-run: none of today's changes touches an RNG call, and the
+replay driver doesn't use `main.ts`'s key handler). **Next session starts here**: E3's
 remaining screen chrome (see "Not done" above), then the TODO(E3-3) list.

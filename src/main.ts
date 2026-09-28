@@ -121,6 +121,7 @@ import { BOE_HEIGHT, BOE_WIDTH, ToolbarButton } from './render/layout';
 
 import { CHROME_SHEETS, Screen, toolbarButtons, toolbarMode } from './render/screen';
 import { TouchControls, setTouchControls, touchControlsOn } from './platform/touchControls';
+import { aimSpaceAction, autoAim, currentAim, moveAim } from './game/aimCursor';
 import { tilePattern } from './render/tiling';
 import {
   DEFAULT_UI_SCALE, DisplayMode, UI_SCALES, UI_SCALE_FIT, desktop, placeBesideGame,
@@ -658,7 +659,27 @@ async function main(): Promise<void> {
   let shownCursor = '';
   // Made once the toolbar's handler exists, below; redraws before then skip it.
   let touchPads: TouchControls | undefined;
+  /**
+   * The aim the keyboard cursor belongs to (`game/aimCursor.ts`). A new
+   * spell, missile or multi-target pick puts the cursor back on the nearest
+   * enemy; nothing aimed, and there's no cursor.
+   */
+  let aimToken: unknown = null;
+  let aimPicks = -1;
+  const syncAim = (): void => {
+    const aim = currentAim(session);
+    if (!aim) {
+      screen.aimAt = null;
+      aimToken = null;
+      return;
+    }
+    if (aim.token === aimToken && aim.picks === aimPicks && screen.aimAt !== null) return;
+    aimToken = aim.token;
+    aimPicks = aim.picks;
+    screen.aimAt = autoAim(session, aim);
+  };
   const redraw = (): void => {
+    syncAim();
     // The desktop around the game screen gets the same background pattern.
     // OBoE's put_background tiles its whole window (boe.graphics.cpp:683).
     // It's tiled in the game screen's coordinates, so the pattern runs on
@@ -2392,6 +2413,12 @@ async function main(): Promise<void> {
       pressToolbar(which);
     },
     sheet: () => store.get('buttons'),
+    aiming: () => (screen.aimAt !== null && currentAim(session) !== null
+      ? { space: aimSpaceAction(session) } : null),
+    spells: {
+      dialog: () => (dialogs.active instanceof CastDialog ? dialogs.active : null),
+      answer: (dialog, name) => dialogs.answerScreen(dialog, name),
+    },
   });
 
   const router = new InputRouter(canvas, {
@@ -2401,6 +2428,15 @@ async function main(): Promise<void> {
       // into movement before `onKey` ever sees them.
       if (key !== undefined && dialogs.active && dialogs.handleKey(key)) return;
       if (dialogs.active || session.talk || session.shop || midAction()) return;
+      // While a spell or missile is aimed, a direction moves its cursor
+      // instead of acting on the square beside the caster, as the original's
+      // arrows do; Enter then takes the cursor's square as a click would.
+      if (screen.aimAt !== null && currentAim(session) !== null) {
+        screen.aimAt = moveAim(session, screen.aimAt, dir);
+        screen.hover = null;
+        redraw();
+        return;
+      }
       const from = session.mode === GameMode.COMBAT || session.missile !== null
         ? univ.currentPc.combatPos
         : session.inTown ? univ.party.townLoc : univ.party.outLoc;
@@ -2603,6 +2639,12 @@ async function main(): Promise<void> {
         return;
       }
       screen.hover = { x, y };
+      // The keyboard's cursor follows the mouse, so the arrows carry on from
+      // wherever it was pointing.
+      const cell = screen.terrainCellAt(x, y);
+      if (cell && screen.aimAt !== null) {
+        screen.aimAt = { x: session.center.x + cell.q - 4, y: session.center.y + cell.r - 4 };
+      }
       redraw();
     },
     onHoverEnd: () => {
@@ -2681,6 +2723,13 @@ async function main(): Promise<void> {
       // start a *new* action. It matters more than it used to: a monster round
       // now takes real time, where before it was over within the keystroke.
       if (midAction()) return;
+      // Enter shoots at the aim cursor's square — the click on it, exactly.
+      if (key === 'Enter' && screen.aimAt !== null && currentAim(session) !== null) {
+        void actOn(screen.aimAt);
+        setStatus();
+        redraw();
+        return;
+      }
       // handle_keystroke's letters (boe.actions.cpp:2772), which are what a
       // BoE player's fingers already know. Uppercase variants that mean
       // something different in the original (M/P force a recast, L picks a
@@ -2696,9 +2745,29 @@ async function main(): Promise<void> {
           if (inCombat) await endCombatFlow();
           break;
         case ' ':
-          // Space is `handle_pause` (boe.actions.cpp:3003): one turn — stand
-          // ready in combat, pause otherwise.
-          await session.pause();
+          // boe.actions.cpp:3010. **This was two `case ' '` arms**, and a
+          // switch only ever takes the first: Space paused in every mode, so
+          // a multi-target spell's "(Hit space to cast.)" and a wall's
+          // "(Hit space to rotate.)" never happened, and Space with a spell
+          // or missile in the air spent the turn instead.
+          if (session.mode === GameMode.FANCY_TARGET) {
+            // start_fancy_spell_targeting's "(Hit space to cast.)".
+            await castCollected(session);
+          } else if (session.mode === GameMode.SPELL_TARGET) {
+            // "(Hit space to rotate.)" — a wall spell turns.
+            spellCastHitReturn(session);
+            redraw();
+          } else if (session.mode === GameMode.ITEM_TARGET) {
+            // `cancel_item_target`: Identify or Recharge's panel closes, and the
+            // turn the spell owes is charged — as the replay driver does it.
+            if (session.endItemShop()) await session.afterPartyTurn();
+            setStatus();
+            redraw();
+          } else if (session.mode === GameMode.TOWN || session.mode === GameMode.COMBAT
+            || session.mode === GameMode.OUTDOORS) {
+            // `handle_pause`: one turn — stand ready in combat, pause otherwise.
+            await session.pause();
+          }
           break;
         case 'w': case 'W':
           // **w is `handle_wait`, not `handle_pause`** (boe.actions.cpp:3094).
@@ -2748,16 +2817,6 @@ async function main(): Promise<void> {
             session.handleMissile();
             // The cancel arm alone recentres — `center = current_pc().combat_pos`.
             recentre();
-          }
-          break;
-        case ' ':
-          // start_fancy_spell_targeting's "(Hit space to cast.)".
-          if (session.mode === GameMode.FANCY_TARGET) await castCollected(session);
-          // "(Hit space to rotate.)" — Space turns a wall spell rather than
-          // pausing the turn (boe.actions.cpp:3001).
-          else if (session.mode === GameMode.SPELL_TARGET) {
-            spellCastHitReturn(session);
-            redraw();
           }
           break;
         case 'm': case 'M': case 'p': case 'P':
