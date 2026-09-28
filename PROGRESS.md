@@ -13924,3 +13924,51 @@ corpus is unchanged at 51 of 87, 1,231,440 draws (the new behaviour sits
 behind flags a recording never lists, or spends no draws). **Next session
 starts here**: the white flee area, once the user says which screen; then
 the rest of the TODO(E3-3) list.
+
+### E3 play-test notes, third round, continued (2026-09-27)
+
+- [x] **the white "flee" squares, and "Blocked: South".** Two port bugs
+      about the arena border, which the C++ hard-codes as terrain 90:
+      - `get_blockage`'s "little kludgy in here for pits" (OBoE
+        boe.locutils.cpp:444, 1997 LOCUTILS.CPP) makes the border opaque in
+        an outdoor fight, and the port had dropped it. BoE's border is a dark
+        pit, so nobody noticed; E3's is pure white in TER2.BMP itself.
+      - E3's border is **86**, and E3 tests 86 where BoE tests 90 in all four
+        places: fleeing (`pc_combat_move`, exile3.c:7655), sight
+        (`FUN_1080_1529`), pushing (`FUN_1080_1986`) and monsters escaping.
+        The port's flee test only knew 90, so E3's border was a wall.
+      `GameSession.arenaBorder()` is 86 under `outdoor-arena` = `exile3`, 90
+      otherwise. The row of border next to the arena still shows, white:
+      an opaque square is drawn, like a wall, and that is E3's own picture.
+      The corpus is unchanged.
+- [x] **the Exile III icon on the scenario page.** EXILE3.ICO (32×32, 16
+      colours) decoded by `decodeIco` (`tools/e3convert/cursors.ts`) into the
+      committed `public/exile3-icon.png` (`tools/e3convert/makeIcon.ts`, like
+      `exile3-preview.png`). A card's icon may now be a picture URL as well
+      as a `scenpics` number.
+- [ ] **dialog pictures are BoE's.** Planned, not started. E3's DLOGPICS.BMP
+      is the same 36×36 grid, 4 across, but 7 rows (BoE's has 10), with its
+      own art in its own order. E3's 624 RT_DIALOG templates have **no
+      picture control** (3,815 statics, 10 buttons), so the picture is an
+      argument at each call that shows one. The work: find E3's show-dialog
+      function(s), read the picture argument at every call site (nedis.py),
+      then ship DLOGPICS as a custom sheet and have the converter give each
+      message node its picture. Today every E3 message node says pic 0,
+      pictype 4.
+- [ ] **backgrounds and dialog backgrounds are BoE's.** Planned, not started.
+      E3's patterns are in MIXED.BMP (396×296), the bottom band of 64×64
+      tiles, not BoE's `pixpats.png` layout. 1997 Windows builds its
+      backgrounds from the same kind of MIXED.BMP (GRAPHICS.CPP:623,
+      `bg_from[9]`, 8×8 brushes, plus the 64×64 status patterns). OBoE lets a
+      scenario ship `graphics/<name>.png` to replace a game sheet
+      (fileio_scen.cpp:2431), which is the way in: build a `pixpats.png` from
+      MIXED.BMP in BoE's layout, once E3's choice of pattern for each screen
+      and dialog is known. Other E3 chrome that may also want the same
+      treatment, found by size: TERSCRN.BMP (279×351, BoE terscreen
+      278×350), TEXTBAR.BMP (identical size), STATAREA.BMP (271×398, BoE's
+      statarea + inventory stacked), BUTTONS.BMP, DLOGBTNS.BMP, TALKPORT.BMP
+      (320×192, same grid as talkportraits with fewer rows).
+
+All checks pass: 1,401 tests, both sweeps, verify-screen/e3/party, corpus
+unchanged at 51 of 87, 1,231,440 draws. **Next session starts here**: E3's
+dialog pictures, then its backgrounds (the two plans just above).

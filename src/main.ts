@@ -322,7 +322,8 @@ async function main(): Promise<void> {
         const url = `${import.meta.env.BASE_URL}scenarios/${id}/scenario.xml`;
         const hdr = readScenarioFromXml(await parseXmlDoc(await (await fetch(url)).text(), url));
         return {
-          id, title: hdr.title, blurb: hdr.teasers.find((t) => t !== '') ?? '', icon: hdr.introPic,
+          id, title: hdr.title, blurb: hdr.teasers.find((t) => t !== '') ?? '',
+          icon: id === EXILE3_ID ? EXILE3_CARD.icon : hdr.introPic as number | string,
           // Made by scripts/scenario-previews.mjs; the card drops it if missing.
           preview: id === EXILE3_ID ? EXILE3_CARD.preview : `${import.meta.env.BASE_URL}scenarios/${id}/preview.png`,
         };
@@ -380,7 +381,7 @@ async function main(): Promise<void> {
         maxSp: pc.maxSp,
         picture: await portrait(pc.graphic),
       })));
-    const known = (id: string): { title: string; icon?: number } | undefined =>
+    const known = (id: string): { title: string; icon?: number | string } | undefined =>
       headers.find((h) => h.id === id) ?? added.find((h) => h.id === id)
         ?? library?.entries.find((e) => e.id === id);
     const titleOf = (id: string): string | undefined => known(id)?.title;

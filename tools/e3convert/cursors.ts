@@ -29,40 +29,55 @@ export interface E3Cursor {
 }
 
 /**
- * Decode one `RT_CURSOR`: a hotspot (two words), a BITMAPINFOHEADER whose
- * height counts both masks, a two-colour palette, then the XOR mask and the
- * AND mask, each 1 bit a pixel, rows bottom up and padded to four bytes. AND
- * set is transparent (or, with XOR set too, the screen inverted, drawn here
- * as black); AND clear takes the palette colour XOR names.
+ * A Win16 icon or cursor image: a BITMAPINFOHEADER whose height counts both
+ * masks, a palette, then the XOR image (1 or 4 bits a pixel) and the 1-bit
+ * AND mask, rows bottom up and padded to four bytes. AND set is transparent
+ * (with a non-black XOR too, the screen inverted, drawn here as black); AND
+ * clear takes the palette colour the XOR image names.
  */
-function decodeCursor(data: Uint8Array): { image: Rgba; hotspot: { x: number; y: number } } {
+export function decodeDib(data: Uint8Array, at = 0): Rgba {
   const v = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  const hotspot = { x: v.getUint16(0, true), y: v.getUint16(2, true) };
-  const hdr = 4;
-  const headerSize = v.getUint32(hdr, true);
-  const w = v.getInt32(hdr + 4, true);
-  const h = v.getInt32(hdr + 8, true) / 2;
-  const bpp = v.getUint16(hdr + 14, true);
-  if (bpp !== 1) throw new Error(`cursor with ${bpp} bits a pixel`);
-  const palette = hdr + headerSize;
+  const headerSize = v.getUint32(at, true);
+  const w = v.getInt32(at + 4, true);
+  const h = v.getInt32(at + 8, true) / 2;
+  const bpp = v.getUint16(at + 14, true);
+  if (bpp !== 1 && bpp !== 4) throw new Error(`icon with ${bpp} bits a pixel`);
+  const palette = at + headerSize;
   const colour = (i: number): [number, number, number] =>
     [data[palette + 4 * i + 2]!, data[palette + 4 * i + 1]!, data[palette + 4 * i]!];
-  const stride = Math.ceil(w / 32) * 4;
-  const xor = palette + 8;
-  const and = xor + stride * h;
-  const bit = (base: number, x: number, y: number): number =>
-    ((data[base + (h - 1 - y) * stride + (x >> 3)]! >> (7 - (x & 7))) & 1);
+  const xorStride = Math.ceil((w * bpp) / 32) * 4;
+  const andStride = Math.ceil(w / 32) * 4;
+  const xor = palette + 4 * (1 << bpp);
+  const and = xor + xorStride * h;
+  const index = (x: number, y: number): number => {
+    const byte = data[xor + (h - 1 - y) * xorStride + ((x * bpp) >> 3)]!;
+    return bpp === 1 ? (byte >> (7 - (x & 7))) & 1 : (x & 1) === 0 ? byte >> 4 : byte & 15;
+  };
+  const masked = (x: number, y: number): boolean =>
+    ((data[and + (h - 1 - y) * andStride + (x >> 3)]! >> (7 - (x & 7))) & 1) === 1;
   const out = new Uint8ClampedArray(w * h * 4);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const p = (y * w + x) * 4;
-      const a = bit(and, x, y), xo = bit(xor, x, y);
-      if (a === 1 && xo === 0) continue;
-      const [r, g, b] = a === 1 ? [0, 0, 0] : colour(xo);
+      const i = index(x, y);
+      if (masked(x, y) && i === 0) continue;
+      const [r, g, b] = masked(x, y) ? [0, 0, 0] : colour(i);
       out[p] = r; out[p + 1] = g; out[p + 2] = b; out[p + 3] = 255;
     }
   }
-  return { image: { width: w, height: h, data: out }, hotspot };
+  return { width: w, height: h, data: out };
+}
+
+/** One `RT_CURSOR`: a hotspot (two words), then the image. */
+function decodeCursor(data: Uint8Array): { image: Rgba; hotspot: { x: number; y: number } } {
+  const v = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  return { image: decodeDib(data, 4), hotspot: { x: v.getUint16(0, true), y: v.getUint16(2, true) } };
+}
+
+/** An `.ICO` file's first image (EXILE3.ICO has one, 32×32 in 16 colours). */
+export function decodeIco(data: Uint8Array): Rgba {
+  const v = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  return decodeDib(data, v.getUint32(6 + 12, true));
 }
 
 export function readE3Cursors(resources: NeResource[]): E3Cursor[] {

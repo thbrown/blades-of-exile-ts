@@ -1159,3 +1159,32 @@ describe('the town-entry sound', () => {
     expect(heard(`${scen.startTown + 1}-99`)).toContain(16);
   });
 });
+
+/**
+ * `get_blockage`'s pit kludge (boe.locutils.cpp:444): the outdoor arena's
+ * border is opaque in an outdoor fight. It is 90, or Exile III's 86 under
+ * `outdoor-arena` = `exile3`.
+ */
+describe("the arena border's opacity", () => {
+  it('blocks sight in an outdoor fight only, on the scenario’s own border', () => {
+    const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
+    const session = new GameSession(univ);
+    session.startNewGame();
+    const ter = univ.town!.record.terrain;
+    const saved = [ter[1]![1]!, scen.featureFlags['outdoor-arena']];
+    try {
+      ter[1]![1] = 90;
+      expect(session.sightObscurity(1, 1)).toBe(0);
+      session.mode = GameMode.COMBAT;
+      session.whichCombatType = 0;
+      expect(session.sightObscurity(1, 1)).toBe(5);
+      scen.featureFlags['outdoor-arena'] = 'exile3';
+      expect(session.arenaBorder()).toBe(86);
+      expect(session.sightObscurity(1, 1)).toBe(0);
+    } finally {
+      ter[1]![1] = saved[0] as number;
+      if (saved[1] === undefined) delete scen.featureFlags['outdoor-arena'];
+      else scen.featureFlags['outdoor-arena'] = saved[1] as string;
+    }
+  });
+});

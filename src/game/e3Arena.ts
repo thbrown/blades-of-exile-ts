@@ -23,7 +23,8 @@ import type { Universe } from '../universe/universe';
 const ARENA_DIM = 48;
 
 /** The border: "Pit/Combat Border". */
-const BORDER = 86;
+export const E3_ARENA_BORDER = 86;
+const BORDER = E3_ARENA_BORDER;
 /** What the road and bridge strips are paved with: "Walkway". */
 const WALKWAY = 245;
 /** E3's road terrains (cave, grass and hills); the test is on the party's terrain. */

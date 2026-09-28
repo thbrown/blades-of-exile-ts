@@ -30,8 +30,11 @@ export interface StartupScenario {
   title: string;
   /** The scenario's first teaser line, shown under its title. */
   blurb: string;
-  /** `intro_pic` — its icon in `scenpics`, 5 across, 32×32 each. */
-  icon?: number;
+  /**
+   * `intro_pic` — its icon in `scenpics`, 5 across, 32×32 each — or a
+   * picture of its own, 32×32 (Exile III's is EXILE3.ICO).
+   */
+  icon?: number | string;
   /** A picture of where it starts; the card falls back to the icon if it won't load. */
   preview?: string;
 }
@@ -47,7 +50,7 @@ export interface StartupSave {
   /** A picture of the terrain view at the time, when the save has one. */
   thumb?: string;
   /** The scenario's icon, for a save with no picture. */
-  icon?: number;
+  icon?: number | string;
 }
 
 export interface StartupChoice {
@@ -168,15 +171,20 @@ function link(href: string, text: string, className?: string): HTMLAnchorElement
 }
 
 /** The icon, cut out of `scenpics` with CSS and doubled like the game canvas. */
-function iconElement(icon: number): HTMLElement {
+function iconElement(icon: number | string): HTMLElement {
   const node = el('span', 'startup-icon');
+  if (typeof icon === 'string') {
+    node.style.backgroundImage = `url(${icon})`;
+    node.style.backgroundSize = '64px 64px';
+    return node;
+  }
   const n = icon >= 0 && icon < SCEN_ICONS ? icon : 0;
   node.style.backgroundImage = `url(${import.meta.env.BASE_URL}data/graphics/scenpics.png)`;
   node.style.backgroundPosition = `${-64 * (n % 5)}px ${-64 * Math.floor(n / 5)}px`;
   return node;
 }
 
-function pictureElement(icon: number | undefined, preview: string | undefined): HTMLElement {
+function pictureElement(icon: number | string | undefined, preview: string | undefined): HTMLElement {
   const frame = el('span', 'startup-picture');
   // Only the picture and its corner icon go; anything laid over the frame
   // since (a badge) stays.
@@ -193,7 +201,7 @@ function pictureElement(icon: number | undefined, preview: string | undefined): 
     img.addEventListener('error', fallback, { once: true });
     frame.append(img);
     // The icon rides in the corner of the picture, as the scenario's own mark.
-    if (icon !== undefined && icon < SCEN_ICONS) frame.append(iconElement(icon));
+    if (icon !== undefined && (typeof icon === 'string' || icon < SCEN_ICONS)) frame.append(iconElement(icon));
   } else fallback();
   return frame;
 }

@@ -44,6 +44,7 @@ import {
   adjacentEncounter, countWalls, createWandMonst, doOutdoorMonsters, outEncLevTot,
 } from './wandering';
 import { setUpCombat, startOutdoorCombat } from './outCombat';
+import { E3_ARENA_BORDER } from './e3Arena';
 import { increaseAgeEffects } from './increaseAge';
 import { processFields, syncForceCages } from './processFields';
 import type { TownTarget } from './spellTarget';
@@ -1757,8 +1758,8 @@ export class GameSession {
     if (!town || !town.isOnMap(target.x, target.y)) return { ...from };
     const ter = town.record.terrain[target.x]![target.y]!;
     const info = this.univ.terrainType(ter);
-    // Terrain 90 is the pit; boat_over means water.
-    if (ter === 90 || info.boatOver) return loc(0, target.y);
+    // Terrain 90 is the pit (the arena border); boat_over means water.
+    if (ter === this.arenaBorder() || info.boatOver) return loc(0, target.y);
     if (this.sightObscurity(target.x, target.y) > 0) return { ...from };
     if (info.blockage !== TerObstruct.CLEAR) return { ...from };
     if (this.locOffActiveArea(target)) return { ...from };
@@ -4650,7 +4651,7 @@ export class GameSession {
     // costs 1 AP as if they'd tried to bolt and been dragged back. Only
     // arena combat (whichCombatType === 0) has this border; town fights use
     // the "can't leave town" refusal above instead.
-    if (town.record.terrain[destination.x]?.[destination.y] === 90 && this.whichCombatType === 0) {
+    if (town.record.terrain[destination.x]?.[destination.y] === this.arenaBorder() && this.whichCombatType === 0) {
       if (this.univ.rng.getRan(1, 1, 10) < 3) {
         pc.mainStatus = MainStatus.FLED;
         if (this.combatActivePc === this.univ.curPc) this.combatActivePc = NO_ONE;
@@ -4977,8 +4978,24 @@ export class GameSession {
     return this.univ.out.isOnMap(x, y) ? this.univ.out.at(x, y) : 0;
   }
 
+  /**
+   * The outdoor arena's border, which the C++ hard-codes as terrain 90 ("we
+   * protect terrain 90 from redefinition", boe.locutils.cpp:442): fleeing onto
+   * it, monsters escaping by it, crates pushed into it, and its being opaque.
+   * Exile III's is 86, "Pit/Combat Border" (`e3Arena.ts`), in every one of
+   * those tests: `pc_combat_move` (exile3.c:7655), `get_blockage`
+   * (`FUN_1080_1529`) and `push_loc` (`FUN_1080_1986`).
+   */
+  arenaBorder(): number {
+    return this.univ.scenario.featureFlags['outdoor-arena'] === 'exile3' ? E3_ARENA_BORDER : 90;
+  }
+
   /** get_blockage (boe.locutils.cpp:441) — how much a tile obstructs sight. */
   private getBlockage(ter: number): number {
+    // "little kludgy in here for pits": the arena's border is opaque in an
+    // outdoor fight, so it draws black. This port had dropped it, which
+    // Exile III's border, a plain white picture, made plain.
+    if (ter === this.arenaBorder() && isCombat(this.mode) && this.whichCombatType === 0) return SIGHT_BLOCKED;
     const blockage = this.univ.terrainType(ter).blockage;
     if (
       blockage === TerObstruct.BLOCK_MOVE_AND_SIGHT ||
@@ -5819,7 +5836,7 @@ export class GameSession {
     // Monsters don't hop into bed when things are calm.
     if (placid && ter.special === TerSpec.BED) canEnter = false;
     if (mode === 1 && town.hasField(where.x, where.y, FieldType.SPECIAL_SPOT)) canEnter = false;
-    if (terNum === 90) {
+    if (terNum === this.arenaBorder()) {
       // Terrain 90 is the protected "escape hatch"; a monster that reaches it
       // in a real fight leaves the map for good.
       if (isCombat(this.mode) && this.whichCombatType === 0) {

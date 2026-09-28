@@ -32,6 +32,8 @@ export const EXILE3_CARD = {
   // A committed picture of the game's first screen (the user's decision,
   // 2026-09-27), so the card has one before anyone has played.
   preview: `${import.meta.env.BASE_URL}exile3-preview.png`,
+  // The game's own icon, EXILE3.ICO (tools/e3convert/makeIcon.ts).
+  icon: `${import.meta.env.BASE_URL}exile3-icon.png`,
 };
 
 /** Whether this site serves a converted copy as plain files (the dev server does). */
