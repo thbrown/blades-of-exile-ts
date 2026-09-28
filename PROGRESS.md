@@ -14154,7 +14154,21 @@ the rest of the TODO(E3-3) list.
       - **Button labels** are navy, `rgb(0,0,100)`, sampled.
       - The caption's gradient starts greyer (`#b3b9bf`) than the capture's
         far left, at the user's word.
+- [x] **A magically inept PC can read E3's notes (2026-09-28).** Reported by
+      the user: "Use: Can't - magically inept." on a Piece of Paper. E3's
+      use-item (`FUN_10c0_2c92`) works as 1997's `use_item`: its chart at
+      `1140:0000`, indexed by ability, says `inept_ok` for 10 and up, and
+      every readable ability 0xa0–0xb7 is 10 (usable anywhere, inept or
+      not). The converter carries the notes on CALL_SPECIAL, which OBoE's
+      chart marks magic, so the port refused them — which would also have
+      stopped an inept PC reading the "You may proceed." scroll that opens
+      the remote cave. Fixed with a port-only item flag, `Item.ineptOk`
+      (`<inept-ok>` in items.xml, `INEPTOK` in saves), which `useMagic`
+      honours and only the E3 converter sets; `scenarioDump` leaves it out
+      so the C++ comparisons still match. *Caveat*: a note already in a pack
+      in a save made before this has no flag and is still refused until the
+      party picks up a fresh copy.
 
-All checks pass: 1,403 tests, both sweeps, verify-screen/e3/party, corpus
-unchanged at 51 of 87, 1,231,440 draws. **Next session starts here**: E3's
+All checks pass: 1,413 tests, both sweeps, verify-screen/party (corpus not
+re-run for the inept fix, which touches no RNG call). **Next session starts here**: E3's
 remaining screen chrome (see "Not done" above), then the TODO(E3-3) list.

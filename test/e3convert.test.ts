@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { TerObstruct, TerSpec } from '../src/data/terrain';
 import type { Scenario } from '../src/data/scenario';
-import { ItemAbil, ItemType } from '../src/data/item';
+import { ItemAbil, ItemType, useMagic } from '../src/data/item';
 import { MonstTime } from '../src/data/monster';
 import { ShopItemType, ShopPrompt } from '../src/data/shop';
 import { TalkNodeType } from '../src/data/talking';
@@ -764,6 +764,14 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     }) as never);
     const notes = scen.scenItems.filter((it) => it.ability === ItemAbil.CALL_SPECIAL);
     expect(notes.length).toBeGreaterThan(40);
+    // A magically inept PC can read them: E3's item chart (segment 1140,
+    // which `FUN_10c0_2c92` indexes by ability) has 10 — `inept_ok`, usable
+    // anywhere — for every readable ability, 0xa0–0xb7.
+    const exe = new Uint8Array(readFileSync(join(dir as string, 'EXILE3.EXE')));
+    const chart = readNeSegment(exe, (0x1140 - 0x1000) / 8 + 1);
+    for (let a = 0xa0; a <= 0xb7; a++) expect(chart[2 * a]! | (chart[2 * a + 1]! << 8)).toBe(10);
+    expect(notes.every((it) => it.ineptOk && !useMagic(it))).toBe(true);
+    expect(scen.scenItems.filter((it) => it.ineptOk)).toHaveLength(notes.length);
     // The scroll in town 72 (a Piece of Paper made 0xaf): "You may proceed.",
     // and the remote cave's passage opens (party+0x35d).
     const scroll = scen.towns[72]!.presetItems.map((p) => scen.scenItems[p.code]!).find((it) => it.ability === ItemAbil.CALL_SPECIAL)!;

@@ -59,7 +59,24 @@ function shop(s: Shop): Json {
   };
 }
 
+/**
+ * `Item.ineptOk` is this port's own, for E3's notes; OBoE's cItem has no such
+ * field, so it leaves the dump wherever an item appears (the item table, and
+ * each shop's stock).
+ */
+function dropPortOnly(j: Json): Json {
+  if (Array.isArray(j)) return j.map(dropPortOnly);
+  if (j === null || typeof j !== 'object' || j instanceof Map) return j;
+  const out: Record<string, Json> = {};
+  for (const [k, v] of Object.entries(j)) if (k !== 'ineptOk') out[k] = dropPortOnly(v);
+  return out;
+}
+
 export function scenarioDump(s: Scenario): Json {
+  return dropPortOnly(scenarioDumpRaw(s));
+}
+
+function scenarioDumpRaw(s: Scenario): Json {
   return {
     title: s.title,
     teasers: s.teasers,

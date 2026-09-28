@@ -816,12 +816,15 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     // Pants (variety 22), which a spot in Rentar-Ihrno's keep looks for.
     else if (old.variety === 22) it.specialClass = PANTS_CLASS;
     // A readable item runs its case of E3's switch when used (`notes.ts`):
-    // a scenario node, through OBoE's CALL_SPECIAL ability.
+    // a scenario node, through OBoE's CALL_SPECIAL ability. E3's item chart
+    // (1140:0000, read by `FUN_10c0_2c92`) has 10 for all of 0xa0–0xb7:
+    // usable anywhere, and `inept_ok`, so a magically inept PC can read.
     const ability = e3Abilities[k] ?? 0;
     if (isE3NoteAbility(ability)) {
       if (!noteNodes.has(ability)) noteNodes.set(ability, scen!.compile(e3NoteSteps(scen!, ability)));
       it.ability = ItemAbil.CALL_SPECIAL;
       it.abilStrength = noteNodes.get(ability)!;
+      it.ineptOk = true;
     }
     return it;
   });

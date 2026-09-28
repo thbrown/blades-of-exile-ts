@@ -144,6 +144,8 @@ describe('.exg round trip', () => {
     pc.traits[2] = true;
     pc.items[4] = presetItem(ItemPreset.POTION);
     pc.items[4].charges = 3;
+    // This port's own flag, which E3's notes carry (`INEPTOK`).
+    pc.items[4].ineptOk = true;
     pc.equip[0] = true;
 
     const back = roundTrip(univ).party.pcs[1]!;
@@ -164,6 +166,7 @@ describe('.exg round trip', () => {
     expect(back.items[4]!.variety).toBe(pc.items[4]!.variety);
     expect(back.items[4]!.name).toBe(pc.items[4]!.name);
     expect(back.items[4]!.charges).toBe(3);
+    expect(back.items[4]!.ineptOk).toBe(true);
     expect(back.items[5]!.variety).toBe(ItemType.NO_ITEM);
   });
 

@@ -161,6 +161,14 @@ export interface Item {
   enchanted: boolean;
   unsellable: boolean;
   rechargeable: boolean;
+  /**
+   * Not in OBoE's cItem: a use that isn't magic whatever the ability says, so
+   * a magically inept PC may make it. Exile III's own item chart gives its
+   * readable notes (abilities 0xa0–0xb7) the value 10 — `inept_ok` — but the
+   * converter carries them on CALL_SPECIAL, which OBoE's chart marks magic.
+   * Only the E3 converter sets it (`<inept-ok>` in items.xml).
+   */
+  ineptOk: boolean;
   desc: string;
 }
 
@@ -199,6 +207,7 @@ export function defaultItem(): Item {
     enchanted: false,
     unsellable: false,
     rechargeable: false,
+    ineptOk: false,
     desc: '',
   };
 }
@@ -508,6 +517,7 @@ export function useOutdoors(item: Item): boolean {
 
 /** cItem::use_magic (item.cpp:1410) — does Using it count as casting? */
 export function useMagic(item: Item): boolean {
+  if (item.ineptOk) return false;
   return ((ABIL_CHART[item.ability] ?? 0) & USE_MAGIC) !== 0;
 }
 

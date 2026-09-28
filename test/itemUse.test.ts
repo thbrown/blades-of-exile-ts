@@ -152,6 +152,18 @@ describe('the refusals', () => {
     expect(blade.charges).toBe(2);
   });
 
+  it("lets a magically inept PC use an item marked inept-ok, as E3's notes are", async () => {
+    // CALL_SPECIAL is magic in OBoE's chart; `ineptOk` overrides it. Node -1
+    // runs nothing, so all this sees is whether the use got past the gate.
+    const s = inTown();
+    const note = held(s, { ability: ItemAbil.CALL_SPECIAL, abilStrength: -1, ineptOk: true }, 0);
+    expect(useMagic(note)).toBe(false);
+    expect(useMagic({ ...note, ineptOk: false })).toBe(true);
+    await useItem(s, 0, 0);
+    expect(s.univ.transcript.some((l) => l.includes('magically inept'))).toBe(false);
+    expect(note.charges).toBe(2);
+  });
+
   it('an empty row still says so, and still spends the turn', async () => {
     // `use_item` has no empty-slot test — `can_use()` on a blank slot is false,
     // so it refuses like any other unusable item — and `handle_use_item`'s tail

@@ -96,6 +96,8 @@ export function readItemsFromXml(root: Element, fname = 'items.xml'): Item[] {
             else if (pt === 'enchanted') item.enchanted = state;
             else if (pt === 'rechargeable') item.rechargeable = state;
             else if (pt === 'unsellable') item.unsellable = state;
+            // This port's own, for Exile III's notes (`Item.ineptOk`).
+            else if (pt === 'inept-ok') item.ineptOk = state;
             else throw new Error(`${fname}: bad node <${pt}> in item properties`);
           }
           break;

@@ -175,7 +175,7 @@ ${weap}        <missile-type>${it.missile}</missile-type>
             <enchanted>${it.enchanted}</enchanted>
             <rechargeable>${it.rechargeable}</rechargeable>
             <unsellable>${it.unsellable}</unsellable>
-        </properties>
+${it.ineptOk ? '            <inept-ok>true</inept-ok>\n' : ''}        </properties>
 ${it.desc ? `        <description>${esc(it.desc)}</description>\n` : ''}    </item>
 `;
 }

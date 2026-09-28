@@ -130,6 +130,8 @@ export function writeItem(page: TagPage, item: Item): void {
   if (item.enchanted) page.add('ENCHANTED');
   if (item.rechargeable) page.add('RECHARGEABLE');
   if (item.unsellable) page.add('UNSELLABLE');
+  // This port's own (`Item.ineptOk`); OBoE's reader skips a key it doesn't know.
+  if (item.ineptOk) page.add('INEPTOK');
 }
 
 export function readItem(page: TagPage): Item {
@@ -174,6 +176,7 @@ export function readItem(page: TagPage): Item {
   item.enchanted = page.has('ENCHANTED');
   item.rechargeable = page.has('RECHARGEABLE');
   item.unsellable = page.has('UNSELLABLE');
+  item.ineptOk = page.has('INEPTOK');
   return item;
 }
 
