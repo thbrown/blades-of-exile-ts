@@ -72,7 +72,7 @@ import { monsterDims, monsterGraphic } from './monsterPics';
 import { pcGraphic } from './pcPics';
 import { SheetStore, TILE_H, TILE_W, calcRect } from './sheets';
 import { terrainGraphic } from './terrainPics';
-import { DEFAULT_BG, PANEL_BG, tileBwPattern, tilePattern } from './tiling';
+import { DEFAULT_BG, PANEL_BG, e3Background, tileBwPattern, tilePattern } from './tiling';
 import { MAP_SHEETS, MapScreen } from './mapScreen';
 import { TalkScreen } from './talkScreen';
 import { ShopScreen } from './shopScreen';
@@ -294,6 +294,10 @@ export class Screen {
   backgroundIndex(session: GameSession): number {
     // MODE_STARTUP uses bg[4].
     if (this.startupBackdrop) return 4;
+    if (session.univ.scenario.featureFlags['backgrounds'] === 'exile3') {
+      const where = isCombat(session.mode) ? 'fight' : session.isOutdoors ? 'out' : 'town';
+      return e3Background(where, session.univ.party.outdoorCorner.x >= 7, session.univ.party.townNum);
+    }
     if (session.isOutdoors) return DEFAULT_BG.out;
     if (session.univ.townRecord?.lightingType !== Lighting.LIGHT_NORMAL) return DEFAULT_BG.dungeon;
     return DEFAULT_BG.town;

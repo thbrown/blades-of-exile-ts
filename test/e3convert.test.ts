@@ -177,7 +177,7 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(e3DialogPic(38, sprites)).toEqual([e3TerrainPic(38), 1]);
     expect(e3DialogPic(412, sprites)).toEqual([1468, 3]);
     expect(e3DialogPic(905, sprites)).toBeUndefined();
-    expect(EXILE3_SHEET_OVERRIDES).toEqual(E3_SHEET_OVERRIDES.map(([n]) => n));
+    expect(EXILE3_SHEET_OVERRIDES).toEqual([...E3_SHEET_OVERRIDES.map(([n]) => n), 'pixpats']);
     // The nodes carry them: dialog pictures, E3 terrain and E3 sprites. (No
     // dialog with a face has been transcribed yet.)
     const kinds = new Set<number>();
@@ -185,6 +185,21 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
       if (node.pic !== 0 || node.pictype !== 4) kinds.add(node.pictype);
     }
     expect([...kinds]).toEqual(expect.arrayContaining([1, 3, 4]));
+  });
+
+  it("tiles the window with E3's own patterns", async () => {
+    const { e3Background, E3_PATTERN_SLOTS, BG_LIGHT } = await import('../src/render/tiling');
+    expect(scen.featureFlags['backgrounds']).toBe('exile3');
+    // E3's dialog pattern, 2, is OBoE's light dialog background, which E3
+    // makes the default.
+    expect(E3_PATTERN_SLOTS[2]).toBe(BG_LIGHT);
+    expect(E3_PATTERN_SLOTS).not.toContain(5);
+    expect(e3Background('out', true, 0)).toBe(E3_PATTERN_SLOTS[0]);
+    expect(e3Background('out', false, 0)).toBe(E3_PATTERN_SLOTS[7]);
+    expect(e3Background('fight', true, 0)).toBe(E3_PATTERN_SLOTS[9]);
+    expect(e3Background('town', true, 21)).toBe(E3_PATTERN_SLOTS[4]);
+    expect(e3Background('town', true, 22)).toBe(E3_PATTERN_SLOTS[5]);
+    expect(new Set(E3_PATTERN_SLOTS).size).toBe(10);
   });
 
   it("gives E3's locked doors its bash limits", () => {
@@ -906,7 +921,7 @@ describe("Exile III converted in memory, as the browser does", () => {
     expect(loaded.sounds.get(16)).not.toEqual(boe16);
     expect(new TextDecoder().decode(loaded.sounds.get(16)!.subarray(0, 4))).toBe('RIFF');
     // Its dialog pictures and talking faces, over the game's.
-    expect([...loaded.overrides.keys()].sort()).toEqual(['dlogpics', 'talkportraits']);
+    expect([...loaded.overrides.keys()].sort()).toEqual(['dlogpics', 'pixpats', 'talkportraits']);
     // And its fourteen cursors, each one the flag names.
     const named = loaded.scenario.featureFlags['cursors']!.split(',').map((e) => e.split(':')[0]);
     expect([...loaded.cursors.keys()].sort()).toEqual([...named].sort());

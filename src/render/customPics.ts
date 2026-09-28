@@ -133,8 +133,9 @@ export async function installCustomSheets(
  * for a NAME that isn't `sheetN` (OBoE's override sheets, fileio_scen.cpp:2431,
  * found ahead of the game's on the resource path). Each is laid over the
  * game's sheet rather than put in its place, so a smaller one (Exile III's
- * dialog pictures run to 28, BoE's to 40) leaves the rest of the game's
- * pictures where they were. The game's sheet must already be loaded.
+ * dialog pictures run to 28, BoE's to 40), or one transparent where it has
+ * nothing to say (its `pixpats`), leaves the rest of the game's pictures
+ * where they were. The game's sheet must already be loaded.
  */
 export async function installSheetOverrides(
   store: SheetStore, overrides: Map<string, Uint8Array>,
@@ -145,8 +146,8 @@ export async function installSheetOverrides(
     const own = await createImageBitmap(new Blob([png as BlobPart], { type: 'image/png' }));
     const canvas = new OffscreenCanvas(Math.max(base.width, own.width), Math.max(base.height, own.height));
     const ctx = canvas.getContext('2d')!;
+    // Where the scenario's is transparent, the game's shows through.
     ctx.drawImage(base, 0, 0);
-    ctx.clearRect(0, 0, own.width, own.height);
     ctx.drawImage(own, 0, 0);
     store.put(name, await createImageBitmap(canvas));
   }

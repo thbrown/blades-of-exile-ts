@@ -20,7 +20,7 @@ import { SheetStore, calcRect } from '../render/sheets';
 import { statIconRect } from '../data/statusIcons';
 import { terrainGraphic } from '../render/terrainPics';
 import { drawString, drawStringCentre, measureString, wrapLines } from '../render/text';
-import { tilePattern } from '../render/tiling';
+import { dialogBackground, dialogTextIsWhite, tilePattern } from '../render/tiling';
 import {
   ButtonControl, ButtonType, DialogControl, DialogDef, FieldControl, FieldType, FontSpec,
   KEY_PLACEHOLDER, LedControl, LedState, PaneControl, PictControl, PictType, TextControl, measureDialog,
@@ -29,9 +29,11 @@ import {
 import { ModalScreen } from './dialog';
 import { drawPictAt } from './pict';
 
-/** cDialog::BG_DARK, and the white text that goes with it (dialog.cpp:49/405). */
-const BG_DARK = 5;
-const DEF_TEXT = Colours.WHITE;
+/**
+ * The dialog's text colour: white on cDialog::BG_DARK, black on anything
+ * else (dialog.cpp:406). The background is `dialogBackground()`.
+ */
+const defText = (): string => (dialogTextIsWhite() ? Colours.WHITE : Colours.BLACK);
 
 /**
  * `cButton::btnRects` (button.cpp:247) — the source rect of each button type's
@@ -92,7 +94,7 @@ const FULL_SHEETS: Record<number, string> = { 1400: 'outhelp', 1401: 'fighthelp'
 
 /** The style a text control's own font gives, before any runtime colour. */
 function textStyle(font: FontSpec): { font: 'plain' | 'bold' | 'dungeon' | 'maidenword'; size: number; colour: string } {
-  return { font: font.font === 'bold' ? 'bold' : font.font, size: font.size, colour: DEF_TEXT };
+  return { font: font.font === 'bold' ? 'bold' : font.font, size: font.size, colour: defText() };
 }
 
 /** A text's lines, wrapped to its written width when it has one. */
@@ -437,7 +439,7 @@ export class XmlDialog implements ModalScreen {
     const existing = this.labels.get(name);
     const control = this.def.byName.get(name);
     const colour = existing?.colour
-      ?? (control?.kind === 'button' ? DEF_TEXT : this.resolvedColour(name));
+      ?? (control?.kind === 'button' ? defText() : this.resolvedColour(name));
     this.labels.set(name, { text, bold, colour });
     this.labelPos.set(name, { where, offset });
     return this;
@@ -448,7 +450,7 @@ export class XmlDialog implements ModalScreen {
     const control = this.def.byName.get(name);
     const named = this.colour.get(name)
       ?? (control && 'font' in control ? control.font.colour : undefined);
-    return named ? COLOURS[named] ?? named : DEF_TEXT;
+    return named ? COLOURS[named] ?? named : defText();
   }
 
   /** `cDialog::setEscapeButton` — which button Escape presses, over the definition's. */
@@ -724,7 +726,7 @@ export class XmlDialog implements ModalScreen {
       top: frame.top + 2, left: frame.left + 2,
       bottom: frame.bottom - 2, right: frame.right - 2,
     };
-    if (pats) tilePattern(ctx, pats, BG_DARK, inner);
+    if (pats) tilePattern(ctx, pats, dialogBackground(), inner);
     else {
       ctx.fillStyle = Colours.GREY;
       ctx.fillRect(inner.left, inner.top, width(inner), height(inner));
@@ -862,7 +864,7 @@ export class XmlDialog implements ModalScreen {
     return {
       font: font.font === 'bold' ? 'bold' : font.font,
       size: font.size,
-      colour: named ? COLOURS[named] ?? named : DEF_TEXT,
+      colour: named ? COLOURS[named] ?? named : defText(),
     };
   }
 

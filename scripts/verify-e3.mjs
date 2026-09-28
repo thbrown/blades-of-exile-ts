@@ -291,22 +291,55 @@ console.log('LEFT TOWN:', JSON.stringify(exit), JSON.stringify(outside));
 await shot('02-outdoors');
 if (outside.inTown) errors.push(`could not walk out of Fort Emergence: ${JSON.stringify(exit)}`);
 
-// A stroll on the world map: count the steps the terrain allows.
-const stroll = await page.evaluate(async () => {
-  const s = window.__session;
-  const tried = [];
-  for (const d of [4, 4, 4, 4, 2, 2, 2, 2, 0, 0, 6, 6]) {
-    const before = { ...s.univ.party.outLoc };
-    const ok = await Promise.race([s.move(d), new Promise((r) => setTimeout(() => r('stalled'), 400))]);
-    if (ok === 'stalled' || window.__dialogs.active) break;
-    tried.push(before.x !== s.univ.party.outLoc.x || before.y !== s.univ.party.outLoc.y);
+// A stroll on the world map: count the steps the terrain allows. Each step
+// the first open direction, round lava rather than into it (damaging ground,
+// special 2), as a player would, and not back into the fort (a town entrance,
+// special 21), nor straight back. Messages on the way (leaving by the north
+// passage says "You emerge from Fort Emergence...") are read and closed.
+const closeDialogs = async () => {
+  for (let k = 0; k < 10 && await page.evaluate(() => !!window.__dialogs.active); k++) {
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(300);
   }
+};
+await closeDialogs();
+const tried = [];
+let last = -1;
+for (let i = 0; i < 8; i++) {
+  const d = await page.evaluate((last) => {
+    const s = window.__session;
+    const step = { 0: [0, -1], 2: [1, 0], 4: [0, 1], 6: [-1, 0] };
+    const back = { 0: 4, 2: 6, 4: 0, 6: 2 };
+    const at = s.univ.party.outLoc;
+    const d = [4, 2, 0, 6].find((k) => {
+      if (k === back[last]) return false;
+      const t = s.univ.terrainType(s.univ.out.at(at.x + step[k][0], at.y + step[k][1]));
+      return t.blockage < 3 && ![2, 21].includes(t.special);
+    });
+    if (d === undefined || s.inTown) return null;
+    window.__strollFrom = { ...at };
+    window.__strollMove = s.move(d);
+    return d;
+  }, last);
+  if (d === null) break;
+  last = d;
+  await page.waitForTimeout(200);
+  await closeDialogs();
+  tried.push(await page.evaluate(async () => {
+    await Promise.race([window.__strollMove, new Promise((r) => setTimeout(r, 400))]);
+    const at = window.__univ.party.outLoc, was = window.__strollFrom;
+    return at.x !== was.x || at.y !== was.y;
+  }));
+}
+const stroll = await page.evaluate((tried) => {
   window.__redraw();
-  return { moved: tried.filter(Boolean).length, tried: tried.length, place: s.locationName() };
-});
+  return { moved: tried.filter(Boolean).length, tried: tried.length, place: window.__session.locationName() };
+}, tried);
 console.log('STROLL:', JSON.stringify(stroll));
 await shot('03-stroll');
 if (stroll.moved === 0) errors.push('no outdoor step moved the party');
+if (await page.evaluate(() => window.__univ.transcript.some((l) => l.includes('LAVA!'))))
+  errors.push('the walk went through lava');
 
 // A message spot in Krizsan: the inn's common room tells you about itself,
 // once.

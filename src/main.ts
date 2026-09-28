@@ -113,6 +113,7 @@ import { InputRouter } from './platform/input';
 import { Snd, SoundPlayer } from './platform/sound';
 import { installCustomSheets, installSheetOverrides, loadCustomSheets } from './render/customPics';
 import { captureTerrainView } from './render/preview';
+import { BG_DARK, BG_LIGHT, setDefaultDialogBackground } from './render/tiling';
 import { changeCursor, cursorCss, setScenarioCursors } from './platform/cursors';
 import { giveHelp, setGiveHelp, setLivingSound } from './universe/living';
 import { killPc } from './game/damage';
@@ -597,6 +598,9 @@ async function main(): Promise<void> {
     for (let n = 0; n < 100; n++) scenSounds.set(n, async () => bytes(await src.getBinary(`sounds/SND${n}.wav`)));
   }
   sound.setScenarioSounds(scenSounds);
+  // `cDialog::defaultBackground`: Exile III's dialogs are light, with black
+  // text, on its own pattern (render/tiling.ts, `E3_PATTERN_SLOTS`).
+  setDefaultDialogBackground(scen.featureFlags['backgrounds'] === 'exile3' ? BG_LIGHT : BG_DARK);
   setScenarioCursors(scen.featureFlags['cursors'], (n) => {
     const png = packageCursors.get(n);
     return isBundled || !png ? `${bundledUrl}cursors/${n}.png`

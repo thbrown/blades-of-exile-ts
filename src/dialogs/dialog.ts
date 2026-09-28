@@ -17,7 +17,7 @@ import { UiRect, height, width } from '../render/layout';
 import { itemGraphic } from '../render/itemPics';
 import { SheetStore } from '../render/sheets';
 import { drawString, wrapLines } from '../render/text';
-import { tilePattern } from '../render/tiling';
+import { dialogBackground, dialogTextIsWhite, tilePattern } from '../render/tiling';
 import { PictType } from './dialogXml';
 import { drawPictAt } from './pict';
 
@@ -25,8 +25,7 @@ import { drawPictAt } from './pict';
  * cDialog::BG_DARK (dialog.cpp:49) is the game's default dialog background, and
  * text on it is white (dialog.cpp:405).
  */
-const DIALOG_BG = 5;
-const DIALOG_TEXT = Colours.WHITE;
+const DIALOG_TEXT = (): string => (dialogTextIsWhite() ? Colours.WHITE : Colours.BLACK);
 const TEXT_SIZE = 12;
 const LINE_HEIGHT = 14;
 const PADDING = 10;
@@ -255,7 +254,7 @@ export class Dialog {
       bottom: frame.bottom - 2,
       right: frame.right - 2,
     };
-    if (pats) tilePattern(ctx, pats, DIALOG_BG, inner);
+    if (pats) tilePattern(ctx, pats, dialogBackground(), inner);
     else {
       ctx.fillStyle = Colours.GREY;
       ctx.fillRect(inner.left, inner.top, width(inner), height(inner));
@@ -275,7 +274,7 @@ export class Dialog {
     for (const line of this.lines) {
       drawString(ctx, { top: y, left: textLeft, bottom: y + LINE_HEIGHT, right: frame.right }, line, {
         size: TEXT_SIZE,
-        colour: DIALOG_TEXT,
+        colour: DIALOG_TEXT(),
       });
       y += LINE_HEIGHT;
     }

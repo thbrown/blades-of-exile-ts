@@ -36,6 +36,55 @@ export const BG_RECTS: UiRect[] = (() => {
   return rects;
 })();
 
+/**
+ * Where Exile III's ten background patterns sit in the `pixpats` it ships
+ * (tools/e3convert): E3 pattern `k` is `BG_RECTS[E3_PATTERN_SLOTS[k]]`. E3's
+ * dialog pattern, 2, takes slot 16, OBoE's `BG_LIGHT`, which a scenario with
+ * `backgrounds` = `exile3` makes the dialogs' default (black text, as 1997's
+ * and E3's dialogs have). The rest take slots nothing else reads under that
+ * flag, so the dark dialog (5), startup/map (4), panel (6) and talk/shop
+ * (12) patterns stay the game's.
+ */
+export const E3_PATTERN_SLOTS = [8, 9, 16, 10, 11, 13, 14, 15, 17, 19];
+
+/**
+ * Exile III's window background (`1050:1e81`), for the scenario flag
+ * `backgrounds` = `exile3`: by whether the party's outdoor window is in the
+ * world's eastern, cave columns (party+0x12e2, the window's column, 7 and
+ * up; E3's zone is `(0x12e3 + 0x12e5) × 9 + 0x12e2 + 0x12e4`). Outdoors
+ * 0 in the caves and 7 above; in a fight 9 and 6; in town 5 in the caves, 4
+ * above and in Fort Emergence (21) wherever it is.
+ */
+export function e3Background(where: 'out' | 'fight' | 'town', caves: boolean, town: number): number {
+  const k = where === 'out' ? (caves ? 0 : 7)
+    : where === 'fight' ? (caves ? 9 : 6)
+    : caves && town !== 21 ? 5 : 4;
+  return E3_PATTERN_SLOTS[k]!;
+}
+
+/** cDialog::BG_DARK and BG_LIGHT (dialog.cpp:50). */
+export const BG_DARK = 5;
+export const BG_LIGHT = 16;
+
+let defaultDialogBg = BG_DARK;
+
+/**
+ * `cDialog::defaultBackground` (dialog.cpp:51): what a dialog tiles with, and
+ * so whether its text is white (dark) or black (dialog.cpp:406).
+ */
+export function setDefaultDialogBackground(bg: number): void {
+  defaultDialogBg = bg;
+}
+
+export function dialogBackground(): number {
+  return defaultDialogBg;
+}
+
+/** The default text colour on the default dialog background. */
+export function dialogTextIsWhite(): boolean {
+  return defaultDialogBg === BG_DARK;
+}
+
 /** cScenario defaults (scenario.cpp:67) — used when no area overrides them. */
 export const DEFAULT_BG = {
   out: 10,

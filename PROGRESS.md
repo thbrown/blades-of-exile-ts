@@ -13969,20 +13969,36 @@ the rest of the TODO(E3-3) list.
         name (`EXILE3_SHEET_OVERRIDES`, tested against the converter's list).
       - `verify-e3.mjs`'s path-finder now walks round damaging ground: with
         lava burning, its walk out of the fort killed four of the party.
-- [ ] **backgrounds and dialog backgrounds are BoE's.** Planned, not started.
-      E3's patterns are in MIXED.BMP (396×296), the bottom band of 64×64
-      tiles, not BoE's `pixpats.png` layout. 1997 Windows builds its
-      backgrounds from the same kind of MIXED.BMP (GRAPHICS.CPP:623,
-      `bg_from[9]`, 8×8 brushes, plus the 64×64 status patterns). OBoE lets a
-      scenario ship `graphics/<name>.png` to replace a game sheet
-      (fileio_scen.cpp:2431), which is the way in: build a `pixpats.png` from
-      MIXED.BMP in BoE's layout, once E3's choice of pattern for each screen
-      and dialog is known. Other E3 chrome that may also want the same
-      treatment, found by size: TERSCRN.BMP (279×351, BoE terscreen
-      278×350), TEXTBAR.BMP (identical size), STATAREA.BMP (271×398, BoE's
-      statarea + inventory stacked), BUTTONS.BMP, DLOGBTNS.BMP, TALKPORT.BMP
-      (320×192, same grid as talkportraits with fewer rows).
+- [x] **backgrounds and dialog backgrounds are BoE's.** E3's pattern code is
+      1997 Windows' (its rectangles are in DGROUP: `pattern_source`
+      `{32,168,96,232}` at `DS:1768`, `pat_from` at `158a`, `bg_from` at
+      `1522`). `paint_pattern` is `FUN_1058_1695`: ten 64×64 patterns in
+      MIXED.BMP at (32 + 64·(k mod 5), 168 + 64·⌊k/5⌋); dialogs always tile
+      pattern 2. The window's choice is `1050:1e81`, keyed on whether
+      party+0x12e2, the outdoor window's *column* (E3's zone is
+      `(0x12e3 + 0x12e5) × 9 + 0x12e2 + 0x12e4`), is 7 or more, the eastern
+      caves: outdoors 0 / 7 above, fighting 9 / 6, in town 5 / 4, and 4 in
+      Fort Emergence (21) wherever it is. Ported as:
+      - the converter's `graphics/pixpats.png`, E3's ten patterns at the slots
+        `E3_PATTERN_SLOTS` names (`render/tiling.ts`), transparent elsewhere,
+        so the game's other patterns show through (`installSheetOverrides`
+        now lays over without clearing);
+      - scenario flag **`backgrounds`** = `exile3`: `Screen.backgroundIndex`
+        follows `e3Background`, and main.ts makes OBoE's `BG_LIGHT` (16), where
+        E3's dialog pattern sits, the dialogs' default
+        (`cDialog::defaultBackground`, `setDefaultDialogBackground`), so their
+        text is black (dialog.cpp:406), as E3's is. XmlDialog and the plain
+        modal read it; `castDialog.ts` still tiles BoE's dark 5.
+      - The cave test uses the engine's `outdoorCorner.x`, which is E3's
+        window column only as long as the two engines shift the window alike.
+      - Not done: E3's other chrome (TERSCRN, TEXTBAR, STATAREA, BUTTONS,
+        DLOGBTNS) and the talk/shop/panel patterns (BoE's 12 and 6), whose E3
+        choices haven't been traced.
+      - `verify-e3.mjs`: the stroll now steps one page call at a time and
+        closes messages between steps (leaving by the north passage raises
+        "You emerge from Fort Emergence..."), walks round lava and town
+        entrances, and the script fails if anyone walks through lava.
 
-All checks pass: 1,401 tests, both sweeps, verify-screen/e3/party, corpus
+All checks pass: 1,403 tests, both sweeps, verify-screen/e3/party, corpus
 unchanged at 51 of 87, 1,231,440 draws. **Next session starts here**: E3's
-dialog pictures, then its backgrounds (the two plans just above).
+remaining screen chrome (see "Not done" above), then the TODO(E3-3) list.

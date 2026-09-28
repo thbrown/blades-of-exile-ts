@@ -20,7 +20,8 @@ import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor, type E3Ou
 import { ItemAbil } from '../../src/data/item';
 import { FieldType } from '../../src/data/fields';
 import { DamageType } from '../../src/data/monster';
-import { decodeBmp } from '../../src/fileio/legacy/bmp';
+import { decodeBmp, type Rgba } from '../../src/fileio/legacy/bmp';
+import { BG_RECTS, E3_PATTERN_SLOTS } from '../../src/render/tiling';
 import { E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3ItemAbilities, readE3Items, readE3Monsters, readE3RoadJoins, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3PresetItem, type E3Town } from './town';
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
@@ -113,6 +114,26 @@ const E3_DUNGEON_SOUND = '22-23,25-33,35-38,44-47,50-79,86,200';
 export const E3_SHEET_OVERRIDES: readonly [string, string][] = [
   ['dlogpics', 'DLOGPICS.BMP'], ['talkportraits', 'TALKPORT.BMP'],
 ];
+
+/**
+ * E3's background patterns as a `pixpats` to lay over the game's: MIXED.BMP's
+ * ten 64×64 patterns, `paint_pattern`'s `{32,168,96,232}` stepped 64 across
+ * five and down two (1997 GRAPHUTL.CPP; E3 keeps the same rectangle at
+ * `DS:1768`), each at its slot in `E3_PATTERN_SLOTS`, the rest transparent.
+ */
+function buildE3Patterns(read: E3Read): Rgba {
+  const mixed = decodeBmp(read('MIXED.BMP'));
+  const out: Rgba = { width: 320, height: 256, data: new Uint8ClampedArray(320 * 256 * 4) };
+  E3_PATTERN_SLOTS.forEach((slot, k) => {
+    const to = BG_RECTS[slot]!;
+    const sx = 32 + 64 * (k % 5), sy = 168 + 64 * Math.floor(k / 5);
+    for (let y = 0; y < 64; y++) {
+      const from = ((sy + y) * mixed.width + sx) * 4;
+      out.data.set(mixed.data.subarray(from, from + 64 * 4), ((to.top + y) * out.width + to.left) * 4);
+    }
+  });
+  return out;
+}
 
 /**
  * A dialog's picture tag `5_n` as a node's `[pic, pictype]`. The numbering is
@@ -605,6 +626,7 @@ function scenarioXml(
         <town-timers>repeat</town-timers>
         <inn>exile3</inn>
         <lava>exile3</lava>
+        <backgrounds>exile3</backgrounds>
         <bash>exile3</bash>
         <dungeon-sound>${E3_DUNGEON_SOUND}</dungeon-sound>
         <cursors>${cursors.map((c) => `${c.name}:${c.hotspot.x}:${c.hotspot.y}`).join(',')}</cursors>
@@ -881,6 +903,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   // 36×36 four across, and 32×32 ten across. E3 has fewer of each; the
   // engine keeps BoE's beyond them (`installSheetOverrides`).
   for (const [name, bmp] of E3_SHEET_OVERRIDES) write(`graphics/${name}.png`, encodePng(decodeBmp(read(bmp))));
+  write('graphics/pixpats.png', encodePng(buildE3Patterns(read)));
   progress(1);
   return { sectors: zones.length, towns: towns.length, sheets: sheets.length };
 }
