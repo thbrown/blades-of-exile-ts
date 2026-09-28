@@ -51,6 +51,15 @@ export interface InputHandlers {
    */
   onDrag?(x: number, y: number): void;
   onRelease?(x: number, y: number): void;
+  /**
+   * A finger has started to slide from (x, y). Start dragging whatever is
+   * there that drags — the map window, a dialog's caption — and say whether
+   * anything did; `onDrag` and `onRelease` then follow the finger. A mouse
+   * needs none of this: its press is a click the moment it goes down, and
+   * the click is what starts the drag. A finger's press only becomes one
+   * when it lifts, which is too late.
+   */
+  onDragStart?(x: number, y: number): boolean;
   /** The mouse wheel over the canvas; true if it was used, so the page doesn't scroll. */
   onWheel?(x: number, y: number, deltaY: number): boolean;
 }
@@ -70,6 +79,11 @@ export class InputRouter {
   private press: { id: number; x: number; y: number; timer: number } | null = null;
   /** The long press fired, so the mouse events the browser makes of that touch are not a click too. */
   private swallowMouse = false;
+  /**
+   * A finger on the canvas that may yet drag something: `maybe` until it has
+   * slid past the slop, then `dragging` if `onDragStart` took it or `no`.
+   */
+  private slide: { id: number; x: number; y: number; state: 'maybe' | 'dragging' | 'no' } | null = null;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -80,12 +94,17 @@ export class InputRouter {
     window.addEventListener('keydown', (ev) => this.onKeyDown(ev));
     this.canvas.addEventListener('mousedown', (ev) => this.onMouseDown(ev));
     this.canvas.addEventListener('pointerdown', (ev) => this.onPointerDown(ev));
-    this.canvas.addEventListener('pointermove', (ev) => {
-      if (this.press?.id === ev.pointerId
-        && Math.hypot(ev.clientX - this.press.x, ev.clientY - this.press.y) > LONG_PRESS_SLOP) this.cancelPress();
-    });
+    this.canvas.addEventListener('pointermove', (ev) => this.onPointerMove(ev));
     for (const end of ['pointerup', 'pointercancel'] as const) {
-      this.canvas.addEventListener(end, (ev) => { if (this.press?.id === ev.pointerId) this.cancelPress(); });
+      this.canvas.addEventListener(end, (ev) => {
+        if (this.press?.id === ev.pointerId) this.cancelPress();
+        if (this.slide?.id !== ev.pointerId) return;
+        if (this.slide.state === 'dragging') {
+          const at = this.toCanvas(ev);
+          this.handlers.onRelease?.(at.x, at.y);
+        }
+        this.slide = null;
+      });
     }
     // The original has no context menu. A right-click reaches `onClick` with
     // `right` set, as 1997's WM_RBUTTONDOWN reaches `handle_action`.
@@ -126,8 +145,10 @@ export class InputRouter {
     // touchscreen: its mouse events are real clicks unless it is held.
     this.swallowMouse = false;
     this.cancelPress();
+    this.slide = null;
     if (ev.pointerType !== 'touch') return;
     const { clientX, clientY } = ev;
+    this.slide = { id: ev.pointerId, x: clientX, y: clientY, state: 'maybe' };
     const timer = window.setTimeout(() => {
       this.press = null;
       if (this.blocked) return;
@@ -136,6 +157,25 @@ export class InputRouter {
       this.handlers.onClick(at.x, at.y, true, { alt: false, ctrl: false });
     }, LONG_PRESS_MS);
     this.press = { id: ev.pointerId, x: clientX, y: clientY, timer };
+  }
+
+  private onPointerMove(ev: PointerEvent): void {
+    const slide = this.slide;
+    if (!slide || slide.id !== ev.pointerId) return;
+    if (slide.state === 'maybe') {
+      if (Math.hypot(ev.clientX - slide.x, ev.clientY - slide.y) <= LONG_PRESS_SLOP) return;
+      // Sliding: not a long press any more, and a drag only if it began on
+      // something that drags.
+      this.cancelPress();
+      const from = this.toCanvas({ clientX: slide.x, clientY: slide.y });
+      slide.state = !this.blocked && this.handlers.onDragStart?.(from.x, from.y) ? 'dragging' : 'no';
+      // The mouse events the browser may still make of this touch are not a click.
+      if (slide.state === 'dragging') this.swallowMouse = true;
+    }
+    if (slide.state !== 'dragging') return;
+    ev.preventDefault();
+    const at = this.toCanvas(ev);
+    this.handlers.onDrag?.(at.x, at.y);
   }
 
   private cancelPress(): void {

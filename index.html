@@ -899,10 +899,14 @@
         border-color: rgba(255, 220, 0, 0.85);
         color: #f3dc98;
       }
-      /* A finger on the canvas: no double-tap zoom, no text selection, no
+      /* A finger on the canvas: no zoom or pan, no text selection, no
          iOS callout on a long press (which is the right button here). */
       body.touch-controls #canvas {
-        touch-action: manipulation;
+        /* none, not manipulation: a finger sliding on the canvas is the game's
+           (dragging the map or a dialog), and the browser would otherwise
+           take it as a pan and cancel the pointer. The game fits the
+           screen, so there's no page to pan or zoom anyway. */
+        touch-action: none;
         user-select: none;
         -webkit-user-select: none;
         -webkit-touch-callout: none;

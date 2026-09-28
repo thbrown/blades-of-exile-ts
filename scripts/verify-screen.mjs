@@ -3143,6 +3143,39 @@ await tp.waitForTimeout(600);
 const tTo = await tLoc();
 touch.moved = tTo.x === tFrom.x + 1 && tTo.y === tFrom.y;
 await tp.screenshot({ path: `${SHOTS}/60-touch.png` });
+// A finger slides the map window (and a swipe on the terrain does nothing):
+// a touch's press only becomes a click when it lifts, too late to drag.
+const tCdpDrag = await touchCtx.newCDPSession(tp);
+const tSlide = async (from, to) => {
+  await tCdpDrag.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [from] });
+  for (let i = 1; i <= 8; i++) {
+    await tCdpDrag.send('Input.dispatchTouchEvent', { type: 'touchMove',
+      touchPoints: [{ x: from.x + (to.x - from.x) * i / 8, y: from.y + (to.y - from.y) * i / 8 }] });
+    await tp.waitForTimeout(16);
+  }
+  await tCdpDrag.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await tp.waitForTimeout(300);
+};
+const tPage = (gx, gy) => tp.evaluate(({ gx, gy }) => {
+  const c = document.querySelector('#canvas'); const r = c.getBoundingClientRect(); const k = r.width / c.width;
+  return { x: r.left + gx * k, y: r.top + gy * k };
+}, { gx, gy });
+const tParty0 = await tLoc();
+const tTerr = await tp.evaluate(() => ({ x: window.__desktop.gameX + 150, y: window.__desktop.gameY + 150 }));
+const tTerrAt = await tPage(tTerr.x, tTerr.y);
+await tSlide(tTerrAt, { x: tTerrAt.x + 80, y: tTerrAt.y });
+const tParty1 = await tLoc();
+touch.swipeStill = tParty1.x === tParty0.x && tParty1.y === tParty0.y;
+await tp.tap('.touch-actions [data-button="MAP"]');
+await tp.waitForTimeout(300);
+const tMap0 = await tp.evaluate(() => ({ ...window.__screen.mapScreen.pos }));
+const tWin = await tp.evaluate(() => window.__screen.mapScreen.window);
+const tMid = await tPage((tWin.left + tWin.right) / 2, (tWin.top + tWin.bottom) / 2);
+await tSlide(tMid, { x: tMid.x - 120, y: tMid.y + 40 });
+const tMap1 = await tp.evaluate(() => ({ ...window.__screen.mapScreen.pos, visible: window.__screen.mapVisible }));
+touch.mapDrag = { dx: tMap1.x - tMap0.x, dy: tMap1.y - tMap0.y, visible: tMap1.visible };
+await tp.tap('.touch-actions [data-button="MAP"]');
+await tp.waitForTimeout(200);
 await tp.tap('.touch-actions [data-button="LOOK"]');
 await tp.waitForTimeout(200);
 touch.look = await tLast();
@@ -3235,7 +3268,8 @@ await tall.screenshot({ path: `${SHOTS}/62-touch-portrait.png` });
 await tallCtx.close();
 console.log('TOUCH:', JSON.stringify(touch));
 const touchOk = touch.desktopHidden && touch.townSet === 'MAGE PRIEST LOOK TALK HAND USE MAP SWORD w Escape' &&
-  touch.moved && touch.look.startsWith('Look:') && touch.esc.includes('Cancelled') &&
+  touch.moved && touch.swipeStill && touch.mapDrag.visible && touch.mapDrag.dx < -60 && touch.mapDrag.dy > 20 &&
+  touch.look.startsWith('Look:') && touch.esc.includes('Cancelled') &&
   touch.longPress && touch.stayed &&
   touch.combatSet === 'MAGE PRIEST LOOK SHIELD BAG WAIT SHOOT END ACT Escape' && touch.cover &&
   touch.menuTicked && touch.menuOff &&

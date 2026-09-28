@@ -2454,6 +2454,18 @@ async function main(): Promise<void> {
       dialogs.handleRelease();
       screen.mapScreen.endDrag();
     },
+    // A finger sliding: what a press there would have started dragging, in
+    // the click's own order — a dialog's caption first, and the map only
+    // with no dialog up.
+    onDragStart: (dx, dy) => {
+      if (dialogs.startCaptionDrag(dx, dy)) return true;
+      if (dialogs.active) return false;
+      if (!screen.mapVisible || !screen.mapScreen.contains(dx, dy)) return false;
+      screen.mapScreen.startDrag(dx, dy);
+      mapFocused = true;
+      redraw();
+      return true;
+    },
     // The router speaks desktop coordinates. Dialogs and the map live there;
     // everything else is on the game screen and is offset from it.
     onWheel: (dx, dy, deltaY) => dialogs.handleWheel(dx, dy, deltaY),

@@ -640,6 +640,19 @@ export class DialogHost {
     this.drawWindow(this.screen, true);
   }
 
+  /**
+   * Start dragging the top window if (x, y) is on its caption, as a press
+   * there does in `handleClick`; true if it started. For a finger, which
+   * has to say it's dragging before it lifts (`InputRouter`'s touch drag).
+   */
+  startCaptionDrag(x: number, y: number): boolean {
+    const top = this.top;
+    const b = top?.bounds?.();
+    if (!top || !b || !this.chrome || !inRect(captionRect(b), x, y)) return false;
+    this.dragging = { win: top, x, y };
+    return true;
+  }
+
   handleClick(x: number, y: number, mods?: ClickMods): boolean {
     const top = this.top;
     const b = top?.bounds?.();

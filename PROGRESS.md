@@ -14241,6 +14241,16 @@ the rest of the TODO(E3-3) list.
         all), and pause only in town, combat or outdoors.
       - Summoning spells are multi-target too and aim at empty squares; the
         cursor still starts on an enemy for them, and is moved off.
+- [x] **Dragging the map by finger (2026-09-28).** The map window (and a
+      dialog's caption) moved only by mouse: a mouse press is a click the
+      moment it goes down, and the click starts the drag, but a finger's
+      press only becomes a click when it lifts. `InputRouter` now watches a
+      touch slide past 10px and asks `onDragStart` whether anything there
+      drags — a dialog's caption first (`DialogHost.startCaptionDrag`), the
+      map only with no dialog up — then feeds `onDrag`/`onRelease`. A swipe
+      on anything else does nothing. The canvas is `touch-action: none`
+      under touch controls, or the browser takes the slide as a pan and
+      cancels the pointer.
 
 All checks pass: 1,419 tests, both sweeps, verify-screen (with TOUCH)/party
 (corpus not re-run: none of today's changes touches an RNG call, and the
