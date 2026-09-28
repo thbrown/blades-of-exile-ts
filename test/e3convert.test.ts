@@ -167,6 +167,26 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(scen.featureFlags['dungeon-sound']).toBe('22-23,25-33,35-38,44-47,50-79,86,200');
   });
 
+  it("gives each dialog E3's own picture", async () => {
+    const { e3DialogPic, E3_SHEET_OVERRIDES } = await import('../tools/e3convert/emit');
+    const { e3TerrainPic } = await import('../tools/e3convert/graphics');
+    const { EXILE3_SHEET_OVERRIDES } = await import('../src/platform/exile3');
+    const sprites = new Map([[12, 1468]]);
+    expect(e3DialogPic(722, sprites)).toEqual([22, 4]);
+    expect(e3DialogPic(1003, sprites)).toEqual([3, 5]);
+    expect(e3DialogPic(38, sprites)).toEqual([e3TerrainPic(38), 1]);
+    expect(e3DialogPic(412, sprites)).toEqual([1468, 3]);
+    expect(e3DialogPic(905, sprites)).toBeUndefined();
+    expect(EXILE3_SHEET_OVERRIDES).toEqual(E3_SHEET_OVERRIDES.map(([n]) => n));
+    // The nodes carry them: dialog pictures, E3 terrain and E3 sprites. (No
+    // dialog with a face has been transcribed yet.)
+    const kinds = new Set<number>();
+    for (const node of [...scen.scenSpecials.values(), ...scen.towns.flatMap((t) => [...t.specials.values()])]) {
+      if (node.pic !== 0 || node.pictype !== 4) kinds.add(node.pictype);
+    }
+    expect([...kinds]).toEqual(expect.arrayContaining([1, 3, 4]));
+  });
+
   it("gives E3's locked doors its bash limits", () => {
     expect(scen.featureFlags['bash']).toBe('exile3');
     // Stone and adobe break at 25 or under, basalt at 10; past picking, never.
@@ -885,6 +905,8 @@ describe("Exile III converted in memory, as the browser does", () => {
     const boe16 = new Uint8Array(readFileSync(new URL('../public/data/sounds/SND16.wav', import.meta.url)));
     expect(loaded.sounds.get(16)).not.toEqual(boe16);
     expect(new TextDecoder().decode(loaded.sounds.get(16)!.subarray(0, 4))).toBe('RIFF');
+    // Its dialog pictures and talking faces, over the game's.
+    expect([...loaded.overrides.keys()].sort()).toEqual(['dlogpics', 'talkportraits']);
     // And its fourteen cursors, each one the flag names.
     const named = loaded.scenario.featureFlags['cursors']!.split(',').map((e) => e.split(':')[0]);
     expect([...loaded.cursors.keys()].sort()).toEqual([...named].sort());

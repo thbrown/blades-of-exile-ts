@@ -231,9 +231,11 @@ const walkOut = (maxSteps = 1000) => page.evaluate(async (maxSteps) => {
     const size = rec.terrain.length;
     // Blocked squares a step can open: doors (step-change 1, unlock 9).
     // Not every special: a dresser is a blocked `box`.
+    // Not damaging ground (special 2): E3's lava is 8d10 fire, and a player
+    // walks around it.
     const passable = (x, y) => {
       const t = s.univ.terrainType(rec.terrain[x][y]);
-      return t.blockage < 3 || t.special === 1 || t.special === 9;
+      return (t.blockage < 3 && t.special !== 2) || t.special === 1 || t.special === 9;
     };
     const start = s.univ.party.townLoc;
     const prev = new Map([[`${start.x},${start.y}`, null]]);

@@ -60,7 +60,7 @@ import {
 import { fitCanvasToPage } from './platform/pageLayout';
 import { startMapWindow } from './platform/mapWindow';
 import { installDebugPanel } from './platform/debugPanel';
-import { EXILE3_CARD, EXILE3_ID, exile3Served, prepareExile3 } from './platform/exile3';
+import { EXILE3_CARD, EXILE3_ID, EXILE3_SHEET_OVERRIDES, exile3Served, prepareExile3 } from './platform/exile3';
 import { WorldMapFeed } from './render/worldMap';
 import { GAME_SPEED_PACE, PREFERENCES_DIALOG_DEFS, preferencesDialog } from './dialogs/preferencesDialog';
 import { setTargetLockPref } from './game/targetMode';
@@ -111,7 +111,7 @@ import { TOWN_NUM_OUTDOORS } from './universe/party';
 import { FetchSource } from './fileio/source';
 import { InputRouter } from './platform/input';
 import { Snd, SoundPlayer } from './platform/sound';
-import { installCustomSheets, loadCustomSheets } from './render/customPics';
+import { installCustomSheets, installSheetOverrides, loadCustomSheets } from './render/customPics';
 import { captureTerrainView } from './render/preview';
 import { changeCursor, cursorCss, setScenarioCursors } from './platform/cursors';
 import { giveHelp, setGiveHelp, setLivingSound } from './universe/living';
@@ -546,6 +546,7 @@ async function main(): Promise<void> {
   let packageSheets: LoadedPackage['sheets'] = [];
   let packageSounds: LoadedPackage['sounds'] = new Map();
   let packageCursors: LoadedPackage['cursors'] = new Map();
+  let packageOverrides: LoadedPackage['overrides'] = new Map();
   let installedPreview = true;
   if (makingParty) {
     scen = noScenario();
@@ -559,6 +560,7 @@ async function main(): Promise<void> {
     packageSheets = loaded.sheets;
     packageSounds = loaded.sounds;
     packageCursors = loaded.cursors;
+    packageOverrides = loaded.overrides;
     for (const w of loaded.warnings) console.warn(`${name}: ${w}`);
     installedPreview = (await listInstalledScenarios()).find((s) => s.id === name)?.preview !== undefined;
   }
@@ -569,6 +571,14 @@ async function main(): Promise<void> {
   // known now, after the bar was sized.
   if (isBundled) await loadCustomSheets(store, scen, new FetchSource(bundledUrl));
   else await installCustomSheets(store, packageSheets);
+  // Its replacements for the game's own sheets. As with sounds, a bundled
+  // scenario can't be listed, and only a served Exile III has any.
+  if (!isBundled) await installSheetOverrides(store, packageOverrides);
+  else if (name === EXILE3_ID) {
+    const src = new FetchSource(bundledUrl);
+    await installSheetOverrides(store, new Map(await Promise.all(EXILE3_SHEET_OVERRIDES.map(
+      async (n) => [n, await src.getBinary(`graphics/${n}.png`)] as [string, Uint8Array]))));
+  }
 
   const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
   const session = new GameSession(univ);

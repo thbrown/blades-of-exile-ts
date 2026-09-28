@@ -20,6 +20,7 @@ import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor, type E3Ou
 import { ItemAbil } from '../../src/data/item';
 import { FieldType } from '../../src/data/fields';
 import { DamageType } from '../../src/data/monster';
+import { decodeBmp } from '../../src/fileio/legacy/bmp';
 import { E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3ItemAbilities, readE3Items, readE3Monsters, readE3RoadJoins, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3PresetItem, type E3Town } from './town';
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
@@ -107,6 +108,30 @@ const E3_BOOSTED_GUARDS = [91, 92];
  * has that number.
  */
 const E3_DUNGEON_SOUND = '22-23,25-33,35-38,44-47,50-79,86,200';
+
+/** The game sheets E3 replaces with its own: engine name → E3 file. */
+export const E3_SHEET_OVERRIDES: readonly [string, string][] = [
+  ['dlogpics', 'DLOGPICS.BMP'], ['talkportraits', 'TALKPORT.BMP'],
+];
+
+/**
+ * A dialog's picture tag `5_n` as a node's `[pic, pictype]`. The numbering is
+ * 1997's `draw_dialog_graphic` (DLOGTOOL.CPP), which E3's (`1028:3856`)
+ * shares: under 300 a terrain picture, 400–579 a monster sprite (E3 takes
+ * a raw sprite index, under 180), 700 up a dialog picture, 1000 up a talking
+ * face. TODO(E3-3): 900 up, the ten black-and-white maps, are left on the
+ * default picture.
+ */
+export function e3DialogPic(tag: number, spritePic: Map<number, number>): [number, number] | undefined {
+  if (tag < 240) return [e3TerrainPic(tag), 1];
+  if (tag >= 400 && tag < 600) {
+    const pic = spritePic.get(tag - 400);
+    return pic === undefined ? undefined : [pic, 3];
+  }
+  if (tag >= 700 && tag < 800) return [tag - 700, 4];
+  if (tag >= 1000 && tag < 1100) return [tag - 1000, 5];
+  return undefined;
+}
 
 const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="no" ?>\n';
 
@@ -684,8 +709,16 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   // sprites cut into custom sheets after the terrain's.
   const terrainSheets = buildTerrainSheets(read);
   const legacyMonsters = readE3Monsters(files.exe, strings);
-  const monsterArt = buildMonsterSheets(read,
-    legacyMonsters.map((m) => ({ pic: m.pictureNum, w: m.xWidth, h: m.yWidth })), terrainSheets.length);
+  // The sprites E3's dialogs show (`5_4xx`, a raw sprite index, one cell)
+  // get cells of their own after the monsters'.
+  const dialogSprites = [...new Set([...e3Src.dialogs.values()].flatMap((d) => d.controls)
+    .map((c) => /^5_(4\d\d)$/.exec(c.text)).filter((m) => m !== null).map((m) => Number(m[1]) - 400))];
+  const monsterArt = buildMonsterSheets(read, [
+    ...legacyMonsters.map((m) => ({ pic: m.pictureNum, w: m.xWidth, h: m.yWidth })),
+    ...dialogSprites.map((pic) => ({ pic, w: 1, h: 1 })),
+  ], terrainSheets.length);
+  const spritePic = new Map(dialogSprites.map((x, i) => [x, monsterArt.pics[legacyMonsters.length + i]!]));
+  e3Src.dialogPic = (tag) => e3DialogPic(tag, spritePic);
   const monsters = legacyMonsters.map((m, n) => {
     const mon = convertMonster(m);
     mon.pictureNum = monsterArt.pics[n]!;
@@ -843,6 +876,11 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   // 78, 79 (swapped), 90 and 99.
   for (const [id, wav] of readSounds(resources)) write(`sounds/SND${id - 1}.wav`, wav);
   for (const c of cursors) write(`cursors/${c.name}.png`, encodePng(c.image));
+  // E3's dialog pictures and talking faces, in place of the game's own sheets
+  // (OBoE's override sheets, fileio_scen.cpp:2431). Same grids as BoE's:
+  // 36×36 four across, and 32×32 ten across. E3 has fewer of each; the
+  // engine keeps BoE's beyond them (`installSheetOverrides`).
+  for (const [name, bmp] of E3_SHEET_OVERRIDES) write(`graphics/${name}.png`, encodePng(decodeBmp(read(bmp))));
   progress(1);
   return { sectors: zones.length, towns: towns.length, sheets: sheets.length };
 }

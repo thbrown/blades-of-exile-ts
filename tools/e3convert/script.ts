@@ -91,6 +91,12 @@ export interface ScriptSource {
   noteItem?: (item: number, ability: number) => number;
   /** Spot `id`'s own converter flag (`e3SpotFlag`), for `eraseSpot`. */
   spotFlag?: (id: number) => Flag;
+  /**
+   * The node picture `[pic, pictype]` for a dialog's picture tag `5_n`
+   * (1997's `draw_dialog_graphic` numbering), or undefined to keep the
+   * default. See `e3DialogPic` in emit.ts.
+   */
+  dialogPic?: (tag: number) => [number, number] | undefined;
   /** Where this place's spot `id` is (`FUN_10e0_07b7`), for scripts that test its square. */
   spotLoc?: (id: number) => { x: number; y: number } | undefined;
   /** The engine's number for an E3 shop (`E3TalkConversion.shop`). */
@@ -218,9 +224,13 @@ export class SpecBuilder {
    * long one becomes pages of about `PAGE` characters (and at most six
    * paragraphs, all a node shows), each shown in turn.
    */
-  private dialogPages(id: number): { pages: number[]; buttons: string[] } {
+  private dialogPages(id: number): { pages: number[]; buttons: string[]; pic?: [number, number] } {
     const d = this.src.dialogs.get(id);
     if (!d) throw new Error(`E3 dialog ${id} not found`);
+    // The dialog's picture: its first `5_n` control. A node shows one, and
+    // twenty of E3's dialogs have two.
+    const tag = d.controls.filter((c) => /^5_\d+$/.test(c.text)).sort((a, b) => a.id - b.id)[0];
+    const pic = tag ? this.src.dialogPic?.(Number(tag.text.slice(2))) : undefined;
     const texts = d.controls.filter((c) => !/^\d+_\d+$/.test(c.text)).sort((a, b) => a.y - b.y || a.x - b.x);
     const buttons = d.controls.filter((c) => /^[01]_\d+$/.test(c.text)).sort((a, b) => a.id - b.id)
       .map((c) => E3_BUTTONS[Number(c.text.split('_')[1])] || 'OK');
@@ -242,19 +252,19 @@ export class SpecBuilder {
       for (let i = 0; i < 6; i++) this.text(g[i] ?? '');
       return first;
     });
-    return { pages, buttons };
+    return { pages, buttons, ...(pic ? { pic } : {}) };
   }
 
   /** All but the last page, as plain dialogs leading to `last`. */
-  private leadPages(pages: number[], last: number): number {
-    return pages.slice(0, -1).reduceRight((after, first) => this.node('once-dlog', { msg: [first, -1, 1] }, after), last);
+  private leadPages(pages: number[], last: number, pic?: [number, number]): number {
+    return pages.slice(0, -1).reduceRight((after, first) => this.node('once-dlog', { msg: [first, -1, 1], pic }, after), last);
   }
 
   /** `FUN_1070_31cd` for a dialog with only an OK. */
   dialog(id: number): Step {
     return (next) => {
-      const { pages } = this.dialogPages(id);
-      return this.leadPages(pages, this.node('once-dlog', { msg: [pages[pages.length - 1]!, -1, 1] }, next));
+      const { pages, pic } = this.dialogPages(id);
+      return this.leadPages(pages, this.node('once-dlog', { msg: [pages[pages.length - 1]!, -1, 1], pic }, next), pic);
     };
   }
 
@@ -265,15 +275,15 @@ export class SpecBuilder {
    */
   giveItemDialog(id: number, flag: Flag, item: number, reward = 0): Step {
     return (next) => {
-      const { pages } = this.dialogPages(id);
+      const { pages, pic } = this.dialogPages(id);
       const gold = reward >= 2000 && reward < 3000 ? reward - 2000 : 0;
       const food = reward >= 1000 && reward < 2000 ? reward - 1000 : 0;
       const special = reward >= 300 && reward < 400 ? reward - 300 : -1;
       const last = this.node('once-give-dlog', {
-        sdf: flag, msg: [pages[pages.length - 1]!, -1, special], ex1: [item > 0 ? item : -1, gold], ex2: [food, next],
+        sdf: flag, msg: [pages[pages.length - 1]!, -1, special], ex1: [item > 0 ? item : -1, gold], ex2: [food, next], pic,
       }, next);
       // A second visit must not replay the lead pages: guard them by the flag.
-      const lead = this.leadPages(pages, last);
+      const lead = this.leadPages(pages, last, pic);
       return lead === last ? last : this.node('if-sdf', { sdf: flag, ex1: [250, next] }, lead);
     };
   }
@@ -284,12 +294,12 @@ export class SpecBuilder {
    */
   askDialog(id: number, then: Step[], otherwise: Step[] = []): Step {
     return (next) => {
-      const { pages, buttons } = this.dialogPages(id);
+      const { pages, buttons, pic } = this.dialogPages(id);
       const yes = this.seq(then)(next);
       const no = this.seq(otherwise)(next);
       return this.leadPages(pages, this.node('once-dlog', {
-        msg: [pages[pages.length - 1]!, -1, 1], ex1: [this.buttonIndex(buttons[1] ?? 'OK'), yes],
-      }, no));
+        msg: [pages[pages.length - 1]!, -1, 1], ex1: [this.buttonIndex(buttons[1] ?? 'OK'), yes], pic,
+      }, no), pic);
     };
   }
 
@@ -300,15 +310,15 @@ export class SpecBuilder {
    */
   choiceDialog(id: number, second: Step[], third: Step[], first: Step[] = []): Step {
     return (next) => {
-      const { pages, buttons } = this.dialogPages(id);
+      const { pages, buttons, pic } = this.dialogPages(id);
       const two = this.seq(second)(next);
       const three = this.seq(third)(next);
       const one = this.seq(first)(next);
       return this.leadPages(pages, this.node('once-dlog', {
         msg: [pages[pages.length - 1]!, -1, 1],
         ex1: [this.buttonIndex(buttons[1] ?? 'OK'), two],
-        ex2: [this.buttonIndex(buttons[2] ?? 'OK'), three],
-      }, one));
+        ex2: [this.buttonIndex(buttons[2] ?? 'OK'), three], pic,
+      }, one), pic);
     };
   }
 
@@ -435,12 +445,12 @@ export class SpecBuilder {
    */
   trap(id: number, flag: Flag, kind: number): Step {
     return (next) => {
-      const { pages } = this.dialogPages(id);
+      const { pages, pic } = this.dialogPages(id);
       const strong = kind >= 20;
       const k = strong ? kind - 20 : kind;
       return this.node('once-trap', {
         sdf: flag, msg: [pages[pages.length - 1]!, -1],
-        ex1: [k === 5 ? 6 : k, strong ? 2 : 0], ex2: [k === 8 || k === 11 ? 10 : 0],
+        ex1: [k === 5 ? 6 : k, strong ? 2 : 0], ex2: [k === 8 || k === 11 ? 10 : 0], pic,
       }, next);
     };
   }
@@ -1103,8 +1113,8 @@ export class SpecBuilder {
    */
   lever(then: Step[]): Step {
     return (next) => {
-      const { pages } = this.dialogPages(0x3fc);
-      return this.leadPages(pages, this.node('lever', { msg: [pages[pages.length - 1]!, -1], ex1: [-1, this.seq(then)(next)] }, next));
+      const { pages, pic } = this.dialogPages(0x3fc);
+      return this.leadPages(pages, this.node('lever', { msg: [pages[pages.length - 1]!, -1], ex1: [-1, this.seq(then)(next)], pic }, next), pic);
     };
   }
 

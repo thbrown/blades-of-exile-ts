@@ -127,3 +127,27 @@ export async function installCustomSheets(
   }
   setCustomSheets(sizes);
 }
+
+/**
+ * A scenario's replacements for the game's own sheets: `graphics/NAME.png`
+ * for a NAME that isn't `sheetN` (OBoE's override sheets, fileio_scen.cpp:2431,
+ * found ahead of the game's on the resource path). Each is laid over the
+ * game's sheet rather than put in its place, so a smaller one (Exile III's
+ * dialog pictures run to 28, BoE's to 40) leaves the rest of the game's
+ * pictures where they were. The game's sheet must already be loaded.
+ */
+export async function installSheetOverrides(
+  store: SheetStore, overrides: Map<string, Uint8Array>,
+): Promise<void> {
+  for (const [name, png] of overrides) {
+    const base = store.get(name);
+    if (!base) continue;
+    const own = await createImageBitmap(new Blob([png as BlobPart], { type: 'image/png' }));
+    const canvas = new OffscreenCanvas(Math.max(base.width, own.width), Math.max(base.height, own.height));
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(base, 0, 0);
+    ctx.clearRect(0, 0, own.width, own.height);
+    ctx.drawImage(own, 0, 0);
+    store.put(name, await createImageBitmap(canvas));
+  }
+}

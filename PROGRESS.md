@@ -13946,15 +13946,29 @@ the rest of the TODO(E3-3) list.
       committed `public/exile3-icon.png` (`tools/e3convert/makeIcon.ts`, like
       `exile3-preview.png`). A card's icon may now be a picture URL as well
       as a `scenpics` number.
-- [ ] **dialog pictures are BoE's.** Planned, not started. E3's DLOGPICS.BMP
-      is the same 36×36 grid, 4 across, but 7 rows (BoE's has 10), with its
-      own art in its own order. E3's 624 RT_DIALOG templates have **no
-      picture control** (3,815 statics, 10 buttons), so the picture is an
-      argument at each call that shows one. The work: find E3's show-dialog
-      function(s), read the picture argument at every call site (nedis.py),
-      then ship DLOGPICS as a custom sheet and have the converter give each
-      message node its picture. Today every E3 message node says pic 0,
-      pictype 4.
+- [x] **dialog pictures are BoE's.** They were, and so were the talking
+      faces. Correction to the note that stood here: E3's dialogs *do* name
+      their picture, as a static whose text is a `5_n` tag (FORMATS.md already
+      said so). `n` is 1997's `draw_dialog_graphic` numbering (DLOGTOOL.CPP),
+      which E3's drawer (`1028:3856`) shares: under 300 a terrain picture,
+      400+ a monster sprite (in E3 a raw sprite index under 180), 700+ a
+      dialog picture, 900+ a B&W map, 1000+ a talking face. Of 624 dialogs,
+      286 show a dialog picture, 231 a terrain, 144 a sprite, 37 a face and
+      10 a map; 20 have two, and a node shows the first.
+      - The converter gives each dialog node its picture
+        (`SpecBuilder.dialogPages` → `ScriptSource.dialogPic` →
+        `e3DialogPic`, emit.ts). A dialog's sprites get cells of their own
+        after the monsters'. The maps stay on the default (`TODO(E3-3)`).
+      - E3's DLOGPICS.BMP and TALKPORT.BMP ship as `graphics/dlogpics.png`
+        and `graphics/talkportraits.png`, OBoE's override sheets
+        (fileio_scen.cpp:2431). `installSheetOverrides` lays each over the
+        game's sheet, so BoE's pictures beyond E3's 28 dialog pictures and
+        60 faces still draw. **Faces were wrong before this**: E3's face
+        numbers index TALKPORT, and the port drew BoE's faces for them.
+      - A package's overrides are found in the tar; a served Exile III's by
+        name (`EXILE3_SHEET_OVERRIDES`, tested against the converter's list).
+      - `verify-e3.mjs`'s path-finder now walks round damaging ground: with
+        lava burning, its walk out of the fort killed four of the party.
 - [ ] **backgrounds and dialog backgrounds are BoE's.** Planned, not started.
       E3's patterns are in MIXED.BMP (396×296), the bottom band of 64×64
       tiles, not BoE's `pixpats.png` layout. 1997 Windows builds its

@@ -36,6 +36,12 @@ export const EXILE3_CARD = {
   icon: `${import.meta.env.BASE_URL}exile3-icon.png`,
 };
 
+/**
+ * The game sheets a converted Exile III replaces (`graphics/NAME.png`), which
+ * a served copy can't list. Must match tools/e3convert's `E3_SHEET_OVERRIDES`.
+ */
+export const EXILE3_SHEET_OVERRIDES = ['dlogpics', 'talkportraits'];
+
 /** Whether this site serves a converted copy as plain files (the dev server does). */
 export async function exile3Served(): Promise<boolean> {
   try {
