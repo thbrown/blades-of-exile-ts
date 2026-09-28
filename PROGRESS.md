@@ -14168,6 +14168,17 @@ the rest of the TODO(E3-3) list.
       so the C++ comparisons still match. *Caveat*: a note already in a pack
       in a save made before this has no flag and is still refused until the
       party picks up a fresh copy.
+- [x] **The main menu on any width (2026-09-28).** At the user's request:
+      the scenario grid takes as many 200px-or-wider columns as fit (five on
+      a desktop, one on a phone), and the page no longer scrolls sideways
+      below 1210px — `#startup-host`, a flex item of the body, had sized
+      itself to its 1210px content, so the page's `max-width: 100%` never
+      shrank it. `index.html` gained its viewport meta (phones were laying
+      the page out 980px wide), and a ≤560px layout with a smaller
+      masthead. The body is already `playing` under the menu, which zeroed
+      its gutter; `body.starting` puts it back. Card pictures are cropped in
+      CSS to the terrain view inside its frame (13/14px round a 252×324
+      view), so no strip of the frame shows.
 
 All checks pass: 1,413 tests, both sweeps, verify-screen/party (corpus not
 re-run for the inept fix, which touches no RNG call). **Next session starts here**: E3's

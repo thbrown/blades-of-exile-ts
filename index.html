@@ -2,6 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Blades of Exile</title>
     <link rel="icon" type="image/png" href="/data/graphics/icon.png" />
     <style>
@@ -211,6 +212,13 @@
       .startup-page input {
         font-family: 'BoEText', 'DejaVu Sans', Verdana, sans-serif;
       }
+      /* The startup screen's host is a flex item of the body, which would size
+         it to its content — the 1210px page — so the page's max-width never
+         had anything smaller to answer to and the menu scrolled sideways. */
+      #startup-host {
+        width: 100%;
+        max-width: 1210px;
+      }
       .startup {
         width: 1210px;
         max-width: 100%;
@@ -231,7 +239,7 @@
       }
       .startup-list {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
         gap: 8px;
       }
       /* Every card is a sheet of the game's paper — the marble its text and
@@ -267,8 +275,9 @@
         color: #333;
         line-height: 1.35;
       }
+      /* As many columns as fit, at least 200px each; one on a phone. */
       .startup-cards {
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
       }
       .startup-card {
         padding: 0;
@@ -285,11 +294,21 @@
         box-sizing: border-box;
         overflow: hidden;
       }
+      /* Every picture is the terrain view as the game draws it, 279×351 with
+         its frame (13px left and top, 14px right and bottom) round a 252×324
+         view (render/preview.ts). The image is widened so only the view
+         spans the card, and raised so the card shows a band of it 40% of the
+         way down — a margin's percentage is of the card's width, which is
+         what makes this sum work at any width. */
       .startup-picture img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        object-position: center 40%;
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: calc(100% * 279 / 252);
+        max-width: none;
+        height: auto;
+        margin-left: calc(-100% * 13 / 252);
+        margin-top: calc(-100% * (13 + (324 - 252 * 200 / 279) * 0.4) / 252);
         image-rendering: pixelated;
         display: block;
       }
@@ -337,6 +356,9 @@
         image-rendering: pixelated;
         min-height: 100vh;
         box-sizing: border-box;
+        /* The body is `playing` as well by now, which takes its padding
+           away; the menu keeps a gutter so its cards never meet the edge. */
+        padding: 0 12px 12px;
       }
       /* Both of the page's cards, the party's and the one holding the
          lists, are the game's paper too. */
@@ -550,7 +572,7 @@
         font-size: 13px;
       }
       .startup-saves {
-        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
       }
       .startup-party-button {
         font-size: 12px;
@@ -608,6 +630,34 @@
         margin: 8px 0 0;
         color: #8a1c10;
         font-size: 12px;
+      }
+      /* A phone: less padding round the page's cards, and a smaller masthead
+         so the title fits on one line. */
+      @media (max-width: 560px) {
+        .startup {
+          padding: 16px 14px 18px;
+        }
+        .startup-header {
+          gap: 12px;
+          padding: 8px 0 12px;
+        }
+        .startup-logo {
+          width: 56px;
+          height: 56px;
+        }
+        .startup-title {
+          font-size: 30px;
+        }
+        .startup-masthead p {
+          font-size: 12px;
+        }
+        .startup-filter {
+          min-width: 0;
+          flex: 1 1 100%;
+        }
+        .startup-shown {
+          margin-left: 0;
+        }
       }
       #progress-wrap {
         width: 1210px;
