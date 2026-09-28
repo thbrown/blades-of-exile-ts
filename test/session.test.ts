@@ -5,11 +5,12 @@ import { Direction, shiftLoc } from '../src/core/location';
 import { GameRng } from '../src/core/rng';
 import { FieldType } from '../src/data/fields';
 import { ItemType } from '../src/data/item';
-import { Attitude } from '../src/data/monster';
+import { Attitude, MonstTime } from '../src/data/monster';
 import { SECTOR_SIZE } from '../src/data/outdoors';
 import { Scenario } from '../src/data/scenario';
 import { SpecType, emptySpecialNode } from '../src/data/special';
 import { TerObstruct, TerSpec } from '../src/data/terrain';
+import { resetFeatureFlags, setFeatureFlags } from '../src/game/featureFlags';
 import { GameMode } from '../src/game/modes';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
 import { SpecCtx, SpecCtxType, SpecialHost } from '../src/game/specials/context';
@@ -962,14 +963,26 @@ describe('town memory', () => {
     const record = s.univ.town!.record;
     const before = { max: record.maxNumMonst, killed: record.monstersKilled };
     try {
-      // is_cleaned_out: killed >= max_num_monst. Both live on the record, so
-      // they survive leaving and coming back — that is the whole point.
-      record.maxNumMonst = 1;
+      // is_cleaned_out: killed > max_num_monst, as in 1997 and Exile III
+      // (DIVERGENCES.md §14). Both live on the record, so they survive
+      // leaving and coming back — that is the whole point.
+      record.maxNumMonst = 5;
       record.monstersKilled = 5;
+      s.startTownMode(scen.startTown, FORCED_ENTRY);
+      expect(s.univ.town!.monsters.some((m) => m.isAlive)).toBe(true);
+      expect(s.univ.transcript.join(' ')).not.toContain('Area has been cleaned out.');
+      record.monstersKilled = 6;
       s.startTownMode(scen.startTown, FORCED_ENTRY);
       expect(s.univ.town!.monsters.some((m) => m.isAlive)).toBe(false);
       expect(s.univ.transcript.join(' ')).toContain('Area has been cleaned out.');
+      // A replay's flag set has no `town-thrash`, so it keeps OBoE's `>=`.
+      setFeatureFlags({});
+      record.monstersKilled = 5;
+      const replay = newSession();
+      replay.startNewGame();
+      expect(replay.univ.town!.monsters.some((m) => m.isAlive)).toBe(false);
     } finally {
+      resetFeatureFlags();
       record.maxNumMonst = before.max;
       record.monstersKilled = before.killed;
     }
@@ -986,10 +999,46 @@ describe('town memory', () => {
       record.townChopKey = 0;
       s.startTownMode(scen.startTown, FORCED_ENTRY);
       const town = s.univ.town!;
-      expect(s.univ.transcript.join(' ')).toContain('Area has been abandoned.');
+      // OBoE's "Area has been abandoned." is commented out in 1997 (§14).
+      expect(s.univ.transcript.join(' ')).not.toContain('abandoned');
       // Every survivor is hostile; nothing friendly is left standing.
       expect(town.monsters.filter((m) => m.isAlive).every((m) => !m.isFriendly)).toBe(true);
     } finally {
+      record.townChopTime = before.time;
+      record.townChopKey = before.key;
+    }
+  });
+
+  it('brings in after-death creatures on the chop, not for a cleaned-out town', async () => {
+    // Case 9 of 1997's start_town_mode (TOWN.CPP:348) tests the chop alone;
+    // OBoE also counts a cleaned-out town (DIVERGENCES.md §14).
+    const record = scen.towns[scen.startTown]!;
+    const slot = record.creatures.findIndex((c) => c.number > 0);
+    const preset = record.creatures[slot]!;
+    const before = {
+      flag: preset.timeFlag, max: record.maxNumMonst, killed: record.monstersKilled,
+      time: record.townChopTime, key: record.townChopKey,
+    };
+    const present = () => {
+      const s = newSession();
+      s.startNewGame();
+      return s.univ.town!.monsters.some((m) => m.slot === slot && m.isAlive);
+    };
+    try {
+      preset.timeFlag = MonstTime.APPEAR_AFTER_CHOP;
+      expect(present()).toBe(false);
+      record.maxNumMonst = 1;
+      record.monstersKilled = 5;
+      expect(present()).toBe(false);
+      record.maxNumMonst = before.max;
+      record.monstersKilled = before.killed;
+      record.townChopTime = 1;
+      record.townChopKey = 0;
+      expect(present()).toBe(true);
+    } finally {
+      preset.timeFlag = before.flag;
+      record.maxNumMonst = before.max;
+      record.monstersKilled = before.killed;
       record.townChopTime = before.time;
       record.townChopKey = before.key;
     }

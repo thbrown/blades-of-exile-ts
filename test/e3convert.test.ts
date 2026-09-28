@@ -40,6 +40,9 @@ import {
   e3Jobs, e3JobsBase, e3JobsTick, e3ZoneDistance, takeE3Job,
 } from '../src/game/e3Jobs';
 import { readE3JobTables } from '../tools/e3convert/jobs';
+import { GENERATORS } from '../tools/e3convert/towns/shiftingFloors';
+import { e3DayCount, e3TownState } from '../tools/e3convert/flags';
+import { specialIncreaseAge } from '../src/game/specialIncreaseAge';
 import { loadSave, saveGame } from '../src/fileio/saveIo';
 import { SpecCtx, SpecCtxType } from '../src/game/specials/context';
 import { partyFlag } from '../tools/e3convert/script';
@@ -380,6 +383,51 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     makeTownHostile(erika.session);
     await vi.waitFor(() => expect(erika.said.join(' ')).toMatch(/amulets protected you/));
     expect(erika.party.isAlive()).toBe(true);
+  });
+
+  it("runs the Tower of Shifting Floors' golem generators every eighth tick", async () => {
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    const said: string[] = [];
+    session.attachSpecials(new Proxy({}, {
+      get: (_, k) => (k === 'message' ? (s: string) => { said.push(s); return Promise.resolve(); } : () => Promise.resolve(0)),
+    }) as never);
+    session.startTownMode(32, 0);
+    await vi.waitFor(() => expect(session.specials!.busy).toBe(false));
+    const town = session.univ.town!;
+    const party = session.univ.party;
+    const golems = () => town.monsters.filter((m) => m.isAlive && m.number >= 159 && m.number <= 163);
+    const before = golems().length;
+    const clangs = () => session.univ.transcript.filter((l) => l.includes('distant clang')).length;
+    // Ten multiples of 8, one tick at a time: a golem each, and never between.
+    party.age -= party.age % 8;
+    for (let tick = 1; tick <= 80; tick++) {
+      party.age++;
+      specialIncreaseAge(session);
+      await vi.waitFor(() => expect(session.specials!.busy).toBe(false));
+      expect(golems().length).toBe(before + Math.floor(tick / 8));
+    }
+    expect(clangs()).toBe(10);
+    // Each one stands north of a generator, hostile and hunting.
+    const north = new Set(GENERATORS.map((g) => `${g.x},${g.y - 1}`));
+    for (const m of golems().slice(-10)) {
+      expect(north.has(`${m.curLoc.x},${m.curLoc.y}`)).toBe(true);
+      expect(m.isFriendly).toBe(false);
+    }
+    // A generator whose flag is set makes nothing (E3 never sets one).
+    for (const g of GENERATORS) party.setSdf(...g.flag, 1);
+    party.age += 8;
+    specialIncreaseAge(session, 8);
+    await vi.waitFor(() => expect(session.specials!.busy).toBe(false));
+    expect(golems().length).toBe(before + 10);
+  });
+
+  it("keeps the converter's own flags off E3's bytes", () => {
+    // Columns 0–9 are E3's; the town states once sat on the generators' flags.
+    const own = [0, 1, 2, 3, 4].flatMap((k) => [e3TownState(k), e3DayCount(k)]);
+    for (const [, col] of own) expect(col).toBeGreaterThanOrEqual(10);
+    const key = ([r, c]: readonly number[]) => `${r},${c}`;
+    const generators = new Set(GENERATORS.map((g) => key(g.flag)));
+    for (const f of own) expect(generators.has(key(f))).toBe(false);
   });
 
   it("greets a party that walks in, and runs E3's other entry cases", async () => {

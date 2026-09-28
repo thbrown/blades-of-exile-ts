@@ -54,6 +54,8 @@ export interface SpotScript {
   kills: number[];
   /** Each outdoor group's `<onmeet>`, `<onwin>` and `<onflee>` nodes, or -1 (`GroupScript`). */
   groups: GroupNodes[];
+  /** The town's `<timer>`s: every `freq` ticks, `node` (`TimerScript`). */
+  timers: { freq: number; node: number }[];
 }
 
 export interface GroupNodes { meet: number; win: number; flee: number }
@@ -105,6 +107,13 @@ export type KillScript = (b: SpecBuilder, slot: number) => { key: string; steps:
  */
 export type GroupScript = (b: SpecBuilder) => ({ key: string; meet: Step[] | null; win: Step[] | null; flee: Step[] | null })[];
 
+/**
+ * What a town does on a clock of its own, every `freq` ticks while the party
+ * is there. The scenario's `town-timers` flag makes the engine's town timers
+ * repeat, as E3's clock does.
+ */
+export type TimerScript = (b: SpecBuilder) => { freq: number; steps: Step[] }[];
+
 /** Blocked terrains a town spot still runs on (water, and three walls). */
 const WALK_INTO = new Set([71, 101, 118, 133]);
 
@@ -126,7 +135,7 @@ export function e3ZoneMessageBlock(zone: number): number {
 export function e3SpotScript(
   spots: E3Spot[], place: { zone: number } | { town: number },
   src: ScriptSource, terrainAt: (x: number, y: number) => number, own?: PlaceScript, onEntry?: TownEntryScript,
-  onKill?: KillScript, onGroups?: GroupScript, onHostile?: EntryScript,
+  onKill?: KillScript, onGroups?: GroupScript, onHostile?: EntryScript, onTimers?: TimerScript,
 ): SpotScript {
   const isTown = 'town' in place;
   const block = isTown ? e3TownMessageBlock(place.town) : e3ZoneMessageBlock(place.zone);
@@ -197,5 +206,6 @@ export function e3SpotScript(
     groupNodes.set(g.key, n);
     return n;
   });
-  return { spec: b.spec, strings: b.strings, marks, spots: listed, entry, entryDead, hostile, kills, groups };
+  const timers = (onTimers?.(b) ?? []).map((t) => ({ freq: t.freq, node: b.compile(t.steps) }));
+  return { spec: b.spec, strings: b.strings, marks, spots: listed, entry, entryDead, hostile, kills, groups, timers };
 }

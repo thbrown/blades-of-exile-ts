@@ -388,6 +388,47 @@ to both, so no BoE scenario uses them, as with RECT_PLACE_FIELD's `100 + f`.
 
 ---
 
+### 14. A town cleaned out or abandoned (2026-09-27)
+
+**DECIDED: the original's rule in the live game, OBoE's in a replay**, through
+an exile-js feature flag, `town-thrash` = `1997` (`featureFlags.ts`). The live
+game has it; a recording's flag set replaces the build's and never lists it,
+so a replay runs OBoE's rule, as with OBoE's own flags. Both 1997 builds
+(Windows TOWN.CPP:348 and :375, Mac town.c:329 and :359) and Exile III's town
+loader (`10d8:0f4c`, `10d8:1057`) agree, and OBoE differs in three ways a
+player can see:
+
+| | 1997 and Exile III | OBoE (boe.town.cpp, town.cpp:191) |
+|---|---|---|
+| Cleaned out | kills **>** `max_num_monst` | kills **>=** (b8ac49f9, the refactor that made a negative limit mean "never") |
+| On the chop day | nothing is said; the line is commented out | "Area has been abandoned." |
+| An `after-death` creature (time flag 9, OBoE's 8) | only once the chop day comes | also in a cleaned-out town |
+
+The first is the one most likely to be met: a town with a limit of 40 empties
+at 41 kills, not 40. Wandering monsters still stop at the limit (`<` in
+MONSTER.CPP:148, as in OBoE), so a town at exactly the limit has neither. The
+negative limit is kept: it is a format extension, and no 1997 scenario has
+one. Exile III's villages 151 and 152 (limit 40) and village 121's slimes
+(after-death) are where it shows there.
+
+The corpus needs OBoE's `>=`: without the flag, `long/VoDT-5-11.xml`
+re-enters a town at exactly its limit, keeps a monster the C++ removed, and
+parts at draw 9,674 of 31,963 (1,231,440 matched draws fell to 1,209,150).
+
+---
+
+### 15. Town timers that repeat (2026-09-27)
+
+**DECIDED: a scenario flag, `town-timers` = `repeat`.** BoE's town timers
+(1997 and OBoE) are zeroed the first time they fire, so "every N ticks" is
+really once a game. Exile III's golem generators run on every eighth tick of
+age in the Tower of Shifting Floors (`10c0:71cb`), for as long as the party is
+there. With the flag, a town's `<timer>` keeps firing on each multiple of its
+`freq`; without it, BoE's rule stands. The E3 converter sets it, and E3 has no
+other town timers.
+
+---
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

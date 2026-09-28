@@ -8,9 +8,11 @@
  *   count and chop, which the engine does itself and answers with the
  *   `dead` node, or a flag: 22 and 23 (0xc85), 50 (0x281), 52 (0x295), 46
  *   and 90 (0x257 and 0x259 both), 36 (0x1f3), and 200, which no entrance
- *   names. A cleared town loses its creatures. TODO(E3-3): E3 keeps the
- *   ones its chop spared (`active` 10 and up) and brings in after-death
- *   creatures.
+ *   names. A cleared town loses its creatures. E3 keeps the ones its chop
+ *   spared (`active` 10 and up), which is the engine's own thrash
+ *   (DIVERGENCES.md §14): no town a flag clears has a chop day, and a
+ *   chopped one has already run the `dead` node, so the flag's
+ *   `nuke-monsts` never meets a spared creature.
  * - **Plagues' creatures** (`FUN_10d8_3d5b`, 10d8:18b4): once the Alien Slime
  *   is dead (0xc85) the slimes, kinds 138–141, are gone from every town but
  *   the Tower of Magi (24); in 46 and 90 also once 0x259 is set. Once the
@@ -37,7 +39,8 @@
  * - The Tower of Shifting Floors turns its belts as its control panel left
  *   them (10d8:1d0f): level 2 (33) by Belt Alpha and Belt Star, the
  *   basement (108) by Belt Beta. Level 1 (32) has lost each of its sixteen
- *   golem generators whose flag is set (10d8:1dff).
+ *   golem generators whose flag is set (10d8:1dff), which nothing in E3
+ *   ever sets (`shiftingFloors.ts`).
  * - Rentar-Ihrno's keep: level 2 (64) opens the channels whose levers are
  *   pulled (10d8:1eb2, `FUN_10d8_239b`); level 1 (38) has four blood decals
  *   (10d8:1f2a), and opens the portcullis at (41,1) for a party that came up
@@ -64,7 +67,7 @@ import { partyFlag as f, type Flag, type SpecBuilder, type Step } from '../scrip
 import { ANAMA } from './shayder';
 import { PEDESTAL } from './slimePit';
 import { TROGLO_STAGE, TROGLO_WAR } from './castleTroglo';
-import { BELT_ALPHA, BELT_BETA, BELT_STAR } from './shiftingFloors';
+import { BELT_ALPHA, BELT_BETA, BELT_STAR, GENERATORS } from './shiftingFloors';
 import { PANEL_DOORS, SOULS_FOUGHT } from './tinraya';
 import { WALLS_SIDE, zkal2Entry } from './dungeons';
 import { UP_STAIR_14, openChannels } from './rentarKeep';
@@ -74,21 +77,6 @@ const LORELEI_SEEN = f(0x105);
 
 /** The squares the Slime Pit's pedestal buttons open on level 2 (DGROUP 0x37e8). */
 const PORTCULLISES: [number, number][] = [[5, 60], [10, 60], [33, 43], [48, 30], [54, 5]];
-
-/**
- * The Tower of Shifting Floors' sixteen golem generators on level 1 (town
- * 32): each one's flag, and its square (tables at 1140:0190 and 1140:01a4),
- * which is ground once the flag is set. TODO(E3-3): the generators
- * themselves: every eighth turn level 1 picks one at random and, unless its
- * flag is set, makes a golem (kinds 159–163) beside it (10c0:71cb), and
- * whatever destroys one and sets its flag.
- */
-const GENERATORS: [number, number, number][] = [
-  ...[[8, 3], [12, 7], [2, 13], [14, 13], [30, 20], [23, 26], [6, 25], [11, 41], [16, 54], [4, 57]]
-    .map(([x, y], i): [number, number, number] => [0xc0a + i, x!, y!]),
-  ...[[25, 42], [31, 56], [35, 56], [50, 5], [48, 15], [49, 56]]
-    .map(([x, y], i): [number, number, number] => [0xc00 + i, x!, y!]),
-];
 
 /** Athron's drake, gone once Athron is angered (flag (104, 9)). */
 const ATHRON_ANGRY = f(0x49d);
@@ -152,7 +140,7 @@ const TOWN_CASES = new Map<number, EntryScript>([
   ...[29, 31, 103].map((t): [number, EntryScript] => [t, (b) =>
     [b.ifFlagAtLeast(f(0xc8a), 1, [b.replaceTerrain(255, 0), b.replaceTerrain(256, 0)])]]),
   ...[78, 79].map((t): [number, EntryScript] => [t, (b) => [b.scatterDecals(1, 5)]]),
-  [32, (b) => GENERATORS.map(([flag, x, y]) => b.ifFlagAtLeast(f(flag), 1, [b.setTer(x, y, 0)]))],
+  [32, (b) => GENERATORS.map(({ flag, x, y }) => b.ifFlagAtLeast(flag, 1, [b.setTer(x, y, 0)]))],
   [82, (b) => [b.ifEntryDir(3, 3, [b.setTer(4, 20, 0x8d)])]],
   ...[57, 104, 105].map((t): [number, EntryScript] => [t, (b) => dragons(b, t)]),
 ]);

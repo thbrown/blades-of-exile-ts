@@ -879,8 +879,16 @@ export class SpecBuilder {
    * hostile, as `place_monster` makes it).
    */
   moveCreature(from: { x: number; y: number }, to: { x: number; y: number }, type: number): Step {
-    return (next) => this.node('destroy-monst', { ex1: [from.x, from.y] },
-      this.node('place-monst', { ex1: [to.x, to.y], ex2: [type, 1] }, next));
+    return (next) => this.node('destroy-monst', { ex1: [from.x, from.y] }, this.placeMonster(to.x, to.y, type)(next));
+  }
+
+  /**
+   * `FUN_1090_3d56(type, loc)`: a new creature of monster `type` at `(x, y)`,
+   * hostile and hunting, whatever already stands there. It is the engine's
+   * TOWN_PLACE_MONST, forced.
+   */
+  placeMonster(x: number, y: number, type: number): Step {
+    return (next) => this.node('place-monst', { ex1: [x, y], ex2: [type, 1] }, next);
   }
 
   /** `FUN_1080_1b76(x, y, t)`: the terrain at `(x, y)` becomes `t`. */

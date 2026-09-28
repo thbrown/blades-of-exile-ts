@@ -53,6 +53,9 @@ export const SUPPORTED_FEATURES: Readonly<Record<string, readonly string[]>> = {
   'store-spell-caster': ['fixed'],
   // Game balance: Resist Magic used to not help against magic damage.
   'magic-resistance': ['fixed'],
+  // exile-js's own, not OBoE's: a town is cleaned out and abandoned by 1997's
+  // rule (DIVERGENCES.md §14). No recording lists it, so a replay has OBoE's.
+  'town-thrash': ['1997'],
 };
 
 /** The set in force. Starts as everything this build supports. */

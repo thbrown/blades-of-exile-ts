@@ -33,6 +33,7 @@ import {
 import { Attitude, DamageType } from '../data/monster';
 import { animSettle } from './anim';
 import { damagePc, hitParty } from './damage';
+import { hasFeatureFlag } from './featureFlags';
 import {
   NO_ONE, endTownCombat, pcAttack, pickNextPc, setPcMoves, startTownCombat, takeAp,
 } from './combat';
@@ -5244,10 +5245,13 @@ export class GameSession {
           break;
         }
         case MonstTime.APPEAR_AFTER_CHOP: {
+          // Only the chop brings these in, as in both 1997 builds and Exile
+          // III; OBoE also brings them into a cleaned-out town
+          // (DIVERGENCES.md §14).
           const record = town.record;
           const chopped = record.townChopTime > 0
             && party.dayReached(record.townChopTime, record.townChopKey);
-          if (chopped || isCleanedOut(record)) {
+          if (chopped || (!thrash1997() && isCleanedOut(record))) {
             noThrash.add(monst);
             monst.timeFlag = MonstTime.ALWAYS;
           } else monst.active = CreatureStatus.DEAD;
@@ -5265,7 +5269,7 @@ export class GameSession {
    * fires depends on it.
    *
    * The two arms are not symmetrical, and the difference is deliberate:
-   * - **Cleaned out** — the party has killed `max_num_monst` of the town's
+   * - **Cleaned out** — the party has killed more than `max_num_monst` of the town's
    *   creatures — kills *everything* the chop rules didn't already spare,
    *   friendly townsfolk included.
    * - **Chopped** — the scenario's `town_chop_time` has come — first adds
@@ -5286,7 +5290,9 @@ export class GameSession {
       this.univ.addStringToBuf('Area has been cleaned out.');
     }
     if (record.townChopTime > 0 && party.dayReached(record.townChopTime, record.townChopKey)) {
-      this.univ.addStringToBuf('Area has been abandoned.');
+      // Both 1997 builds have this line commented out, and Exile III says
+      // nothing; OBoE says it (DIVERGENCES.md §14).
+      if (!thrash1997()) this.univ.addStringToBuf('Area has been abandoned.');
       for (const monst of town.monsters)
         if (monst.isAlive && !monst.isFriendly) noThrash.add(monst);
       townToast = true;
@@ -5443,10 +5449,11 @@ export class GameSession {
           // The C++ collects these into `no_thrash` instead of sparing them
           // outright, because the town-toast pass below it is what would
           // otherwise kill them. Without that pass the two are the same thing.
+          // In 1997 the chop alone brings them in (DIVERGENCES.md §14).
           const record = town.record;
           const chopped = record.townChopTime > 0
             && party.dayReached(record.townChopTime, record.townChopKey);
-          if (chopped || isCleanedOut(record)) noThrash.add(monst);
+          if (chopped || (!thrash1997() && isCleanedOut(record))) noThrash.add(monst);
           else monst.active = CreatureStatus.DEAD;
           break;
         }
@@ -6010,13 +6017,27 @@ export class GameSession {
 }
 
 /**
- * cTown::is_cleaned_out (town.cpp:191) — the party has killed as many of this
- * town's creatures as the scenario said it takes to empty it. A negative
- * `maxNumMonst` means the town can never be cleaned out.
+ * cTown::is_cleaned_out (town.cpp:191) — the party has killed more of this
+ * town's creatures than the scenario said it takes to empty it. A negative
+ * `maxNumMonst` means the town can never be cleaned out (OBoE's).
+ *
+ * More than, not as many as: `>` is both 1997 builds' test (TOWN.CPP:375)
+ * and Exile III's (`10d8:1072`). OBoE's `>=` came in with the refactor that
+ * added the negative case, and its recordings depend on it, so a replay
+ * (which has no `town-thrash` flag) keeps it (DIVERGENCES.md §14). Wandering
+ * monsters stop at `maxNumMonst` either way (`wandering.ts`), so in 1997 a
+ * town at exactly that count is neither.
  */
 function isCleanedOut(record: Town): boolean {
   if (record.maxNumMonst < 0) return false;
-  return record.monstersKilled >= record.maxNumMonst;
+  return thrash1997()
+    ? record.monstersKilled > record.maxNumMonst
+    : record.monstersKilled >= record.maxNumMonst;
+}
+
+/** The live game's town thrash is 1997's; an OBoE replay's is OBoE's (`featureFlags.ts`). */
+function thrash1997(): boolean {
+  return hasFeatureFlag('town-thrash', '1997');
 }
 
 function clampToWindow(where: Location): Location {

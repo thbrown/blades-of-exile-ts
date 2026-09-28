@@ -40,7 +40,7 @@ import { towerOfMagi } from './towns/towerOfMagi';
 import { filthFactory } from './towns/filthFactory';
 import { castleTroglo } from './towns/castleTroglo';
 import { cavesOfGiants } from './towns/cavesOfGiants';
-import { shiftingFloors } from './towns/shiftingFloors';
+import { level1Timers, shiftingFloors } from './towns/shiftingFloors';
 import { DUNGEON_SCRIPTS, TUNNEL_GUARD_DEAD, WOLF_PIT_ENTRANCES } from './towns/dungeons';
 import { DUNGEON2_SCRIPTS } from './towns/dungeons2';
 import { VILLAGE_SCRIPTS } from './towns/villages';
@@ -61,6 +61,9 @@ import type { Shop } from '../../src/data/shop';
 const ATTITUDE = ['docile', 'hostile-a', 'friendly', 'hostile-b'];
 const BLOCKAGE = ['none', 'sight', 'monsters', 'move', 'move-and-shoot', 'move-and-sight'];
 const LIGHTING = ['lit', 'dark', 'drains', 'none'];
+
+/** Towns with a clock of their own (`TimerScript`). */
+const TIMER_SCRIPTS = new Map([[32, level1Timers]]);
 /** Town entrance markers for `start_locs[0..3]` (`loadTownMapData`). */
 const ENTRANCE_MARK = ['v', '<', '^', '>'];
 
@@ -394,9 +397,10 @@ ${onKill >= 0 ? `        <onkill>${onKill}</onkill>\n` : ''}    </creature>
  * When a town is overrun: E3's villages fall to the monsters on a day unless
  * a plot event comes first (the town loader, `10d8:0f51`), and any town is
  * "cleaned out" once more than `max_num_monst` of its creatures are killed.
- * TODO(E3-3): E3's overrun spares the town's hostile creatures (attitude
- * odd) as well as its `after-death` ones; the engine's spares only the
- * latter.
+ * E3's thrash (`10d8:1057`) is both 1997 builds' exactly: the overrun spares
+ * the town's hostile creatures (attitude odd) and brings in its
+ * `after-death` ones, the kill count must pass the limit, and nothing says
+ * "abandoned". The engine follows 1997 there (DIVERGENCES.md §14).
  */
 function chopXml(t: E3Town): string {
   const attrs: string[] = [];
@@ -460,7 +464,7 @@ function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, st
     <bounds top="${r.top}" left="${r.left}" bottom="${r.bottom}" right="${r.right}" />
     <difficulty>0</difficulty>
     <lighting>${LIGHTING[t.lighting] ?? 'lit'}</lighting>
-${script.entry >= 0 ? `    <onenter condition="alive">${script.entry}</onenter>\n    <onenter condition="dead">${script.entryDead}</onenter>\n` : ''}${script.hostile >= 0 ? `    <onoffend>${script.hostile}</onoffend>\n` : ''}    <flags>
+${script.entry >= 0 ? `    <onenter condition="alive">${script.entry}</onenter>\n    <onenter condition="dead">${script.entryDead}</onenter>\n` : ''}${script.hostile >= 0 ? `    <onoffend>${script.hostile}</onoffend>\n` : ''}${script.timers.map((tm) => `    <timer freq="${tm.freq}">${tm.node}</timer>\n`).join('')}    <flags>
 ${chopXml(t)}${tables.hidden(t.number) ? '        <hidden>true</hidden>\n' : ''}    </flags>
 ${wandering}${items}${creatures}${rooms}${townSigns(t, strings).map(signXml).join('')}${specStringsXml(script)}</town>
 `;
@@ -554,6 +558,7 @@ function scenarioXml(
         <job-boards>exile3:${jobBase}</job-boards>
         <monster-sightings>exile3</monster-sightings>
         <hostile-movers>${E3_HOSTILE_MOVERS}</hostile-movers>
+        <town-timers>repeat</town-timers>
     </feature-flags>
     <text>
         <teaser>The surface world is dying. Find out why.</teaser>
@@ -777,7 +782,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
       (x, y) => terrain[x]?.[y] ?? 0, TOWN_SCRIPTS.get(t.number),
       townEntryScript(t.number, new Set(creatures.map((c) => c.number)),
         creatures.filter((c) => c.number >= 138 && c.number <= 141).map((c) => c.startLoc), t.entryMsg, t.deadMsg),
-      townKillScript(t.number, creatures), undefined, HOSTILE_SCRIPTS.get(t.number));
+      townKillScript(t.number, creatures), undefined, HOSTILE_SCRIPTS.get(t.number), TIMER_SCRIPTS.get(t.number));
     write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf, strings, script, townTables));
     write(`${base}.map`, townMap(t, terrain, strings, script, vehicles));
     write(`${base}.spec`, script.spec);

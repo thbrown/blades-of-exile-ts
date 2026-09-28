@@ -32,6 +32,48 @@ const PANEL_SETTINGS = new Map<number, { flag: Flag; off: number; on: number }>(
   [29, { flag: f(0x4c5), off: 0x4b54, on: 0x4b56 }],
 ]);
 
+/**
+ * Level 1's sixteen golem generators (terrain 255): each one's flag and its
+ * square, in the order E3 numbers them. The squares are one table at
+ * 1140:0190; the flags are party+0xc0a on for the first ten and party+0xc00
+ * on for the other six (`10c0:720e`, `10d8:1dff`).
+ *
+ * **Nothing in E3 sets these flags**: no code writes them, and no talk node or
+ * creature's death flag names them, so every generator runs for the whole
+ * game. The spawner and the entry case (`towns/entry.ts`) test them anyway, as
+ * E3 does.
+ */
+export const GENERATORS: { flag: Flag; x: number; y: number }[] = [
+  ...[[8, 3], [12, 7], [2, 13], [14, 13], [30, 20], [23, 26], [6, 25], [11, 41], [16, 54], [4, 57]]
+    .map(([x, y], i) => ({ flag: f(0xc0a + i), x: x!, y: y! })),
+  ...[[25, 42], [31, 56], [35, 56], [50, 5], [48, 15], [49, 56]]
+    .map(([x, y], i) => ({ flag: f(0xc00 + i), x: x!, y: y! })),
+];
+
+/** The golems a generator makes, kinds 159–163 (`0x9f + get_ran(1, 0, 4)`). */
+const GOLEMS = [159, 160, 161, 162, 163];
+
+/**
+ * The generators at work (`10c0:71cb`, in the per-tick clock): on every
+ * eighth tick of age, in level 1 or a fight inside it, E3 picks one of the
+ * sixteen at random and, unless its flag is set, places a golem of a random
+ * kind on the square north of it, hostile and hunting (`FUN_1090_3d56`,
+ * which fills the first free creature slot of 60). If it found a slot, the
+ * party hears "You hear a distant clang.". The engine runs it as a town
+ * `<timer>` that repeats (the `town-timers` flag, `specialIncreaseAge.ts`),
+ * which fires on the same ticks.
+ *
+ * TODO(E3-3): E3 stops at 60 creatures and says nothing then; the engine's
+ * town has no limit, so the golems keep coming and the clang keeps sounding.
+ */
+export function level1Timers(b: SpecBuilder): { freq: number; steps: Step[] }[] {
+  const make = ({ flag, x, y }: (typeof GENERATORS)[number]): Step[] => [b.ifFlagEq(flag, 0, [
+    b.randomCase(GOLEMS.length, GOLEMS.map((kind) => [b.placeMonster(x, y - 1, kind)])),
+    b.log(0x10c0, 0x6171),
+  ])];
+  return [{ freq: 8, steps: [b.randomCase(GENERATORS.length, GENERATORS.map(make))] }];
+}
+
 /** Belt Alpha's and Belt Star's squares, set from their flags. */
 export function setBelts(b: SpecBuilder): Step[] {
   return [BELT_ALPHA, BELT_STAR].map((belt) => b.ifFlagAtLeast(belt.flag, 1,

@@ -78,20 +78,25 @@ export function e3DeathFlag(k: number): [number, number] {
 }
 
 /**
- * A converter flag counting days, `(293, k)`: where E3 stamps a day and
+ * A converter flag counting days, `(293, 10 + k)`: where E3 stamps a day and
  * later subtracts, the daily timer advances one of these instead
  * (`towns/plot.ts`).
+ *
+ * Every converter flag is in columns 10–49. Columns 0–9 are E3's own bytes
+ * (`e3Flag`), even in rows no transcription names: `(294, 0)` is party+0xc00,
+ * a golem generator's flag (`towns/entry.ts`), and the town states once sat
+ * there.
  */
 export function e3DayCount(k: number): [number, number] {
-  return [293, k];
+  return [293, 10 + k];
 }
 
 /**
- * A converter flag holding a changing town's state, `(294, k)` for the
+ * A converter flag holding a changing town's state, `(294, 10 + k)` for the
  * `k`th of `towns/townStates.ts`'s groups: 0–3, how many records past the
  * first the party walks into. A scenario `<town-flag>` adds it to the town
  * number, which is how E3's loader swaps the record (`FUN_10d8_0107`).
  */
 export function e3TownState(k: number): [number, number] {
-  return [294, k];
+  return [294, 10 + k];
 }

@@ -88,6 +88,10 @@ export function specialIncreaseAge(session: GameSession, length = 1, queue = fal
 
   // Town timers only tick while the party is in that town — and in an arena
   // fight only if the fight started from inside one (which_combat_type 1).
+  // A scenario with the exile-js flag `town-timers` = `repeat` keeps its town
+  // timers firing every `time` ticks: Exile III's golem generators, which
+  // make a golem on every eighth tick in their tower (`10c0:71cb`).
+  const repeat = univ.scenario.featureFlags['town-timers'] === 'repeat';
   const town = univ.town;
   if (town && (session.inTown || (inCombat && session.whichCombatType === 1))) {
     for (const timer of town.record.timers) {
@@ -99,7 +103,7 @@ export function specialIncreaseAge(session: GameSession, length = 1, queue = fal
         // Note the C++ zeroes the timer the first time it fires, so a "every
         // N days" town timer is really once only. Kept: scenarios are written
         // against it, and the scenario timers below do the same.
-        timer.time = 0;
+        if (!repeat) timer.time = 0;
       }
     }
   }

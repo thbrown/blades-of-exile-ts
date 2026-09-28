@@ -13735,3 +13735,47 @@ tests, both sweeps, verify-screen/e3/party. `grep -rn "TODO(E3-3)" src tools`:
 40. **Next session starts here**: the rest of the TODO(E3-3) list, for
 example the golem generators above, E3's after-death creatures and the chop's
 spared creatures.
+
+### The town thrash, the golem generators, and a flag collision (2026-09-27)
+
+- **The chop's spared creatures and after-death creatures were an engine
+  question, not a converter one.** E3's thrash (`10d8:0f4c`, `10d8:1057`) is
+  both 1997 builds' exactly, and OBoE differs in three ways a player can see:
+  it cleans a town out at kills **>=** the limit, not **>**; it says "Area has
+  been abandoned." (commented out in 1997); and it brings after-death creatures
+  into a cleaned-out town, not only a chopped one. The engine now follows 1997
+  behind an exile-js feature flag, **`town-thrash` = `1997`**, which is in the
+  live defaults and in no recording, so replays keep OBoE's rule
+  (DIVERGENCES.md §14). **Gotcha:** without the flag, `long/VoDT-5-11.xml`
+  parts at draw 9,674 (it re-enters a town at exactly its limit). With it the
+  corpus is unchanged: 1,231,440 draws, 51 of 87. With the engine on 1997's
+  rule, E3's chop needs nothing more: its only after-death creatures are
+  village 121's slimes (limit 10000), and no town a flag clears has a chop day.
+- **The golem generators** (`10c0:71cb`): on every eighth tick in the Tower of
+  Shifting Floors' level 1 (or a fight there), `get_ran(1,0,15)` picks a
+  generator; unless its flag is set, `get_ran(1,0,4)` picks kind 159–163 and
+  `FUN_1090_3d56` puts it on the square north of the generator (terrain 255),
+  hostile and hunting, and the party hears "You hear a distant clang."
+  **Nothing in E3 sets the generator flags**: no code writes party+0xc0a–0xc13
+  or 0xc00–0xc05, and no talk node or death flag names them. So all sixteen run
+  all game, and the entry case that turns a destroyed one to ground is dead
+  code in E3 (kept, as E3 has it).
+  - Ported as an exile-js flag, **`town-timers` = `repeat`**
+    (`specialIncreaseAge.ts`): a town `<timer>` keeps firing every `freq`
+    ticks instead of once. BoE's zeroing is kept without the flag. The
+    converter has a new `TimerScript` (`specials.ts`), and town 32 gets
+    `<timer freq="8">` running `level1Timers` (`towns/shiftingFloors.ts`,
+    which now owns `GENERATORS`). New builder `SpecBuilder.placeMonster`.
+  - `TODO(E3-3)`: E3 fills the first free slot of 60 and stops (and says
+    nothing) when there is none; the engine's town has no limit.
+- **A converter flag collision, fixed.** `e3TownState(k)` was `(294, k)`, which
+  is party+0xc00 + k: generators 10–14's flags. Once Krizsan declined, the
+  generator at (25,42) would have gone quiet and turned to ground. The town
+  states are now `(294, 10 + k)`, and `e3DayCount` `(293, 10 + k)` to match,
+  so every converter flag is in columns 10–49 (`flags.ts` says so). A test
+  checks it.
+
+All checks pass: 1,387 tests, both sweeps, verify-screen/e3/party, and the
+corpus as above. `grep -rn "TODO(E3-3)" src tools`: 38. **Next session starts
+here**: the rest of the TODO(E3-3) list — for example E3's inn aging the party
+(`talk.ts`), the Filth Factory's drowning in combat, or `sleep`'s saving roll.
