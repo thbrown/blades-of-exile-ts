@@ -492,6 +492,33 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(golems().length).toBe(before + 10);
   });
 
+  it("moves where the party comes out as it takes a passage to another building", async () => {
+    // Each passage answers its dialog's second button, and the party comes
+    // out by the door of the building it arrives in.
+    const through = async (town: number, spot: { x: number; y: number }) => {
+      const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+      session.attachSpecials(new Proxy({}, {
+        get: (_, k) => (k === 'choice' ? () => Promise.resolve(1) : () => Promise.resolve(0)),
+      }) as never);
+      session.startTownMode(town, FORCED_ENTRY);
+      await vi.waitFor(() => expect(session.specials!.busy).toBe(false));
+      const s = scen.towns[town]!.specialLocs.find((l) => l.x === spot.x && l.y === spot.y)!;
+      await session.runSpecial(SpecCtx.TOWN_MOVE, SpecCtxType.TOWN, s.spec, spot);
+      const { party } = session.univ;
+      return { sector: party.sector, loc: party.locInSec };
+    };
+    const at = (town: number, id: number) => {
+      const spots = JSON.parse(readFileSync(join(out, 'debug.json'), 'utf8')) as { towns: Record<string, { id: number; x: number; y: number }[]> };
+      return spots.towns[town]!.find((s) => s.id === id)!;
+    };
+    // The Tower of Shifting Floors (32) and its basement (108) have two doors in zone 14.
+    expect(await through(32, at(32, 12))).toEqual({ sector: { x: 5, y: 1 }, loc: { x: 34, y: 4 } });
+    expect(await through(108, at(108, 15))).toEqual({ sector: { x: 5, y: 1 }, loc: { x: 34, y: 14 } });
+    // Sulfras's lair (57) leads to the other two lairs, in zone 28.
+    expect(await through(57, at(57, 11))).toEqual({ sector: { x: 1, y: 3 }, loc: { x: 36, y: 24 } });
+    expect(await through(57, at(57, 12))).toEqual({ sector: { x: 1, y: 3 }, loc: { x: 38, y: 25 } });
+  });
+
   it("keeps the converter's own flags off E3's bytes", () => {
     // Columns 0–9 are E3's; the town states once sat on the generators' flags.
     const own = [0, 1, 2, 3, 4].flatMap((k) => [e3TownState(k), e3DayCount(k)]);

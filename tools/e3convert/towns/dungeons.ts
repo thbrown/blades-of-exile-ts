@@ -412,9 +412,12 @@ function woodsyTower(b: SpecBuilder): Map<number, Step[]> {
 /** The Lair of Sulfras (town 57), the dragon: `FUN_1088_325a`, block 61. */
 function sulfrasLair(b: SpecBuilder): Map<number, Step[]> {
   const B = 61, spot = (id: number) => townSpotFlag(57, id);
-  // TODO(E3-3): E3 also sets party+0x12e6 (`FUN_1080_022e`) going through.
-  const passage = (town: number, x: number, y: number): Step[] =>
-    [b.askDialog(0xdf2, [b.changeTown(town, x, y)]), b.blockMove()];
+  // Each passage also moves where the party will come out (party+0x12e6,
+  // `FUN_1080_022e`) to the other lair's own door in zone 28, DGROUP 0x1d98
+  // and 0x1d9a. E3 gives the square relative to its outdoor window; see
+  // `shiftingFloors.ts`'s `toBasement` for why the port names the zone.
+  const passage = (town: number, x: number, y: number, door: [number, number]): Step[] =>
+    [b.askDialog(0xdf2, [b.exitTo(1, 3, ...door), b.changeTown(town, x, y)]), b.blockMove()];
   return new Map<number, Step[]>([
     [0, []],
     [1, [b.askDialog(0xfca, [b.msg(B, 0x4a), b.setFlag(spot(1), 20), b.bringIn(200, 1)], [b.blockMove()])]],
@@ -422,7 +425,7 @@ function sulfrasLair(b: SpecBuilder): Map<number, Step[]> {
     // slimes or the roaches).
     [2, [b.ifFlagEq(f(0xc85), 0, [b.ifFlagEq(f(0xc87), 0, [b.msg(B, 0x4c)], [audience(b, B)])], [audience(b, B)])]],
     [3, [b.onceMsg(spot(3), B, 0x4e)]],
-    [11, passage(0x68, 3, 8)], [12, passage(0x69, 0x1a, 5)],
+    [11, passage(0x68, 3, 8, [36, 24])], [12, passage(0x69, 0x1a, 5, [38, 25])],
     [14, [b.msg(B, 0x4f), b.blockMove()]],
   ]);
 }

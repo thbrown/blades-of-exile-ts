@@ -13815,3 +13815,29 @@ tools`: 34. **Next session starts here**: the rest of the TODO(E3-3) list, for
 example E3's item ability semantics (`tables.ts`), which the sleep
 protections and seven presets wait on, or the `FUN_1080_022e` party+0x12e6
 calls in the dungeons.
+
+### Passages that move the party's way out (2026-09-27)
+
+- **`FUN_1080_022e` is not a mystery any more.** party+0x12e6 is the party's
+  outdoor square in E3's window (x low byte, y high; the terrain test at
+  `0x5e1b + x·0x60 + y` reads it), and `FUN_1080_022e` turns a zone-local
+  square into a window one by adding 48 to x when party+0x12e4 (x > 47) is set.
+  **It never adjusts y**: party+0x12e5 is computed and unread.
+- The three dungeons that set it do so to move where the party comes out to
+  the door of the building it arrives in. The squares are DGROUP constants,
+  and each is that town's entrance in OUTDOOR.DAT:
+  - Tower of Shifting Floors (32) → basement (108): zone 14 (5,1), (34,4)
+    (DGROUP 0x1c78, 0x1c7c); basement → tower: (34,14) (0x31d2).
+  - Sulfras's lair (57) → lairs 104 and 105: zone 28 (1,3), (36,24) and (38,25)
+    (0x1d98, 0x1d9a).
+- Ported as `exitTo` (`set-sector`) before each `changeTown`, naming the zone
+  outright, since the engine's window is BoE's and not E3's. Before this, a
+  party that went down to the basement left it by the tower's door.
+- Test: "moves where the party comes out as it takes a passage to another
+  building". Converter only, so the corpus is untouched.
+
+All checks pass: 1,391 tests, both sweeps, verify-screen/e3/party.
+`grep -rn "TODO(E3-3)" src tools`: 31. **Next
+session starts here**: the rest of the TODO(E3-3) list, for example E3's item
+ability semantics (`tables.ts`), which the sleep protections and seven
+presets wait on.

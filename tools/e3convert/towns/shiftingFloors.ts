@@ -80,13 +80,29 @@ export function setBelts(b: SpecBuilder): Step[] {
     belt.squares.map(([x, y]) => b.setTer(x, y, SOUTH)), belt.squares.map(([x, y]) => b.setTer(x, y, NORTH))));
 }
 
+/**
+ * The tower (32) and its basement (108) open onto zone 14 by two different
+ * doors, (34,14) and (34,4). Each stair between them also moves where the
+ * party will come out (party+0x12e6, through `FUN_1080_022e`), to the door
+ * of the building it arrives in: DGROUP 0x1c78 and 0x1c7c going down, 0x31d2
+ * going up. Without it, a party that went down would leave the basement by
+ * the tower's door.
+ *
+ * E3 stores the square relative to its outdoor window, and `FUN_1080_022e`
+ * adds 48 to x when the party is in the window's right half, but never to y
+ * (party+0x12e5 is unread). So a party whose window put zone 14 in its lower
+ * half would come out 48 squares north, in zone 5. That depends on E3's
+ * window, which the engine's is not; the port names zone 14 outright.
+ */
+const toBasement = (b: SpecBuilder): Step => b.exitTo(5, 1, 34, 4);
+const toTower = (b: SpecBuilder): Step => b.exitTo(5, 1, 34, 14);
+
 function level1(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]> {
   return new Map<number, Step[]>([
     [1, [b.dialog(0xcf8), b.setFlag(spot(1), 20)]],
     [2, [b.askDialog(0xd04, [b.moveParty(0x12, 4)])]],
     [11, [b.askDialog(0xd7f, [b.changeTown(33, 5, 5)]), b.blockMove()]],
-    // TODO(E3-3): E3 also sets party+0x12e6 (`FUN_1080_022e`) going down.
-    [12, [b.askDialog(0xd7e, [b.changeTown(108, 0x18, 0x1d)]), b.blockMove()]],
+    [12, [b.askDialog(0xd7e, [toBasement(b), b.changeTown(108, 0x18, 0x1d)]), b.blockMove()]],
     [14, [b.askDialog(0xd7f, [b.changeTown(33, 0x28, 8)]), b.blockMove()]],
     [15, [b.dialog(0xcfa)]],
   ]);
@@ -115,7 +131,7 @@ function level2(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]>
     [11, [b.dialog(0xd02)]],
     [12, [b.dialog(0xd03)]],
     [14, stairs(0xd7e, 32, 2, 3)],
-    [15, stairs(0xd7e, 108, 0x12, 0x13)],
+    [15, [b.askDialog(0xd7e, [toBasement(b), b.changeTown(108, 0x12, 0x13)]), b.blockMove()]],
     [16, stairs(0xd7e, 32, 0x2a, 0xa)],
     [17, stairs(0xd7f, 60, 0x18, 5)],
     // A belt that reverses as the party reaches it.
@@ -143,12 +159,11 @@ function level3(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]>
 }
 
 function basement(b: SpecBuilder): Map<number, Step[]> {
-  // TODO(E3-3): E3 also sets party+0x12e6 (`FUN_1080_022e`) on the way up.
   return new Map<number, Step[]>([
     [11, [b.dialog(0xff0)]],
     [12, [b.ifTer(0x17, 0x1a, 0x6d, [b.msg(66, 0x2d), b.setTer(0x17, 0x1a, 0x6c), b.setTer(0x19, 0x1a, 0x6c)])]],
-    [14, [b.askDialog(0xd7f, [b.changeTown(33, 0x20, 0x24)]), b.blockMove()]],
-    [15, [b.askDialog(0xd7f, [b.changeTown(32, 0x17, 0x3c)]), b.blockMove()]],
+    [14, [b.askDialog(0xd7f, [toTower(b), b.changeTown(33, 0x20, 0x24)]), b.blockMove()]],
+    [15, [b.askDialog(0xd7f, [toTower(b), b.changeTown(32, 0x17, 0x3c)]), b.blockMove()]],
   ]);
 }
 
