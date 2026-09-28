@@ -132,6 +132,8 @@ export interface CastSlot {
   spell: Spell;
   name: string;
   level: number;
+  /** Its spell-point cost as the grid prints it: '?' for Simulacrum, whose cost depends on the creature. */
+  cost: string;
   /** In the caster's book at all. */
   known: boolean;
   /** Lit: the caster can cast it now. */
@@ -386,6 +388,7 @@ export class CastDialog implements ModalScreen {
       if (spell === Spell.NONE) continue;
       slots.push({
         slot: i, spell, name: spellName(spell), level: SPELLS[spell]?.level ?? 0,
+        cost: (SPELLS[spell]?.cost ?? 0) < 0 ? '?' : String(SPELLS[spell]?.cost ?? 0),
         known: known?.[this.pick.numAt(i)] === true, castable: this.castable(spell),
       });
     }

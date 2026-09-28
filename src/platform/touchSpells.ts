@@ -113,7 +113,8 @@ export class TouchSpellPanel {
       // A tap picks it; a long press describes it, as a long press on the
       // game screen is the right button, which describes a spell in the dialog.
       let described = false;
-      const b = button(`ts-spell${chosen ? ' on' : ''}${s.castable ? '' : ' dim'}`, s.name, () => {
+      // Named as the dialog's grid names it, "name (cost)".
+      const b = button(`ts-spell${chosen ? ' on' : ''}${s.castable ? '' : ' dim'}`, `${s.name} (${s.cost})`, () => {
         if (described) described = false;
         else this.press(dialog, `spell${s.slot + 1}`);
       });
@@ -128,12 +129,13 @@ export class TouchSpellPanel {
       b.addEventListener('contextmenu', (ev) => ev.preventDefault());
       list.append(b);
     }
+    // Bottom left, level with Cast on the right.
     const steps = el('div', 'ts-steps');
     steps.append(
       button('ts-step', '◀', () => this.stepLevel(dialog, view, -1), level <= MIN_LEVEL),
       button('ts-step', '▶', () => this.stepLevel(dialog, view, 1), level >= MAX_LEVEL),
     );
-    left.append(list, steps);
+    left.append(list);
 
     // Right: who it's for, when the spell is cast on a party member.
     const right = el('div', 'ts-strip ts-right');
@@ -142,8 +144,9 @@ export class TouchSpellPanel {
       for (const pc of view.party) {
         if (!pc.present) continue;
         const chip = button(`ts-pc${pc.index === view.target ? ' on' : ''}${pc.alive ? '' : ' dim'}`,
-          `${pc.index + 1}. ${pc.name}`, () => this.press(dialog, `target${pc.index + 1}`));
-        chip.append(el('small', '', `${pc.hp} HP`));
+          '', () => this.press(dialog, `target${pc.index + 1}`));
+        chip.title = pc.name;
+        chip.append(el('span', 'ts-name', `${pc.index + 1}. ${pc.name}`), el('small', '', `${pc.hp} HP`));
         right.append(chip);
       }
     }
@@ -159,6 +162,6 @@ export class TouchSpellPanel {
       button('ts-cast', 'CAST', () => this.press(dialog, 'cast'), !chosen),
     );
 
-    this.root.replaceChildren(left, right, foot);
+    this.root.replaceChildren(left, right, steps, foot);
   }
 }

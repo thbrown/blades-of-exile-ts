@@ -3191,9 +3191,9 @@ touch.aimFoes = await tp.evaluate(() => {
 await tp.tap('.touch-actions [data-button="MAGE"]');
 await tp.waitForTimeout(400);
 touch.panel = await tp.evaluate(() => document.querySelector('#touch-spells')?.hidden === false
-  && [...document.querySelectorAll('.ts-spell')].some((b) => b.textContent === 'Spark'));
+  && [...document.querySelectorAll('.ts-spell')].some((b) => b.textContent === 'Spark (1)'));
 await tp.screenshot({ path: `${SHOTS}/63-touch-spells.png` });
-await tp.tap('.ts-spell:text-is("Spark")');
+await tp.tap('.ts-spell:text-is("Spark (1)")');
 await tp.waitForTimeout(150);
 await tp.tap('.ts-cast');
 await tp.waitForTimeout(500);
