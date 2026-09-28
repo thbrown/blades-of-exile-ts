@@ -119,7 +119,8 @@ import { giveHelp, setGiveHelp, setLivingSound } from './universe/living';
 import { killPc } from './game/damage';
 import { BOE_HEIGHT, BOE_WIDTH, ToolbarButton } from './render/layout';
 
-import { CHROME_SHEETS, Screen } from './render/screen';
+import { CHROME_SHEETS, Screen, toolbarButtons, toolbarMode } from './render/screen';
+import { TouchControls, setTouchControls, touchControlsOn } from './platform/touchControls';
 import { tilePattern } from './render/tiling';
 import {
   DEFAULT_UI_SCALE, DisplayMode, UI_SCALES, UI_SCALE_FIT, desktop, placeBesideGame,
@@ -655,6 +656,8 @@ async function main(): Promise<void> {
   // Where the pointer is on the canvas, for `change_cursor`; null off it.
   let pointer: { x: number; y: number } | null = null;
   let shownCursor = '';
+  // Made once the toolbar's handler exists, below; redraws before then skip it.
+  let touchPads: TouchControls | undefined;
   const redraw = (): void => {
     // The desktop around the game screen gets the same background pattern.
     // OBoE's put_background tiles its whole window (boe.graphics.cpp:683).
@@ -695,6 +698,7 @@ async function main(): Promise<void> {
       canvas.style.cursor = css;
       shownCursor = css;
     }
+    touchPads?.sync();
   };
   const dialogs = new DialogHost(ctx, store, () => redraw());
   windowFrames.on = true;
@@ -2307,6 +2311,89 @@ async function main(): Promise<void> {
     refitDesktop();
   };
 
+  /**
+   * A toolbar button, pressed: `handle_action`'s toolbar switch
+   * (boe.actions.cpp:1630), with its mode guards — a button pressed in a mode
+   * it has no business in does nothing, as in the original. The canvas's
+   * toolbar and the touch pads both come here.
+   */
+  const pressToolbar = (which: ToolbarButton): void => {
+    sound.play(Snd.BUTTON); // the UI click
+    const mode = session.mode;
+    switch (which) {
+      case ToolbarButton.MAGE: case ToolbarButton.PRIEST:
+        // handle_spell_button dispatches on which book — the m/p keys' flow.
+        void castSpellFlow(which === ToolbarButton.MAGE
+          ? Skill.MAGE_SPELLS : Skill.PRIEST_SPELLS);
+        break;
+      case ToolbarButton.LOOK:
+        beginLook();
+        break;
+      case ToolbarButton.SHIELD:
+        // handle_parry — spend what's left of the turn on defence.
+        if (mode === GameMode.COMBAT) void session.parry();
+        break;
+      case ToolbarButton.TALK:
+        if (mode === GameMode.TOWN || mode === GameMode.TALK_TOWN) beginTalk();
+        break;
+      case ToolbarButton.CAMP:
+        if (mode === GameMode.OUTDOORS) void session.rest();
+        break;
+      case ToolbarButton.SCROLL: case ToolbarButton.MAP:
+        // display_map — and "do not call advance_time".
+        toggleMap();
+        break;
+      case ToolbarButton.BAG: case ToolbarButton.HAND:
+        if (mode === GameMode.TOWN || mode === GameMode.COMBAT) void getItems();
+        break;
+      case ToolbarButton.SAVE:
+        if (mode === GameMode.OUTDOORS) void saveGameFlow();
+        break;
+      case ToolbarButton.USE:
+        if (mode === GameMode.TOWN || mode === GameMode.USE_TOWN) selectSpace('use');
+        break;
+      case ToolbarButton.WAIT:
+        // handle_stand_ready — give up the turn *on guard*, not just idle.
+        if (mode === GameMode.COMBAT) void session.pause();
+        break;
+      case ToolbarButton.LOAD:
+        if (mode === GameMode.OUTDOORS) void loadGameFlow();
+        break;
+      case ToolbarButton.SHOOT:
+        // handle_missile — the 's' key's flow, arm and cancel alike.
+        if (mode === GameMode.COMBAT) session.handleMissile();
+        else if (mode === GameMode.FIRING || mode === GameMode.THROWING) {
+          session.handleMissile();
+          recentre();
+        }
+        break;
+      case ToolbarButton.SWORD: case ToolbarButton.END:
+        void combatSwitchFlow();
+        break;
+      case ToolbarButton.ACT:
+        // handle_toggle_active — pin the turn to this PC, or release it.
+        if (mode === GameMode.COMBAT) session.toggleActivePc();
+        break;
+      default:
+        break;
+    }
+    setStatus();
+    redraw();
+  };
+
+  touchPads = new TouchControls({
+    // Hidden wherever the canvas's toolbar can't be clicked either: under a
+    // dialog, in a shop or a conversation — and on the main menu.
+    mode: () => (document.body.classList.contains('starting') || dialogs.active || session.shop || session.talk
+      ? null : toolbarMode(session)),
+    buttons: toolbarButtons,
+    press: (which) => {
+      if (dialogs.active || session.shop || session.talk) return;
+      pressToolbar(which);
+    },
+    sheet: () => store.get('buttons'),
+  });
+
   const router = new InputRouter(canvas, {
     onMove: (dir, key) => {
       // A dialog gets first refusal on the arrows: pc-info.xml's left/right
@@ -2432,70 +2519,7 @@ async function main(): Promise<void> {
       }
       const btn = screen.buttonAt(x, y);
       if (btn) {
-        sound.play(Snd.BUTTON); // the UI click
-        // `handle_action`'s toolbar switch (boe.actions.cpp:1630), with its
-        // mode guards: a button pressed in a mode it has no business in does
-        // nothing, as in the original.
-        const mode = session.mode;
-        switch (btn.btn) {
-          case ToolbarButton.MAGE: case ToolbarButton.PRIEST:
-            // handle_spell_button dispatches on which book — the m/p keys' flow.
-            void castSpellFlow(btn.btn === ToolbarButton.MAGE
-              ? Skill.MAGE_SPELLS : Skill.PRIEST_SPELLS);
-            break;
-          case ToolbarButton.LOOK:
-            beginLook();
-            break;
-          case ToolbarButton.SHIELD:
-            // handle_parry — spend what's left of the turn on defence.
-            if (mode === GameMode.COMBAT) void session.parry();
-            break;
-          case ToolbarButton.TALK:
-            if (mode === GameMode.TOWN || mode === GameMode.TALK_TOWN) beginTalk();
-            break;
-          case ToolbarButton.CAMP:
-            if (mode === GameMode.OUTDOORS) void session.rest();
-            break;
-          case ToolbarButton.SCROLL: case ToolbarButton.MAP:
-            // display_map — and "do not call advance_time".
-            toggleMap();
-            break;
-          case ToolbarButton.BAG: case ToolbarButton.HAND:
-            if (mode === GameMode.TOWN || mode === GameMode.COMBAT) void getItems();
-            break;
-          case ToolbarButton.SAVE:
-            if (mode === GameMode.OUTDOORS) void saveGameFlow();
-            break;
-          case ToolbarButton.USE:
-            if (mode === GameMode.TOWN || mode === GameMode.USE_TOWN) selectSpace('use');
-            break;
-          case ToolbarButton.WAIT:
-            // handle_stand_ready — give up the turn *on guard*, not just idle.
-            if (mode === GameMode.COMBAT) void session.pause();
-            break;
-          case ToolbarButton.LOAD:
-            if (mode === GameMode.OUTDOORS) void loadGameFlow();
-            break;
-          case ToolbarButton.SHOOT:
-            // handle_missile — the 's' key's flow, arm and cancel alike.
-            if (mode === GameMode.COMBAT) session.handleMissile();
-            else if (mode === GameMode.FIRING || mode === GameMode.THROWING) {
-              session.handleMissile();
-              recentre();
-            }
-            break;
-          case ToolbarButton.SWORD: case ToolbarButton.END:
-            void combatSwitchFlow();
-            break;
-          case ToolbarButton.ACT:
-            // handle_toggle_active — pin the turn to this PC, or release it.
-            if (mode === GameMode.COMBAT) session.toggleActivePc();
-            break;
-          default:
-            break;
-        }
-        setStatus();
-        redraw();
+        pressToolbar(btn.btn);
         return;
       }
       // The border around the terrain grid scrolls the view while aiming —
@@ -3058,7 +3082,11 @@ async function main(): Promise<void> {
           [DisplayMode.TOP_RIGHT, 'Top Right'], [DisplayMode.BOTTOM_LEFT, 'Bottom Left'],
           [DisplayMode.BOTTOM_RIGHT, 'Bottom Right'], [DisplayMode.SMALL_WINDOW, 'Game Screen Only'],
         ];
+        const touch = touchControlsOn();
         return [
+          // On by default on a phone or tablet (`touchControlsOn`).
+          { label: tick(touch, 'Touch Controls'), action: () => { setTouchControls(!touch); redraw(); } },
+          MENU_SEPARATOR,
           ...modes.map(([m, label]): MenuItem => ({
             label: tick(mode === m, label), action: () => setDesktopPrefs(m, scale),
           })),

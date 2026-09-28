@@ -47,6 +47,7 @@ import {
   TER_VIEW_CENTER,
   TER_VIEW_TILES,
   TOWN_BUTTONS,
+  ToolbarButton,
   TRANSCRIPT_LINE_HEIGHT,
   TRANSCRIPT_TEXT,
   UiRect,
@@ -207,13 +208,24 @@ export function statusBarText(session: GameSession): string {
   return `${pc.name} (ap: ${pc.ap})`;
 }
 
+/** Which of the toolbar's three button sets is up (boe.ui.cpp:48). */
+export type ToolbarMode = 'out' | 'town' | 'combat';
+
+export function toolbarMode(session: GameSession): ToolbarMode {
+  return isCombat(session.mode) ? 'combat' : session.inTown ? 'town' : 'out';
+}
+
+export function toolbarButtons(mode: ToolbarMode): readonly ToolbarButton[] {
+  return mode === 'combat' ? FIGHT_BUTTONS : mode === 'town' ? TOWN_BUTTONS : OUT_BUTTONS;
+}
+
 export class Screen {
   /** Hit animations still on screen; see `drawBooms`. */
   booms: Boom[] = [];
   /** Projectiles still in flight; see `drawMissiles`. */
   missiles: Missile[] = [];
   private buttons: PlacedButton[] = [];
-  private buttonsMode: 'out' | 'town' | 'combat' | null = null;
+  private buttonsMode: ToolbarMode | null = null;
   private trim: TrimMasks;
   readonly talkScreen: TalkScreen;
   readonly shopScreen: ShopScreen;
@@ -1874,13 +1886,10 @@ export class Screen {
 
   /** cToolbar::draw (boe.ui.cpp:193). */
   private drawToolbar(session: GameSession): void {
-    const mode: 'out' | 'town' | 'combat' =
-      isCombat(session.mode) ? 'combat' : session.inTown ? 'town' : 'out';
+    const mode = toolbarMode(session);
     if (mode !== this.buttonsMode) {
       this.buttonsMode = mode;
-      this.buttons = placeButtons(
-        mode === 'combat' ? FIGHT_BUTTONS : mode === 'town' ? TOWN_BUTTONS : OUT_BUTTONS,
-      );
+      this.buttons = placeButtons(toolbarButtons(mode));
     }
     const img = this.store.get('buttons');
     if (!img) return;

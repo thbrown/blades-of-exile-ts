@@ -55,9 +55,21 @@ export interface InputHandlers {
   onWheel?(x: number, y: number, deltaY: number): boolean;
 }
 
+/** How long a finger rests before it counts as the right button, and how far it may drift. */
+const LONG_PRESS_MS = 500;
+const LONG_PRESS_SLOP = 10;
+
 export class InputRouter {
   /** Non-empty while a modal dialog is up; game input is ignored then. */
   dialogStack: unknown[] = [];
+  /**
+   * A touch that is being held, which becomes a right-click if it stays put:
+   * a phone's only way to the quick look and the spell descriptions. Not the
+   * `contextmenu` event, which Android sends for a long press and iOS doesn't.
+   */
+  private press: { id: number; x: number; y: number; timer: number } | null = null;
+  /** The long press fired, so the mouse events the browser makes of that touch are not a click too. */
+  private swallowMouse = false;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -67,6 +79,14 @@ export class InputRouter {
   attach(): void {
     window.addEventListener('keydown', (ev) => this.onKeyDown(ev));
     this.canvas.addEventListener('mousedown', (ev) => this.onMouseDown(ev));
+    this.canvas.addEventListener('pointerdown', (ev) => this.onPointerDown(ev));
+    this.canvas.addEventListener('pointermove', (ev) => {
+      if (this.press?.id === ev.pointerId
+        && Math.hypot(ev.clientX - this.press.x, ev.clientY - this.press.y) > LONG_PRESS_SLOP) this.cancelPress();
+    });
+    for (const end of ['pointerup', 'pointercancel'] as const) {
+      this.canvas.addEventListener(end, (ev) => { if (this.press?.id === ev.pointerId) this.cancelPress(); });
+    }
     // The original has no context menu. A right-click reaches `onClick` with
     // `right` set, as 1997's WM_RBUTTONDOWN reaches `handle_action`.
     this.canvas.addEventListener('contextmenu', (ev) => ev.preventDefault());
@@ -101,7 +121,33 @@ export class InputRouter {
     this.handlers.onKey(ev.key, ev);
   }
 
+  private onPointerDown(ev: PointerEvent): void {
+    // Any new press starts clean — a mouse's too, on a laptop with a
+    // touchscreen: its mouse events are real clicks unless it is held.
+    this.swallowMouse = false;
+    this.cancelPress();
+    if (ev.pointerType !== 'touch') return;
+    const { clientX, clientY } = ev;
+    const timer = window.setTimeout(() => {
+      this.press = null;
+      if (this.blocked) return;
+      this.swallowMouse = true;
+      const at = this.toCanvas({ clientX, clientY });
+      this.handlers.onClick(at.x, at.y, true, { alt: false, ctrl: false });
+    }, LONG_PRESS_MS);
+    this.press = { id: ev.pointerId, x: clientX, y: clientY, timer };
+  }
+
+  private cancelPress(): void {
+    if (this.press) window.clearTimeout(this.press.timer);
+    this.press = null;
+  }
+
   private onMouseDown(ev: MouseEvent): void {
+    if (this.swallowMouse) {
+      this.swallowMouse = false;
+      return;
+    }
     if (this.blocked) return;
     const at = this.toCanvas(ev);
     this.handlers.onClick(at.x, at.y, ev.button === 2, { alt: ev.altKey, ctrl: ev.ctrlKey });
@@ -119,7 +165,7 @@ export class InputRouter {
   }
 
   /** The canvas is drawn at native size and may be CSS-scaled up. */
-  private toCanvas(ev: MouseEvent): { x: number; y: number } {
+  private toCanvas(ev: { clientX: number; clientY: number }): { x: number; y: number } {
     const rect = this.canvas.getBoundingClientRect();
     return {
       x: (ev.clientX - rect.left) * (this.canvas.width / rect.width),

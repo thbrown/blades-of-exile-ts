@@ -14179,7 +14179,37 @@ the rest of the TODO(E3-3) list.
       its gutter; `body.starting` puts it back. Card pictures are cropped in
       CSS to the terrain view inside its frame (13/14px round a 252×324
       view), so no strip of the frame shows.
+- [x] **Touch controls for a phone held sideways (2026-09-28).** At the
+      user's request; not in the original. `platform/touchControls.ts`:
+      - Two translucent pads pinned to the sides under the menu bar. The
+        right one is the eight directions with Space in the middle; held, a
+        direction repeats. The left one is the current mode's toolbar set
+        (`toolbarMode`/`toolbarButtons`, now exported from screen.ts) plus
+        Wait (town) and Escape. On an iPhone 14 sideways they sit in the
+        space either side of the scaled game; on an SE they overlap it.
+      - **No new route into the game**: directions and extra keys are real
+        `keydown`s on the window, and toolbar buttons call `pressToolbar`,
+        which is the canvas toolbar's switch moved into a function of its own.
+        Replays record actions, so they can't tell. The pads hide wherever
+        the canvas toolbar couldn't be clicked (dialog, shop, conversation,
+        main menu).
+      - **A long press on the canvas is the right button** (`InputRouter`,
+        500ms, 10px of drift): the quick look and spell descriptions. The
+        browser's mouse events for that touch are swallowed. Not
+        `contextmenu`, which iOS never sends. A look at an adjacent special
+        runs it, exactly as a right-click does.
+      - **View → Touch Controls**, pref `TouchControls`. Unset, it's on
+        where `(pointer: coarse)` and there's no fine pointer at all.
+      - **Landscape**: the first touch in play asks for full screen and
+        `screen.orientation.lock('landscape')` — Android grants both; an
+        iPhone has neither API. In portrait, in play, `#rotate-cover` hides
+        the game and asks. It has to hide the rest of the page, not just
+        cover it: the menu bar doesn't wrap, is 634px wide, and upright it
+        widened the page the fixed cover fills.
+      - `verify-screen.mjs` has a TOUCH step on an emulated phone.
+      - Not done: typing into the canvas dialogs (PC names, numbers) doesn't
+        bring up a phone's keyboard; the menu bar could fold away sideways.
 
-All checks pass: 1,413 tests, both sweeps, verify-screen/party (corpus not
-re-run for the inept fix, which touches no RNG call). **Next session starts here**: E3's
+All checks pass: 1,413 tests, both sweeps, verify-screen (with TOUCH)/party
+(corpus not re-run: neither the inept fix nor the pads touch an RNG call). **Next session starts here**: E3's
 remaining screen chrome (see "Not done" above), then the TODO(E3-3) list.

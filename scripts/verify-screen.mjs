@@ -3115,6 +3115,91 @@ const desktopOk = desk.layout.gameX === 0 && desk.layout.gameY === 0 && desk.lay
   desk.scaled.scale === 2 && !desk.scaled.scrolls &&
   desk.popout.place === 'Fort Talrus' && desk.popout.lit > 500;
 
+// TOUCH: the pads for a phone held sideways (platform/touchControls.ts). On
+// by default where the pointer is a finger — the desktop page above never
+// showed them — and every pad goes through the game's own handling: the
+// right pad's East moves the party as the arrow key does, Look and Escape
+// are the toolbar button and the key, a held finger on the terrain is the
+// right button's look, and the combat button swaps in the combat set.
+const touchCtx = await browser.newContext({ viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true });
+const tp = await touchCtx.newPage();
+tp.on('pageerror', (e) => errors.push(`touch pageerror: ${e.message}`));
+tp.on('console', (m) => { if (m.type() === 'error') errors.push(`touch console: ${m.text()}`); });
+await tp.addInitScript(() => {
+  try { localStorage.setItem('exile-js:prefs', JSON.stringify({ ShowInstantHelp: false })); } catch { /* default */ }
+});
+await tp.goto('http://localhost:5199/?scenario=valleydy&pace=1');
+await tp.waitForFunction(() => window.__univ && window.__dialogs && !window.__dialogs.active
+  && document.querySelector('#touch-pads')?.hidden === false, null, { timeout: 60000 });
+await tp.waitForTimeout(500);
+const tLoc = () => tp.evaluate(() => ({ ...window.__univ.party.townLoc }));
+const tLast = () => tp.evaluate(() => window.__univ.transcript.at(-1) ?? '');
+const touch = { desktopHidden: await page.evaluate(() => document.querySelector('#touch-pads')?.hidden !== false) };
+touch.townSet = await tp.evaluate(() => [...document.querySelectorAll('.touch-actions .touch-button')]
+  .map((b) => b.dataset.button ?? b.dataset.key).join(' '));
+const tFrom = await tLoc();
+await tp.tap('.touch-dpad .touch-button[title="East"]');
+await tp.waitForTimeout(600);
+const tTo = await tLoc();
+touch.moved = tTo.x === tFrom.x + 1 && tTo.y === tFrom.y;
+await tp.screenshot({ path: `${SHOTS}/60-touch.png` });
+await tp.tap('.touch-actions [data-button="LOOK"]');
+await tp.waitForTimeout(200);
+touch.look = await tLast();
+await tp.tap('.touch-actions [data-key="Escape"]');
+await tp.waitForTimeout(200);
+touch.esc = await tLast();
+// A long press two squares north of the party: a look, not a walk.
+const tSq = await tp.evaluate(() => {
+  const c = document.querySelector('#canvas'); const r = c.getBoundingClientRect(); const s = r.width / c.width;
+  const d = window.__desktop;
+  return { x: r.left + (d.gameX + 19 + 13 + 28 * 4 + 14) * s, y: r.top + (d.gameY + 7 + 13 + 36 * 2 + 18) * s };
+});
+const tCdp = await touchCtx.newCDPSession(tp);
+const tBefore = await tLoc();
+await tCdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [tSq] });
+await tp.waitForTimeout(700);
+await tCdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+await tp.waitForTimeout(400);
+touch.longPress = await tp.evaluate(() => window.__univ.transcript.slice(-4).some((l) => l.startsWith('You see')));
+const tAfter = await tLoc();
+touch.stayed = tAfter.x === tBefore.x && tAfter.y === tBefore.y;
+// If the square had a special on it, looking ran it; its dialog goes with Escape.
+for (let i = 0; i < 4 && await tp.evaluate(() => !!window.__dialogs.active); i++) {
+  await tp.keyboard.press('Escape');
+  await tp.waitForTimeout(300);
+}
+await tp.tap('.touch-actions [data-button="SWORD"]');
+await tp.waitForTimeout(1200);
+touch.combatSet = await tp.evaluate(() => [...document.querySelectorAll('.touch-actions .touch-button')]
+  .map((b) => b.dataset.button ?? b.dataset.key).join(' '));
+await tp.screenshot({ path: `${SHOTS}/61-touch-combat.png` });
+// View → Touch Controls turns them off, and says so with its tick.
+await tp.locator('#game-menu-bar .menu-item', { hasText: 'View' }).first().click();
+touch.menuTicked = (await tp.locator('#game-menu-bar .menu-item.open .dropdown li', { hasText: 'Touch Controls' }).first().textContent())?.startsWith('✓') === true;
+await tp.locator('#game-menu-bar .menu-item.open .dropdown li', { hasText: 'Touch Controls' }).first().click();
+await tp.waitForTimeout(200);
+touch.menuOff = await tp.evaluate(() => document.querySelector('#touch-pads').hidden === true);
+await touchCtx.close();
+// Upright, the game is covered and the phone asked to turn.
+const tallCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+const tall = await tallCtx.newPage();
+tall.on('pageerror', (e) => errors.push(`portrait pageerror: ${e.message}`));
+await tall.goto('http://localhost:5199/?scenario=valleydy&pace=1');
+await tall.waitForFunction(() => window.__univ && window.__dialogs && !window.__dialogs.active, null, { timeout: 60000 });
+touch.cover = await tall.evaluate(() => {
+  const r = document.querySelector('#rotate-cover').getBoundingClientRect();
+  return getComputedStyle(document.querySelector('#rotate-cover')).display === 'flex' && r.width === innerWidth && innerWidth === 390;
+});
+await tall.screenshot({ path: `${SHOTS}/62-touch-portrait.png` });
+await tallCtx.close();
+console.log('TOUCH:', JSON.stringify(touch));
+const touchOk = touch.desktopHidden && touch.townSet === 'MAGE PRIEST LOOK TALK HAND USE MAP SWORD w Escape' &&
+  touch.moved && touch.look.startsWith('Look:') && touch.esc.includes('Cancelled') &&
+  touch.longPress && touch.stayed &&
+  touch.combatSet === 'MAGE PRIEST LOOK SHIELD BAG WAIT SHOOT END ACT Escape' && touch.cover &&
+  touch.menuTicked && touch.menuOff;
+
 console.log('ERRORS:', errors.length ? errors.join(' | ') : 'none');
 await browser.close();
 
@@ -3276,7 +3361,7 @@ const ok =
   prefs.ledAfterClick === 'red' && prefs.lessWm === true && prefs.closed === true &&
   fields.typed === true && fields.fieldError === 'Error' &&
   fields.numAnswer === 75 && fields.textAnswer === 'hello' &&
-  desktopOk &&
+  desktopOk && touchOk &&
   errors.length === 0;
 console.log(ok ? 'PASS' : 'FAIL');
 process.exit(ok ? 0 : 1);

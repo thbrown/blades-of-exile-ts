@@ -673,6 +673,130 @@
         background: #6a8fc7;
         transition: width 0.15s ease-out;
       }
+      /* Touch controls (platform/touchControls.ts): two translucent pads
+         pinned to the sides, below the menu bar. On most phones held
+         sideways they sit in the space the scaled game leaves either side;
+         on a small one they overlap its edges, which is why they're
+         see-through. Only the buttons take touches — between them, the
+         canvas underneath still does. */
+      #touch-pads {
+        --pad: clamp(40px, 11.5vh, 56px);
+        position: fixed;
+        inset: 28px 0 0 0;
+        pointer-events: none;
+        z-index: 5;
+      }
+      #touch-pads[hidden] {
+        display: none;
+      }
+      .touch-pad {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        display: grid;
+        gap: 6px;
+      }
+      .touch-actions {
+        left: 8px;
+        grid-template-columns: repeat(2, var(--pad));
+      }
+      .touch-dpad {
+        right: 8px;
+        grid-template-columns: repeat(3, var(--pad));
+      }
+      .touch-button {
+        pointer-events: auto;
+        width: var(--pad);
+        height: var(--pad);
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(20, 20, 20, 0.38);
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        border-radius: 8px;
+        color: rgba(255, 255, 255, 0.85);
+        font: bold 22px 'BoEText', system-ui, sans-serif;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .touch-button:active {
+        background: rgba(255, 255, 255, 0.3);
+        border-color: rgba(255, 255, 255, 0.7);
+      }
+      .touch-button.centre {
+        font-size: 16px;
+      }
+      .touch-button.text {
+        font-size: 13px;
+      }
+      .touch-icon {
+        width: 64%;
+        image-rendering: pixelated;
+        opacity: 0.9;
+        pointer-events: none;
+      }
+      .touch-icon.wide {
+        width: 80%;
+      }
+      /* A finger on the canvas: no double-tap zoom, no text selection, no
+         iOS callout on a long press (which is the right button here). */
+      body.touch-controls #canvas {
+        touch-action: manipulation;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+      }
+      /* In portrait the game is too small to play: an iPhone can't be made
+         to turn, so it's asked to. Only in play — the main menu works
+         upright. */
+      #rotate-cover {
+        display: none;
+      }
+      @media (orientation: portrait) {
+        /* The game goes while it's asked: the menu bar alone is wider than a
+           phone upright, which would widen the page and the cover with it. */
+        body.touch-controls.playing:not(.starting) > :not(#rotate-cover) {
+          display: none !important;
+        }
+        body.touch-controls.playing:not(.starting) #rotate-cover {
+          display: flex;
+          position: fixed;
+          inset: 0;
+          z-index: 20;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 18px;
+          background:
+            linear-gradient(rgba(10, 10, 10, 0.55), rgba(10, 10, 10, 0.85)),
+            var(--menu-tile, none) 0 0 / 128px 128px repeat,
+            #1a1a1a;
+          color: #e8e8e8;
+          font: 15px 'BoEText', system-ui, sans-serif;
+          text-shadow: 0 1px 3px #000;
+        }
+      }
+      .rotate-phone {
+        width: 46px;
+        height: 80px;
+        border: 3px solid #e8e8e8;
+        border-radius: 8px;
+        animation: rotate-phone 2.4s ease-in-out infinite;
+      }
+      @keyframes rotate-phone {
+        0%, 25% { transform: rotate(0deg); }
+        55%, 100% { transform: rotate(-90deg); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .rotate-phone {
+          animation: none;
+          transform: rotate(-90deg);
+        }
+      }
     </style>
   </head>
   <body>
