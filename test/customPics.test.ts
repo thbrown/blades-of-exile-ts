@@ -77,5 +77,9 @@ describe('how many sheets a scenario needs', () => {
     expect(customSheetCount(scen)).toBe(1);
     scen.terTypes[0]!.picture = 1250;
     expect(customSheetCount(scen)).toBe(3);
+    // An item's 2000 is not an animation: 2126 is cell 26 of sheet 11.
+    scen.terTypes[0]!.picture = 0;
+    scen.scenItems[0]!.graphicNum = 2126;
+    expect(customSheetCount(scen)).toBe(12);
   });
 });

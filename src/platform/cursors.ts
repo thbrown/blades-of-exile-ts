@@ -29,8 +29,29 @@ const HOTSPOT: Record<CursorName, [number, number]> = {
 /** `arrow_curs[dy + 1][dx + 1]`. */
 const ARROWS: CursorName[][] = [['NW', 'N', 'NE'], ['W', 'wait', 'E'], ['SW', 'S', 'SE']];
 
+/**
+ * A scenario's own cursor images, by name, each with its hotspot: the
+ * exile-js scenario flag `cursors`, `name:x:y` comma-separated, naming the
+ * `cursors/NAME.png` the scenario ships. Exile III's are its Win16 cursors
+ * (tools/e3convert/cursors.ts). Only the pictures change; which cursor shows
+ * when is still `change_cursor`'s.
+ */
+let scenarioCursors = new Map<string, { url: string; x: number; y: number }>();
+
+/** Install a scenario's cursors from its flag; `url` finds each one's image. */
+export function setScenarioCursors(flag: string | undefined, url: (name: string) => string): void {
+  scenarioCursors = new Map();
+  for (const entry of (flag ?? '').split(',')) {
+    const [name, x, y] = entry.split(':');
+    if (!name || !(name in HOTSPOT)) continue;
+    scenarioCursors.set(name, { url: url(name), x: Number(x) || 0, y: Number(y) || 0 });
+  }
+}
+
 /** The CSS `cursor` value for one of them. */
 export function cursorCss(name: CursorName): string {
+  const own = scenarioCursors.get(name);
+  if (own) return `url(${own.url}) ${own.x} ${own.y}, auto`;
   const [x, y] = HOTSPOT[name];
   return `url(${import.meta.env.BASE_URL}data/cursors/${name}.gif) ${x} ${y}, auto`;
 }

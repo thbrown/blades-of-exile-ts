@@ -38,7 +38,21 @@ export class SoundPlayer {
   private pending = new Set<number>();
   enabled = true;
 
+  /**
+   * The scenario's own sounds, `sounds/SNDn.wav` in its package, each in
+   * place of the engine's sound `n`: OBoE pushes the scenario's `sounds`
+   * directory onto the resource path ahead of the game's
+   * (`ResMgr::sounds.pushPath`, fileio_scen.cpp). Exile III ships all its own.
+   */
+  private scenarioSounds = new Map<number, () => Promise<ArrayBuffer>>();
+
   constructor(private baseUrl = `${import.meta.env.BASE_URL}data/sounds/`) {}
+
+  /** Install a scenario's sounds, dropping any cached sound they replace. */
+  setScenarioSounds(sounds: Map<number, () => Promise<ArrayBuffer>>): void {
+    for (const n of [...this.scenarioSounds.keys(), ...sounds.keys()]) this.buffers.delete(n);
+    this.scenarioSounds = new Map(sounds);
+  }
 
   /** Call from a user-gesture handler; safe to call repeatedly. */
   async resume(): Promise<void> {
@@ -88,9 +102,15 @@ export class SoundPlayer {
     try {
       await this.resume();
       if (!this.ctx) return;
-      const resp = await fetch(`${this.baseUrl}SND${which}.wav`);
-      if (!resp.ok) return;
-      this.buffers.set(which, await this.ctx.decodeAudioData(await resp.arrayBuffer()));
+      const own = this.scenarioSounds.get(which);
+      let bytes: ArrayBuffer;
+      if (own) bytes = await own();
+      else {
+        const resp = await fetch(`${this.baseUrl}SND${which}.wav`);
+        if (!resp.ok) return;
+        bytes = await resp.arrayBuffer();
+      }
+      this.buffers.set(which, await this.ctx.decodeAudioData(bytes));
     } catch {
       // A missing or undecodable sound is not worth failing the game over.
     } finally {

@@ -11,7 +11,8 @@ import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { PartyPreset } from '../src/universe/player';
-import { Skill, Trait } from '../src/universe/skills';
+import { Skill, Status, Trait } from '../src/universe/skills';
+import { SUPPORTED_FEATURES, resetFeatureFlags, setFeatureFlags } from '../src/game/featureFlags';
 import { Universe } from '../src/universe/universe';
 
 const opcodes = buildOpcodeTable(
@@ -201,6 +202,66 @@ describe('locked doors', () => {
     expect(pc.curHealth).toBeLessThan(before);
     expect(before - pc.curHealth).toBeLessThanOrEqual(4);
     expect(session.univ.transcript.join(' | ')).toContain("Didn't work");
+  });
+
+  /**
+   * 1997's bash hurts with damage type 4, unblockable, and OBoE's with
+   * SPECIAL (DIVERGENCES.md §18). Invulnerability tells them apart: it stops
+   * everything but SPECIAL.
+   */
+  it("hurts as 1997's does under bash-door, and as OBoE's without it", async () => {
+    const hurt = async (): Promise<number> => {
+      const session = newSession();
+      const where = findTerrain(session, TerSpec.UNLOCKABLE)!;
+      const spec = session.univ.terrainType(session.univ.town!.record.terrain[where.x]![where.y]!);
+      const flag3 = spec.flag3;
+      spec.flag3 = 0;
+      const pc = session.univ.party.pcs[0]!;
+      pc.status[Status.INVULNERABLE] = 5;
+      const before = pc.curHealth;
+      try {
+        await session.bashDoor(where, 0);
+      } finally {
+        spec.flag3 = flag3;
+      }
+      return before - pc.curHealth;
+    };
+    expect(await hurt()).toBe(0);
+    const { 'bash-door': _, ...oboe } = SUPPORTED_FEATURES;
+    setFeatureFlags(oboe);
+    try {
+      expect(await hurt()).toBeGreaterThan(0);
+    } finally {
+      resetFeatureFlags();
+    }
+  });
+
+  /** Exile III's bash (`10d8:4224`): the lock breaks at or under flag3. */
+  it("breaks at or under flag3 under E3's bash flag", async () => {
+    const saved = scen.featureFlags['bash'];
+    scen.featureFlags['bash'] = 'exile3';
+    const bash = async (limit: number): Promise<string> => {
+      const session = newSession();
+      const where = findTerrain(session, TerSpec.UNLOCKABLE)!;
+      const spec = session.univ.terrainType(session.univ.town!.record.terrain[where.x]![where.y]!);
+      const [flag2, flag3] = [spec.flag2, spec.flag3];
+      // flag2 10 would stop BoE's bash outright; E3's ignores it.
+      spec.flag2 = 10;
+      spec.flag3 = limit;
+      try {
+        await session.bashDoor(where, 0);
+      } finally {
+        [spec.flag2, spec.flag3] = [flag2, flag3];
+      }
+      return session.univ.transcript.join(' | ');
+    };
+    try {
+      expect(await bash(1000)).toContain('lock breaks.');
+      expect(await bash(-1000)).toContain("Didn't work");
+    } finally {
+      if (saved === undefined) delete scen.featureFlags['bash'];
+      else scen.featureFlags['bash'] = saved;
+    }
   });
 
   it('picking a lock needs lockpicks equipped', async () => {

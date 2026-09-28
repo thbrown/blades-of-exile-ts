@@ -35,6 +35,10 @@ export interface LoadedPackage {
   scenario: Scenario;
   /** Custom graphics sheets — from the package's PNGs, or cut from the `.bmp`. */
   sheets: { png?: Uint8Array; rgba?: Rgba }[];
+  /** The package's own sounds, `sounds/SNDn.wav`, by `n`. */
+  sounds: Map<number, Uint8Array>;
+  /** Its own cursor images, `cursors/NAME.png`, by name (the `cursors` flag). */
+  cursors: Map<string, Uint8Array>;
   warnings: string[];
 }
 
@@ -98,7 +102,15 @@ export async function loadScenarioPackage(
     while (src.has(`graphics/sheet${sheets.length}.png`)) {
       sheets.push({ png: await src.getBinary(`graphics/sheet${sheets.length}.png`) });
     }
-    return { scenario, sheets, warnings: [] };
+    const sounds = new Map<number, Uint8Array>();
+    const cursors = new Map<string, Uint8Array>();
+    for (const path of src.paths()) {
+      const m = /^sounds\/SND(\d+)\.wav$/.exec(path);
+      if (m) sounds.set(Number(m[1]), await src.getBinary(path));
+      const c = /^cursors\/(\w+)\.png$/.exec(path);
+      if (c) cursors.set(c[1]!, await src.getBinary(path));
+    }
+    return { scenario, sheets, sounds, cursors, warnings: [] };
   }
   const { scenario, warnings } = loadLegacyScenario(pkg.data, pkg.id);
   let sheets: LoadedPackage['sheets'] = [];
@@ -111,7 +123,7 @@ export async function loadScenarioPackage(
       warnings.push(`The custom graphics could not be read (${err instanceof Error ? err.message : String(err)}).`);
     }
   }
-  return { scenario, sheets, warnings };
+  return { scenario, sheets, sounds: new Map(), cursors: new Map(), warnings };
 }
 
 /**

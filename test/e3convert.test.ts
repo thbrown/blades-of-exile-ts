@@ -155,6 +155,24 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(gold).toMatchObject({ code: 0, charges: 40, contained: true });
   });
 
+  it("burns on terrain 75, E3's lava, and not on 76", () => {
+    expect(scen.terTypes[75]).toMatchObject({ name: 'Lava', special: TerSpec.DAMAGING, flag1: 10, flag2: 8, flag3: 1 });
+    expect(scen.terTypes[76]?.special).toBe(TerSpec.BLOCKED_TO_MONSTERS);
+    expect(scen.featureFlags['lava']).toBe('exile3');
+    // Fort Emergence, where the play-test found it cold.
+    expect(scen.towns[21]!.terrain.some((col) => col.includes(75))).toBe(true);
+  });
+
+  it("enters E3's lit dungeons with the dungeon sound", () => {
+    expect(scen.featureFlags['dungeon-sound']).toBe('22-23,25-33,35-38,44-47,50-79,86,200');
+  });
+
+  it("gives E3's locked doors its bash limits", () => {
+    expect(scen.featureFlags['bash']).toBe('exile3');
+    // Stone and adobe break at 25 or under, basalt at 10; past picking, never.
+    expect([104, 136, 121, 105, 106].map((t) => scen.terTypes[t]?.flag3)).toEqual([25, 25, 10, 0, 0]);
+  });
+
   it('lays out 90 zones as a 9×10 world with their names', () => {
     expect(scen.outWidth).toBe(9);
     expect(scen.outHeight).toBe(10);
@@ -861,5 +879,15 @@ describe("Exile III converted in memory, as the browser does", () => {
     expect(loaded.scenario.title).toBe('Exile III: Ruined World');
     expect(loaded.scenario.towns.length).toBe(200);
     expect(loaded.sheets.length).toBe(12);
+    // E3's own hundred sounds, in place of the engine's; 16, entering a town,
+    // is one of the twelve that differ.
+    expect([...loaded.sounds.keys()].sort((a, b) => a - b)).toEqual([...Array(100).keys()]);
+    const boe16 = new Uint8Array(readFileSync(new URL('../public/data/sounds/SND16.wav', import.meta.url)));
+    expect(loaded.sounds.get(16)).not.toEqual(boe16);
+    expect(new TextDecoder().decode(loaded.sounds.get(16)!.subarray(0, 4))).toBe('RIFF');
+    // And its fourteen cursors, each one the flag names.
+    const named = loaded.scenario.featureFlags['cursors']!.split(',').map((e) => e.split(':')[0]);
+    expect([...loaded.cursors.keys()].sort()).toEqual([...named].sort());
+    expect(named).toHaveLength(14);
   }, 120000);
 });

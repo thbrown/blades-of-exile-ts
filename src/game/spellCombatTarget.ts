@@ -36,8 +36,8 @@ import { handleTargetMode } from './targetMode';
 import { drawTerrain, missileAnimFrames } from './textBar';
 import { getSummonMonster, summonMonster } from './monsterPlace';
 import { Attitude } from '../data/monster';
-import { animSettle } from './anim';
-import { runAMissile } from './missileAnim';
+import { animAt, animSettle } from './anim';
+import { holdForSound, runAMissile } from './missileAnim';
 import { boomAnimActive, boomSpace, runBoomAnim, startBoomAnim } from './booms';
 import { hitSpace } from './processFields';
 import { placeSpellPattern } from './spellPatterns';
@@ -434,9 +434,11 @@ export async function flyMissiles(
   const flying = boomAnimActive()
     ? queue.filter((m) => !locsEqual(m.dest, from)) : [];
   const flew = flying.length > 0;
+  const t0 = animAt();
   for (const m of flying) {
-    runAMissile(from, m.dest, m.type, m.pathType, sound, m.xAdj, m.yAdj, numSteps);
+    runAMissile(from, m.dest, m.type, m.pathType, sound, m.xAdj, m.yAdj, numSteps, false);
   }
+  if (flew) holdForSound(sound, t0);
   queue.length = 0;
   // **The whole volley flies on one `do_missile_anim`** (boe.combat.cpp:1419),
   // which is why the frames are counted here and not inside `runAMissile`:

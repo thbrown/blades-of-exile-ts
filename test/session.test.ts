@@ -1128,3 +1128,34 @@ describe('a party with nobody awake', () => {
     expect(await session.move(dir)).toBe(true);
   });
 });
+
+/**
+ * The town-entry sound: 95 in the dark, 16 in the light (1997's
+ * start_town_mode), and 95 for any town on the scenario's `dungeon-sound`
+ * list, as Exile III's `start_town_mode` (`10d8:0526`) has it.
+ */
+describe('the town-entry sound', () => {
+  it("plays the dungeon's for a lit town on the dungeon-sound list", () => {
+    const heard = (list: string | undefined): number[] => {
+      const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
+      const session = new GameSession(univ);
+      const played: number[] = [];
+      session.sound = { play: (n: number) => { played.push(n); } } as unknown as GameSession['sound'];
+      const saved = scen.featureFlags['dungeon-sound'];
+      if (list === undefined) delete scen.featureFlags['dungeon-sound'];
+      else scen.featureFlags['dungeon-sound'] = list;
+      try {
+        session.startTownMode(scen.startTown, FORCED_ENTRY, true);
+      } finally {
+        if (saved === undefined) delete scen.featureFlags['dungeon-sound'];
+        else scen.featureFlags['dungeon-sound'] = saved;
+      }
+      return played;
+    };
+    expect(scen.towns[scen.startTown]!.lightingType).toBe(0);
+    expect(heard(undefined)).toContain(16);
+    expect(heard(`${scen.startTown}`)).toContain(95);
+    expect(heard(`0-${scen.startTown + 1}`)).toContain(95);
+    expect(heard(`${scen.startTown + 1}-99`)).toContain(16);
+  });
+});

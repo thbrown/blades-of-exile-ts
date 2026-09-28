@@ -2877,6 +2877,10 @@ export class GameSession {
   private async damagingTerrain(
     spec: Terrain, where: Location, inCombatMove: boolean, town: boolean,
   ): Promise<void> {
+    if (this.univ.scenario.featureFlags['lava'] === 'exile3') {
+      await this.e3Lava(spec, inCombatMove, where, town);
+      return;
+    }
     if (this.terrainCantHarm(where, inCombatMove, town)) return;
     let damType: DamageType = spec.flag3 > 0 && spec.flag3 < DamageType.SPECIAL
       ? spec.flag3 as DamageType
@@ -2924,6 +2928,30 @@ export class GameSession {
       return;
     }
     await hitParty(this.univ, amount, damType);
+  }
+
+  /**
+   * Exile 3's lava, the move code's arm for terrain 75 (`10c0:15ab`), for the
+   * `lava` = `exile3` feature flag. The dice are the terrain's, as BoE's; what
+   * differs is the order and the words. Firewalk (party+0xc71) is tested
+   * first, says "You walk over the lava." and spends no roll, where BoE rolls
+   * and then discards it; then the boat, flight and boarding tests; then
+   * sound 63 and "  LAVA!" before the roll.
+   */
+  private async e3Lava(spec: Terrain, inCombatMove: boolean, where: Location, town: boolean): Promise<void> {
+    if ((this.univ.party.partyStatus[PartyStatus.FIREWALK] ?? 0) > 0) {
+      this.univ.addStringToBuf('You walk over the lava.');
+      return;
+    }
+    if (this.terrainCantHarm(where, inCombatMove, town)) return;
+    this.sound?.play(63);
+    this.univ.addStringToBuf('  LAVA!');
+    const amount = this.univ.rng.getRan(spec.flag2, 1, spec.flag1);
+    if (inCombatMove) {
+      await damagePc(this.univ, this.univ.currentPc, amount, DamageType.FIRE, Race.UNKNOWN);
+      return;
+    }
+    await hitParty(this.univ, amount, DamageType.FIRE);
   }
 
   /**
@@ -4764,6 +4792,23 @@ export class GameSession {
    * effect, and this port runs the chain rather than queueing it, so the only
    * place to say it is here.
    */
+  /**
+   * Towns that sound like a dungeon however they are lit: the scenario flag
+   * `dungeon-sound`, a comma-separated list of numbers and `a-b` ranges.
+   * Exile III's `start_town_mode` (`10d8:0526`) plays 95 for a dark town *or*
+   * one on its list of dungeon numbers, where BoE only asks the lighting.
+   */
+  private dungeonSoundTowns(): Set<number> {
+    const towns = new Set<number>();
+    for (const part of (this.univ.scenario.featureFlags['dungeon-sound'] ?? '').split(',')) {
+      if (part.trim() === '') continue;
+      const [a, b] = part.split('-').map(Number);
+      if (a === undefined || Number.isNaN(a)) continue;
+      for (let t = a; t <= (b ?? a); t++) towns.add(t);
+    }
+    return towns;
+  }
+
   startTownMode(townNum: number, entryDir: number, skipEntrySpecial = false): void {
     if (this.univ.scenario.towns[townNum] === undefined) {
       this.univ.addStringToBuf('The scenario tried to put you into a town that does not exist.');
@@ -4806,7 +4851,8 @@ export class GameSession {
     this.mode = GameMode.TOWN;
     this.univ.party.townNum = townNum;
     this.sound?.play(
-      record.lightingType === Lighting.LIGHT_NORMAL ? Snd.ENTER_TOWN : Snd.ENTER_DUNGEON,
+      record.lightingType === Lighting.LIGHT_NORMAL && !this.dungeonSoundTowns().has(townNum)
+        ? Snd.ENTER_TOWN : Snd.ENTER_DUNGEON,
     );
     const town = new CurTown(record, this.univ);
     town.entryDir = entryDir;

@@ -515,6 +515,56 @@ describe('damaging terrain', () => {
     expect(univ.party.pcs.every((pc) => pc.curHealth === 200)).toBe(true);
     expect(univ.transcript.join(' ')).toContain("It doesn't affect you.");
   });
+
+  /**
+   * Exile 3's lava (`10c0:15ab`, the `lava` = `exile3` flag): "  LAVA!" and
+   * the terrain's dice, and firewalk is tested before the roll, so it spends
+   * no draws and says "You walk over the lava." instead.
+   */
+  it("burns with E3's words under the lava flag, and firewalk spends no roll", async () => {
+    let found: { town: number; x: number; y: number } | null = null;
+    for (let t = 0; t < scen.towns.length && !found; t++) {
+      const town = scen.towns[t]!;
+      for (let x = 0; x < town.maxDim && !found; x++) {
+        for (let y = 0; y < town.maxDim; y++) {
+          const spec = scen.terTypes[town.terrain[x]![y]!]!;
+          if (spec.special === TerSpec.DAMAGING && spec.flag3 === DamageType.FIRE) {
+            found = { town: t, x, y };
+            break;
+          }
+        }
+      }
+    }
+    expect(found).not.toBeNull();
+    if (!found) return;
+    const saved = scen.featureFlags['lava'];
+    scen.featureFlags['lava'] = 'exile3';
+    try {
+      const walk = async (firewalk: number): Promise<{ univ: Universe; draws: number }> => {
+        const { univ, session } = newGame();
+        session.startTownMode(found.town, FORCED_ENTRY);
+        univ.party.pcs.forEach((pc) => {
+          pc.maxHealth = 200;
+          pc.curHealth = 200;
+          pc.items.forEach((_, i) => { pc.equip[i] = false; });
+        });
+        univ.party.partyStatus[PartyStatus.FIREWALK] = firewalk;
+        const before = univ.rng.gameCalls;
+        await session.moveTo({ x: found.x, y: found.y });
+        return { univ, draws: univ.rng.gameCalls - before };
+      };
+      const burnt = await walk(0);
+      expect(burnt.univ.transcript.join(' ')).toContain('LAVA!');
+      expect(burnt.univ.party.pcs.some((pc) => pc.curHealth < 200)).toBe(true);
+      const safe = await walk(5);
+      expect(safe.univ.transcript.join(' ')).toContain('You walk over the lava.');
+      expect(safe.univ.party.pcs.every((pc) => pc.curHealth === 200)).toBe(true);
+      expect(safe.draws).toBeLessThan(burnt.draws);
+    } finally {
+      if (saved === undefined) delete scen.featureFlags['lava'];
+      else scen.featureFlags['lava'] = saved;
+    }
+  });
 });
 
 /**

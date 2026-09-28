@@ -113,7 +113,7 @@ import { InputRouter } from './platform/input';
 import { Snd, SoundPlayer } from './platform/sound';
 import { installCustomSheets, loadCustomSheets } from './render/customPics';
 import { captureTerrainView } from './render/preview';
-import { changeCursor, cursorCss } from './platform/cursors';
+import { changeCursor, cursorCss, setScenarioCursors } from './platform/cursors';
 import { giveHelp, setGiveHelp, setLivingSound } from './universe/living';
 import { killPc } from './game/damage';
 import { BOE_HEIGHT, BOE_WIDTH, ToolbarButton } from './render/layout';
@@ -543,6 +543,8 @@ async function main(): Promise<void> {
   }
   let scen: Scenario;
   let packageSheets: LoadedPackage['sheets'] = [];
+  let packageSounds: LoadedPackage['sounds'] = new Map();
+  let packageCursors: LoadedPackage['cursors'] = new Map();
   let installedPreview = true;
   if (makingParty) {
     scen = noScenario();
@@ -554,6 +556,8 @@ async function main(): Promise<void> {
     const loaded = await loadScenarioPackage(installed, opcodes, addTotal);
     scen = loaded.scenario;
     packageSheets = loaded.sheets;
+    packageSounds = loaded.sounds;
+    packageCursors = loaded.cursors;
     for (const w of loaded.warnings) console.warn(`${name}: ${w}`);
     installedPreview = (await listInstalledScenarios()).find((s) => s.id === name)?.preview !== undefined;
   }
@@ -568,6 +572,25 @@ async function main(): Promise<void> {
   const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
   const session = new GameSession(univ);
   const sound = new SoundPlayer();
+  // The scenario's own sounds. A package lists its files; a bundled scenario
+  // is fetched file by file and can't be listed, and asking for a sound it
+  // doesn't have is a failed request the console reports. None of the
+  // bundled library ships sounds, and a served Exile III ships all hundred
+  // (tools/e3convert, `sounds/SND0–99.wav`), so that is the one asked.
+  const bytes = (b: Uint8Array): ArrayBuffer => b.slice().buffer as ArrayBuffer;
+  const scenSounds = new Map<number, () => Promise<ArrayBuffer>>();
+  if (!isBundled) {
+    for (const [n, wav] of packageSounds) scenSounds.set(n, () => Promise.resolve(bytes(wav)));
+  } else if (name === EXILE3_ID) {
+    const src = new FetchSource(bundledUrl);
+    for (let n = 0; n < 100; n++) scenSounds.set(n, async () => bytes(await src.getBinary(`sounds/SND${n}.wav`)));
+  }
+  sound.setScenarioSounds(scenSounds);
+  setScenarioCursors(scen.featureFlags['cursors'], (n) => {
+    const png = packageCursors.get(n);
+    return isBundled || !png ? `${bundledUrl}cursors/${n}.png`
+      : URL.createObjectURL(new Blob([bytes(png)], { type: 'image/png' }));
+  });
   session.sound = sound;
   // iLiving's effects call one_sound/play_sound from deep inside the damage
   // pipeline, where there's no session to hand; the C++ uses globals for the
@@ -2264,7 +2287,7 @@ async function main(): Promise<void> {
     // The router speaks desktop coordinates. Dialogs and the map live there;
     // everything else is on the game screen and is offset from it.
     onWheel: (dx, dy, deltaY) => dialogs.handleWheel(dx, dy, deltaY),
-    onClick: (dx, dy) => {
+    onClick: (dx, dy, right = false) => {
       if (dialogs.handleClick(dx, dy)) return;
       // The map is a separate window in the original, so a click that lands on
       // it never reaches the game screen underneath.
@@ -2446,6 +2469,17 @@ async function main(): Promise<void> {
         // relative to what's drawn, which is `center`.
         const from = session.isOutdoors ? univ.party.outLoc : session.center;
         const clicked = { x: from.x + cell.q - 4, y: from.y + cell.r - 4 };
+        // **A right-click looks** at the square, whatever else is going on
+        // (1997 ACTIONS.CPP's "Looking at something", `right_button == TRUE`;
+        // OBoE's "quick look", boe.actions.cpp:318). No mode, no prompt and
+        // no recentring: the view stays where it was. Not while aiming, where
+        // the click would have to go somewhere.
+        if (right && !isAiming() && (pending === null || pending === 'look') && !midAction()) {
+          void lookAt(clicked).then(() => { setStatus(); redraw(); });
+          setStatus();
+          redraw();
+          return;
+        }
         // Look, Talk and Use all act on the square you clicked — handle_talk
         // (boe.actions.cpp:818) takes the destination as given and only needs
         // line of sight. Moving is the one that steps once toward it. A missile

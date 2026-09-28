@@ -59,6 +59,9 @@ export const SUPPORTED_FEATURES: Readonly<Record<string, readonly string[]>> = {
   // exile-js's own too: a PC's saving roll against sleep and paralysis is
   // 1997's, against their level (DIVERGENCES.md §17).
   'sleep-save': ['1997'],
+  // exile-js's own too: a failed bash hurts as 1997's does, unblockable, and
+  // its roll runs 0–100 (DIVERGENCES.md §18).
+  'bash-door': ['1997'],
 };
 
 /** The set in force. Starts as everything this build supports. */

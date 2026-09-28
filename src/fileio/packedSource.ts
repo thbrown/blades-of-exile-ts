@@ -38,6 +38,11 @@ export class PackedSource implements ScenarioSource {
     return this.files.has(path);
   }
 
+  /** Every file in the package, relative to its root. */
+  paths(): string[] {
+    return [...this.files.keys()];
+  }
+
   getText(path: string): Promise<string> {
     return this.getBinary(path).then((data) => new TextDecoder().decode(data));
   }

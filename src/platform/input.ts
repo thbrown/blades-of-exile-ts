@@ -28,7 +28,8 @@ export const KEY_DIRECTIONS: Record<string, Direction> = {
 
 export interface InputHandlers {
   onMove(dir: Direction, key?: string): void;
-  onClick(x: number, y: number): void;
+  /** `right` is the right button: a quick look on the terrain view. */
+  onClick(x: number, y: number, right?: boolean): void;
   onKey(key: string, event: KeyboardEvent): void;
   /**
    * Where the pointer is, in canvas coordinates, or null once it leaves. The
@@ -63,7 +64,8 @@ export class InputRouter {
   attach(): void {
     window.addEventListener('keydown', (ev) => this.onKeyDown(ev));
     this.canvas.addEventListener('mousedown', (ev) => this.onMouseDown(ev));
-    // The original has no context menu; a right-click on the game is just a click.
+    // The original has no context menu. A right-click reaches `onClick` with
+    // `right` set, as 1997's WM_RBUTTONDOWN reaches `handle_action`.
     this.canvas.addEventListener('contextmenu', (ev) => ev.preventDefault());
     this.canvas.addEventListener('mousemove', (ev) => this.onMouseMove(ev));
     this.canvas.addEventListener('mouseleave', () => this.handlers.onHoverEnd?.());
@@ -99,7 +101,7 @@ export class InputRouter {
   private onMouseDown(ev: MouseEvent): void {
     if (this.blocked) return;
     const at = this.toCanvas(ev);
-    this.handlers.onClick(at.x, at.y);
+    this.handlers.onClick(at.x, at.y, ev.button === 2);
   }
 
   private onMouseMove(ev: MouseEvent): void {

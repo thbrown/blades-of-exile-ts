@@ -468,6 +468,33 @@ monsters' saving rolls, which have not been compared.
 
 ---
 
+### 18. A failed bash, and its roll (2026-09-27)
+
+**DECIDED: the original's in the live game, OBoE's in a replay**, through an
+exile-js feature flag, `bash-door` = `1997`, as in §14 and §17. 1997's
+`bash_door` (TOWN.CPP) rolls `get_ran(1,0,100)` and hurts a failed basher
+with `damage_pc(pc, get_ran(1,1,4), 4, -1)`: type 4, unblockable. OBoE's
+(boe.town.cpp:1204) rolls from 1 and hurts with `eDamageType::SPECIAL`.
+A player can tell. The blast is the unblockable one rather than the magic
+one, the sound is 5 rather than the plain thud, and invulnerability stops
+unblockable damage but not SPECIAL. Found in play-testing Exile III, whose
+bash (`10d8:4224`) is 1997's with its own odds (the scenario flag
+`bash` = `exile3`, `src/game/doors.ts`). The draw count is the same.
+
+---
+
+### 19. How long a missile holds the turn (2026-09-27)
+
+**DECIDED: the original's.** 1997's `do_missile_anim` (NEWGRAPH.CPP) and
+Exile III's (`exile3.c:46769`) note the time as they start and, after the
+flight, wait until `pause_len + 40` ms have gone by, `pause_len` being the
+launch sound's length: 660 for sound 11, 410 for 12, 200 for 14, 1000 for 53,
+500 for 64. OBoE's (boe.newgraph.cpp:347) has no such wait, so its fireball
+bursts before its sound has finished. Timing only, with no draws, so no flag:
+`holdForSound` in `src/game/missileAnim.ts`.
+
+---
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

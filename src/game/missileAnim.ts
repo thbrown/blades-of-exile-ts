@@ -20,7 +20,7 @@
 
 import { Location, betweenAnchorPoints } from '../core/location';
 import { livingSound } from '../universe/living';
-import { animBook, focusAt, paced } from './anim';
+import { animAt, animBook, focusAt, paced } from './anim';
 
 /**
  * How long a missile takes to cross, in ms. The C++ sleeps
@@ -43,6 +43,34 @@ const MISSILE_EXTRA = 2.5;
 
 export function missileMs(): number {
   return paced(MISSILE_MS * MISSILE_EXTRA);
+}
+
+/**
+ * **1997's hold, which OBoE dropped.** `do_missile_anim` (1997 NEWGRAPH.CPP,
+ * and Exile III's the same) notes the time as it starts, and after the flight
+ * spins until `pause_len + 40` ms have passed, `pause_len` being the length
+ * of the launch sound: 660 for sound 11 (fire: Fireball, Flame), 410 for 12,
+ * 200 for 14, 1000 for 53, 500 for 64. So a fireball lasts as long as its
+ * whoosh and the blast comes after it, where OBoE's lands mid-sound. A player
+ * can tell, and no die is rolled, so this port has the original's
+ * (DIVERGENCES.md's rule). Paced like everything else.
+ */
+const SOUND_HOLD_MS: Readonly<Record<number, number>> = { 11: 660, 12: 410, 14: 200, 53: 1000, 64: 500 };
+
+/** What a missile volley with sound `soundNum` holds the turn for, at least. */
+export function missileHoldMs(soundNum: number): number {
+  const hold = SOUND_HOLD_MS[soundNum];
+  return hold === undefined ? 0 : paced(hold + 40);
+}
+
+/**
+ * Book whatever of the hold is left, counted from `t0`, the timeline slot the
+ * flight (or the whole volley) started at, as 1997 counts from its
+ * `GetCurrentTime()`: an empty slot, so what follows waits for it.
+ */
+export function holdForSound(soundNum: number, t0: number): void {
+  const left = t0 + missileHoldMs(soundNum) - animAt();
+  if (left > 0) animBook(left);
 }
 
 /** One missile in flight. `store_missiles[i]` in the C++. */
@@ -113,6 +141,7 @@ export function runAMissile(
   xAdj = 0,
   yAdj = 0,
   len = 100,
+  hold = true,
 ): void {
   // do_missile_anim plays its sound before the flight loop, and before the
   // per-missile setup has thrown anything away (boe.newgraph.cpp:429) — so a
@@ -151,6 +180,8 @@ export function runAMissile(
   sink?.({
     from: { ...from }, dest: { ...dest }, type, pathType, xAdj, yAdj, len, started, dur,
   });
+  // A volley (`flyMissiles`) passes `hold` false and holds once for them all.
+  if (hold) holdForSound(soundNum, started);
 }
 
 /**

@@ -17,6 +17,7 @@ import { Player } from '../universe/player';
 import { Universe } from '../universe/universe';
 import { DamageType } from '../data/monster';
 import { damagePc } from './damage';
+import { hasFeatureFlag } from './featureFlags';
 
 export type DoorResult = 'opened' | 'failed' | 'no-picks' | 'wrong-terrain';
 
@@ -101,7 +102,19 @@ export function pickLock(
   return 'opened';
 }
 
-/** bash_door (boe.town.cpp:1204). */
+/**
+ * bash_door (boe.town.cpp:1204).
+ *
+ * Two flags change it. **`bash-door` = `1997`** (DIVERGENCES.md §18) is 1997's
+ * (TOWN.CPP): the roll runs 0–100 rather than 1–100, and a failure hurts with
+ * damage type 4, unblockable, where OBoE's is SPECIAL. A player sees it: the
+ * blast is the unblockable one and the sound is 5, not the thud. The draws
+ * are the same. **`bash` = `exile3`** is Exile III's (`10d8:4224`), a
+ * scenario's flag: the town's difficulty counts once, not four times, and a
+ * door breaks when the roll comes in at or under the terrain's flag3 (25, or
+ * 10 for basalt), not `flag2 × 15 + 40`. A door E3 won't let be bashed has
+ * flag3 0 and always fails, still hurting.
+ */
 export async function bashDoor(
   univ: Universe,
   where: Location,
@@ -114,8 +127,10 @@ export async function bashDoor(
   if (!pc) return 'wrong-terrain';
   const terrain = town.record.terrain[where.x]![where.y]!;
   const spec = univ.terrainType(terrain);
-  const r1 =
-    univ.rng.getRan(1, 1, 100) - 15 * pc.statAdj(Skill.STRENGTH) + town.record.difficulty * 4;
+  const e3 = univ.scenario.featureFlags['bash'] === 'exile3';
+  const original = e3 || hasFeatureFlag('bash-door', '1997');
+  const r1 = univ.rng.getRan(1, original ? 0 : 1, 100) - 15 * pc.statAdj(Skill.STRENGTH)
+    + town.record.difficulty * (e3 ? 1 : 4);
 
   if (spec.special !== TerSpec.UNLOCKABLE) {
     univ.addStringToBuf('  Wrong terrain type.');
@@ -123,18 +138,21 @@ export async function bashDoor(
   }
 
   const unlockAdjust = spec.flag2;
-  if (unlockAdjust >= 5 || r1 > unlockAdjust * 15 + 40 || spec.flag3 !== 1) {
+  const fails = e3 ? r1 > spec.flag3
+    : unlockAdjust >= 5 || r1 > unlockAdjust * 15 + 40 || spec.flag3 !== 1;
+  if (fails) {
     univ.addStringToBuf("  Didn't work.");
-    // A failed bash hurts: 1d4, unblockable — and it goes through the **real**
+    // A failed bash hurts: 1d4 — and it goes through the **real**
     // `damage_pc` (boe.town.cpp:1218), which this used to short-circuit into a
     // subtraction with an M5 marker on it. M5 has been closed since July, and
     // the shortcut was not just missing the death and the animation: even for
     // `SPECIAL` damage `damage_pc` rolls the party's luck, so the bash was one
     // `get_ran(1,1,100)` short every time it failed.
-    await damagePc(univ, pc, univ.rng.getRan(1, 1, 4), DamageType.SPECIAL, Race.UNKNOWN);
+    await damagePc(univ, pc, univ.rng.getRan(1, 1, 4),
+      original ? DamageType.UNBLOCKABLE : DamageType.SPECIAL, Race.UNKNOWN);
     return 'failed';
   }
-  univ.addStringToBuf('  Lock breaks.');
+  univ.addStringToBuf(e3 ? '  lock breaks.' : '  Lock breaks.');
   sound?.play(Snd.LOCK_OPENED);
   unlockDoor(univ, where, terrain);
   return 'opened';

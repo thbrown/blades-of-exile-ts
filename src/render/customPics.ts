@@ -62,13 +62,23 @@ export function customSheetCount(scen: Scenario): number {
   let max = -1;
   const note = (pic: number, span = 1): void => {
     if (pic >= 10000) return;
-    if (pic >= 2000) max = Math.max(max, pic - 2000 + 3);
-    else if (pic >= 1000) max = Math.max(max, pic - 1000 + span - 1);
+    if (pic >= 1000) max = Math.max(max, pic - 1000 + span - 1);
   };
-  for (const ter of scen.terTypes) note(ter.picture);
+  // Only a *terrain* of 2000 and up is animated (four cells from pic − 2000).
+  // Anything else of 2000 and up is plain custom picture pic − 1000 on a
+  // later sheet: Exile III's items are 2100–2199, sheet 11. Reading those as
+  // animations under-counted E3's sheets, sheet 11 never loaded, and every
+  // item drew blank.
+  for (const ter of scen.terTypes) {
+    if (ter.picture >= 2000 && ter.picture < 10000) max = Math.max(max, ter.picture - 2000 + 3);
+    else note(ter.picture);
+  }
   // A monster uses its width × height cells, twice over for its two facings
-  // and twice again for the attack pose.
-  for (const mon of scen.scenMonsters) note(mon.pictureNum, 4 * mon.xWidth * mon.yWidth);
+  // and twice again for the attack pose, from `pic % 1000` (`monsterGraphic`).
+  for (const mon of scen.scenMonsters) {
+    const pic = mon.pictureNum;
+    if (pic >= 1000 && pic < 10000) note(1000 + (pic % 1000), 4 * mon.xWidth * mon.yWidth);
+  }
   for (const item of scen.scenItems) note(item.graphicNum);
   return max < 0 ? 0 : Math.floor(max / 100) + 1;
 }

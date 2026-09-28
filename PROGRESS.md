@@ -13841,3 +13841,86 @@ All checks pass: 1,391 tests, both sweeps, verify-screen/e3/party.
 session starts here**: the rest of the TODO(E3-3) list, for example E3's item
 ability semantics (`tables.ts`), which the sleep protections and seven
 presets wait on.
+
+### E3 play-test notes, third round (2026-09-27)
+
+The user's list, verbatim, then what each turned out to be as it is worked
+through (unticked = not looked at yet):
+
+- [x] **lava doesn't damage PCs in Fort Emergence.** The converter gave
+      E3's lava no special at all. E3's move code has an arm for terrain 75
+      only (`10c0:15ab`; 76, the other "Lava", never burns): firewalk
+      (party+0xc71) says "You walk over the lava." with no roll, then the
+      boat/flight/boarding tests, sound 63, "  LAVA!", `get_ran(8,1,10)` fire
+      to the party (the moving PC in combat). 75 is now BoE `dmg` 10/8/fire,
+      and a new scenario flag **`lava` = `exile3`** gives E3's order and words
+      (`GameSession.e3Lava`). Cost: blockage 2 is gone from 75, so a
+      fire-immune monster can cross it where E3 keeps all monsters off.
+- [x] **icons on the pick-up-items screen / "looking in a container" shows
+      no picture for each item** (one issue, and bigger than that screen).
+      `customSheetCount` read every picture of 2000+ as animated terrain,
+      items included. E3's items are 2100–2149 (sheet 11), so E3 loaded 11
+      sheets, and every item drew blank everywhere: pack, floor, shops,
+      dialogs. Now only a terrain's 2000 is an animation, a monster counts
+      from `pic % 1000` (its thousands are its size) and an item from
+      `pic − 1000`.
+- [x] **bash door sound/damage are different.** Two things. OBoE hurts a
+      failed basher with SPECIAL (magic blast, thud); 1997 and E3 with type 4,
+      unblockable (its blast, sound 5). New exile-js flag **`bash-door` =
+      `1997`** (DIVERGENCES.md §18), which also rolls 0–100. And E3's odds
+      (`10d8:4224`) are its own: difficulty ×1 not ×4, and the lock breaks at
+      25 or under (10 for the basalt door, 121), never for the doors past
+      picking. Scenario flag **`bash` = `exile3`**; the converter writes the
+      limit into the `unlock` terrain's flag3. E3's *pick* is still BoE's
+      (`TODO(E3-3)` in `emit.ts`).
+- [x] **Fireball is too fast.** 1997's `do_missile_anim`, and E3's the
+      same (`exile3.c:46769`), holds each shot until `pause_len + 40` ms from
+      its start, `pause_len` being the launch sound's length: 660 for sound
+      11 (the fire spells), 410 for 12, 200 for 14, 1000 for 53, 500 for 64.
+      OBoE dropped the hold, so a fireball's blast landed mid-whoosh after
+      the port's 450 ms flight. `holdForSound` (`missileAnim.ts`) books the
+      rest of the hold, once per volley (DIVERGENCES.md §19). The flight
+      itself is unchanged; if it still feels quick, `MISSILE_EXTRA` is the
+      knob.
+- [ ] **flee area is white — not reproduced, asked the user which screen.**
+      Looked at: an E3 outdoor fight (arena and its view edges, grass
+      arena at (8,9)), Shayder's town fight (`verify-e3`'s thugs shot). No
+      white anywhere. Still to try: the arena beyond the E3 east wall (x > 32)
+      and an E3 town fight near the map's edge.
+- [x] **wrong sound on town enter.** Every sound was BoE's: E3's own, 100
+      RIFF WAVs in EXILE3.EXE (type 100, resource k + 1 = sound k), were
+      never used. Twelve differ from BoE's: 7, 13, **16 (entering a town)**,
+      21, 22, 23, 34, **57 (the message box)**, 78 and 79 (swapped), 90 and
+      99. The converter writes all hundred as `sounds/SNDn.wav`, which is
+      OBoE's layout (a scenario's `sounds/` goes ahead of the game's on the
+      resource path), and `SoundPlayer.setScenarioSounds` plays them in place
+      of the engine's. A package's are listed from the tar; a *bundled*
+      scenario can't be listed, so main.ts asks for 0–99 only for a served
+      Exile III. Separately, E3's `start_town_mode` (`10d8:0526`) plays the
+      dungeon sound (95) for a lit town on a list of dungeon numbers as well
+      as for a dark one: scenario flag **`dungeon-sound`** =
+      `22-23,25-33,35-38,44-47,50-79,86,200`.
+- [x] **right click should "look".** Not a divergence after all: 1997
+      Windows (`WM_RBUTTONDOWN` → `handle_action` with `right_button`,
+      ACTIONS.CPP "Looking at something") and OBoE ("quick look",
+      boe.actions.cpp:318) both look at a right-clicked square, with no look
+      mode and no recentring. The port dropped the button. `InputRouter`
+      passes `right` to `onClick` now, and main.ts looks at the square unless
+      something is being aimed. A right-click anywhere else is still a click.
+- [x] **mouse cursors are still BoE's, not Exile 3's.** EXILE3.EXE has 14
+      Win16 cursors (RT_GROUP_CURSOR, numbered as 1997's `LoadCursor` calls:
+      arrows `100 + dx + 10·dy`, sword 120, key 122, target 124, talk 126,
+      look 129). `tools/e3convert/cursors.ts` decodes the 1-bit AND/XOR masks
+      to `cursors/NAME.png`, and the exile-js scenario flag **`cursors`**
+      (`name:x:y,…`) names them with their hotspots, so a served scenario
+      needs no directory listing. `setScenarioCursors` (`platform/cursors.ts`)
+      swaps only the pictures; which cursor shows when is still OBoE's
+      `change_cursor`. E3 has no boot or drop cursor, so those two stay BoE's.
+      1997's `change_cursor` differs in small ways (the sword, not the wait
+      cursor, over the party; the key for bash), which have not been ported.
+
+All checks pass: 1,400 tests, both sweeps, verify-screen/e3/party, and the
+corpus is unchanged at 51 of 87, 1,231,440 draws (the new behaviour sits
+behind flags a recording never lists, or spends no draws). **Next session
+starts here**: the white flee area, once the user says which screen; then
+the rest of the TODO(E3-3) list.

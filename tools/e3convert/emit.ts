@@ -12,12 +12,14 @@ import { sightingScripts } from './towns/sightings';
 import { e3JobStrings } from './jobs';
 import { E3_JOB_TARGET_PERSONALITY } from '../../src/game/e3Jobs';
 import { encodePng } from './png';
+import { readE3Cursors, type E3Cursor } from './cursors';
 import { convertItem, convertMonster, convertPresetField } from '../../src/fileio/legacy/convert';
 import { buildItemSheet, buildMonsterSheets, buildTerrainSheets, e3TerrainPic } from './graphics';
-import { readDialogs, readNeResources, readNeSegment, readStringTable } from './ne';
+import { readDialogs, readNeResources, readNeSegment, readSounds, readStringTable } from './ne';
 import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor, type E3OutWandering } from './outdoor';
 import { ItemAbil } from '../../src/data/item';
 import { FieldType } from '../../src/data/fields';
+import { DamageType } from '../../src/data/monster';
 import { E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3ItemAbilities, readE3Items, readE3Monsters, readE3RoadJoins, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3PresetItem, type E3Town } from './town';
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
@@ -99,6 +101,13 @@ const E3_SPECIAL_ITEMS = 50;
 const E3_HOSTILE_MOVERS = '12-20,91-98,149-154';
 const E3_BOOSTED_GUARDS = [91, 92];
 
+/**
+ * The towns E3 enters with the dungeon sound (95) however they are lit:
+ * `start_town_mode`'s list (`10d8:0526`–`05d1`). 200 is on it though no town
+ * has that number.
+ */
+const E3_DUNGEON_SOUND = '22-23,25-33,35-38,44-47,50-79,86,200';
+
 const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="no" ?>\n';
 
 /** One `.map` file: rows are y, columns x, with `marks` appended after a tile's number. */
@@ -144,6 +153,13 @@ function specialXml(t: E3TerrainType, id: number, hiddenAs: Map<number, number>)
   const [type, f1, f2, f3] = !sp && id >= 217 && id <= 231 ? ['town', hiddenAs.get(id) ?? id, 0, 0]
     : !sp && E3_CONTAINERS.has(id) ? ['box', -1, 0, 0]
     : !sp && t.pic === 143 ? ['bed', e3TerrainPic(230), 0, 0]
+    // Lava burns: the move code's arm for terrain 75 (`10c0:15ab`) is BoE's
+    // DAMAGING, `get_ran(8,1,10)` fire (flag1 10 sides, flag2 8 dice, flag3
+    // fire), sparing a party that flies, sails or is boarding a boat. Terrain
+    // 76, the other "Lava", has no arm and never burns. The E3 wording and
+    // order are the `lava` feature flag's. This gives up blockage 2: a
+    // fire-immune monster may now cross it, where E3 keeps every monster off.
+    : !sp && id === 75 ? ['dmg', 10, 8, DamageType.FIRE]
     // E3's blockage 2 keeps monsters off (lava, portals, town entrances);
     // BoE's only means that for counters (`is_special`), so the special says it.
     : !sp && t.blockage === 2 ? ['monst-block', -1, 0, 0]
@@ -151,10 +167,13 @@ function specialXml(t: E3TerrainType, id: number, hiddenAs: Map<number, number>)
     : sp.kind === 'sign' ? ['sign', 0, 0, 0]
     : sp.kind === 'belt' ? ['belt', sp.dir, 0, 0]
     : sp.kind === 'step-change' ? ['step-change', sp.to, sp.sound, 0]
-    // BoE's `unlock`: flag2 is the difficulty, 5 and up beyond picking and
-    // bashing; flag3 1 lets it be bashed. TODO(E3-3): E3 rolls its own pick
-    // (`FUN_10d8_3f67`: success over 35 on its roll), not BoE's formula.
-    : ['unlock', sp.to, sp.pickable ? 1 : 10, sp.pickable ? 1 : 0];
+    // BoE's `unlock`: flag2 is the difficulty, 5 and up beyond picking.
+    // flag3 is E3's bash limit, under the `bash` = `exile3` flag: E3's bash
+    // (`10d8:4224`) breaks the lock at or under 25, or 10 for the basalt door
+    // (121), and never for the doors past picking. TODO(E3-3): E3 rolls its
+    // own pick (`FUN_10d8_3f67`: success over 35 on its roll), not BoE's
+    // formula.
+    : ['unlock', sp.to, sp.pickable ? 1 : 10, !sp.pickable ? 0 : id === 121 ? 10 : 25];
   return `        <special>
             <type>${type}</type>
             <flag>${f1}</flag>
@@ -539,7 +558,7 @@ function scenarioXml(
   start: { town: number; loc: { x: number; y: number } },
   outStart: { sector: { x: number; y: number }; loc: { x: number; y: number } },
   shops: Shop[], specialItems: SpecItem[], specStrings: string[], newDay: number, roadJoins: number[],
-  jobBase: number, journal: string[],
+  jobBase: number, journal: string[], cursors: E3Cursor[],
 ): string {
   return `${XML_HEAD}<scenario boes="2.0.0">
     <title>Exile III: Ruined World</title>
@@ -560,6 +579,10 @@ function scenarioXml(
         <hostile-movers>${E3_HOSTILE_MOVERS}</hostile-movers>
         <town-timers>repeat</town-timers>
         <inn>exile3</inn>
+        <lava>exile3</lava>
+        <bash>exile3</bash>
+        <dungeon-sound>${E3_DUNGEON_SOUND}</dungeon-sound>
+        <cursors>${cursors.map((c) => `${c.name}:${c.hotspot.x}:${c.hotspot.y}`).join(',')}</cursors>
     </feature-flags>
     <text>
         <teaser>The surface world is dying. Find out why.</teaser>
@@ -809,9 +832,17 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   write('scenario.spec', scen.spec);
   // Last, since the places' scripts can add shops of their own.
   shops.push(...talk.shops);
-  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, e3JournalStrings((id) => strings.get(id) ?? '')));
+  const cursors = readE3Cursors(resources);
+  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, e3JournalStrings((id) => strings.get(id) ?? ''), cursors));
   const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(read)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
+  // E3's own sounds, which a scenario's `sounds/SNDn.wav` puts in place of
+  // the engine's (OBoE's `ResMgr::sounds.pushPath`). Resource k + 1 is sound
+  // k: `play_sound(n)` loads resource n + 1. Twelve of the hundred are not
+  // BoE's: 7, 13, 16 (entering a town), 21, 22, 23, 34, 57 (the message box),
+  // 78, 79 (swapped), 90 and 99.
+  for (const [id, wav] of readSounds(resources)) write(`sounds/SND${id - 1}.wav`, wav);
+  for (const c of cursors) write(`cursors/${c.name}.png`, encodePng(c.image));
   progress(1);
   return { sectors: zones.length, towns: towns.length, sheets: sheets.length };
 }
