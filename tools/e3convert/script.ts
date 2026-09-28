@@ -103,6 +103,15 @@ export interface ScriptSource {
   shop?: (type: E3ShopType, first: number, last: number, title: string) => number;
 }
 
+/** The dialog tag a block message shows: see `SpecBuilder.msg`. */
+export const MSG_PIC = 0x2c4;
+/** Anaximander's reports, block 14 (`FUN_1008_386f`), show his sprite. */
+export const ANAX_PIC = 0x1af;
+
+function msgPic(block: number): number {
+  return block === 0xe ? ANAX_PIC : MSG_PIC;
+}
+
 export class SpecBuilder {
   private nodes: string[] = [];
   readonly strings: string[] = [];
@@ -177,14 +186,25 @@ export class SpecBuilder {
 
   // ------------------------------------------------------------ steps
 
-  /** `FUN_1008_37de` / `FUN_1008_3812`: one or two strings of a block. */
-  msg(block: number, a: number, b = 0): Step {
-    return (next) => this.node('disp-msg', { msg: [this.e3(block, a), b > 0 ? this.e3(block, b) : -1] }, next);
+  /**
+   * `FUN_1008_37de` / `FUN_1008_3812`: one or two strings of a block. The
+   * picture is a dialog tag, and the message routine chooses it: dialog
+   * picture 8 (`0x2c4`) for these, and Anaximander's sprite (`0x1af`) for
+   * his reports, block 14 (`FUN_1008_386f`). A few scripts call the dialog
+   * directly with a picture of their own, and pass it. The engine shows it
+   * under the `message-pics` flag.
+   */
+  msg(block: number, a: number, b = 0, pic = msgPic(block)): Step {
+    return (next) => this.node('disp-msg', {
+      msg: [this.e3(block, a), b > 0 ? this.e3(block, b) : -1], pic: this.src.dialogPic?.(pic),
+    }, next);
   }
 
-  /** `FUN_10e0_0044`: the same, once, marked by `flag`. */
+  /** `FUN_10e0_0044`: the same, once, marked by `flag` — through `FUN_1008_3812`, so picture 8. */
   onceMsg(flag: Flag, block: number, a: number, b = 0): Step {
-    return (next) => this.node('once-disp-msg', { sdf: flag, msg: [this.e3(block, a), b > 0 ? this.e3(block, b) : -1] }, next);
+    return (next) => this.node('once-disp-msg', {
+      sdf: flag, msg: [this.e3(block, a), b > 0 ? this.e3(block, b) : -1], pic: this.src.dialogPic?.(msgPic(block)),
+    }, next);
   }
 
   /**

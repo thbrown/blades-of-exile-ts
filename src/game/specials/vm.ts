@@ -339,6 +339,15 @@ export async function handleMessage(
 ): Promise<void> {
   const node = ctx.curSpec;
   // A node with no picture of its own borrows the scenario's title picture.
+  // **`message-pics` = `exile3`** is a scenario's flag: a plain message node
+  // shows its own picture instead, as every E3 message does — its message
+  // routines each pass one (`FUN_1008_37de`'s dialog picture 8, Anaximander's
+  // sprite 31), where OBoE's DISPLAY_MSG never reads the node's.
+  if (pic === -1 && univ.scenario.featureFlags['message-pics'] === 'exile3'
+    && (node.type === SpecType.DISPLAY_MSG || node.type === SpecType.ONCE_DISPLAY_MSG)) {
+    pic = node.pic;
+    picType = node.pictype;
+  }
   if (pic === -1) {
     pic = univ.scenario.introPic;
     picType = PIC_SCEN;

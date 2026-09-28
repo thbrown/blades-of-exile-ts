@@ -91,6 +91,14 @@ const LABEL_SIZE = 12;
  */
 const UNSEEN_PATTERN = 3;
 
+/**
+ * Exile III's look (`backgrounds` = `exile3`): its light panel art, which
+ * wants black text where OBoE's dark marble has white and yellow.
+ */
+function e3Look(session: GameSession): boolean {
+  return session.univ.scenario.featureFlags['backgrounds'] === 'exile3';
+}
+
 /** Every image the main screen needs, beyond the terrain/monster sheets. */
 export const CHROME_SHEETS = [
   'terscreen',
@@ -1290,17 +1298,15 @@ export class Screen {
   private drawStatusBar(session: GameSession): void {
     const rect = WIN_RECTS.status;
     const inner: UiRect = { top: rect.top + 4, left: rect.left + 5, bottom: rect.bottom, right: rect.right - 5 };
-    drawString(this.ctx, inner, statusBarText(session), {
-      font: 'bold',
-      size: 12,
-      colour: Colours.WHITE,
-    });
+    // Black on E3's light TEXTBAR.BMP.
+    const colour = e3Look(session) ? Colours.BLACK : Colours.WHITE;
+    drawString(this.ctx, inner, statusBarText(session), { font: 'bold', size: 12, colour });
     // `put_text_bar` (boe.graphics.cpp:773): the recast hint on the right in
     // combat; otherwise, while the monsters aren't going, the party's own
     // status icons, laid right to left 15 pixels apart.
     const hint = isCombat(session.mode) ? session.recastHint : '';
     if (hint) {
-      drawStringRight(this.ctx, inner, hint, { font: 'bold', size: 12, colour: Colours.WHITE });
+      drawStringRight(this.ctx, inner, hint, { font: 'bold', size: 12, colour });
     } else if (!session.monstersGoing) {
       const icons = this.store.get('staticons');
       let left = inner.right - 15;
@@ -1336,15 +1342,20 @@ export class Screen {
       right: panel.left + rect.right,
     });
 
-    const label = { font: 'bold', size: 10, colour: Colours.YELLOW } as const;
-    drawString(this.ctx, at(PC_PANEL.titles[0]!), 'Party stats:', label);
-    drawString(this.ctx, at(PC_PANEL.titles[1]!), 'HP:', label);
-    drawString(this.ctx, at(PC_PANEL.titles[2]!), 'SP:', label);
-    drawString(this.ctx, at(PC_PANEL.foodLabel), 'Food:', label);
-    drawString(this.ctx, at(PC_PANEL.goldLabel), 'Gold:', label);
-    drawString(this.ctx, at(PC_PANEL.dayLabel), 'Day:', label);
+    // E3's panel (STATAREA.BMP) has its labels painted in, in black, as
+    // 1997's does; OBoE's is bare and they are drawn in yellow.
+    const e3 = e3Look(session);
+    if (!e3) {
+      const label = { font: 'bold', size: 10, colour: Colours.YELLOW } as const;
+      drawString(this.ctx, at(PC_PANEL.titles[0]!), 'Party stats:', label);
+      drawString(this.ctx, at(PC_PANEL.titles[1]!), 'HP:', label);
+      drawString(this.ctx, at(PC_PANEL.titles[2]!), 'SP:', label);
+      drawString(this.ctx, at(PC_PANEL.foodLabel), 'Food:', label);
+      drawString(this.ctx, at(PC_PANEL.goldLabel), 'Gold:', label);
+      drawString(this.ctx, at(PC_PANEL.dayLabel), 'Day:', label);
+    }
 
-    const value = { size: 12, colour: Colours.WHITE } as const;
+    const value = { size: 12, colour: e3 ? Colours.BLACK : Colours.WHITE } as const;
     drawString(this.ctx, at(PC_PANEL.foodValue), String(univ.party.food), value);
     drawString(this.ctx, at(PC_PANEL.goldValue), String(univ.party.gold), value);
     drawString(this.ctx, at(PC_PANEL.dayValue), String(univ.party.calcDay()), value);
@@ -1495,7 +1506,8 @@ export class Screen {
     drawStringEllipsis(this.ctx, at(ITEM_PANEL.title), title, {
       font: 'bold',
       size: 10,
-      colour: Colours.WHITE,
+      // Black on E3's light bar.
+      colour: e3Look(session) ? Colours.BLACK : Colours.WHITE,
     });
 
     // The scrollbar is a control on the main window, not part of the panel, so
@@ -1723,6 +1735,8 @@ export class Screen {
           inner.left, inner.top, width(inner), height(inner),
         );
       }
+      // E3's panel has its numerals painted in.
+      if (e3Look(session)) continue;
       // The numeral sits to the left of the portrait; "6" is nudged an extra
       // pixel down because it has an ascender in this font.
       const numeral = String(i + 1);

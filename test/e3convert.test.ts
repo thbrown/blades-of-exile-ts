@@ -168,7 +168,7 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
   });
 
   it("gives each dialog E3's own picture", async () => {
-    const { e3DialogPic, E3_SHEET_OVERRIDES } = await import('../tools/e3convert/emit');
+    const { e3DialogPic, E3_PANELS, E3_SHEET_OVERRIDES } = await import('../tools/e3convert/emit');
     const { e3TerrainPic } = await import('../tools/e3convert/graphics');
     const { EXILE3_SHEET_OVERRIDES } = await import('../src/platform/exile3');
     const sprites = new Map([[12, 1468]]);
@@ -177,7 +177,8 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(e3DialogPic(38, sprites)).toEqual([e3TerrainPic(38), 1]);
     expect(e3DialogPic(412, sprites)).toEqual([1468, 3]);
     expect(e3DialogPic(905, sprites)).toBeUndefined();
-    expect(EXILE3_SHEET_OVERRIDES).toEqual([...E3_SHEET_OVERRIDES.map(([n]) => n), 'pixpats']);
+    expect(EXILE3_SHEET_OVERRIDES).toEqual([
+      ...E3_SHEET_OVERRIDES.map(([n]) => n), 'pixpats', ...E3_PANELS.map(([n]) => n), 'textbar']);
     // The nodes carry them: dialog pictures, E3 terrain and E3 sprites. (No
     // dialog with a face has been transcribed yet.)
     const kinds = new Set<number>();
@@ -938,8 +939,9 @@ describe("Exile III converted in memory, as the browser does", () => {
     const boe16 = new Uint8Array(readFileSync(new URL('../public/data/sounds/SND16.wav', import.meta.url)));
     expect(loaded.sounds.get(16)).not.toEqual(boe16);
     expect(new TextDecoder().decode(loaded.sounds.get(16)!.subarray(0, 4))).toBe('RIFF');
-    // Its dialog pictures and talking faces, over the game's.
-    expect([...loaded.overrides.keys()].sort()).toEqual(['dlogpics', 'pixpats', 'talkportraits']);
+    // Its dialog pictures, talking faces, patterns and panels, over the game's.
+    expect([...loaded.overrides.keys()].sort()).toEqual(
+      ['dlogpics', 'inventory', 'pixpats', 'statarea', 'talkportraits', 'textbar', 'transcript']);
     // And its fourteen cursors, each one the flag names.
     const named = loaded.scenario.featureFlags['cursors']!.split(',').map((e) => e.split(':')[0]);
     expect([...loaded.cursors.keys()].sort()).toEqual([...named].sort());

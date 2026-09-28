@@ -14063,6 +14063,28 @@ the rest of the TODO(E3-3) list.
         a right-click elsewhere in the picker does nothing, where before it
         counted as a left-click. `test/castDialog.test.ts`.
 
+- [x] **Message pictures (2026-09-28).** Every plain message showed the
+      scenario's card icon (OBoE's `handle_message` falls back to
+      `intro_pic`, and its DISPLAY_MSG never reads the node's picture). E3's
+      message routines each pass one to the dialog (`FUN_1008_3b3f`'s 8th
+      argument): `0x2c4`, dialog picture 8, from `FUN_1008_37de`/`3812` (and
+      so the once-only `FUN_10e0_0044`); `0x1af`, sprite 31, from
+      Anaximander's `FUN_1008_386f` (block 14) and one direct call in the
+      fort (block 0x36, 0x11). The converter now puts it on each `disp-msg`
+      / `once-disp-msg`, and the new scenario flag **`message-pics` =
+      `exile3`** has `handleMessage` show a message node's own picture. Not
+      yet mapped: the direct calls with other pictures (`0x2d4` block 10,
+      `0x2bf` block 0x13, `0xa8` block 0x3b), if any are transcribed.
+- [x] **E3's panel art (2026-09-28).** STATAREA.BMP is the three right-hand
+      panels stacked, cut apart as 1997's `load_main_screen` does
+      (GRAPHICS.CPP:766) into `statarea`, `inventory` and `transcript`
+      overrides; TEXTBAR.BMP becomes `textbar`. They are light grey with the
+      labels painted in, so under `backgrounds` = `exile3` the screen skips
+      the yellow party-stats labels and the inventory's yellow numerals, and
+      draws the food/gold/day values, the inventory title and the status bar
+      in black. BUTTONS.BMP is laid out differently from OBoE's `buttons.png`
+      and the toolbar already matched, so it is left alone.
+
 All checks pass: 1,403 tests, both sweeps, verify-screen/e3/party, corpus
 unchanged at 51 of 87, 1,231,440 draws. **Next session starts here**: E3's
 remaining screen chrome (see "Not done" above), then the TODO(E3-3) list.

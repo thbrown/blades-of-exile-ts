@@ -6,7 +6,7 @@
  */
 
 import type { EntranceMark } from '../specials';
-import { partyFlag as f, partySpecItem, townSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
+import { ANAX_PIC, partyFlag as f, partySpecItem, townSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
 
 const TOWN = 21;
 /** The fort's message block, `21 / 5 + 52`. */
@@ -107,7 +107,7 @@ function anaximander(b: SpecBuilder): Step[] {
       b.msg(ANAX, 0x39, 0x3a), b.setFlag(f(0xc9c), 0), b.giveSpecItem(AMULET),
     ])]),
     report(0xc9e, 0x3c, 0x3d),
-    b.ifFlagEq(f(0xac), 3, [b.ifFlagEq(f(0x10f), 0, [b.msg(0x36, 0x11), b.setFlag(f(0x10f), 1)])]),
+    b.ifFlagEq(f(0xac), 3, [b.ifFlagEq(f(0x10f), 0, [b.msg(0x36, 0x11, 0, ANAX_PIC), b.setFlag(f(0x10f), 1)])]),
     b.ifFlagEq(f(0x105), 1, [b.msg(0x36, 0xb), b.setFlag(f(0x105), 2)]),
   ];
 }

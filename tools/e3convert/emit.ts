@@ -136,6 +136,29 @@ function buildE3Patterns(read: E3Read): Rgba {
 }
 
 /**
+ * E3's three panels on the right, which STATAREA.BMP holds one above the
+ * other and 1997's `load_main_screen` (GRAPHICS.CPP:766) cuts apart: the
+ * party's stats (rows 0-116), the items (116-260) and the transcript
+ * (260-398, 256 wide) — OBoE's statarea, inventory and transcript. E3's are
+ * light, with their labels painted in.
+ */
+export const E3_PANELS: readonly [string, number, number, number][] = [
+  ['statarea', 0, 116, 271], ['inventory', 116, 260, 271], ['transcript', 260, 398, 256],
+];
+
+function e3Panels(read: E3Read): [string, Rgba][] {
+  const all = decodeBmp(read('STATAREA.BMP'));
+  return E3_PANELS.map(([name, top, bottom, width]) => {
+    const img: Rgba = { width, height: bottom - top, data: new Uint8ClampedArray(width * (bottom - top) * 4) };
+    for (let y = top; y < bottom; y++) {
+      const from = (y * all.width) * 4;
+      img.data.set(all.data.subarray(from, from + width * 4), (y - top) * width * 4);
+    }
+    return [name, img];
+  });
+}
+
+/**
  * A dialog's picture tag `5_n` as a node's `[pic, pictype]`. The numbering is
  * 1997's `draw_dialog_graphic` (DLOGTOOL.CPP), which E3's (`1028:3856`)
  * shares: under 300 a terrain picture, 400–579 a monster sprite (E3 takes
@@ -628,6 +651,7 @@ function scenarioXml(
         <inn>exile3</inn>
         <lava>exile3</lava>
         <backgrounds>exile3</backgrounds>
+        <message-pics>exile3</message-pics>
         <bash>exile3</bash>
         <dungeon-sound>${E3_DUNGEON_SOUND}</dungeon-sound>
         <cursors>${cursors.map((c) => `${c.name}:${c.hotspot.x}:${c.hotspot.y}`).join(',')}</cursors>
@@ -905,6 +929,8 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   // engine keeps BoE's beyond them (`installSheetOverrides`).
   for (const [name, bmp] of E3_SHEET_OVERRIDES) write(`graphics/${name}.png`, encodePng(decodeBmp(read(bmp))));
   write('graphics/pixpats.png', encodePng(buildE3Patterns(read)));
+  for (const [name, img] of e3Panels(read)) write(`graphics/${name}.png`, encodePng(img));
+  write('graphics/textbar.png', encodePng(decodeBmp(read('TEXTBAR.BMP'))));
   progress(1);
   return { sectors: zones.length, towns: towns.length, sheets: sheets.length };
 }
