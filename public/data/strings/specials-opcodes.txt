@@ -160,7 +160,7 @@ if-horse
 if-quest
 if-town-visible
 if-entry-dir
-
+if-creature
 
 
 
@@ -202,7 +202,7 @@ spell-pat-field
 spell-pat-boom
 relocate
 label
-
+town-creature
 
 
 

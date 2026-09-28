@@ -507,6 +507,29 @@ where the mode allows the border arrows at all. What reaches
 the rules is the same click, so recordings can't tell, and finding the target
 draws no dice (`test/aimCursor.test.ts`). `src/game/aimCursor.ts`.
 
+### 21. Naming a town creature by its slot (2026-09-28)
+
+**DECIDED: two exile-js opcodes, `if-creature` (163, IF_THEN) and
+`town-creature` (205, TOWN).** Exile III's scripts read and write its
+creatures' records directly — `active` (+0), attitude (+2), health (+9) —
+where BoE can only act on creatures by kind, by square, or through a
+conversation's END_DIE. `if-creature` jumps to `ex1b` when slot `ex1a` is here
+(`ex2a` 0), here with attitude `ex2b` (1), or its group not yet brought in
+(2: its live encounter code is still set). `town-creature` wakes slot `ex1a`
+to hunt (`ex1b` 0), sets its health to `ex1c` (1, uncapped, as E3 writes it),
+takes it away (2), or takes it away and sets its death flag (3, END_DIE's
+effect); slot -1 is everyone, -2 the creature being talked to. Both touch only
+creatures that are here, as E3 tests `active > 0` first.
+
+This replaced a converter workaround: E3's alive tests had been expressed as
+invented death flags (`e3DeathFlag`), which also kept those creatures dead
+when their town reloaded (E3 brings them back) and made the four Sharimiks'
+Spragins one man. And OBoE's `activate_monsters` reads the encounter code off
+the town *record*, which never changes, so a script bringing a group in twice
+revived the dead; `SpecBuilder.bringIn` now tests the live code first, which
+the engine clears, as E3 clears its own. As with §10 and §11, OBoE would read
+a scenario using either opcode as having an unknown one.
+
 ---
 
 ## Agreements worth recording

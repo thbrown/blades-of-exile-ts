@@ -184,12 +184,8 @@ function boatmen(town: number): PlaceScript {
 function dryadGrove(b: SpecBuilder): Map<number, Step[]> {
   const B = 65, spot = (id: number) => townSpotFlag(99, id);
   const pods = spot(6), freed = spot(8);
-  /**
-   * The ogre wakes: its group comes in.
-   * TODO(E3-3): E3 also sets creature 0's health to 120 (creature +9), which
-   * no node can.
-   */
-  const fight: Step[] = [b.msg(B, 0x34), b.bringIn(200, 1)];
+  /** The ogre (creature 0) wakes with 120 health, and its group comes in. */
+  const fight: Step[] = [b.msg(B, 0x34), b.bringIn(200, 1), b.setCreature(0, 'health', 120)];
   return new Map<number, Step[]>([
     // The pollen: back to the entrance, 5 spell points gone.
     [1, [b.msg(B, 0x30), b.drainSp(5), b.moveParty(3, 2), b.blockMove()]],

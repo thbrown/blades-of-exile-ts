@@ -414,6 +414,35 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
       break;
     }
 
+    case SpecType.TOWN_SET_CREATURE: {
+      // Exile III writes its creatures' records directly (DIVERGENCES.md
+      // #21), and only ever to one that is here (`active > 0`).
+      const monsters = town?.monsters ?? [];
+      const talking = ctx.session.talk?.monsterIndex ?? -1;
+      const which = spec.ex1a === -1 ? monsters
+        : [monsters[spec.ex1a === -2 ? talking : spec.ex1a]].flatMap((m) => (m ? [m] : []));
+      if (spec.ex1a < -2 || (spec.ex1a >= 0 && spec.ex1a >= monsters.length)) {
+        univ.addStringToBuf(`Tried to change nonexistent monster ${spec.ex1a} of 0...${monsters.length}`);
+        break;
+      }
+      for (const monst of which) {
+        if (!monst.isAlive) continue;
+        switch (spec.ex1b) {
+          case 0: monst.active = CreatureStatus.ALERTED; break;
+          // Set, not healed: E3 can put a creature past its maximum.
+          case 1: monst.health = spec.ex1c; break;
+          case 2: monst.active = CreatureStatus.DEAD; break;
+          case 3:
+            monst.active = CreatureStatus.DEAD;
+            if (univ.party.sdLegit(monst.spec1, monst.spec2)) univ.party.setSdf(monst.spec1, monst.spec2, 1);
+            break;
+          default: break;
+        }
+      }
+      ctx.redraw = true;
+      break;
+    }
+
     case SpecType.TOWN_CHANGE_LIGHTING:
       if (town && spec.ex1a >= 0 && spec.ex1a <= 3) {
         town.record.lightingType = spec.ex1a;

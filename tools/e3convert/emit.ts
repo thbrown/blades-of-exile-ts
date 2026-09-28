@@ -45,13 +45,13 @@ import { filthFactory } from './towns/filthFactory';
 import { castleTroglo } from './towns/castleTroglo';
 import { cavesOfGiants } from './towns/cavesOfGiants';
 import { level1Timers, shiftingFloors } from './towns/shiftingFloors';
-import { DUNGEON_SCRIPTS, TUNNEL_GUARD_DEAD, WOLF_PIT_ENTRANCES } from './towns/dungeons';
+import { DUNGEON_SCRIPTS, WOLF_PIT_ENTRANCES } from './towns/dungeons';
 import { DUNGEON2_SCRIPTS } from './towns/dungeons2';
 import { VILLAGE_SCRIPTS } from './towns/villages';
 import { newCotra } from './towns/newCotra';
 import { tinraya } from './towns/tinraya';
-import { PANTS_CLASS, RENTAR_DEATH_FLAGS, rentarKeep } from './towns/rentarKeep';
-import { sharimik, SHARIMIK_DEATH_FLAGS } from './towns/sharimik';
+import { PANTS_CLASS, rentarKeep } from './towns/rentarKeep';
+import { sharimik } from './towns/sharimik';
 import { ZONE_SCRIPTS } from './towns/zones';
 import { e3NoteItems, e3NoteSteps, isE3NoteAbility } from './notes';
 import { DAILY_FLAGS, KILL_SCRIPTS } from './towns/talkScripts';
@@ -462,16 +462,13 @@ function creatureTimeXml(c: E3CreatureStart): string {
   }
 }
 
-/** Death flags the converter gives creatures E3 asks about (`e3DeathFlag`), by `town:slot`. */
-const DEATH_FLAGS = new Map<string, [number, number]>([...SHARIMIK_DEATH_FLAGS, ...RENTAR_DEATH_FLAGS, ['61:9', TUNNEL_GUARD_DEAD]]);
-
-function creatureXml(c: E3CreatureStart, id: number, personality: number, deathFlag?: [number, number], onKill = -1): string {
+function creatureXml(c: E3CreatureStart, id: number, personality: number, onKill = -1): string {
   // `spec1`/`spec2` is the creature's death flag: END_DIE sets it, and a town
   // loading leaves out anyone whose flag is set (`10d8:` town setup, which
   // skips row 0 and 200 up). 200–204 are creatures a script brings in
   // (`FUN_1090_4053`, `SpecBuilder.bringIn`): the loader leaves them absent
   // (`10d8:0d36`), which is what an encounter code does.
-  const sdf = c.spec1 > 0 && c.spec1 < 200 && c.spec2 < 10 ? e3Flag(c.spec1, c.spec2) : deathFlag ?? null;
+  const sdf = c.spec1 > 0 && c.spec1 < 200 && c.spec2 < 10 ? e3Flag(c.spec1, c.spec2) : null;
   const code = c.spec1 >= 200 && c.spec1 < 205 ? c.spec1 : 0;
   return `    <creature id="${id}">
         <type>${c.number}</type>
@@ -531,7 +528,7 @@ function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, st
   const r = t.village ? { top: 0, left: 0, bottom: size - 1, right: size - 1 } : t.inTownRect;
   const creatures = townCreatures(t)
     .map((c, i) => (c.number > 0
-      ? creatureXml(c, i, personalityOf.get(`${t.number}:${i}`) ?? -1, DEATH_FLAGS.get(`${t.number}:${i}`), script.kills[i])
+      ? creatureXml(c, i, personalityOf.get(`${t.number}:${i}`) ?? -1, script.kills[i])
       : '')).join('');
   const items = t.presetItems.map((p, i) => (p.itemCode < 0 ? '' : `    <item id="${i}">
         <type>${tables.type(p)}</type>

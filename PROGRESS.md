@@ -14285,6 +14285,23 @@ the rest of the TODO(E3-3) list.
       - Not done: importing Exile III's own `.sav` files (the party record
         is mapped in FORMATS.md, the rest is not), and a rewind history.
 
+- [ ] **The TODO sweep (started 2026-09-28).** At the user's word: every
+      `TODO(` in `src/` and `tools/` before the rewind (`PLAN.md`, "Queued").
+      Worked in groups, each checked against `project/exile3.c`:
+      - [x] **Creatures by slot** — `if-creature` (163) and `town-creature`
+        (205), DIVERGENCES #21. Troglo Temple's alarm and the Monastery of
+        Madness wake everyone; Guhkbar's alarm wakes the giant; the dryad
+        grove's ogre wakes with 120 health; a freed prisoner (talk script
+        159) leaves and his death flag is set; `removeCreatureSlots` removes
+        by slot, not kind. The Guarded Tunnel's alarm is E3's real test
+        (creature 9 here and not already hostile), not "the guard is dead".
+        The invented death flags (`e3DeathFlag`: Spragin, Erika, the tunnel
+        guard) are gone, and with them two divergences: those creatures now
+        come back when their town reloads, as in E3, and Sharimik's four
+        Spragins are four men. **Found on the way:** `activate_monsters`
+        revives a dead group if a script brings it in twice (OBoE reads the
+        record's code); `bringIn` now tests the live code first.
+
 All checks pass: 1,420 tests, both sweeps, verify-screen (with TOUCH)/party
 (this round). Before it: 1,419 tests, both sweeps, verify-screen (with TOUCH)/party
 (corpus not re-run: none of today's changes touches an RNG call, and the

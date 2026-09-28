@@ -6,7 +6,6 @@
 
 import { DamageType } from '../../../src/data/monster';
 import { FieldType } from '../../../src/data/fields';
-import { e3DeathFlag } from '../flags';
 import { e3TownMessageBlock, type EntranceMark, type PlaceScript } from '../specials';
 import { partyFlag as f, partySpecItem, townSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
 
@@ -328,9 +327,8 @@ function trogloTemple(b: SpecBuilder): Map<number, Step[]> {
   return new Map<number, Step[]>([
     [1, [b.onceMsg(spot(1), B, 0x1b, 0x1c)]],
     [2, [b.trap(0x107e, spot(2), 0x14)]],
-    // The alarm: more come, hostile. TODO(E3-3): E3 also sets every
-    // creature here active (2), hunting the party.
-    [3, [b.setFlag(spot(3), 20), b.bringIn(200, 3)]],
+    // The alarm: more come, hostile, and everyone here hunts the party.
+    [3, [b.setFlag(spot(3), 20), b.bringIn(200, 3), b.setCreature(-1, 'wake')]],
     [4, [b.giveItemDialog(0xdca, spot(4), 0x5f)]],
     [5, [b.onceMsg(spot(5), B, 0x1d)]],
     [11, down(5, 9)], [12, down(5, 0xf)],
@@ -474,9 +472,6 @@ function defiledCrypt(b: SpecBuilder): Map<number, Step[]> {
   ]);
 }
 
-/** The Guarded Tunnel's creature 9, whose being alive sounds the alarm (spot 2). */
-export const TUNNEL_GUARD_DEAD = e3DeathFlag(2);
-
 /** The Guarded Tunnel (town 61), the back way into Blackcrag: `FUN_1088_4f13`, block 62. */
 function guardedTunnel(b: SpecBuilder): Map<number, Step[]> {
   const B = 62, spot = (id: number) => townSpotFlag(61, id);
@@ -487,9 +482,10 @@ function guardedTunnel(b: SpecBuilder): Map<number, Step[]> {
   return new Map<number, Step[]>([
     // The ethereal bridge: whoever is on it falls through (in combat, the active PC).
     [1, [b.ifFlagEq(bridge, 0, [b.msg(B, 6), b.slayParty(3)])]],
-    // The alarm, unless flag 0x107 says the party is expected.
-    // TODO(E3-3): E3 also spares a party that creature 9 is friendly with.
-    [2, [b.ifFlagEq(f(0x107), 0, [b.ifFlagEq(TUNNEL_GUARD_DEAD, 0, [b.msg(B, 0xa), b.makeTownHostile()])],
+    // The alarm, unless flag 0x107 says the party is expected: only while
+    // creature 9 is here and not hostile already (attitude 1).
+    [2, [b.ifFlagEq(f(0x107), 0, [b.ifCreature(9, 'here', [b.ifCreature(9, { attitude: 1 }, [],
+      [b.msg(B, 0xa), b.makeTownHostile()])])],
       [b.msg(B, 0xb), b.setFlag(spot(2), 20)])]],
     [3, [b.onceMsg(spot(3), B, 0xc)]],
     // Beams of light: two in three of the party turn to stone.
@@ -810,8 +806,8 @@ function madMonastery(b: SpecBuilder): Map<number, Step[]> {
     // Martial arts books: +1 dexterity (to 19) for a party of 15 levels.
     [1, [b.ifLevelTotal(15, [b.eachPc(() => [b.ifStat(1, 19, [], [b.addStat(1, 1)])]), b.msg(B, 9), b.setFlag(spot(1), 20)],
       [b.msg(B, 0xa)])]],
-    // TODO(E3-3): E3 also sets every creature here active (2), hunting the party.
-    [2, [b.msg(B, 0xb, 0xc), b.setFlag(spot(2), 20)]],
+    // Everyone here hunts the party.
+    [2, [b.setCreature(-1, 'wake'), b.msg(B, 0xb, 0xc), b.setFlag(spot(2), 20)]],
     [3, [b.giveItemDialog(0xec6, spot(3), 0x8c)]],
     ...[4, 5, 6].map((id): [number, Step[]] => [id, [b.setFlag(spot(id), 20), b.msg(B, 0x11), b.bringIn(id + 0xc4, 1)]]),
     [11, [b.askDialog(0xec4, [b.msg(B, 2)])]],
@@ -996,9 +992,9 @@ function guhkbarsPit(b: SpecBuilder): Map<number, Step[]> {
       [b.msg(B, 0x27, 0x28), b.setTer(4, 0x1b, 0xa), b.setTer(6, 0x1a, 0)],
       [b.msg(B, 0x25)])])]],
     [2, [b.onceMsg(spot(2), B, 0x2d, 0x2e)]],
-    // TODO(E3-3): the alarm also wakes the giant (creature 0 active, 2).
+    // The alarm wakes the giant (creature 0).
     ...[3, 4].map((id): [number, Step[]] => [id, [b.askDialog(0xf33,
-      [b.setFlag(spot(id), 20), b.msg(B, 0x2b)], [b.blockMove()])]]),
+      [b.setFlag(spot(id), 20), b.msg(B, 0x2b), b.setCreature(0, 'wake')], [b.blockMove()])]]),
     [5, [b.askDialog(0xf33, [b.askDialog(0xf34, [b.setFlag(spot(5), 20), b.giveSpecItem(rustyKey)])])]],
     // The cell: the key frees Illyree, who deals with the giant herself
     // (creature 0 takes 1000, `FUN_10c0_4af4`) and leaves (creature 25).

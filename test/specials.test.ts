@@ -26,7 +26,7 @@ import { MainStatus, PartyStatus, Race, Skill, Status, Trait } from '../src/univ
 import { killMonst } from '../src/game/damage';
 import { Universe } from '../src/universe/universe';
 import { Attitude, DamageType } from '../src/data/monster';
-import { Creature, assignCreature } from '../src/universe/creature';
+import { Creature, CreatureStatus, assignCreature } from '../src/universe/creature';
 import { Boom, setBoomSink } from '../src/game/booms';
 import { Missile, setMissileSink } from '../src/game/missileAnim';
 import { animClear } from '../src/game/anim';
@@ -2143,5 +2143,84 @@ describe('Use on a special spot', () => {
   });
   it('does nothing otherwise', async () => {
     expect(await useIt(false)).toEqual({ did: false, gold: 0 });
+  });
+});
+
+/**
+ * `IF_CREATURE` and `TOWN_SET_CREATURE` (DIVERGENCES.md #21): exile-js
+ * opcodes for Exile III, which reads and writes its creatures' records.
+ */
+describe('a node that names a creature by its slot', () => {
+  function town3(univ: Universe): Creature[] {
+    const mk = (active: CreatureStatus, attitude: Attitude, code = 0): Creature => {
+      const c = new Creature();
+      c.active = active;
+      c.attitude = attitude;
+      c.health = c.maxHealth = 30;
+      c.specEncCode = code;
+      return c;
+    };
+    const monsters = [
+      mk(CreatureStatus.IDLE, Attitude.FRIENDLY),
+      mk(CreatureStatus.DEAD, Attitude.HOSTILE_A),
+      mk(CreatureStatus.DEAD, Attitude.HOSTILE_A, 200),
+    ];
+    monsters[0]!.spec1 = 16;
+    monsters[0]!.spec2 = 3;
+    monsters.forEach((m, i) => { m.slot = i; });
+    univ.town!.monsters = monsters;
+    return monsters;
+  }
+
+  it('tests one: here, here with an attitude, still waiting to be brought in', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.IF_CREATURE, ex1a: 0, ex1b: 10, ex2a: 0, jumpto: -1 },
+      1: { type: SpecType.IF_CREATURE, ex1a: 1, ex1b: 10, ex2a: 0, jumpto: -1 },
+      2: { type: SpecType.IF_CREATURE, ex1a: 0, ex1b: 10, ex2a: 1, ex2b: Attitude.FRIENDLY, jumpto: -1 },
+      3: { type: SpecType.IF_CREATURE, ex1a: 0, ex1b: 10, ex2a: 1, ex2b: Attitude.HOSTILE_A, jumpto: -1 },
+      4: { type: SpecType.IF_CREATURE, ex1a: 2, ex1b: 10, ex2a: 2, jumpto: -1 },
+      5: { type: SpecType.IF_CREATURE, ex1a: 1, ex1b: 10, ex2a: 2, jumpto: -1 },
+      6: { type: SpecType.IF_CREATURE, ex1a: 99, ex1b: 10, ex2a: 0, jumpto: -1 },
+      10: { type: SpecType.SET_SDF, sd1: 15, sd2: 1, ex1a: 1 },
+    });
+    town3(univ);
+    const passes: boolean[] = [];
+    for (let n = 0; n <= 6; n++) {
+      univ.party.setSdf(15, 1, 0);
+      await run(n);
+      passes.push(univ.party.getSdf(15, 1) === 1);
+    }
+    expect(passes).toEqual([true, false, true, false, true, false, false]);
+  });
+
+  it('wakes, sets health, removes, and removes as dead — only those here', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.TOWN_SET_CREATURE, ex1a: -1, ex1b: 0 },
+      1: { type: SpecType.TOWN_SET_CREATURE, ex1a: 0, ex1b: 1, ex1c: 120 },
+      2: { type: SpecType.TOWN_SET_CREATURE, ex1a: 0, ex1b: 3 },
+      3: { type: SpecType.TOWN_SET_CREATURE, ex1a: 7, ex1b: 2 },
+    });
+    const m = town3(univ);
+    await run(0);
+    expect(m.map((c) => c.active)).toEqual([CreatureStatus.ALERTED, CreatureStatus.DEAD, CreatureStatus.DEAD]);
+    await run(1);
+    expect(m[0]!.health).toBe(120);
+    await run(2);
+    expect(m[0]!.active).toBe(CreatureStatus.DEAD);
+    expect(univ.party.getSdf(16, 3)).toBe(1);
+    univ.transcript.length = 0;
+    await run(3);
+    expect(univ.transcript.join('\n')).toContain('nonexistent monster 7');
+  });
+
+  it('takes away the creature being talked to (-2)', async () => {
+    const { univ, session, run } = withNodes({
+      0: { type: SpecType.TOWN_SET_CREATURE, ex1a: -2, ex1b: 2 },
+    });
+    const m = town3(univ);
+    session.talk = { monsterIndex: 0 } as never;
+    await run(0);
+    expect(m[0]!.active).toBe(CreatureStatus.DEAD);
+    expect(univ.party.getSdf(16, 3)).toBe(0);
   });
 });

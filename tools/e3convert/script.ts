@@ -655,6 +655,33 @@ export class SpecBuilder {
     };
   }
 
+  /**
+   * A test of creature `slot`'s record (+0 `active`, +2 attitude, stride
+   * 0x5c from 1160:1427): `here` it is present (`active > 0`), `attitude`
+   * present with `attitude`, `waiting` its group not yet brought in. The
+   * engine's `if-creature` is an exile-js opcode (`SpecType.IF_CREATURE`).
+   */
+  ifCreature(slot: number, test: 'here' | 'waiting' | { attitude: number }, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      const ex2: [number, number?] = test === 'here' ? [0] : test === 'waiting' ? [2] : [1, test.attitude];
+      return this.node('if-creature', { ex1: [slot, yes], ex2 }, no);
+    };
+  }
+
+  /**
+   * A write to creature `slot`'s record, where it is present: `wake` sets
+   * `active` 2 (hunting), `health` sets +9, `remove` clears `active`, and
+   * `die` clears it and sets its death flag (`spec1`/`spec2`). Slot -1 is
+   * every creature, -2 the one being talked to. The engine's
+   * `town-creature` is an exile-js opcode (`SpecType.TOWN_SET_CREATURE`).
+   */
+  setCreature(slot: number, what: 'wake' | 'health' | 'remove' | 'die', value = 0): Step {
+    const code = { wake: 0, health: 1, remove: 2, die: 3 }[what];
+    return (next) => this.node('town-creature', { ex1: [slot, code, value] }, next);
+  }
+
   /** `if (entry_dir < 9)`: the party walked in, rather than a script putting it here. */
   ifWalkedIn(then: Step[]): Step {
     return this.ifEntryDir(0, 8, then);
@@ -815,17 +842,23 @@ export class SpecBuilder {
    * for monsters 149–154. The engine's `ONCE_TOWN_ENCOUNTER` brings in the
    * group whose encounter code is `code`, and a `TOWN_SET_ATTITUDE` per slot
    * gives each its attitude.
-   * TODO(E3-3): E3 clears each creature's code, so a second call does
-   * nothing; the engine's preset keeps its code and could bring one back.
+   *
+   * E3 clears each creature's code as it comes in, so a second call finds
+   * nobody. The engine's `activate_monsters` reads the code off the town's
+   * *record*, which never changes, so a second call would bring the group
+   * back from the dead; the call is guarded on its first creature's live
+   * code instead, which the engine does clear.
    */
   bringIn(code: number, attitude: number): Step {
     return (next) => {
       const slots = (this.src.creatures ?? []).flatMap((c, i) => (c.number > 0 && c.spec1 === code ? [i] : []));
+      if (slots.length === 0) return this.node('once-town-encounter', { ex1: [code] }, next);
       const set = slots.reduceRight((after, i) => {
         const n = this.src.creatures![i]!.number;
         return this.node('set-attitude', { ex1: [i, n > 0x94 && n < 0x9b ? 3 : attitude] }, after);
       }, next);
-      return this.node('once-town-encounter', { ex1: [code] }, set);
+      const bring = this.node('once-town-encounter', { ex1: [code] }, set);
+      return this.node('if-creature', { ex1: [slots[0]!, bring], ex2: [2] }, next);
     };
   }
 
@@ -1385,14 +1418,9 @@ export class SpecBuilder {
     return (next) => this.node('status', { ex1: [Math.abs(n), n > 0 ? 1 : 0, STATUS_POISON] }, next);
   }
 
-  /**
-   * Creatures in slots `slots` are gone (E3 clears their `active`). The
-   * engine removes by kind, so this nukes each slot's kind: right where no
-   * other creature of that kind is in the town.
-   */
+  /** Creatures in slots `slots` are gone (E3 clears their `active`). */
   removeCreatureSlots(slots: number[]): Step {
-    const kinds = [...new Set(slots.map((k) => this.src.creatures?.[k]?.number ?? 0))].filter((n) => n > 0);
-    return this.seq(kinds.map((n) => this.removeCreatures(n)));
+    return this.seq(slots.map((k) => this.setCreature(k, 'remove')));
   }
 
   /** The target loses `n` spell points (AFFECT_SP's take arm), down to 0. */

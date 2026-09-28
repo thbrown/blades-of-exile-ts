@@ -11,7 +11,6 @@
  * all four vats full, win the game.
  */
 
-import { e3DeathFlag } from '../flags';
 import { partyFlag as f, partySpecItem, townSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
 
 /** The channels' flags, one per lever (`0x2f0 + id` for lever `id`). */
@@ -37,9 +36,7 @@ const TELEPORTS = f(0x209);
 const CRYSTALS = f(0x207);
 /** Erika's amulets, and the story flags that let them work. */
 const AMULETS = partySpecItem(0x54);
-/** Erika (creature 14): her death flag, and a converter flag while she duels. */
-export const ERIKA_DEAD = e3DeathFlag(1);
-export const RENTAR_DEATH_FLAGS: [string, [number, number]][] = [['38:14', ERIKA_DEAD]];
+/** Erika is creature 14; this converter flag is set while she duels. */
 const ERIKA_HERE: Flag = [291, 24];
 /** The party came up stair 14, which opens the portcullis at (41,1) above (`towns/entry.ts`). */
 export const UP_STAIR_14: Flag = [291, 25];
@@ -114,7 +111,7 @@ function upper(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]> 
     // The pedestal. Erika's duel ends as the party reaches it; without her,
     // Rentar-Ihrno teleports them away five times first.
     [26, [
-      b.ifFlagAtLeast(ERIKA_HERE, 1, [b.ifFlagEq(ERIKA_DEAD, 0, [
+      b.ifFlagAtLeast(ERIKA_HERE, 1, [b.ifCreature(14, 'here', [
         b.setFlag(TELEPORTS, 10), b.dialog(0xd3a), b.removeCreatureSlots([14]), b.setFlag(ERIKA_HERE, 0),
       ])]),
       b.ifFlagBelow(TELEPORTS, 5, [

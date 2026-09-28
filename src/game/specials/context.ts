@@ -46,8 +46,8 @@ const CATEGORY_RANGES: [SpecCat, SpecType, SpecType][] = [
   [SpecCat.GENERAL, SpecType.NONE, SpecType.ADD_JOURNAL],
   [SpecCat.ONCE, SpecType.ONCE_GIVE_ITEM, SpecType.ONCE_TRAP],
   [SpecCat.AFFECT, SpecType.SELECT_TARGET, SpecType.UNSTORE_PC],
-  [SpecCat.IF_THEN, SpecType.IF_SDF, SpecType.IF_ENTRY_DIR],
-  [SpecCat.TOWN, SpecType.MAKE_TOWN_HOSTILE, SpecType.TOWN_PLACE_LABEL],
+  [SpecCat.IF_THEN, SpecType.IF_SDF, SpecType.IF_CREATURE],
+  [SpecCat.TOWN, SpecType.MAKE_TOWN_HOSTILE, SpecType.TOWN_SET_CREATURE],
   [SpecCat.RECT, SpecType.RECT_PLACE_FIELD, SpecType.RECT_UNLOCK],
   [SpecCat.OUTDOOR, SpecType.OUT_MAKE_WANDER, SpecType.OUT_MOVE_PARTY],
 ];

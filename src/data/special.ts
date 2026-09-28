@@ -149,6 +149,14 @@ export enum SpecType {
    * script). Exile III's town loader tests it.
    */
   IF_ENTRY_DIR = 162,
+  /**
+   * An exile-js opcode, not in BoE or OBoE: jump to `ex1b` if the town's
+   * creature in slot `ex1a` passes test `ex2a` — 0 it is here (alive), 1 it
+   * is here with attitude `ex2b`, 2 its group has not been brought in yet
+   * (its live encounter code is still set). Exile III reads its creatures'
+   * records directly (DIVERGENCES.md #21).
+   */
+  IF_CREATURE = 163,
 
   MAKE_TOWN_HOSTILE = 170,
   TOWN_RUN_MISSILE = 171,
@@ -185,6 +193,15 @@ export enum SpecType {
   TOWN_SPELL_PAT_BOOM = 202,
   TOWN_RELOCATE_CREATURE = 203,
   TOWN_PLACE_LABEL = 204,
+  /**
+   * An exile-js opcode, not in BoE or OBoE: change the town's creature in
+   * slot `ex1a` (-1 every creature, -2 the one being talked to), only where
+   * it is here. `ex1b` names what: 0 wakes it to hunt the party (`active`
+   * 2), 1 sets its health to `ex1c`, 2 takes it away, and 3 takes it away
+   * and sets its death flag, as a conversation's END_DIE does. Exile III
+   * writes its creatures' records directly (DIVERGENCES.md #21).
+   */
+  TOWN_SET_CREATURE = 205,
 
   RECT_PLACE_FIELD = 210,
   RECT_SET_EXPLORED = 211,

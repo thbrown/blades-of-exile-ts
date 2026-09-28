@@ -459,6 +459,16 @@ export async function ifThenSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       break;
     }
 
+    case SpecType.IF_CREATURE: {
+      // Exile III reads its creatures' records directly (DIVERGENCES.md #21).
+      // A slot out of range is "not here", as a slot of the dead is.
+      const monst = univ.town?.monsters[spec.ex1a];
+      const pass = spec.ex2a === 2 ? (monst?.specEncCode ?? 0) > 0
+        : monst !== undefined && monst.isAlive && (spec.ex2a !== 1 || monst.attitude === spec.ex2b);
+      if (pass) ctx.nextSpec = spec.ex1b;
+      break;
+    }
+
     case SpecType.IF_QUEST: {
       if (spec.ex1a < 0 || spec.ex1a >= univ.scenario.quests.length) {
         univ.addStringToBuf('The scenario tried to update a non-existent quest.');

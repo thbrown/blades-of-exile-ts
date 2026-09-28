@@ -7,7 +7,6 @@
  */
 
 import { DamageType } from '../../../src/data/monster';
-import { e3DeathFlag } from '../flags';
 import { PAT_SQUARE, partyFlag as f, partySpecItem, townSpotFlag, type SpecBuilder, type Step } from '../script';
 
 const BLOCK = 53;
@@ -17,15 +16,6 @@ export const SLOAN_RING = partySpecItem(0x60);
 export const RING_HIDDEN = f(0xde);
 /** A ticket for the boat to Farport, from Kurt. */
 export const FARPORT_TICKET = f(0xdd);
-/**
- * Spragin, creature 0 in every state. E3 asks whether he is alive; the
- * converter gives him a death flag to ask instead (`e3DeathFlag`). One flag
- * for all four states, where E3 keeps each town's dead apart.
- */
-export const SPRAGIN_DEAD = e3DeathFlag(0);
-export const SHARIMIK_DEATH_FLAGS: [string, [number, number]][] =
-  [8, 9, 10, 11].map((t) => [`${t}:0`, SPRAGIN_DEAD]);
-
 export function sharimik(town: number) {
   return (b: SpecBuilder): Map<number, Step[]> => {
     const spot = (id: number) => townSpotFlag(town, id);
@@ -59,7 +49,8 @@ export function sharimik(town: number) {
         b.addAge(800), b.setFlag(FARPORT_TICKET, 0), b.msg(BLOCK, 3),
         b.exitTo(2, 7, 0x18, 0x14), b.changeTown(0x7e, 0x18, 6),
       ])]), b.blockMove()]],
-      [14, [b.ifFlagEq(SPRAGIN_DEAD, 0, [b.msg(BLOCK, 7), b.blockMove()])]],
+      // While Spragin (creature 0) is here.
+      [14, [b.ifCreature(0, 'here', [b.msg(BLOCK, 7), b.blockMove()])]],
       // "Fireballs explode!": three 3×3 blasts of 20 dice of fire.
       [15, [b.msg(BLOCK, 10), ...[0, 1, 2].map(() => b.patternBoom(PAT_SQUARE, DamageType.FIRE, 20))]],
       // A door of locking runes, which knows the party once flag 0xe8 is 3.

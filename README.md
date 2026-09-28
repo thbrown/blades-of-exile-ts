@@ -96,7 +96,7 @@ Blades of Exile's GPL tree. The GPL does not cover:
 
 The community scenarios in the library (`docs/library/`) are included in this
 repository and on the site under the fair use doctrine. Copyright in each one
-stays with its author. We include them because:
+stays with its author. I include them because:
 
 - **The purpose is preservation, and it is non-commercial.** The scenarios are
   free to play here, as they always were. Nothing is sold, and there are no
@@ -112,14 +112,14 @@ The [cboe-scenarios](https://github.com/NQNStudios/cboe-scenarios) archive
 takes the same approach.
 
 **If you wrote one of these scenarios and want it removed,** open an issue on
-this repository saying which scenario. We will take it out of the library and
+this repository saying which scenario. I will take it out of the library and
 purge it from the repository's git history, not just from the current
 version. Copies other people have already made (forks, clones, caches) are
 out of our hands.
 
-**We have no reliable way to confirm who you are.** Many scenarios were
+**I have no reliable way to confirm who you are.** Many scenarios were
 published under handles, most of the email addresses in them stopped working
-long ago, and anyone can open an issue under any name. So we will ask for
+long ago, and anyone can open an issue under any name. So I will ask for
 something that ties you to the scenario. For example:
 
 - a message from the address given in the scenario's own documents or
@@ -128,7 +128,7 @@ something that ties you to the scenario. For example:
   discussed under;
 - or anything else that reasonably shows you are the author.
 
-We decide in good faith, and we may decline a request we can't connect to the
-scenario's author. That applies especially to a single request covering many
-scenarios by different authors.
+I'll attempt to decide in good faith, and may decline a request I can't 
+connect to the scenario's author. That applies especially to a single request 
+covering many scenarios by different authors.
 

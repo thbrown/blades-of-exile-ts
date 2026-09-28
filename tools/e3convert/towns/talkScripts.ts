@@ -432,14 +432,13 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
   ])]],
   // A prisoner of the giants escapes once the party has found the hidden
   // way out (0x1b0), and counts as the first of Bruskrud's four missions
-  // still to do. TODO(E3-3): E3 also takes the prisoner out of the town
-  // (`active` 0) and sets his death flag, (30,6)–(30,9) by which prisoner,
-  // so he stays gone; the engine can't name the creature being talked to,
-  // so he stays, and asking again counts again.
+  // still to do. He leaves the town (`active` 0, the slot at [0x49d4]) and
+  // his death flag is set, (30,6)–(30,9) by which prisoner, so he stays gone.
   [159, (b) => [b.ifFlagEq(f(0x1b0), 0, [b.reply(0xd6)], [
     b.reply(0xd7, 0xd8),
     [0xc3b, 0xc2f, 0xc30, 0xc31].reduceRight<Step>((otherwise, flag) =>
       b.ifFlagEq(f(flag), 0, [b.setFlag(f(flag), 1)], [otherwise]), b.seq([])),
+    b.setCreature(-2, 'die'),
   ])]],
   // Rabellino's Nephilim raids (zone 28's spot 9 flag): 3 dealt with them
   // peaceably (500 gold), 5 slew them.
