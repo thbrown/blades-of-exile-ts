@@ -34,6 +34,7 @@ import { shayder } from './towns/shayder';
 import { lorelei } from './towns/lorelei';
 import { gale } from './towns/gale';
 import { ENTRY_SCRIPTS } from './towns/entry';
+import { HOSTILE_SCRIPTS } from './towns/hostile';
 import { slimePit } from './towns/slimePit';
 import { towerOfMagi } from './towns/towerOfMagi';
 import { filthFactory } from './towns/filthFactory';
@@ -86,6 +87,14 @@ const TOWN_SCRIPTS = new Map<number, PlaceScript>([
 
 /** E3's special items: strings 1801 on, and the engine's limit too. */
 const E3_SPECIAL_ITEMS = 50;
+
+/**
+ * The monsters E3's `make_town_hostile` gets moving and alerts (1070:2455,
+ * mobile and `active` 2), as the `hostile-movers` flag's list; the rest
+ * turn hostile where they stand. Of these, 91 and 92 get the guard boost.
+ */
+const E3_HOSTILE_MOVERS = '12-20,91-98,149-154';
+const E3_BOOSTED_GUARDS = [91, 92];
 
 const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="no" ?>\n';
 
@@ -451,7 +460,7 @@ function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, st
     <bounds top="${r.top}" left="${r.left}" bottom="${r.bottom}" right="${r.right}" />
     <difficulty>0</difficulty>
     <lighting>${LIGHTING[t.lighting] ?? 'lit'}</lighting>
-${script.entry >= 0 ? `    <onenter condition="alive">${script.entry}</onenter>\n    <onenter condition="dead">${script.entry}</onenter>\n` : ''}    <flags>
+${script.entry >= 0 ? `    <onenter condition="alive">${script.entry}</onenter>\n    <onenter condition="dead">${script.entry}</onenter>\n` : ''}${script.hostile >= 0 ? `    <onoffend>${script.hostile}</onoffend>\n` : ''}    <flags>
 ${chopXml(t)}${tables.hidden(t.number) ? '        <hidden>true</hidden>\n' : ''}    </flags>
 ${wandering}${items}${creatures}${rooms}${townSigns(t, strings).map(signXml).join('')}${specStringsXml(script)}</town>
 `;
@@ -544,6 +553,7 @@ function scenarioXml(
         <road-joins>${roadJoins.join(',')}</road-joins>
         <job-boards>exile3:${jobBase}</job-boards>
         <monster-sightings>exile3</monster-sightings>
+        <hostile-movers>${E3_HOSTILE_MOVERS}</hostile-movers>
     </feature-flags>
     <text>
         <teaser>The surface world is dying. Find out why.</teaser>
@@ -650,6 +660,9 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   const monsters = legacyMonsters.map((m, n) => {
     const mon = convertMonster(m);
     mon.pictureNum = monsterArt.pics[n]!;
+    // E3's `make_town_hostile` gives BoE's guard boost (health ×3, two
+    // statuses 8) to monsters 91 and 92 alone (1070:24e6).
+    mon.guard = E3_BOOSTED_GUARDS.includes(n);
     return mon;
   });
   // Items: E3's table through the legacy importer, pictured from one custom
@@ -762,7 +775,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     const creatures = townCreatures(t);
     const script = e3SpotScript(spots, { town: t.number }, { ...e3Src, creatures, terrain },
       (x, y) => terrain[x]?.[y] ?? 0, TOWN_SCRIPTS.get(t.number), ENTRY_SCRIPTS.get(t.number),
-      townKillScript(t.number, creatures));
+      townKillScript(t.number, creatures), undefined, HOSTILE_SCRIPTS.get(t.number));
     write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf, strings, script, townTables));
     write(`${base}.map`, townMap(t, terrain, strings, script, vehicles));
     write(`${base}.spec`, script.spec);

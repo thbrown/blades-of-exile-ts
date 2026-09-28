@@ -7,7 +7,7 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { TerObstruct, TerSpec } from '../src/data/terrain';
 import type { Scenario } from '../src/data/scenario';
 import { ItemAbil, ItemType } from '../src/data/item';
@@ -27,6 +27,7 @@ import { Universe } from '../src/universe/universe';
 import { PartyPreset } from '../src/universe/player';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
 import { killMonst } from '../src/game/damage';
+import { makeTownHostile } from '../src/game/townAttitude';
 import { MainStatus, Race } from '../src/universe/skills';
 import { Direction } from '../src/core/location';
 import {
@@ -348,6 +349,37 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(univ.party.pcs.flatMap((pc) => pc.items).some((it) => it.fullName === 'Orb of Sight')).toBe(true);
     // Zone 74's special group (script 99) comes for the party from anywhere.
     expect(scen.outdoors[2]![8]!.specialEnc[0]!.forced).toBe(true);
+  });
+
+  it("ends the game where E3 does as a town turns hostile, and moves only E3's movers", async () => {
+    const setUp = (town: number) => {
+      const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+      const said: string[] = [];
+      session.attachSpecials(new Proxy({}, {
+        get: (_, k) => (k === 'message' ? (s: string) => { said.push(s); return Promise.resolve(); } : () => Promise.resolve(0)),
+      }) as never);
+      session.startTownMode(town, FORCED_ENTRY);
+      return { session, said, party: session.univ.party };
+    };
+    // Fort Emergence: the guards haul the party off.
+    const fort = setUp(21);
+    const still = fort.session.univ.town!.monsters.filter((m) => m.isAlive && !m.mobile);
+    makeTownHostile(fort.session);
+    await vi.waitFor(() => expect(fort.party.isAlive()).toBe(false));
+    expect(fort.said.join(' ')).toMatch(/very bad place to cause trouble/);
+    expect(fort.party.pcs.every((pc) => pc.mainStatus === MainStatus.ABSENT)).toBe(true);
+    // Only monsters 12–20, 91–98 and 149–154 get moving.
+    const movers = new Set([...Array(9).keys()].map((k) => k + 12).concat([91, 92, 93, 94, 95, 96, 97, 98, 149, 150, 151, 152, 153, 154]));
+    expect(still.length).toBeGreaterThan(0);
+    for (const m of still) expect(m.mobile).toBe(movers.has(m.number));
+    expect(scen.scenMonsters.flatMap((m, i) => (m?.guard ? [i] : []))).toEqual([91, 92]);
+
+    // Erika's Tower: the amulets (special item 32) save the party.
+    const erika = setUp(47);
+    erika.party.specItems.add(32);
+    makeTownHostile(erika.session);
+    await vi.waitFor(() => expect(erika.said.join(' ')).toMatch(/amulets protected you/));
+    expect(erika.party.isAlive()).toBe(true);
   });
 
   it("tests whether a town shows on the map, as E3's scripts do", async () => {

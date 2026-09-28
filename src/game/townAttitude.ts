@@ -16,6 +16,27 @@ import { SpecCtx, SpecCtxType } from './specials/context';
 const HOSTILE = new Set<Attitude>([Attitude.HOSTILE_A, Attitude.HOSTILE_B]);
 
 /**
+ * The `hostile-movers` feature flag, an exile-js extension: a list of monster
+ * numbers and ranges (`12-20,91-98`). When a scenario has it, a creature
+ * turned hostile gets moving, and is alerted, only if its monster is listed;
+ * the rest turn where they stand. That is Exile III's `make_town_hostile`
+ * (`FUN_1070_23b9`), where BoE makes everyone mobile and alerts only guards.
+ * Without the flag, null: BoE's rule.
+ */
+export function hostileMovers(flag: string | undefined): Set<number> | null {
+  if (flag === undefined) return null;
+  const movers = new Set<number>();
+  for (const part of flag.split(',')) {
+    const [lo, hi] = part.split('-').map((s) => Number(s.trim()));
+    if (lo === undefined || !Number.isInteger(lo)) continue;
+    const last = hi ?? lo;
+    if (!Number.isInteger(last)) continue;
+    for (let m = lo; m <= last; m++) movers.add(m);
+  }
+  return movers;
+}
+
+/**
  * Set the attitude of the town creatures in slots `lo`..`hi` inclusive.
  * Negative indices count back from the end, Python-style, and are clamped to 0
  * rather than wrapping; `hi < lo` swaps them. `make_town_hostile` is
@@ -36,6 +57,7 @@ export function setTownAttitude(
 
   const count = town.monsters.length;
   town.monstHostile = HOSTILE.has(att);
+  const movers = hostileMovers(univ.scenario.featureFlags['hostile-movers']);
 
   if (lo <= -count) lo = 0;
   if (lo < 0) lo = count + lo;
@@ -51,7 +73,13 @@ export function setTownAttitude(
     if (monst.isFriendly) continue;
     // Anything turned hostile gets up and moves, and a creature flagged as a
     // guard in the scenario becomes a serious problem.
-    monst.mobile = true;
+    if (movers) {
+      // Exile III's rule: only the listed monsters move, and they are alerted.
+      if (movers.has(monst.number)) {
+        monst.mobile = true;
+        monst.active = CreatureStatus.ALERTED;
+      }
+    } else monst.mobile = true;
     if (univ.scenario.scenMonsters[monst.number]?.guard) {
       monst.active = CreatureStatus.ALERTED;
       // **A `short`** (creature.hpp:31), and this is the multiply that

@@ -46,6 +46,8 @@ export interface SpotScript {
   spots: { x: number; y: number; id: number; node: number }[];
   /** The town's entry node (`<onenter>`), or -1. */
   entry: number;
+  /** The node run as the town turns hostile (`<onoffend>`), or -1. */
+  hostile: number;
   /** Each creature slot's `<onkill>` node, or -1 (`KillScript`). */
   kills: number[];
   /** Each outdoor group's `<onmeet>`, `<onwin>` and `<onflee>` nodes, or -1 (`GroupScript`). */
@@ -116,7 +118,7 @@ export function e3ZoneMessageBlock(zone: number): number {
 export function e3SpotScript(
   spots: E3Spot[], place: { zone: number } | { town: number },
   src: ScriptSource, terrainAt: (x: number, y: number) => number, own?: PlaceScript, onEntry?: EntryScript,
-  onKill?: KillScript, onGroups?: GroupScript,
+  onKill?: KillScript, onGroups?: GroupScript, onHostile?: EntryScript,
 ): SpotScript {
   const isTown = 'town' in place;
   const block = isTown ? e3TownMessageBlock(place.town) : e3ZoneMessageBlock(place.zone);
@@ -170,6 +172,7 @@ export function e3SpotScript(
     listed.push({ x: s.loc.x, y: s.loc.y, id: s.id, node: n });
   });
   const entry = onEntry ? b.compile(onEntry(b)) : -1;
+  const hostile = onHostile ? b.compile(onHostile(b)) : -1;
   const killNodes = new Map<string, number>();
   const kills = (src.creatures ?? []).map((_, slot) => {
     const k = onKill?.(b, slot);
@@ -185,5 +188,5 @@ export function e3SpotScript(
     groupNodes.set(g.key, n);
     return n;
   });
-  return { spec: b.spec, strings: b.strings, marks, spots: listed, entry, kills, groups };
+  return { spec: b.spec, strings: b.strings, marks, spots: listed, entry, hostile, kills, groups };
 }

@@ -13644,6 +13644,37 @@ against the disassembly:
 
 `test/e3convert.test.ts` steps on zone 45's spot with the factory hidden and
 shown. All checks pass: 1,382 tests, both sweeps, verify-screen/e3/party.
-`grep -rn "TODO(E3-3)" src tools`: 43. **Next session starts here**:
-`script.ts`'s town-hostile endings, then `entry.ts`'s list (towns 31, 41, 46,
-57, 78/79, 82, 90, 103–105, 107).
+`grep -rn "TODO(E3-3)" src tools`: 43.
+
+### E3's hostile towns: the endings and the guards (2026-09-27)
+
+E3's `make_town_hostile` is `FUN_1070_23b9`. After BoE's pass it runs town
+cases, which BoE 1997 cut down to a `fry_party` stub and a "wedge in special"
+comment (ITEMS.CPP:843). OBoE's `spec_on_hostile` is the hook for them, so
+`tools/e3convert/towns/hostile.ts` writes each case as the town's
+`<onoffend>`. The engine runs that wherever a town turns: a blow at a friendly,
+END_ALARM, or a script. The cases:
+- Fort Emergence (21) and Portal Fortress (40), 60:0x13; Ghikra (41),
+  60:0x31; Blackcrag (34), 58:0x27. Each is a message, then every PC ABSENT
+  (`killParty`, the `death` node with 5), and `runSpecial`'s game-over
+  check ends it.
+- Erika's Tower (47): 60:0x72, then death, unless the party has the amulets
+  (special item 32 = party+0x4c), which gives 60:0x73.
+- Drake Aerie (107), once (party+0x4b9): dialog 0xfe7, and each PC is
+  paralysed 5, put to sleep 5, slowed 8 and cursed 8 (`sleep_pc` type 12,
+  so `paralyze`, with `sleep`'s saving-roll caveat).
+- Castle Troglo (28): 0x1a4 = 7, 0x1a1 and 0x19f = 20, everyone attitude 3.
+- **Guards** (DIVERGENCES.md §12): only monsters 12–20, 91–98 and 149–154
+  move and are alerted, and only 91 and 92 get BoE's guard boost. There is a
+  new engine flag, `hostile-movers` (`townAttitude.ts`), and 91 and 92 are
+  `<guard>`. No E3 monster was a guard before.
+- Not ported: E3's one-time hint 0x35 (`FUN_1008_38d6`, BoE's
+  `give_help(53)`), like its other hints.
+
+`test/e3convert.test.ts` turns Fort Emergence hostile (the party is gone, and
+only the movers move) and Erika's Tower with the amulets. All checks pass:
+1,382 tests, both sweeps, verify-screen/e3/party. The replay corpus was not
+rerun, because everything is behind the flag and the E3-only `<onoffend>`.
+`grep -rn "TODO(E3-3)" src tools`: 42. **Next session starts here**:
+`entry.ts`'s list (towns 31, 41, 46, 57, 78/79, 82, 90, 103–105, 107), and
+Castle Troglo's "docile below stage 7".

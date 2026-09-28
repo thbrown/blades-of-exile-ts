@@ -57,6 +57,7 @@ const STATUS_POISON = 2;
 const STATUS_DUMB = 9;
 const STATUS_CURSE = 1;
 const STATUS_SLOW = 3;
+const STATUS_PARALYZED = 12;
 const STATUS_ASLEEP = 11;
 /** The engine's `SpellPat.SQUARE`, a 3×3 block. */
 export const PAT_SQUARE = 1;
@@ -693,6 +694,32 @@ export class SpecBuilder {
     return (next) => this.node('status', { ex1: [n, 1, STATUS_ASLEEP] }, next);
   }
 
+  /**
+   * `FUN_10b0_19dd(pc, n, 12, adjust)`: `sleep_pc` paralysing the target for
+   * `n`, with `sleep`'s saving roll and its caveat.
+   */
+  paralyze(n: number): Step {
+    return (next) => this.node('status', { ex1: [n, 1, STATUS_PARALYZED] }, next);
+  }
+
+  /**
+   * `fry_party`: every PC's `main_status` to 0, absent, so the party is
+   * gone and the game over (the engine's party-death check). AFFECT_DEADNESS
+   * with `ex1a` 5 is ABSENT.
+   */
+  killParty(): Step {
+    return (next) => this.node('death', { ex1: [5, 1] }, next);
+  }
+
+  /**
+   * Every creature of the town's record to `attitude`, slot by slot, as
+   * `bringIn` sets them. A dead or absent slot takes it and shows nothing.
+   */
+  everyoneAttitude(attitude: number): Step {
+    return (next) => (this.src.creatures ?? []).reduceRight(
+      (after, c, i) => (c.number > 0 ? this.node('set-attitude', { ex1: [i, attitude] }, after) : after), next);
+  }
+
   /** `FUN_10b0_1606(pc, n)`: BoE 1997's `curse_pc`, the target cursed by `n`. */
   curse(n: number): Step {
     return (next) => this.node('status', { ex1: [n, 1, STATUS_CURSE] }, next);
@@ -801,10 +828,9 @@ export class SpecBuilder {
 
   /**
    * `FUN_1070_23b9`: BoE 1997's `make_town_hostile`, every creature turns on
-   * the party. E3's own also makes certain monsters (12–20, 91–98, 149–154)
-   * guards, and ends the game in a few towns (21, 28, 34, 40, 41, 47, 107).
-   * TODO(E3-3): those towns' endings, and E3's guards (the engine boosts the
-   * monsters marked guard instead).
+   * the party. E3's own cases for seven towns are their `<onoffend>` nodes
+   * (`towns/hostile.ts`), and which monsters move and which are boosted is
+   * the `hostile-movers` flag and `<guard>` (`emit.ts`).
    */
   makeTownHostile(): Step {
     return (next) => this.node('town-attitude', { ex1: [0, -1], ex2: [1] }, next);

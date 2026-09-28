@@ -353,6 +353,22 @@ would read a scenario using it as having an unknown opcode.
 
 ---
 
+### 12. Who moves when a town turns hostile (2026-09-27)
+
+**DECIDED: a scenario flag, `hostile-movers`, for Exile III's rule.** BoE
+(1997 and OBoE) makes every creature it turns mobile and gives guards
+(`<guard>`, 1997's `spec_skill` 37) an alert, ×3 health and two statuses.
+Exile III's `make_town_hostile` (`FUN_1070_23b9`) gets only monsters 12–20,
+91–98 and 149–154 moving and alerted; everyone else turns hostile where they
+stand, and only 91 and 92 get the boost. A player sees the difference as a
+shopkeeper who stays behind the counter. So `hostile-movers` lists the monsters
+that move, and without it the rule is BoE's. The E3 converter writes the list
+and marks 91 and 92 `<guard>`. E3's per-town cases (the endings) need no engine
+change: they are OBoE's `spec_on_hostile` (`<onoffend>`), whose comment,
+"In some towns, doing this will get you killed", is where 1997 had cut them.
+
+---
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**
