@@ -344,7 +344,9 @@ export async function handleMessage(
   // routines each pass one (`FUN_1008_37de`'s dialog picture 8, Anaximander's
   // sprite 31), where OBoE's DISPLAY_MSG never reads the node's.
   if (pic === -1 && univ.scenario.featureFlags['message-pics'] === 'exile3'
-    && (node.type === SpecType.DISPLAY_MSG || node.type === SpecType.ONCE_DISPLAY_MSG)) {
+    && (node.type === SpecType.DISPLAY_MSG || node.type === SpecType.ONCE_DISPLAY_MSG
+      // E3's special encounter meets the party with its first monster's picture.
+      || node.type === SpecType.ONCE_OUT_ENCOUNTER)) {
     pic = node.pic;
     picType = node.pictype;
   }

@@ -14105,6 +14105,37 @@ the rest of the TODO(E3-3) list.
       dragged map slid over a pattern that stayed put; it takes an `anchor`
       now, and the map and both dialog classes pass their corner.
       `test/windowChrome.test.ts`.
+      **Second pass, same day, against a 1:1 capture** of E3's north-gate
+      dialog (the first colours came from a scaled video, and were greyer):
+      a 1px `#616468` edge, a 22px caption `#bdcfdc`→`#d5e3f0` with a black,
+      not bold, title, and a 1px line under it — `CAPTION_H` 24. The caption
+      is exactly the dialog's width, and a dialog drawn as a window
+      (`windowFrames.on`) leaves out its own 2px black frame and shadow; the
+      window's edge goes over its outer pixel. Drags move by whole pixels: at
+      a scaled UI the pointer lands between canvas pixels, and a window at a
+      fractional position had its parts rounding apart (the shimmer) and the
+      map's tiles resampled (the pixelation).
+- [x] **Message picture audit (2026-09-28).** Every E3 node that shows a
+      message, by the routine behind it:
+      - `msg`/`onceMsg` — picture 8 or Anaximander's sprite (above).
+      - **The generic spot messages** (spot ids 100–299, `specials.ts`) had
+        none, so they showed the card icon: the north gate was one. E3's
+        dispatcher (`FUN_10c0_0000`) shows them through `37de`/`3812`, so
+        picture 8 now.
+      - **Special encounters** (`once-out-encounter`, 140 nodes):
+        `FUN_10c0_443a` meets the party with `400 +` the group's first
+        monster's sprite. The converter now gives the node that monster's
+        picture, and `message-pics` covers ONCE_OUT_ENCOUNTER too.
+      - Dialogs (`once-dlog`, `once-give-dlog`, `lever`, traps) take their
+        E3 dialog's own `5_n` picture, and 479 of E3's dialogs map. Not
+        mapped, and still on dialog picture 0: six with no picture at all
+        (E3 draws none — `416 42e 42f 441 444 447`), the ten black-and-white
+        maps (900s, already TODO(E3-3)), animated terrain 302 and 305, and
+        2531, 2537 and 2700, which are outside every range 1997's
+        `draw_dialog_graphic` draws — E3's own (`1028:3856`) needs reading.
+      - `38d6`, the block-10 routine with picture 24, is E3's hints, which
+        this port answers with its own instant help.
+      - Not checked: the seven `if-num-response` prompts.
 
 All checks pass: 1,403 tests, both sweeps, verify-screen/e3/party, corpus
 unchanged at 51 of 87, 1,231,440 draws. **Next session starts here**: E3's

@@ -29,6 +29,7 @@ import { dialogBackground, dialogTextIsWhite, tilePattern } from '../render/tili
 import { MainStatus, Skill, Status } from '../universe/skills';
 import type { ClickMods, ModalScreen } from './dialog';
 import { drawPictAt } from './pict';
+import { windowFrames } from '../render/windowChrome';
 
 const SPELL_KEYS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKL';
 
@@ -347,7 +348,8 @@ export class CastDialog implements ModalScreen {
     TEXT = dialogTextIsWhite() ? Colours.WHITE : Colours.BLACK;
     // Exile III's is a window with a black edge, like the port's other
     // dialogs: the 2px round the pattern.
-    if (this.e3) {
+    // Drawn as a window, the window's own edge stands in for both edges.
+    if (this.e3 && !windowFrames.on) {
       ctx.fillStyle = Colours.BLACK;
       ctx.fillRect(0, 0, BOE_WIDTH, BOE_HEIGHT);
     }
@@ -357,7 +359,7 @@ export class CastDialog implements ModalScreen {
       ctx.fillStyle = Colours.BLACK;
       ctx.fillRect(FRAME.left, FRAME.top, FRAME.right - FRAME.left, FRAME.bottom - FRAME.top);
     }
-    if (!this.e3) {
+    if (!this.e3 && !windowFrames.on) {
       ctx.strokeStyle = Colours.WHITE;
       ctx.lineWidth = 1;
       ctx.strokeRect(FRAME.left + 0.5, FRAME.top + 0.5,

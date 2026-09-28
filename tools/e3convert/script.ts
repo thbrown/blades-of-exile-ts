@@ -97,6 +97,11 @@ export interface ScriptSource {
    * default. See `e3DialogPic` in emit.ts.
    */
   dialogPic?: (tag: number) => [number, number] | undefined;
+  /**
+   * The picture a zone's special encounter `group` meets the party with: its
+   * first monster's (`FUN_10c0_443a` passes `400 +` that monster's sprite).
+   */
+  encounterPic?: (group: number) => [number, number] | undefined;
   /** Where this place's spot `id` is (`FUN_10e0_07b7`), for scripts that test its square. */
   spotLoc?: (id: number) => { x: number; y: number } | undefined;
   /** The engine's number for an E3 shop (`E3TalkConversion.shop`). */
@@ -536,6 +541,7 @@ export class SpecBuilder {
   onceEncounter(flag: Flag, block: number, a: number, b: number, group: number): Step {
     return (next) => this.node('once-out-encounter', {
       sdf: flag, msg: [a > 0 ? this.e3(block, a) : -1, b > 0 ? this.e3(block, b) : -1], ex1: [group],
+      pic: this.src.encounterPic?.(group),
     }, next);
   }
 

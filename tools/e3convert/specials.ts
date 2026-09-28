@@ -27,7 +27,7 @@
 
 import { BASIC_BUTTONS } from '../../src/game/specials/oneshot';
 import { e3SpotFlag } from './flags';
-import { SpecBuilder, townSpotFlag, zoneSpotFlag, type Flag, type ScriptSource, type Step } from './script';
+import { MSG_PIC, SpecBuilder, townSpotFlag, zoneSpotFlag, type Flag, type ScriptSource, type Step } from './script';
 
 export interface E3Spot { loc: { x: number; y: number }; id: number }
 
@@ -172,9 +172,12 @@ export function e3SpotScript(
       const msg: [number, number] = s.id >= 200
         ? [b.e3(block, s.id - 200), b.e3(block, s.id - 199)]
         : [b.e3(block, s.id - 100), -1];
+      // E3 shows these through `FUN_1008_37de`/`3812` (`FUN_10c0_0000`), so
+      // with their dialog picture 8.
+      const pic = src.dialogPic?.(MSG_PIC);
       n = terrainAt(s.loc.x, s.loc.y) >= repeatsFrom
-        ? b.node('disp-msg', { msg }, -1)
-        : b.node('once-disp-msg', { sdf: e3SpotFlag(place, k), msg }, -1);
+        ? b.node('disp-msg', { msg, pic }, -1)
+        : b.node('once-disp-msg', { sdf: e3SpotFlag(place, k), msg, pic }, -1);
     }
     // E3 runs a town spot only on a square the party could stand on, or on
     // one of four blocked terrains — water and three walls — which it runs

@@ -145,9 +145,13 @@ export class MapScreen {
    */
   dragTo(x: number, y: number, canvasW: number, canvasH: number): void {
     if (!this.dragging) return;
-    this.pos.x += x - this.dragFrom.x;
-    this.pos.y += y - this.dragFrom.y;
-    this.dragFrom = { x, y };
+    // Whole pixels, as the dialogs move: at a fractional position the map's
+    // 6px tiles are resampled and smear as it moves.
+    const dx = Math.round(x - this.dragFrom.x);
+    const dy = Math.round(y - this.dragFrom.y);
+    this.pos.x += dx;
+    this.pos.y += dy;
+    this.dragFrom = { x: this.dragFrom.x + dx, y: this.dragFrom.y + dy };
     if (this.pos.x < -MAP_W + MAP_MIN_VISIBLE) this.pos.x = -MAP_W + MAP_MIN_VISIBLE;
     if (this.pos.y < 0) this.pos.y = 0;
     if (this.pos.x > canvasW - MAP_MIN_VISIBLE) this.pos.x = canvasW - MAP_MIN_VISIBLE;

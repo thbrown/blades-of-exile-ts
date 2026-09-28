@@ -125,7 +125,7 @@ import {
   DEFAULT_UI_SCALE, DisplayMode, UI_SCALES, UI_SCALE_FIT, desktop, placeBesideGame,
 } from './render/desktop';
 import { MAP_DEFAULT_POS, MAP_H, MAP_W } from './render/mapScreen';
-import { CAPTION_H, WINDOW_TITLES, drawCaption, type ChromeFlavour } from './render/windowChrome';
+import { CAPTION_H, WINDOW_TITLES, drawCaption, windowFrames, type ChromeFlavour } from './render/windowChrome';
 import { ShopHit, shopItemInfo } from './render/shopScreen';
 import { SheetStore } from './render/sheets';
 import { PartyPreset, Player } from './universe/player';
@@ -696,6 +696,7 @@ async function main(): Promise<void> {
     }
   };
   const dialogs = new DialogHost(ctx, store, () => redraw());
+  windowFrames.on = true;
   dialogs.chrome = () => {
     const flavour = chromeFlavour();
     return { flavour, title: WINDOW_TITLES[flavour].dialog };

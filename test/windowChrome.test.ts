@@ -16,8 +16,10 @@ function fakeCtx(drawn: { x: number; y: number }[] = []): CanvasRenderingContext
   return {
     font: '', fillStyle: '', strokeStyle: '', textBaseline: '', imageSmoothingEnabled: true,
     measureText: (s: string) => ({ width: s.length * 6 }),
-    fillText: noop, fillRect: noop, drawImage: (_i: unknown, _sx: number, _sy: number, _sw: number, _sh: number,
-      x: number, y: number) => { drawn.push({ x, y }); },
+    fillText: noop, fillRect: noop, strokeRect: noop, lineWidth: 1,
+    drawImage: (_i: unknown, _sx: number, _sy: number, _sw: number, _sh: number, x: number, y: number) => {
+      drawn.push({ x, y });
+    },
     save: noop, restore: noop, beginPath: noop, rect: noop, clip: noop,
     createLinearGradient: () => ({ addColorStop: noop }),
   } as unknown as CanvasRenderingContext2D;
@@ -73,6 +75,24 @@ describe('window captions', () => {
     host.handleClick(150, top - 5);
     host.handleDrag(150, -500);
     expect(win.bounds!().top).toBe(CAPTION_H);
+  });
+
+  it('moves by whole pixels when the pointer is between them', () => {
+    Object.assign(desktop, room);
+    const host = new DialogHost(fakeCtx(), new SheetStore(), () => {});
+    host.chrome = () => ({ flavour: 'boe', title: 'Blades of Exile' });
+    const win = fakeWindow({ left: 100, top: 100, right: 300, bottom: 200 });
+    void host.runScreen(win);
+    host.draw();
+    const top = win.bounds!().top;
+    host.handleClick(150.5, top - 5.5);
+    for (const [x, y] of [[151.25, top - 4.75], [152.75, top - 3.5], [160.4, top + 2.2]]) {
+      host.handleDrag(x!, y!);
+      const b = win.bounds!();
+      expect(Number.isInteger(b.left) && Number.isInteger(b.top)).toBe(true);
+    }
+    // And the fractions are not lost: it ends up where the pointer went.
+    expect(win.bounds!().left).toBe(110);
   });
 
   it('draws no caption and moves nothing without chrome', () => {

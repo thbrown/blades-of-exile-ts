@@ -860,7 +860,16 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     // The groups in `sectorXml`'s order: special encounters, then wandering.
     const groupScripts: GroupScript = (b) => [...z.specialEnc, ...z.wandering]
       .map((g) => ({ key: [g.words[0], ...g.words.slice(3)].join(), ...e3GroupSteps(b, g) }));
-    const script = e3SpotScript(spots, { zone: i }, e3Src, (x, y) => z.terrain[x]?.[y] ?? 0, !marks.length ? own
+    const firstMonster = (g: number) => z.specialEnc[g]?.monst.find((m) => m > 0);
+    const zoneSrc: ScriptSource = {
+      ...e3Src,
+      encounterPic: (g) => {
+        const m = firstMonster(g);
+        const pic = m === undefined ? undefined : monsterArt.pics[m];
+        return pic === undefined ? undefined : [pic, 3];
+      },
+    };
+    const script = e3SpotScript(spots, { zone: i }, zoneSrc, (x, y) => z.terrain[x]?.[y] ?? 0, !marks.length ? own
       : (b) => new Map([...own?.(b) ?? [], ...marks.map((m, k): [number, Step[]] => [ENTRANCE_MARK_SPOT + k, [b.setFlag(m.flag, m.value)]])]),
     undefined, undefined, groupScripts);
     write(`${base}.xml`, sectorXml(z, i, strings, script));

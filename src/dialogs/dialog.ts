@@ -17,7 +17,7 @@ import { UiRect, height, shiftRect, width } from '../render/layout';
 import { itemGraphic } from '../render/itemPics';
 import { SheetStore } from '../render/sheets';
 import { drawString, wrapLines } from '../render/text';
-import { CAPTION_H, captionRect, drawCaption, inRect, type ChromeFlavour } from '../render/windowChrome';
+import { CAPTION_H, captionRect, drawCaption, inRect, windowFrames, type ChromeFlavour } from '../render/windowChrome';
 import { dialogBackground, dialogTextIsWhite, tilePattern } from '../render/tiling';
 import { PictType } from './dialogXml';
 import { drawPictAt } from './pict';
@@ -252,17 +252,21 @@ export class Dialog {
 
   draw(): void {
     const { ctx, frame } = this;
-    // Drop shadow, frame, patterned interior.
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(frame.left + 4, frame.top + 4, width(frame), height(frame));
-    ctx.fillStyle = Colours.BLACK;
-    ctx.fillRect(frame.left, frame.top, width(frame), height(frame));
+    // Drop shadow, frame, patterned interior — or, drawn as a window, the
+    // pattern to the edge, which the window's own edge goes over.
+    const edge = windowFrames.on ? 0 : 2;
+    if (!windowFrames.on) {
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(frame.left + 4, frame.top + 4, width(frame), height(frame));
+      ctx.fillStyle = Colours.BLACK;
+      ctx.fillRect(frame.left, frame.top, width(frame), height(frame));
+    }
     const pats = this.store.get('pixpats');
     const inner: UiRect = {
-      top: frame.top + 2,
-      left: frame.left + 2,
-      bottom: frame.bottom - 2,
-      right: frame.right - 2,
+      top: frame.top + edge,
+      left: frame.left + edge,
+      bottom: frame.bottom - edge,
+      right: frame.right - edge,
     };
     if (pats) tilePattern(ctx, pats, dialogBackground(), inner, { x: this.frame.left, y: this.frame.top });
     else {
@@ -532,8 +536,11 @@ export class DialogHost {
     // As the map's clamp: the caption stays reachable, with at least
     // MIN_VISIBLE of it on the desktop either side and its top on it.
     const b = d.win.bounds();
-    let dx = x - d.x;
-    let dy = y - d.y;
+    // Whole pixels only. With the UI scaled the pointer lands between canvas
+    // pixels, and a window at a fractional position has each of its parts
+    // round its own way — they shimmer against each other as it moves.
+    let dx = Math.round(x - d.x);
+    let dy = Math.round(y - d.y);
     dx = Math.max(dx, MIN_VISIBLE - b.right);
     dx = Math.min(dx, desktop.w - MIN_VISIBLE - b.left);
     dy = Math.max(dy, CAPTION_H - b.top);

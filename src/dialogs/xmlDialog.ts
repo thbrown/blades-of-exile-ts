@@ -28,6 +28,7 @@ import {
 } from './dialogXml';
 import { ModalScreen } from './dialog';
 import { drawPictAt } from './pict';
+import { windowFrames } from '../render/windowChrome';
 
 /**
  * The dialog's text colour: white on cDialog::BG_DARK, black on anything
@@ -724,14 +725,19 @@ export class XmlDialog implements ModalScreen {
   draw(): void {
     this.pickFocus();
     const { ctx, frame } = this;
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(frame.left + 4, frame.top + 4, width(frame), height(frame));
-    ctx.fillStyle = Colours.BLACK;
-    ctx.fillRect(frame.left, frame.top, width(frame), height(frame));
+    // Drawn as a window, the pattern goes to the edge and the window's own
+    // 1px edge goes over it, in place of this black frame and its shadow.
+    const edge = windowFrames.on ? 0 : 2;
+    if (!windowFrames.on) {
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(frame.left + 4, frame.top + 4, width(frame), height(frame));
+      ctx.fillStyle = Colours.BLACK;
+      ctx.fillRect(frame.left, frame.top, width(frame), height(frame));
+    }
     const pats = this.store.get('pixpats');
     const inner: UiRect = {
-      top: frame.top + 2, left: frame.left + 2,
-      bottom: frame.bottom - 2, right: frame.right - 2,
+      top: frame.top + edge, left: frame.left + edge,
+      bottom: frame.bottom - edge, right: frame.right - edge,
     };
     if (pats) tilePattern(ctx, pats, dialogBackground(), inner, { x: frame.left, y: frame.top });
     else {
