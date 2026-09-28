@@ -89,6 +89,8 @@ export interface ScriptSource {
   scenNode?: (build: (s: SpecBuilder) => number) => number;
   /** The engine's item for E3's `item` given readable `ability` (`notes.ts`). */
   noteItem?: (item: number, ability: number) => number;
+  /** The engine's item for E3's `item` given some other `ability` (`notes.ts`, `e3StampedItems`). */
+  stampedItem?: (item: number, ability: number) => number;
   /** Spot `id`'s own converter flag (`e3SpotFlag`), for `eraseSpot`. */
   spotFlag?: (id: number) => Flag;
   /**
@@ -1396,6 +1398,13 @@ export class SpecBuilder {
     return n;
   }
 
+  /** The engine's item number for E3's `item` with its ability byte stamped to `ability`. */
+  stamped(item: number, ability: number): number {
+    const n = this.src.stampedItem?.(item, ability);
+    if (n === undefined) throw new Error('stamped needs ScriptSource.stampedItem');
+    return n;
+  }
+
   /** `FUN_1070_18fd`: item `item` (the engine's number) lies at `(x, y)` (TOWN_PLACE_ITEM). */
   placeItem(x: number, y: number, item: number): Step {
     return (next) => this.node('place-item', { ex1: [x, y], ex2: [item, 0] }, next);
@@ -1421,6 +1430,24 @@ export class SpecBuilder {
   /** Creatures in slots `slots` are gone (E3 clears their `active`). */
   removeCreatureSlots(slots: number[]): Step {
     return this.seq(slots.map((k) => this.setCreature(k, 'remove')));
+  }
+
+  /**
+   * Every PC's `cur_health` (+0x54) scaled to `pct` percent, rounded down,
+   * whatever their state. The engine's `hp-percent` is an exile-js opcode
+   * (`SpecType.AFFECT_HP_PERCENT`).
+   */
+  scaleHealth(pct: number): Step {
+    return (next) => this.node('hp-percent', { ex1: [pct] }, next);
+  }
+
+  /**
+   * Every magic item (+0x11) out of the living PCs' packs, and, with `floor`,
+   * off the town's floor. The engine's `take-magic` is an exile-js opcode
+   * (`SpecType.AFFECT_TAKE_MAGIC_ITEMS`).
+   */
+  takeMagicItems(floor: boolean): Step {
+    return (next) => this.node('take-magic', { ex1: [floor ? 1 : 0] }, next);
   }
 
   /** The target loses `n` spell points (AFFECT_SP's take arm), down to 0. */

@@ -275,7 +275,7 @@ export const E3_ITEM_COUNT = 415;
  * throughout; the rest are items BoE retuned). E3 codes seen only on E3-only
  * items (60, 70, 78, 82, 97, 98, 101–103, 111, 132–135, 168) are absent.
  */
-const E3_ABILITY_TO_LEGACY: Readonly<Record<number, number>> = {
+export const E3_ABILITY_TO_LEGACY: Readonly<Record<number, number>> = {
   0: 0, 2: 35, 3: 87, 4: 72, 5: 110, 6: 111, 8: 70, 9: 48, 10: 131, 11: 161, 12: 90, 13: 160,
   14: 0, 16: 32, 17: 158, 18: 71, 19: 124, 20: 88, 21: 91, 22: 112, 23: 113, 24: 87, 25: 49,
   26: 73, 27: 74, 28: 72, 29: 89, 30: 84, 31: 86, 32: 14, 33: 1, 34: 2, 35: 3, 36: 75, 37: 116,

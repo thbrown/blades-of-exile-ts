@@ -104,6 +104,18 @@ export enum SpecType {
   CREATE_NEW_PC = 105,
   STORE_PC = 106,
   UNSTORE_PC = 107,
+  /**
+   * An exile-js opcode, not in BoE or OBoE: each target's health becomes
+   * `ex1a` percent of what it is, rounded down. Exile III halves the party's
+   * in the Pit of the Wyrm (DIVERGENCES.md #22).
+   */
+  AFFECT_HP_PERCENT = 108,
+  /**
+   * An exile-js opcode, not in BoE or OBoE: every magic item leaves each
+   * living target's pack, and with `ex1a` 1 every magic item lying in the
+   * town is destroyed. Exile III's Great Circle does both (DIVERGENCES.md #22).
+   */
+  AFFECT_TAKE_MAGIC_ITEMS = 109,
 
   IF_SDF = 130,
   IF_TOWN_NUM = 131,

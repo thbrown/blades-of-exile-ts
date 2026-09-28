@@ -530,6 +530,19 @@ revived the dead; `SpecBuilder.bringIn` now tests the live code first, which
 the engine clears, as E3 clears its own. As with §10 and §11, OBoE would read
 a scenario using either opcode as having an unknown one.
 
+### 22. Halving the party's health, and taking its magic (2026-09-28)
+
+**DECIDED: two exile-js opcodes in AFFECT's range, `hp-percent` (108) and
+`take-magic` (109).** Exile III's Pit of the Wyrm halves every PC's current
+health (`cur_health / 2`, dead or alive), and its Great Circle takes every
+magic item from the living PCs' packs, curses and all, and destroys the magic
+items lying in the town. BoE can heal (which stops at the maximum) or damage
+(which can kill), but not scale, and has no node that takes items by their
+magic flag. `hp-percent` sets each target's health to `ex1a` percent, rounded
+down; `take-magic` empties the targets' packs of magic items, and with `ex1a`
+1 the town's floor too. Both do nothing to a creature target, as nine of
+OBoE's AFFECT nodes do.
+
 ---
 
 ## Agreements worth recording

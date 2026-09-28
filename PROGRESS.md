@@ -14301,6 +14301,18 @@ the rest of the TODO(E3-3) list.
         Spragins are four men. **Found on the way:** `activate_monsters`
         revives a dead group if a script brings it in twice (OBoE reads the
         record's code); `bringIn` now tests the live code first.
+      - [x] **The party and its items** — `hp-percent` (108) and
+        `take-magic` (109), DIVERGENCES #22: the Wyrm Pit's throw halves
+        everyone's health; the Great Circle's haakai take every magic item
+        (packs and floor). **Stamped items** (`notes.ts`, `e3StampedItems`):
+        the six town presets whose ability differs from the table's, and the
+        outdoor plate E3 stamps with ability 77, each get an item record of
+        their own, after the notes so no number moves. (The old note listed
+        Bronze Chain Mail; its preset matches the table.) **Two "party
+        bytes" were town visibility**: party+0x849f and +0x8520 are
+        `can_find_town[26]` and `[155]` (the array starts at +0x8485), so
+        burning the Filth Factory takes it off the map, and so does taking
+        the Isolated Inn's item.
 
 All checks pass: 1,420 tests, both sweeps, verify-screen (with TOUCH)/party
 (this round). Before it: 1,419 tests, both sweeps, verify-screen (with TOUCH)/party

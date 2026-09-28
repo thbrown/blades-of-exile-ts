@@ -22,7 +22,7 @@ import { FieldType } from '../../src/data/fields';
 import { DamageType } from '../../src/data/monster';
 import { decodeBmp, type Rgba } from '../../src/fileio/legacy/bmp';
 import { BG_RECTS, E3_PATTERN_SLOTS } from '../../src/render/tiling';
-import { E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3ItemAbilities, readE3Items, readE3Monsters, readE3RoadJoins, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
+import { E3_ABILITY_TO_LEGACY, E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3ItemAbilities, readE3Items, readE3Monsters, readE3RoadJoins, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3PresetItem, type E3Town } from './town';
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
 import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
@@ -53,7 +53,7 @@ import { tinraya } from './towns/tinraya';
 import { PANTS_CLASS, rentarKeep } from './towns/rentarKeep';
 import { sharimik } from './towns/sharimik';
 import { ZONE_SCRIPTS } from './towns/zones';
-import { e3NoteItems, e3NoteSteps, isE3NoteAbility } from './notes';
+import { e3NoteItems, e3NoteSteps, e3StampedItems, isE3NoteAbility } from './notes';
 import { DAILY_FLAGS, KILL_SCRIPTS } from './towns/talkScripts';
 import { dailyPlot } from './towns/plot';
 import { townStatesXml } from './towns/townStates';
@@ -512,9 +512,9 @@ function townSigns(t: E3Town, strings: Map<number, string>) {
  * (`notes.ts`); `charges`, when not 0, replaces the item's own. The engine's
  * preset has one number, `<charges>`, which it reads as gold's and food's
  * amount, so the ability goes there for those and E3's charges otherwise.
- * TODO(E3-3): seven presets give some other item an ability of its own
- * (a Book 65, Iron Gauntlets and a Crude Buckler 14, Robes 16, razordisks
- * 65 and 92, Bronze Chain Mail 0); they come out as the table's item.
+ * A preset that gives some other item an ability of its own (six: a Book
+ * 65, Iron Gauntlets and a Crude Buckler 14, Robes 16, razordisks 65 and
+ * 92) names an item made for it (`e3StampedItems`).
  */
 interface TownTables {
   type(p: E3PresetItem): number;
@@ -725,6 +725,11 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
       return scen.text(text);
     },
     horse: (k) => horseNumber[k] ?? -1,
+    stampedItem: (item, ability) => {
+      const k = stampedIndex(item, ability);
+      if (k < 0) throw new Error(`no stamped item ${item} with ability ${ability}: add it to notes.ts's SCRIPT_STAMPS`);
+      return stampBase + k;
+    },
     noteItem: (item, ability) => {
       const k = noteItems.findIndex(([i, a]) => i === item && a === ability);
       if (k < 0) throw new Error(`no note item ${item} with ability ${ability}: add it to notes.ts's SCRIPT_NOTES`);
@@ -784,15 +789,24 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   const noteBase = foodBase + shopTables.food.length;
   const isGoldOrFood = (item: number) => e3Items[item]?.variety === 3 || e3Items[item]?.variety === 11;
   const noteItems = e3NoteItems(towns, isGoldOrFood);
+  // After the notes, the items given some other ability of their own.
+  const tableAbilities = readE3ItemAbilities(files.exe);
+  const stampBase = noteBase + noteItems.length;
+  const stampedItems = e3StampedItems(towns, isGoldOrFood, (item) => tableAbilities[item] ?? 0);
+  const stampedIndex = (item: number, ability: number) =>
+    stampedItems.findIndex(([i, a]) => i === item && a === ability);
   const townTables: TownTables = {
     type: (p) => {
-      if (isGoldOrFood(p.itemCode) || !isE3NoteAbility(p.ability)) return p.itemCode;
-      return noteBase + noteItems.findIndex(([i, a]) => i === p.itemCode && a === p.ability);
+      if (isGoldOrFood(p.itemCode) || p.ability < 0) return p.itemCode;
+      if (isE3NoteAbility(p.ability)) return noteBase + noteItems.findIndex(([i, a]) => i === p.itemCode && a === p.ability);
+      const k = stampedIndex(p.itemCode, p.ability);
+      return k < 0 ? p.itemCode : stampBase + k;
     },
     charges: (p) => (isGoldOrFood(p.itemCode) ? p.ability : p.charges > 0 ? p.charges : -1),
     hidden: (t) => hiddenTowns.has(t),
   };
-  const e3Abilities = [...readE3ItemAbilities(files.exe), ...shopTables.food.map(() => 0), ...noteItems.map(([, a]) => a)];
+  const e3Abilities = [...tableAbilities, ...shopTables.food.map(() => 0), ...noteItems.map(([, a]) => a),
+    ...stampedItems.map(([, a]) => a)];
   scen = new SpecBuilder(e3Src, (label) => Math.max(0, BASIC_BUTTONS.indexOf(label)));
   // First sightings (towns/sightings.ts): each plague monster's onsight node.
   // A range of monsters shares one script, so one node.
@@ -804,7 +818,12 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   }
   write('monsters.xml', monstersXml(monsters));
   const noteNodes = new Map<number, number>();
-  const items = [...e3Items, ...shopTables.food, ...noteItems.map(([k]) => e3Items[k]!)].map((old, k) => {
+  // A stamped item's ability goes through E3's code table, with the level as
+  // strength, as for an item with no namesake in BoE (`readE3Items`).
+  const stamped = stampedItems.map(([k, a]) => ({
+    ...e3Items[k]!, ability: E3_ABILITY_TO_LEGACY[a] ?? 0, abilityStrength: e3Items[k]!.itemLevel,
+  }));
+  const items = [...e3Items, ...shopTables.food, ...noteItems.map(([k]) => e3Items[k]!), ...stamped].map((old, k) => {
     const it = convertItem(old);
     it.graphicNum = 1000 + itemSheetNum * 100 + old.graphicNum;
     // E3's scripts name kinds of item by `type_flag` (unicorn horns are 111);

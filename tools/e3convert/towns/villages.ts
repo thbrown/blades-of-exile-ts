@@ -195,9 +195,10 @@ function bengaro(t: number): PlaceScript {
     if (t === 155) {
       return new Map<number, Step[]>([
         [1, [b.askDialog(0x1198, [b.dialog(0x1199), b.bringIn(RAIDERS, 1), b.setFlag(f(0x693), 20)])]],
-        // TODO(E3-3): once taken, E3 also clears party+0x8520, which no
-        // other code in the EXE touches.
-        [2, [b.ifFlagAtLeast(f(0x693), 1, [b.giveItemDialog(0x1197, spot(2), 0x13a)])]],
+        // Once the item is taken the inn leaves the map (party+0x8520,
+        // `can_find_town[155]`).
+        [2, [b.ifFlagAtLeast(f(0x693), 1, [b.giveItemDialog(0x1197, spot(2), 0x13a),
+          b.ifFlagAtLeast(spot(2), 1, [b.townVisible(155, false)])])]],
       ]);
     }
     return new Map<number, Step[]>([

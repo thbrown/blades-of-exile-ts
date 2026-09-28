@@ -13,8 +13,9 @@ import { SpecType } from '../../data/special';
 import { SKILL_MAX } from '../../data/shop';
 import { MAX_FOOD, MAX_GOLD } from '../../universe/party';
 import { Enchant, enchantWeapon } from '../../data/enchant';
-import { GiveEquip, GiveStatus, giveItem } from '../../universe/inventory';
-import { Player } from '../../universe/player';
+import { GiveEquip, GiveStatus, giveItem, takeItem } from '../../universe/inventory';
+import { NUM_INVEN_SLOTS, Player } from '../../universe/player';
+import { ItemType } from '../../data/item';
 import { MainStatus, PartyStatus, Skill, Status, Trait } from '../../universe/skills';
 import { Creature } from '../../universe/creature';
 import { isCombat } from '../modes';
@@ -149,6 +150,35 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
     case SpecType.AFFECT_HP:
       for (const pc of targets()) pc.heal(signed(spec.ex1a));
       break;
+
+    case SpecType.AFFECT_HP_PERCENT:
+      // Exile III's `cur_health / 2` for all six PCs, whatever their state
+      // (DIVERGENCES.md #22). Set directly: `heal` stops at the maximum.
+      if (monsterTarget) break;
+      for (const pc of targets()) pc.curHealth = Math.trunc((pc.curHealth * spec.ex1a) / 100);
+      break;
+
+    case SpecType.AFFECT_TAKE_MAGIC_ITEMS: {
+      // Exile III's Great Circle (DIVERGENCES.md #22): the living PCs' packs,
+      // last slot first so the compaction skips nothing, curses or not; then,
+      // with ex1a 1, whatever lies in the town.
+      if (monsterTarget) break;
+      for (const pc of targets()) {
+        if (pc.mainStatus !== MainStatus.ALIVE) continue;
+        for (let slot = NUM_INVEN_SLOTS - 1; slot >= 0; slot--) {
+          const item = pc.items[slot];
+          if (!item || item.variety === ItemType.NO_ITEM || !item.magic) continue;
+          pc.equip[slot] = false;
+          takeItem(pc, slot);
+        }
+      }
+      if (spec.ex1a === 1) {
+        for (const item of univ.town?.items ?? [])
+          if (item.variety !== ItemType.NO_ITEM && item.magic) item.variety = ItemType.NO_ITEM;
+      }
+      ctx.redraw = true;
+      break;
+    }
 
     case SpecType.AFFECT_SP:
       for (const pc of targets()) {

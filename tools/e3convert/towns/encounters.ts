@@ -86,12 +86,12 @@ function win(b: SpecBuilder, script: number): Step[] | null {
       return [b.msg(0x56, 0x11), b.giveItem(0x10a)];
     case 0x6a:
       return [b.msg(0x55, 0xc), b.setFlag(f(0xa83), 2)];
-    // TODO(E3-3): the plate is `FUN_1070_0464(0x89, 77)`: E3's ability 77
-    // (BoE's 34) stamped on it, which no node can give.
+    // The plate is `FUN_1070_0464(0x89, 77)`: E3's ability 77 (BoE's 34)
+    // stamped on it, an item of its own (`notes.ts`, `e3StampedItems`).
     case 0x6f:
-      return [b.msg(0x58, 0x48), b.giveItem(0x89)];
+      return [b.msg(0x58, 0x48), b.giveItem(b.stamped(0x89, 77))];
     case 0x70:
-      return [b.msg(0x58, 0x49, 0x4a), b.giveItem(0x89)];
+      return [b.msg(0x58, 0x49, 0x4a), b.giveItem(b.stamped(0x89, 77))];
     case 0x71:
       return [b.msg(0x56, 0x27), b.gold(500), b.giveItem(0x43)];
     // `FUN_10b0_1ff2`: `award_xp` to every living PC.

@@ -100,12 +100,12 @@ function level2(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]>
   const teleport = (x: number, y: number): Step[] => [b.askDialog(0xcc5, [b.moveParty(x, y)])];
   return new Map<number, Step[]>([
     [1, [b.dialog(0xcc8), b.setFlag(spot(1), 20)]],
-    // The heart of the roach pit, where the Phoenix Egg burns it all.
-    // TODO(E3-3): party+0x849f, which E3 zeroes here.
+    // The heart of the roach pit, where the Phoenix Egg burns it all, and
+    // the factory leaves the map (party+0x849f, `can_find_town[26]`).
     [2, [b.ifSpecItem(PHOENIX_EGG, [b.askDialog(0xcca, [
       b.dialog(0xccb), b.setFlag(spot(2), 20), b.setFlag(FACTORY_BURNED, 1), b.journal(8),
       b.placeField(0x1d, 0x1f, FieldType.FIELD_QUICKFIRE), b.xp(25), b.takeSpecItem(PHOENIX_EGG),
-      b.removeCreatures(), b.setEvent(1),
+      b.removeCreatures(), b.setEvent(1), b.townVisible(26, false),
     ])], [b.dialog(0xcc9)]), b.blockMove()]],
     [3, [b.trap(0xccc, spot(3), 0x17)]],
     [4, [b.trap(0xccc, spot(4), 0x17)]],

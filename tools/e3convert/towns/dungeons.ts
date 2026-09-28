@@ -510,9 +510,9 @@ function greatCircle(b: SpecBuilder): Map<number, Step[]> {
   const smash = (): Step[] => [
     b.setFlag(f(0x867), 1), b.setFlag(spot(1), 20), b.townVisible(62),
     b.askDialog(0xe27, [
-      // TODO(E3-3): E3 also takes every magic item the party carries, and
-      // those lying here; no node can.
-      b.msg(B, 0xf), (next) => b.node('gold', { ex1: [30000, 1] }, next), b.msg(B, 0x13),
+      // The haakai take the party's gold, every magic item it carries, and
+      // those lying here.
+      b.msg(B, 0xf), (next) => b.node('gold', { ex1: [30000, 1] }, next), b.takeMagicItems(true), b.msg(B, 0x13),
     ], [b.msg(B, 0x10), b.bringIn(200, 1)]),
   ];
   return new Map<number, Step[]>([
@@ -775,9 +775,7 @@ function wyrmPit2(b: SpecBuilder): Map<number, Step[]> {
   /** The bier's first visit (flag (77,9)) decides where the throw lands. */
   const bier = f(0x38f);
   const thrown = (): Step[] => [
-    // TODO(E3-3): E3 also halves each PC's health; no node can (heal does
-    // nothing to a PC at full health, and damage can kill).
-    b.msg(B, 0x37),
+    b.msg(B, 0x37), b.scaleHealth(50),
     b.ifFlagEq(bier, 0, [b.moveParty(0xf, 0x2a)], [b.moveParty(0x15, 0x27)]),
     b.setTer(0x10, 0x2a, SAFE), b.setTer(0x15, 0x28, SAFE), b.blockMove(),
   ];

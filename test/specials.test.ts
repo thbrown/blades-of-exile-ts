@@ -26,6 +26,7 @@ import { MainStatus, PartyStatus, Race, Skill, Status, Trait } from '../src/univ
 import { killMonst } from '../src/game/damage';
 import { Universe } from '../src/universe/universe';
 import { Attitude, DamageType } from '../src/data/monster';
+import { ItemType, defaultItem } from '../src/data/item';
 import { Creature, CreatureStatus, assignCreature } from '../src/universe/creature';
 import { Boom, setBoomSink } from '../src/game/booms';
 import { Missile, setMissileSink } from '../src/game/missileAnim';
@@ -2222,5 +2223,38 @@ describe('a node that names a creature by its slot', () => {
     await run(0);
     expect(m[0]!.active).toBe(CreatureStatus.DEAD);
     expect(univ.party.getSdf(16, 3)).toBe(0);
+  });
+});
+
+/** `AFFECT_HP_PERCENT` and `AFFECT_TAKE_MAGIC_ITEMS` (DIVERGENCES.md #22). */
+describe('a node that halves health or takes magic items', () => {
+  it('scales every PC\'s health, rounding down, past what heal could', async () => {
+    const { univ, run } = withNodes({ 0: { type: SpecType.SELECT_TARGET, ex1a: 2, jumpto: 1 },
+      1: { type: SpecType.AFFECT_HP_PERCENT, ex1a: 50 } });
+    univ.party.pcs.forEach((pc, i) => { pc.curHealth = 11 + i; });
+    await run();
+    expect(univ.party.pcs.map((pc) => pc.curHealth)).toEqual([5, 6, 6, 7, 7, 8]);
+  });
+
+  it('takes magic items from living PCs\' packs, and off the floor with ex1a 1', async () => {
+    const { univ, run } = withNodes({ 0: { type: SpecType.SELECT_TARGET, ex1a: 2, jumpto: 1 },
+      1: { type: SpecType.AFFECT_TAKE_MAGIC_ITEMS, ex1a: 1 } });
+    const item = (name: string, magic: boolean) =>
+      ({ ...defaultItem(), variety: ItemType.ONE_HANDED, name, fullName: name, magic });
+    const [a, b] = univ.party.pcs;
+    a!.items.fill(defaultItem());
+    a!.items[0] = item('plain', false);
+    a!.items[1] = item('wand', true);
+    a!.items[2] = item('ring', true);
+    a!.items[3] = item('rope', false);
+    a!.equip[2] = true;
+    b!.items[0] = item('kept', true);
+    b!.mainStatus = MainStatus.DEAD;
+    univ.town!.items = [item('floor wand', true), item('floor rock', false)];
+    await run();
+    expect(a!.items.filter((i) => i.variety !== ItemType.NO_ITEM).map((i) => i.name)).toEqual(['plain', 'rope']);
+    expect(a!.equip.slice(0, 4)).toEqual([false, false, false, false]);
+    expect(b!.items[0]!.name).toBe('kept');
+    expect(univ.town!.items.map((i) => i.variety !== ItemType.NO_ITEM)).toEqual([false, true]);
   });
 });

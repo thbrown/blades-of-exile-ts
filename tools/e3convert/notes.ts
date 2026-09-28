@@ -96,3 +96,32 @@ export function e3NoteItems(towns: E3Town[], isGoldOrFood: (item: number) => boo
   const rest = [...pairs.values()].slice(scripted).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   return [...SCRIPT_NOTES, ...rest];
 }
+
+/**
+ * Items with an ability of their own that isn't a readable one: a town
+ * preset whose `ability` differs from its table item's, or a script's
+ * `FUN_1070_0464(item, ability)`. Each (item, ability) pair gets an item of
+ * its own, as the notes do, appended after them so the notes' numbers stay.
+ */
+const SCRIPT_STAMPS: [number, number][] = [
+  // The plate from an outdoor group (`towns/encounters.ts`, 10c0:0977).
+  [0x89, 77],
+];
+
+export function e3StampedItems(
+  towns: E3Town[], isGoldOrFood: (item: number) => boolean, tableAbility: (item: number) => number,
+): [number, number][] {
+  const pairs = new Map<string, [number, number]>(SCRIPT_STAMPS.map((p) => [`${p[0]}:${p[1]}`, p]));
+  const found: [number, number][] = [];
+  for (const t of towns) {
+    for (const p of t.presetItems) {
+      if (p.itemCode < 0 || p.ability < 0 || isGoldOrFood(p.itemCode) || isE3NoteAbility(p.ability)) continue;
+      if (p.ability === tableAbility(p.itemCode)) continue;
+      const key = `${p.itemCode}:${p.ability}`;
+      if (!pairs.has(key)) found.push([p.itemCode, p.ability]);
+      pairs.set(key, [p.itemCode, p.ability]);
+    }
+  }
+  found.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  return [...SCRIPT_STAMPS, ...found];
+}
