@@ -1,7 +1,11 @@
 /**
- * The spell picker for a finger: a panel over the cast dialog while touch
- * controls are on. The canvas dialog is 605×430 of small LEDs and 23px
- * buttons, which a phone shrinks to about two-thirds.
+ * The spell picker for a finger: translucent strips round the cast dialog
+ * while touch controls are on, laid out as the movement pads are. The dialog
+ * itself stays up and stays live — its caster buttons, Other Spells and the
+ * rest still answer a tap — and the strips are the parts a thumb needs
+ * bigger: on the left one level's spells, with ◀ ▶ to step through the
+ * levels (a long press on one describes it); on the right the party, when
+ * the spell is cast on one of them, and Cast under it.
  *
  * It is only a face. Every tap presses one of the dialog's own controls by
  * its C++ id (`CastDialog.pressControl` → `SpellPick.click`), the ids the
@@ -10,8 +14,7 @@
  * missing target does — is the game's, not this file's.
  */
 
-import type { CastDialog, CastSlot, CastView } from '../dialogs/castDialog';
-import { NO_TARGET } from '../game/spellPick';
+import type { CastDialog, CastView } from '../dialogs/castDialog';
 
 export interface TouchSpellHost {
   /** The cast dialog, when it's the one on top; null otherwise. */
@@ -20,12 +23,21 @@ export interface TouchSpellHost {
   answer(dialog: CastDialog, name: string | null): void;
 }
 
-const LEVEL_PAGES: readonly (readonly number[])[] = [[1, 2, 3, 4], [5, 6, 7]];
+/** How long a finger rests on a spell before it describes it rather than picks it. */
+const LONG_PRESS_MS = 500;
+
+const MIN_LEVEL = 1;
+const MAX_LEVEL = 7;
+/** The dialog's grid shows levels 1–4 on its first page and 5–7 on its second. */
+const pageOf = (level: number): number => (level <= 4 ? 0 : 1);
 
 export class TouchSpellPanel {
   private readonly root: HTMLElement;
   /** The view last drawn, so a redraw that changes nothing rebuilds nothing. */
   private shown = '';
+  /** Which level the left strip lists; null until a dialog opens. */
+  private level: number | null = null;
+  private dialog: CastDialog | null = null;
 
   constructor(private readonly host: TouchSpellHost) {
     this.root = document.createElement('div');
@@ -39,20 +51,41 @@ export class TouchSpellPanel {
     this.root.hidden = dialog === null;
     if (dialog === null) {
       this.shown = '';
+      this.level = null;
+      this.dialog = null;
       return;
     }
     const view = dialog.view;
-    const key = JSON.stringify(view);
+    // A fresh dialog opens on the level of the spell it has chosen; after
+    // that, if the dialog's own Other Spells flips the page, follow it.
+    if (dialog !== this.dialog || this.level === null) {
+      this.dialog = dialog;
+      this.level = view.slots.find((s) => s.spell === view.spell)?.level ?? (view.page === 0 ? 1 : 5);
+    }
+    if (pageOf(this.level) !== view.page) this.level = view.page === 0 ? 1 : 5;
+    const key = `${this.level}|${JSON.stringify(view)}`;
     if (key === this.shown) return;
     this.shown = key;
-    this.build(dialog, view);
+    this.build(dialog, view, this.level);
   }
 
   private press(dialog: CastDialog, id: string): void {
     this.host.answer(dialog, dialog.pressControl(id));
   }
 
-  private build(dialog: CastDialog, view: CastView): void {
+  /** Step the left strip a level, flipping the dialog's page when it crosses 4↔5. */
+  private stepLevel(dialog: CastDialog, view: CastView, by: number): void {
+    const next = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, (this.level ?? 1) + by));
+    if (next === this.level) return;
+    this.level = next;
+    if (pageOf(next) !== view.page) this.press(dialog, 'other');
+    else {
+      this.shown = '';
+      this.sync(true);
+    }
+  }
+
+  private build(dialog: CastDialog, view: CastView, level: number): void {
     const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): HTMLElementTagNameMap[K] => {
       const e = document.createElement(tag);
       if (cls) e.className = cls;
@@ -68,79 +101,64 @@ export class TouchSpellPanel {
       return b;
     };
 
-    const head = el('div', 'ts-head');
-    head.append(el('strong', 'ts-title', view.priest ? 'Priest Spells' : 'Mage Spells'));
-    // The two pages of the grid, levels 1–4 and 5–7: the dialog's Other Spells.
-    const tabs = el('div', 'ts-tabs');
-    LEVEL_PAGES.forEach((levels, page) => {
-      const label = `Levels ${levels[0]}–${levels[levels.length - 1]}`;
-      const tab = button(page === view.page ? 'ts-tab on' : 'ts-tab', label, () => {
-        if (page !== view.page) this.press(dialog, 'other');
+    // Left: this level's spells — the caster's own, dim where they can't
+    // cast them now, as the dialog's unlit LEDs are.
+    const left = el('div', 'ts-strip ts-left');
+    left.append(el('div', 'ts-heading', `Level ${level}`));
+    const list = el('div', 'ts-list');
+    const mine = view.slots.filter((s) => s.level === level && s.known);
+    if (mine.length === 0) list.append(el('div', 'ts-none', 'No spells'));
+    for (const s of mine) {
+      const chosen = s.spell === view.spell;
+      // A tap picks it; a long press describes it, as a long press on the
+      // game screen is the right button, which describes a spell in the dialog.
+      let described = false;
+      const b = button(`ts-spell${chosen ? ' on' : ''}${s.castable ? '' : ' dim'}`, s.name, () => {
+        if (described) described = false;
+        else this.press(dialog, `spell${s.slot + 1}`);
       });
-      tabs.append(tab);
-    });
-    head.append(tabs, el('span', 'ts-feedback', view.feedback));
-
-    // Who casts. In combat it's the active PC, and the dialog's buttons are inert.
-    const casters = el('div', 'ts-row');
-    casters.append(el('span', 'ts-label', 'Caster'));
-    for (const pc of view.party) {
-      if (!pc.present) continue;
-      if (!view.canChooseCaster && pc.index !== view.caster) continue;
-      const chip = button(pc.index === view.caster ? 'ts-chip on' : 'ts-chip',
-        `${pc.index + 1}. ${pc.name}`, () => this.press(dialog, `caster${pc.index + 1}`),
-        !view.canChooseCaster || !pc.canCast);
-      chip.append(el('small', '', ` ${pc.sp} SP`));
-      casters.append(chip);
+      let timer = 0;
+      b.addEventListener('pointerdown', () => {
+        described = false;
+        timer = window.setTimeout(() => { described = true; dialog.describeSlot(s.slot); }, LONG_PRESS_MS);
+      });
+      for (const end of ['pointerup', 'pointercancel', 'pointerleave'] as const) {
+        b.addEventListener(end, () => window.clearTimeout(timer));
+      }
+      b.addEventListener('contextmenu', (ev) => ev.preventDefault());
+      list.append(b);
     }
+    const steps = el('div', 'ts-steps');
+    steps.append(
+      button('ts-step', '◀', () => this.stepLevel(dialog, view, -1), level <= MIN_LEVEL),
+      button('ts-step', '▶', () => this.stepLevel(dialog, view, 1), level >= MAX_LEVEL),
+    );
+    left.append(list, steps);
 
-    // Who it's for, when the spell is cast on a party member.
-    const targets = el('div', 'ts-row');
+    // Right: who it's for, when the spell is cast on a party member.
+    const right = el('div', 'ts-strip ts-right');
     if (view.needsTarget) {
-      targets.append(el('span', 'ts-label', 'Target'));
+      right.append(el('div', 'ts-heading', 'Target'));
       for (const pc of view.party) {
         if (!pc.present) continue;
-        const chip = button(pc.index === view.target ? 'ts-chip on' : 'ts-chip',
+        const chip = button(`ts-pc${pc.index === view.target ? ' on' : ''}${pc.alive ? '' : ' dim'}`,
           `${pc.index + 1}. ${pc.name}`, () => this.press(dialog, `target${pc.index + 1}`));
-        chip.append(el('small', '', ` ${pc.hp} HP`));
-        targets.append(chip);
+        chip.append(el('small', '', `${pc.hp} HP`));
+        right.append(chip);
       }
     }
 
-    // The grid: a column a level, the caster's own spells only; the ones they
-    // can't cast now are there but dim, as the dialog's unlit LEDs are.
-    const grid = el('div', 'ts-grid');
-    const levels = LEVEL_PAGES[view.page] ?? [];
-    for (const level of levels) {
-      const col = el('div', 'ts-col');
-      col.append(el('div', 'ts-level', `Level ${level}`));
-      const mine = view.slots.filter((s: CastSlot) => s.level === level && s.known);
-      if (mine.length === 0) col.append(el('div', 'ts-none', '—'));
-      for (const s of mine) {
-        const chosen = s.spell === view.spell;
-        const b = button(`ts-spell${chosen ? ' on' : ''}${s.castable ? '' : ' dim'}`, s.name, () => {
-          // A second tap on the chosen spell casts it, once it has what it needs.
-          if (chosen && s.castable && (!view.needsTarget || view.target !== NO_TARGET)) this.press(dialog, 'cast');
-          else this.press(dialog, `spell${s.slot + 1}`);
-        });
-        col.append(b);
-      }
-      grid.append(col);
-    }
-
+    // Bottom right: Cast, and Cancel beside it.
     const chosen = view.slots.find((s) => s.spell === view.spell);
     const foot = el('div', 'ts-foot');
+    const cancel = button('ts-cancel', '✕', () => this.press(dialog, 'cancel'));
+    cancel.title = 'Cancel';
+    cancel.setAttribute('aria-label', 'Cancel');
     foot.append(
-      button('ts-info', 'Describe', () => { if (chosen) dialog.describeSlot(chosen.slot); }, !chosen),
-      el('span', 'ts-spacer'),
-      button('ts-cancel', 'Cancel', () => this.press(dialog, 'cancel')),
-      button('ts-cast', chosen ? `Cast ${chosen.name}` : 'Cast', () => this.press(dialog, 'cast'), !chosen),
+      cancel,
+      button('ts-cast', 'CAST', () => this.press(dialog, 'cast'), !chosen),
     );
 
-    const panel = el('div', 'ts-panel');
-    panel.append(head, casters);
-    if (view.needsTarget) panel.append(targets);
-    panel.append(grid, foot);
-    this.root.replaceChildren(panel);
+    this.root.replaceChildren(left, right, foot);
   }
 }

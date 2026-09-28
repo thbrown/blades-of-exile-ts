@@ -749,127 +749,140 @@
       .touch-icon.wide {
         width: 80%;
       }
-      /* The spell picker for a finger (platform/touchSpells.ts), over the
-         cast dialog: the game's paper, its fonts, and buttons a thumb can
-         hit. */
+      /* The spell picker for a finger (platform/touchSpells.ts): strips down
+         the sides and a bar along the bottom, round the cast dialog, which
+         stays visible and live between them. See-through as the pads are. */
       #touch-spells {
+        --strip: clamp(118px, 19vw, 170px);
         position: fixed;
         inset: 28px 0 0 0;
         z-index: 6;
-        display: flex;
-        align-items: stretch;
-        justify-content: center;
-        padding: 6px;
-        box-sizing: border-box;
-        background: rgba(0, 0, 0, 0.55);
+        pointer-events: none;
+        font: 13px 'BoEText', system-ui, sans-serif;
       }
       #touch-spells[hidden] {
         display: none;
       }
-      .ts-panel {
-        width: 100%;
-        max-width: 900px;
+      .ts-strip {
+        position: absolute;
+        top: 6px;
+        bottom: 56px;
+        width: var(--strip);
         display: flex;
         flex-direction: column;
-        gap: 6px;
-        padding: 8px 10px;
-        box-sizing: border-box;
-        background: var(--paper-tile, none) 0 0 / 64px 64px repeat, #e4e4e4;
-        image-rendering: pixelated;
-        border: 1px solid #000;
-        border-radius: 6px;
-        color: #000;
-        font: 13px 'BoEText', system-ui, sans-serif;
-        min-height: 0;
-      }
-      .ts-head,
-      .ts-row,
-      .ts-foot {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 5px;
-      }
-      .ts-title {
-        font-size: 15px;
-        margin-right: 6px;
-      }
-      .ts-tabs {
-        display: flex;
         gap: 4px;
       }
-      .ts-feedback {
-        margin-left: auto;
-        font-size: 12px;
-        font-style: italic;
-        color: #333;
+      .ts-left {
+        left: 6px;
       }
-      .ts-label {
-        width: 48px;
-        font-size: 11px;
-        font-weight: bold;
+      .ts-right {
+        right: 6px;
       }
-      .ts-btn {
-        font: inherit;
-        color: #000;
-        background: #f4f4f4;
-        border: 1px solid #000;
-        border-radius: 4px;
-        padding: 0 10px;
-        min-height: 34px;
-        touch-action: manipulation;
-        -webkit-tap-highlight-color: transparent;
-      }
-      .ts-btn:disabled {
-        opacity: 0.45;
-      }
-      .ts-btn.on {
-        background: #23425f;
+      .ts-heading {
         color: #fff;
+        font-weight: bold;
+        font-size: 12px;
+        text-shadow: 0 1px 2px #000, 0 0 4px #000;
+        padding: 0 2px;
       }
-      .ts-chip small {
-        font-size: 10px;
-        opacity: 0.8;
-      }
-      .ts-grid {
+      .ts-list {
         flex: 1 1 auto;
         min-height: 0;
         overflow-y: auto;
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 6px;
-        align-items: start;
-      }
-      .ts-col {
         display: flex;
         flex-direction: column;
         gap: 4px;
+        pointer-events: auto;
+        scrollbar-width: none;
       }
-      .ts-level {
-        font-size: 11px;
-        font-weight: bold;
-        border-bottom: 1px solid #000;
-        padding-bottom: 1px;
+      .ts-btn {
+        pointer-events: auto;
+        font: inherit;
+        min-height: 32px;
+        padding: 2px 8px;
+        text-align: left;
+        color: rgba(255, 255, 255, 0.92);
+        background: rgba(20, 20, 20, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        border-radius: 6px;
+        text-shadow: 0 1px 1px #000;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        flex: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+      }
+      .ts-btn:active {
+        background: rgba(255, 255, 255, 0.3);
+      }
+      .ts-btn:disabled {
+        opacity: 0.35;
+      }
+      .ts-btn.on {
+        background: rgba(120, 90, 10, 0.75);
+        border-color: rgba(255, 220, 0, 0.85);
+        color: #ffe680;
+      }
+      .ts-btn.dim:not(.on) {
+        color: rgba(255, 255, 255, 0.45);
       }
       .ts-none {
+        color: rgba(255, 255, 255, 0.7);
         font-size: 12px;
-        color: #666;
+        text-shadow: 0 1px 2px #000;
+        padding: 0 2px;
       }
-      .ts-spell {
-        text-align: left;
+      .ts-steps {
+        display: flex;
+        gap: 6px;
       }
-      .ts-spell.dim {
-        color: #777;
-        border-color: #999;
-      }
-      .ts-spacer {
+      .ts-step {
         flex: 1;
+        min-height: 40px;
+        text-align: center;
+        font-size: 18px;
+      }
+      .ts-pc {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 6px;
+        min-height: 36px;
+      }
+      .ts-pc small {
+        font-size: 10px;
+        opacity: 0.8;
+      }
+      /* Cast and Cancel sit under the party, bottom right: the middle of
+         the bottom is the dialog's own Other Spells, Cancel and Cast. */
+      .ts-foot {
+        position: absolute;
+        right: 6px;
+        bottom: 6px;
+        width: var(--strip);
+        display: flex;
+        gap: 6px;
+      }
+      .ts-foot .ts-btn {
+        min-height: 42px;
+        text-align: center;
+        padding: 2px 4px;
+      }
+      .ts-foot .ts-cancel {
+        flex: none;
+        width: 42px;
       }
       .ts-cast {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
         font-weight: bold;
-        background: #6b5418;
+        background: rgba(107, 84, 24, 0.9);
+        border-color: rgba(255, 220, 0, 0.85);
         color: #f3dc98;
-        min-width: 110px;
       }
       /* A finger on the canvas: no double-tap zoom, no text selection, no
          iOS callout on a long press (which is the right button here). */

@@ -14211,13 +14211,18 @@ the rest of the TODO(E3-3) list.
         bring up a phone's keyboard; the menu bar could fold away sideways.
 - [x] **Casting by finger, and aiming by key (2026-09-28).** At the user's
       request:
-      - **The touch spell panel** (`platform/touchSpells.ts`): with touch
-        controls on, the cast dialog gets a panel over it — casters, targets
-        when the spell wants one, the caster's own spells by level (dim when
-        they can't cast them now), Describe, Cancel, Cast. Every tap is one
-        of the dialog's controls by its C++ id (`CastDialog.pressControl` →
+      - **The touch spell strips** (`platform/touchSpells.ts`): with touch
+        controls on, the cast dialog stays up and live, with translucent
+        strips round it as the pads are — one level's spells down the left
+        (the caster's own, dim when they can't cast them now; ◀ ▶ step the
+        level, flipping the dialog's page across 4↔5; a long press
+        describes), the party down the right when the spell wants a target,
+        and CAST with ✕ under it. A first version covered the dialog with a
+        panel; the user wanted the dialog kept. Every tap is one of the
+        dialog's controls by its C++ id (`CastDialog.pressControl` →
         `SpellPick.click`, the replay driver's route), answered through
-        `DialogHost.answerScreen`. A second tap on the chosen spell casts it.
+        `DialogHost.answerScreen`. Caster choice stays on the dialog, and on
+        an iPhone SE the left strip sits over those buttons.
       - **The aim cursor** (`game/aimCursor.ts`, DIVERGENCES #20): with a
         spell or missile armed, the target starts on the nearest visible,
         reachable hostile; the arrows (or the pad) move it; Enter (or the
