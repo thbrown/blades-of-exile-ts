@@ -99,12 +99,17 @@ export const PANEL_BG = 6;
 /**
  * Fill `dest` with pattern `index`, aligning the pattern to the destination
  * origin the way tileImage does.
+ *
+ * `anchor` is the corner of the window the pattern belongs to. OBoE's
+ * dialogs and map are windows of their own, each tiling from its own (0,0),
+ * so the pattern goes where the window goes; left out, it is the canvas's.
  */
 export function tilePattern(
   ctx: CanvasRenderingContext2D,
   pixpats: CanvasImageSource,
   index: number,
   dest: UiRect,
+  anchor: { x: number; y: number } = { x: 0, y: 0 },
 ): void {
   const src = BG_RECTS[index] ?? BG_RECTS[0]!;
   const pw = src.right - src.left;
@@ -115,8 +120,8 @@ export function tilePattern(
   ctx.clip();
   // Rounded down, so a rect that starts off the canvas (the desktop around the
   // game screen, drawn in the game screen's coordinates) still lines up.
-  const startX = Math.floor(dest.left / pw) * pw;
-  const startY = Math.floor(dest.top / ph) * ph;
+  const startX = anchor.x + Math.floor((dest.left - anchor.x) / pw) * pw;
+  const startY = anchor.y + Math.floor((dest.top - anchor.y) / ph) * ph;
   for (let y = startY; y < dest.bottom; y += ph)
     for (let x = startX; x < dest.right; x += pw)
       ctx.drawImage(pixpats, src.left, src.top, pw, ph, x, y, pw, ph);

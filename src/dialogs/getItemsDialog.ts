@@ -17,6 +17,7 @@ import { Item, ItemType, interestingString } from '../data/item';
 import { GetItemsPick, ITEMS_IN_WINDOW, NOBODY, ROW_KEYS } from '../game/getItems';
 import type { GameSession } from '../game/session';
 import { SheetStore } from '../render/sheets';
+import type { UiRect } from '../render/layout';
 import { curWeight, itemWeight, maxWeight } from '../universe/inventory';
 import type { ModalScreen } from './dialog';
 import { getDialogDef } from './dialogStore';
@@ -166,6 +167,11 @@ export class GetItemsDialog implements ModalScreen {
     this.dlg.draw();
     this.steal?.draw();
   }
+
+  bounds(): UiRect { return this.dlg.bounds(); }
+
+  /** `steal-item` is a window of its own, centred when it opens, so it stays put. */
+  moveBy(dx: number, dy: number): void { this.dlg.moveBy(dx, dy); }
 
   onClick(x: number, y: number): string | null {
     if (this.steal) {

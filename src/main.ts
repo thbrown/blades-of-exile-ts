@@ -125,6 +125,7 @@ import {
   DEFAULT_UI_SCALE, DisplayMode, UI_SCALES, UI_SCALE_FIT, desktop, placeBesideGame,
 } from './render/desktop';
 import { MAP_DEFAULT_POS, MAP_H, MAP_W } from './render/mapScreen';
+import { CAPTION_H, WINDOW_TITLES, drawCaption, type ChromeFlavour } from './render/windowChrome';
 import { ShopHit, shopItemInfo } from './render/shopScreen';
 import { SheetStore } from './render/sheets';
 import { PartyPreset, Player } from './universe/player';
@@ -631,6 +632,18 @@ async function main(): Promise<void> {
   const buildParty = scenarioFromQuery() === null && openSlot === null && enteringParty === null;
   if (!buildParty && enteringParty === null) session.startNewGame();
   const screen = new Screen(ctx, store);
+  // The windows' title bars: each game's own, by the scenario's look.
+  const chromeFlavour = (): ChromeFlavour =>
+    univ.scenario.featureFlags['backgrounds'] === 'exile3' ? 'exile3' : 'boe';
+  screen.mapScreen.captionH = CAPTION_H;
+  // The map has a system menu, so its caption carries the game's icon.
+  const windowIcons: Record<ChromeFlavour, HTMLImageElement> = {
+    boe: new Image(), exile3: new Image(),
+  };
+  windowIcons.boe.src = `${import.meta.env.BASE_URL}data/graphics/boe-icon.png`;
+  windowIcons.exile3.src = EXILE3_CARD.icon;
+  /** Whether the map was the last window clicked, which makes its caption the active one. */
+  let mapFocused = false;
   // With no scenario there is no game screen to draw, only the backdrop the
   // party editor sits on — from the very first redraw.
   if (makingParty) screen.startupBackdrop = true;
@@ -664,7 +677,14 @@ async function main(): Promise<void> {
     screen.draw(session);
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    if (screen.mapVisible) screen.mapScreen.draw(session);
+    if (screen.mapVisible) {
+      screen.mapScreen.draw(session);
+      const flavour = chromeFlavour();
+      const icon = windowIcons[flavour];
+      drawCaption(ctx, screen.mapScreen.window, WINDOW_TITLES[flavour].map, {
+        flavour, active: mapFocused && dialogs.active === null, icon: icon.complete ? icon : null,
+      });
+    }
     dialogs.draw();
     ctx.restore();
     worldMap.update();
@@ -676,6 +696,11 @@ async function main(): Promise<void> {
     }
   };
   const dialogs = new DialogHost(ctx, store, () => redraw());
+  dialogs.chrome = () => {
+    const flavour = chromeFlavour();
+    return { flavour, title: WINDOW_TITLES[flavour].dialog };
+  };
+  for (const icon of Object.values(windowIcons)) icon.addEventListener('load', () => redraw());
   // The pop-out map, if one is open; it hears about every redraw.
   const worldMap = new WorldMapFeed(store, () => session, () => univ.scenario.title);
   worldMap.attach();
@@ -2256,7 +2281,7 @@ async function main(): Promise<void> {
     // the map beside the game screen if there is room. After that it stays
     // where the player dragged it.
     if (screen.mapVisible && !mapPlaced) {
-      screen.mapScreen.pos = placeBesideGame(desktop, MAP_W, MAP_H, MAP_DEFAULT_POS);
+      screen.mapScreen.pos = placeBesideGame(desktop, MAP_W, MAP_H + CAPTION_H, MAP_DEFAULT_POS);
       mapPlaced = true;
     }
   };
@@ -2266,7 +2291,7 @@ async function main(): Promise<void> {
     if (!fitDesktop()) return;
     mapPlaced = false;
     if (screen.mapVisible) {
-      screen.mapScreen.pos = placeBesideGame(desktop, MAP_W, MAP_H, MAP_DEFAULT_POS);
+      screen.mapScreen.pos = placeBesideGame(desktop, MAP_W, MAP_H + CAPTION_H, MAP_DEFAULT_POS);
       mapPlaced = true;
     }
     redraw();
@@ -2295,11 +2320,13 @@ async function main(): Promise<void> {
       redraw();
     },
     onDrag: (x, y) => {
+      if (dialogs.handleDrag(x, y)) return;
       if (!screen.mapScreen.dragging) return;
       screen.mapScreen.dragTo(x, y, desktop.w, desktop.h);
       redraw();
     },
     onRelease: () => {
+      dialogs.handleRelease();
       screen.mapScreen.endDrag();
     },
     // The router speaks desktop coordinates. Dialogs and the map live there;
@@ -2313,8 +2340,10 @@ async function main(): Promise<void> {
         // A click anywhere on the map window picks it up, as the WASM build
         // allows ("Allow dragging from anywhere on the map window").
         screen.mapScreen.startDrag(dx, dy);
+        if (!mapFocused) { mapFocused = true; redraw(); }
         return;
       }
+      if (mapFocused) { mapFocused = false; redraw(); }
       const x = dx - desktop.gameX;
       const y = dy - desktop.gameY;
       // The desktop around the game screen is only background.

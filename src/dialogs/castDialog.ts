@@ -20,7 +20,7 @@ import { CastChoice, NO_TARGET, SPELL_SLOTS, SpellPick } from '../game/spellPick
 import type { GameSession } from '../game/session';
 import { Colours } from '../render/colours';
 import { centreOnDesktop } from '../render/desktop';
-import { BOE_HEIGHT, BOE_WIDTH, UiRect } from '../render/layout';
+import { BOE_HEIGHT, BOE_WIDTH, UiRect, shiftRect } from '../render/layout';
 import { SheetStore } from '../render/sheets';
 import {
   drawString, drawStringCentre, drawStringEllipsis, drawStringRight, wrapLines,
@@ -146,7 +146,13 @@ export class CastDialog implements ModalScreen {
    * The layout below is in 605×430 game-screen coordinates, so the whole
    * dialog is shifted to the middle of the desktop when it opens.
    */
-  private readonly origin = centreOnDesktop(BOE_WIDTH, BOE_HEIGHT);
+  private origin = centreOnDesktop(BOE_WIDTH, BOE_HEIGHT);
+
+  bounds(): UiRect { return shiftRect(FRAME, this.origin.x, this.origin.y); }
+
+  moveBy(dx: number, dy: number): void {
+    this.origin = { x: this.origin.x + dx, y: this.origin.y + dy };
+  }
 
   /** Exile III's look (`backgrounds` = `exile3`): 1997's label colours. */
   private get e3(): boolean {

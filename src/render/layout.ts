@@ -346,3 +346,8 @@ export function buttonIconRect(placed: PlacedButton): UiRect {
   const h = placed.type === ButtonType.LARGE ? 32 : 16;
   return r(38 + 32 * sy, 32 * sx, 38 + 32 * sy + h, 32 * sx + 32);
 }
+
+/** `r` moved by (dx, dy). */
+export function shiftRect(r: UiRect, dx: number, dy: number): UiRect {
+  return { left: r.left + dx, right: r.right + dx, top: r.top + dy, bottom: r.bottom + dy };
+}

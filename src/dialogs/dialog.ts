@@ -12,11 +12,12 @@
  */
 
 import { Colours } from '../render/colours';
-import { centreOnDesktop } from '../render/desktop';
-import { UiRect, height, width } from '../render/layout';
+import { centreOnDesktop, desktop } from '../render/desktop';
+import { UiRect, height, shiftRect, width } from '../render/layout';
 import { itemGraphic } from '../render/itemPics';
 import { SheetStore } from '../render/sheets';
 import { drawString, wrapLines } from '../render/text';
+import { CAPTION_H, captionRect, drawCaption, inRect, type ChromeFlavour } from '../render/windowChrome';
 import { dialogBackground, dialogTextIsWhite, tilePattern } from '../render/tiling';
 import { PictType } from './dialogXml';
 import { drawPictAt } from './pict';
@@ -109,6 +110,15 @@ const ROW_KEY_W = 23;
 
 export class Dialog {
   private frame: UiRect = { top: 0, left: 0, bottom: 0, right: 0 };
+
+  bounds(): UiRect { return this.frame; }
+
+  moveBy(dx: number, dy: number): void {
+    this.frame = shiftRect(this.frame, dx, dy);
+    for (const b of this.placed) b.rect = shiftRect(b.rect, dx, dy);
+    for (const r of this.placedRows) r.rect = shiftRect(r.rect, dx, dy);
+  }
+
   private placed: PlacedDialogButton[] = [];
   private placedRows: PlacedDialogRow[] = [];
   private lines: string[] = [];
@@ -254,7 +264,7 @@ export class Dialog {
       bottom: frame.bottom - 2,
       right: frame.right - 2,
     };
-    if (pats) tilePattern(ctx, pats, dialogBackground(), inner);
+    if (pats) tilePattern(ctx, pats, dialogBackground(), inner, { x: this.frame.left, y: this.frame.top });
     else {
       ctx.fillStyle = Colours.GREY;
       ctx.fillRect(inner.left, inner.top, width(inner), height(inner));
@@ -425,6 +435,12 @@ export interface ClickMods {
 export interface ModalScreen {
   draw(): void;
   onClick(x: number, y: number, mods?: ClickMods): string | null;
+  /**
+   * Where the window sits on the desktop, for the host to draw its caption
+   * above (`windowChrome.ts`), and to move it when the caption is dragged.
+   */
+  bounds?(): UiRect;
+  moveBy?(dx: number, dy: number): void;
   onKey(key: string): string | null;
   /** The mouse wheel; true if it scrolled something. */
   onWheel?(x: number, y: number, deltaY: number): boolean;
@@ -434,6 +450,12 @@ export interface ModalScreen {
  * Owns the modal stack. The game holds one of these; `run()` shows a dialog and
  * resolves once the player picks a button.
  */
+/** What a window needs for a caption and to be dragged by it. */
+type Movable = Pick<ModalScreen, 'draw' | 'bounds' | 'moveBy'>;
+
+/** How much of a dragged window stays on the desktop (the map's `MAP_MIN_VISIBLE`). */
+const MIN_VISIBLE = 50;
+
 export class DialogHost {
   private current: Dialog | null = null;
   private screen: ModalScreen | null = null;
@@ -458,6 +480,72 @@ export class DialogHost {
 
   get active(): Dialog | ModalScreen | null {
     return this.current ?? this.screen;
+  }
+
+  /**
+   * The title bar each window gets (`windowChrome.ts`), or null for none —
+   * tests and headless runs leave it off, and nothing moves. The host sets it
+   * for the scenario that is running.
+   */
+  chrome: (() => { flavour: ChromeFlavour; title: string }) | null = null;
+
+  /** Windows already nudged down to make room for their caption. */
+  private placedWindows = new WeakSet<object>();
+
+  /** The window being dragged by its caption, and where the pointer was. */
+  private dragging: { win: Movable; x: number; y: number } | null = null;
+
+  /**
+   * A window opens centred with its caption, as an OS centres the whole
+   * window: half the caption's height down. Its content comes first, though —
+   * a window as tall as the desktop keeps its bottom edge on it and lets the
+   * caption go off the top.
+   */
+  private place(win: Movable): void {
+    if (!this.chrome || !win.bounds || !win.moveBy || this.placedWindows.has(win)) return;
+    this.placedWindows.add(win);
+    const b = win.bounds();
+    let dy = Math.round(CAPTION_H / 2);
+    if (b.top + dy < CAPTION_H) dy = CAPTION_H - b.top;
+    dy = Math.min(dy, desktop.h - b.bottom);
+    if (dy !== 0) win.moveBy(0, dy);
+  }
+
+  /** The window on top, whose caption is the active one. */
+  private get top(): Movable | null {
+    return this.screen ?? this.current;
+  }
+
+  private drawWindow(win: Movable | null, active: boolean): void {
+    if (!win) return;
+    this.place(win);
+    win.draw();
+    const chrome = this.chrome?.();
+    const b = win.bounds?.();
+    if (chrome && b) drawCaption(this.ctx, b, chrome.title, { flavour: chrome.flavour, active });
+  }
+
+  /** Mouse moved with the button down: drag a window by its caption. */
+  handleDrag(x: number, y: number): boolean {
+    const d = this.dragging;
+    if (!d || !d.win.moveBy || !d.win.bounds) return false;
+    // As the map's clamp: the caption stays reachable, with at least
+    // MIN_VISIBLE of it on the desktop either side and its top on it.
+    const b = d.win.bounds();
+    let dx = x - d.x;
+    let dy = y - d.y;
+    dx = Math.max(dx, MIN_VISIBLE - b.right);
+    dx = Math.min(dx, desktop.w - MIN_VISIBLE - b.left);
+    dy = Math.max(dy, CAPTION_H - b.top);
+    dy = Math.min(dy, desktop.h - MIN_VISIBLE - b.top);
+    d.win.moveBy(dx, dy);
+    this.dragging = { win: d.win, x: d.x + dx, y: d.y + dy };
+    this.redraw();
+    return true;
+  }
+
+  handleRelease(): void {
+    this.dragging = null;
   }
 
   /**
@@ -537,14 +625,21 @@ export class DialogHost {
   /** Draw the open dialog, if there is one. Call after drawing the screen. */
   draw(): void {
     for (const under of this.below) {
-      under.current?.draw();
-      under.screen?.draw();
+      this.drawWindow(under.current, false);
+      this.drawWindow(under.screen, false);
     }
-    this.current?.draw();
-    this.screen?.draw();
+    // A plain dialog and a screen are never up at once at the same depth.
+    this.drawWindow(this.current, this.screen === null);
+    this.drawWindow(this.screen, true);
   }
 
   handleClick(x: number, y: number, mods?: ClickMods): boolean {
+    const top = this.top;
+    const b = top?.bounds?.();
+    if (top && b && this.chrome && !mods?.right && inRect(captionRect(b), x, y)) {
+      this.dragging = { win: top, x, y };
+      return true;
+    }
     if (this.screen) {
       const name = this.screen.onClick(x, y, mods);
       if (name === null) this.redraw();

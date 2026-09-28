@@ -115,14 +115,22 @@ export class MapScreen {
     private store: SheetStore,
   ) {}
 
+  /**
+   * The height of the title bar the host draws over the window's top
+   * (`windowChrome.ts`); `pos` is the corner of the whole window, caption
+   * and all, so the map itself starts this far down. 0 draws none.
+   */
+  captionH = 0;
+
+  /** The map's own area — what `draw_map` draws into. */
   get window(): UiRect {
-    return mapWindowRect(this.pos);
+    return mapWindowRect({ x: this.pos.x, y: this.pos.y + this.captionH });
   }
 
-  /** Is (x, y) inside the window? Anywhere on it starts a drag. */
+  /** Is (x, y) inside the window, caption included? Anywhere on it starts a drag. */
   contains(x: number, y: number): boolean {
     const w = this.window;
-    return x >= w.left && x < w.right && y >= w.top && y < w.bottom;
+    return x >= w.left && x < w.right && y >= w.top - this.captionH && y < w.bottom;
   }
 
   startDrag(x: number, y: number): void {
@@ -225,7 +233,8 @@ export class MapScreen {
     // Exile III's is 1997's `paint_pattern(hdc2, 2, ...)` (TOWN.CPP:1613),
     // the dialogs' pattern, which is E3's light one.
     const e3 = session.univ.scenario.featureFlags['backgrounds'] === 'exile3';
-    if (pats) tilePattern(ctx, pats, e3 ? BG_LIGHT : 4, this.window);
+    if (pats) tilePattern(ctx, pats, e3 ? BG_LIGHT : 4, this.window,
+      { x: this.window.left, y: this.window.top });
     else {
       ctx.fillStyle = Colours.GREY;
       ctx.fillRect(

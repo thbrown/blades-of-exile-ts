@@ -14,7 +14,7 @@
 
 import { Colours } from '../render/colours';
 import { centreOnDesktop } from '../render/desktop';
-import { UiRect, height, width } from '../render/layout';
+import { UiRect, height, shiftRect, width } from '../render/layout';
 import { monsterGraphic } from '../render/monsterPics';
 import { SheetStore, calcRect } from '../render/sheets';
 import { statIconRect } from '../data/statusIcons';
@@ -219,7 +219,14 @@ export interface XmlDialogOptions {
  * so a definition can be shown twice without carrying state between showings.
  */
 export class XmlDialog implements ModalScreen {
-  readonly frame: UiRect;
+  /** Where it sits on the desktop; `moveBy` drags it. */
+  frame: UiRect;
+
+  bounds(): UiRect { return this.frame; }
+
+  moveBy(dx: number, dy: number): void {
+    this.frame = shiftRect(this.frame, dx, dy);
+  }
   private textOverride = new Map<string, string>();
   private hidden = new Set<string>();
   private ledState = new Map<string, LedState>();
@@ -726,7 +733,7 @@ export class XmlDialog implements ModalScreen {
       top: frame.top + 2, left: frame.left + 2,
       bottom: frame.bottom - 2, right: frame.right - 2,
     };
-    if (pats) tilePattern(ctx, pats, dialogBackground(), inner);
+    if (pats) tilePattern(ctx, pats, dialogBackground(), inner, { x: frame.left, y: frame.top });
     else {
       ctx.fillStyle = Colours.GREY;
       ctx.fillRect(inner.left, inner.top, width(inner), height(inner));

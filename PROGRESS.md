@@ -14084,6 +14084,27 @@ the rest of the TODO(E3-3) list.
       draws the food/gold/day values, the inventory title and the status bar
       in black. BUTTONS.BMP is laid out differently from OBoE's `buttons.png`
       and the toolbar already matched, so it is left alone.
+- [x] **Window title bars (2026-09-28, the user's call).** The original's
+      dialogs and automap are OS windows with captions; this port now draws
+      one over each (`render/windowChrome.ts`), in each game's flavour:
+      Windows 98's navy gradient for BoE, and E3's grey to light blue
+      (sampled from the user's recording). Titles are 1997's — "Blades of
+      Exile" / "Blades of Exile Map" (DLOGTOOL.CPP:284 and the RC), where
+      OBoE says "Dialog" / "Map" — and E3's "Exile III: Ruined World" /
+      "Exile 3 Map". No close box: the original's is greyed. The map's
+      caption carries the game's icon (`boe-icon.png` is OBoE's
+      `rsrc/legacy/game_old.ico`, the 1997 icon). Dragging a caption moves
+      the window: `ModalScreen` gained `bounds()`/`moveBy()`, and
+      `DialogHost.chrome` (null in tests) places, draws and drags. A
+      window opens half a caption lower so both fit; one as tall as the
+      desktop keeps its content on it and loses the caption off the top
+      (the spell picker at an unscaled 605×430). The active caption is the
+      top dialog's, or the map's once clicked.
+      *Gotcha, from the user*: **a window's background pattern has to be
+      anchored to the window.** `tilePattern` aligned to the canvas, so a
+      dragged map slid over a pattern that stayed put; it takes an `anchor`
+      now, and the map and both dialog classes pass their corner.
+      `test/windowChrome.test.ts`.
 
 All checks pass: 1,403 tests, both sweeps, verify-screen/e3/party, corpus
 unchanged at 51 of 87, 1,231,440 draws. **Next session starts here**: E3's
