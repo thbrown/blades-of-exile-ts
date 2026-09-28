@@ -108,9 +108,13 @@ export class TalkState {
    * owns the dialog, and the node's own text is the board's title.
    */
   onJobBank: ((which: number, title: string) => void) | null = null;
-  /** How an INN node rests the party and moves it to the bed it paid for. */
+  /**
+   * How an INN node rests the party and moves it to the bed it paid for.
+   * `rest` is null when the node has already done its own resting.
+   */
   onRest:
-    | ((length: number, hp: number, sp: number, wakeAt: { x: number; y: number }) => void)
+    | ((rest: { length: number; hp: number; sp: number } | null,
+      wakeAt: { x: number; y: number }) => void)
     | null = null;
   private history: HistoryEntry[] = [];
   /** Clickable words, rebuilt after every reply. */
@@ -469,7 +473,16 @@ export class TalkState {
         else {
           this.endForced = true;
           party.gold -= a;
-          this.onRest?.(700, 30 * b, 25 * b, { x: c, y: d });
+          if (this.univ.scenario.featureFlags['inn'] === 'exile3') {
+            // Exile III's inn (`1020:269f`) is 1997's (DLGUTILS.CPP:785):
+            // heal, restore, age, and the bed — no do_rest, so statuses and
+            // disease stay, and no timers run. Its night is 500 ticks, not
+            // 700 (DIVERGENCES.md §16).
+            party.healAll(30 * b);
+            party.restoreSpAll(25 * b);
+            party.age += 500;
+            this.onRest?.(null, { x: c, y: d });
+          } else this.onRest?.({ length: 700, hp: 30 * b, sp: 25 * b }, { x: c, y: d });
           str2 = '';
         }
         break;

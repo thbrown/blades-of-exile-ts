@@ -56,6 +56,9 @@ export const SUPPORTED_FEATURES: Readonly<Record<string, readonly string[]>> = {
   // exile-js's own, not OBoE's: a town is cleaned out and abandoned by 1997's
   // rule (DIVERGENCES.md §14). No recording lists it, so a replay has OBoE's.
   'town-thrash': ['1997'],
+  // exile-js's own too: a PC's saving roll against sleep and paralysis is
+  // 1997's, against their level (DIVERGENCES.md §17).
+  'sleep-save': ['1997'],
 };
 
 /** The set in force. Starts as everything this build supports. */

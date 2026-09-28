@@ -28,7 +28,7 @@ import { PartyPreset } from '../src/universe/player';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
 import { killMonst } from '../src/game/damage';
 import { makeTownHostile } from '../src/game/townAttitude';
-import { MainStatus, Race } from '../src/universe/skills';
+import { MainStatus, Race, Status } from '../src/universe/skills';
 import { Direction } from '../src/core/location';
 import {
   createE3OutCombatTerrain, E3_ARENA_GROUND, E3_ARENA_ODDS, E3_ARENA_STAMP_LOCS, E3_ARENA_WALLS,
@@ -352,6 +352,77 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(univ.party.pcs.flatMap((pc) => pc.items).some((it) => it.fullName === 'Orb of Sight')).toBe(true);
     // Zone 74's special group (script 99) comes for the party from anywhere.
     expect(scen.outdoors[2]![8]!.specialEnc[0]!.forced).toBe(true);
+  });
+
+  it("drowns whoever stands in the Filth Factory's trench as the flow restarts", async () => {
+    // The countdown's chain is the scenario node that asks for town 26.
+    const chain = [...scen.scenSpecials].find(([, n]) => n.type === SpecType.IF_TOWN_NUM && n.ex1a === 26)![0];
+    const halted = partyFlag(0x191);
+    const setUp = async () => {
+      const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+      const said: string[] = [];
+      session.attachSpecials(new Proxy({}, {
+        get: (_, k) => (k === 'message' ? (s: string) => { said.push(s); return Promise.resolve(); } : () => Promise.resolve(0)),
+      }) as never);
+      session.startTownMode(26, 0);
+      await vi.waitFor(() => expect(session.specials!.busy).toBe(false));
+      said.length = 0;
+      session.univ.party.setSdf(...halted, 1);
+      const flow = () => session.runSpecial(SpecCtx.SCEN_TIMER, SpecCtxType.SCEN, chain, { x: 0, y: 0 });
+      return { session, said, party: session.univ.party, flow };
+    };
+    const alive = (party: Universe['party']) => party.pcs.map((pc) => pc.mainStatus === MainStatus.ALIVE);
+
+    // Town mode, beside the trench: a warning, and nobody hurt.
+    let t = await setUp();
+    t.party.townLoc = { x: 48, y: 37 };
+    await t.flow();
+    expect(t.said).toHaveLength(1);
+    expect(alive(t.party).every(Boolean)).toBe(true);
+
+    // Town mode, in it: the whole party is gone.
+    t = await setUp();
+    t.party.townLoc = { x: 48, y: 34 };
+    await t.flow();
+    expect(t.said).toHaveLength(1);
+    expect(t.party.isAlive()).toBe(false);
+
+    // Combat, with the party's square in the trench but only PC 1 in it:
+    // the warning, then PC 1 drowns, alone.
+    t = await setUp();
+    t.party.townLoc = { x: 48, y: 34 };
+    expect(t.session.startCombat(Direction.N)).toBe(true);
+    t.party.pcs.forEach((pc, i) => { pc.combatPos = { x: 44 + i, y: 38 }; });
+    t.party.pcs[1]!.combatPos = { x: 50, y: 35 };
+    await t.flow();
+    expect(t.said).toHaveLength(2);
+    expect(t.party.pcs[1]!.mainStatus).toBe(MainStatus.DEAD);
+    expect(alive(t.party).filter(Boolean)).toHaveLength(5);
+  });
+
+  it("rests at an inn as E3 does: 500 ticks, and statuses stay", () => {
+    expect(scen.featureFlags['inn']).toBe('exile3');
+    const t = scen.townTalk.findIndex((talk) => talk.talkNodes.some(
+      (n) => n.type === TalkNodeType.INN && n.personality >= 0));
+    expect(t).toBeGreaterThanOrEqual(0);
+    const index = scen.townTalk[t]!.talkNodes.findIndex(
+      (n) => n.type === TalkNodeType.INN && n.personality >= 0);
+    const node = scen.townTalk[t]!.talkNodes[index]!;
+    const [price, b, x, y] = node.extras;
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    const { party } = session.univ;
+    session.startTownMode(t, FORCED_ENTRY);
+    session.startTalkMode(-1, node.personality, 0, -1);
+    party.gold = price! + 100;
+    party.pcs.forEach((pc) => { pc.curHealth = 1; });
+    party.pcs[0]!.status[Status.POISON] = 3;
+    const age = party.age;
+    session.chooseTalkNode(index);
+    expect(party.gold).toBe(100);
+    expect(party.age).toBe(age + 500);
+    expect(party.pcs[0]!.curHealth).toBe(Math.min(1 + 30 * b!, party.pcs[0]!.maxHealth));
+    expect(party.pcs[0]!.status[Status.POISON]).toBe(3);
+    expect(party.townLoc).toEqual({ x, y });
   });
 
   it("ends the game where E3 does as a town turns hostile, and moves only E3's movers", async () => {

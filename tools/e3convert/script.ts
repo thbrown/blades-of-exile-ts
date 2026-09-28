@@ -705,9 +705,11 @@ export class SpecBuilder {
 
   /**
    * `FUN_10b0_19dd(pc, n, 11, adjust)`: `sleep_pc`, the target put to sleep
-   * for `n`. TODO(E3-3): E3's saving roll is `get_ran(1, 0, 100) + adjust`
-   * against `30 + 2 × level`; the engine's node rolls `get_ran(1, 1, 100) + 10`
-   * against `30 + 2 × free action`, so who resists differs.
+   * for `n`. E3's saving roll, `get_ran(1, 0, 100) + adjust` against
+   * `30 + 2 × level`, is 1997's, which the engine has (`sleep-save`,
+   * DIVERGENCES.md §17). TODO(E3-3): E3's protections are its own item
+   * abilities: 118 makes a PC immune, and 120 or 127 takes 2 off `n`
+   * (`10b0:1a14`). They need E3's ability semantics (`tables.ts`).
    */
   sleep(n: number): Step {
     return (next) => this.node('status', { ex1: [n, 1, STATUS_ASLEEP] }, next);
@@ -715,7 +717,8 @@ export class SpecBuilder {
 
   /**
    * `FUN_10b0_19dd(pc, n, 12, adjust)`: `sleep_pc` paralysing the target for
-   * `n`, with `sleep`'s saving roll and its caveat.
+   * `n`, with `sleep`'s saving roll. E3's ability 120 makes a PC immune;
+   * `sleep`'s TODO covers it.
    */
   paralyze(n: number): Step {
     return (next) => this.node('status', { ex1: [n, 1, STATUS_PARALYZED] }, next);
@@ -1223,8 +1226,9 @@ export class SpecBuilder {
   }
 
   /**
-   * `if (the terrain under the party is t)`: IF_TER_TYPE at (-1, -1), an
-   * exile-js extension (`src/game/specials/ifthen.ts`).
+   * `if (is_town() && the terrain under the party is t)`: IF_TER_TYPE at
+   * (-1, -1), an exile-js extension (`src/game/specials/ifthen.ts`), which
+   * never matches in combat.
    */
   ifPartyOnTer(t: number, then: Step[], otherwise: Step[] = []): Step {
     return (next) => {
@@ -1232,6 +1236,23 @@ export class SpecBuilder {
       const no = this.seq(otherwise)(next);
       return this.node('if-ter', { ex1: [-1, -1], ex2: [t, yes] }, no);
     };
+  }
+
+  /**
+   * `if (is_combat() && pc is alive && the terrain under pc is t)`, for the
+   * target `eachPc` picked: IF_TER_TYPE at (-2, -2), an exile-js extension.
+   */
+  ifTargetOnTer(t: number, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-ter', { ex1: [-2, -2], ex2: [t, yes] }, no);
+    };
+  }
+
+  /** `play_sound(n)`: PLAY_SOUND, without waiting for it to finish. */
+  sound(n: number): Step {
+    return (next) => this.node('play-sound', { ex1: [n, 0] }, next);
   }
 
   /** `get_ran(n, 1, sides)` damage of `type`, rolled once, to every PC. */

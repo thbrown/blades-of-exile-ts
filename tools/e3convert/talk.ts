@@ -231,8 +231,8 @@ function convertNode(ctx: Context, raw: E3TalkNodeRaw, personality: number, extr
       set(TalkNodeType.SET_SDF, ...e3Flag(e1, e2), 1);
       break;
     case E3Node.INN:
-      // TODO(E3-3): E3's inn adds 500 to the party's age (`1020:26d8`); the
-      // engine's INN adds BoE's 700, which runs the calendar a little fast.
+      // E3's inn is 1997's with a 500-tick night (`1020:26d8`); the
+      // scenario's `inn` flag makes the engine's INN do the same.
       set(TalkNodeType.INN, e1, e2, extras[0], extras[1]);
       break;
     case E3Node.DEP_ON_TIME: {

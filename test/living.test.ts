@@ -6,6 +6,7 @@ import { ItemAbil, ItemType } from '../src/data/item';
 import { Attitude, DamageType } from '../src/data/monster';
 import { Scenario } from '../src/data/scenario';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
+import { resetFeatureFlags, setFeatureFlags } from '../src/game/featureFlags';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
@@ -226,6 +227,30 @@ describe('a PC taking effects', () => {
     // Free action costs paralysis 300 per point, so nothing lands.
     other.sleep(Status.PARALYZED, 100, 0, univ.rng);
     expect(other.status[Status.PARALYZED]).toBe(0);
+  });
+
+  it("saves against sleep by the PC's level, as 1997 does, but by free action in a replay", async () => {
+    const roll = (n: number) => ({ getRan: () => n }) as unknown as GameRng;
+    const { univ } = newGame();
+    const pc = univ.party.pcs[0]!;
+    pc.traits[Trait.HIGHLY_ALERT] = false;
+    pc.level = 20;
+    try {
+      // 1997: 30 + 2 × 20 = 70, so a 69 saves and a 70 doesn't.
+      pc.sleep(Status.ASLEEP, 5, 0, roll(69));
+      expect(pc.status[Status.ASLEEP]).toBe(0);
+      pc.sleep(Status.PARALYZED, 5, 0, roll(69));
+      expect(pc.status[Status.PARALYZED]).toBe(0);
+      pc.sleep(Status.ASLEEP, 5, 0, roll(70));
+      expect(pc.status[Status.ASLEEP]).toBe(5);
+      // OBoE, whose recordings never list the flag: 30 + 2 × free action.
+      pc.status[Status.ASLEEP] = 0;
+      setFeatureFlags({});
+      pc.sleep(Status.ASLEEP, 5, 0, roll(30));
+      expect(pc.status[Status.ASLEEP]).toBe(5);
+    } finally {
+      resetFeatureFlags();
+    }
   });
 
   it('being highly alert is total immunity to sleep', async () => {

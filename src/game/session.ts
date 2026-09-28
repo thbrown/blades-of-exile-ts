@@ -3571,8 +3571,8 @@ export class GameSession {
         this.onRedraw?.();
       });
     };
-    this.talk.onRest = (length, hp, sp, wakeAt) => {
-      doRest(this.univ, length, hp, sp, this.isOutdoors, this);
+    this.talk.onRest = (rest, wakeAt) => {
+      if (rest) doRest(this.univ, rest.length, rest.hp, rest.sp, this.isOutdoors, this);
       this.univ.party.townLoc = { ...wakeAt };
       this.center = { ...wakeAt };
       this.updateExplored(this.center);

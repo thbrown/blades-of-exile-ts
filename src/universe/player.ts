@@ -12,6 +12,7 @@ import { Spell } from '../data/spell';
 import { getProtLevel, hasAbilEquip } from './inventory';
 import { Living, SpellNote, giveHelp, livingSound, printResult } from './living';
 import { Party } from './party';
+import { hasFeatureFlag } from '../game/featureFlags';
 import {
   MainStatus, NUM_SKILLS, NUM_STATUSES, NUM_TRAITS, Race, Skill, Status, Trait,
 } from './skills';
@@ -428,9 +429,21 @@ export class Player extends Living {
         getProtLevel(this, ItemAbil.STATUS_PROTECTION, whatType) / 8);
     }
 
-    let r1 = rng.getRan(1, 1, 100) + adjust;
-    if (whatType === Status.FORCECAGE) r1 -= this.statAdj(Skill.MAGE_LORE);
-    if (r1 < 30 + freeAction * 2) howMuch = -1;
+    // OBoE's saving roll is against `30 + 2 × free action`: its `level` is a
+    // local that free action overwrote. 1997's (PARTY.CPP:904) and Exile
+    // III's (`10b0:1a69`) are against the PC's own level, from 0 to 100, so a
+    // seasoned party shrugs sleep off. The live game has 1997's; a replay,
+    // whose recorded flags never list it, has OBoE's (DIVERGENCES.md §17).
+    // A forcecage is OBoE's alone, so it keeps OBoE's roll.
+    let r1: number;
+    if (whatType !== Status.FORCECAGE && hasFeatureFlag('sleep-save', '1997')) {
+      r1 = rng.getRan(1, 0, 100) + adjust;
+      if (r1 < 30 + this.level * 2) howMuch = -1;
+    } else {
+      r1 = rng.getRan(1, 1, 100) + adjust;
+      if (whatType === Status.FORCECAGE) r1 -= this.statAdj(Skill.MAGE_LORE);
+      if (r1 < 30 + freeAction * 2) howMuch = -1;
+    }
     // Being alert, or having just shaken it off, makes you immune to sleep.
     if (whatType === Status.ASLEEP
       && (this.traits[Trait.HIGHLY_ALERT] || (this.status[Status.ASLEEP] ?? 0) < 0)) howMuch = -1;

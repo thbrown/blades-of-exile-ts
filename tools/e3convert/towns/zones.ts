@@ -854,9 +854,8 @@ function zone68(b: SpecBuilder): Map<number, Step[]> {
   return new Map<number, Step[]>([
     // Each dig is 100 gold, then the owners turn up if `get_ran(1, 1, 20)`
     // is at most the number of digs so far (a chance of 5% a dig).
-    // TODO(E3-3): E3 plays sound 39 with each dig.
     [1, [b.askDialog(0x1630, [b.loop((again) => [b.askDialog(0x1631, [
-      b.gold(100), b.log(0x10a8, 0x74), b.incFlag(dug),
+      b.sound(39), b.gold(100), b.log(0x10a8, 0x74), b.incFlag(dug),
       b.switchFlag(dug, Array.from({ length: 20 }, (_, n) => [b.ifChance(5 * n, mugged, [again])]), mugged),
     ], [b.msg(B, 0x2a)])])])]],
     [2, [b.askDialog(0x1632, [b.onceEncounter(spot(2), B, 0x26, 0, 1)])]],
@@ -1121,7 +1120,8 @@ function zone84(b: SpecBuilder): Map<number, Step[]> {
     ])])]],
     [3, [b.askDialog(0x16d4, [b.onceEncounter(spot(3), B, 0x3d, 0, 2)], [b.blockMove()])]],
     [4, [b.askDialog(0x16d3, [b.onceEncounter(spot(4), B, 0x3d, 0, 1)], [b.blockMove()])]],
-    // TODO(E3-3): E3 plays sound 54 here rather than its usual 57.
+    // TODO(E3-3): E3's message plays sound 54 here rather than its usual 57;
+    // the engine's message box always plays 57.
     [5, [b.onceMsg(spot(5), B, 0x3e)]],
     // Only while town 22 is off the map (10a8:338e).
     [11, [b.ifTownVisible(22, [], [b.msg(B, 0x3c, 0x41)])]],

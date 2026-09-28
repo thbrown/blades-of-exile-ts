@@ -13779,3 +13779,39 @@ All checks pass: 1,387 tests, both sweeps, verify-screen/e3/party, and the
 corpus as above. `grep -rn "TODO(E3-3)" src tools`: 38. **Next session starts
 here**: the rest of the TODO(E3-3) list — for example E3's inn aging the party
 (`talk.ts`), the Filth Factory's drowning in combat, or `sleep`'s saving roll.
+
+### The inn, the trench, and sleep's saving roll (2026-09-27)
+
+- **E3's inn** (`1020:269f`) is 1997's INN (DLGUTILS.CPP:785), not OBoE's
+  `do_rest`, and its night is **500** ticks, not 700. A scenario flag,
+  **`inn` = `exile3`**, gives the engine's INN exactly that: heal `30 × b`,
+  restore `25 × b`, age + 500, the bed. Statuses, disease, shops and timers
+  are untouched (DIVERGENCES.md §16, which also leaves open 1997 against OBoE
+  for ordinary scenarios). `TalkState.onRest` now takes `rest: {…} | null`.
+- **The Filth Factory's trench** (`10c0:66bb`): when the flow restarts, a
+  party in it in town mode dies (0x31). Otherwise E3 says 0x30, and in combat
+  each living PC standing in it drowns (0x38, dead). Two exile-js
+  IF_TER_TYPE squares: `(-1, -1)`, the party's square, now never matches in
+  combat, and `(-2, -2)` is the target PC's square, in combat only, for a
+  living PC (`SpecBuilder.ifTargetOnTer`, with `eachPc`). **Gotcha:** before
+  this, a fight whose start square was in the trench killed the whole party
+  by `townLoc`.
+- **Sleep's saving roll** is an engine change. OBoE's `cPlayer::sleep` saves
+  against `30 + 2 × free action`, because a local `level` shadows the PC's.
+  1997 and E3 save against `30 + 2 × the PC's level`. New exile-js feature
+  flag **`sleep-save` = `1997`**, live but in no recording, like
+  `town-thrash` (DIVERGENCES.md §17). Forcecage keeps OBoE's roll. Still
+  `TODO(E3-3)`: E3's own item protections against sleep (abilities 118,
+  120 and 127), which wait on E3's ability semantics.
+- **Sounds.** `SpecBuilder.sound(n)` (PLAY_SOUND). Zone 68's dig plays 39
+  after each dialog (`10a8:1816`) and Fort Emergence's portcullis lever 94
+  (`10e0:0a0c`). E3's "57 with each message" was already true, because the
+  engine's message box plays 57 as 1997 and OBoE do. Zone 68's spot 5 asks for
+  54 instead, and no node can change the box's sound, so that is still a TODO.
+
+All checks pass: 1,390 tests, both sweeps, verify-screen/e3/party, and the
+corpus is unchanged at 51 of 87, 1,231,440 draws. `grep -rn "TODO(E3-3)" src
+tools`: 34. **Next session starts here**: the rest of the TODO(E3-3) list, for
+example E3's item ability semantics (`tables.ts`), which the sleep
+protections and seven presets wait on, or the `FUN_1080_022e` party+0x12e6
+calls in the dungeons.

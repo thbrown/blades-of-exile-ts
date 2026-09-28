@@ -21,8 +21,8 @@
  * town. In the engine a one-shot message is `once-disp-msg` with a flag of its
  * own (`spotFlag`).
  *
- * TODO(E3-3): E3 plays sound 57 with each message, and never erases a spot
- * while flag (306, 3) is set.
+ * E3 plays sound 57 with each message, as the engine's message box does.
+ * TODO(E3-3): E3 never erases a spot while flag (306, 3) is set.
  */
 
 import { BASIC_BUTTONS } from '../../src/game/specials/oneshot';

@@ -44,14 +44,16 @@ function level1(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]>
   /** The flow's trench, dry (210) while halted, and the grate above it (47,33). */
   const trench = (grate: number, floor: number): Step[] => [b.setTer(47, 33, grate), b.rectTer(47, 34, 52, 35, floor)];
   const gates = (t: number): Step => b.seq(GATES.map(([x, y]) => b.setTer(x, y, t)));
-  // The flow restarts after 120 turns. A party caught in the trench drowns.
-  // TODO(E3-3): in combat E3 drowns each PC standing in it (message 0x38);
-  // the engine can only ask where the party is.
+  // The flow restarts after 120 turns (10c0:66bb). A party caught in the
+  // trench in town mode drowns; in combat, each PC standing in it does.
   const halt = b.townCountdown(26, HALTED, 120, RIVER_TIMER, (s) => new Map<number, Step[]>([
     [100, [s.msg(BLOCK, 0x2e)]],
     [40, [s.msg(BLOCK, 0x2f)]],
     [0, [s.setTer(47, 33, 140), s.rectTer(47, 34, 52, 35, WATER),
-      s.ifPartyOnTer(WATER, [s.msg(BLOCK, 0x31), s.slayParty(0)], [s.msg(BLOCK, 0x30)])]],
+      s.ifPartyOnTer(WATER, [s.msg(BLOCK, 0x31), s.slayParty(0)], [
+        s.msg(BLOCK, 0x30),
+        s.eachPc(() => [s.ifTargetOnTer(WATER, [s.msg(BLOCK, 0x38), s.slayParty(2)])]),
+      ])]],
   ]));
   return new Map<number, Step[]>([
     [1, [b.askDialog(0x10a5, [b.msg(BLOCK, 0x19), b.setFlag(spot(1), 20), b.cureDiseaseAll()])]],

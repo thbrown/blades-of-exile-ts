@@ -429,6 +429,45 @@ other town timers.
 
 ---
 
+### 16. A night at an inn (2026-09-27)
+
+**DECIDED: a scenario flag, `inn` = `exile3`, for Exile III's inn.** 1997's
+INN node (DLGUTILS.CPP:785) heals `30 × b`, restores `25 × b` spell points,
+adds 700 to the party's age and puts it in the bed. OBoE's calls `do_rest`
+with the same numbers, which also clears every status, runs disease three
+times, restocks shops and fires timers. Exile III's (`1020:269f`) is 1997's
+with a **500**-tick night. With the flag, the engine does exactly that; without
+it, OBoE's `do_rest(700, …)` stands.
+
+**Not decided:** 1997 against OBoE for an ordinary BoE scenario. A player
+could tell (a poisoned PC stays poisoned in 1997), so the rule above would
+pick 1997, but it would have to sit behind a feature flag like §14's
+to keep the replay corpus. Nothing has been measured yet.
+
+---
+
+### 17. A PC's saving roll against sleep and paralysis (2026-09-27)
+
+**DECIDED: the original's roll in the live game, OBoE's in a replay**, through
+an exile-js feature flag, `sleep-save` = `1997`, as in §14. The roll in
+`sleep_pc` (1997 PARTY.CPP:904) is `get_ran(1,0,100) + adjust` against
+`30 + 2 × the PC's level`. OBoE's `cPlayer::sleep` (pc.cpp:231) rolls
+`get_ran(1,1,100) + adjust` against `30 + 2 × level`, where `level` is a local
+that has just been set to the PC's **free action** protection. Both declare
+that local, but only 1997 tests `adven[which_pc].level`. So in OBoE a PC
+without free action saves only when the roll comes in under 30, whatever
+their level. In 1997 a level-20 PC saves at under 70. Exile III's `sleep_pc`
+(`10b0:1a69`) has 1997's roll. A player can tell. The draw count is the same
+(one die either way), so a replay parts only where a save comes out
+differently. This is why it needs the flag.
+
+Only sleep and paralysis change. A forcecage is OBoE's alone and keeps OBoE's
+roll. Not changed: OBoE's other additions to the function (race
+immunities, `STATUS_PROTECTION`), which 1997 content can't reach, and
+monsters' saving rolls, which have not been compared.
+
+---
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

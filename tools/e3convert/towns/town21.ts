@@ -138,8 +138,8 @@ export function town21(b: SpecBuilder): Map<number, Step[]> {
     ])]]),
     // 16: a lever (`FUN_10e0_09e5`: dialog 0x3fc, then the lever itself
     // flips between 243 and 244), which works five portcullises.
-    // TODO(E3-3): E3 plays sound 94 as it goes.
     [16, [b.askDialog(0x3fc, [
+      b.sound(94),
       b.swapTer(57, 52, 243, 244),
       b.ifTer(57, 52, 243, [b.msg(BLOCK, 0x15)], [b.msg(BLOCK, 0x16)]),
       ...[[58, 53], [58, 56], [58, 58], [52, 55], [54, 55]].map(([x, y]) => b.swapTer(x!, y!, 0x7c, 0x7d)),

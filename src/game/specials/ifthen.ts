@@ -128,11 +128,22 @@ export async function ifThenSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
 
     case SpecType.IF_TER_TYPE: {
       const town = univ.town;
-      // An exile-js extension, not in OBoE: (-1, -1) is the party's own
-      // square. The C++ reads the terrain at (-1, -1), which is off every map
-      // and never matches, so no BoE scenario can mean anything by it. Exile 3
-      // needs it for its flooding trench (tools/e3convert, `ifPartyOnTer`).
-      const here = spec.ex1a === -1 && spec.ex1b === -1 ? party.getLoc() : { x: spec.ex1a, y: spec.ex1b };
+      // Two exile-js extensions, not in OBoE. The C++ reads the terrain at a
+      // negative square, which is off every map and never matches, so no BoE
+      // scenario can mean anything by them. Exile 3 needs both for its
+      // flooding trench (tools/e3convert, `ifPartyOnTer`, `ifTargetOnTer`),
+      // which drowns a party standing in it and, in combat, each PC:
+      // (-1, -1) is the party's own square, and in combat there is none;
+      // (-2, -2) is the target PC's square, only in combat, and only while
+      // that PC is alive.
+      const combat = isCombat(ctx.session.mode);
+      let here: { x: number; y: number } | null = { x: spec.ex1a, y: spec.ex1b };
+      if (spec.ex1a === -1 && spec.ex1b === -1) here = combat ? null : party.getLoc();
+      else if (spec.ex1a === -2 && spec.ex1b === -2) {
+        const pc = ctx.curTarget === null ? undefined : party.pcs[ctx.curTarget];
+        here = combat && pc?.mainStatus === MainStatus.ALIVE ? pc.getLoc() : null;
+      }
+      if (!here) break;
       const at = town
         ? town.record.terrain[here.x]?.[here.y]
         : univ.out.at(here.x, here.y);

@@ -559,6 +559,7 @@ function scenarioXml(
         <monster-sightings>exile3</monster-sightings>
         <hostile-movers>${E3_HOSTILE_MOVERS}</hostile-movers>
         <town-timers>repeat</town-timers>
+        <inn>exile3</inn>
     </feature-flags>
     <text>
         <teaser>The surface world is dying. Find out why.</teaser>
