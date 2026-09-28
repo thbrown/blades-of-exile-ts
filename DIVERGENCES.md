@@ -501,7 +501,9 @@ square next to the caster, so a spell can only be aimed by mouse. Here the
 target starts on the nearest hostile the party can see and reach (skipping
 squares a multi-target spell has already picked), the arrows move it, and
 Enter — or the middle of the touch pad — takes that square exactly as a click
-on it would. A mouse over the view still aims as it always has. What reaches
+on it would. A mouse over the view still aims as it always has. Past the view's
+edge the cursor scrolls it, by the same `screen_shift` the border arrows use,
+where the mode allows the border arrows at all. What reaches
 the rules is the same click, so recordings can't tell, and finding the target
 draws no dice (`test/aimCursor.test.ts`). `src/game/aimCursor.ts`.
 

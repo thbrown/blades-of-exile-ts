@@ -12,6 +12,7 @@ import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { Aiming, autoAim, canAimAt, moveAim } from '../src/game/aimCursor';
+import { GameMode } from '../src/game/modes';
 import { GameSession } from '../src/game/session';
 import { PartyPreset } from '../src/universe/player';
 import { Universe } from '../src/universe/universe';
@@ -76,12 +77,25 @@ describe('the aim cursor', () => {
     expect(autoAim(s, aimFor(s))).toEqual({ x: 7, y: 8 });
   });
 
-  it('moves a square at a time and stays on the 9x9 view', () => {
+  it('moves a square at a time, and stops at the edge where the view cannot scroll', () => {
     const s = fight([]);
-    const c = s.center;
+    s.mode = GameMode.TOWN_TARGET;
+    const c = { ...s.center };
     expect(moveAim(s, { ...c }, Direction.NE)).toEqual({ x: c.x + 1, y: c.y - 1 });
     const edge = { x: c.x + 4, y: c.y };
     expect(moveAim(s, edge, Direction.E)).toEqual(edge);
+    expect(s.center).toEqual(c);
+  });
+
+  it('takes the view with it past the edge while a spell or missile is aimed', () => {
+    const s = fight([]);
+    s.mode = GameMode.SPELL_TARGET;
+    const c = { ...s.center };
+    // One square past the east edge, and diagonally past the north-east corner.
+    expect(moveAim(s, { x: c.x + 4, y: c.y }, Direction.E)).toEqual({ x: c.x + 5, y: c.y });
+    expect(s.center).toEqual({ x: c.x + 1, y: c.y });
+    expect(moveAim(s, { x: c.x + 5, y: c.y - 4 }, Direction.NE)).toEqual({ x: c.x + 6, y: c.y - 5 });
+    expect(s.center).toEqual({ x: c.x + 2, y: c.y - 1 });
   });
 
   it('never draws from the RNG', () => {

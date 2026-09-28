@@ -13,7 +13,7 @@
 import { Direction, Location, dist, fdist, shiftLoc } from '../core/location';
 import { Attitude } from '../data/monster';
 import { SIGHT_BLOCKED } from '../core/sight';
-import { GameMode, isCombat } from './modes';
+import { GameMode, isCombat, isScrollable } from './modes';
 import type { GameSession } from './session';
 
 /** How far from the view's centre a square can be and still be drawn (the 9×9 view). */
@@ -95,10 +95,23 @@ export function autoAim(session: GameSession, aim: Aiming): Location {
   return nearest(seen.filter((p) => canAimAt(session, aim, p))) ?? nearest(seen) ?? { ...aim.from };
 }
 
-/** The cursor one square `dir`, kept on the view. */
+/**
+ * The cursor one square `dir`. Past the edge of the 9×9 view it takes the
+ * view with it where the view may scroll — `screen_shift`, exactly what the
+ * border arrows round the terrain do in those modes (`isScrollable`) — and
+ * otherwise stops at the edge: a town spell can't scroll the view, in the
+ * original either.
+ */
 export function moveAim(session: GameSession, at: Location, dir: Direction): Location {
   const next = shiftLoc(at, dir);
   const c = session.center;
+  const over = (v: number, mid: number): number => (v > mid + VIEW_RADIUS ? 1 : v < mid - VIEW_RADIUS ? -1 : 0);
+  const dx = over(next.x, c.x);
+  const dy = over(next.y, c.y);
+  if ((dx !== 0 || dy !== 0) && isScrollable(session.mode)) {
+    session.screenShift(dx, dy);
+    return next;
+  }
   return {
     x: Math.max(c.x - VIEW_RADIUS, Math.min(c.x + VIEW_RADIUS, next.x)),
     y: Math.max(c.y - VIEW_RADIUS, Math.min(c.y + VIEW_RADIUS, next.y)),

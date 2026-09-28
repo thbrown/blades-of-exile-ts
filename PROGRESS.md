@@ -14241,6 +14241,11 @@ the rest of the TODO(E3-3) list.
         all), and pause only in town, combat or outdoors.
       - Summoning spells are multi-target too and aim at empty squares; the
         cursor still starts on an enemy for them, and is moved off.
+      - Past the edge of the view the cursor takes the view with it —
+        `session.screenShift`, what the border arrows do — in the modes
+        where the view may scroll (`isScrollable`: combat spells, missiles,
+        look). A town spell's cursor stops at the edge, since TOWN_TARGET
+        can't scroll in the original either.
 - [x] **Dragging the map by finger (2026-09-28).** The map window (and a
       dialog's caption) moved only by mouse: a mouse press is a click the
       moment it goes down, and the click starts the drag, but a finger's

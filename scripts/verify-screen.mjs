@@ -3237,6 +3237,14 @@ touch.aimMoved = await tp.evaluate(() => window.__screen.aimAt && { ...window.__
 await tp.tap('.touch-dpad .touch-button[title="North"]');
 await tp.waitForTimeout(150);
 touch.fireLabel = await tp.evaluate(() => document.querySelector('.touch-button.centre').textContent);
+// Past the edge of the view the cursor takes the view with it (screen_shift,
+// as the border arrows do), and coming back leaves the view where it went.
+const tCentre0 = await tp.evaluate(() => ({ ...window.__session.center }));
+for (let i = 0; i < 6; i++) { await tp.tap('.touch-dpad .touch-button[title="East"]'); await tp.waitForTimeout(60); }
+const tFar = await tp.evaluate(() => ({ aim: { ...window.__screen.aimAt }, centre: { ...window.__session.center } }));
+for (let i = 0; i < 6; i++) { await tp.tap('.touch-dpad .touch-button[title="West"]'); await tp.waitForTimeout(60); }
+touch.scrolled = { from: tCentre0, far: tFar,
+  back: await tp.evaluate(() => ({ ...window.__screen.aimAt })) };
 await tp.screenshot({ path: `${SHOTS}/64-touch-aim.png` });
 const tLines = await tp.evaluate(() => window.__univ.transcript.length);
 await tp.tap('.touch-dpad .touch-button.centre');
@@ -3276,6 +3284,8 @@ const touchOk = touch.desktopHidden && touch.townSet === 'MAGE PRIEST LOOK TALK 
   touch.aimFoes.n === 2 && touch.panel &&
   touch.aimStart?.x === 8 && touch.aimStart?.y === 8 &&
   touch.aimMoved?.x === 8 && touch.aimMoved?.y === 9 && touch.fireLabel === '◎' &&
+  touch.scrolled.far.aim.x === 14 && touch.scrolled.far.centre.x === touch.scrolled.from.x + 14 - (touch.scrolled.from.x + 4) &&
+  touch.scrolled.back.x === 8 && touch.scrolled.back.y === 8 &&
   touch.fired.mode === 9 && touch.fired.aim === null && touch.fired.said.some((l) => /takes|miss|resist/i.test(l));
 
 console.log('ERRORS:', errors.length ? errors.join(' | ') : 'none');
