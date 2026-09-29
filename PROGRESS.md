@@ -14373,6 +14373,9 @@ the rest of the TODO(E3-3) list.
         `forget-towns` (49, DIVERGENCES #25). The plot TODO's "job
         deadlines" and "daily 1-in-50" were already the engine's
         (`e3JobsTick`).
+      - [x] **Horses follow a declining town** (DIVERGENCES #26):
+        `<town-flag span="4" rehome="horses">`, port-only attributes; E3's
+        loader moves horses from all four records and never a boat.
 
 All checks pass: 1,420 tests, both sweeps, verify-screen (with TOUCH)/party
 (this round). Before it: 1,419 tests, both sweeps, verify-screen (with TOUCH)/party

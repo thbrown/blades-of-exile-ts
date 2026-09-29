@@ -595,6 +595,16 @@ so their creatures fill again from the records. BoE has the same four slots
 (`debug_towns_forget`), and the opcode does what it does. OBoE would read a
 scenario using it as having an unknown opcode.
 
+### 26. Which vehicles follow a town that changes (2026-09-28)
+
+**DECIDED: two optional attributes on `<town-flag>`, this port's own.**
+OBoE's town replacement moves the horses and boats stabled in the entrance
+record to the record it chooses. Exile III's loader moves the horses stabled
+in any of a declining town's four records, and never a boat.
+`span="n"` widens the source to records `town` to `town + n - 1`, and
+`rehome="horses"` leaves the boats alone. A scenario without them behaves as
+OBoE's; OBoE itself ignores attributes it doesn't know.
+
 ---
 
 ## Agreements worth recording

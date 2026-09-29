@@ -706,6 +706,20 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(univ.party.pcs.some((pc) => pc.mainStatus === MainStatus.ALIVE)).toBe(false);
   });
 
+  it("moves the horses from all four of a declining town's records, and no boat", () => {
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    const { party } = session.univ;
+    const mod = scen.townMods.find((m) => m.spec === 0)!;
+    expect([mod.span, mod.rehome]).toEqual([4, 'horses']);
+    party.horses = [{ ...party.horses[0]!, exists: true, whichTown: 1 }] as never;
+    party.boats = [{ ...party.boats[0]!, exists: true, whichTown: 0 }] as never;
+    party.setSdf(mod.x, mod.y, 2);
+    session.startTownMode(0, FORCED_ENTRY, true);
+    expect(party.townNum).toBe(2);
+    expect(party.horses[0]!.whichTown).toBe(2);
+    expect(party.boats[0]!.whichTown).toBe(0);
+  });
+
   it("swaps in a declining town's later record by day, as E3's loader does", async () => {
     const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
     session.attachSpecials(new Proxy({}, { get: () => () => Promise.resolve(0) }) as never);

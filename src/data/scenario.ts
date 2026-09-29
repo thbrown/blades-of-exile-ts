@@ -16,6 +16,21 @@ import type { ScenarioState } from './scenarioState';
 import { Timer, Town } from './town';
 import { Vehicle } from './vehicle';
 
+/**
+ * One `<town-flag>`: entering town `spec` enters `spec + PSD[x][y]`.
+ * `span` and `rehome` are this port's own, for Exile III (DIVERGENCES.md
+ * #26): which vehicles follow the party's town — OBoE's, horses and boats
+ * stabled in `spec` alone; E3's, horses from all `span` records and never
+ * boats.
+ */
+export interface TownMod {
+  spec: number;
+  x: number;
+  y: number;
+  span?: number;
+  rehome?: 'horses';
+}
+
 export interface Scenario {
   /**
    * The scenario's directory name (`ScenarioSource.id`) — the string a save
@@ -100,7 +115,7 @@ export interface Scenario {
    * `cScenario::town_mods` — up to ten `<town-flag>` entries, each redirecting
    * one town number by the value of a Stuff Done Flag (boe.town.cpp:99).
    */
-  townMods: { spec: number; x: number; y: number }[];
+  townMods: TownMod[];
   storeItemRects: Map<number, { top: number; left: number; bottom: number; right: number }>;
   /** The scenario's boat/horse templates, by vehicle number (fileio_scen.cpp). */
   boats: Vehicle[];

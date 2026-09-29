@@ -13,12 +13,12 @@
  * day implies an earlier one, and so does the event), so testing at the start
  * of each day is testing on entry.
  *
- * Where the two differ: the engine re-homes the horses *and boats* stabled in
- * the first record only, where E3 re-homes horses from all four and never
- * boats. Krizsan's two boats (records 0's shipyard, which the later records
- * show ruined) therefore come along into the ruins here, and a horse left in
- * a middle state stays there. TODO(E3-3): E3's re-homing, which needs the
- * engine's town replacement to take a range.
+ * E3 re-homes the horses from all four records and never the boats, where
+ * OBoE's town replacement moves horses and boats from the first record
+ * alone; the `<town-flag>`'s `span="4" rehome="horses"` (this port's own,
+ * DIVERGENCES.md #26) ask for E3's. So Krizsan's two boats stay in record 0's
+ * shipyard, which the later records show ruined, and a horse left in a
+ * middle state follows the town on.
  */
 
 import { e3TownState } from '../flags';
@@ -52,6 +52,6 @@ export function townStatesPlot(b: SpecBuilder): Step[] {
 export function townStatesXml(): string {
   return TOWN_STATES.map((g, k) => {
     const [x, y] = e3TownState(k);
-    return `        <town-flag town="${g.town}" add-x="${x}" add-y="${y}" />\n`;
+    return `        <town-flag town="${g.town}" add-x="${x}" add-y="${y}" span="4" rehome="horses" />\n`;
   }).join('');
 }

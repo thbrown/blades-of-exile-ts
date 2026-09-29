@@ -5,7 +5,7 @@
  * Deferred sections are skipped by name and picked up in later milestones.
  */
 
-import { Scenario } from '../data/scenario';
+import { Scenario, TownMod } from '../data/scenario';
 import {
   Quest, SpecItem, makeQuest, makeSpecItem,
 } from '../data/quest';
@@ -154,7 +154,7 @@ export interface ScenarioHeader {
   /** journal_strs — the events journal's entries, which `journal` nodes add. */
   journalStrs: string[];
   /** town_mods — `<town-flag>`, an SDF-driven redirect of a town number. */
-  townMods: { spec: number; x: number; y: number }[];
+  townMods: TownMod[];
   /** store_item_rects — where each town's shops keep sold-back goods. */
   storeItemRects: Map<number, { top: number; left: number; bottom: number; right: number }>;
 }
@@ -315,7 +315,14 @@ export function readScenarioFromXml(root: Element, fname = 'scenario.xml'): Scen
           // scripts. Ten of them at most, as the C++'s fixed array allows.
           if (hdr.townMods.length >= 10)
             throw new Error(`${fname}: more than ten <town-flag> nodes`);
-          hdr.townMods.push({ spec: intAttr(g, 'town'), ...locFromXml(g, 'add-') });
+          // `span` and `rehome` are this port's own (`TownMod`).
+          const span = attr(g, 'span');
+          const rehome = attr(g, 'rehome');
+          hdr.townMods.push({
+            spec: intAttr(g, 'town'), ...locFromXml(g, 'add-'),
+            ...(span !== null && span !== undefined ? { span: Number(span) } : {}),
+            ...(rehome === 'horses' ? { rehome: 'horses' as const } : {}),
+          });
         }
         else if (gt === 'store-items') {
           const town = intAttr(g, 'town');

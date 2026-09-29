@@ -4836,11 +4836,19 @@ export class GameSession {
       if (mod.spec < 0 || mod.spec >= 200 || townNum !== mod.spec) continue;
       if (!this.univ.party.sdLegit(mod.x, mod.y)) continue;
       townNum += this.univ.party.getSdf(mod.x, mod.y);
+      // OBoE's rehoming: horses and boats stabled in the entrance record.
+      // A `span` (DIVERGENCES.md #26) widens that to every record of the
+      // group, and `rehome="horses"` leaves the boats where they were, as
+      // Exile III's loader does.
+      const span = mod.span ?? 1;
+      const ours = (t: number) => t >= formerTown && t < formerTown + span;
       for (const horse of this.univ.party.horses) {
-        if (horse.exists && horse.whichTown === formerTown) horse.whichTown = townNum;
+        if (horse.exists && ours(horse.whichTown)) horse.whichTown = townNum;
       }
-      for (const boat of this.univ.party.boats) {
-        if (boat.exists && boat.whichTown === formerTown) boat.whichTown = townNum;
+      if (mod.rehome !== 'horses') {
+        for (const boat of this.univ.party.boats) {
+          if (boat.exists && ours(boat.whichTown)) boat.whichTown = townNum;
+        }
       }
     }
     const record = this.univ.scenario.towns[townNum];
