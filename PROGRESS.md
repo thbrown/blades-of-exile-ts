@@ -14350,6 +14350,14 @@ the rest of the TODO(E3-3) list.
         twice, 18 so far). *Lorelei's manse* says "Can't enter manse while in
         combat." *The Shifting Floors' golems* stop at 60 creatures
         (`if-creature` test 3, "fewer than N here").
+      - [x] **`day_reached` and E3's events** (DIVERGENCES §9, now
+        decided). `day-reached` = `1997`: an event that never happened
+        passes, as both 1997 builds read `key_times`' 30000; a replay keeps
+        OBoE's "missing key fails". The converter keeps E3's events (8 is
+        none) — **which was a real bug**: events 0–3 are the four plague
+        sources destroyed, and fourteen towns and five creatures change on
+        their day only if the source is still there; with the event dropped,
+        a town fell to a plague the party had already ended.
 
 All checks pass: 1,420 tests, both sweeps, verify-screen (with TOUCH)/party
 (this round). Before it: 1,419 tests, both sweeps, verify-screen (with TOUCH)/party

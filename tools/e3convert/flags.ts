@@ -37,15 +37,12 @@ export function e3Event(k: number): number {
  * chop). A script's test is `SpecBuilder.ifE3DayReached`, which keeps the
  * event with E3's meaning.
  *
- * TODO(E3-3): the event is dropped. E3 skips the change if the event happened
- * *before* the day, and an event that never happened (30000) does not stop
- * it. The engine agrees on the first and not the second — it reads an unset
- * key as "no" (DIVERGENCES.md #9) — so keeping the key would freeze every
- * such change until the event happens. Dropped, the change happens on its
- * day even after the event, where E3 would have spared it.
+ * The event is kept: E3 skips the change if the event happened *before*
+ * the day, and an event that never happened (30000) does not stop it, which
+ * the engine's `day-reached` = `1997` flag agrees with (DIVERGENCES.md #9).
  */
-export function e3DayReached(day: number, _event: number): { day: number; event: number } {
-  return { day: day + 20, event: 0 };
+export function e3DayReached(day: number, event: number): { day: number; event: number } {
+  return { day: day + 20, event: event === 8 ? 0 : e3Event(event) };
 }
 
 /**

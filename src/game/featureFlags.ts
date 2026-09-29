@@ -62,6 +62,10 @@ export const SUPPORTED_FEATURES: Readonly<Record<string, readonly string[]>> = {
   // exile-js's own too: a failed bash hurts as 1997's does, unblockable, and
   // its roll runs 0–100 (DIVERGENCES.md §18).
   'bash-door': ['1997'],
+  // exile-js's own too: `day_reached` passes an event that never happened, as
+  // both 1997 builds do (`key_times` start at 30000), where OBoE's missing key
+  // fails (DIVERGENCES.md §9).
+  'day-reached': ['1997'],
 };
 
 /** The set in force. Starts as everything this build supports. */

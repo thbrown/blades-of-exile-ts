@@ -283,7 +283,13 @@ condensing. The page's own masthead links to this port's source.
 
 ### 9. `day_reached`: three versions, and the engine has OBoE's (2026-09-24)
 
-**OPEN: not decided, and not changed.** Found while converting Exile 3,
+**DECIDED (2026-09-28): the original's last row in the live game, OBoE's
+in a replay**, through an exile-js feature flag, `day-reached` = `1997`, as
+§14, §17 and §18 do: an event that never happened passes. The extra days are
+unchanged (OBoE's +10 in easy mode); Exile III puts its own +20 into its
+data. The first half of what follows is the finding as it stood.
+
+Found while converting Exile 3,
 whose `day_reached` (`FUN_10d0_54b8`) is the Windows 1997 one exactly. This
 test runs everywhere time matters: talk nodes, creatures that come and go,
 towns that fall.
@@ -299,10 +305,11 @@ day 30 unless event 3 happened first. In both 1997 builds it turns up on day
 30 if event 3 never happened. In OBoE it never turns up at all. Neither
 original reads an unset event as "no".
 
-- **Exile 3 does not depend on it yet.** The converter (`e3DayReached`,
-  `tools/e3convert/flags.ts`) puts the +20 into the data and drops the event
-  key, which is exactly E3's behaviour until E3-3's scripts set events. That
-  is marked `TODO(E3-3)`.
+- **Exile 3 depends on it.** Its events 0–3 are the four plague sources
+  destroyed (`setEvent`), and fourteen towns fall on their day *unless* the
+  source went first (`<chop event>`), as do five creatures. The converter
+  (`e3DayReached`) used to drop the event, so towns fell to a plague the
+  party had already ended; it keeps it now (8 is E3's "none").
 - **Legacy BoE scenarios (Part 1b) do depend on it.** A 1997-era scenario
   that uses events gets OBoE's answer. The Windows +20 is another question:
   it depends on which build the scenario was balanced for.

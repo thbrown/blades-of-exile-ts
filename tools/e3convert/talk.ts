@@ -236,8 +236,8 @@ function convertNode(ctx: Context, raw: E3TalkNodeRaw, personality: number, extr
       set(TalkNodeType.INN, e1, e2, extras[0], extras[1]);
       break;
     case E3Node.DEP_ON_TIME: {
-      // `e3DayReached` moves E3's extra 20 days into the day, and for now
-      // drops the event (its TODO says why).
+      // `e3DayReached` moves E3's extra 20 days into the day, and maps the
+      // event (8 is none).
       const t = e3DayReached(e1, e2);
       if (t.event) set(TalkNodeType.DEP_ON_TIME_AND_EVENT, t.day, t.event);
       else set(TalkNodeType.DEP_ON_TIME, t.day);

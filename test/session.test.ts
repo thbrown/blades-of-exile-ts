@@ -84,6 +84,24 @@ describe('party setup', () => {
     expect(univ.party.calcDay()).toBe(1);
   });
 
+  it("day_reached passes an event that never happened, as 1997 does, but not in a replay (DIVERGENCES §9)", () => {
+    const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
+    const { party } = univ;
+    party.age = 3700 * 40; // day 41
+    try {
+      expect(party.dayReached(30, 3)).toBe(true);
+      party.keyTimes.set(3, 20);
+      expect(party.dayReached(30, 3)).toBe(false);
+      party.keyTimes.set(3, 35);
+      expect(party.dayReached(30, 3)).toBe(true);
+      party.keyTimes.delete(3);
+      setFeatureFlags({});
+      expect(party.dayReached(30, 3)).toBe(false);
+    } finally {
+      resetFeatureFlags();
+    }
+  });
+
   it('arms the party in finish_create, which the preset ctor leaves undone', async () => {
     // `cPlayer(PARTY_DEFAULT, slot)` explicitly empties the pack; the gear
     // comes from `finish_create`, which start_new_game runs over the whole

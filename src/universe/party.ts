@@ -13,6 +13,7 @@
 import type { E3JobState } from '../game/e3Jobs';
 import { Direction, Location, loc } from '../core/location';
 import { GameRng } from '../core/rng';
+import { hasFeatureFlag } from '../game/featureFlags';
 import { Job, JobBank, makeJobBank } from '../data/quest';
 import { SpecCtxType } from '../game/specials/context';
 import { OutdoorCreature } from './outdoorCreature';
@@ -457,8 +458,13 @@ export class Party {
   dayReached(day: number, event = 0): boolean {
     if (event > 0) {
       const when = this.keyTimes.get(event);
-      if (when === undefined) return false;
-      if (when < day) return false;
+      // An event that never happened: both 1997 builds read their 30000, so
+      // the day still comes; OBoE's map has no key, so it never does. The
+      // live game has 1997's; a replay, whose flags never list it, OBoE's
+      // (DIVERGENCES.md §9).
+      if (when === undefined) {
+        if (!hasFeatureFlag('day-reached', '1997')) return false;
+      } else if (when < day) return false;
     }
     return this.calcDay() >= day;
   }
