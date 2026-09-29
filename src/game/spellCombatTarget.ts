@@ -511,7 +511,9 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
   // and, because that function is a 200-try search, spent a fresh run of
   // `get_ran(1,0,195)` draws doing it.
   let summon = 0;
-  if (spell === Spell.SUMMON_BEAST || spell === Spell.SUMMON_WEAK) {
+  if (spell === Spell.SUMMON_BEAST) {
+    summon = getSummonMonster(session, 1, { beast: true });
+  } else if (spell === Spell.SUMMON_WEAK) {
     summon = getSummonMonster(session, 1);
   } else if (spell === Spell.SUMMON || spell === Spell.SUMMON_AID) {
     summon = getSummonMonster(session, 2);

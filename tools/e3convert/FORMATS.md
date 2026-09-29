@@ -115,9 +115,16 @@ E3 keeps its terrain types in code and data, not in a file:
   dialog), and the units a row of the ten words at `DS:0878`
   (0 1 2 3 4 5 7 10 17 23), plus 2, d8. E3 breathes at 7 squares, not 8.
   bladbase kept the byte as the dice and gave the kind a field of its own.
-  **Not in E3's tables** (in code somewhere): radiation, default attitude,
-  summon type, facial picture, loot. 177–190 are E3's own unique
-  characters (Rentar-Ihrno, Athron, Sulfras, Erika …).
+  **Not in E3's record**, and where E3 answers instead (2026-09-28):
+  radiation and loot, nowhere (no monster has either); attitude,
+  `place_monster` (`1090:3d56`): hostile A, but troglodytes 149–154 hostile
+  B; summon class, none — the spells draw from lists, combat's at
+  `DS:0770`/`0775`/`0789`/`0799` (5, 20, 16, 16 bytes: Summon Beast, then
+  classes 1–3) and out-of-combat's at `DS:3072`/`3077`/`308b`/`309b`;
+  talking face, the words of **segment 40** (`1138:0000`) by monster, 1-based
+  into TALKPORT.BMP and 0 for the sprite, overridden for 28 personalities by
+  the (personality, face) pairs at `DS:2364` (`1098:984e`). 177–190 are E3's
+  own unique characters (Rentar-Ihrno, Athron, Sulfras, Erika …).
   **Sprites**: MONST1–9 use BoE's layout. There are 20 sprites a sheet in
   column pairs (idx < 10 in columns 0/1, else 2/3), with the attack pose 4
   columns further along. Column 1 faces left, the default.

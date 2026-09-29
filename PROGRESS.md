@@ -917,7 +917,9 @@ Notes for M2 implementer:
     - Fields E3 keeps in code rather than tables come from BoE's `bladbase`,
       Jeff's own export of the same monsters and items (generated into
       `bladbaseExtras.ts`, GPL):
-      - for monsters: breath type, radiation, attitude, summon, face, loot;
+      - for monsters: breath type, radiation, attitude, summon, face, loot
+        (*since found in E3's own code, 2026-09-28: bladbase no longer
+        supplies any of them*);
       - for items with a namesake: ability, strength, use, treasure class,
         curse.
     - Sprites come from MONST1–9, OBJECTS and TINYOBJ.
@@ -14392,9 +14394,33 @@ the rest of the TODO(E3-3) list.
         which picks "Breathes fire/ice/acid" by the byte's size. The
         remaining monster extras (radiation, attitude, summon type, face,
         loot) keep their TODO(E3-3).
+      - [x] **The monster extras, from E3's own code** (2026-09-28), not
+        bladbase's. E3's monster record has none of BoE's radiation, loot,
+        attitude, summon class or face, and its code answers each
+        (FORMATS.md): no monster radiates or drops loot; `place_monster`
+        (`1090:3d56`) makes creatures hostile A but the troglodytes
+        (149–154) hostile B; *faces* are a word table in segment 40 by
+        monster (agreeing with bladbase for only 122 of 176, and giving
+        177–190 theirs), overridden for 28 personalities by pairs at
+        `DS:2364` — the converter writes those as the creature's `<face>`.
+        *Summons* (DIVERGENCES #28): E3 has no summon classes; each spell
+        draws once from a list of its own, one set in combat (`DS:0770`)
+        and another out of it (`DS:3072`). `summons` = `exile3` and
+        `src/game/e3Summons.ts`; `getSummonMonster` takes
+        `{ beast, outOfCombat }`, since E3's Summon Beast has its own list.
+        `bladbaseExtras.ts` now carries only the items.
+        **Found on the way** (TODO(E3-3), `talk.ts`): E3 speaks for
+        Anaximander as personality 19, his weary self, once any of 0xc85,
+        0xc87 or 0xc8a is set; the engine can't switch a personality yet.
+        *Tool note*: `nedis.py` needs capstone; a venv in the scratchpad
+        (`python3 -m venv …; pip install capstone`) does it without touching
+        the system Python.
 
-All checks pass: 1,420 tests, both sweeps, verify-screen (with TOUCH)/party
-(this round). Before it: 1,419 tests, both sweeps, verify-screen (with TOUCH)/party
+All checks pass: 1,440 tests, both sweeps, verify-screen (with TOUCH)/party
+and verify-e3 (the monster extras, 2026-09-28). Before it: 1,420 tests, both
+sweeps, verify-screen (with TOUCH)/party. Before it: 1,419 tests, both sweeps, verify-screen (with TOUCH)/party
 (corpus not re-run: none of today's changes touches an RNG call, and the
-replay driver doesn't use `main.ts`'s key handler). **Next session starts here**: E3's
-remaining screen chrome (see "Not done" above), then the TODO(E3-3) list.
+replay driver doesn't use `main.ts`'s key handler). **Next session starts here**: the TODO sweep's
+last dozen — `grep -rn "TODO(" src/ tools/`: two TODO(E3-3) (E3's own item
+ability semantics, `tables.ts`; Anaximander's personality, `talk.ts`), then
+TODO(M9)/TODO(campaign)/TODO(M8), which may be left for the user to rule on.

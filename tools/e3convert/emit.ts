@@ -24,7 +24,7 @@ import { MonstAbil, MonstGen } from '../../src/data/monsterAbility';
 import { decodeBmp, type Rgba } from '../../src/fileio/legacy/bmp';
 import { PIC_CUSTOM_FULL } from '../../src/data/special';
 import { BG_RECTS, E3_PATTERN_SLOTS } from '../../src/render/tiling';
-import { E3_ABILITY_TO_LEGACY, E3_BREATH_RANGE, E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3ItemAbilities, readE3Items, readE3Monsters, readE3RoadJoins, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
+import { E3_ABILITY_TO_LEGACY, E3_BREATH_RANGE, E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3ItemAbilities, readE3Items, readE3Monsters, readE3PersonalityFaces, readE3RoadJoins, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3PresetItem, type E3Town } from './town';
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
 import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
@@ -518,7 +518,7 @@ function creatureTimeXml(c: E3CreatureStart): string {
   }
 }
 
-function creatureXml(c: E3CreatureStart, id: number, personality: number, onKill = -1): string {
+function creatureXml(c: E3CreatureStart, id: number, personality: number, onKill = -1, face?: number): string {
   // `spec1`/`spec2` is the creature's death flag: END_DIE sets it, and a town
   // loading leaves out anyone whose flag is set (`10d8:` town setup, which
   // skips row 0 and 200 up). 200–204 are creatures a script brings in
@@ -530,7 +530,7 @@ function creatureXml(c: E3CreatureStart, id: number, personality: number, onKill
         <type>${c.number}</type>
         <attitude>${ATTITUDE[c.startAttitude] ?? 'docile'}</attitude>
         <mobility>${c.mobile}</mobility>
-${sdf ? `        <sdf x="${sdf[0]}" y="${sdf[1]}" />\n` : ''}${code ? `        <encounter>${code}</encounter>\n` : ''}${creatureTimeXml(c)}        <personality>${personality}</personality>
+${sdf ? `        <sdf x="${sdf[0]}" y="${sdf[1]}" />\n` : ''}${code ? `        <encounter>${code}</encounter>\n` : ''}${creatureTimeXml(c)}${face ? `        <face>${face - 1}</face>\n` : ''}        <personality>${personality}</personality>
 ${onKill >= 0 ? `        <onkill>${onKill}</onkill>\n` : ''}    </creature>
 `;
 }
@@ -577,6 +577,8 @@ interface TownTables {
   charges(p: E3PresetItem): number;
   /** Whether town `t` starts off the map (`readE3HiddenTowns`). */
   hidden(t: number): boolean;
+  /** The face E3's talk screen gives personality `p` over its monster's, 1-based (`readE3PersonalityFaces`). */
+  face(p: number): number | undefined;
 }
 
 function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, strings: Map<number, string>, script: SpotScript, tables: TownTables): string {
@@ -584,7 +586,7 @@ function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, st
   const r = t.village ? { top: 0, left: 0, bottom: size - 1, right: size - 1 } : t.inTownRect;
   const creatures = townCreatures(t)
     .map((c, i) => (c.number > 0
-      ? creatureXml(c, i, personalityOf.get(`${t.number}:${i}`) ?? -1, script.kills[i])
+      ? creatureXml(c, i, personalityOf.get(`${t.number}:${i}`) ?? -1, script.kills[i], tables.face(c.personality))
       : '')).join('');
   const items = t.presetItems.map((p, i) => (p.itemCode < 0 ? '' : `    <item id="${i}">
         <type>${tables.type(p)}</type>
@@ -710,6 +712,7 @@ function scenarioXml(
         <room-descriptions>exile3</room-descriptions>
         <explode-spots>exile3</explode-spots>
         <pick-lock>exile3</pick-lock>
+        <summons>exile3</summons>
         <dungeon-sound>${E3_DUNGEON_SOUND}</dungeon-sound>
         <cursors>${cursors.map((c) => `${c.name}:${c.hotspot.x}:${c.hotspot.y}`).join(',')}</cursors>
     </feature-flags>
@@ -859,6 +862,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   const stampedItems = e3StampedItems(towns, isGoldOrFood, (item) => tableAbilities[item] ?? 0);
   const stampedIndex = (item: number, ability: number) =>
     stampedItems.findIndex(([i, a]) => i === item && a === ability);
+  const personalityFaces = readE3PersonalityFaces(files.exe);
   const townTables: TownTables = {
     type: (p) => {
       if (isGoldOrFood(p.itemCode) || p.ability < 0) return p.itemCode;
@@ -868,6 +872,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     },
     charges: (p) => (isGoldOrFood(p.itemCode) ? p.ability : p.charges > 0 ? p.charges : -1),
     hidden: (t) => hiddenTowns.has(t),
+    face: (p) => personalityFaces.get(p),
   };
   const e3Abilities = [...tableAbilities, ...shopTables.food.map(() => 0), ...noteItems.map(([, a]) => a),
     ...stampedItems.map(([, a]) => a)];

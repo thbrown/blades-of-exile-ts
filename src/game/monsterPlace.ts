@@ -14,6 +14,7 @@ import { Creature, CreatureStatus, assignCreature, copyMonster } from '../univer
 import { SpellNote } from '../universe/living';
 import { GameMode } from './modes';
 import type { GameSession } from './session';
+import { E3_COMBAT_SUMMONS, E3_TOWN_SUMMONS } from './e3Summons';
 
 /**
  * find_clear_spot — up to 75 random tries at a square within two of
@@ -180,9 +181,18 @@ export function placeMonster(
  * whose `summonType` matches the class asked for. Two hundred blind draws, so
  * a scenario with no monster of that class costs 200 RNG calls and then says
  * so; keep the count, since every later roll depends on it.
+ *
+ * Under `summons` = `exile3` Exile III's lists answer instead
+ * (`e3Summons.ts`): Summon Beast's own when `beast`, the out-of-combat set
+ * when `outOfCombat`, one draw and no failing. BoE's Summon Beast is class 1.
  */
-export function getSummonMonster(session: GameSession, summonClass: number): number {
+export function getSummonMonster(
+  session: GameSession, summonClass: number, how: { beast?: boolean; outOfCombat?: boolean } = {},
+): number {
   const univ = session.univ;
+  const e3 = univ.scenario.featureFlags['summons'] === 'exile3'
+    ? (how.outOfCombat ? E3_TOWN_SUMMONS : E3_COMBAT_SUMMONS)[how.beast ? 0 : summonClass] : undefined;
+  if (e3) return e3[univ.rng.getRan(1, 0, e3.length - 1)]!;
   const monsters = univ.scenario.scenMonsters;
   for (let i = 0; i < 200; i++) {
     const j = univ.rng.getRan(1, 0, monsters.length - 1);

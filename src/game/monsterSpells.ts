@@ -375,7 +375,7 @@ export async function monstCastMage(
       break;
     case Spell.SUMMON_BEAST:
       livingSound(25);
-      summonN(getSummonMonster(session, 1), () => 1, 3);
+      summonN(getSummonMonster(session, 1, { beast: true }), () => 1, 3);
       break;
     case Spell.CONFLAGRATION:
       await placeSpellPattern(session, SpellPat.RADIUS_2, target,

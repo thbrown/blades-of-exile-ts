@@ -6,7 +6,7 @@
  */
 
 import type { LegacyItem, LegacyMonster } from '../../src/fileio/legacy/structs';
-import { BLADBASE_EXTRAS, BLADBASE_ITEMS } from './bladbaseExtras';
+import { BLADBASE_ITEMS } from './bladbaseExtras';
 import { neAutoDataSegment, readNeSegment } from './ne';
 
 export const E3_TERRAIN_COUNT = 256;
@@ -236,10 +236,22 @@ export const E3_MONSTER_COUNT = 190;
  * `convertMonster`. Index 0 is the empty monster. The stats are E3's own:
  * segment 39's parallel arrays (`FUN_1090_0000`; FORMATS.md). `pictureNum`
  * is E3's sprite index, for `buildMonsterSheets` to replace.
+ *
+ * BoE's record has fields E3's lacks, and E3's code answers each:
+ * - **radiation, loot**: none. E3's monster record has no such fields and no
+ *   code gives a monster either (bladbase, Jeff's export of these monsters,
+ *   has none for any of them too).
+ * - **attitude**: E3's `place_monster` (`1090:3d56`) makes everything it
+ *   places hostile A, except the troglodytes (149–154), hostile B. BoE
+ *   reads the template's `default_attitude` there, so that is what it is.
+ * - **summon class**: none. E3's summoning spells draw from lists of their
+ *   own (`summons` = `exile3`, `src/game/e3Summons.ts`).
+ * - **face**: `readE3Faces`.
  */
 export function readE3Monsters(exe: Uint8Array, strings: Map<number, string>): LegacyMonster[] {
   const t = readNeSegment(exe, 39);
   const breathDice = readE3BreathDice(exe);
+  const faces = readE3Faces(exe);
   const v = new DataView(t.buffer, t.byteOffset, t.byteLength);
   const u8 = (off: number, n: number) => t[off + n] ?? 0;
   const i16 = (off: number, n: number) => v.getInt16(off + 2 * n, true);
@@ -247,12 +259,6 @@ export function readE3Monsters(exe: Uint8Array, strings: Map<number, string>): L
     .reduce((bits, off, k) => bits | (u8(off, n) === 1 ? 1 << (2 * k) : u8(off, n) >= 2 ? 2 << (2 * k) : 0), 0);
   const out: LegacyMonster[] = [];
   for (let n = 0; n <= E3_MONSTER_COUNT; n++) {
-    // Fields E3's table lacks: borrowed from BoE's bladbase for 1–176, the
-    // monsters the two games share; E3's unique 177–190 get BoE's defaults.
-    // (The breath type isn't one of them: E3 packs it into the breath byte.)
-    // TODO(E3-3): find where E3 keeps the radiation, default attitude, summon
-    // type, facial picture and corpse item (its code).
-    const x = BLADBASE_EXTRAS[n - 1] ?? [0, 0, 0, 1, 0, 0, 0, 0];
     out.push({
       level: u8(0, n), mName: n === 0 ? '' : strings.get(600 + n) ?? `Monster ${n}`,
       mHealth: i16(200, n), armor: u8(600, n), skill: u8(800, n),
@@ -262,11 +268,40 @@ export function readE3Monsters(exe: Uint8Array, strings: Map<number, string>): L
       breath: u8(3400, n) === 0 ? 0 : (breathDice[u8(3400, n) % 10] ?? 0) + 2,
       breathType: Math.trunc(u8(3400, n) / 10),
       treasure: u8(3800, n), specSkill: u8(4000, n), poison: u8(3600, n),
-      corpseItem: x[6] ?? 0, corpseItemChance: x[7] ?? 0, immunities: resist(n),
+      corpseItem: -1, corpseItemChance: -1, immunities: resist(n),
       xWidth: u8(4400, n) || 1, yWidth: u8(4600, n) || 1,
-      radiate1: x[1] ?? 0, radiate2: x[2] ?? 0, defaultAttitude: x[3] ?? 0, summonType: x[4] ?? 0,
-      defaultFacialPic: x[5] ?? 0, pictureNum: u8(4200, n),
+      radiate1: 0, radiate2: 0, defaultAttitude: n >= 149 && n <= 154 ? 3 : 1, summonType: 0,
+      defaultFacialPic: faces[n] ?? 0, pictureNum: u8(4200, n),
     });
+  }
+  return out;
+}
+
+/**
+ * E3's talking face for each monster, 1-based into TALKPORT.BMP and 0 for
+ * none: the words of segment 40 (`1138:0000`), which the talk screen
+ * (`1098:984e`) reads by the creature's monster number. With none it draws
+ * the monster's sprite, as 1997's `place_talk_str` does. bladbase's faces
+ * agree for only 122 of the 176 monsters the two share.
+ */
+export function readE3Faces(exe: Uint8Array): number[] {
+  const t = readNeSegment(exe, 40);
+  const v = new DataView(t.buffer, t.byteOffset, t.byteLength);
+  return Array.from({ length: E3_MONSTER_COUNT + 1 }, (_, n) => v.getInt16(2 * n, true));
+}
+
+/**
+ * The faces the talk screen gives particular people over their monster's:
+ * 50 (personality, face) pairs at `DS:2364`, 28 used, that `1098:984e`
+ * copies and looks the personality up in (E3's own number, 1-based).
+ */
+export function readE3PersonalityFaces(exe: Uint8Array): Map<number, number> {
+  const ds = readNeSegment(exe, neAutoDataSegment(exe));
+  const v = new DataView(ds.buffer, ds.byteOffset, ds.byteLength);
+  const out = new Map<number, number>();
+  for (let i = 0; i < 50; i++) {
+    const p = v.getInt16(0x2364 + 4 * i, true);
+    if (p > 0) out.set(p, v.getInt16(0x2366 + 4 * i, true));
   }
   return out;
 }

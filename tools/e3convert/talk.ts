@@ -28,6 +28,13 @@
  *   which no E3 town uses.
  * - Types 29 and up (only 100+ occur) are scripted: `FUN_1020_2eb0` switches
  *   on the type. They are E3-3's.
+ *
+ * TODO(E3-3): Anaximander grows weary. E3's talk start (`1020:16a8`) speaks
+ * as personality 19 in place of 20 once any of 0xc85, 0xc87 or 0xc8a is set
+ * (the slime, the Filth Factory, the troglodyte war), so his look, name and
+ * job change with the plot. The engine has no way to change a creature's
+ * personality, and those three texts aren't nodes a flag could branch, so
+ * he stays at 20 and 19 goes unused.
  */
 
 import { TalkNodeType, emptyPersonality, emptySpeech, emptyTalkNode, type Personality, type Speech, type TalkNode } from '../../src/data/talking';

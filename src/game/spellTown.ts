@@ -162,7 +162,7 @@ export function doMageSpell(
 
     // --- the summons -------------------------------------------------------
     case Spell.SUMMON_BEAST: {
-      const which = getSummonMonster(session, 1);
+      const which = getSummonMonster(session, 1, { beast: true, outOfCombat: true });
       if (which < 0) break;
       spendSp(pc, spellNum, freebie);
       summon(which, univ.rng.getRan(3, 1, 4) + adj);
@@ -173,7 +173,7 @@ export function doMageSpell(
       // recomputing it below; its own comment asks why. The roll still happens,
       // so it still moves the RNG, and that is why it is kept.
       univ.rng.getRan(1, 0, 2);
-      const which = getSummonMonster(session, 1);
+      const which = getSummonMonster(session, 1, { outOfCombat: true });
       if (which < 0) break;
       spendSp(pc, spellNum, freebie);
       const store = univ.rng.getRan(4, 1, 4) + adj;
@@ -182,7 +182,7 @@ export function doMageSpell(
     }
     case Spell.SUMMON: {
       univ.rng.getRan(1, 0, 1); // discarded, as above
-      const which = getSummonMonster(session, 2);
+      const which = getSummonMonster(session, 2, { outOfCombat: true });
       if (which < 0) break;
       spendSp(pc, spellNum, freebie);
       const store = univ.rng.getRan(5, 1, 4) + adj;
@@ -191,7 +191,7 @@ export function doMageSpell(
     }
     case Spell.SUMMON_MAJOR: {
       univ.rng.getRan(1, 0, 1); // discarded, as above
-      const which = getSummonMonster(session, 3);
+      const which = getSummonMonster(session, 3, { outOfCombat: true });
       if (which < 0) break;
       spendSp(pc, spellNum, freebie);
       const store = univ.rng.getRan(7, 1, 4) + adj;
@@ -199,14 +199,14 @@ export function doMageSpell(
       break;
     }
     case Spell.SUMMON_AID: {
-      const which = getSummonMonster(session, 2);
+      const which = getSummonMonster(session, 2, { outOfCombat: true });
       if (which < 0) break;
       // Note: no cost. It's a scenario-granted spell.
       summon(which, univ.rng.getRan(5, 1, 4) + adj);
       break;
     }
     case Spell.SUMMON_AID_MAJOR: {
-      const which = getSummonMonster(session, 3);
+      const which = getSummonMonster(session, 3, { outOfCombat: true });
       if (which < 0) break;
       summon(which, univ.rng.getRan(7, 1, 4) + adj);
       break;

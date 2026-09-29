@@ -622,6 +622,18 @@ the whole part of the straight line.
 passes only for the spell in `ex1b` when it isn't -1 (boe.specials.cpp:3832);
 this port had dropped the test. It is back.
 
+### 28. What a summoning spell brings (2026-09-28)
+
+**DECIDED: a scenario flag, `summons` = `exile3`, with Exile III's lists in
+the engine (`src/game/e3Summons.ts`).** BoE's `get_summon_monster` draws
+random monsters until one has the summon class asked for. Exile III's
+monsters have no class: each summoning spell makes one draw from a list of
+its own (`DS:0770` in combat, `DS:3072` out of it), in the same place in the
+cast, so the rolls either side keep their order. The lists can't be written
+as classes: Summon Beast has its own where BoE uses class 1, monsters 73 and
+74 are on two lists, and some are on one twice to weight the draw. With the
+flag set, Exile III's summons never fail.
+
 ---
 
 ## Agreements worth recording

@@ -11,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { TerObstruct, TerSpec } from '../src/data/terrain';
 import type { Scenario } from '../src/data/scenario';
 import { ItemAbil, ItemType, useMagic } from '../src/data/item';
-import { DamageType, MonstTime } from '../src/data/monster';
+import { Attitude, DamageType, MonstTime } from '../src/data/monster';
 import { MonstAbil } from '../src/data/monsterAbility';
 import { ShopItemType, ShopPrompt } from '../src/data/shop';
 import { TalkNodeType } from '../src/data/talking';
@@ -41,6 +41,8 @@ import {
   e3Jobs, e3JobsBase, e3JobsTick, e3ZoneDistance, takeE3Job,
 } from '../src/game/e3Jobs';
 import { readE3JobTables } from '../tools/e3convert/jobs';
+import { E3_COMBAT_SUMMONS, E3_TOWN_SUMMONS } from '../src/game/e3Summons';
+import { getSummonMonster } from '../src/game/monsterPlace';
 import { GENERATORS } from '../tools/e3convert/towns/shiftingFloors';
 import { e3DayCount, e3TownState } from '../tools/e3convert/flags';
 import { FieldType } from '../src/data/fields';
@@ -295,6 +297,35 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     // A road is paved with walkway down the middle.
     createE3OutCombatTerrain(univ, arena, 233, 0);
     expect(arena.terrain[20]![20]).toBe(245);
+  });
+
+  it("summons from E3's lists, and gives monsters E3's attitudes and faces", () => {
+    // The engine's copies of the summoning lists match EXILE3.EXE's.
+    const exe = new Uint8Array(readFileSync(join(dir as string, 'EXILE3.EXE')));
+    const ds = readNeSegment(exe, neAutoDataSegment(exe));
+    const lists = (at: number) => [5, 20, 16, 16].map((n, k) => {
+      const from = at + [0, 5, 25, 41][k]!;
+      return Array.from(ds.subarray(from, from + n));
+    });
+    expect(lists(0x770)).toEqual(E3_COMBAT_SUMMONS);
+    expect(lists(0x3072)).toEqual(E3_TOWN_SUMMONS);
+    expect(scen.featureFlags['summons']).toBe('exile3');
+    // One draw from the list, never BoE's summon classes (E3 has none).
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    for (let i = 0; i < 20; i++) {
+      expect(E3_COMBAT_SUMMONS[0]).toContain(getSummonMonster(session, 1, { beast: true }));
+      expect(E3_TOWN_SUMMONS[3]).toContain(getSummonMonster(session, 3, { outOfCombat: true }));
+    }
+    expect(scen.scenMonsters.every((m) => m.summonType === 0)).toBe(true);
+    // Placed monsters are hostile A, but the troglodytes are hostile B.
+    expect(scen.scenMonsters[149]!.name).toBe('Troglodyte');
+    expect([148, 149, 154, 155].map((n) => scen.scenMonsters[n]!.defaultAttitude))
+      .toEqual([Attitude.HOSTILE_A, Attitude.HOSTILE_B, Attitude.HOSTILE_B, Attitude.HOSTILE_A]);
+    // Faces are E3's (1-based there), and a monster with none talks with its sprite.
+    expect([1, 11, 24, 70].map((n) => scen.scenMonsters[n]!.defaultFacialPic)).toEqual([0, -1, 58, -1]);
+    // Some people have a face of their own: personality 33 is face 6.
+    const faces = scen.towns.flatMap((t) => t.creatures.map((c) => c.facialPic)).filter((f) => f >= 0);
+    expect(faces).toContain(5);
   });
 
   it("runs E3's job boards: generated jobs, taken, delivered and failed", async () => {
