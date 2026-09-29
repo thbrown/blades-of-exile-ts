@@ -14427,8 +14427,8 @@ the rest of the TODO(E3-3) list.
         `session.talkAs` for the one conversation; slot -2 names the hailed
         creature (`session.hailing`); job deliveries go by the swapped
         personality as E3's do. `TalkState` takes a `greeter`.
-      - [ ] **E3's own item abilities** (the last TODO(E3-3), `tables.ts`;
-        started 2026-09-28). E3's code reads an item's *level* where BoE
+      - [x] **E3's own item abilities** (the last TODO(E3-3), `tables.ts`;
+        started 2026-09-28, finished 2026-09-29). E3's code reads an item's *level* where BoE
         reads a strength, and its numbers are its own; bladbase's namesakes
         are Jeff's BoE retuning. Every place E3 tests the ability byte (`+10`
         of a 63-byte record at `pc*0x722 − 0x7a5c`): `FUN_1070_0681` (first
@@ -14514,13 +14514,24 @@ the rest of the TODO(E3-3) list.
             `1018:a598`); the Potion of Doom takes one off each stat.
           - Codes 62 (flying), 114 (Fire Egg) and 126 (mass charm) have
             cases but no item carries them; left out, said so in a comment.
-        - [ ] **Skribbane Herb** (135, `10c0:3b74`, `TODO(E3-3)` in
-          `e3ItemUse.ts`, which spells out the whole decode): E3's
-          addiction — herbs eaten party+0x141, addiction +0x12d, a
-          withdrawal clock +0x137 wound down in `FUN_10c0_61c4`
-          (`10c0:6ebe`). Needs three of E3's strings (block 0x37:
-          0x14–0x16) written out for the engine, so it still takes BoE's
-          path, where it can't be used.
+        - [x] **Skribbane Herb** (2026-09-29, 135, `10c0:3b74`, and the
+          withdrawal in `FUN_10c0_61c4` at `10c0:6ebe`). **Its three
+          counters are E3 flag bytes** — addiction party+0x12d, withdrawal
+          clock +0x137, herbs eaten +0x141 are flags (16,9), (17,9), (18,9)
+          by party+0x84+10a+b — so they sit in the SDFs and save with them;
+          no new save page. The messages (block 0x37: 0x14, 0x15, 0x16) are
+          scenario nodes the converter compiles, named by the new feature
+          flag `skribbane` = `exile3:a,b,c`. Use: the message, then *the
+          first ten* herbs (not nine, as the old TODO said: `herbs < 10`
+          before the increment) give every slot health +22−herbs and spell
+          points +15−herbs where above 0, **uncapped**; addiction +5, or +3
+          once over 20; over 10 the clock is 150. The tick
+          (`e3WithdrawalTick`, run from `specialIncreaseAge` before the job
+          boards, message fired as a scenario timer): every tenth tick with
+          the clock running, `get_ran(1,0,9) == 5` winds it down; at 0 the
+          withdrawal message, all six slots' health and SP ×3/5, addiction
+          −1, and over 10 the clock restarts at 100. `e3UsesOwnRules` now
+          takes every code below 160.
         - [x] *The Lodestone and Airy Stone* (2026-09-29, `e3Taken` in
           `inventory.ts`). **+0x13 is the weight**: `1068:0886`, which turns
           a 59-byte table record into the 63-byte item, copies the table's
@@ -14541,10 +14552,9 @@ the rest of the TODO(E3-3) list.
           argument the decompiler dropped — that is how Micah's Gloves
           turned up.
 
-All checks pass (2026-09-29, after E3's use_item): 1,459 tests, both
+All checks pass (2026-09-29, after the Skribbane Herb): 1,462 tests, both
 sweeps, verify-screen (with TOUCH), verify-party and verify-e3. (Corpus not
-re-run: the new path is taken only by items with an E3 code, and
-`poisonWeapon`'s default is unchanged.) **Next session starts here**: the
-Skribbane Herb (`e3ItemUse.ts`, the last TODO(E3-3)) — then
-TODO(M9)/TODO(campaign)/TODO(M8), which may be left for the user to rule on,
-as is DIVERGENCES #30.
+re-run: the herb's tick does nothing without the `skribbane` flag, so no
+BoE scenario draws differently.) **No TODO(E3-3) is left.** **Next session
+starts here**: TODO(M9) (5), TODO(campaign) (4) and TODO(M8) (1) — which
+may need the user's ruling — and DIVERGENCES #30, open for the user.

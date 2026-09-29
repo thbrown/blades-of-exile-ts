@@ -693,7 +693,7 @@ function scenarioXml(
   start: { town: number; loc: { x: number; y: number } },
   outStart: { sector: { x: number; y: number }; loc: { x: number; y: number } },
   shops: Shop[], specialItems: SpecItem[], specStrings: string[], newDay: number, roadJoins: number[],
-  jobBase: number, journal: string[], cursors: E3Cursor[], townCount: number,
+  jobBase: number, skribbane: number[], journal: string[], cursors: E3Cursor[], townCount: number,
 ): string {
   return `${XML_HEAD}<scenario boes="2.0.0">
     <title>Exile III: Ruined World</title>
@@ -710,6 +710,7 @@ function scenarioXml(
         <outdoor-arena>exile3</outdoor-arena>
         <road-joins>${roadJoins.join(',')}</road-joins>
         <job-boards>exile3:${jobBase}</job-boards>
+        <skribbane>exile3:${skribbane.join(',')}</skribbane>
         <monster-sightings>exile3</monster-sightings>
         <hostile-movers>${E3_HOSTILE_MOVERS}</hostile-movers>
         <town-timers>repeat</town-timers>
@@ -1054,12 +1055,16 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   }
   const jobBase = scen.strings.length;
   for (const str of e3JobStrings((id) => strings.get(id) ?? '', e3Src.exeString!)) scen.text(str);
+  // The Skribbane Herb's messages (src/game/e3ItemUse.ts): block 0x37's
+  // 0x14 (the first ten herbs), 0x15 (after) and 0x16 (withdrawal), each
+  // `FUN_1008_37de(0x37, i, 57)`.
+  const skribbane = [0x14, 0x15, 0x16].map((i) => scen.compile([scen.msg(0x37, i)]));
   // Last, since the places' scripts may add scenario strings and nodes.
   write('scenario.spec', scen.spec);
   // Last, since the places' scripts can add shops of their own.
   shops.push(...talk.shops);
   const cursors = readE3Cursors(resources);
-  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, e3JournalStrings((id) => strings.get(id) ?? ''), cursors, townCount));
+  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, skribbane, e3JournalStrings((id) => strings.get(id) ?? ''), cursors, townCount));
   const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(read), ...e3MapSheets(read)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
   // E3's own sounds, which a scenario's `sounds/SNDn.wav` puts in place of

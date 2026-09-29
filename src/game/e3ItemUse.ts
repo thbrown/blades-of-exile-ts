@@ -15,7 +15,6 @@
  * table at `cs:3cb1` is indexed by code − 3), since the decompiler drops every
  * far call's arguments. Codes 160–183, the books and notes, are not here: the
  * converter turns those into scenario specials (`tools/e3convert/notes.ts`).
- * Nor is 135, the Skribbane Herb (`e3UsesOwnRules`).
  *
  * `project/exile3.c` addresses are Ghidra's; see `tools/e3convert/FORMATS.md`.
  */
@@ -33,7 +32,7 @@ import { GameMode } from './modes';
 import { summonMonster } from './monsterPlace';
 import { poisonWeapon } from './poisonWeapon';
 import type { GameSession } from './session';
-import type { SpecialHost } from './specials/context';
+import { SpecCtx, SpecCtxType, type SpecialHost } from './specials/context';
 import { doShockwave } from './spellCombat';
 import { startSpellTargeting } from './spellCombatTarget';
 import { placeSpellPattern } from './spellPatterns';
@@ -58,24 +57,68 @@ export const E3_USE_CODE: readonly number[] = [
 
 /** The first of E3's readable items, which the converter scripts instead. */
 const E3_NOTE_ABILITIES = 160;
-/** The Skribbane Herb: its addiction needs E3's strings (see `e3UsesOwnRules`). */
+/** The Skribbane Herb, whose case is E3's addiction (`e3Skribbane`). */
 const E3_SKRIBBANE = 135;
 
 /**
- * Whether Using this item runs E3's switch rather than BoE's. TODO(E3-3): the
- * Skribbane Herb (135, `10c0:3b74`) is E3's addiction — two dialogs (message
- * block 0x37, string 0x14, or 0x15 from the tenth herb on), each PC's health
- * up 22 − herbs eaten and spell points (if any) 15 − that, both only for the
- * first nine; then the addiction (party+0x12d) up 5, or 3 once over 20, and
- * over 10 the withdrawal clock (party+0x137) set to 150. `FUN_10c0_61c4`
- * winds that clock down one in ten, every tenth tick; at 0 it shows 0x37:0x16
- * and cuts everyone's health and spell points to 3/5, takes one off the
- * addiction and, still over 10, sets the clock to 100. The strings are E3's,
- * which the converter doesn't write out for the engine yet, so the herb keeps
- * BoE's path, where it can't be used.
+ * The herb's three counters, which are party bytes E3 also addresses as its
+ * flags (flag `(a, b)` is party+0x84 + 10a + b), so they live in the SDFs
+ * with every other E3 byte and save with them: the addiction (party+0x12d),
+ * the withdrawal clock (+0x137) and the herbs eaten (+0x141).
  */
+const HERB_ADDICTION: [number, number] = [16, 9];
+const HERB_CLOCK: [number, number] = [17, 9];
+const HERBS_EATEN: [number, number] = [18, 9];
+
+/**
+ * The herb's messages, E3's block 0x37 strings 0x14, 0x15 and 0x16, as the
+ * scenario nodes the converter wrote for them: the feature flag `skribbane`
+ * = `exile3:<a>,<b>,<c>`, an exile-js extension. Null without it, and then
+ * the herb works but says nothing.
+ */
+function skribbaneNodes(session: GameSession): number[] | null {
+  const flag = session.univ.scenario.featureFlags['skribbane'];
+  if (flag === undefined || !flag.startsWith('exile3:')) return null;
+  const nodes = flag.slice('exile3:'.length).split(',').map(Number);
+  return nodes.length === 3 && nodes.every((n) => Number.isInteger(n) && n >= 0) ? nodes : null;
+}
+
+/** Whether Using this item runs E3's switch rather than BoE's. */
 export function e3UsesOwnRules(e3Ability: number): boolean {
-  return e3Ability >= 0 && e3Ability < E3_NOTE_ABILITIES && e3Ability !== E3_SKRIBBANE;
+  return e3Ability >= 0 && e3Ability < E3_NOTE_ABILITIES;
+}
+
+/**
+ * The withdrawal half of the herb, from `FUN_10c0_61c4` (`10c0:6ebe`), E3's
+ * per-tick code: on every tenth tick while the clock runs, a 1-in-10 roll
+ * winds it down one. At 0 comes 0x37:0x16, everyone's health and spell
+ * points are cut to 3/5 (all six slots, whatever their state, as E3's loop
+ * does), the addiction eases by one, and if it is still over 10 the clock
+ * starts again at 100. `fire` shows the message, as a scenario timer's node.
+ *
+ * E3 steps its clock one tick at a time; this port's can jump several, so
+ * each tenth tick crossed gets its roll, as `e3JobsTick` does for days.
+ */
+export function e3WithdrawalTick(
+  session: GameSession, ageBefore: number, fire: (node: number, at: number) => void,
+): void {
+  const nodes = skribbaneNodes(session);
+  if (!nodes) return;
+  const party = session.univ.party;
+  const age = party.age;
+  for (let j = ageBefore + 1; j <= age; j++) {
+    if (j % 10 !== 0 || party.getSdf(...HERB_CLOCK) === 0) continue;
+    if (session.univ.rng.getRan(1, 0, 9) !== 5) continue;
+    party.setSdf(...HERB_CLOCK, party.getSdf(...HERB_CLOCK) - 1);
+    if (party.getSdf(...HERB_CLOCK) !== 0) continue;
+    fire(nodes[2]!, j);
+    for (const p of party.pcs) {
+      p.curHealth = Math.trunc((p.curHealth * 3) / 5);
+      p.curSp = Math.trunc((p.curSp * 3) / 5);
+    }
+    party.setSdf(...HERB_ADDICTION, party.getSdf(...HERB_ADDICTION) - 1);
+    if (party.getSdf(...HERB_ADDICTION) > 10) party.setSdf(...HERB_CLOCK, 100);
+  }
 }
 
 /**
@@ -415,6 +458,26 @@ export async function e3UseItem(
       say('Your party is hasted!');
       for (const p of party.pcs) if (p.mainStatus === MainStatus.ALIVE) addStatus(p, Status.HASTE_SLOW, 4);
       break;
+    case E3_SKRIBBANE: { // `10c0:3b74`
+      // The first ten herbs pick everyone up, uncapped and in all six slots,
+      // by less each time — spell points only where there are some; from the
+      // eleventh on there's only the craving. Then the addiction grows, more
+      // slowly past 20, and past 10 the withdrawal clock (re)starts at 150.
+      const herbs = party.getSdf(...HERBS_EATEN);
+      const node = skribbaneNodes(session)?.[herbs >= 10 ? 1 : 0];
+      if (node !== undefined) await session.runSpecial(SpecCtx.USE_SPEC_ITEM, SpecCtxType.SCEN, node, userLoc);
+      if (herbs < 10) {
+        for (const p of party.pcs) {
+          p.curHealth += 22 - herbs;
+          if (p.curSp > 0) p.curSp += 15 - herbs;
+        }
+      }
+      party.setSdf(...HERBS_EATEN, herbs + 1);
+      const addiction = party.getSdf(...HERB_ADDICTION);
+      party.setSdf(...HERB_ADDICTION, addiction + (addiction > 20 ? 3 : 5));
+      if (party.getSdf(...HERB_ADDICTION) > 10) party.setSdf(...HERB_CLOCK, 150);
+      break;
+    }
     // 62 (flying: boat, already aloft, registration), 114 (the Fire Egg) and
     // 126 (a charm of every hostile within 8) have cases, but no item of E3's
     // carries them and no script stamps them on. Every other code has none:

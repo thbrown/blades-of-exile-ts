@@ -13,6 +13,7 @@
 
 import { QuestStatus } from '../data/quest';
 import { e3JobsTick } from './e3Jobs';
+import { e3WithdrawalTick } from './e3ItemUse';
 import { Universe } from '../universe/universe';
 import { isCombat } from './modes';
 import type { GameSession } from './session';
@@ -134,6 +135,10 @@ export function specialIncreaseAge(session: GameSession, length = 1, queue = fal
       slot.node = -1;
     } else slot.time -= length;
   }
+  party.age = currentAge;
+
+  // Exile III's Skribbane withdrawal (e3ItemUse.ts), its message as a timer's.
+  e3WithdrawalTick(session, ageBefore, (node, at) => fire(SpecCtx.SCEN_TIMER, SpecCtxType.SCEN, node, at));
   party.age = currentAge;
 
   // Exile III's job boards keep their own calendar (e3Jobs.ts).

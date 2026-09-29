@@ -11,7 +11,7 @@ import { Scenario } from '../src/data/scenario';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
-import { e3UsesOwnRules, offersUse } from '../src/game/e3ItemUse';
+import { e3UsesOwnRules, e3WithdrawalTick, offersUse } from '../src/game/e3ItemUse';
 import { useItem } from '../src/game/itemUse';
 import { GameMode } from '../src/game/modes';
 import { GameSession } from '../src/game/session';
@@ -146,11 +146,77 @@ describe("Exile III's use_item (src/game/e3ItemUse.ts)", () => {
     expect([3, 6]).toContain(pc.status[Status.POISONED_WEAPON]);
   });
 
-  it('leaves the notes and the Skribbane Herb to their own paths', () => {
+  it('leaves the notes to their own path', () => {
     expect(e3UsesOwnRules(3)).toBe(true);
     expect(e3UsesOwnRules(-1)).toBe(false);
-    expect(e3UsesOwnRules(135)).toBe(false);
+    expect(e3UsesOwnRules(135)).toBe(true);
     expect(e3UsesOwnRules(0xa8)).toBe(false);
+  });
+
+  it('the Skribbane Herb picks everyone up ten times, then only feeds the addiction', async () => {
+    const s = inTown();
+    const party = s.univ.party;
+    const pcs = party.pcs;
+    for (const pc of pcs) pc.curSp = 0;
+    pcs[0]!.curSp = 4;
+    const before = pcs.map((p) => p.curHealth);
+    const herb = held(s, 135, 0, { charges: 20 });
+    await useItem(s, 3, 0);
+    // All six slots, uncapped: 22 health, and 15 spell points where there were any.
+    pcs.forEach((p, i) => expect(p.curHealth).toBe(before[i]! + 22));
+    expect(pcs[0]!.curSp).toBe(19);
+    expect(pcs[1]!.curSp).toBe(0);
+    expect(herb.charges).toBe(19);
+    // Herbs eaten (party+0x141), addiction (+0x12d), the clock (+0x137).
+    expect(party.getSdf(18, 9)).toBe(1);
+    expect(party.getSdf(16, 9)).toBe(5);
+    expect(party.getSdf(17, 9)).toBe(0);
+    await useItem(s, 3, 0);
+    expect(pcs[1]!.curHealth).toBe(before[1]! + 22 + 21);
+    expect(party.getSdf(16, 9)).toBe(10);
+    expect(party.getSdf(17, 9)).toBe(0);
+    await useItem(s, 3, 0);
+    // Over 10: the withdrawal clock starts.
+    expect(party.getSdf(16, 9)).toBe(15);
+    expect(party.getSdf(17, 9)).toBe(150);
+    // From the eleventh herb, no lift; past 20, the addiction grows by 3.
+    party.setSdf(18, 9, 10);
+    party.setSdf(16, 9, 21);
+    const health = pcs.map((p) => p.curHealth);
+    await useItem(s, 3, 0);
+    pcs.forEach((p, i) => expect(p.curHealth).toBe(health[i]));
+    expect(party.getSdf(16, 9)).toBe(24);
+    expect(party.getSdf(18, 9)).toBe(11);
+  });
+
+  it('withdrawal cuts everyone to 3/5 when the clock runs out, and restarts it', () => {
+    const s = inTown();
+    const party = s.univ.party;
+    scen.featureFlags['skribbane'] = 'exile3:1,2,3';
+    try {
+      party.setSdf(17, 9, 1);
+      party.setSdf(16, 9, 12);
+      for (const pc of party.pcs) {
+        pc.curHealth = 50;
+        pc.curSp = 11;
+      }
+      const fired: number[] = [];
+      const age = party.age;
+      party.age = age + 1000;
+      e3WithdrawalTick(s, age, (node) => fired.push(node));
+      // A hundred tenth ticks, each a 1-in-10 roll: the first hit ends the clock.
+      expect(fired).toEqual([3]);
+      for (const pc of party.pcs) {
+        expect(pc.curHealth).toBe(30);
+        expect(pc.curSp).toBe(6);
+      }
+      expect(party.getSdf(16, 9)).toBe(11);
+      const clock = party.getSdf(17, 9);
+      expect(clock).toBeGreaterThan(80);
+      expect(clock).toBeLessThanOrEqual(100);
+    } finally {
+      delete scen.featureFlags['skribbane'];
+    }
   });
 
   it('offers USE by the use code, so an E3 code with no BoE namesake has one', () => {
