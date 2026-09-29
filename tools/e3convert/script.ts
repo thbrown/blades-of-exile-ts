@@ -1599,6 +1599,43 @@ export class SpecBuilder {
     return this.seq([this.setFlag(flag, value), rearm]);
   }
 
+  /**
+   * A countdown by turns, as E3 keeps its demon plot's (party+0x850f, in
+   * `FUN_10c0_61c4`, every turn anywhere): from `value`, falling by one a
+   * turn while above 0, with `at`'s steps run for the value it has just
+   * fallen to. A flag is a byte, so the count is two: hundreds in `hi`, units
+   * in `lo`. A one-tick scenario timer rearms itself while the count runs;
+   * zeroing both flags stops it. Returns the step that starts it.
+   */
+  turnCountdown(hi: Flag, lo: Flag, value: number, at: Map<number, Step[]>): Step {
+    const tick = this.reserve();
+    const rearm = (next: number) => this.node('start-timer-scen', { ex1: [1, tick] }, next);
+    const whileRunning = (steps: Step[]) => this.ifFlagAtLeast(hi, 1, steps, [this.ifFlagAtLeast(lo, 1, steps)]);
+    const body = this.seq([
+      this.ifFlagAtLeast(lo, 1, [this.decFlag(lo)], [this.decFlag(hi), this.setFlag(lo, 99)]),
+      ...[...at].map(([v, steps]) => this.ifFlagEq(hi, Math.floor(v / 100), [this.ifFlagEq(lo, v % 100, steps)])),
+      whileRunning([rearm]),
+    ])(-1);
+    const go: Step = () => body;
+    this.fill(tick, 'nop', {}, this.seq([whileRunning([go])])(-1));
+    return this.seq([this.setFlag(hi, Math.floor(value / 100)), this.setFlag(lo, value % 100), rearm]);
+  }
+
+  /**
+   * `FUN_1008_3b3f(block, a, …, title, 57, pic)`: a message under a heading
+   * (TITLED_MSG), the heading a literal at `seg:off`.
+   */
+  titledMsg(block: number, a: number, seg: number, off: number, pic: number): Step {
+    return (next) => this.node('title-msg', {
+      msg: [this.e3(block, a), -1, this.text(this.src.exeString?.(seg, off) ?? '')], pic: this.src.dialogPic?.(pic),
+    }, next);
+  }
+
+  /** E3 forgets its four saved towns (`+0x29a6 + 0x1594k = 200`): `forget-towns`, an exile-js opcode. */
+  forgetTowns(): Step {
+    return (next) => this.node('forget-towns', {}, next);
+  }
+
   /** The scenario chain behind `townCountdown`, returning its first node. */
   countdownChain(town: number, flag: Flag, running: Flag, at: Map<number, Step[]>, zeroAway = true): number {
     const start = this.reserve();

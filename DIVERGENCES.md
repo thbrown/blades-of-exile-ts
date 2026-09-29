@@ -585,6 +585,16 @@ inside a ruined square is the ruins record's roll, not a fresh one; and
 where two buildings overlap, copying one square can bring in part of the
 other's ruin early.
 
+### 25. Forgetting the towns the party remembers (2026-09-28)
+
+**DECIDED: an exile-js opcode, `forget-towns` (49, GENERAL).** Exile III
+empties its four saved towns (`party+0x29a6 + 0x1594k = 200`) twice as its
+plot turns — when the roaches' plague ends and when Grah-Hoth's gate is cut —
+so their creatures fill again from the records. BoE has the same four slots
+(`creature_save`) but no node to empty them; OBoE's debug key does
+(`debug_towns_forget`), and the opcode does what it does. OBoE would read a
+scenario using it as having an unknown opcode.
+
 ---
 
 ## Agreements worth recording

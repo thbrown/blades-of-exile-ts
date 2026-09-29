@@ -46,7 +46,7 @@ quest
 swap-buf
 sign-buf
 journal
-
+forget-towns
 once-give-item
 once-give-spec-item
 once

@@ -14363,6 +14363,16 @@ the rest of the TODO(E3-3) list.
         200–221 (`num-towns` 222); the village's entry copies each
         building's square in on its day, or all once overrun.
         `test/e3convert.test.ts` enters Angel's Rest on day 1 and day 400.
+      - [x] **The demon plot's countdown** (`towns/plot.ts`,
+        `SpecBuilder.turnCountdown`): from day 160, 2000 turns in two
+        converter flags (292, 10/11); Anaximander's seven reports at 1997
+        down to 397, the party lost at 1 away from the Tower, and Grah-Hoth
+        speaking every 220 turns inside it (the second and third time with
+        damage). Cutting the gate stops it. **The four saved towns** are
+        forgotten as the roaches' plague ends and as the gate is cut:
+        `forget-towns` (49, DIVERGENCES #25). The plot TODO's "job
+        deadlines" and "daily 1-in-50" were already the engine's
+        (`e3JobsTick`).
 
 All checks pass: 1,420 tests, both sweeps, verify-screen (with TOUCH)/party
 (this round). Before it: 1,419 tests, both sweeps, verify-screen (with TOUCH)/party

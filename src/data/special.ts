@@ -60,6 +60,13 @@ export enum SpecType {
    * but no node that calls it; Exile III adds entries from its scripts.
    */
   ADD_JOURNAL = 48,
+  /**
+   * An exile-js opcode, not in BoE or OBoE: the party forgets the four towns
+   * whose creatures it remembers (`creature_save`), so each fills again from
+   * its record on the next visit — the debug key's `debug_towns_forget`.
+   * Exile III does it twice, as the plot turns (DIVERGENCES.md #25).
+   */
+  FORGET_TOWNS = 49,
 
   ONCE_GIVE_ITEM = 50,
   ONCE_GIVE_SPEC_ITEM = 51,

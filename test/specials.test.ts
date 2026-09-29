@@ -411,6 +411,12 @@ describe('if-then nodes', () => {
       else univ.scenario.featureFlags['message-sounds'] = was;
     }
   });
+  it('forgets the four remembered towns (FORGET_TOWNS)', async () => {
+    const { univ, run } = withNodes({ 0: { type: SpecType.FORGET_TOWNS } });
+    univ.party.creatureSave.forEach((pop, i) => { pop.whichTown = i + 3; });
+    await run();
+    expect(univ.party.creatureSave.map((pop) => pop.whichTown)).toEqual([200, 200, 200, 200]);
+  });
   it('branches on a town showing on the map (IF_TOWN_VISIBLE)', async () => {
     const { univ, run } = withNodes({
       0: { type: SpecType.IF_TOWN_VISIBLE, ex1a: 1, ex1b: 10, jumpto: -1 },

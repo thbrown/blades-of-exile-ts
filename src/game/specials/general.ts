@@ -306,6 +306,11 @@ export async function generalSpec(
       break;
     }
 
+    case SpecType.FORGET_TOWNS:
+      // DIVERGENCES.md #25: which_town 200 is an empty slot.
+      for (const pop of univ.party.creatureSave) pop.whichTown = 200;
+      break;
+
     case SpecType.ADD_JOURNAL: {
       // `add_to_journal` (boe.infodlg.cpp:681), which no OBoE node reaches.
       // An entry number with no string adds nothing: the C++ would index

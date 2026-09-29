@@ -4,11 +4,9 @@
  * overrun by demons, block 57, where Linda, the arch-mage, has become the
  * demon Grah-Hoth's gate.
  *
- * TODO(E3-3): cutting the gate is the end of E3's demon plot. It also stops
- * the plot's countdown (party+0x850f, which starts at 2000 once day 159 has
- * come and flag 0xc91 is 0, `exile3.c` near line 6327) and forgets the four
- * saved towns (party+0x29a6 + 0x1594k, set to 200). Neither is a flag, and
- * the countdown is not transcribed yet, so only flag 0xc91 is set here.
+ * Cutting the gate is the end of E3's demon plot: flag 0xc91 goes to 3, the
+ * plot's countdown stops (party+0x850f to 0; `towns/plot.ts`), and the four
+ * saved towns are forgotten (party+0x29a6 + 0x1594k, set to 200).
  */
 
 import { Skill } from '../../../src/universe/skills';
@@ -23,6 +21,12 @@ const TITHE = f(0x17c);
 const ATHAME = partySpecItem(0x52);
 /** E3's demon plot: 3 once the gate is cut. */
 export const DEMON_PLOT = f(0xc91);
+/**
+ * Its countdown (party+0x850f, a word) as two converter flags, hundreds and
+ * units (`SpecBuilder.turnCountdown`), in row 292, which E3 never uses.
+ */
+export const DEMON_COUNT_HI: [number, number] = [292, 10];
+export const DEMON_COUNT_LO: [number, number] = [292, 11];
 
 /** `FUN_10c0_4a61(40, 5, 41)`: through the portal to the Portal Fortress. */
 function toPortalFortress(b: SpecBuilder): Step {
@@ -85,7 +89,8 @@ export function towerOfMagi(town: number) {
       [2, [b.choiceDialog(0xcb3,
         [b.ifSpecItem(ATHAME, [
           b.setTer(0xc, 0xb, 0), b.dialog(0xcb4), b.journal(0x13),
-          b.xp(50), b.setFlag(DEMON_PLOT, 3), toPortalFortress(b),
+          b.xp(50), b.setFlag(DEMON_PLOT, 3), b.setFlag(DEMON_COUNT_HI, 0), b.setFlag(DEMON_COUNT_LO, 0),
+          b.forgetTowns(), toPortalFortress(b),
         ], [b.msg(B, 0x17)])],
         [b.msg(B, 0x18), b.slayParty(0)],
         [b.blockMove()])]],

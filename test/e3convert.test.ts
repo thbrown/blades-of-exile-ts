@@ -680,6 +680,32 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     }
   });
 
+  it("counts the demon plot down by turns, from day 160 to the party's end", async () => {
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    const said: string[] = [];
+    session.attachSpecials(new Proxy({}, {
+      get: (_, k) => (k === 'message' ? (s: string) => { said.push(s); return Promise.resolve(); } : () => Promise.resolve(0)),
+    }) as never);
+    const univ = session.univ;
+    const settle = async () => { while (session.specials!.busy) await new Promise((r) => setTimeout(r, 0)); };
+    const turn = async () => { univ.party.age++; specialIncreaseAge(session, 1); await settle(); };
+    session.debugLeaveTown();
+    univ.party.age = 160 * 3700;
+    await session.runSpecial(SpecCtx.SCEN_TIMER, SpecCtxType.SCEN, scen.scenarioTimers[0]!.node, univ.party.outLoc);
+    await settle();
+    expect(univ.party.getSdf(...partyFlag(0xc91))).toBe(1);
+    expect([univ.party.getSdf(292, 10), univ.party.getSdf(292, 11)]).toEqual([20, 0]);
+    // Three turns: 1997, Anaximander's first report.
+    for (let i = 0; i < 3; i++) await turn();
+    expect([univ.party.getSdf(292, 10), univ.party.getSdf(292, 11)]).toEqual([19, 97]);
+    expect(said.at(-1)).toMatch(/^Suddenly, without warning/);
+    // At 1, away from the Tower, the party is lost.
+    univ.party.setSdf(292, 10, 0);
+    univ.party.setSdf(292, 11, 2);
+    await turn();
+    expect(univ.party.pcs.some((pc) => pc.mainStatus === MainStatus.ALIVE)).toBe(false);
+  });
+
   it("swaps in a declining town's later record by day, as E3's loader does", async () => {
     const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
     session.attachSpecials(new Proxy({}, { get: () => () => Promise.resolve(0) }) as never);
