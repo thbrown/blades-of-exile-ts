@@ -15,6 +15,7 @@
 
 import { Rect } from '../core/location';
 import { Scenario } from '../data/scenario';
+import { PIC_CUSTOM_FULL } from '../data/special';
 import { ScenarioSource } from '../fileio/source';
 import { SheetStore, calcRect } from './sheets';
 import { Rgba } from '../fileio/legacy/bmp';
@@ -34,6 +35,11 @@ let sheetSizes: { w: number; h: number }[] = [];
 /** Install the loaded sheets' sizes. An empty list means no custom graphics. */
 export function setCustomSheets(sizes: { w: number; h: number }[]): void {
   sheetSizes = sizes;
+}
+
+/** A loaded scenario sheet's size, for a picture that is the whole sheet (PIC_CUSTOM_FULL). */
+export function customSheetSize(i: number): { w: number; h: number } | null {
+  return sheetSizes[i] ?? null;
 }
 
 /** `cCustomGraphics::find_graphic(which, party)`. */
@@ -80,6 +86,12 @@ export function customSheetCount(scen: Scenario): number {
     if (pic >= 1000 && pic < 10000) note(1000 + (pic % 1000), 4 * mon.xWidth * mon.yWidth);
   }
   for (const item of scen.scenItems) note(item.graphicNum);
+  // A node whose picture is a whole sheet (PIC_CUSTOM_FULL, 111): Exile III's
+  // maps and carvings, one sheet each.
+  const nodes = [scen.scenSpecials, ...scen.towns.map((t) => t.specials),
+    ...scen.outdoors.flat().map((o) => o.specials)];
+  for (const list of nodes)
+    for (const node of list.values()) if (node.pictype === PIC_CUSTOM_FULL && node.pic >= 0) note(1000 + node.pic * 100);
   return max < 0 ? 0 : Math.floor(max / 100) + 1;
 }
 

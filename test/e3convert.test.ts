@@ -177,6 +177,9 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(e3DialogPic(38, sprites)).toEqual([e3TerrainPic(38), 1]);
     expect(e3DialogPic(412, sprites)).toEqual([1468, 3]);
     expect(e3DialogPic(905, sprites)).toBeUndefined();
+    // The maps and carvings: a sheet each from `mapBase`, shown whole.
+    expect(e3DialogPic(905, sprites, 12)).toEqual([17, 111]);
+    expect(e3DialogPic(910, sprites, 12)).toBeUndefined();
     expect(EXILE3_SHEET_OVERRIDES).toEqual([
       ...E3_SHEET_OVERRIDES.map(([n]) => n), 'pixpats', ...E3_PANELS.map(([n]) => n), 'textbar']);
     // The nodes carry them: dialog pictures, E3 terrain and E3 sprites. (No
@@ -940,7 +943,10 @@ describe("Exile III converted in memory, as the browser does", () => {
       { id: 'exile3', fileName: 'exile3.boes', kind: 'boes', data: gzipSync(writeTar(entries)) }, opcodes);
     expect(loaded.scenario.title).toBe('Exile III: Ruined World');
     expect(loaded.scenario.towns.length).toBe(200);
-    expect(loaded.sheets.length).toBe(12);
+    // Terrain, monsters and items, then the ten maps and carvings.
+    expect(loaded.sheets.length).toBe(22);
+    // Its instant help, in its own words, over the game's.
+    expect(loaded.strings.get('help')?.split('\n')[0]).toMatch(/^Welcome to Exile III/);
     // E3's own hundred sounds, in place of the engine's; 16, entering a town,
     // is one of the twelve that differ.
     expect([...loaded.sounds.keys()].sort((a, b) => a - b)).toEqual([...Array(100).keys()]);

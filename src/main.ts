@@ -60,7 +60,9 @@ import {
 import { fitCanvasToPage } from './platform/pageLayout';
 import { startMapWindow } from './platform/mapWindow';
 import { installDebugPanel } from './platform/debugPanel';
-import { EXILE3_CARD, EXILE3_ID, EXILE3_SHEET_OVERRIDES, exile3Served, prepareExile3 } from './platform/exile3';
+import {
+  EXILE3_CARD, EXILE3_ID, EXILE3_SHEET_OVERRIDES, EXILE3_STRING_OVERRIDES, exile3Served, prepareExile3,
+} from './platform/exile3';
 import { WorldMapFeed } from './render/worldMap';
 import { GAME_SPEED_PACE, PREFERENCES_DIALOG_DEFS, preferencesDialog } from './dialogs/preferencesDialog';
 import { setTargetLockPref } from './game/targetMode';
@@ -81,7 +83,7 @@ import { Missile, setMissileSink } from './game/missileAnim';
 import { pickNextPc } from './game/combat';
 import { GameRng } from './core/rng';
 import { DialogHost } from './dialogs/dialog';
-import { STRING_TABLES, getStr, loadStringTables, stringCount } from './data/strings';
+import { STRING_TABLES, getStr, loadStringTables, overrideStrings, stringCount } from './data/strings';
 import { Colours } from './render/colours';
 import { TerSpec } from './data/terrain';
 import { GameSession } from './game/session';
@@ -573,6 +575,7 @@ async function main(): Promise<void> {
   let packageSounds: LoadedPackage['sounds'] = new Map();
   let packageCursors: LoadedPackage['cursors'] = new Map();
   let packageOverrides: LoadedPackage['overrides'] = new Map();
+  let packageStrings: LoadedPackage['strings'] = new Map();
   let installedPreview = true;
   if (makingParty) {
     scen = noScenario();
@@ -587,6 +590,7 @@ async function main(): Promise<void> {
     packageSounds = loaded.sounds;
     packageCursors = loaded.cursors;
     packageOverrides = loaded.overrides;
+    packageStrings = loaded.strings;
     for (const w of loaded.warnings) console.warn(`${name}: ${w}`);
     installedPreview = (await listInstalledScenarios()).find((s) => s.id === name)?.preview !== undefined;
   }
@@ -604,6 +608,14 @@ async function main(): Promise<void> {
     const src = new FetchSource(bundledUrl);
     await installSheetOverrides(store, new Map(await Promise.all(EXILE3_SHEET_OVERRIDES.map(
       async (n) => [n, await src.getBinary(`graphics/${n}.png`)] as [string, Uint8Array]))));
+  }
+
+  // Its lines for the game's string tables; again only Exile III, served, has
+  // any: its instant help (`EXILE3_STRING_OVERRIDES`).
+  if (!isBundled) for (const [n, text] of packageStrings) overrideStrings(n, text);
+  else if (name === EXILE3_ID) {
+    const src = new FetchSource(bundledUrl);
+    for (const n of EXILE3_STRING_OVERRIDES) overrideStrings(n, await src.getText(`strings/${n}.txt`));
   }
 
   const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);

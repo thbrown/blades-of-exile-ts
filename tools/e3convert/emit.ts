@@ -2,10 +2,10 @@
  * Writes Exile 3 out as an unpacked v2 scenario tree, the layout of
  * `public/scenarios/<id>/` that the engine loads like any other scenario.
  *
- * E3-1 scope: the world's shape. Terrain, the 90 outdoor zones as sectors
- * with their names, areas and town entrances, and all 200 towns' maps and
- * entrances. Monsters, items, people, dialogue and every scripted encounter
- * are later milestones, marked `TODO(E3-2)` / `TODO(E3-3)` where they would go.
+ * Everything E3 keeps as data — terrain, the 90 outdoor zones as sectors,
+ * the 200 towns, monsters, items, people, dialogue and shops — and the
+ * encounters it keeps as code, transcribed town by town in `towns/` and
+ * compiled into special nodes by `SpecBuilder` (`script.ts`).
  */
 
 import { sightingScripts } from './towns/sightings';
@@ -21,6 +21,7 @@ import { ItemAbil } from '../../src/data/item';
 import { FieldType } from '../../src/data/fields';
 import { DamageType } from '../../src/data/monster';
 import { decodeBmp, type Rgba } from '../../src/fileio/legacy/bmp';
+import { PIC_CUSTOM_FULL } from '../../src/data/special';
 import { BG_RECTS, E3_PATTERN_SLOTS } from '../../src/render/tiling';
 import { E3_ABILITY_TO_LEGACY, E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3ItemAbilities, readE3Items, readE3Monsters, readE3RoadJoins, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3PresetItem, type E3Town } from './town';
@@ -110,6 +111,9 @@ const E3_BOOSTED_GUARDS = [91, 92];
  */
 const E3_DUNGEON_SOUND = '22-23,25-33,35-38,44-47,50-79,86,200';
 
+/** The game's string tables E3 has lines for (`strings/NAME.txt`). */
+export const E3_STRING_OVERRIDES = ['help'];
+
 /** The game sheets E3 replaces with its own: engine name → E3 file. */
 export const E3_SHEET_OVERRIDES: readonly [string, string][] = [
   ['dlogpics', 'DLOGPICS.BMP'], ['talkportraits', 'TALKPORT.BMP'],
@@ -163,10 +167,11 @@ function e3Panels(read: E3Read): [string, Rgba][] {
  * 1997's `draw_dialog_graphic` (DLOGTOOL.CPP), which E3's (`1028:3856`)
  * shares: under 300 a terrain picture, 400–579 a monster sprite (E3 takes
  * a raw sprite index, under 180), 700 up a dialog picture, 1000 up a talking
- * face. TODO(E3-3): 900 up, the ten black-and-white maps, are left on the
- * default picture.
+ * face, and 900 up one of the ten black-and-white maps and carvings: each is
+ * a scenario sheet of its own from `mapBase` (`e3MapSheets`), shown whole
+ * (PIC_CUSTOM_FULL, 111).
  */
-export function e3DialogPic(tag: number, spritePic: Map<number, number>): [number, number] | undefined {
+export function e3DialogPic(tag: number, spritePic: Map<number, number>, mapBase = -1): [number, number] | undefined {
   if (tag < 240) return [e3TerrainPic(tag), 1];
   if (tag >= 400 && tag < 600) {
     const pic = spritePic.get(tag - 400);
@@ -174,7 +179,28 @@ export function e3DialogPic(tag: number, spritePic: Map<number, number>): [numbe
   }
   if (tag >= 700 && tag < 800) return [tag - 700, 4];
   if (tag >= 1000 && tag < 1100) return [tag - 1000, 5];
+  if (tag >= 900 && tag < 900 + E3_MAP_COUNT && mapBase >= 0) return [mapBase + tag - 900, PIC_CUSTOM_FULL];
   return undefined;
+}
+
+/** How many of DLOGMAPS.BMP's 120×120 cells E3's dialogs use (`5_900`–`5_909`). */
+const E3_MAP_COUNT = 10;
+
+/**
+ * DLOGMAPS.BMP, 1997's B&W graphic sheet (`draw_dialog_graphic`'s case 9:
+ * 120×120 cells, three across), cut into one sheet a picture.
+ */
+function e3MapSheets(read: E3Read): Rgba[] {
+  const all = decodeBmp(read('DLOGMAPS.BMP'));
+  return Array.from({ length: E3_MAP_COUNT }, (_, k) => {
+    const x0 = 120 * (k % 3), y0 = 120 * Math.floor(k / 3);
+    const data = new Uint8ClampedArray(120 * 120 * 4);
+    for (let y = 0; y < 120; y++) {
+      const from = ((y0 + y) * all.width + x0) * 4;
+      data.set(all.data.subarray(from, from + 120 * 4), y * 120 * 4);
+    }
+    return { width: 120, height: 120, data };
+  });
 }
 
 const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="no" ?>\n';
@@ -768,7 +794,9 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     ...dialogSprites.map((pic) => ({ pic, w: 1, h: 1 })),
   ], terrainSheets.length);
   const spritePic = new Map(dialogSprites.map((x, i) => [x, monsterArt.pics[legacyMonsters.length + i]!]));
-  e3Src.dialogPic = (tag) => e3DialogPic(tag, spritePic);
+  // The maps and carvings go after the items' sheet.
+  const mapBase = terrainSheets.length + monsterArt.sheets.length + 1;
+  e3Src.dialogPic = (tag) => e3DialogPic(tag, spritePic, mapBase);
   const monsters = legacyMonsters.map((m, n) => {
     const mon = convertMonster(m);
     mon.pictureNum = monsterArt.pics[n]!;
@@ -945,7 +973,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   shops.push(...talk.shops);
   const cursors = readE3Cursors(resources);
   write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, e3JournalStrings((id) => strings.get(id) ?? ''), cursors));
-  const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(read)];
+  const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(read), ...e3MapSheets(read)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
   // E3's own sounds, which a scenario's `sounds/SNDn.wav` puts in place of
   // the engine's (OBoE's `ResMgr::sounds.pushPath`). Resource k + 1 is sound
@@ -962,6 +990,10 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   write('graphics/pixpats.png', encodePng(buildE3Patterns(read)));
   for (const [name, img] of e3Panels(read)) write(`graphics/${name}.png`, encodePng(img));
   write('graphics/textbar.png', encodePng(decodeBmp(read('TEXTBAR.BMP'))));
+  // E3's instant help, string block 10 (3000 + n), which its `give_help`
+  // (`FUN_1008_38d6`) shows by 1997's numbers — the engine's too — in place
+  // of BoE's wording. A number E3 has no string for keeps BoE's.
+  write('strings/help.txt', Array.from({ length: 300 }, (_, k) => strings.get(3001 + k) ?? '').join('\n') + '\n');
   progress(1);
   return { sectors: zones.length, towns: towns.length, sheets: sheets.length };
 }

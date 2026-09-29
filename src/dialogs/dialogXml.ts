@@ -13,6 +13,7 @@
 
 import { attr, children, tag } from '../fileio/xml';
 import { UiRect } from '../render/layout';
+import { customSheetSize } from '../render/customPics';
 
 /** eBtnType (button.hpp:19), in the order `basic_buttons` uses. */
 export type ButtonType =
@@ -22,7 +23,7 @@ export type ButtonType =
 /** ePicType (pictypes.hpp), narrowed to the kinds the player's dialogs use. */
 export type PictType =
   | 'blank' | 'ter' | 'teranim' | 'monst' | 'dlog' | 'talk' | 'scen' | 'item'
-  | 'pc' | 'field' | 'boom' | 'missile' | 'full' | 'map' | 'status' | 'btn';
+  | 'pc' | 'field' | 'boom' | 'missile' | 'full' | 'custom-full' | 'map' | 'status' | 'btn';
 
 export type FieldType = 'int' | 'uint' | 'real' | 'text';
 export type LedState = 'red' | 'green' | 'off';
@@ -426,6 +427,8 @@ export function pictNaturalSize(
     case 'talk': return { w: 32, h: 32 };
     case 'missile': return { w: 18, h: 18 };
     case 'map': return { w: 24, h: 24 };
+    // PIC_CUSTOM_FULL: the scenario's `sheet<num>`, whole.
+    case 'custom-full': return customSheetSize(num);
     case 'status': return { w: 12, h: 12 };
     case 'btn':
       if (num <= 1) return { w: 12, h: 12 };

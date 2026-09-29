@@ -9,6 +9,8 @@
  * on `XmlDialog` like everything else.
  */
 
+import { PIC_CUSTOM_FULL } from '../data/special';
+import { customSheetSize } from '../render/customPics';
 import { ChoiceButton } from '../game/specials/context';
 import { STAIR_DLOGS } from '../game/specials/town';
 import { SheetStore } from '../render/sheets';
@@ -66,10 +68,15 @@ export async function threeChoiceDialog(
     controls.push(`<pict name='pict' type='${pictTypeOf(picType)}' num='${pic}' top='8' left='8'`
       + `${large ? " size='large'" : ''}/>`);
   }
+  // A whole scenario sheet (PIC_CUSTOM_FULL) — Exile III's maps and
+  // carvings, 120×120 — pushes the text past itself and the buttons below
+  // it, as E3's own dialogs lay them out. OBoE has no rule for it; the
+  // picture would draw over the text.
+  const full = picType === PIC_CUSTOM_FULL && pic >= 0 ? customSheetSize(pic) : null;
 
   // init_strings (3choice.cpp:69): one width for all of them, the square root
   // of twelve times their total length, never under 340.
-  const left = large ? 86 : 50;
+  const left = full ? 8 + full.w + 10 : large ? 86 : 50;
   const lengths = strings.map((s) => Math.round(measureString(ctx, s, STYLE)));
   const total = lengths.reduce((a, b) => a + b, 0) * 12;
   const strWidth = Math.max(340, Math.trunc(Math.sqrt(total)) + 20);
@@ -92,6 +99,7 @@ export async function threeChoiceDialog(
       + ` height='${height - 2 * TEXT_INSET}'/>`);
     top += height + 8;
   });
+  if (full) top = Math.max(top, 8 + full.h + 8);
 
   // init_buttons (3choice.cpp:98): right-aligned 30px past the text, slot 2
   // rightmost, then slot 3, then slot 1 — OBoE's reversal of the original's

@@ -12,6 +12,7 @@
  * the original: `dlg.setNum('day', n)`, `dlg.hide('take1')`.
  */
 
+import { customSheetName } from '../render/customPics';
 import { Colours } from '../render/colours';
 import { centreOnDesktop } from '../render/desktop';
 import { UiRect, height, shiftRect, width } from '../render/layout';
@@ -1071,6 +1072,10 @@ export class XmlDialog implements ModalScreen {
       // three help pictures; anything else is a scenario's `sheet<n>`.
       const name = FULL_SHEETS[num] ?? `sheet${num}`;
       const sheet = this.store.get(name);
+      if (sheet) ctx.drawImage(sheet, at.left, at.top);
+    } else if (type === 'custom-full') {
+      // PIC_CUSTOM_FULL: the scenario's `sheet<num>`, whole (`drawFullSheet`).
+      const sheet = this.store.get(customSheetName(num));
       if (sheet) ctx.drawImage(sheet, at.left, at.top);
     } else {
       drawPictAt(ctx, this.store, type, num, at.left, at.top, large);

@@ -232,6 +232,9 @@ export enum SpecType {
   OUT_MOVE_PARTY = 228,
 }
 
+/** PIC_CUSTOM_FULL — a scenario's `sheet<pic>`, drawn whole (pictypes.hpp). */
+export const PIC_CUSTOM_FULL = 111;
+
 /** PIC_DLOG — the default pictype for nodes (pictypes.hpp). */
 export const PIC_DLOG = 4;
 /** PIC_SCEN — the scenario's own icon sheet, which `handle_message` falls back to. */

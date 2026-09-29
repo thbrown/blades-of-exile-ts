@@ -428,8 +428,9 @@ export class TalkState {
             useSecond();
             break;
           }
-          // TODO(E3-3): E3 first shows its one-time hint about job boards
-          // (`FUN_1008_38d6(0x33)`, string 3051); none of E3's hints is ported.
+          // E3 first shows its one-time hint about job boards
+          // (`FUN_1008_38d6(0x33)`), in its own words (`strings/help.txt`).
+          giveHelp(51);
           this.canRecord = false;
           str1 = this.univ.scenario.specStrs[e3JobsBase(this.univ)! + JOB_STR.business] ?? '';
           str2 = '';

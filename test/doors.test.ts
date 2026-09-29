@@ -284,7 +284,7 @@ describe('locked doors', () => {
       pc.skills[Skill.LOCKPICKING] = 0;
       pc.skills[Skill.DEXTERITY] = 4;
       univ.town!.record.difficulty = 0;
-      univ.rng = { getRan: () => roll } as never;
+      Object.defineProperty(univ, 'rng', { value: { getRan: () => roll } });
       try {
         session.pickLock(where, 0);
       } finally {

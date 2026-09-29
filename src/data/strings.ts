@@ -15,6 +15,23 @@ export function setStrings(name: string, text: string): void {
   tables.set(name, text.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n'));
 }
 
+/**
+ * A scenario's own lines for one of the game's tables (`strings/NAME.txt` in
+ * its package, as OBoE's resource path lets a scenario replace any resource):
+ * each non-empty line replaces the game's, and a blank one leaves it, so a
+ * scenario that never wrote a string keeps the game's. Exile III ships its
+ * instant help this way.
+ */
+export function overrideStrings(name: string, text: string): void {
+  const own = text.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n');
+  const table = [...(tables.get(name) ?? [])];
+  own.forEach((line, i) => {
+    if (line !== '') table[i] = line;
+    else table[i] ??= '';
+  });
+  tables.set(name, table);
+}
+
 export function hasStrings(name: string): boolean {
   return tables.has(name);
 }

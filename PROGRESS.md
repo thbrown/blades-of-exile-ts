@@ -14325,6 +14325,19 @@ the rest of the TODO(E3-3) list.
         (DIVERGENCES #23). *Lock picking*: `pick-lock` = `exile3`, E3's
         `10d8:3f67` — 1997's shape with the pick's level ×15, difficulty
         once, and 35 or under opens.
+      - [x] **Pictures and words.** *The ten maps and carvings* (dialog
+        tags 900–909, 1997's B&W sheet `DLOGMAPS.BMP`) are a scenario sheet
+        each (`graphics/sheet12`–`21`), shown whole through OBoE's
+        PIC_CUSTOM_FULL (111), which the port now draws (`custom-full`);
+        `cThreeChoice`'s layout puts the text beside a picture that size, as
+        E3 does, and the sheet count counts nodes that name one. **Found on
+        the way**: PIC_FULL looked for `sheet<n>` where a scenario's sheets
+        are kept as `scen-sheet<n>` — PIC_CUSTOM_FULL is the type that means
+        the scenario's. *E3's instant help*: a package may carry
+        `strings/NAME.txt` over one of the game's tables
+        (`overrideStrings`, a blank line keeps the game's); E3's block 10 is
+        its `help`, by the same numbers, and the job board raises 51 first
+        as E3 does.
 
 All checks pass: 1,420 tests, both sweeps, verify-screen (with TOUCH)/party
 (this round). Before it: 1,419 tests, both sweeps, verify-screen (with TOUCH)/party

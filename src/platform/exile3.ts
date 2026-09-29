@@ -44,6 +44,13 @@ export const EXILE3_SHEET_OVERRIDES = [
   'dlogpics', 'talkportraits', 'pixpats', 'statarea', 'inventory', 'transcript', 'textbar',
 ];
 
+/**
+ * The game's string tables a converted Exile III has lines for
+ * (`strings/NAME.txt`, `overrideStrings`): its instant help, E3's string
+ * block 10. Must match tools/e3convert's `E3_STRING_OVERRIDES`.
+ */
+export const EXILE3_STRING_OVERRIDES = ['help'];
+
 /** Whether this site serves a converted copy as plain files (the dev server does). */
 export async function exile3Served(): Promise<boolean> {
   try {

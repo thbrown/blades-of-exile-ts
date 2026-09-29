@@ -41,6 +41,8 @@ export interface LoadedPackage {
   cursors: Map<string, Uint8Array>;
   /** Its replacements for the game's sheets, `graphics/NAME.png` (not `sheetN`). */
   overrides: Map<string, Uint8Array>;
+  /** Its lines for the game's string tables, `strings/NAME.txt` (`overrideStrings`). */
+  strings: Map<string, string>;
   warnings: string[];
 }
 
@@ -107,7 +109,10 @@ export async function loadScenarioPackage(
     const sounds = new Map<number, Uint8Array>();
     const cursors = new Map<string, Uint8Array>();
     const overrides = new Map<string, Uint8Array>();
+    const strings = new Map<string, string>();
     for (const path of src.paths()) {
+      const t = /^strings\/(\w+)\.txt$/.exec(path);
+      if (t) strings.set(t[1]!, await src.getText(path));
       const m = /^sounds\/SND(\d+)\.wav$/.exec(path);
       if (m) sounds.set(Number(m[1]), await src.getBinary(path));
       const c = /^cursors\/(\w+)\.png$/.exec(path);
@@ -115,7 +120,7 @@ export async function loadScenarioPackage(
       const g = /^graphics\/(\w+)\.png$/.exec(path);
       if (g && !/^sheet\d+$/.test(g[1]!)) overrides.set(g[1]!, await src.getBinary(path));
     }
-    return { scenario, sheets, sounds, cursors, overrides, warnings: [] };
+    return { scenario, sheets, sounds, cursors, overrides, strings, warnings: [] };
   }
   const { scenario, warnings } = loadLegacyScenario(pkg.data, pkg.id);
   let sheets: LoadedPackage['sheets'] = [];
@@ -128,7 +133,7 @@ export async function loadScenarioPackage(
       warnings.push(`The custom graphics could not be read (${err instanceof Error ? err.message : String(err)}).`);
     }
   }
-  return { scenario, sheets, sounds: new Map(), cursors: new Map(), overrides: new Map(), warnings };
+  return { scenario, sheets, sounds: new Map(), cursors: new Map(), overrides: new Map(), strings: new Map(), warnings };
 }
 
 /**

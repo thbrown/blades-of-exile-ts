@@ -790,9 +790,9 @@ export class SpecBuilder {
    * `FUN_10b0_19dd(pc, n, 11, adjust)`: `sleep_pc`, the target put to sleep
    * for `n`. E3's saving roll, `get_ran(1, 0, 100) + adjust` against
    * `30 + 2 × level`, is 1997's, which the engine has (`sleep-save`,
-   * DIVERGENCES.md §17). TODO(E3-3): E3's protections are its own item
-   * abilities: 118 makes a PC immune, and 120 or 127 takes 2 off `n`
-   * (`10b0:1a14`). They need E3's ability semantics (`tables.ts`).
+   * DIVERGENCES.md §17). E3's protections are its own item abilities —
+   * 118 makes a PC immune, and 120 or 127 takes 2 off `n` (`10b0:1a14`) —
+   * which `Player.sleep` reads off `Item.e3Ability` (DIVERGENCES.md #23).
    */
   sleep(n: number): Step {
     return (next) => this.node('status', { ex1: [n, 1, STATUS_ASLEEP] }, next);
@@ -800,8 +800,8 @@ export class SpecBuilder {
 
   /**
    * `FUN_10b0_19dd(pc, n, 12, adjust)`: `sleep_pc` paralysing the target for
-   * `n`, with `sleep`'s saving roll. E3's ability 120 makes a PC immune;
-   * `sleep`'s TODO covers it.
+   * `n`, with `sleep`'s saving roll. E3's ability 120 makes a PC immune,
+   * as `sleep` says.
    */
   paralyze(n: number): Step {
     return (next) => this.node('status', { ex1: [n, 1, STATUS_PARALYZED] }, next);

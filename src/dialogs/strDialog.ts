@@ -33,6 +33,7 @@ export function pictTypeOf(num: number): PictType {
     case 9: return 'field';
     case 10: return 'boom';
     case 11: return 'full';
+    case 111: return 'custom-full';
     case 12: return 'missile';
     case 15: return 'map';
     case 16: return 'status';
