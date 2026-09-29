@@ -14427,6 +14427,52 @@ the rest of the TODO(E3-3) list.
         `session.talkAs` for the one conversation; slot -2 names the hailed
         creature (`session.hailing`); job deliveries go by the swapped
         personality as E3's do. `TalkState` takes a `greeter`.
+      - [ ] **E3's own item abilities** (the last TODO(E3-3), `tables.ts`;
+        started 2026-09-28). E3's code reads an item's *level* where BoE
+        reads a strength, and its numbers are its own; bladbase's namesakes
+        are Jeff's BoE retuning. Every place E3 tests the ability byte (`+10`
+        of a 63-byte record at `pc*0x722 − 0x7a5c`): `FUN_1070_0681` (first
+        *equipped* with code), `FUN_1070_06f4` (in the pack), `FUN_1070_0752`
+        (anyone carries it), plus direct compares. New
+        **`src/game/e3Items.ts`**; BoE's rule skips an E3 item (`notE3` on
+        `hasAbilEquip`/`getProtLevel`, or `e3Ability >= 0`), and the item
+        keeps a BoE ability for its description. Done so far:
+        - [x] *Combat* (`1018:0edd` melee, `1018:38ba` missiles, `1018:1915`
+          extra damage). Skill Rings (101) hit += (level+1)×5, dam += level
+          — a *penalty*, the slip 1997 kept; Ogrish Gauntlets (96) dam +2 hit
+          +1; Giant Gauntlets (97) hit +5 dam +3. **1997's own character sheet
+          still tests these three E3 numbers** (INFODLGS.CPP:833), which
+          confirms the reading. Accuracy Rings (70): shot hit bonus + level+1,
+          no damage. Extra damage is an 8-case table, rolled only on a match:
+          flaming 8+0..5 (not demons), demon bane 25+0..10, undead 5+0..10,
+          giant 20+0..11, Wyrmsbane 50 flat vs reptiles, **Beastslayer 30 vs
+          monsters 166/167 only** (it had no ability at all). BoE's were far
+          bigger (Lightning Rods 20d6). Venom (32): half the time poison 2,
+          melee only — E3's missiles have no on-hit step, so Poison Darts
+          only poison through the poisoned-weapon status. The Accuracy
+          Rings, Skill Rings and Giant Gauntlets had converted with **no
+          ability**; they now carry ACCURACY/SKILL/GIANT_STRENGTH for the
+          description.
+        - [x] *Per round and action points* (`1018:43f2`, `10b0:a0ce`). Ring
+          of Speed (74) and Boots of Speed (94) +1 AP each; the Helm of
+          Speed (42) gives none (BoE's SPEED 0 still gave +1) but hastes 1
+          on a 5 of 0..10 ("Helm of speed glows."); the Fang Necklace (47)
+          blesses 1 ("Necklace glows."); **Dancing Boots (95) curse by 2
+          ("%s starts dancing!") and cost no AP** (BoE's took one); Asp
+          Gloves (98, unmapped) poison 2 on a 5 of 0..12 ("%s feels ill.").
+          Only when worn; BoE's OCCASIONAL_STATUS skips E3 items.
+        - [x] *Strengths the converter can fix*: regeneration 3×(level+1),
+          so `increase_age`'s 0..strength/3 is E3's 0..level+1; uranium 2.
+        - [ ] Still to read: status saves (75, 77, 118, 120, 122, 127 and
+          code 1, in `poison_pc` `10b0:933f` and its siblings near
+          `1098:`/`10b0:` 51980–55200 in the C), damage resistances
+          (55406: 48, 50, 2, 16, 66, 127), life saving (9), the Silver Ankh
+          (48, XP drain, 10324), Aescal's Ring (67, 12768), Micah's Gloves
+          (99), lockpicks (11) and Nimble Gloves (61, 66841), curses (14,
+          95 compares), and the use-item switch (`59914`) for every potion,
+          scroll and wand.
+        - *Tool note*: a message literal pushed as `push cs; push off` is in
+          the *caller's* code segment — `nedis.py --str 1018:4360` — not DS.
 
 All checks pass: 1,441 tests, both sweeps, verify-screen (with TOUCH)/party
 and verify-e3 (the personality swaps, 2026-09-28). Before it: 1,440 tests

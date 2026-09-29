@@ -917,6 +917,11 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     const ability = e3Abilities[k] ?? 0;
     // E3's own code, for the rules where E3 and BoE part (`Item.e3Ability`).
     it.e3Ability = ability;
+    // Where BoE's rule is E3's with another strength, E3's strength. A ring of
+    // regeneration heals 0 to strength/3 in `increase_age`, and E3 0 to level
+    // + 1 (`1010:5889`); a uranium bar diseases by its strength, and E3 by 2.
+    if (ability === 46) it.abilStrength = 3 * (old.itemLevel + 1);
+    if (ability === 110) it.abilStrength = 2;
     if (isE3NoteAbility(ability)) {
       if (!noteNodes.has(ability)) noteNodes.set(ability, scen!.compile(e3NoteSteps(scen!, ability)));
       it.ability = ItemAbil.CALL_SPECIAL;

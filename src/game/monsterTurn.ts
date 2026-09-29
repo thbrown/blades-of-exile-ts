@@ -34,6 +34,7 @@ import { GameMode, isCombat, isTown } from './modes';
 import { damageMonst, damagePc, hitChance } from './damage';
 import { onHitTargetSpecial } from './weaponAbilities';
 import { ItemAbil, abilGroup, abilHarms } from '../data/item';
+import { e3CombatRoundItems } from './e3Items';
 import { FieldType } from '../data/fields';
 import { getProtLevel, hasAbilEquip } from '../universe/inventory';
 import { animSettle, bookActionPause, focusOn } from './anim';
@@ -1870,6 +1871,7 @@ export async function combatRunMonst(session: GameSession): Promise<void> {
       pc.status[which] = moveToZero(pc.status[which] ?? 0);
     }
     occasionalStatus(univ, pc);
+    e3CombatRoundItems(univ, pc);
   }
   // combat_run_monst's own call (boe.combat.cpp:2018): the timers get their
   // round in a fight too, so a town timer keeps counting while you fight in it.
@@ -1914,6 +1916,8 @@ function occasionalStatus(univ: Universe, pc: Player): void {
     if (item.ability !== ItemAbil.OCCASIONAL_STATUS) continue;
     // The party-wide ones are handled elsewhere, in `increase_age`.
     if (abilGroup(item)) continue;
+    // Exile III's are `e3CombatRoundItems`'.
+    if (item.e3Ability >= 0) continue;
     if (univ.rng.getRan(1, 0, 10) !== 5) continue;
     let howMuch = item.abilStrength;
     if (abilHarms(item)) howMuch *= -1;

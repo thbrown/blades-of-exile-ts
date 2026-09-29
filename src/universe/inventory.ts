@@ -433,12 +433,14 @@ export function unequipItem(pc: Player, slot: number): EquipResult {
  * ring protects against, which stat an item boosts); -1 means "any".
  */
 export function hasAbilEquip(
-  pc: Player, abil: ItemAbil, dat = -1,
+  pc: Player, abil: ItemAbil, dat = -1, notE3 = false,
 ): { slot: number; item: Item } | null {
   for (let i = 0; i < NUM_INVEN_SLOTS; i++) {
     const item = pc.items[i]!;
     if (!pc.equip[i] || item.variety === ItemType.NO_ITEM) continue;
     if (item.ability !== abil) continue;
+    // `notE3`: as in `getProtLevel`.
+    if (notE3 && item.e3Ability >= 0) continue;
     if (dat >= 0 && dat !== item.abilData) continue;
     return { slot: i, item };
   }

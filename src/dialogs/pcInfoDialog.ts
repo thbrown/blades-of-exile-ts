@@ -10,6 +10,7 @@
 import { ItemAbil, Item } from '../data/item';
 import { getStr } from '../data/strings';
 import { getWeapons } from '../game/combat';
+import { e3AttackAdj } from '../game/e3Items';
 import { curWeight, hasAbilEquip, maxWeight } from '../universe/inventory';
 import { NUM_INVEN_SLOTS, Player } from '../universe/player';
 import { MainStatus, NUM_SKILLS, Skill, Status, Trait } from '../universe/skills';
@@ -67,16 +68,20 @@ export function displayPcInfo(dlg: XmlDialog, univ: Universe, pcNum: number): vo
     + 5 * clamp8(pc.status[Status.BLESS_CURSE] ?? 0);
   if (!pc.traits[Trait.AMBIDEXTROUS] && weap2) hitAdj -= 25;
   let damAdj = pc.statAdj(Skill.STRENGTH) + clamp8(pc.status[Status.BLESS_CURSE] ?? 0);
-  const skillItem = hasAbilEquip(pc, ItemAbil.SKILL);
+  const skillItem = hasAbilEquip(pc, ItemAbil.SKILL, -1, true);
   if (skillItem) {
     hitAdj += 5 * (Math.trunc(skillItem.item.abilStrength / 2) + 1);
     damAdj += Math.trunc(skillItem.item.abilStrength / 2);
   }
-  const giant = hasAbilEquip(pc, ItemAbil.GIANT_STRENGTH);
+  const giant = hasAbilEquip(pc, ItemAbil.GIANT_STRENGTH, -1, true);
   if (giant) {
     damAdj += giant.item.abilStrength;
     hitAdj += giant.item.abilStrength * 2;
   }
+  // Exile III's items: the sums 1997's sheet itself still has (`e3AttackAdj`).
+  const e3 = e3AttackAdj(pc);
+  hitAdj += e3.hit;
+  damAdj += e3.dam;
 
   const describe = (weap: Item | null, a: string, b: string): void => {
     dlg.setText(a, 'No weapon.');

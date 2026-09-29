@@ -25,6 +25,7 @@ import { calcSpecDam } from './missiles';
 import { SpellPat } from '../data/pattern';
 import { placeSpellPattern } from './spellPatterns';
 import { onHitItemAbility } from './weaponAbilities';
+import { e3ActionPoints, e3AttackAdj, e3OnMeleeHit, e3SpecDam } from './e3Items';
 import { drawTerrain } from './textBar';
 import type { GameSession } from './session';
 import type { Item } from '../data/item';
@@ -89,8 +90,10 @@ export function setPcMoves(univ: Universe): void {
     const encumbrance = totalEncumbrance(univ, pc);
     pc.ap = minmax(1, 8, pc.ap - Math.trunc(encumbrance / 3));
 
-    pc.ap += getProtLevel(pc, ItemAbil.SPEED);
-    pc.ap -= getProtLevel(pc, ItemAbil.SLOW_WEARER);
+    // Exile III's items: E3's own rule (`e3ActionPoints`).
+    pc.ap += getProtLevel(pc, ItemAbil.SPEED, -1, true);
+    pc.ap -= getProtLevel(pc, ItemAbil.SLOW_WEARER, -1, true);
+    pc.ap += e3ActionPoints(pc);
 
     const haste = pc.status[Status.HASTE_SLOW] ?? 0;
     if (haste < 0 && univ.party.age % 2 === 1) {
@@ -376,16 +379,20 @@ export async function pcAttack(
     damAdj += 10;
   }
 
-  const skillItem = hasAbilEquip(attacker, ItemAbil.SKILL);
+  // Exile III's items go by E3's own sums (`e3AttackAdj`).
+  const skillItem = hasAbilEquip(attacker, ItemAbil.SKILL, -1, true);
   if (skillItem) {
     hitAdj += 5 * (Math.trunc(skillItem.item.abilStrength / 2) + 1);
     damAdj += Math.trunc(skillItem.item.abilStrength / 2);
   }
-  const strengthItem = hasAbilEquip(attacker, ItemAbil.GIANT_STRENGTH);
+  const strengthItem = hasAbilEquip(attacker, ItemAbil.GIANT_STRENGTH, -1, true);
   if (strengthItem) {
     damAdj += strengthItem.item.abilStrength;
     hitAdj += strengthItem.item.abilStrength * 2;
   }
+  const e3 = e3AttackAdj(attacker);
+  hitAdj += e3.hit;
+  damAdj += e3.dam;
 
   // Swinging at something gives away your position.
   attacker.voidSanctuary();
@@ -554,7 +561,10 @@ export async function pcAttackWeapon(
   // damage of a named type (DAMAGING_WEAPON). The C++ computes one variable and
   // swaps it into the other when the type came back set, which is why the two
   // are applied with different sound types below.
-  const spec = calcSpecDam(univ, weap.ability, weap.abilStrength, weap.abilData, target);
+  // An Exile III weapon's extra damage is E3's table's (`e3SpecDam`).
+  const spec = weap.e3Ability >= 0
+    ? { damage: e3SpecDam(univ, weap.e3Ability, target), damType: DamageType.SPECIAL }
+    : calcSpecDam(univ, weap.ability, weap.abilStrength, weap.abilData, target);
   let specDam = spec.damage;
   let bonusDam = 0;
   if (spec.damType !== DamageType.SPECIAL) {
@@ -610,7 +620,8 @@ export async function pcAttackWeapon(
     attacker.status[Status.POISONED_WEAPON] = moveToZero(poisoned);
   }
 
-  onHitItemAbility(univ, attacker, weap, target, r2 + specDam, 'melee', session);
+  if (weap.e3Ability >= 0) e3OnMeleeHit(univ, weap, target);
+  else onHitItemAbility(univ, attacker, weap, target, r2 + specDam, 'melee', session);
 }
 
 /**

@@ -331,7 +331,10 @@ export const E3_ITEM_COUNT = 415;
  * Derived by matching E3's items to bladbase's by name and taking, for each
  * E3 code, the BoE code most of its items carry (94 of 103 codes agree
  * throughout; the rest are items BoE retuned). E3 codes seen only on E3-only
- * items (60, 70, 78, 82, 97, 98, 101–103, 111, 132–135, 168) are absent.
+ * items (60, 78, 82, 98, 102, 103, 111, 132–135, 168) are absent. 70, 97 and
+ * 101 are the Accuracy Rings, Giant Gauntlets and Skill Rings, given BoE's
+ * ACCURACY, GIANT_STRENGTH and SKILL for their descriptions only: the engine
+ * plays them by E3's own sums (`src/game/e3Items.ts`).
  */
 export const E3_ABILITY_TO_LEGACY: Readonly<Record<number, number>> = {
   0: 0, 2: 35, 3: 87, 4: 72, 5: 110, 6: 111, 8: 70, 9: 48, 10: 131, 11: 161, 12: 90, 13: 160,
@@ -343,7 +346,7 @@ export const E3_ABILITY_TO_LEGACY: Readonly<Record<number, number>> = {
   76: 119, 77: 34, 79: 79, 80: 134, 81: 135, 83: 87, 84: 119, 85: 127, 86: 122, 87: 78, 88: 77,
   89: 120, 90: 84, 91: 119, 92: 172, 93: 11, 94: 55, 95: 56, 96: 43, 99: 40, 100: 80, 110: 52,
   115: 71, 117: 44, 118: 54, 120: 54, 121: 83, 122: 36, 123: 123, 124: 121, 125: 126, 127: 31,
-  129: 45, 130: 82, 131: 4,
+  129: 45, 130: 82, 131: 4, 70: 41, 97: 43, 101: 37,
 };
 
 const WEAPON_VARIETIES = new Set([1, 2, 4, 5, 6, 23, 24, 25]);

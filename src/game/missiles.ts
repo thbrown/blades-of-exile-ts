@@ -24,6 +24,7 @@ import { Spell } from '../data/spell';
 import { placeSpellPattern } from './spellPatterns';
 import { takeAp } from './combat';
 import { onHitItemAbility, onHitTargetSpecial } from './weaponAbilities';
+import { e3MissileHitBonus, e3SpecDam } from './e3Items';
 import { damageMonst, damagePc, handleMarkedDamage, hitChance } from './damage';
 import { endBoomAnim, runBoomAnim, startBoomAnim } from './booms';
 import { animSettle } from './anim';
@@ -278,9 +279,11 @@ export async function fireMissile(
   let hitBonus = firing ? missile.bonus : 0;
   hitBonus += firer.statAdj(Skill.DEXTERITY)
     - session.canSeeLight(firer.combatPos, target) + bless;
-  const skillItem = Math.trunc(getProtLevel(firer, ItemAbil.ACCURACY) / 2);
+  // Exile III's Accuracy Rings go by E3's own rule (`e3MissileHitBonus`).
+  const skillItem = Math.trunc(getProtLevel(firer, ItemAbil.ACCURACY, -1, true) / 2);
   hitBonus += skillItem;
   damBonus += skillItem;
+  hitBonus += e3MissileHitBonus(firer);
 
   let aim = target;
   if (ammo.ability === ItemAbil.SEEKING_MISSILE) {
@@ -346,7 +349,10 @@ export async function fireMissile(
   if (r1 > hitChance(skill)) {
     univ.addStringToBuf('  Missed.');
   } else if (victim) {
-    const spec = calcSpecDam(univ, ammo.ability, ammo.abilStrength, ammo.abilData, victim);
+    // Exile III's ammunition: E3's table (`e3SpecDam`).
+    const spec = ammo.e3Ability >= 0
+      ? { damage: e3SpecDam(univ, ammo.e3Ability, victim), damType: DamageType.SPECIAL }
+      : calcSpecDam(univ, ammo.ability, ammo.abilStrength, ammo.abilData, victim);
     let weaponDamage = 0;
     let specialDamage = 0;
     if (ammo.ability === ItemAbil.HEALING_WEAPON) {
@@ -381,8 +387,11 @@ export async function fireMissile(
     }
     // The ammunition's own on-hit ability. WEAPON_CALL_SPECIAL is tested on
     // the ammunition but takes its node from the *launcher* — kept as written.
-    onHitItemAbility(univ, firer, ammo, victim, r2 + spec.damage, 'missile', session,
-      missile.abilStrength);
+    // Exile III's missiles have no such step (`1018:38ba`).
+    if (ammo.e3Ability < 0) {
+      onHitItemAbility(univ, firer, ammo, victim, r2 + spec.damage, 'missile', session,
+        missile.abilStrength);
+    }
 
     // And what the target does about being shot.
     if (victim instanceof Creature) {
