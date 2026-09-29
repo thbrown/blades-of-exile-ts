@@ -6,8 +6,9 @@
  */
 
 import { E3_JOBS_ON_PANEL, JOB_STR, e3HeldJobs, e3JobText, e3JobsBase } from '../game/e3Jobs';
+import { offersUse } from '../game/e3ItemUse';
 import { Direction, Location, dist } from '../core/location';
-import { ItemAbil, ItemType, canUse } from '../data/item';
+import { ItemAbil, ItemType } from '../data/item';
 import { variety } from '../data/itemVariety';
 import { EffectPattern, SpellPat, WALL_ROTATIONS, getBuiltinPattern } from '../data/pattern';
 import { groundFromTer, terFromGround } from '../data/scenario';
@@ -1644,9 +1645,8 @@ export class Screen {
           icon(ITEM_BTN_ICONS.info, at(row.info));
           // Use only appears where it would work (boe.text.cpp:370): the item
           // has to be usable somewhere, and a rechargeable one has to have
-          // something left in it.
-          if (canUse(item) && (item.rechargeable ? item.charges > 0 : true))
-            icon(ITEM_BTN_ICONS.use, at(row.use));
+          // something left in it. Exile III's items go by E3's use codes.
+          if (offersUse(item)) icon(ITEM_BTN_ICONS.use, at(row.use));
         }
       }
     }

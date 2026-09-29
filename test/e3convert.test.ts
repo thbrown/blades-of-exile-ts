@@ -43,6 +43,7 @@ import {
 import { readE3JobTables } from '../tools/e3convert/jobs';
 import { E3_COMBAT_SUMMONS, E3_TOWN_SUMMONS } from '../src/game/e3Summons';
 import { getSummonMonster } from '../src/game/monsterPlace';
+import { E3_USE_CODE } from '../src/game/e3ItemUse';
 import { GENERATORS } from '../tools/e3convert/towns/shiftingFloors';
 import { e3DayCount, e3TownState } from '../tools/e3convert/flags';
 import { FieldType } from '../src/data/fields';
@@ -921,6 +922,8 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     const exe = new Uint8Array(readFileSync(join(dir as string, 'EXILE3.EXE')));
     const chart = readNeSegment(exe, (0x1140 - 0x1000) / 8 + 1);
     for (let a = 0xa0; a <= 0xb7; a++) expect(chart[2 * a]! | (chart[2 * a + 1]! << 8)).toBe(10);
+    // And the rest of the chart is `e3ItemUse.ts`'s, word for word.
+    E3_USE_CODE.forEach((c, a) => expect(chart[2 * a]! | (chart[2 * a + 1]! << 8)).toBe(c));
     expect(notes.every((it) => it.ineptOk && !useMagic(it))).toBe(true);
     expect(scen.scenItems.filter((it) => it.ineptOk)).toHaveLength(notes.length);
     // The scroll in town 72 (a Piece of Paper made 0xaf): "You may proceed.",

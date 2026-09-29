@@ -37,10 +37,14 @@ const POISON_CHANCE = [
  * stop it finding the equipped sword in slot 3. (Its loop reads `equip[...]`
  * one past the end when nothing matches at all, which is undefined there; here
  * the search simply runs out and reports no weapon.)
+ *
+ * `e3` is Exile III's own (`10b0:30f4`), for its poisons: the rolls are 0–100
+ * and the 6 is taken off for a PC *without* nimble fingers — 1997's inverted
+ * test, which OBoE turned round (DIVERGENCES.md #30). Otherwise the same.
  */
 export function poisonWeapon(
   univ: Universe, pcNum: number, howMuch: number, safe: boolean,
-  sound?: (which: number) => void,
+  sound?: (which: number) => void, e3 = false,
 ): boolean {
   const pc = univ.party.pcs[pcNum];
   if (!pc) return false;
@@ -52,13 +56,14 @@ export function poisonWeapon(
 
     let pLevel = howMuch;
     univ.addStringToBuf('  You poison your weapon.');
-    let r1 = univ.rng.getRan(1, 1, 100);
-    if (pc.traits[Trait.NIMBLE]) r1 -= 6;
+    const lo = e3 ? 0 : 1;
+    let r1 = univ.rng.getRan(1, lo, 100);
+    if (e3 ? !pc.traits[Trait.NIMBLE] : pc.traits[Trait.NIMBLE]) r1 -= 6;
     const skill = POISON_CHANCE[pc.skill(Skill.POISON)] ?? 100;
     if (r1 > skill && !safe) {
       univ.addStringToBuf('  Poison put on badly.');
       pLevel = Math.trunc(pLevel / 2);
-      r1 = univ.rng.getRan(1, 1, 100);
+      r1 = univ.rng.getRan(1, lo, 100);
       if (r1 > skill + 10) {
         univ.addStringToBuf('  You nick yourself.');
         // Written straight into the status, not through poison() — so this

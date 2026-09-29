@@ -31,6 +31,7 @@ import { SpellNote } from '../universe/living';
 import { Universe } from '../universe/universe';
 import { takeAp } from './combat';
 import { damagePc, hitParty } from './damage';
+import { e3UseItem, e3UsesOwnRules } from './e3ItemUse';
 import { awardPartyXp, awardXp } from './damage';
 import { GameMode } from './modes';
 import { summonMonster } from './monsterPlace';
@@ -129,6 +130,13 @@ export async function useItem(
   // spent: `ASR_10-05-2025_09-08-20` uses an empty row 3, and from there the
   // C++ was on Kat while this port was still on Feodoric.
   if (!item) return;
+
+  // Exile III's items go by E3's own switch (e3ItemUse.ts), then the same tail.
+  if (e3UsesOwnRules(item.e3Ability)) {
+    await e3UseItem(session, pcNum, slot, host);
+    await finishUse(session);
+    return;
+  }
 
   const say = (line: string): void => univ.addStringToBuf(line);
   const sound = (which: number): void => host?.sound(which);
@@ -750,13 +758,18 @@ export async function useItem(
   }
 
   if (takeCharge && item.charges > 0) removeCharge(pc, slot);
+  await finishUse(session);
+}
 
-  // `handle_use_item`'s tail (boe.actions.cpp:1109) — the AP always, the turn
-  // **only if the item didn't arm a targeting mode**. A wand that asks for a
-  // square hasn't been used yet, so the monsters don't move until the square is
-  // picked. Lives here rather than at the call sites so the game and the replay
-  // driver can't disagree about it.
-  takeAp(univ, 3);
+/**
+ * `handle_use_item`'s tail (boe.actions.cpp:1109) — the AP always, the turn
+ * **only if the item didn't arm a targeting mode**. A wand that asks for a
+ * square hasn't been used yet, so the monsters don't move until the square is
+ * picked. Lives here rather than at the call sites so the game and the replay
+ * driver can't disagree about it.
+ */
+async function finishUse(session: GameSession): Promise<void> {
+  takeAp(session.univ, 3);
   if (session.mode !== GameMode.TOWN_TARGET && session.mode !== GameMode.SPELL_TARGET) {
     await session.afterPartyTurn();
   }

@@ -362,8 +362,8 @@ const E3_CURSED = new Set([14, 95, 129]);
  * curse from there; the rest map E3's code through `E3_ABILITY_TO_LEGACY`
  * with the level as strength. Where E3's code reads the ability differently,
  * the engine asks the item's E3 code instead (`src/game/e3Items.ts`,
- * DIVERGENCES.md #23). TODO(E3-3): what Using an item does (`10c0:2c92`,
- * still BoE's), and the Lodestone and Airy Stone changing as they are taken
+ * DIVERGENCES.md #23), and so is Using one (`src/game/e3ItemUse.ts`, E3's
+ * `10c0:2c92`). TODO(E3-3): the Lodestone and Airy Stone changing as they are taken
  * (`give_to_pc`, `1070:01d1`: the Lodestone is worn and cursed at once, and
  * both have a byte at +0x13 of the in-memory item rewritten, not yet pinned).
  * `graphicNum` is E3's picture, for `buildItemSheet` to replace.

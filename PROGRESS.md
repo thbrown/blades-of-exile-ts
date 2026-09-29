@@ -14487,13 +14487,45 @@ the rest of the TODO(E3-3) list.
           party+0x4c; nimble fingers +1 to dexterity's `stat_adj`; E3's
           disease end-roll ignores good constitution; its luck save in
           `kill_pc` is 0–100.
-        - [ ] Left (the TODO(E3-3) in `tables.ts`): the use-item switch
-          (`10c0:2c92`, ~550 lines of C with every far call's arguments
-          dropped — read it in `nedis.py`, case by case), and `give_to_pc`'s
-          Lodestone (129 → 14, worn at once) and Airy Stone (117 → 0), which
-          also rewrite a byte at +0x13 of the in-memory item (20 and −20).
-          `item_weight` (`1070:094b`) reads the weight byte by stack offset;
-          whether that is +0x11 (FORMATS.md's layout) or +0x13 is unpinned.
+        - [x] *Using an item* (2026-09-29, `src/game/e3ItemUse.ts`,
+          DIVERGENCES #23): E3's `use_item` (`10c0:2c92`) whole — the
+          use-code chart (`1140:0000`, 0–5 and +10 for inept-OK; checked
+          word for word against the EXE in `e3convert.test.ts`), the mode
+          gates and every case, read from `nedis.py` (jump table
+          `cs:3cb1`, index = code − 3). `useItem` hands any item whose
+          `e3Ability` is 0–159 (bar 135) to it, then the same tail
+          (`finishUse`). Item spells cast at a flat **level 6**
+          (`1018:1ff2`). The USE button goes by the chart (`offersUse`),
+          so the wines, the Sapphire Necklace, the Wand of Pyhrrus and
+          Scroll: Major Haste, which had no BoE namesake and no button,
+          have one. **Found on the way**:
+          - **Every E3 healing potion hurt.** The converter leaves E3's
+            byte +8 (1 = drinkable, which also plays sound 56) in the BoE
+            use type, where 1 is HARM_ONE. Fixed by the new path; the byte
+            stays, since `e3ItemUse` reads it for the sound.
+          - Poisons are combat only in E3 (chart 11), and E3's
+            `poison_weapon` is 1997's: rolls 0–100, and −6 for a PC
+            **without** Nimble Fingers — an inverted test OBoE fixed.
+            `poisonWeapon(…, e3)` does E3's for E3's poisons; the BoE-wide
+            question is **DIVERGENCES #30, open for the user**.
+          - Oddities kept: Dust of Hiding loops six times over the user
+            (meant for the party); the Wand of Vorb does 250 to its user;
+            the Wand of Pyhrrus rings its user with blade walls (radius 2,
+            `1018:a598`); the Potion of Doom takes one off each stat.
+          - Codes 62 (flying), 114 (Fire Egg) and 126 (mass charm) have
+            cases but no item carries them; left out, said so in a comment.
+        - [ ] **Skribbane Herb** (135, `10c0:3b74`, `TODO(E3-3)` in
+          `e3ItemUse.ts`, which spells out the whole decode): E3's
+          addiction — herbs eaten party+0x141, addiction +0x12d, a
+          withdrawal clock +0x137 wound down in `FUN_10c0_61c4`
+          (`10c0:6ebe`). Needs three of E3's strings (block 0x37:
+          0x14–0x16) written out for the engine, so it still takes BoE's
+          path, where it can't be used.
+        - [ ] `give_to_pc`'s Lodestone (129 → 14, worn at once) and Airy
+          Stone (117 → 0), which also rewrite a byte at +0x13 of the
+          in-memory item (20 and −20). `item_weight` (`1070:094b`) reads
+          the weight byte by stack offset; whether that is +0x11
+          (FORMATS.md's layout) or +0x13 is unpinned.
         - *Tool note*: a message literal pushed as `push cs; push off` is in
           the *caller's* code segment — `nedis.py --str 1018:4360` — not DS.
         - *Tool note*: `nedis.py --all > all.s` in the scratchpad (~390k
@@ -14501,9 +14533,10 @@ the rest of the TODO(E3-3) list.
           argument the decompiler dropped — that is how Micah's Gloves
           turned up.
 
-All checks pass (2026-09-29): 1,450 tests, both sweeps, verify-screen (with
-TOUCH), verify-party and verify-e3. (Corpus not re-run: every change is
-behind an E3 item code, and no RNG call moved for anything else.) **Next
-session starts here**: the one TODO(E3-3) left in `tables.ts` — E3's
-use-item switch, then the Lodestone and Airy Stone — then
-TODO(M9)/TODO(campaign)/TODO(M8), which may be left for the user to rule on.
+All checks pass (2026-09-29, after E3's use_item): 1,459 tests, both
+sweeps, verify-screen (with TOUCH), verify-party and verify-e3. (Corpus not
+re-run: the new path is taken only by items with an E3 code, and
+`poisonWeapon`'s default is unchanged.) **Next session starts here**: the
+Lodestone and Airy Stone (`tables.ts`), then the Skribbane Herb
+(`e3ItemUse.ts`) — both TODO(E3-3) — then TODO(M9)/TODO(campaign)/TODO(M8),
+which may be left for the user to rule on, as is DIVERGENCES #30.

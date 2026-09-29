@@ -580,8 +580,16 @@ life-saving item, against undead drain, stun and icy touch; Aescal's Ring
 ending disease; Micah's Gloves adding to dexterity's adjustment rather than
 the skill. **An E3 item is cursed by its code (14, 95), not bladbase's
 flag**, which curses five more items, and lifting the curse zeroes the code,
-so uncursed Dancing Boots stop dancing. What *using* an item does is still
-BoE's.
+so uncursed Dancing Boots stop dancing.
+
+And, 2026-09-29, *using* one (`src/game/e3ItemUse.ts`): E3's `use_item`
+(`10c0:2c92`) whole — its use-code chart (`1140:0000`), its four mode gates
+and its switch, one case per E3 code, on the item's level. Item spells cast
+at E3's flat level 6. This fixed a live bug as well as the numbers: the
+converter leaves E3's byte +8 (1 on a drinkable potion) in the BoE use type,
+where it reads as "harm one", so every E3 healing potion *hurt*. The notes and
+books (160–183) stay scenario specials, and the Skribbane Herb (135) stays
+unusable pending its strings (`TODO(E3-3)` in that file).
 
 The rest of E3's rules are the scenario's own, by flag, as `bash` is: Exile
 III's lock picking is `pick-lock` = `exile3` (`10d8:3f67`, in `doors.ts`),
@@ -668,6 +676,29 @@ name. The change lasts for the one conversation, since E3 decides it again
 each time.
 
 ---
+
+### 30. `poison_weapon`'s nimble-fingers test (2026-09-29)
+
+**OPEN — for the user to rule on.** 1997 (`PARTY.CPP`, `poison_weapon`) and
+Exile III (`10b0:30f4`) agree, and OBoE differs twice:
+
+```c
+/* 1997 and E3 */                          // OBoE, boe.party.cpp:442
+r1 = get_ran(1,0,100);                     r1 = get_ran(1,1,100);
+if (adven[pc].traits[3] == FALSE)          if(pc.traits[eTrait::NIMBLE])
+    r1 -= 6;                                   r1 -= 6;
+```
+
+`traits[3]` is Nimble Fingers, so the original helps everyone *but* the
+nimble — plainly inverted, and OBoE fixed it. The roll's range is dice only;
+the trait is something a player could tell (a nimble PC botches more often).
+1997 has the same inverted test in disarming a trap (`TOWNSPEC.CPP:152`) and
+picking a lock (`TOWN.CPP:1126`). Exile III's own items follow E3, as #23
+has it: its poisons pass `e3` to `poisonWeapon`, and `pick-lock` = `exile3`
+already takes 8 off for the clumsy. Everything else follows OBoE
+(`poisonWeapon.ts`, `trap.ts`, `doors.ts`). Following the original there
+would move the corpus wherever a weapon is poisoned, a trap disarmed or a
+lock picked, so it wants a flag, like `pick-lock`, if it is wanted.
 
 ## Agreements worth recording
 
