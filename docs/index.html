@@ -2,6 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Blades of Exile</title>
     <link rel="icon" type="image/png" href="/exile-js/data/graphics/icon.png" />
     <style>
@@ -211,6 +212,13 @@
       .startup-page input {
         font-family: 'BoEText', 'DejaVu Sans', Verdana, sans-serif;
       }
+      /* The startup screen's host is a flex item of the body, which would size
+         it to its content — the 1210px page — so the page's max-width never
+         had anything smaller to answer to and the menu scrolled sideways. */
+      #startup-host {
+        width: 100%;
+        max-width: 1210px;
+      }
       .startup {
         width: 1210px;
         max-width: 100%;
@@ -231,7 +239,7 @@
       }
       .startup-list {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
         gap: 8px;
       }
       /* Every card is a sheet of the game's paper — the marble its text and
@@ -267,8 +275,9 @@
         color: #333;
         line-height: 1.35;
       }
+      /* As many columns as fit, at least 200px each; one on a phone. */
       .startup-cards {
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
       }
       .startup-card {
         padding: 0;
@@ -285,11 +294,21 @@
         box-sizing: border-box;
         overflow: hidden;
       }
+      /* Every picture is the terrain view as the game draws it, 279×351 with
+         its frame (13px left and top, 14px right and bottom) round a 252×324
+         view (render/preview.ts). The image is widened so only the view
+         spans the card, and raised so the card shows a band of it 40% of the
+         way down — a margin's percentage is of the card's width, which is
+         what makes this sum work at any width. */
       .startup-picture img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        object-position: center 40%;
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: calc(100% * 279 / 252);
+        max-width: none;
+        height: auto;
+        margin-left: calc(-100% * 13 / 252);
+        margin-top: calc(-100% * (13 + (324 - 252 * 200 / 279) * 0.4) / 252);
         image-rendering: pixelated;
         display: block;
       }
@@ -337,6 +356,9 @@
         image-rendering: pixelated;
         min-height: 100vh;
         box-sizing: border-box;
+        /* The body is `playing` as well by now, which takes its padding
+           away; the menu keeps a gutter so its cards never meet the edge. */
+        padding: 0 12px 12px;
       }
       /* Both of the page's cards, the party's and the one holding the
          lists, are the game's paper too. */
@@ -550,7 +572,7 @@
         font-size: 13px;
       }
       .startup-saves {
-        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
       }
       .startup-party-button {
         font-size: 12px;
@@ -609,6 +631,34 @@
         color: #8a1c10;
         font-size: 12px;
       }
+      /* A phone: less padding round the page's cards, and a smaller masthead
+         so the title fits on one line. */
+      @media (max-width: 560px) {
+        .startup {
+          padding: 16px 14px 18px;
+        }
+        .startup-header {
+          gap: 12px;
+          padding: 8px 0 12px;
+        }
+        .startup-logo {
+          width: 56px;
+          height: 56px;
+        }
+        .startup-title {
+          font-size: 30px;
+        }
+        .startup-masthead p {
+          font-size: 12px;
+        }
+        .startup-filter {
+          min-width: 0;
+          flex: 1 1 100%;
+        }
+        .startup-shown {
+          margin-left: 0;
+        }
+      }
       #progress-wrap {
         width: 1210px;
         max-width: 100%;
@@ -623,8 +673,293 @@
         background: #6a8fc7;
         transition: width 0.15s ease-out;
       }
+      /* Touch controls (platform/touchControls.ts): two translucent pads
+         pinned to the sides, below the menu bar. On most phones held
+         sideways they sit in the space the scaled game leaves either side;
+         on a small one they overlap its edges, which is why they're
+         see-through. Only the buttons take touches — between them, the
+         canvas underneath still does. */
+      #touch-pads {
+        --pad: clamp(40px, 11.5vh, 56px);
+        position: fixed;
+        inset: 28px 0 0 0;
+        pointer-events: none;
+        z-index: 5;
+      }
+      #touch-pads[hidden] {
+        display: none;
+      }
+      .touch-pad {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        display: grid;
+        gap: 6px;
+      }
+      .touch-actions {
+        left: 8px;
+        grid-template-columns: repeat(2, var(--pad));
+      }
+      .touch-dpad {
+        right: 8px;
+        grid-template-columns: repeat(3, var(--pad));
+      }
+      .touch-button {
+        pointer-events: auto;
+        width: var(--pad);
+        height: var(--pad);
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(20, 20, 20, 0.38);
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        border-radius: 8px;
+        color: rgba(255, 255, 255, 0.85);
+        font: bold 22px 'BoEText', system-ui, sans-serif;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .touch-button:active {
+        background: rgba(255, 255, 255, 0.3);
+        border-color: rgba(255, 255, 255, 0.7);
+      }
+      .touch-button.centre {
+        font-size: 16px;
+      }
+      /* Aiming: the middle fires, and the button for Space stands out. */
+      .touch-button.centre.fire,
+      .touch-button.aim {
+        background: rgba(120, 90, 10, 0.55);
+        border-color: rgba(255, 220, 0, 0.8);
+        color: #ffe680;
+      }
+      .touch-button.text {
+        font-size: 13px;
+      }
+      .touch-icon {
+        width: 64%;
+        image-rendering: pixelated;
+        opacity: 0.9;
+        pointer-events: none;
+      }
+      .touch-icon.wide {
+        width: 80%;
+      }
+      /* The spell picker for a finger (platform/touchSpells.ts): strips down
+         the sides and a bar along the bottom, round the cast dialog, which
+         stays visible and live between them. See-through as the pads are. */
+      #touch-spells {
+        --strip: clamp(118px, 19vw, 170px);
+        position: fixed;
+        inset: 28px 0 0 0;
+        z-index: 6;
+        pointer-events: none;
+        font: 13px 'BoEText', system-ui, sans-serif;
+      }
+      #touch-spells[hidden] {
+        display: none;
+      }
+      .ts-strip {
+        position: absolute;
+        top: 6px;
+        bottom: 56px;
+        width: var(--strip);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .ts-left {
+        left: 6px;
+      }
+      .ts-right {
+        right: 6px;
+      }
+      .ts-heading {
+        color: #fff;
+        font-weight: bold;
+        font-size: 12px;
+        text-shadow: 0 1px 2px #000, 0 0 4px #000;
+        padding: 0 2px;
+      }
+      .ts-list {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        pointer-events: auto;
+        scrollbar-width: none;
+      }
+      .ts-btn {
+        pointer-events: auto;
+        font: inherit;
+        min-height: 32px;
+        padding: 2px 8px;
+        text-align: left;
+        color: rgba(255, 255, 255, 0.92);
+        background: rgba(20, 20, 20, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        border-radius: 6px;
+        text-shadow: 0 1px 1px #000;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        flex: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+      }
+      .ts-btn:active {
+        background: rgba(255, 255, 255, 0.3);
+      }
+      .ts-btn:disabled {
+        opacity: 0.35;
+      }
+      .ts-btn.on {
+        background: rgba(120, 90, 10, 0.75);
+        border-color: rgba(255, 220, 0, 0.85);
+        color: #ffe680;
+      }
+      .ts-btn.dim:not(.on) {
+        color: rgba(255, 255, 255, 0.45);
+      }
+      .ts-none {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 12px;
+        text-shadow: 0 1px 2px #000;
+        padding: 0 2px;
+      }
+      /* ◀ ▶ bottom left, mirroring ✕ and CAST bottom right. */
+      .ts-steps {
+        position: absolute;
+        left: 6px;
+        bottom: 6px;
+        width: var(--strip);
+        display: flex;
+        gap: 6px;
+      }
+      .ts-step {
+        flex: 1;
+        min-height: 42px;
+        text-align: center;
+        font-size: 18px;
+      }
+      /* One line each: the name gives way (with an ellipsis) before the HP. */
+      .ts-pc {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 6px;
+        min-height: 36px;
+        white-space: nowrap;
+      }
+      .ts-pc .ts-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .ts-pc small {
+        flex: none;
+      }
+      .ts-pc small {
+        font-size: 10px;
+        opacity: 0.8;
+      }
+      /* Cast and Cancel sit under the party, bottom right: the middle of
+         the bottom is the dialog's own Other Spells, Cancel and Cast. */
+      .ts-foot {
+        position: absolute;
+        right: 6px;
+        bottom: 6px;
+        width: var(--strip);
+        display: flex;
+        gap: 6px;
+      }
+      .ts-foot .ts-btn {
+        min-height: 42px;
+        text-align: center;
+        padding: 2px 4px;
+      }
+      .ts-foot .ts-cancel {
+        flex: none;
+        width: 42px;
+      }
+      .ts-cast {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: bold;
+        background: rgba(107, 84, 24, 0.9);
+        border-color: rgba(255, 220, 0, 0.85);
+        color: #f3dc98;
+      }
+      /* A finger on the canvas: no zoom or pan, no text selection, no
+         iOS callout on a long press (which is the right button here). */
+      body.touch-controls #canvas {
+        /* none, not manipulation: a finger sliding on the canvas is the game's
+           (dragging the map or a dialog), and the browser would otherwise
+           take it as a pan and cancel the pointer. The game fits the
+           screen, so there's no page to pan or zoom anyway. */
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+      }
+      /* In portrait the game is too small to play: an iPhone can't be made
+         to turn, so it's asked to. Only in play — the main menu works
+         upright. */
+      #rotate-cover {
+        display: none;
+      }
+      @media (orientation: portrait) {
+        /* The game goes while it's asked: the menu bar alone is wider than a
+           phone upright, which would widen the page and the cover with it. */
+        body.touch-controls.playing:not(.starting) > :not(#rotate-cover) {
+          display: none !important;
+        }
+        body.touch-controls.playing:not(.starting) #rotate-cover {
+          display: flex;
+          position: fixed;
+          inset: 0;
+          z-index: 20;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 18px;
+          background:
+            linear-gradient(rgba(10, 10, 10, 0.55), rgba(10, 10, 10, 0.85)),
+            var(--menu-tile, none) 0 0 / 128px 128px repeat,
+            #1a1a1a;
+          color: #e8e8e8;
+          font: 15px 'BoEText', system-ui, sans-serif;
+          text-shadow: 0 1px 3px #000;
+        }
+      }
+      .rotate-phone {
+        width: 46px;
+        height: 80px;
+        border: 3px solid #e8e8e8;
+        border-radius: 8px;
+        animation: rotate-phone 2.4s ease-in-out infinite;
+      }
+      @keyframes rotate-phone {
+        0%, 25% { transform: rotate(0deg); }
+        55%, 100% { transform: rotate(-90deg); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .rotate-phone {
+          animation: none;
+          transform: rotate(-90deg);
+        }
+      }
     </style>
-    <script type="module" crossorigin src="/exile-js/assets/index-k-PPo2YD.js"></script>
+    <script type="module" crossorigin src="/exile-js/assets/index-CYgTivR0.js"></script>
   </head>
   <body>
     <nav id="game-menu-bar"></nav>

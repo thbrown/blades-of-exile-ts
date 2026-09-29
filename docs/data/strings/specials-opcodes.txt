@@ -45,8 +45,8 @@ start-talk
 quest
 swap-buf
 sign-buf
-
-
+journal
+forget-towns
 once-give-item
 once-give-spec-item
 once
@@ -105,8 +105,8 @@ party-status
 create-pc
 store-pc
 unstore-pc
-
-
+hp-percent
+take-magic
 
 
 
@@ -158,10 +158,10 @@ if-num-response
 if-boat
 if-horse
 if-quest
-
-
-
-
+if-town-visible
+if-entry-dir
+if-creature
+if-near
 
 
 
@@ -202,8 +202,8 @@ spell-pat-field
 spell-pat-boom
 relocate
 label
-
-
+town-creature
+copy-ter
 
 
 
