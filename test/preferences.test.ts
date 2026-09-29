@@ -39,7 +39,7 @@ function click(dlg: ModalScreen, name: string): string | null {
 const base: Preferences = {
   playSounds: true, gameSpeed: 1, targetLock: true, showInstantHelp: true,
   autosave: DEFAULT_AUTOSAVE_PREFS, easyMode: false, lessWm: false,
-  displayMode: DisplayMode.CENTRE, uiScale: 2,
+  displayMode: DisplayMode.CENTRE, uiScale: 2, fixBugs: false,
 };
 
 describe('the preferences dialog', () => {
@@ -61,6 +61,21 @@ describe('the preferences dialog', () => {
     expect(out).toMatchObject({
       gameSpeed: 3, playSounds: false, showInstantHelp: false, easyMode: true, lessWm: false,
     });
+  });
+
+  it('offers "Fix known bugs" in the save-browser row the browser never shows', async () => {
+    const out = await preferencesDialog(fakeCtx(), new SheetStore(), base, {
+      resetHelp: () => {},
+      nest: async (screen) => {
+        const d = screen as XmlDialog;
+        expect(d.isVisible('fancypicker')).toBe(true);
+        expect(d.getText('fancypicker')).toBe('Fix known bugs in the original games');
+        expect(d.getLed('fancypicker')).toBe('off');
+        expect(click(d, 'fancypicker')).toBeNull();
+        return click(d, 'okay')!;
+      },
+    });
+    expect(out?.fixBugs).toBe(true);
   });
 
   it('Cancel keeps nothing', async () => {

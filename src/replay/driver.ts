@@ -19,6 +19,7 @@
  *     milestone `TODO` markers.
  */
 
+import { setBugFixes } from '../game/bugFixes';
 import { Direction, dist, Location } from '../core/location';
 import { ItemPreset, presetItem } from '../data/item';
 import { DamageType } from '../data/monster';
@@ -161,6 +162,9 @@ export async function runReplay(
   // the defaults alone. Installed per run, so one replay cannot leak its set
   // into the next.
   setFeatureFlags(replay.featureFlags ?? {});
+  // Recordings are made against the originals' bugs, so the "Fix known bugs"
+  // preference never reaches one (`game/bugFixes.ts`).
+  setBugFixes(false);
   // **Scripting on, answered from the recording.** The host pulls from this
   // same source, which is how the C++'s modal dialogs behave: `cDialog::run`
   // pops actions off the stream the outer handler is walking, so a message

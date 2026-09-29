@@ -83,6 +83,8 @@ export interface ScriptSource {
   scenString?: (s: string) => number;
   /** The engine's number for E3's horse `k` (`vehicleNumbers`). */
   horse?: (k: number) => number;
+  /** The engine's number for E3's boat `k`. */
+  boat?: (k: number) => number;
   /** The NUL-terminated string at `seg:off` in the EXE (a Ghidra address). */
   exeString?: (seg: number, off: number) => string;
   /**
@@ -720,6 +722,19 @@ export class SpecBuilder {
   }
 
   /**
+   * Known bug `n` (`E3-SUSPECTED-BUGS.md`): `fixed` under the "Fix known
+   * bugs" preference, else `original`, as E3 shipped. The engine's
+   * `if-fixed` is an exile-js opcode (`SpecType.IF_FIXED`).
+   */
+  ifFixed(n: number, fixed: Step[], original: Step[]): Step {
+    return (next) => {
+      const yes = this.seq(fixed)(next);
+      const no = this.seq(original)(next);
+      return this.node('if-fixed', { ex1: [n, yes] }, no);
+    };
+  }
+
+  /**
    * `if (FUN_1080_0000(party, (x, y)) < limit)`: the party — in combat, the
    * acting PC — is nearer than `limit`. The engine's `if-near` is an
    * exile-js opcode (`SpecType.IF_NEAR`).
@@ -1070,6 +1085,13 @@ export class SpecBuilder {
     const n = this.src.horse?.(k) ?? k;
     if (n < 0) throw new Error(`E3 horse ${k} is not placed anywhere`);
     return (next) => this.node('change-horse', { ex1: [n], ex2: [1] }, next);
+  }
+
+  /** E3's boat `k` becomes the party's (its `property` byte cleared). */
+  giveBoat(k: number): Step {
+    const n = this.src.boat?.(k) ?? k;
+    if (n < 0) throw new Error(`E3 boat ${k} is not placed anywhere`);
+    return (next) => this.node('change-boat', { ex1: [n], ex2: [1] }, next);
   }
 
   /**

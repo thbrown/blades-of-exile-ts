@@ -41,6 +41,8 @@ export interface Preferences {
   displayMode: number;
   /** `UIScale`: 1, 1.5, 2, 3, 4, or `UI_SCALE_FIT`. */
   uiScale: number;
+  /** `FixBugs`, an exile-js preference: play the known bugs fixed (`game/bugFixes.ts`). */
+  fixBugs: boolean;
   /**
    * Exile III's "Show room descriptions more than once" (its dialog 1099,
    * LED 24), a party setting too; undefined where the scenario has no such
@@ -54,6 +56,12 @@ export interface Preferences {
  * browser has no use for and never shows, so no other row moves.
  */
 const ROOM_DESCRIPTIONS_LED = 'skipsplash';
+
+/**
+ * The row "Fix known bugs" takes: "Use in-game save file browser", which the
+ * browser has no use for and never shows.
+ */
+const FIX_BUGS_LED = 'fancypicker';
 
 /** The pace each speed sets; Medium is the pace the game ships at. */
 export const GAME_SPEED_PACE = [0.6, 1, 1.5, 2.2];
@@ -71,7 +79,7 @@ const DESKTOP_BLOCK = [
 const HIDDEN = [
   'scalemap-head', 'scalemap',
   'keyshift-head', 'keyshift-options', 'target-adjacent', 'screen-shift', 'keyshift-note',
-  'fancypicker', 'skipsplash',
+  'skipsplash',
 ];
 const TRIGGERS: AutosaveReason[] = [
   'RestComplete', 'TownWaitComplete', 'Eat', 'EnterTown', 'ExitTown', 'EndOutdoorCombat',
@@ -135,6 +143,7 @@ export async function preferencesDialog(
     if (!(roomDescs && name === ROOM_DESCRIPTIONS_LED)) dlg.hide(name);
   }
   if (roomDescs) dlg.setText(ROOM_DESCRIPTIONS_LED, 'Show room descriptions more than once');
+  dlg.setText(FIX_BUGS_LED, 'Fix known bugs in the original games');
   if (!compact) {
     dlg.setText('other', 'Fit');
     // OBoE's "Small Window (not full screen)" is about an OS window.
@@ -154,6 +163,7 @@ export async function preferencesDialog(
   dlg.setLed('easier', on(prefs.easyMode));
   dlg.setLed('lesswm', on(prefs.lessWm));
   dlg.setLed('nohelp', on(!prefs.showInstantHelp));
+  dlg.setLed(FIX_BUGS_LED, on(prefs.fixBugs));
   if (roomDescs) dlg.setLed(ROOM_DESCRIPTIONS_LED, on(prefs.roomDescriptions!));
   // A group keeps one lit: clicking the lit speed again mustn't turn it off.
   for (const id of SPEED_LEDS) dlg.attachHandler(id, (me) => { me.setLed(id, 'red'); return 'stay'; });
@@ -181,6 +191,7 @@ export async function preferencesDialog(
     lessWm: lit('lesswm'),
     displayMode: compact ? prefs.displayMode : Math.max(0, DISPLAY_LEDS.findIndex(lit)),
     uiScale: compact ? prefs.uiScale : (UI_SCALES[SCALE_LEDS.findIndex(lit)] ?? UI_SCALE_FIT),
+    fixBugs: lit(FIX_BUGS_LED),
     ...(roomDescs ? { roomDescriptions: lit(ROOM_DESCRIPTIONS_LED) } : {}),
   };
 }

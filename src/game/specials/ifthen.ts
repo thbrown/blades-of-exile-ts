@@ -7,6 +7,7 @@
  * 1 is >, 2 is >=.
  */
 
+import { bugFixed } from '../bugFixes';
 import { FieldType } from '../../data/fields';
 import { ItemType } from '../../data/item';
 import { SpecType } from '../../data/special';
@@ -480,6 +481,10 @@ export async function ifThenSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       if (Math.trunc(Math.sqrt(dx * dx + dy * dy)) < spec.ex1c) ctx.nextSpec = spec.ex2a;
       break;
     }
+
+    case SpecType.IF_FIXED:
+      if (bugFixed(spec.ex1a)) ctx.nextSpec = spec.ex1b;
+      break;
 
     case SpecType.IF_QUEST: {
       if (spec.ex1a < 0 || spec.ex1a >= univ.scenario.quests.length) {

@@ -185,6 +185,13 @@ export enum SpecType {
    * them (DIVERGENCES.md #27).
    */
   IF_NEAR = 164,
+  /**
+   * An exile-js opcode, not in BoE or OBoE: jump to `ex1b` if known bug
+   * `ex1a` plays fixed (`game/bugFixes.ts`, the "Fix known bugs"
+   * preference). The converter writes both versions of a suspected bug in
+   * Exile III's scripts behind one.
+   */
+  IF_FIXED = 165,
 
   MAKE_TOWN_HOSTILE = 170,
   TOWN_RUN_MISSILE = 171,

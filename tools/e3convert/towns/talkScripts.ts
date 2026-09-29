@@ -315,9 +315,9 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
   // byte of the first saved town's creatures, and never frees the boat (E3's
   // boat 2, New Cotra's), so the party pays and cannot board it
   // (E3-SUSPECTED-BUGS.md #8). GOINTZ_SOLD stands in for that byte, read as
-  // not yet zero.
+  // not yet zero. Under "Fix known bugs" the sale frees the boat.
   [116, (b) => [b.ifFlagEq(GOINTZ_SOLD, 1, [b.reply(0x3a)], [
-    b.ifGold(500, [b.reply(0x39), b.takeGold(500), b.setFlag(GOINTZ_SOLD, 1)], [b.reply(0x38)]),
+    b.ifGold(500, [b.reply(0x39), b.takeGold(500), b.setFlag(GOINTZ_SOLD, 1), b.ifFixed(8, [b.giveBoat(2)], [])], [b.reply(0x38)]),
   ])]],
   // Crisper pays 300 gold for the ice pudding (zone 88's spot 5 flag).
   [117, (b) => [b.ifFlagAtLeast(f(0xbc9), 1, [
@@ -414,9 +414,10 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
   ])])]],
   // Masok sells the map to Black Halberd (item 0x1f made readable with
   // 0xb3, `notes.ts`) for 2000 gold. E3 sets the reply to 0xb1 and then to
-  // 0xb2 over it, so 0xb1 is never shown (E3-SUSPECTED-BUGS.md #9).
+  // 0xb2 over it, so 0xb1 is never shown (E3-SUSPECTED-BUGS.md #9); both,
+  // under "Fix known bugs".
   [149, (b) => [b.ifFlagEq(f(0x64b), 1, [b.reply(0xb4)], [
-    b.ifGold(2000, [b.takeGold(2000), b.reply(0xb2), b.giveItem(b.note(31, 0xb3)), b.setFlag(f(0x64b), 1)], [b.reply(0xb3)]),
+    b.ifGold(2000, [b.takeGold(2000), b.ifFixed(9, [b.reply(0xb1, 0xb2)], [b.reply(0xb2)]), b.giveItem(b.note(31, 0xb3)), b.setFlag(f(0x64b), 1)], [b.reply(0xb3)]),
   ])]],
   // Shirley buys trade goods (type flag 103) at 50 gold each.
   [150, (b) => [

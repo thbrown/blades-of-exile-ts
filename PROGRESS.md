@@ -14552,9 +14552,44 @@ the rest of the TODO(E3-3) list.
           argument the decompiler dropped — that is how Micah's Gloves
           turned up.
 
+### "Fix known bugs" (2026-09-29)
+
+At the user's word: a preference, **Preferences › "Fix known bugs in the
+original games"** (pref `FixBugs`, off by default), in the row OBoE's "Use
+in-game save file browser" had, which the browser never showed. With it on,
+each suspected bug in `src/game/bugFixes.ts`'s `KNOWN_BUGS` plays as it was
+probably meant, **unless the user has ruled it `legit`**; the user rules each
+one and the ruling is recorded there. It is a module switch rather than a
+session field so a loaded game keeps it; `main.ts` sets it, and **`runReplay`
+clears it**, since recordings are made against the bugs.
+
+- **`if-fixed`** (165, `SpecType.IF_FIXED`), an exile-js opcode: jump to
+  `ex1b` if bug `ex1a` plays fixed. The converter's `SpecBuilder.ifFixed(n,
+  fixed, original)` writes both versions; E3's scripts are converted once, so
+  the choice has to be made at run time.
+- **Wired**: E3-SUSPECTED-BUGS #1 (Mage Lore), #2 (the tablet's own text, checked
+  in the converted scenario), #3, #6 (agreeing to fight sets the welcome),
+  #7 (the ferry's 10 gold), #8 (the sale frees boat 2: new `giveBoat`),
+  #9 (both halves of Masok's reply), #10 (entrance-mark spots on the camp's
+  towers that refuse the step; `EntranceMark.steps`), #11 (the Airy Stone
+  weighs −20), and new #12 (E3's inverted Nimble Fingers test in poisoning
+  and lock picking). `test/e3convert.test.ts` checks every `if-fixed` in the
+  converted scenario names a wired bug and that every wired one is there.
+- **Not wired**: #4 (zone 10's block has no string to fix it to) and #5.
+- **Found on the way, a gap (not a bug)**: E3's conversation start
+  (`FUN_1020_1484`) has one-off rewards for personalities 0x10c, 0x151,
+  0x142, 0x143, 0x2f, 0x162 and 0x174 (`1020:14bf`–`1020:16ee`), such as
+  Baziron (0x162) taking the Dervish's scroll (special item at party+0x6e)
+  with dialog 0x1217, then `FUN_10b0_1ff2(5)` (not yet identified) and 200 added to the dword at party+4 (probably gold). Only Seles's and
+  Anaximander's personality swaps and the job deliveries are ported
+  (`towns/talkStart.ts`, `e3Jobs.ts`). #5's fix belongs in Baziron's.
+
 All checks pass (2026-09-29, after the Skribbane Herb): 1,462 tests, both
 sweeps, verify-screen (with TOUCH), verify-party and verify-e3. (Corpus not
 re-run: the herb's tick does nothing without the `skribbane` flag, so no
 BoE scenario draws differently.) **No TODO(E3-3) is left.** **Next session
 starts here**: TODO(M9) (5), TODO(campaign) (4) and TODO(M8) (1) — which
 may need the user's ruling — and DIVERGENCES #30, open for the user.
+**Superseded, same day**: see "Fix known bugs" just above. Next: port the
+talk-start rewards (`FUN_1020_1484`, the gap above), then wire #5; the user
+is ruling on the known bugs.

@@ -3,6 +3,7 @@
  * the classic 605x430 screen.
  */
 
+import { setBugFixes } from './game/bugFixes';
 import { animAt, animSchedule, combatPace, setCombatPace } from './game/anim';
 import { useItem } from './game/itemUse';
 import { dropItemAt, handleDropItem, handleGiveItem } from './game/giveDrop';
@@ -788,6 +789,7 @@ async function main(): Promise<void> {
       setCombatPace(GAME_SPEED_PACE[getIntPref('GameSpeed', 1)] ?? 1);
     }
     setTargetLockPref(getBoolPref('TargetLock', true));
+    setBugFixes(getBoolPref('FixBugs', false));
     const reasons = Object.keys(AUTOSAVE_TRIGGER_DEFAULTS);
     setAutosavePrefs(readAutosavePrefs(reasons, AUTOSAVE_TRIGGER_DEFAULTS, MAX_AUTOSAVE_DEFAULT));
   };
@@ -806,6 +808,7 @@ async function main(): Promise<void> {
       lessWm: univ.party.lessWm,
       displayMode: getIntPref('DisplayMode', DisplayMode.CENTRE),
       uiScale: getFloatPref('UIScale', DEFAULT_UI_SCALE),
+      fixBugs: getBoolPref('FixBugs', false),
       // Exile III's party+0xc7b, kept where it keeps it (tools/e3convert, specials.ts).
       ...(univ.scenario.featureFlags['room-descriptions'] === 'exile3'
         ? { roomDescriptions: univ.party.getSdf(306, 3) !== 0 } : {}),
@@ -818,6 +821,7 @@ async function main(): Promise<void> {
       setPref('GameSpeed', next.gameSpeed);
       setPref('TargetLock', next.targetLock);
       setPref('ShowInstantHelp', next.showInstantHelp);
+      setPref('FixBugs', next.fixBugs);
       setPref('Autosave', next.autosave.enabled);
       setPref('Autosave_Max', next.autosave.max);
       for (const [reason, on] of Object.entries(next.autosave.triggers)) {

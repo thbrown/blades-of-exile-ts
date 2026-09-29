@@ -6,7 +6,7 @@
  * A zone's message block is `zone / 10 + 80`.
  */
 
-import type { PlaceScript } from '../specials';
+import type { EntranceMark, PlaceScript } from '../specials';
 import { partyFlag as f, partySpecItem, zoneSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
 import { Race, Skill, Trait } from '../../../src/universe/skills';
 import { E3ShopType } from '../shops';
@@ -53,6 +53,17 @@ function zone0(b: SpecBuilder): Map<number, Step[]> {
   ]);
 }
 
+/**
+ * The Third Empire Army's camp in zone 4: its four towers are exits to town
+ * 0, Krizsan, and a gap in the fence lets the party step onto one
+ * (E3-SUSPECTED-BUGS.md #10). Under "Fix known bugs" a tower refuses the
+ * step, as scenery would; otherwise the party walks into Krizsan, as in E3.
+ */
+export const ARMY_CAMP_TOWERS: EntranceMark[] = [[25, 19], [27, 19], [25, 21], [27, 21]].map(([x, y]) => ({
+  zone: 4, loc: { x: x!, y: y! }, flag: [0, 0], value: 0,
+  steps: (b) => [b.ifFixed(10, [b.blockMove()], [])],
+}));
+
 /** Zone 1 (1,0): the valley of the stone circle, whose pull is stronger once `f(0xb41)` reaches 4. */
 function zone1(b: SpecBuilder): Map<number, Step[]> {
   const Z = 1, B = block(Z), spot = (id: number) => zoneSpotFlag(Z, id);
@@ -64,9 +75,11 @@ function zone1(b: SpecBuilder): Map<number, Step[]> {
     [1, pull(1, 0x23, 0x22)],
     [2, pull(2, 0x25, 0x24)],
     // The whispering turns the party back. E3 marks the spot only once slot 9
-    // is set, which is the other way round from its neighbours; kept
-    // (E3-SUSPECTED-BUGS.md #3).
-    [3, [b.ifFlagEq(spot(9), 0, [b.ifFlagAtLeast(f(0xb41), 4, [b.msg(B, 0x26), b.blockMove()])], [b.setFlag(spot(3), 20)])]],
+    // is set, which is the other way round from its neighbours; kept, and
+    // marked as they are under "Fix known bugs" (E3-SUSPECTED-BUGS.md #3).
+    [3, [b.ifFixed(3,
+      [b.ifFlagEq(spot(9), 0, [b.ifFlagAtLeast(f(0xb41), 4, [b.msg(B, 0x26), b.blockMove()]), b.setFlag(spot(3), 20)])],
+      [b.ifFlagEq(spot(9), 0, [b.ifFlagAtLeast(f(0xb41), 4, [b.msg(B, 0x26), b.blockMove()])], [b.setFlag(spot(3), 20)])])]],
     [4, pull(4, 0x28, 0x27)],
   ]);
 }
@@ -119,20 +132,21 @@ function zone4(b: SpecBuilder): Map<number, Step[]> {
 /** Zone 5 (5,0): Vilovsky's temple, and the northern herbs. */
 function zone5(b: SpecBuilder): Map<number, Step[]> {
   const Z = 5, B = block(Z), spot = (id: number) => zoneSpotFlag(Z, id);
+  /** A coin flip's rise in `skill` for a PC with 1 to 6 in it. */
+  const lore = (skill: Skill): Step[] =>
+    [b.ifStat(skill, 1, [b.ifStat(skill, 7, [], [b.ifCoinFlip([b.addStat(skill, 1)])])])];
   return new Map<number, Step[]>([
     // The temple never lets the party onto its square. Anama rings (flag
     // (4,0) at 3) shut its gates; a second visit is only a welcome; the
     // first costs 5,000 gold for two priest spells and, for each PC with the
     // skill from 1 to 6, a coin flip's rise in Alchemy (skill 12, +0x2e) —
-    // which the message calls Mage Lore (E3-SUSPECTED-BUGS.md #1). E3 flips
-    // `get_ran(1, 0, 1)`.
+    // which the message calls Mage Lore (E3-SUSPECTED-BUGS.md #1; Mage Lore
+    // under "Fix known bugs"). E3 flips `get_ran(1, 0, 1)`.
     [1, [b.askDialog(0x13ba, [
       b.ifFlagEq(f(0xac), 3, [b.msg(B, 9)], [
         b.ifFlagAtLeast(spot(1), 1, [b.msg(B, 7)], [b.askDialog(0x13bb, [b.pay(5000, [
           b.msg(B, 5, 6), b.teachSpell(0x97), b.teachSpell(0x9d), b.setFlag(spot(1), 1),
-          b.eachPc(() => [b.ifStat(Skill.ALCHEMY, 1, [b.ifStat(Skill.ALCHEMY, 7, [], [
-            b.ifCoinFlip([b.addStat(Skill.ALCHEMY, 1)]),
-          ])])]),
+          b.ifFixed(1, [b.eachPc(() => lore(Skill.MAGE_LORE))], [b.eachPc(() => lore(Skill.ALCHEMY))]),
         ], [b.log(0x10a0, 0)])])]),
       ]),
     ]), b.blockMove()]],
@@ -974,13 +988,14 @@ function zone75(b: SpecBuilder): Map<number, Step[]> {
  * Zone 76 (4,8): the Nephilim village. Slot 9 is 2 once the party walks
  * away from their fight with the ursagi, after which only a party with a
  * Nephil gets in; 1 would be a welcome for having helped, but nothing sets
- * it (E3-SUSPECTED-BUGS.md #6).
+ * it (E3-SUSPECTED-BUGS.md #6). Under "Fix known bugs", agreeing to fight
+ * sets it.
  */
 function zone76(b: SpecBuilder): Map<number, Step[]> {
   const Z = 76, B = block(Z), spot = (id: number) => zoneSpotFlag(Z, id);
   const state = spot(9);
   const battle: Step[] = [b.blockMove(), b.askDialog(0x1683,
-    [b.msg(B, 0x4f), b.onceEncounter(spot(3), B, 0, 0, 1)],
+    [b.msg(B, 0x4f), b.ifFixed(6, [b.setFlag(state, 1)], []), b.onceEncounter(spot(3), B, 0, 0, 1)],
     [b.msg(B, 0x50), b.setFlag(state, 2)])];
   return new Map<number, Step[]>([
     [1, [herb(b, B, 0xc53, 0x54, 0x1680, 0x182)]],
@@ -1135,8 +1150,10 @@ function zone85(b: SpecBuilder): Map<number, Step[]> {
       [b.askDialog(0x16dc, [b.onceEncounter(spot(1), B, 0x44, 0x46, 1)])])]],
     [11, [b.blockMove(), b.askDialog(0x16da, [b.pay(10, [b.msg(B, 0x47), b.outMoveParty(0x26, 0x12)], [b.log(0x10a8, 0x299f)])])]],
     // The way back asks the same 10 gold and says it's paid, but takes
-    // nothing (E3-SUSPECTED-BUGS.md #7).
-    [12, [b.blockMove(), b.askDialog(0x16da, [b.msg(B, 0x47), b.outMoveParty(0x22, 0x15)])]],
+    // nothing (E3-SUSPECTED-BUGS.md #7); spot 11's toll under "Fix known bugs".
+    [12, [b.blockMove(), b.askDialog(0x16da, [b.ifFixed(7,
+      [b.pay(10, [b.msg(B, 0x47), b.outMoveParty(0x22, 0x15)], [b.log(0x10a8, 0x299f)])],
+      [b.msg(B, 0x47), b.outMoveParty(0x22, 0x15)])])]],
   ]);
 }
 

@@ -700,6 +700,11 @@ already takes 8 off for the clumsy. Everything else follows OBoE
 would move the corpus wherever a weapon is poisoned, a trap disarmed or a
 lock picked, so it wants a flag, like `pick-lock`, if it is wanted.
 
+*2026-09-29*: the "Fix known bugs" preference now covers Exile III's side
+(E3-SUSPECTED-BUGS #12): with it on, E3's poisons and lock picking help the
+nimble. BoE's side is unchanged; the open question is only whether a BoE
+scenario should ever get 1997's inverted test.
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

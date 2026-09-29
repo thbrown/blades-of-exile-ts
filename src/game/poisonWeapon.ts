@@ -7,6 +7,7 @@
  * is imported *by* `itemUse.ts`, so keeping it there made a cycle.
  */
 
+import { bugFixed } from './bugFixes';
 import { Item, ItemType } from '../data/item';
 import { Skill, Status, Trait } from '../universe/skills';
 import { Universe } from '../universe/universe';
@@ -58,7 +59,8 @@ export function poisonWeapon(
     univ.addStringToBuf('  You poison your weapon.');
     const lo = e3 ? 0 : 1;
     let r1 = univ.rng.getRan(1, lo, 100);
-    if (e3 ? !pc.traits[Trait.NIMBLE] : pc.traits[Trait.NIMBLE]) r1 -= 6;
+    // Known bug 12 (E3-SUSPECTED-BUGS.md): E3's inverted test, OBoE's under "Fix known bugs".
+    if (e3 && !bugFixed(12) ? !pc.traits[Trait.NIMBLE] : pc.traits[Trait.NIMBLE]) r1 -= 6;
     const skill = POISON_CHANCE[pc.skill(Skill.POISON)] ?? 100;
     if (r1 > skill && !safe) {
       univ.addStringToBuf('  Poison put on badly.');

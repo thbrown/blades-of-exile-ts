@@ -5,6 +5,7 @@
  * cItem::item_weight (item.cpp:99).
  */
 
+import { bugFixed } from '../game/bugFixes';
 import { makeJob } from '../data/quest';
 import { Item, ItemAbil, ItemType, defaultItem } from '../data/item';
 import { ItemCat, variety } from '../data/itemVariety';
@@ -99,7 +100,8 @@ const E3_LODESTONE = 129;
  *   byte is set to −20 (`0xec`). **E3 reads that byte unsigned**
  *   (`item_weight`, `1070:094b`: `mov dh, 0`), so the stone weighs 236 once
  *   taken, and with its code gone `cur_weight`'s −30 never applies to it.
- *   Kept; E3-SUSPECTED-BUGS.md #11.
+ *   Kept; E3-SUSPECTED-BUGS.md #11. Under "Fix known bugs" the byte is
+ *   read signed, so the stone weighs −20, as E3 meant.
  *
  * The weight is +0x13 of E3's 63-byte item, where `1068:0886` copies the
  * table's +17 (FORMATS.md). Items with any other code are untouched.
@@ -116,7 +118,7 @@ function e3Taken(pc: Player, slot: number): void {
     pc.equip[slot] = true;
   } else if (item.e3Ability === E3_AIRY_STONE) {
     item.e3Ability = 0;
-    item.weight = 0xec;
+    item.weight = bugFixed(11) ? -20 : 0xec;
     item.ident = true;
   }
 }

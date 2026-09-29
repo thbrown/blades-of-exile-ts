@@ -49,6 +49,7 @@ import { castleTroglo } from './towns/castleTroglo';
 import { cavesOfGiants } from './towns/cavesOfGiants';
 import { level1Timers, shiftingFloors } from './towns/shiftingFloors';
 import { DUNGEON_SCRIPTS, WOLF_PIT_ENTRANCES, agateTimers } from './towns/dungeons';
+import { ARMY_CAMP_TOWERS } from './towns/zones';
 import { DUNGEON2_SCRIPTS } from './towns/dungeons2';
 import { VILLAGE_SCRIPTS } from './towns/villages';
 import { newCotra } from './towns/newCotra';
@@ -789,6 +790,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   const strings = readStringTable(resources);
   const vehicles = readE3Vehicles(files.exe);
   const horseNumber = vehicleNumbers(vehicles.horses);
+  const boatNumber = vehicleNumbers(vehicles.boats);
   // The scenario's own node builder, made below; `scenString` reaches it
   // from the town scripts.
   let scen: SpecBuilder | null = null;
@@ -799,6 +801,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
       return scen.text(text);
     },
     horse: (k) => horseNumber[k] ?? -1,
+    boat: (k) => boatNumber[k] ?? -1,
     stampedItem: (item, ability) => {
       const k = stampedIndex(item, ability);
       if (k < 0) throw new Error(`no stamped item ${item} with ability ${ability}: add it to notes.ts's SCRIPT_STAMPS`);
@@ -960,7 +963,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     const base = `out/out${i % E3_ZONES_WIDE}~${Math.floor(i / E3_ZONES_WIDE)}`;
     const spots = z.specialLocs.map((loc, k) => ({ loc, id: z.specialId[k] ?? 0 }));
     // The converter's own spots on town entrances (`EntranceMark`).
-    const marks = [...FORT_ENTRANCES, ...WOLF_PIT_ENTRANCES].filter((e) => e.zone === i);
+    const marks = [...FORT_ENTRANCES, ...WOLF_PIT_ENTRANCES, ...ARMY_CAMP_TOWERS].filter((e) => e.zone === i);
     const own = ZONE_SCRIPTS.get(i);
     marks.forEach((m, k) => spots.push({ loc: m.loc, id: ENTRANCE_MARK_SPOT + k }));
     // The groups in `sectorXml`'s order: special encounters, then wandering.
@@ -976,7 +979,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
       },
     };
     const script = e3SpotScript(spots, { zone: i }, zoneSrc, (x, y) => z.terrain[x]?.[y] ?? 0, !marks.length ? own
-      : (b) => new Map([...own?.(b) ?? [], ...marks.map((m, k): [number, Step[]] => [ENTRANCE_MARK_SPOT + k, [b.setFlag(m.flag, m.value)]])]),
+      : (b) => new Map([...own?.(b) ?? [], ...marks.map((m, k): [number, Step[]] => [ENTRANCE_MARK_SPOT + k, m.steps?.(b) ?? [b.setFlag(m.flag, m.value)]])]),
     undefined, undefined, groupScripts);
     write(`${base}.xml`, sectorXml(z, i, strings, script));
     write(`${base}.map`, sectorMap(z, i, strings, script));

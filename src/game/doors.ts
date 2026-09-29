@@ -7,6 +7,7 @@
  * stay exactly where the C++ makes them even when the result is unused.
  */
 
+import { bugFixed } from './bugFixes';
 import { Location } from '../core/location';
 import { ItemAbil } from '../data/item';
 import { TerSpec } from '../data/terrain';
@@ -72,7 +73,8 @@ export function pickLock(
     const willBreak = univ.rng.getRan(1, 0, 100) + level * 15 < 55;
     let r = univ.rng.getRan(1, 0, 100) - 5 * pc.statAdj(Skill.DEXTERITY) + town.record.difficulty
       - 5 * (pc.skills[Skill.LOCKPICKING] ?? 0) - level * 15;
-    if (!pc.traits[Trait.NIMBLE]) r -= 8;
+    // Known bug 12 (E3-SUSPECTED-BUGS.md): the nimble are the ones helped, under "Fix known bugs".
+    if (bugFixed(12) ? pc.traits[Trait.NIMBLE] : !pc.traits[Trait.NIMBLE]) r -= 8;
     const thief = hasAbilEquip(pc, ItemAbil.THIEVING);
     if (thief && thief.slot < 16) r -= 12;
     return pickResult(univ, where, terrain, pc, picks.slot, unlockAdjust >= 5 || r > 35, willBreak, sound);

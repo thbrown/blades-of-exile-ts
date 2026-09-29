@@ -1,13 +1,20 @@
 # Suspected bugs in Exile III, kept
 
 The port reproduces Exile III as it shipped, bugs included (see `CLAUDE.md`,
-"Faithful port"). This file lists what looks wrong in the original, so it can
-be revisited later, perhaps as an opt-in "fixed" mode. Each entry says where
-the port keeps the behaviour, what E3 does, what it probably meant, and how
-sure we are.
+"Faithful port"). This file lists what looks wrong in the original. Each entry
+says where the port keeps the behaviour, what E3 does, what it probably meant,
+and how sure we are.
 
-Add an entry whenever a transcription keeps something odd, and leave a
-comment at the site pointing here. Bugs in the Blades of Exile *engine* (the
+**Preferences › "Fix known bugs in the original games"** (2026-09-29) plays
+the "probably meant" column instead. Each number here is its number in
+`src/game/bugFixes.ts` (`KNOWN_BUGS`), which also records the user's ruling:
+`bug` or `undecided` are fixed under the preference, `legit` never is.
+Converted scripts branch on the `if-fixed` opcode; engine code calls
+`bugFixed(n)`. Replays always play the bugs. Not wired: #4 (nothing to fix
+it to) and #5 (its fix belongs in Baziron's reward, which isn't ported yet).
+
+Add an entry whenever a transcription keeps something odd, leave a comment at
+the site pointing here, and add it to `KNOWN_BUGS`. Bugs in the Blades of Exile *engine* (the
 C++) are logged in `PROGRESS.md` and `DIVERGENCES.md`, not here.
 
 | # | Where | What E3 does | Probably meant | Confidence |
@@ -23,3 +30,4 @@ C++) are logged in `PROGRESS.md` and `DIVERGENCES.md`, not here.
 | 9 | Masok, talk script 149 (`towns/talkScripts.ts`) | After the sale it sets the reply to string 0xb1 ("you pay Masok the hefty sum… He hands you a very old looking piece of parchment") and at once to 0xb2 over it (`mov si, 0xb1; mov si, 0xb2` at `1020:40cd`), so the first half is never shown. | 0xb1 as the reply and 0xb2 as its second part, as the other scripts pair them | High |
 | 10 | Zone 4 (4,0), the Third Empire Army's camp (`OUTDOOR.DAT`, zone 4's exits 1–4) | The camp's four towers, (25,19), (27,19), (25,21) and (27,21), are zone exits to town 0, Krizsan, half the world away. E3's entry loop (`1010:21a7`) compares the square with each exit and has no test for an empty one, and the camp's fence has a gap, so stepping onto a tower enters Krizsan. The port does the same. Two other exits to town 0 (zones 27 and 47) sit in huts behind a spot that blocks. | No exits there: the towers are scenery, and 0 is the editor's default | Medium: unused slots elsewhere are (0,0), so these were placed |
 | 11 | Taking the Airy Stone (`src/universe/inventory.ts`, `e3Taken`; E3's `give_to_pc`, `1070:01d1`) | Sets the stone's weight byte (+0x13) to −20 (`0xec`) and clears its code 117. `item_weight` (`1070:094b`) reads the byte unsigned, so the stone weighs 236 once taken, and with the code gone `cur_weight`'s −30 for 117 (`1070:08aa`) never applies to it. A PC who picks one up is suddenly carrying a boulder. | A light stone: weight −20 read signed, or the −30 kept by leaving the code alone | High for the arithmetic; the item's name says what was meant |
+| 12 | Poisoning a weapon (`src/game/poisonWeapon.ts`, `10b0:30f4`) and picking a lock (`src/game/doors.ts`, `pick-lock` = `exile3`) | Takes 6 (poison) or 8 (lock) off the roll for a PC **without** Nimble Fingers, so the nimble do worse. 1997 has the same test; OBoE inverted it, and the port's BoE path follows OBoE (DIVERGENCES #30). | Help the nimble | High: the trait's whole point |

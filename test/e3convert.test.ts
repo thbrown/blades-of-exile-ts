@@ -15,7 +15,8 @@ import { Attitude, DamageType, MonstTime } from '../src/data/monster';
 import { MonstAbil } from '../src/data/monsterAbility';
 import { ShopItemType, ShopPrompt } from '../src/data/shop';
 import { TalkNodeType } from '../src/data/talking';
-import { SpecType } from '../src/data/special';
+import { SpecType, type SpecialNode } from '../src/data/special';
+import { KNOWN_BUGS } from '../src/game/bugFixes';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
@@ -1095,6 +1096,19 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     } finally {
       kept.forEach((col, x) => { village.terrain[x] = col; });
     }
+  });
+
+  it('writes every wired known bug behind if-fixed, and nothing else', () => {
+    const named = new Set<number>();
+    const scan = (nodes: Map<number, SpecialNode>) => {
+      for (const n of nodes.values()) if (n.type === SpecType.IF_FIXED) named.add(n.ex1a);
+    };
+    scan(scen.scenSpecials);
+    for (const t of scen.towns) scan(t.specials);
+    for (const row of scen.outdoors) for (const o of row) scan(o.specials);
+    const wired = Object.entries(KNOWN_BUGS).filter(([n, b]) => Number(n) < 100 && !b.unwired && Number(n) !== 11 && Number(n) !== 12);
+    // 11 and 12 are the engine's (the Airy Stone, and E3's nimble test).
+    expect([...named].sort((a, b) => a - b)).toEqual(wired.map(([n]) => Number(n)));
   });
 
   it('has all 200 towns, their maps sized by record number', () => {

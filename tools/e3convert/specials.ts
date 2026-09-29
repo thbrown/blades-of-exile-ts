@@ -80,12 +80,15 @@ export type PlaceScript = (b: SpecBuilder) => Map<number, Step[]>;
  * in by. Outdoor specials run before the town-entrance check
  * (`session.ts`, `outdMoveParty`), so the flag is set by the time the town's
  * scripts can read it.
+ *
+ * A mark with `steps` runs those instead, and its flag and value go unused.
  */
 export interface EntranceMark {
   zone: number;
   loc: { x: number; y: number };
   flag: Flag;
   value: number;
+  steps?: (b: SpecBuilder) => Step[];
 }
 
 /**
