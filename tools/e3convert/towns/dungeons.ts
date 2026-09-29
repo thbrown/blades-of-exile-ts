@@ -155,6 +155,15 @@ function banditHideout(b: SpecBuilder): Map<number, Step[]> {
 }
 
 /** The Agate Tower (town 46), the slime maker Jordan's: `FUN_1088_0c28`, block 60. */
+/** The Agate Tower's slime maker is gone: flag (46, 9), party+0x259. */
+const AGATE_GONE = f(0x259);
+
+/** Its clock (`10c0:62b9`): while it stands, it breathes sleep over the 9×9 around it on a party within 8. */
+export function agateTimers(b: SpecBuilder): { freq: number; steps: Step[] }[] {
+  return [{ freq: 1, steps: [b.ifFlagEq(AGATE_GONE, 0, [b.ifNear(24, 41, 9,
+    [b.placeFieldRect(20, 37, 28, 45, FieldType.CLOUD_SLEEP)])])] }];
+}
+
 function agateTower(b: SpecBuilder): Map<number, Step[]> {
   const B = 60, spot = (id: number) => townSpotFlag(46, id);
   const up = (x: number, y: number): Step[] => [b.askDialog(0xd7f, [b.changeTown(0x5a, x, y)]), b.blockMove()];
@@ -171,7 +180,12 @@ function agateTower(b: SpecBuilder): Map<number, Step[]> {
     [11, [b.dialog(0xd85), b.townVisible(22)]],
     [12, [b.log(0x1088, 0xc21), b.setTer(0xd, 0x21, 100)]],
     [14, up(0xd, 0xc)], [15, up(0x10, 0xf)], [16, up(0x10, 0x13)], [17, up(0x18, 0x1d)],
-    [21, []],
+    // The slime maker at (24,41): an exploding missile ends it (`1018:9aa1`),
+    // and the slimes of four kinds (138–141) with it (`FUN_10d8_3d5b`).
+    [21, [b.ifTargeted([b.ifFlagEq(AGATE_GONE, 0, [
+      b.dialog(0xd88), b.setFlag(AGATE_GONE, 1), ...[138, 139, 140, 141].map((k) => b.removeCreatures(k)),
+      b.setTer(24, 41, 0),
+    ])])]],
     [20, [b.askDialog(0xd87, [b.ifLevelTotal(8, [b.msg(B, 0x6b), b.teachSpell(0x1a)], [b.msg(B, 0x6a)])])]],
   ]);
 }

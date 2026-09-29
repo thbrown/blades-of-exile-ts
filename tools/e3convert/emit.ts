@@ -40,13 +40,13 @@ import { lorelei } from './towns/lorelei';
 import { gale } from './towns/gale';
 import { townEntryScript } from './towns/entry';
 import { HOSTILE_SCRIPTS } from './towns/hostile';
-import { slimePit } from './towns/slimePit';
+import { POOL_SPOT, SLIME_POOLS, level2Timers, slimePit } from './towns/slimePit';
 import { towerOfMagi } from './towns/towerOfMagi';
 import { filthFactory } from './towns/filthFactory';
 import { castleTroglo } from './towns/castleTroglo';
 import { cavesOfGiants } from './towns/cavesOfGiants';
 import { level1Timers, shiftingFloors } from './towns/shiftingFloors';
-import { DUNGEON_SCRIPTS, WOLF_PIT_ENTRANCES } from './towns/dungeons';
+import { DUNGEON_SCRIPTS, WOLF_PIT_ENTRANCES, agateTimers } from './towns/dungeons';
 import { DUNGEON2_SCRIPTS } from './towns/dungeons2';
 import { VILLAGE_SCRIPTS } from './towns/villages';
 import { newCotra } from './towns/newCotra';
@@ -68,7 +68,7 @@ const BLOCKAGE = ['none', 'sight', 'monsters', 'move', 'move-and-shoot', 'move-a
 const LIGHTING = ['lit', 'dark', 'drains', 'none'];
 
 /** Towns with a clock of their own (`TimerScript`). */
-const TIMER_SCRIPTS = new Map([[32, level1Timers]]);
+const TIMER_SCRIPTS = new Map([[32, level1Timers], [23, level2Timers], [46, agateTimers]]);
 /** Town entrance markers for `start_locs[0..3]` (`loadTownMapData`). */
 const ENTRANCE_MARK = ['v', '<', '^', '>'];
 
@@ -707,6 +707,7 @@ function scenarioXml(
         <message-sounds>exile3</message-sounds>
         <bash>exile3</bash>
         <room-descriptions>exile3</room-descriptions>
+        <explode-spots>exile3</explode-spots>
         <pick-lock>exile3</pick-lock>
         <dungeon-sound>${E3_DUNGEON_SOUND}</dungeon-sound>
         <cursors>${cursors.map((c) => `${c.name}:${c.hotspot.x}:${c.hotspot.y}`).join(',')}</cursors>
@@ -981,7 +982,16 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     // entrance is: E3 decides by the party's zone column.
     const underground = villageZone.get(t.number) !== undefined && villageZone.get(t.number)! % E3_ZONES_WIDE >= 7;
     const terrain = townTer255(t.number, t.village ? buildE3Village(template, t.village, underground, t.number) : t.terrain);
-    const spots = t.specialLocs.map((loc, k) => ({ loc, id: t.specId[k] ?? 255 }));
+    let spots = t.specialLocs.map((loc, k) => ({ loc, id: t.specId[k] ?? 255 }));
+    // The Slime Pit's pools are spots of their own (`towns/slimePit.ts`), in
+    // place of the spot 0 two of them had, which does nothing.
+    // Replaced in place, and the rest added after, so no other spot's index
+    // (which names its once-only flag, `e3SpotFlag`) moves.
+    if (t.number === 23) {
+      const pool = (l: { x: number; y: number }) => SLIME_POOLS.findIndex(([x, y]) => l.x === x && l.y === y);
+      spots = spots.map((s) => (pool(s.loc) >= 0 ? { ...s, id: POOL_SPOT + pool(s.loc) } : s));
+      spots.push(...SLIME_POOLS.flatMap(([x, y], i) => (spots.some((s) => s.id === POOL_SPOT + i) ? [] : [{ loc: { x, y }, id: POOL_SPOT + i }])));
+    }
     const creatures = townCreatures(t);
     const entry = townEntryScript(t.number, new Set(creatures.map((c) => c.number)),
       creatures.filter((c) => c.number >= 138 && c.number <= 141).map((c) => c.startLoc), t.entryMsg, t.deadMsg);

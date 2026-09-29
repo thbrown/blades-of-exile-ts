@@ -177,6 +177,14 @@ export enum SpecType {
    * creatures' records directly (DIVERGENCES.md #21).
    */
   IF_CREATURE = 163,
+  /**
+   * An exile-js opcode, not in BoE or OBoE: jump to `ex2a` if the party — in
+   * combat, the acting PC — is less than `ex1c` from (`ex1a`, `ex1b`), by
+   * Exile III's measure (`FUN_1080_0000`: the whole part of the straight
+   * line). Its slime pools and the Agate Tower breathe sleep on a party near
+   * them (DIVERGENCES.md #27).
+   */
+  IF_NEAR = 164,
 
   MAKE_TOWN_HOSTILE = 170,
   TOWN_RUN_MISSILE = 171,

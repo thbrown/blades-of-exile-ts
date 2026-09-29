@@ -411,6 +411,37 @@ describe('if-then nodes', () => {
       else univ.scenario.featureFlags['message-sounds'] = was;
     }
   });
+  it('branches on the party being near a square (IF_NEAR)', async () => {
+    const { univ, run } = withNodes({
+      0: { type: SpecType.IF_NEAR, ex1a: 0, ex1b: 0, ex1c: 9, ex2a: 10, jumpto: -1 },
+      10: { type: SpecType.SET_SDF, sd1: 15, sd2: 2, ex1a: 1 },
+    });
+    const at = univ.party.townLoc;
+    const near = async (dx: number, dy: number) => {
+      univ.party.setSdf(15, 2, 0);
+      univ.town!.record.specials.get(0)!.ex1a = at.x + dx;
+      univ.town!.record.specials.get(0)!.ex1b = at.y + dy;
+      await run();
+      return univ.party.getSdf(15, 2) === 1;
+    };
+    // √80 is 8.9, which counts as 8; √81 is 9.
+    expect([await near(8, 4), await near(9, 0), await near(6, 6), await near(7, 6)]).toEqual([true, false, true, false]);
+  });
+
+  it("answers only its own spell in IF_CONTEXT's TARGET arm (boe.specials.cpp:3832)", async () => {
+    const { univ, session } = withNodes({
+      0: { type: SpecType.IF_CONTEXT, ex1a: SpecCtx.TARGET, ex1b: 7, ex1c: 10, jumpto: -1 },
+      10: { type: SpecType.SET_SDF, sd1: 15, sd2: 3, ex1a: 1 },
+    });
+    const answered = async (spell: number) => {
+      univ.party.setSdf(15, 3, 0);
+      session.spellOnSpace = spell;
+      await session.runSpecialRaw(SpecCtx.TARGET, SpecCtxType.TOWN, 0, { x: 5, y: 5 });
+      return univ.party.getSdf(15, 3) === 1;
+    };
+    expect([await answered(8), await answered(7)]).toEqual([false, true]);
+  });
+
   it('forgets the four remembered towns (FORGET_TOWNS)', async () => {
     const { univ, run } = withNodes({ 0: { type: SpecType.FORGET_TOWNS } });
     univ.party.creatureSave.forEach((pop, i) => { pop.whichTown = i + 3; });

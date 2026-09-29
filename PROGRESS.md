@@ -14376,6 +14376,13 @@ the rest of the TODO(E3-3) list.
       - [x] **Horses follow a declining town** (DIVERGENCES #26):
         `<town-flag span="4" rehome="horses">`, port-only attributes; E3's
         loader moves horses from all four records and never a boat.
+      - [x] **The slime pools and the Agate Tower** (DIVERGENCES #27). The
+        old TODO had them spawning slimes; E3 actually has them breathe
+        sleep clouds (`FUN_1038_0f0e` is 1997's `make_sleep_cloud`) over a
+        party within 8, each turn, until an exploding missile (Exploding
+        Arrows, Iron Razordisks: E3 ability 92) lands on them. `if-near`
+        (164), `explode-spots` = `exile3`, and IF_CONTEXT's TARGET spell
+        test restored (a port gap).
 
 All checks pass: 1,420 tests, both sweeps, verify-screen (with TOUCH)/party
 (this round). Before it: 1,419 tests, both sweeps, verify-screen (with TOUCH)/party

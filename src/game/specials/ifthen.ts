@@ -399,6 +399,9 @@ export async function ifThenSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
               univ.addStringToBuf("Can't go here while in town mode.");
             else univ.addStringToBuf("Can't go here during combat.");
           }
+        } else if (ctx.whichMode === SpecCtx.TARGET && spec.ex1b >= 0) {
+          // Only the one spell (boe.specials.cpp:3832), in town or in combat.
+          if (ctx.session.spellOnSpace !== spec.ex1b) break;
         }
         ctx.nextSpec = spec.ex1c;
       }
@@ -467,6 +470,14 @@ export async function ifThenSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
         : spec.ex2a === 2 ? (monst?.specEncCode ?? 0) > 0
           : monst !== undefined && monst.isAlive && (spec.ex2a !== 1 || monst.attitude === spec.ex2b);
       if (pass) ctx.nextSpec = spec.ex1b;
+      break;
+    }
+
+    case SpecType.IF_NEAR: {
+      // DIVERGENCES.md #27.
+      const at = isCombat(ctx.session.mode) ? univ.currentPc.combatPos : univ.party.townLoc;
+      const dx = at.x - spec.ex1a, dy = at.y - spec.ex1b;
+      if (Math.trunc(Math.sqrt(dx * dx + dy * dy)) < spec.ex1c) ctx.nextSpec = spec.ex2a;
       break;
     }
 

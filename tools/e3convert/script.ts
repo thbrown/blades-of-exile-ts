@@ -710,6 +710,29 @@ export class SpecBuilder {
     return (next) => this.node('town-creature', { ex1: [slot, code, value], ex2: [attitude === undefined ? 0 : attitude + 1] }, next);
   }
 
+  /**
+   * `if (FUN_1080_0000(party, (x, y)) < limit)`: the party — in combat, the
+   * acting PC — is nearer than `limit`. The engine's `if-near` is an
+   * exile-js opcode (`SpecType.IF_NEAR`).
+   */
+  ifNear(x: number, y: number, limit: number, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-near', { ex1: [x, y, limit], ex2: [yes] }, no);
+    };
+  }
+
+  /**
+   * A spot's answer to a blast landing on it (`1018:9a2b`): IF_CONTEXT's
+   * TARGET arm, which a spell cast on the square runs, and under the
+   * `explode-spots` flag an exploding missile too. It must be the spot's
+   * first step, as the engine asks only a spot whose first node is one.
+   */
+  ifTargeted(then: Step[]): Step {
+    return (next) => this.node('if-context', { ex1: [16, -1, this.seq(then)(next)] }, next);
+  }
+
   /** `if (entry_dir < 9)`: the party walked in, rather than a script putting it here. */
   ifWalkedIn(then: Step[]): Step {
     return this.ifEntryDir(0, 8, then);

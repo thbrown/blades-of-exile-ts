@@ -2,13 +2,42 @@
  * The Slime Pit (towns 22 and 23, two levels): `FUN_1078_155e` and
  * `FUN_1078_19df`. Message block 56 for both.
  *
- * TODO(E3-3): level 2's five slime pools (terrain 255 at DGROUP 0x37de's
- * squares) are destroyed by fire spells aimed at them (`FUN_1018_9a2b`,
- * flags 0x14c–0x150) and spawn slimes near a party within 8 squares
- * (`FUN_10c0_61c4`). Neither has a BoE node.
+ * Level 2's five slime pools (terrain 255 at DGROUP 0x37de's squares) breathe
+ * sleep over the 7×7 around them each turn a party is within 8 (`10c0:6325`,
+ * `make_sleep_cloud`), and an exploding missile landing on one destroys it
+ * (`1018:9bb5`: flags 0x14c–0x150; the last clears spot 3's wall, flag
+ * 0x16d). No BoE node reads a missile or a distance: `explode-spots` and
+ * `if-near` (DIVERGENCES.md #27) do. The pools are spots of their own,
+ * `POOL_SPOT` on (`emit.ts`), where two of them had E3's spot 0, which does
+ * nothing.
  */
 
+import { FieldType } from '../../../src/data/fields';
 import { partyFlag as f, partySpecItem, townSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
+
+/** Level 2's pools (DGROUP 0x37de). */
+export const SLIME_POOLS: [number, number][] = [[13, 2], [11, 19], [34, 22], [46, 15], [46, 7]];
+/** The spot ids the pools take, one each (E3's own go up to 26). */
+export const POOL_SPOT = 80;
+const poolGone = (i: number): Flag => f(0x14c + i);
+
+/** Each pool's spot: an exploding missile destroys it (`1018:9bb5`). */
+function poolSteps(b: SpecBuilder, i: number): Step[] {
+  const [x, y] = SLIME_POOLS[i]!;
+  const others = SLIME_POOLS.map((_, k) => k).filter((k) => k !== i);
+  const lastOne = others.reduceRight<Step[]>((inner, k) => [b.ifFlagEq(poolGone(k), 1, inner, [b.dialog(0xca6)])],
+    [b.dialog(0xca7), b.setFlag(f(0x16d), 20)]);
+  return [b.ifTargeted([b.ifFlagEq(poolGone(i), 0, [...lastOne, b.setFlag(poolGone(i), 1), b.setTer(x, y, 0)])])];
+}
+
+/** Level 2's clock: every turn, each pool still there breathes sleep on a party within 8. */
+export function level2Timers(b: SpecBuilder): { freq: number; steps: Step[] }[] {
+  return [{
+    freq: 1,
+    steps: SLIME_POOLS.map(([x, y], i) => b.ifFlagEq(poolGone(i), 0, [b.ifNear(x, y, 9,
+      [b.placeFieldRect(x - 3, y - 3, x + 3, y + 3, FieldType.CLOUD_SLEEP)])])),
+  }];
+}
 
 const BLOCK = 56;
 /** Which pedestal button was pressed last, 0–4 (`FUN_1008_4251`); `towns/entry.ts` reads it. */
@@ -76,6 +105,7 @@ export function slimePit(town: number) {
       [11, [b.dialog(0xca2), b.giveSpecItem(partySpecItem(0x40))]],
       [21, stair(0xc9e, 22, 3, 0x3c)], [22, stair(0xc9e, 22, 6, 0x37)], [23, stair(0xc9e, 22, 0x1f, 0x35)],
       [24, stair(0xc9e, 22, 0x1f, 0x3a)], [25, stair(0xc9e, 22, 0x32, 0x17)], [26, stair(0xc9e, 22, 0x3a, 1)],
+      ...SLIME_POOLS.map((_, i): [number, Step[]] => [POOL_SPOT + i, poolSteps(b, i)]),
     ]);
   };
 }

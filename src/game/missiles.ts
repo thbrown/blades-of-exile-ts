@@ -20,6 +20,7 @@ import { Universe } from '../universe/universe';
 import { MonstAbil } from '../data/monsterAbility';
 import { runAMissile } from './missileAnim';
 import { SpellPat } from '../data/pattern';
+import { Spell } from '../data/spell';
 import { placeSpellPattern } from './spellPatterns';
 import { takeAp } from './combat';
 import { onHitItemAbility, onHitTargetSpecial } from './weaponAbilities';
@@ -320,6 +321,11 @@ export async function fireMissile(
       await animSettle();
       await handleMarkedDamage(univ, session);
     }
+    // **`explode-spots` = `exile3`**, a scenario's flag: the square the blast
+    // lands on hears it as it would a spell (`castSpellOnSpace`, with no
+    // spell), as Exile III's slime pools and Agate Tower do (`1018:9a2b`,
+    // DIVERGENCES.md #27). OBoE's exploding missiles tell no square.
+    if (univ.scenario.featureFlags['explode-spots'] === 'exile3') await session.castSpellOnSpace(aim, Spell.NONE);
     return;
   }
 

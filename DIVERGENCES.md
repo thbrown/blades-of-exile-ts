@@ -605,6 +605,23 @@ in any of a declining town's four records, and never a boat.
 `rehome="horses"` leaves the boats alone. A scenario without them behaves as
 OBoE's; OBoE itself ignores attributes it doesn't know.
 
+### 27. A blast that lands on a square, and a party near one (2026-09-28)
+
+**DECIDED: a scenario flag, `explode-spots` = `exile3`, and an exile-js
+opcode, `if-near` (164).** Exile III's slime pools (town 23) and the Agate
+Tower's slime maker (town 46) are destroyed by an exploding missile landing on
+them (`1018:9a2b`), and each turn they stand they breathe sleep over the
+squares around a party within 8 (`10c0:6325`). OBoE lets a square answer a
+*spell* (`cast_spell_on_space`, an IF_CONTEXT node in the TARGET context) but
+not a missile, and no node measures distance. Under the flag an exploding
+missile asks its square as a spell with no spell would; `if-near` jumps when
+the party (the acting PC in combat) is nearer than `ex1c` by E3's measure,
+the whole part of the straight line.
+
+**Found on the way, a port gap:** OBoE's IF_CONTEXT, in the TARGET context,
+passes only for the spell in `ex1b` when it isn't -1 (boe.specials.cpp:3832);
+this port had dropped the test. It is back.
+
 ---
 
 ## Agreements worth recording

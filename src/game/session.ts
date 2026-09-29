@@ -2203,12 +2203,16 @@ export class GameSession {
    *
    * Returns whether the spell should carry on.
    */
+  /** The spell `castSpellOnSpace` last asked a square about, for IF_CONTEXT's TARGET arm. */
+  spellOnSpace: number = Spell.NONE;
+
   async castSpellOnSpace(where: Location, spell: Spell): Promise<boolean> {
     const town = this.univ.town;
     if (!town) return true;
     for (const spot of town.record.specialLocs) {
       if (spot.x !== where.x || spot.y !== where.y) continue;
       if (town.record.specials.get(spot.spec)?.type !== SpecType.IF_CONTEXT) return true;
+      this.spellOnSpace = spell;
       const r = await this.runSpecialRaw(SpecCtx.TARGET, SpecCtxType.TOWN, spot.spec, where);
       // The C++'s `s1` starts at **0** and the chain may never touch it; this
       // port's `retA` starts at -1 for the same "nobody said" case, so both

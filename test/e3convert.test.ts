@@ -42,6 +42,8 @@ import {
 import { readE3JobTables } from '../tools/e3convert/jobs';
 import { GENERATORS } from '../tools/e3convert/towns/shiftingFloors';
 import { e3DayCount, e3TownState } from '../tools/e3convert/flags';
+import { FieldType } from '../src/data/fields';
+import { Spell } from '../src/data/spell';
 import { specialIncreaseAge } from '../src/game/specialIncreaseAge';
 import { loadSave, saveGame } from '../src/fileio/saveIo';
 import { SpecCtx, SpecCtxType } from '../src/game/specials/context';
@@ -677,6 +679,29 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
       expect(shown).not.toBe(hidden);
     } finally {
       scen.towns[26]!.canFind = false;
+    }
+  });
+
+  it('lets an exploding missile end a slime pool, which breathes sleep until then', async () => {
+    const pit = scen.towns[23]!;
+    const kept = pit.terrain.map((col) => [...col]);
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    session.attachSpecials(new Proxy({}, { get: () => () => Promise.resolve(0) }) as never);
+    const univ = session.univ;
+    const settle = async () => { while (session.specials!.busy) await new Promise((r) => setTimeout(r, 0)); };
+    try {
+      session.startTownMode(23, FORCED_ENTRY, true);
+      univ.party.townLoc = { x: 34, y: 26 };
+      univ.party.age++;
+      specialIncreaseAge(session, 1);
+      await settle();
+      expect(univ.town!.hasField(34, 22, FieldType.CLOUD_SLEEP)).toBe(true);
+      expect(await session.castSpellOnSpace({ x: 34, y: 22 }, Spell.NONE)).toBe(true);
+      await settle();
+      expect(univ.party.getSdf(...partyFlag(0x14e))).toBe(1);
+      expect(pit.terrain[34]![22]).toBe(0);
+    } finally {
+      kept.forEach((col, x) => { pit.terrain[x] = col; });
     }
   });
 
