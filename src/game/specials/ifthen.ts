@@ -463,8 +463,9 @@ export async function ifThenSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       // Exile III reads its creatures' records directly (DIVERGENCES.md #21).
       // A slot out of range is "not here", as a slot of the dead is.
       const monst = univ.town?.monsters[spec.ex1a];
-      const pass = spec.ex2a === 2 ? (monst?.specEncCode ?? 0) > 0
-        : monst !== undefined && monst.isAlive && (spec.ex2a !== 1 || monst.attitude === spec.ex2b);
+      const pass = spec.ex2a === 3 ? (univ.town?.monsters.filter((m) => m.isAlive).length ?? 0) < spec.ex2b
+        : spec.ex2a === 2 ? (monst?.specEncCode ?? 0) > 0
+          : monst !== undefined && monst.isAlive && (spec.ex2a !== 1 || monst.attitude === spec.ex2b);
       if (pass) ctx.nextSpec = spec.ex1b;
       break;
     }

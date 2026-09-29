@@ -32,11 +32,11 @@ export function lorelei(_town: number) {
       [7, once(f(0x103), [b.msg(BLOCK, 0xf), b.bringIn(0xc9, 1)])],
       // A dead soldier's greatsword; afterwards, only the body.
       [8, [b.ifFlagEq(f(0x104), 0, [b.giveItemDialog(0xc33, f(0x104), 0x42)], [b.log(0x1078, 0x526)])]],
-      // Hawke's Manse: locked, until the party holds the deed.
-      // TODO(E3-3): in combat E3 says "Can't enter manse while in combat."
-      // (1078:053e); the engine's stair refuses with its own words.
-      [11, [b.ifSpecItem(MANSE_DEED, [b.askDialog(0xc32, [b.changeTown(0x66, 0x1a, 0x10)])], [b.msg(BLOCK, 1, 2)]),
-        b.blockMove()]],
+      // Hawke's Manse: locked, until the party holds the deed; in combat,
+      // "Can't enter manse while in combat." (1078:071a, asked first).
+      [11, [b.ifInCombat([b.log(0x1078, 0x53e)], [
+        b.ifSpecItem(MANSE_DEED, [b.askDialog(0xc32, [b.changeTown(0x66, 0x1a, 0x10)])], [b.msg(BLOCK, 1, 2)]),
+      ]), b.blockMove()]],
       // The Anama temple lets in members only.
       [12, [b.ifSpecItem(ANAMA_RINGS, [b.msg(BLOCK, 4)], [b.msg(BLOCK, 3), b.blockMove()])]],
       [14, [b.dialog(0xc34)]],

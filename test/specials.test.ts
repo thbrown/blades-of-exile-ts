@@ -59,8 +59,12 @@ class TestHost implements SpecialHost {
   textAnswers: string[] = [];
   pcAnswer = 0;
 
-  async message(str1: string, str2: string, title: string): Promise<void> {
+  messageSounds: (number | undefined)[] = [];
+  async message(
+    str1: string, str2: string, title: string, _pic?: number, _picType?: number, _record?: unknown, sound?: number,
+  ): Promise<void> {
     this.messages.push({ str1, str2, title });
+    this.messageSounds.push(sound);
   }
 
   async choice(strs: string[], buttons: ChoiceButton[]): Promise<number> {
@@ -392,6 +396,20 @@ describe('if-then nodes', () => {
     });
     await run();
     expect(univ.party.getSdf(14, 0)).toBe(1);
+  });
+  it("plays a message's own sound under message-sounds = exile3, and 57 otherwise", async () => {
+    const { univ, host, run } = withNodes({ 0: { type: SpecType.DISPLAY_MSG, m1: 0, ex2c: 54 } });
+    const was = univ.scenario.featureFlags['message-sounds'];
+    try {
+      delete univ.scenario.featureFlags['message-sounds'];
+      await run();
+      univ.scenario.featureFlags['message-sounds'] = 'exile3';
+      await run();
+      expect(host.messageSounds).toEqual([57, 54]);
+    } finally {
+      if (was === undefined) delete univ.scenario.featureFlags['message-sounds'];
+      else univ.scenario.featureFlags['message-sounds'] = was;
+    }
   });
   it('branches on a town showing on the map (IF_TOWN_VISIBLE)', async () => {
     const { univ, run } = withNodes({
@@ -2194,16 +2212,19 @@ describe('a node that names a creature by its slot', () => {
       4: { type: SpecType.IF_CREATURE, ex1a: 2, ex1b: 10, ex2a: 2, jumpto: -1 },
       5: { type: SpecType.IF_CREATURE, ex1a: 1, ex1b: 10, ex2a: 2, jumpto: -1 },
       6: { type: SpecType.IF_CREATURE, ex1a: 99, ex1b: 10, ex2a: 0, jumpto: -1 },
+      // Fewer than 2 here (one is), then fewer than 1.
+      7: { type: SpecType.IF_CREATURE, ex1a: 0, ex1b: 10, ex2a: 3, ex2b: 2, jumpto: -1 },
+      8: { type: SpecType.IF_CREATURE, ex1a: 0, ex1b: 10, ex2a: 3, ex2b: 1, jumpto: -1 },
       10: { type: SpecType.SET_SDF, sd1: 15, sd2: 1, ex1a: 1 },
     });
     town3(univ);
     const passes: boolean[] = [];
-    for (let n = 0; n <= 6; n++) {
+    for (let n = 0; n <= 8; n++) {
       univ.party.setSdf(15, 1, 0);
       await run(n);
       passes.push(univ.party.getSdf(15, 1) === 1);
     }
-    expect(passes).toEqual([true, false, true, false, true, false, false]);
+    expect(passes).toEqual([true, false, true, false, true, false, false, true, false]);
   });
 
   it('wakes, sets health, removes, and removes as dead — only those here', async () => {

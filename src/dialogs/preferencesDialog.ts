@@ -41,7 +41,19 @@ export interface Preferences {
   displayMode: number;
   /** `UIScale`: 1, 1.5, 2, 3, 4, or `UI_SCALE_FIT`. */
   uiScale: number;
+  /**
+   * Exile III's "Show room descriptions more than once" (its dialog 1099,
+   * LED 24), a party setting too; undefined where the scenario has no such
+   * thing, and the row is left out.
+   */
+  roomDescriptions?: boolean;
 }
+
+/**
+ * The row the room descriptions take: "Skip splash screen", which the
+ * browser has no use for and never shows, so no other row moves.
+ */
+const ROOM_DESCRIPTIONS_LED = 'skipsplash';
 
 /** The pace each speed sets; Medium is the pace the game ships at. */
 export const GAME_SPEED_PACE = [0.6, 1, 1.5, 2.2];
@@ -79,7 +91,7 @@ export interface PreferencesHost {
  * on the View menu as well, so they can always be reached. Built fresh each
  * time from the shared definition, which is left alone.
  */
-function browserPreferencesDef(ctx: CanvasRenderingContext2D, compact: boolean): DialogDef {
+function browserPreferencesDef(ctx: CanvasRenderingContext2D, compact: boolean, roomDescs: boolean): DialogDef {
   const def = getDialogDef('preferences');
   // Laid out for good before copying: the copy leaves controls out, and the
   // ones placed relative to their predecessor would anchor on the wrong one
@@ -90,6 +102,7 @@ function browserPreferencesDef(ctx: CanvasRenderingContext2D, compact: boolean):
   // The minimap group's LEDs are named '1', '2'… like the UI group's, so
   // it has to leave the definition, not just be hidden, or the names clash.
   const drop = new Set(compact ? [...HIDDEN, ...DESKTOP_BLOCK] : HIDDEN);
+  if (roomDescs) drop.delete(ROOM_DESCRIPTIONS_LED);
   const moved = (c: DialogControl): DialogControl => {
     const r = c.rect;
     const rect = r.top >= top + cut ? { ...r, top: r.top - cut, bottom: r.bottom - cut } : r;
@@ -114,10 +127,14 @@ function browserPreferencesDef(ctx: CanvasRenderingContext2D, compact: boolean):
 export async function preferencesDialog(
   ctx: CanvasRenderingContext2D, store: SheetStore, prefs: Preferences, host: PreferencesHost,
 ): Promise<Preferences | null> {
-  let dlg = new XmlDialog(ctx, store, browserPreferencesDef(ctx, false));
+  const roomDescs = prefs.roomDescriptions !== undefined;
+  let dlg = new XmlDialog(ctx, store, browserPreferencesDef(ctx, false, roomDescs));
   const compact = dlg.frame.bottom - dlg.frame.top > desktop.h;
-  if (compact) dlg = new XmlDialog(ctx, store, browserPreferencesDef(ctx, true));
-  for (const name of compact ? [...HIDDEN, ...DESKTOP_BLOCK] : HIDDEN) dlg.hide(name);
+  if (compact) dlg = new XmlDialog(ctx, store, browserPreferencesDef(ctx, true, roomDescs));
+  for (const name of compact ? [...HIDDEN, ...DESKTOP_BLOCK] : HIDDEN) {
+    if (!(roomDescs && name === ROOM_DESCRIPTIONS_LED)) dlg.hide(name);
+  }
+  if (roomDescs) dlg.setText(ROOM_DESCRIPTIONS_LED, 'Show room descriptions more than once');
   if (!compact) {
     dlg.setText('other', 'Fit');
     // OBoE's "Small Window (not full screen)" is about an OS window.
@@ -137,6 +154,7 @@ export async function preferencesDialog(
   dlg.setLed('easier', on(prefs.easyMode));
   dlg.setLed('lesswm', on(prefs.lessWm));
   dlg.setLed('nohelp', on(!prefs.showInstantHelp));
+  if (roomDescs) dlg.setLed(ROOM_DESCRIPTIONS_LED, on(prefs.roomDescriptions!));
   // A group keeps one lit: clicking the lit speed again mustn't turn it off.
   for (const id of SPEED_LEDS) dlg.attachHandler(id, (me) => { me.setLed(id, 'red'); return 'stay'; });
 
@@ -163,6 +181,7 @@ export async function preferencesDialog(
     lessWm: lit('lesswm'),
     displayMode: compact ? prefs.displayMode : Math.max(0, DISPLAY_LEDS.findIndex(lit)),
     uiScale: compact ? prefs.uiScale : (UI_SCALES[SCALE_LEDS.findIndex(lit)] ?? UI_SCALE_FIT),
+    ...(roomDescs ? { roomDescriptions: lit(ROOM_DESCRIPTIONS_LED) } : {}),
   };
 }
 

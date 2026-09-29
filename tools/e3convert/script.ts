@@ -202,18 +202,21 @@ export class SpecBuilder {
    * picture 8 (`0x2c4`) for these, and Anaximander's sprite (`0x1af`) for
    * his reports, block 14 (`FUN_1008_386f`). A few scripts call the dialog
    * directly with a picture of their own, and pass it. The engine shows it
-   * under the `message-pics` flag.
+   * under the `message-pics` flag. The routine's last argument is a sound,
+   * 57 but for a handful, which the engine plays under `message-sounds`.
    */
-  msg(block: number, a: number, b = 0, pic = msgPic(block)): Step {
+  msg(block: number, a: number, b = 0, pic = msgPic(block), sound = 57): Step {
     return (next) => this.node('disp-msg', {
       msg: [this.e3(block, a), b > 0 ? this.e3(block, b) : -1], pic: this.src.dialogPic?.(pic),
+      ex2: [-1, -1, sound === 57 ? -1 : sound],
     }, next);
   }
 
   /** `FUN_10e0_0044`: the same, once, marked by `flag` — through `FUN_1008_3812`, so picture 8. */
-  onceMsg(flag: Flag, block: number, a: number, b = 0): Step {
+  onceMsg(flag: Flag, block: number, a: number, b = 0, sound = 57): Step {
     return (next) => this.node('once-disp-msg', {
       sdf: flag, msg: [this.e3(block, a), b > 0 ? this.e3(block, b) : -1], pic: this.src.dialogPic?.(msgPic(block)),
+      ex2: [-1, -1, sound === 57 ? -1 : sound],
     }, next);
   }
 
@@ -677,14 +680,19 @@ export class SpecBuilder {
   /**
    * A test of creature `slot`'s record (+0 `active`, +2 attitude, stride
    * 0x5c from 1160:1427): `here` it is present (`active > 0`), `attitude`
-   * present with `attitude`, `waiting` its group not yet brought in. The
+   * present with `attitude`, `waiting` its group not yet brought in, and
+   * `fewerThan` — any slot — the town has fewer than that many present. The
    * engine's `if-creature` is an exile-js opcode (`SpecType.IF_CREATURE`).
    */
-  ifCreature(slot: number, test: 'here' | 'waiting' | { attitude: number }, then: Step[], otherwise: Step[] = []): Step {
+  ifCreature(
+    slot: number, test: 'here' | 'waiting' | { attitude: number } | { fewerThan: number },
+    then: Step[], otherwise: Step[] = [],
+  ): Step {
     return (next) => {
       const yes = this.seq(then)(next);
       const no = this.seq(otherwise)(next);
-      const ex2: [number, number?] = test === 'here' ? [0] : test === 'waiting' ? [2] : [1, test.attitude];
+      const ex2: [number, number?] = test === 'here' ? [0] : test === 'waiting' ? [2]
+        : 'attitude' in test ? [1, test.attitude] : [3, test.fewerThan];
       return this.node('if-creature', { ex1: [slot, yes], ex2 }, no);
     };
   }

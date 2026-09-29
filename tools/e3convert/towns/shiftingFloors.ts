@@ -61,15 +61,16 @@ const GOLEMS = [159, 160, 161, 162, 163];
  * which fills the first free creature slot of 60). If it found a slot, the
  * party hears "You hear a distant clang.". The engine runs it as a town
  * `<timer>` that repeats (the `town-timers` flag, `specialIncreaseAge.ts`),
- * which fires on the same ticks.
- *
- * TODO(E3-3): E3 stops at 60 creatures and says nothing then; the engine's
- * town has no limit, so the golems keep coming and the clang keeps sounding.
+ * which fires on the same ticks. With all 60 slots taken E3 places nothing
+ * and says nothing; the engine's town has no limit, so the step asks how
+ * many are here first.
  */
 export function level1Timers(b: SpecBuilder): { freq: number; steps: Step[] }[] {
   const make = ({ flag, x, y }: (typeof GENERATORS)[number]): Step[] => [b.ifFlagEq(flag, 0, [
-    b.randomCase(GOLEMS.length, GOLEMS.map((kind) => [b.placeMonster(x, y - 1, kind)])),
-    b.log(0x10c0, 0x6171),
+    // The kind is rolled first, as E3 passes it in; the slot is looked for after.
+    b.randomCase(GOLEMS.length, GOLEMS.map((kind) => [b.ifCreature(0, { fewerThan: 60 }, [
+      b.placeMonster(x, y - 1, kind), b.log(0x10c0, 0x6171),
+    ])])),
   ])];
   return [{ freq: 8, steps: [b.randomCase(GENERATORS.length, GENERATORS.map(make))] }];
 }

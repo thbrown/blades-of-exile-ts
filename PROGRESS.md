@@ -14338,6 +14338,18 @@ the rest of the TODO(E3-3) list.
         (`overrideStrings`, a blank line keeps the game's); E3's block 10 is
         its `help`, by the same numbers, and the job board raises 51 first
         as E3 does.
+      - [x] **Small ones.** *The arena's wall count* is 1997's `count_walls`
+        in E3 too (`FUN_1010_8771`, DS:0618 = terrains 5–35): closed, no
+        change. *Room descriptions*: flag (306, 3) is E3's "Show room
+        descriptions more than once" (dialog 1099's LED 24 — 1997 stores it
+        and never reads it); under `room-descriptions` = `exile3` the
+        preferences dialog offers it in the row "Skip splash screen" leaves,
+        and the converter's one-shot messages repeat while it is set.
+        *Message sounds*: E3's message routines take a sound; under
+        `message-sounds` = `exile3` a DISPLAY_MSG's `ex2c` names it (54, 66
+        twice, 18 so far). *Lorelei's manse* says "Can't enter manse while in
+        combat." *The Shifting Floors' golems* stop at 60 creatures
+        (`if-creature` test 3, "fewer than N here").
 
 All checks pass: 1,420 tests, both sweeps, verify-screen (with TOUCH)/party
 (this round). Before it: 1,419 tests, both sweeps, verify-screen (with TOUCH)/party

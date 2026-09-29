@@ -22,7 +22,11 @@
  * own (`spotFlag`).
  *
  * E3 plays sound 57 with each message, as the engine's message box does.
- * TODO(E3-3): E3 never erases a spot while flag (306, 3) is set.
+ *
+ * E3 never erases a spot while flag (306, 3) is set: the preference "Show
+ * room descriptions more than once" (dialog 1099's LED 24; 1997 stores it
+ * there too and never reads it). The engine keeps it there as well, under
+ * the `room-descriptions` = `exile3` flag (`ROOM_DESCRIPTIONS`).
  */
 
 import { BASIC_BUTTONS } from '../../src/game/specials/oneshot';
@@ -30,6 +34,9 @@ import { e3SpotFlag } from './flags';
 import { MSG_PIC, SpecBuilder, townSpotFlag, zoneSpotFlag, type Flag, type ScriptSource, type Step } from './script';
 
 export interface E3Spot { loc: { x: number; y: number }; id: number }
+
+/** Flag (306, 3): "Show room descriptions more than once" (party+0xc7b). */
+export const ROOM_DESCRIPTIONS: Flag = [306, 3];
 
 export interface SpotScript {
   /** The `.spec` file. */
@@ -175,9 +182,14 @@ export function e3SpotScript(
       // E3 shows these through `FUN_1008_37de`/`3812` (`FUN_10c0_0000`), so
       // with their dialog picture 8.
       const pic = src.dialogPic?.(MSG_PIC);
+      const once = e3SpotFlag(place, k);
       n = terrainAt(s.loc.x, s.loc.y) >= repeatsFrom
         ? b.node('disp-msg', { msg, pic }, -1)
-        : b.node('once-disp-msg', { sdf: e3SpotFlag(place, k), msg, pic }, -1);
+        // Once, unless room descriptions repeat — and then only while the
+        // spot is still there (a one-shot node leaves its flag at 250).
+        : b.compile([b.ifFlagEq(ROOM_DESCRIPTIONS, 0,
+          [(next) => b.node('once-disp-msg', { sdf: once, msg, pic }, next)],
+          [b.ifFlagEq(once, 250, [], [(next) => b.node('disp-msg', { msg, pic }, next)])])]);
     }
     // E3 runs a town spot only on a square the party could stand on, or on
     // one of four blocked terrains — water and three walls — which it runs

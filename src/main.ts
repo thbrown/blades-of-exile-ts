@@ -806,6 +806,9 @@ async function main(): Promise<void> {
       lessWm: univ.party.lessWm,
       displayMode: getIntPref('DisplayMode', DisplayMode.CENTRE),
       uiScale: getFloatPref('UIScale', DEFAULT_UI_SCALE),
+      // Exile III's party+0xc7b, kept where it keeps it (tools/e3convert, specials.ts).
+      ...(univ.scenario.featureFlags['room-descriptions'] === 'exile3'
+        ? { roomDescriptions: univ.party.getSdf(306, 3) !== 0 } : {}),
     }, {
       nest: (screen) => dialogs.runNested(screen),
       resetHelp: () => clearPref('ReceivedHelp'),
@@ -824,6 +827,7 @@ async function main(): Promise<void> {
       // (boe.dlgutil.cpp:1408).
       univ.party.easyMode = next.easyMode;
       univ.party.lessWm = next.lessWm;
+      if (next.roomDescriptions !== undefined) univ.party.setSdf(306, 3, next.roomDescriptions ? 1 : 0);
       applyPrefs();
       setDesktopPrefs(next.displayMode, next.uiScale);
     }
@@ -1256,14 +1260,14 @@ async function main(): Promise<void> {
    */
   session.onRedraw = () => redraw();
   const specialHost: SpecialHost = {
-    message: async (str1, str2, title, pic, picType, record) => {
+    message: async (str1, str2, title, pic, picType, record, snd = 57) => {
       // `cStrDlog` — the real message box: the node's picture at the top left,
       // one of the eight {1|2}str[-title][-lg] layouts, and a Record button
       // that puts the text in the party's encounter notes.
       // `display_strings.setSound(57)` — every message a special node puts up
       // announces itself. Only those carry a recorder, which is what tells the
       // two apart here.
-      if (record) sound.play(57);
+      if (record) sound.play(snd);
       await dialogs.runScreenQueued(strDialog(ctx, store, {
         str1,
         str2,

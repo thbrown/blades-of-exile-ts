@@ -58,7 +58,8 @@ function level1(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]>
   return new Map<number, Step[]>([
     [1, [b.askDialog(0x10a5, [b.msg(BLOCK, 0x19), b.setFlag(spot(1), 20), b.cureDiseaseAll()])]],
     // E3 adds 4 to every PC's disease outright.
-    [2, [b.msg(BLOCK, 0x1a), b.setFlag(spot(2), 20), b.diseaseAll(4)]],
+    // Sound 66, not the message's usual 57.
+    [2, [b.msg(BLOCK, 0x1a, 0, undefined, 66), b.setFlag(spot(2), 20), b.diseaseAll(4)]],
     [3, [b.onceMsg(spot(3), BLOCK, 0x1b, 0x1c)]],
     [4, [b.dialog(0x10a6), b.setFlag(spot(4), 20)]],
     [5, [b.onceMsg(spot(5), BLOCK, 0x27)]],
@@ -137,7 +138,7 @@ function level2(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]>
       b.ifFlagAtLeast(FILLED, 1, [b.msg(BLOCK, 0x6f)]),
     ], [b.msg(BLOCK, 0x71)])]],
     // The dissecting rune: 10d10 to everyone standing on it, when on.
-    [27, [b.ifFlagEq(RUNE, 0, [b.msg(BLOCK, 0x3a)], [b.msg(BLOCK, 0x3b), b.damageDice(10, 10, 0), b.blockMove()])]],
+    [27, [b.ifFlagEq(RUNE, 0, [b.msg(BLOCK, 0x3a)], [b.msg(BLOCK, 0x3b, 0, undefined, 18), b.damageDice(10, 10, 0), b.blockMove()])]],
   ]);
 }
 

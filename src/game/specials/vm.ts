@@ -373,7 +373,13 @@ export async function handleMessage(
     strs: [str1, str2].filter((s) => s.length > 0),
     where,
   };
-  await ctx.host.message(str1, str2, title, pic, picType, record);
+  // **`message-sounds` = `exile3`** is a scenario's flag too: a message node
+  // names its own sound in `ex2c`, which OBoE's DISPLAY_MSG never reads, as
+  // E3's message routines take one (`FUN_1008_37de`'s last argument, 57 but
+  // for a handful). Unset, it's 57 as always.
+  const ownSound = univ.scenario.featureFlags['message-sounds'] === 'exile3'
+    && (node.type === SpecType.DISPLAY_MSG || node.type === SpecType.ONCE_DISPLAY_MSG) && node.ex2c >= 0;
+  await ctx.host.message(str1, str2, title, pic, picType, record, ownSound ? node.ex2c : 57);
 }
 
 /** handle_message's eSpecCtxType → eEncNoteType mapping (:4629). */

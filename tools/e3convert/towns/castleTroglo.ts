@@ -51,7 +51,8 @@ function castle(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]>
   /** Into the cell (`FUN_10c0_46a4(0x36, 0x30, 1)`). */
   const toCell = (): Step[] => [b.moveParty(CELL.x, CELL.y)];
   return new Map<number, Step[]>([
-    [1, [b.askDialog(0xcd0, [b.msg(BLOCK, 0x3e), b.drainSpAll()])]],
+    // Sound 66, not the message's usual 57 (1078:3346).
+    [1, [b.askDialog(0xcd0, [b.msg(BLOCK, 0x3e, 0, undefined, 66), b.drainSpAll()])]],
     // The gates: papers get the party in, blindfolded, to the cell.
     [2, [b.ifFlagBelow(TROGLO_STAGE, 7, [b.ifFlagEq(TROGLO_WAR, 0, [b.ifInCombat([b.log(0x1078, 0x32bd)], [
       b.ifSpecItem(PAPERS, [b.askDialog(0xcd3, [b.askDialog(0xcd4, [

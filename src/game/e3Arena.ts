@@ -86,9 +86,9 @@ const LOOT: [terrains: number[], rolls: [n: number, item: number][]][] = [
  * Builds the arena into `arena.terrain`, and returns the items E3 scatters
  * over it, for the caller to place once the arena is the current town.
  * `terType` is the outdoor terrain the party stood on; `numWalls` is BoE's
- * `count_walls`, as for `createOutCombatTerrain`.
- * TODO(E3-3): E3's caller (`1018:0111`) passes its own wall count, not
- * checked against BoE's.
+ * `count_walls`, as for `createOutCombatTerrain`: E3's caller (`1010:437b`,
+ * into `1018:0111`) counts with `FUN_1010_8771`, which is 1997's — the four
+ * neighbours against terrains 5–35 (DS:0618) — so BoE's count is E3's.
  */
 export function createE3OutCombatTerrain(
   univ: Universe, arena: Town, terType: number, numWalls: number,

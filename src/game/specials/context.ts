@@ -102,11 +102,13 @@ export interface SpecialHost {
    * cStrDlog — two paragraphs, a title and a picture. `record` is the payload
    * behind the Record button: the C++ attaches a `cStringRecorder` to every
    * message a special node puts up, and the button only appears when there is
-   * one to attach (strdlog.cpp:64).
+   * one to attach (strdlog.cpp:64). `sound` is what such a message plays
+   * (57, `display_strings.setSound`, unless the scenario's messages name
+   * their own: `handleMessage`).
    */
   message(
     str1: string, str2: string, title: string, pic: number, picType: number,
-    record?: MessageRecord,
+    record?: MessageRecord, sound?: number,
   ): Promise<void>;
   /**
    * A dialog with up to three buttons; resolves to the index of the one picked.

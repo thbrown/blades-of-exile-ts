@@ -1120,9 +1120,8 @@ function zone84(b: SpecBuilder): Map<number, Step[]> {
     ])])]],
     [3, [b.askDialog(0x16d4, [b.onceEncounter(spot(3), B, 0x3d, 0, 2)], [b.blockMove()])]],
     [4, [b.askDialog(0x16d3, [b.onceEncounter(spot(4), B, 0x3d, 0, 1)], [b.blockMove()])]],
-    // TODO(E3-3): E3's message plays sound 54 here rather than its usual 57;
-    // the engine's message box always plays 57.
-    [5, [b.onceMsg(spot(5), B, 0x3e)]],
+    // E3's message plays sound 54 here rather than its usual 57.
+    [5, [b.onceMsg(spot(5), B, 0x3e, 0, 54)]],
     // Only while town 22 is off the map (10a8:338e).
     [11, [b.ifTownVisible(22, [], [b.msg(B, 0x3c, 0x41)])]],
   ]);

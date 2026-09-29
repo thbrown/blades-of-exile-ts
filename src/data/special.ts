@@ -165,8 +165,9 @@ export enum SpecType {
    * An exile-js opcode, not in BoE or OBoE: jump to `ex1b` if the town's
    * creature in slot `ex1a` passes test `ex2a` — 0 it is here (alive), 1 it
    * is here with attitude `ex2b`, 2 its group has not been brought in yet
-   * (its live encounter code is still set). Exile III reads its creatures'
-   * records directly (DIVERGENCES.md #21).
+   * (its live encounter code is still set), or 3 — whatever the slot — the
+   * town has fewer than `ex2b` creatures here. Exile III reads its
+   * creatures' records directly (DIVERGENCES.md #21).
    */
   IF_CREATURE = 163,
 
