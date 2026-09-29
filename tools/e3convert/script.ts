@@ -53,6 +53,9 @@ const E3_BUTTONS = [
 const SPLIT: Flag = e3Flag(0, 0xc64 - 0x84);
 
 /** The engine's `Status.DISEASE`, the `ex1c` of an AFFECT_STATUS node. */
+/** BoE's trap types (`eTrapType`) that E3's kinds become. */
+const TRAP_ALERT = 8;
+const TRAP_CUSTOM = 13;
 const STATUS_DISEASE = 7;
 const STATUS_POISON = 2;
 const STATUS_DUMB = 9;
@@ -465,21 +468,35 @@ export class SpecBuilder {
    * `FUN_10e0_03ae(7, flag, dlg, kind)`: a trapped container, once. It is
    * BoE 1997's `run_trap` behind an E3 dialog: the party picks who disarms,
    * `kind` 0 is a random trap, and 20 more is a trap three times as strong.
-   * Two differences: kind 5 does nothing (BoE's is a sleep ray), and kinds 8
-   * and 11 are harder by 10.
-   * TODO(E3-3): check kinds 10 and 11 (`FUN_10b0_16e6`, `FUN_1070_23b9`)
-   * against BoE's dumbfound and disease.
+   * Kinds 1–4, 7 and 9 are 1997's; 5 and 6 do nothing, as in 1997. The rest
+   * are E3's own (10e0:06cf on), and 8 and 11 are harder by 10:
+   *   - 8 wakes the town's hostile creatures (attitude 1, `active` 2) under
+   *     "An alarm goes off!!!", where 1997's turns the town hostile: a custom
+   *     trap, whose chain does it;
+   *   - 10 dumbfounds all six by 2 (`FUN_10b0_16e6`, 1997's `dumbfound_pc`),
+   *     however strong the trap, where 1997's adds twice the level;
+   *   - 11 is the alarm that turns the town hostile (`FUN_1070_23b9`), under
+   *     the same words — 1997's alert, not its prick of disease.
    */
   trap(id: number, flag: Flag, kind: number): Step {
     return (next) => {
       const { pages, pic } = this.dialogPages(id);
       const strong = kind >= 20;
       const k = strong ? kind - 20 : kind;
+      const level = strong && k !== 10 ? 2 : 0;
+      const custom = k === 8 ? this.alarmWakes() : -1;
+      const type = k === 5 ? 6 : k === 8 ? TRAP_CUSTOM : k === 11 ? TRAP_ALERT : k;
       return this.node('once-trap', {
         sdf: flag, msg: [pages[pages.length - 1]!, -1],
-        ex1: [k === 5 ? 6 : k, strong ? 2 : 0], ex2: [k === 8 || k === 11 ? 10 : 0], pic,
+        ex1: [type, level], ex2: [k === 8 || k === 11 ? 10 : 0, custom], pic,
       }, next);
     };
+  }
+
+  /** E3's trap 8, as a scenario node: the alarm that wakes the hostile creatures. */
+  private alarmWakes(): number {
+    if (!this.src.scenNode) throw new Error('trap 8 needs ScriptSource.scenNode');
+    return this.src.scenNode((s) => s.compile([s.log(0x10e0, 0x321), s.setCreature(-1, 'wake', 0, 1)]));
   }
 
   /** `FUN_10b0_958e(n, type)`: every living PC takes `n` damage of `type`. */
@@ -676,12 +693,13 @@ export class SpecBuilder {
    * A write to creature `slot`'s record, where it is present: `wake` sets
    * `active` 2 (hunting), `health` sets +9, `remove` clears `active`, and
    * `die` clears it and sets its death flag (`spec1`/`spec2`). Slot -1 is
-   * every creature, -2 the one being talked to. The engine's
-   * `town-creature` is an exile-js opcode (`SpecType.TOWN_SET_CREATURE`).
+   * every creature, -2 the one being talked to; `attitude` keeps to those
+   * with it. The engine's `town-creature` is an exile-js opcode
+   * (`SpecType.TOWN_SET_CREATURE`).
    */
-  setCreature(slot: number, what: 'wake' | 'health' | 'remove' | 'die', value = 0): Step {
+  setCreature(slot: number, what: 'wake' | 'health' | 'remove' | 'die', value = 0, attitude?: number): Step {
     const code = { wake: 0, health: 1, remove: 2, die: 3 }[what];
-    return (next) => this.node('town-creature', { ex1: [slot, code, value] }, next);
+    return (next) => this.node('town-creature', { ex1: [slot, code, value], ex2: [attitude === undefined ? 0 : attitude + 1] }, next);
   }
 
   /** `if (entry_dir < 9)`: the party walked in, rather than a script putting it here. */

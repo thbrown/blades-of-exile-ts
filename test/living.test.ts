@@ -253,6 +253,37 @@ describe('a PC taking effects', () => {
     }
   });
 
+  it("judges Exile III's items by its own rule (DIVERGENCES.md #23)", async () => {
+    const roll = (n: number) => ({ getRan: () => n }) as unknown as GameRng;
+    const { univ } = newGame();
+    const pc = univ.party.pcs[0]!;
+    pc.traits[Trait.HIGHLY_ALERT] = false;
+    pc.level = 1;
+    // What the converter makes: BoE's free action (strength 3 or 7), and E3's own code.
+    const wear = (e3Ability: number, ability: ItemAbil, abilStrength: number) => {
+      pc.items[0] = { ...pc.items[0]!, variety: ItemType.NON_USE_OBJECT, ability, abilStrength, e3Ability };
+      pc.equip[0] = true;
+      pc.status[Status.ASLEEP] = 0;
+      pc.status[Status.PARALYZED] = 0;
+    };
+    // The Helm of Alertness (118): no sleep at all; paralysis as usual.
+    wear(118, ItemAbil.FREE_ACTION, 3);
+    pc.sleep(Status.ASLEEP, 5, 0, roll(99));
+    expect(pc.status[Status.ASLEEP]).toBe(0);
+    pc.sleep(Status.PARALYZED, 5, 0, roll(99));
+    expect(pc.status[Status.PARALYZED]).toBe(5);
+    // The Ring of Free Action (120): no paralysis, and 2 off a sleep (not 7).
+    wear(120, ItemAbil.FREE_ACTION, 7);
+    pc.sleep(Status.PARALYZED, 5, 0, roll(99));
+    expect(pc.status[Status.PARALYZED]).toBe(0);
+    pc.sleep(Status.ASLEEP, 5, 0, roll(99));
+    expect(pc.status[Status.ASLEEP]).toBe(3);
+    // Resistance (127): 2 off a sleep.
+    wear(127, ItemAbil.FULL_PROTECTION, 6);
+    pc.sleep(Status.ASLEEP, 5, 0, roll(99));
+    expect(pc.status[Status.ASLEEP]).toBe(3);
+  });
+
   it('being highly alert is total immunity to sleep', async () => {
     const { univ } = newGame();
     const pc = univ.party.pcs[0]!;

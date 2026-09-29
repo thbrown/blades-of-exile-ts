@@ -472,16 +472,31 @@ export function hasAbil(pc: Player, abil: ItemAbil, dat = -1): { slot: number; i
  * equipped item with this ability. Two rings of protection stack; the status
  * methods divide the total down before subtracting it from an effect.
  */
-export function getProtLevel(pc: Player, abil: ItemAbil, dat = -1): number {
+export function getProtLevel(pc: Player, abil: ItemAbil, dat = -1, notE3 = false): number {
   let sum = 0;
   for (let i = 0; i < NUM_INVEN_SLOTS; i++) {
     const item = pc.items[i]!;
     if (!pc.equip[i] || item.variety === ItemType.NO_ITEM) continue;
     if (item.ability !== abil) continue;
+    // `notE3`: leave out Exile III's items, where a rule of its own replaces
+    // BoE's for them (`Item.e3Ability`).
+    if (notE3 && item.e3Ability >= 0) continue;
     if (dat >= 0 && dat !== item.abilData) continue;
     sum += item.abilStrength;
   }
   return sum;
+}
+
+/**
+ * Whether the PC wears an item Exile III gives ability `code` — its own
+ * number, not BoE's (`Item.e3Ability`) — as its `FUN_1070_0681` asks.
+ */
+export function hasE3AbilEquip(pc: Player, code: number): boolean {
+  for (let i = 0; i < NUM_INVEN_SLOTS; i++) {
+    const item = pc.items[i]!;
+    if (pc.equip[i] && item.variety !== ItemType.NO_ITEM && item.e3Ability === code) return true;
+  }
+  return false;
 }
 
 /**

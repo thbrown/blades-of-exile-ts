@@ -427,6 +427,8 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
       }
       for (const monst of which) {
         if (!monst.isAlive) continue;
+        // ex2a, when positive, keeps to creatures of attitude ex2a - 1.
+        if (spec.ex2a > 0 && monst.attitude !== spec.ex2a - 1) continue;
         switch (spec.ex1b) {
           case 0: monst.active = CreatureStatus.ALERTED; break;
           // Set, not healed: E3 can put a creature past its maximum.

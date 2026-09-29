@@ -14313,6 +14313,18 @@ the rest of the TODO(E3-3) list.
         `can_find_town[26]` and `[155]` (the array starts at +0x8485), so
         burning the Filth Factory takes it off the map, and so does taking
         the Isolated Inn's item.
+      - [x] **E3's own rules.** *Traps* (`SpecBuilder.trap`, from
+        `10e0:06cf`): kind 11 was turning into BoE's "prick your finger"
+        disease, but it is E3's alarm that turns the town hostile — 13 of
+        E3's traps; kind 8 wakes only the already-hostile creatures (a custom
+        trap and a scenario node); kind 10 dumbfounds by 2 however strong the
+        trap. *Sleep*: `Item.e3Ability` (items.xml `<e3-ability>`, saves
+        `E3ABIL`) carries E3's code, and `Player.sleep` judges E3's items by
+        `10b0:19dd` — the Helm of Alertness wards off sleep, the Ring of Free
+        Action paralysis (and 2 off a sleep), Resistance 2 off a sleep
+        (DIVERGENCES #23). *Lock picking*: `pick-lock` = `exile3`, E3's
+        `10d8:3f67` — 1997's shape with the pick's level ×15, difficulty
+        once, and 35 or under opens.
 
 All checks pass: 1,420 tests, both sweeps, verify-screen (with TOUCH)/party
 (this round). Before it: 1,419 tests, both sweeps, verify-screen (with TOUCH)/party

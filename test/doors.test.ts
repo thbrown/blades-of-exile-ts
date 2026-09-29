@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { Direction } from '../src/core/location';
 import { GameRng } from '../src/core/rng';
+import { ItemAbil, ItemType, defaultItem } from '../src/data/item';
 import { Scenario } from '../src/data/scenario';
 import { emptySpecialNode } from '../src/data/special';
 import { TerSpec } from '../src/data/terrain';
@@ -261,6 +262,46 @@ describe('locked doors', () => {
     } finally {
       if (saved === undefined) delete scen.featureFlags['bash'];
       else scen.featureFlags['bash'] = saved;
+    }
+  });
+
+  /** Exile III's pick (`10d8:3f67`): level ×15, difficulty once, 35 or under opens. */
+  it("opens at 35 or under under E3's pick-lock flag, and never past flag2 5", () => {
+    const saved = scen.featureFlags['pick-lock'];
+    scen.featureFlags['pick-lock'] = 'exile3';
+    const pick = (roll: number, flag2: number): string => {
+      const session = newSession();
+      const { univ } = session;
+      const where = findTerrain(session, TerSpec.UNLOCKABLE)!;
+      const spec = univ.terrainType(univ.town!.record.terrain[where.x]![where.y]!);
+      const was = spec.flag2;
+      spec.flag2 = flag2;
+      const pc = univ.party.pcs[0]!;
+      pc.items[0] = { ...defaultItem(), variety: ItemType.NON_USE_OBJECT, ability: ItemAbil.LOCKPICKS,
+        abilStrength: 9, itemLevel: 0, charges: 5 };
+      pc.equip[0] = true;
+      pc.traits[Trait.NIMBLE] = true;
+      pc.skills[Skill.LOCKPICKING] = 0;
+      pc.skills[Skill.DEXTERITY] = 4;
+      univ.town!.record.difficulty = 0;
+      univ.rng = { getRan: () => roll } as never;
+      try {
+        session.pickLock(where, 0);
+      } finally {
+        spec.flag2 = was;
+      }
+      return univ.transcript.join(' | ');
+    };
+    try {
+      // Nothing off: the roll is the whole of it, and flag2 1 doesn't move the line.
+      expect(pick(35, 1)).toContain('Door unlocked');
+      expect(pick(36, 1)).toContain("Didn't work");
+      // A level-0 pick breaks under 55 on the first roll.
+      expect(pick(36, 1)).toContain('Pick breaks');
+      expect(pick(0, 5)).toContain("Didn't work");
+    } finally {
+      if (saved === undefined) delete scen.featureFlags['pick-lock'];
+      else scen.featureFlags['pick-lock'] = saved;
     }
   });
 

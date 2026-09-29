@@ -169,6 +169,14 @@ export interface Item {
    * Only the E3 converter sets it (`<inept-ok>` in items.xml).
    */
   ineptOk: boolean;
+  /**
+   * Not in OBoE's cItem: the item's ability code as Exile III numbers it, or
+   * -1. The converter maps E3's codes onto BoE's abilities, which is as close
+   * as the table gets; where E3's rules for an ability differ from BoE's, the
+   * engine asks this instead (`Player.sleep`; DIVERGENCES.md #23). Only the
+   * E3 converter sets it (`<e3-ability>` in items.xml).
+   */
+  e3Ability: number;
   desc: string;
 }
 
@@ -208,6 +216,7 @@ export function defaultItem(): Item {
     unsellable: false,
     rechargeable: false,
     ineptOk: false,
+    e3Ability: -1,
     desc: '',
   };
 }

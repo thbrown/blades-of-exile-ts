@@ -9,7 +9,7 @@ import { Direction, Location, loc, percent } from '../core/location';
 import { GameRng } from '../core/rng';
 import { Item, ItemAbil, ItemPreset, defaultItem, presetItem } from '../data/item';
 import { Spell } from '../data/spell';
-import { getProtLevel, hasAbilEquip } from './inventory';
+import { getProtLevel, hasAbilEquip, hasE3AbilEquip } from './inventory';
 import { Living, SpellNote, giveHelp, livingSound, printResult } from './living';
 import { Party } from './party';
 import { hasFeatureFlag } from '../game/featureFlags';
@@ -419,11 +419,20 @@ export class Player extends Living {
 
     let freeAction = 0;
     if (whatType === Status.ASLEEP || whatType === Status.PARALYZED) {
-      howMuch -= Math.trunc(getProtLevel(this, ItemAbil.WILL) / 2);
-      freeAction = getProtLevel(this, ItemAbil.FREE_ACTION);
+      howMuch -= Math.trunc(getProtLevel(this, ItemAbil.WILL, -1, true) / 2);
+      freeAction = getProtLevel(this, ItemAbil.FREE_ACTION, -1, true);
       // Free action is far better against paralysis than against sleep.
       howMuch -= whatType === Status.ASLEEP ? freeAction : freeAction * 300;
-      howMuch -= Math.trunc(getProtLevel(this, ItemAbil.STATUS_PROTECTION, whatType) / 4);
+      howMuch -= Math.trunc(getProtLevel(this, ItemAbil.STATUS_PROTECTION, whatType, true) / 4);
+      // Exile III's items go by its own rule (`10b0:19dd`; DIVERGENCES.md
+      // #23): its 118 (the Helm of Alertness) wards off sleep, 120 (the Ring
+      // of Free Action) paralysis, and 120 or 127 (Resistance) take 2 off a
+      // sleep. They don't count above, where their BoE abilities would.
+      const e3 = (code: number) => hasE3AbilEquip(this, code);
+      if (whatType === Status.ASLEEP) {
+        if (e3(118)) howMuch = -1;
+        if (e3(120) || e3(127)) howMuch -= 2;
+      } else if (e3(120)) howMuch = -1;
     } else if (whatType === Status.FORCECAGE) {
       howMuch -= 1 + Math.trunc(
         getProtLevel(this, ItemAbil.STATUS_PROTECTION, whatType) / 8);

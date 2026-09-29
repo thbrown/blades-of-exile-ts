@@ -35,7 +35,19 @@ export type DoorResult = 'opened' | 'failed' | 'no-picks' | 'wrong-terrain';
 const TRACE_PICK = Boolean(
   typeof process !== 'undefined' ? process.env?.PICK : undefined);
 
-/** pick_lock (boe.town.cpp:1156). */
+/**
+ * pick_lock (boe.town.cpp:1156).
+ *
+ * **`pick-lock` = `exile3`**, a scenario's flag, is Exile III's
+ * (`10d8:3f67`), which is 1997's shape with its own numbers: the pick's
+ * *level* counts, fifteen a point, where BoE's strength counts seven (and it
+ * breaks under 55, not 75); the town's difficulty counts once, not seven
+ * times; the skill is the raw one; a PC who is **not** nimble gets the 8 off,
+ * as 1997's does (`traits[3] == FALSE`); thieving counts only from the first
+ * sixteen slots; and a pickable door opens at 35 or under, whatever its
+ * flag2 — a door beyond picking (flag2 5 and up) still never does. Both rolls
+ * run 0–100.
+ */
 export function pickLock(
   univ: Universe,
   where: Location,
@@ -51,6 +63,19 @@ export function pickLock(
   if (!picks) {
     univ.addStringToBuf('  Need lockpick equipped.');
     return 'no-picks';
+  }
+
+  const e3 = univ.scenario.featureFlags['pick-lock'] === 'exile3';
+  const unlockAdjust = univ.terrainType(terrain).flag2;
+  if (e3) {
+    const level = picks.item.itemLevel;
+    const willBreak = univ.rng.getRan(1, 0, 100) + level * 15 < 55;
+    let r = univ.rng.getRan(1, 0, 100) - 5 * pc.statAdj(Skill.DEXTERITY) + town.record.difficulty
+      - 5 * (pc.skills[Skill.LOCKPICKING] ?? 0) - level * 15;
+    if (!pc.traits[Trait.NIMBLE]) r -= 8;
+    const thief = hasAbilEquip(pc, ItemAbil.THIEVING);
+    if (thief && thief.slot < 16) r -= 12;
+    return pickResult(univ, where, terrain, pc, picks.slot, unlockAdjust >= 5 || r > 35, willBreak, sound);
   }
 
   let r1 = univ.rng.getRan(1, 1, 100) + picks.item.abilStrength * 7;
@@ -70,7 +95,6 @@ export function pickLock(
   if (pc.traits[Trait.NIMBLE]) r1 -= 8;
   if (hasAbilEquip(pc, ItemAbil.THIEVING)) r1 -= 12;
 
-  const unlockAdjust = univ.terrainType(terrain).flag2;
   if (TRACE_PICK) {
     // eslint-disable-next-line no-console
     console.log(`      [pick] pc=${pcNum} at (${where.x},${where.y})`
@@ -82,7 +106,16 @@ export function pickLock(
       + ` slot=${picks.slot}`
       + ` break=${willBreak ? 1 : 0}`);
   }
-  if (unlockAdjust >= 5 || r1 > unlockAdjust * 15 + 30) {
+  return pickResult(univ, where, terrain, pc, picks.slot, unlockAdjust >= 5 || r1 > unlockAdjust * 15 + 30,
+    willBreak, sound);
+}
+
+/** The end of `pick_lock`, which BoE and Exile III share. */
+function pickResult(
+  univ: Universe, where: Location, terrain: number, pc: Player, slot: number,
+  failed: boolean, willBreak: boolean, sound?: SoundPlayer | null,
+): DoorResult {
+  if (failed) {
     univ.addStringToBuf("  Didn't work.");
     if (willBreak) {
       univ.addStringToBuf('  Pick breaks.');
@@ -91,7 +124,7 @@ export function pickLock(
       // goes through `take_item`, which *compacts the pack*. Blanking the slot
       // in place left a hole where the C++ shifted everything below it up — and
       // pack order is observable, because a recording uses items by slot.
-      removeCharge(pc, picks.slot);
+      removeCharge(pc, slot);
     }
     sound?.play(Snd.LOCK_FAILED);
     return 'failed';

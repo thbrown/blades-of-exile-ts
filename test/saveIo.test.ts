@@ -146,6 +146,7 @@ describe('.exg round trip', () => {
     pc.items[4].charges = 3;
     // This port's own flag, which E3's notes carry (`INEPTOK`).
     pc.items[4].ineptOk = true;
+    pc.items[4].e3Ability = 118;
     pc.equip[0] = true;
 
     const back = roundTrip(univ).party.pcs[1]!;
@@ -167,6 +168,8 @@ describe('.exg round trip', () => {
     expect(back.items[4]!.name).toBe(pc.items[4]!.name);
     expect(back.items[4]!.charges).toBe(3);
     expect(back.items[4]!.ineptOk).toBe(true);
+    expect(back.items[4]!.e3Ability).toBe(118);
+    expect(back.items[0]!.e3Ability).toBe(-1);
     expect(back.items[5]!.variety).toBe(ItemType.NO_ITEM);
   });
 

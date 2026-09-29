@@ -240,9 +240,9 @@ function specialXml(t: E3TerrainType, id: number, hiddenAs: Map<number, number>)
     // BoE's `unlock`: flag2 is the difficulty, 5 and up beyond picking.
     // flag3 is E3's bash limit, under the `bash` = `exile3` flag: E3's bash
     // (`10d8:4224`) breaks the lock at or under 25, or 10 for the basalt door
-    // (121), and never for the doors past picking. TODO(E3-3): E3 rolls its
-    // own pick (`FUN_10d8_3f67`: success over 35 on its roll), not BoE's
-    // formula.
+    // (121), and never for the doors past picking. E3's pick
+    // (`FUN_10d8_3f67`) is the `pick-lock` = `exile3` flag's: flag2 only
+    // says whether the door can be picked at all.
     : ['unlock', sp.to, sp.pickable ? 1 : 10, !sp.pickable ? 0 : id === 121 ? 10 : 25];
   return `        <special>
             <type>${type}</type>
@@ -650,6 +650,7 @@ function scenarioXml(
         <backgrounds>exile3</backgrounds>
         <message-pics>exile3</message-pics>
         <bash>exile3</bash>
+        <pick-lock>exile3</pick-lock>
         <dungeon-sound>${E3_DUNGEON_SOUND}</dungeon-sound>
         <cursors>${cursors.map((c) => `${c.name}:${c.hotspot.x}:${c.hotspot.y}`).join(',')}</cursors>
     </feature-flags>
@@ -836,6 +837,8 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     // (1140:0000, read by `FUN_10c0_2c92`) has 10 for all of 0xa0–0xb7:
     // usable anywhere, and `inept_ok`, so a magically inept PC can read.
     const ability = e3Abilities[k] ?? 0;
+    // E3's own code, for the rules where E3 and BoE part (`Item.e3Ability`).
+    it.e3Ability = ability;
     if (isE3NoteAbility(ability)) {
       if (!noteNodes.has(ability)) noteNodes.set(ability, scen!.compile(e3NoteSteps(scen!, ability)));
       it.ability = ItemAbil.CALL_SPECIAL;

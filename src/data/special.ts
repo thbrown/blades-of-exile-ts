@@ -210,8 +210,9 @@ export enum SpecType {
    * slot `ex1a` (-1 every creature, -2 the one being talked to), only where
    * it is here. `ex1b` names what: 0 wakes it to hunt the party (`active`
    * 2), 1 sets its health to `ex1c`, 2 takes it away, and 3 takes it away
-   * and sets its death flag, as a conversation's END_DIE does. Exile III
-   * writes its creatures' records directly (DIVERGENCES.md #21).
+   * and sets its death flag, as a conversation's END_DIE does. `ex2a`, when
+   * positive, keeps to creatures of attitude `ex2a - 1`. Exile III writes
+   * its creatures' records directly (DIVERGENCES.md #21).
    */
   TOWN_SET_CREATURE = 205,
 

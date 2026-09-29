@@ -543,6 +543,25 @@ down; `take-magic` empties the targets' packs of magic items, and with `ex1a`
 1 the town's floor too. Both do nothing to a creature target, as nine of
 OBoE's AFFECT nodes do.
 
+### 23. Exile III's items by Exile III's rules (2026-09-28)
+
+**DECIDED: an item carries its E3 ability code (`Item.e3Ability`, port-only),
+and a rule where E3 and BoE part asks it.** The converter maps E3's ability
+codes onto BoE's (by name through bladbase, else by `E3_ABILITY_TO_LEGACY`),
+which is as close as one number gets — but two E3 codes can land on one BoE
+ability and mean different things. Sleep is the first case: E3's `sleep_pc`
+(`10b0:19dd`) reads 118 (the Helm of Alertness) as immunity to sleep, 120
+(the Ring of Free Action) as immunity to paralysis and 2 off a sleep, and 127
+(Resistance) as 2 off a sleep, where BoE's Free Action (both 118 and 120 map
+there) takes its strength off a sleep and makes paralysis hopeless, and Will
+takes half its strength. `Player.sleep` now leaves items with an E3 code out
+of BoE's sums and applies E3's rule to them. An item keeps its code in a save
+(`E3ABIL`) and across scenarios, so an E3 ring stays an E3 ring.
+
+The rest of E3's rules are the scenario's own, by flag, as `bash` is: Exile
+III's lock picking is `pick-lock` = `exile3` (`10d8:3f67`, in `doors.ts`),
+and its traps are mapped kind by kind in the converter (`SpecBuilder.trap`).
+
 ---
 
 ## Agreements worth recording

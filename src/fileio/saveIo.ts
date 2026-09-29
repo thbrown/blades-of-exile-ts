@@ -132,6 +132,7 @@ export function writeItem(page: TagPage, item: Item): void {
   if (item.unsellable) page.add('UNSELLABLE');
   // This port's own (`Item.ineptOk`); OBoE's reader skips a key it doesn't know.
   if (item.ineptOk) page.add('INEPTOK');
+  if (item.e3Ability >= 0) page.add('E3ABIL', item.e3Ability);
 }
 
 export function readItem(page: TagPage): Item {
@@ -177,6 +178,7 @@ export function readItem(page: TagPage): Item {
   item.rechargeable = page.has('RECHARGEABLE');
   item.unsellable = page.has('UNSELLABLE');
   item.ineptOk = page.has('INEPTOK');
+  item.e3Ability = page.first('E3ABIL')?.int(0) ?? -1;
   return item;
 }
 

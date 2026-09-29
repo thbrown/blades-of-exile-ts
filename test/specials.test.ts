@@ -2107,6 +2107,18 @@ describe("Exile 3's per-PC scripts", () => {
     expect(univ.town!.hasField(x + 1, y, FieldType.CLOUD_STINK)).toBe(true);
   });
 
+  it('maps E3\'s trap kinds: 8 wakes the hostile, 10 is 2 however strong, 11 turns the town', () => {
+    const dialogs = new Map([[1, { controls: [{ id: 1, text: 'A trap!', x: 0, y: 0 }] }]]) as never;
+    const scen = new SpecBuilder({ strings: new Map(), dialogs }, () => 0);
+    const b = new SpecBuilder({ strings: new Map(), dialogs, scenNode: (build) => build(scen) }, () => 0);
+    const traps = [8, 10, 30, 11, 31].map((kind) => b.compile([b.trap(1, [200, kind % 10], kind)]));
+    const nodes = new Map(parseSpecials(b.spec, opcodes));
+    const got = traps.map((n) => { const t = nodes.get(n)!; return [t.ex1a, t.ex1b, t.ex2a, t.ex2b >= 0]; });
+    expect(got).toEqual([[13, 0, 10, true], [10, 0, 0, false], [10, 0, 0, false], [8, 0, 10, false], [8, 2, 10, false]]);
+    const wake = new Map(parseSpecials(scen.spec, opcodes)).get(nodes.get(traps[0]!)!.ex2b)!;
+    expect(wake.type).toBe(SpecType.DISPLAY_SM_MSG);
+  });
+
   it('reads the terrain under the party at (-1, -1)', async () => {
     const b = new SpecBuilder({ strings: new Map(), dialogs: new Map() }, () => 0);
     const entry = b.compile([b.ifPartyOnTer(71, [b.gold(1)], [b.gold(2)])]);
