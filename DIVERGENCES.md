@@ -565,6 +565,14 @@ takes half its strength. `Player.sleep` now leaves items with an E3 code out
 of BoE's sums and applies E3's rule to them. An item keeps its code in a save
 (`E3ABIL`) and across scenarios, so an E3 ring stays an E3 ring.
 
+The same mechanism now carries E3's combat items (`src/game/e3Items.ts`,
+2026-09-28): its to-hit and damage sums for Skill Rings and two kinds of
+gauntlets, Accuracy Rings on shots, the eight-case extra-damage table (much
+smaller than bladbase's slayers), melee-only venom, +1 action point each
+from a Ring and Boots of Speed, and the four worn items that act once a
+combat round. BoE's rule skips an item with an E3 code (`notE3`); the item
+keeps a BoE ability so that its description still names one.
+
 The rest of E3's rules are the scenario's own, by flag, as `bash` is: Exile
 III's lock picking is `pick-lock` = `exile3` (`10d8:3f67`, in `doors.ts`),
 and its traps are mapped kind by kind in the converter (`SpecBuilder.trap`).
