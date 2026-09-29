@@ -14521,11 +14521,19 @@ the rest of the TODO(E3-3) list.
           (`10c0:6ebe`). Needs three of E3's strings (block 0x37:
           0x14–0x16) written out for the engine, so it still takes BoE's
           path, where it can't be used.
-        - [ ] `give_to_pc`'s Lodestone (129 → 14, worn at once) and Airy
-          Stone (117 → 0), which also rewrite a byte at +0x13 of the
-          in-memory item (20 and −20). `item_weight` (`1070:094b`) reads
-          the weight byte by stack offset; whether that is +0x11
-          (FORMATS.md's layout) or +0x13 is unpinned.
+        - [x] *The Lodestone and Airy Stone* (2026-09-29, `e3Taken` in
+          `inventory.ts`). **+0x13 is the weight**: `1068:0886`, which turns
+          a 59-byte table record into the 63-byte item, copies the table's
+          +17 there (+16 → +17, zeros at +16/+18, a word at +21, names at
+          +23/+48; FORMATS.md). `give_to_pc` makes the Lodestone a 14
+          (cursed only from then on, so the converter no longer curses it),
+          weight 20, identified and worn; the Airy Stone loses its code and
+          weighs −20 — **read unsigned** by `item_weight`, so 236
+          (E3-SUSPECTED-BUGS #11). `curWeight` goes by E3's `cur_weight`
+          (`1070:08aa`) for E3 items: −30 for code 117, no +30 for anything.
+          **Found on the way** (BoE-wide): the port's `curWeight` had lost
+          OBoE's `if(weight < 0) weight = 0` (pc.cpp:695), and walked the
+          scratch slot past `INVENTORY_SIZE`; both fixed.
         - *Tool note*: a message literal pushed as `push cs; push off` is in
           the *caller's* code segment — `nedis.py --str 1018:4360` — not DS.
         - *Tool note*: `nedis.py --all > all.s` in the scratchpad (~390k
@@ -14537,6 +14545,6 @@ All checks pass (2026-09-29, after E3's use_item): 1,459 tests, both
 sweeps, verify-screen (with TOUCH), verify-party and verify-e3. (Corpus not
 re-run: the new path is taken only by items with an E3 code, and
 `poisonWeapon`'s default is unchanged.) **Next session starts here**: the
-Lodestone and Airy Stone (`tables.ts`), then the Skribbane Herb
-(`e3ItemUse.ts`) — both TODO(E3-3) — then TODO(M9)/TODO(campaign)/TODO(M8),
-which may be left for the user to rule on, as is DIVERGENCES #30.
+Skribbane Herb (`e3ItemUse.ts`, the last TODO(E3-3)) — then
+TODO(M9)/TODO(campaign)/TODO(M8), which may be left for the user to rule on,
+as is DIVERGENCES #30.

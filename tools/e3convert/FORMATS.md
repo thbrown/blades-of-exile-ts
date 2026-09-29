@@ -138,6 +138,12 @@ E3 keeps its terrain types in code and data, not in a file:
   code, and the other 9 are items BoE retuned. The graphic is an E3 picture
   number (only 134 agree with BoE), not yet mapped to a sheet.
 
+  **In memory** an item is 63 bytes, built by `1068:0886`: +0–15 as the
+  table, +16 = 0, +17 magic (table +16), +18 = 0, **+19 (0x13) weight**
+  (table +17), +20 class, +21 a word from `DS:0x194e`, `full_name` at +23,
+  `name` at +48. A PC's items start at `pc*0x722 − 0x7a5c` in the party
+  segment, and the 24 equip bytes follow them.
+
 Ghidra can't recover these `switch` statements: it reports "Could not recover
 jumptable". The table is `n` case values followed by `n` target offsets, and
 `Disasm.java <addr> <out> <count>` lists the arms.

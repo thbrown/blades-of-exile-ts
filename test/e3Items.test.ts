@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { GameRng } from '../src/core/rng';
-import { ItemAbil, ItemType } from '../src/data/item';
+import { defaultItem, ItemAbil, ItemType } from '../src/data/item';
 import { Scenario } from '../src/data/scenario';
 import { DamageType } from '../src/data/monster';
 import { E3Abil, e3ActionPoints, e3AttackAdj, e3CombatRoundItems, e3DamageResist, e3MissileHitBonus, e3OnMeleeHit, e3SpecDam } from '../src/game/e3Items';
@@ -10,7 +10,7 @@ import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { Creature } from '../src/universe/creature';
-import { getProtLevel, hasAbilEquip, uncurse } from '../src/universe/inventory';
+import { curWeight, getProtLevel, giveItem, hasAbilEquip, uncurse } from '../src/universe/inventory';
 import { PartyPreset, Player } from '../src/universe/player';
 import { Race, Skill, Status } from '../src/universe/skills';
 import { Universe } from '../src/universe/universe';
@@ -184,5 +184,32 @@ describe("Exile III's item rules (src/game/e3Items.ts)", () => {
     uncurse(pc.items[20]!);
     expect(pc.items[20]!.cursed).toBe(false);
     expect(pc.items[20]!.e3Ability).toBe(0);
+  });
+
+  it("the Lodestone and Airy Stone change as they are taken (give_to_pc, 1070:01d1)", () => {
+    const { univ, pc } = setup();
+    for (let i = 0; i < pc.items.length; i++) pc.items[i] = defaultItem();
+    pc.equip.fill(false);
+    const rock = (e3Ability: number, ability: ItemAbil) => ({
+      ...defaultItem(), variety: ItemType.NON_USE_OBJECT, weight: 5, e3Ability, ability,
+    });
+
+    // The Lodestone: cursed, worn, identified, 20 — and no BoE +30 on top.
+    const lode = giveItem(pc, univ.party, rock(129, ItemAbil.HEAVIER_OBJECT));
+    const l = pc.items[lode.slot]!;
+    expect([l.e3Ability, l.weight, l.ident, l.cursed, pc.equip[lode.slot]]).toEqual([14, 20, true, true, true]);
+    expect(curWeight(pc)).toBe(20);
+
+    // The Airy Stone: E3 reads its -20 unsigned, so it weighs 236, and with
+    // its code gone the -30 is lost too.
+    const airy = giveItem(pc, univ.party, rock(117, ItemAbil.LIGHTER_OBJECT));
+    const a = pc.items[airy.slot]!;
+    expect([a.e3Ability, a.weight, a.ident, a.cursed, pc.equip[airy.slot]]).toEqual([0, 236, true, false, false]);
+    expect(curWeight(pc)).toBe(256);
+
+    // One that arrived some other way keeps E3's -30, and the total stops at 0.
+    for (let i = 0; i < pc.items.length; i++) pc.items[i] = defaultItem();
+    pc.items[0] = rock(117, ItemAbil.LIGHTER_OBJECT);
+    expect(curWeight(pc)).toBe(0);
   });
 });

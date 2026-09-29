@@ -54,20 +54,71 @@ export function maxWeight(pc: Player): number {
   );
 }
 
-/** cPlayer::cur_weight — two abilities shift the total by a flat 30. */
+/**
+ * cPlayer::cur_weight (pc.cpp:679) — two abilities shift the total by a flat
+ * 30, and the total never goes below 0.
+ *
+ * An Exile III item goes by E3's `cur_weight` (`1070:08aa`) instead: its code
+ * 117 (the Airy Stone) takes 30 off, and nothing adds 30 — E3's Lodestone is
+ * heavy by its own weight (`e3Taken`). BoE's ability, which the converter
+ * leaves on the item for its description, is not read.
+ */
 export function curWeight(pc: Player): number {
   let weight = 0;
   let airy = false;
   let heavy = false;
-  for (const item of pc.items) {
+  for (let i = 0; i < NUM_INVEN_SLOTS; i++) {
+    const item = pc.items[i]!;
     if (item.variety === ItemType.NO_ITEM) continue;
     weight += itemWeight(item);
+    if (item.e3Ability >= 0) {
+      if (item.e3Ability === E3_AIRY_STONE) airy = true;
+      continue;
+    }
     if (item.ability === ItemAbil.LIGHTER_OBJECT) airy = true;
     if (item.ability === ItemAbil.HEAVIER_OBJECT) heavy = true;
   }
   if (airy) weight -= 30;
   if (heavy) weight += 30;
+  if (weight < 0) weight = 0;
   return weight;
+}
+
+/** E3's codes for the Airy Stone and the Lodestone, which change as they are taken. */
+const E3_AIRY_STONE = 117;
+const E3_LODESTONE = 129;
+
+/**
+ * What Exile III's `give_to_pc` (`1070:01d1`) does to two items as they land
+ * in a pack, after the weight test and before `combine_things` and the sort.
+ *
+ * - **The Lodestone** (129) becomes a 14 — E3's curse, so it is cursed only
+ *   from here on — weighs 20 instead of 5, is identified, and is worn at
+ *   once, so it can't be taken off or dropped.
+ * - **The Airy Stone** (117) loses its code and is identified, and its weight
+ *   byte is set to −20 (`0xec`). **E3 reads that byte unsigned**
+ *   (`item_weight`, `1070:094b`: `mov dh, 0`), so the stone weighs 236 once
+ *   taken, and with its code gone `cur_weight`'s −30 never applies to it.
+ *   Kept; E3-SUSPECTED-BUGS.md #11.
+ *
+ * The weight is +0x13 of E3's 63-byte item, where `1068:0886` copies the
+ * table's +17 (FORMATS.md). Items with any other code are untouched.
+ */
+function e3Taken(pc: Player, slot: number): void {
+  const item = pc.items[slot];
+  if (!item || slot >= NUM_INVEN_SLOTS) return;
+  if (item.e3Ability === E3_LODESTONE) {
+    item.e3Ability = 14;
+    item.cursed = true;
+    item.unsellable = true;
+    item.weight = 20;
+    item.ident = true;
+    pc.equip[slot] = true;
+  } else if (item.e3Ability === E3_AIRY_STONE) {
+    item.e3Ability = 0;
+    item.weight = 0xec;
+    item.ident = true;
+  }
 }
 
 export function freeWeight(pc: Player): number {
@@ -221,6 +272,7 @@ export function giveItem(
   // Taking an item clears the flags that only apply while it's on the floor.
   if (!checkOnly) {
     pc.items[slot] = { ...item, property: false, contained: false, held: false };
+    e3Taken(pc, slot);
     if (equipType !== GiveEquip.NONE && variety(item.variety).equipCount)
       giveEquip(pc, slot, item, equipType);
     // `combine_things(); sort_items();` is give_item's last act (pc.cpp:579),

@@ -352,7 +352,7 @@ export const E3_ABILITY_TO_LEGACY: Readonly<Record<number, number>> = {
 const WEAPON_VARIETIES = new Set([1, 2, 4, 5, 6, 23, 24, 25]);
 
 /** E3's ability codes that curse an item (see `readE3Items`). */
-const E3_CURSED = new Set([14, 95, 129]);
+const E3_CURSED = new Set([14, 95]);
 
 /**
  * E3's items as BoE legacy records, for `convertItem`. The numbers are E3's
@@ -363,9 +363,8 @@ const E3_CURSED = new Set([14, 95, 129]);
  * with the level as strength. Where E3's code reads the ability differently,
  * the engine asks the item's E3 code instead (`src/game/e3Items.ts`,
  * DIVERGENCES.md #23), and so is Using one (`src/game/e3ItemUse.ts`, E3's
- * `10c0:2c92`). TODO(E3-3): the Lodestone and Airy Stone changing as they are taken
- * (`give_to_pc`, `1070:01d1`: the Lodestone is worn and cursed at once, and
- * both have a byte at +0x13 of the in-memory item rewritten, not yet pinned).
+ * `10c0:2c92`). The Lodestone and Airy Stone change as they are taken, which
+ * is the engine's (`e3Taken` in `src/universe/inventory.ts`, E3's `give_to_pc`).
  * `graphicNum` is E3's picture, for `buildItemSheet` to replace.
  */
 /** Each E3 item's own ability byte (+10), which `readE3Items` maps to BoE's. */
@@ -406,8 +405,8 @@ export function readE3Items(exe: Uint8Array): LegacyItem[] {
       // Identified and magic are E3's, and so is the curse: E3 has no curse
       // bit, and an item is cursed when its ability is 14 or 95 (the Dancing
       // Boots; `1070:1320` refuses to take either off). Five of its 14s have
-      // no curse in bladbase. The Lodestone (129) is cursed here because E3
-      // makes it a 14 as it is taken (`give_to_pc`, `1070:01d1`).
+      // no curse in bladbase. The Lodestone (129) is not cursed until it is
+      // taken, when E3 makes it a 14 (`e3Taken`, `give_to_pc` `1070:01d1`).
       itemProperties: e3Props | (E3_CURSED.has(u8(10)) ? 16 : 0),
     });
   }
