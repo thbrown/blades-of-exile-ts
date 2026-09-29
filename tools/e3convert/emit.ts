@@ -29,7 +29,7 @@ import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from
 import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
 import { readE3ShopTables, standardShops } from './shops';
 import { e3DayReached, e3Event, e3Flag } from './flags';
-import { buildE3Village, villageTemplate } from './village';
+import { VILLAGE_SIZE, buildE3Village, ruinableBuildings, villageTemplate, type RuinableBuilding } from './village';
 import { ENTRANCE_MARK_SPOT, e3SpotScript, type GroupNodes, type GroupScript, type KillScript, type PlaceScript, type SpotScript } from './specials';
 import { e3GroupForced, e3GroupSteps } from './towns/encounters';
 import { e3KillAfter, e3KillCase } from './towns/kills';
@@ -204,6 +204,35 @@ function e3MapSheets(read: E3Read): Rgba[] {
 }
 
 const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="no" ?>\n';
+
+/**
+ * A village's entry (`FUN_1040_1600`'s ruins): each building with a day of
+ * its own falls to ruin once that day comes, and every one once the village
+ * is overrun (its chop day; 1 or less, from the start). Each is its 8×8
+ * square copied in from the village's ruins record (`copy-ter`).
+ */
+function villageRuinSteps(b: SpecBuilder, t: E3Town, record: number, buildings: RuinableBuilding[]): Step[] {
+  const copy = (bd: RuinableBuilding) => b.copyTerrain(record, bd.x, bd.y, 8, 8);
+  const own = buildings.filter((bd) => bd.day >= 0).map((bd) => b.ifE3DayReached(bd.day, bd.event, [copy(bd)]));
+  if (t.townChopTime <= 0) return own;
+  const all = buildings.map(copy);
+  return [...own, ...(t.townChopTime <= 1 ? all : [b.ifE3DayReached(t.townChopTime, t.townChopKey, all)])];
+}
+
+/** A village's ruins record: its map only, hidden, never entered. */
+function ruinTownXml(name: string): string {
+  return `${XML_HEAD}<town boes="2.0.0">
+    <size>${VILLAGE_SIZE}</size>
+    <name>${esc(name)}</name>
+    <bounds top="0" left="0" bottom="${VILLAGE_SIZE - 1}" right="${VILLAGE_SIZE - 1}" />
+    <difficulty>0</difficulty>
+    <lighting>lit</lighting>
+    <flags>
+        <hidden>true</hidden>
+    </flags>
+</town>
+`;
+}
 
 /** One `.map` file: rows are y, columns x, with `marks` appended after a tile's number. */
 function mapFile(terrain: number[][], size: number, marks: Map<string, string>): string {
@@ -651,7 +680,7 @@ function scenarioXml(
   start: { town: number; loc: { x: number; y: number } },
   outStart: { sector: { x: number; y: number }; loc: { x: number; y: number } },
   shops: Shop[], specialItems: SpecItem[], specStrings: string[], newDay: number, roadJoins: number[],
-  jobBase: number, journal: string[], cursors: E3Cursor[],
+  jobBase: number, journal: string[], cursors: E3Cursor[], townCount: number,
 ): string {
   return `${XML_HEAD}<scenario boes="2.0.0">
     <title>Exile III: Ruined World</title>
@@ -700,7 +729,7 @@ function scenarioXml(
         <version>2.0.0</version>
     </creator>
     <game>
-        <num-towns>${E3_TOWN_COUNT}</num-towns>
+        <num-towns>${townCount}</num-towns>
         <out-width>${E3_ZONES_WIDE}</out-width>
         <out-height>${E3_ZONES_HIGH}</out-height>
         <start-town>${start.town}</start-town>
@@ -931,6 +960,17 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     progress(0.1 + 0.3 * (i + 1) / zones.length);
   });
   const template = villageTemplate(towns);
+  // Each village some of whose buildings can fall to ruin, and the hidden
+  // record after E3's 200 that holds it in ruins (`village.ts`).
+  const ruins = new Map<number, { record: number; buildings: RuinableBuilding[] }>();
+  for (const t of towns) {
+    if (!t.village) continue;
+    const buildings = ruinableBuildings(t.village);
+    if (buildings.some((bd) => bd.day >= 0) || (t.townChopTime > 0 && buildings.length > 0)) {
+      ruins.set(t.number, { record: E3_TOWN_COUNT + ruins.size, buildings });
+    }
+  }
+  const townCount = E3_TOWN_COUNT + ruins.size;
   const villageZone = new Map<number, number>();
   zones.forEach((z, i) => z.exitDests.forEach((d, e) => {
     if (!isUnusedLoc(z.exitLocs[e]!) && !villageZone.has(d)) villageZone.set(d, i);
@@ -943,10 +983,12 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     const terrain = townTer255(t.number, t.village ? buildE3Village(template, t.village, underground, t.number) : t.terrain);
     const spots = t.specialLocs.map((loc, k) => ({ loc, id: t.specId[k] ?? 255 }));
     const creatures = townCreatures(t);
+    const entry = townEntryScript(t.number, new Set(creatures.map((c) => c.number)),
+      creatures.filter((c) => c.number >= 138 && c.number <= 141).map((c) => c.startLoc), t.entryMsg, t.deadMsg);
+    const ruin = ruins.get(t.number);
     const script = e3SpotScript(spots, { town: t.number }, { ...e3Src, creatures, terrain },
       (x, y) => terrain[x]?.[y] ?? 0, TOWN_SCRIPTS.get(t.number),
-      townEntryScript(t.number, new Set(creatures.map((c) => c.number)),
-        creatures.filter((c) => c.number >= 138 && c.number <= 141).map((c) => c.startLoc), t.entryMsg, t.deadMsg),
+      ruin ? (b, dead) => [...villageRuinSteps(b, t, ruin.record, ruin.buildings), ...entry?.(b, dead) ?? []] : entry,
       townKillScript(t.number, creatures), undefined, HOSTILE_SCRIPTS.get(t.number), TIMER_SCRIPTS.get(t.number));
     write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf, strings, script, townTables));
     write(`${base}.map`, townMap(t, terrain, strings, script, vehicles));
@@ -956,6 +998,15 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     // Talk block b is talk<b>.xml, whichever town its people live in.
     const speech = talk.speeches[t.number];
     write(`towns/talk${t.number}.xml`, speech ? dialogueXml(speech, t.number) : `${XML_HEAD}<dialogue boes="2.0.0">\n</dialogue>\n`);
+    if (ruin) {
+      // The village in ruins: never entered, only copied from.
+      const ruined = townTer255(t.number, buildE3Village(template, t.village!, underground, t.number, true));
+      const rb = `towns/town${ruin.record}`;
+      write(`${rb}.xml`, ruinTownXml(`${townName(strings, t.number)} (ruins)`));
+      write(`${rb}.map`, mapFile(ruined, VILLAGE_SIZE, new Map()));
+      write(`${rb}.spec`, '');
+      write(`towns/talk${ruin.record}.xml`, `${XML_HEAD}<dialogue boes="2.0.0">\n</dialogue>\n`);
+    }
   });
   write('debug.json', JSON.stringify(debug));
   // E3's job boards (src/game/e3Jobs.ts): their text, as scenario strings.
@@ -974,7 +1025,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   // Last, since the places' scripts can add shops of their own.
   shops.push(...talk.shops);
   const cursors = readE3Cursors(resources);
-  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, e3JournalStrings((id) => strings.get(id) ?? ''), cursors));
+  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, e3JournalStrings((id) => strings.get(id) ?? ''), cursors, townCount));
   const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(read), ...e3MapSheets(read)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
   // E3's own sounds, which a scenario's `sounds/SNDn.wav` puts in place of

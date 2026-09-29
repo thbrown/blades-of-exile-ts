@@ -216,6 +216,14 @@ export enum SpecType {
    * its creatures' records directly (DIVERGENCES.md #21).
    */
   TOWN_SET_CREATURE = 205,
+  /**
+   * An exile-js opcode, not in BoE or OBoE: the `ex2a` × `ex2b` rectangle at
+   * (`ex1b`, `ex1c`) takes the terrain town record `ex1a` has there, square
+   * by square as CHANGE_TER would. Exile III rebuilds a village on every
+   * visit, with each building ruined once its day has come; the converter
+   * keeps each village's ruins in a record of its own (DIVERGENCES.md #24).
+   */
+  TOWN_COPY_TERRAIN = 206,
 
   RECT_PLACE_FIELD = 210,
   RECT_SET_EXPLORED = 211,

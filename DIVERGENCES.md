@@ -569,6 +569,22 @@ The rest of E3's rules are the scenario's own, by flag, as `bash` is: Exile
 III's lock picking is `pick-lock` = `exile3` (`10d8:3f67`, in `doors.ts`),
 and its traps are mapped kind by kind in the converter (`SpecBuilder.trap`).
 
+### 24. A village falling to ruin (2026-09-28)
+
+**DECIDED: an exile-js opcode, `copy-ter` (206, TOWN), and a hidden town
+record per village.** Exile III's villages store no map; `FUN_1040_1600`
+builds one on every visit from placed buildings, and a building shows its
+ruin once its own `(day, event)` has come, or once the village is overrun
+(its chop day). BoE's town map is fixed. The converter builds each of the 22
+villages this touches a second time with every such building ruined, as a
+town record after E3's 200 (hidden, with no entrance), and the village's
+entry copies each building's 8×8 square in from it when its day has come.
+`copy-ter` copies a rectangle of terrain from another town record, square by
+square as CHANGE_TER does. Two small differences stay: the grass scattered
+inside a ruined square is the ruins record's roll, not a fresh one; and
+where two buildings overlap, copying one square can bring in part of the
+other's ruin early.
+
 ---
 
 ## Agreements worth recording

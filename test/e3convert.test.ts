@@ -114,7 +114,9 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
 
   it("hides E3's fifteen towns until something shows them", async () => {
     const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
-    const hidden = scen.towns.flatMap((t, i) => (t.canFind ? [] : [i]));
+    // E3's own 200; the villages' ruins records after them are hidden too.
+    const hidden = scen.towns.slice(0, 200).flatMap((t, i) => (t.canFind ? [] : [i]));
+    expect(scen.towns.slice(200).every((t) => !t.canFind)).toBe(true);
     expect(hidden).toEqual([22, 26, 32, 54, 70, 71, 74, 75, 76, 77, 78, 79, 86, 87, 92]);
     // Town 22's entrance, zone 84 (3,9) at (22,41), is terrain 223, which
     // shows as 26 while hidden (DS:3c0a) and can't be walked into.
@@ -916,8 +918,40 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(fort.creatures.filter((c) => c.number > 0).length).toBeGreaterThan(40);
   });
 
+  it("ruins a village's buildings once their day has come (copy-ter)", async () => {
+    const village = scen.towns[147]!;
+    const ruins = scen.towns.find((t) => t.name === `${village.name} (ruins)`)!;
+    const kept = village.terrain.map((col) => [...col]);
+    const differs = (a: number[][], b: number[][]) => a.some((col, x) => col.some((ter, y) => ter !== b[x]![y]));
+    try {
+      expect(differs(village.terrain, ruins.terrain)).toBe(true);
+      // Day 1: nothing has fallen yet.
+      const quiet = new Proxy({}, { get: () => () => Promise.resolve(0) }) as never;
+      const early = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+      early.attachSpecials(quiet);
+      early.startTownMode(147, FORCED_ENTRY);
+      while (early.specials!.busy) await new Promise((r) => setTimeout(r, 0));
+      expect(differs(village.terrain, kept)).toBe(false);
+      // Day 400, no plague stopped: every dated building has fallen, and each
+      // square that changed now matches the ruins record.
+      const late = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+      late.attachSpecials(quiet);
+      late.univ.party.age = 3700 * 400;
+      late.startTownMode(147, FORCED_ENTRY);
+      while (late.specials!.busy) await new Promise((r) => setTimeout(r, 0));
+      expect(differs(village.terrain, kept)).toBe(true);
+      village.terrain.forEach((col, x) => col.forEach((ter, y) => {
+        if (ter !== kept[x]![y]) expect(ter).toBe(ruins.terrain[x]![y]);
+      }));
+    } finally {
+      kept.forEach((col, x) => { village.terrain[x] = col; });
+    }
+  });
+
   it('has all 200 towns, their maps sized by record number', () => {
-    expect(scen.towns).toHaveLength(200);
+    // And, after them, the 22 villages' ruins records (`village.ts`).
+    expect(scen.towns).toHaveLength(222);
+    expect(scen.towns[200]?.name).toMatch(/ \(ruins\)$/);
     expect(scen.towns[0]?.maxDim).toBe(64);
     expect(scen.towns[45]?.maxDim).toBe(48);
     expect(scen.towns[80]?.maxDim).toBe(32);
@@ -949,7 +983,7 @@ describe("Exile III converted in memory, as the browser does", () => {
     const loaded = await loadScenarioPackage(
       { id: 'exile3', fileName: 'exile3.boes', kind: 'boes', data: gzipSync(writeTar(entries)) }, opcodes);
     expect(loaded.scenario.title).toBe('Exile III: Ruined World');
-    expect(loaded.scenario.towns.length).toBe(200);
+    expect(loaded.scenario.towns.length).toBe(222);
     // Terrain, monsters and items, then the ten maps and carvings.
     expect(loaded.sheets.length).toBe(22);
     // Its instant help, in its own words, over the game's.

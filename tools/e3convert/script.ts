@@ -991,6 +991,15 @@ export class SpecBuilder {
     return (next) => this.node('place-monst', { ex1: [x, y], ex2: [type, 1] }, next);
   }
 
+  /**
+   * The `w` × `h` rectangle at `(x, y)` takes town record `town`'s terrain
+   * there. The engine's `copy-ter` is an exile-js opcode
+   * (`SpecType.TOWN_COPY_TERRAIN`), for a village's ruins (`village.ts`).
+   */
+  copyTerrain(town: number, x: number, y: number, w: number, h: number): Step {
+    return (next) => this.node('copy-ter', { ex1: [town, x, y], ex2: [w, h] }, next);
+  }
+
   /** `FUN_1080_1b76(x, y, t)`: the terrain at `(x, y)` becomes `t`. */
   setTer(x: number, y: number, t: number): Step {
     return (next) => this.node('change-ter', { ex1: [x, y], ex2: [t] }, next);

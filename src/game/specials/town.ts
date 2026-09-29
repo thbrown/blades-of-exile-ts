@@ -445,6 +445,23 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
       break;
     }
 
+    case SpecType.TOWN_COPY_TERRAIN: {
+      // DIVERGENCES.md #24. A source town out of range, or a square off
+      // either map, is skipped.
+      const from = univ.scenario.towns[spec.ex1a];
+      if (!from || !town) break;
+      for (let i = 0; i < spec.ex2a; i++) {
+        for (let j = 0; j < spec.ex2b; j++) {
+          const x = spec.ex1b + i, y = spec.ex1c + j;
+          const ter = from.terrain[x]?.[y];
+          if (ter === undefined || town.record.terrain[x]?.[y] === undefined) continue;
+          if (town.record.terrain[x]![y] !== ter) alterSpace(univ, x, y, ter);
+        }
+      }
+      ctx.redraw = true;
+      break;
+    }
+
     case SpecType.TOWN_CHANGE_LIGHTING:
       if (town && spec.ex1a >= 0 && spec.ex1a <= 3) {
         town.record.lightingType = spec.ex1a;

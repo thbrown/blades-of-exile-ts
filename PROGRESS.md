@@ -14358,6 +14358,11 @@ the rest of the TODO(E3-3) list.
         sources destroyed, and fourteen towns and five creatures change on
         their day only if the source is still there; with the event dropped,
         a town fell to a plague the party had already ended.
+      - [x] **Villages fall to ruin** (DIVERGENCES #24). `copy-ter` (206)
+        and a hidden "(ruins)" record for each of 22 villages, towns
+        200–221 (`num-towns` 222); the village's entry copies each
+        building's square in on its day, or all once overrun.
+        `test/e3convert.test.ts` enters Angel's Rest on day 1 and day 400.
 
 All checks pass: 1,420 tests, both sweeps, verify-screen (with TOUCH)/party
 (this round). Before it: 1,419 tests, both sweeps, verify-screen (with TOUCH)/party

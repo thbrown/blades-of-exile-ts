@@ -203,7 +203,7 @@ spell-pat-boom
 relocate
 label
 town-creature
-
+copy-ter
 
 
 
