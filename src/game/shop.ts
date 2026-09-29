@@ -18,7 +18,7 @@ import {
 import { SPELLS, spellFromNum } from '../data/spell';
 import { getStr } from '../data/strings';
 import { SoundPlayer, Snd } from '../platform/sound';
-import { GiveStatus, giveItem } from '../universe/inventory';
+import { GiveStatus, giveItem, uncurse } from '../universe/inventory';
 import { NUM_INVEN_SLOTS } from '../universe/player';
 import { MainStatus, Skill, Status } from '../universe/skills';
 import { Universe } from '../universe/universe';
@@ -356,10 +356,7 @@ function applyHealing(univ: Universe, type: ShopItemType): void {
     case ShopItemType.CURE_PARALYSIS: pc.status[Status.PARALYZED] = 0; break;
     case ShopItemType.REMOVE_CURSE:
       for (let i = 0; i < NUM_INVEN_SLOTS; i++) {
-        if (pc.equip[i] && pc.items[i]!.cursed) {
-          pc.items[i]!.cursed = false;
-          pc.items[i]!.unsellable = false;
-        }
+        if (pc.equip[i] && pc.items[i]!.cursed) uncurse(pc.items[i]!);
       }
       break;
     case ShopItemType.DESTONE:

@@ -22,7 +22,7 @@ import { Spell, SPELLS, spellName } from '../data/spell';
 import { ItemAbil, ItemType } from '../data/item';
 import { FieldType } from '../data/fields';
 import { Skill, MainStatus, PartyStatus, Status, Trait } from '../universe/skills';
-import { getProtLevel, hasAbil, hasAbilEquip } from '../universe/inventory';
+import { getProtLevel, hasAbil, hasAbilEquip, uncurse } from '../universe/inventory';
 import { livingSound, SpellNote } from '../universe/living';
 import { Player } from '../universe/player';
 import { crumbleWall } from './fieldEffects';
@@ -588,10 +588,7 @@ export function doPriestSpell(
       } else if (spellNum === Spell.CURSE_REMOVE) {
         for (const item of target.items) {
           if (!item.cursed) continue;
-          if (univ.rng.getRan(1, 0, 200) - 10 * adj < 60) {
-            item.cursed = false;
-            item.unsellable = false;
-          }
+          if (univ.rng.getRan(1, 0, 200) - 10 * adj < 60) uncurse(item);
         }
         livingSound(52);
         line = '  Your items glow.';

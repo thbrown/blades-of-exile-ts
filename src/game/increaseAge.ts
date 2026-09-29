@@ -22,7 +22,7 @@ import { TRACE_AGE } from '../core/trace';
 import { tryAutoSave } from './autosave';
 import { ItemAbil, abilGroup, abilHarms } from '../data/item';
 import { Lighting } from '../data/town';
-import { getProtLevel, hasAbilEquip } from '../universe/inventory';
+import { getProtLevel, hasAbilEquip, hasE3AbilEquip } from '../universe/inventory';
 import { Player } from '../universe/player';
 import { MainStatus, PartyStatus, Race, Status, Trait, statusInfo } from '../universe/skills';
 import { MAX_FOOD, MAX_GOLD, Party } from '../universe/party';
@@ -153,7 +153,10 @@ export function handleDisease(session: GameSession): void {
     }
     let r1 = univ.rng.getRan(1, 0, 7);
     if (pc.traits[Trait.GOOD_CONST]) r1 -= 2;
-    if (r1 <= 0 || hasAbilEquip(pc, ItemAbil.STATUS_PROTECTION, Status.DISEASE)) {
+    // Exile III's Aescal's Ring (its code 67, `1018:ad14`; 1997's number too,
+    // COMBAT.CPP:3988) always does; E3's items sit out of BoE's test.
+    if (r1 <= 0 || hasAbilEquip(pc, ItemAbil.STATUS_PROTECTION, Status.DISEASE, true)
+      || hasE3AbilEquip(pc, 67)) {
       moveToZero(pc, Status.DISEASE);
     }
   }

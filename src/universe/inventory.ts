@@ -494,11 +494,28 @@ export function getProtLevel(pc: Player, abil: ItemAbil, dat = -1, notE3 = false
  * number, not BoE's (`Item.e3Ability`) — as its `FUN_1070_0681` asks.
  */
 export function hasE3AbilEquip(pc: Player, code: number): boolean {
+  return e3AbilEquip(pc, code) !== null;
+}
+
+/**
+ * Lift an item's curse, as Remove Curse and a temple do. Exile III keeps its
+ * curse in the ability byte (14, or 95 for Dancing Boots) and lifts it by
+ * zeroing that (the healer, `1020:06d9`; the spell, `10b0:4937`), so its
+ * uncursed Dancing Boots stop dancing too.
+ */
+export function uncurse(item: Item): void {
+  item.cursed = false;
+  item.unsellable = false;
+  if (item.e3Ability === 14 || item.e3Ability === 95) item.e3Ability = 0;
+}
+
+/** E3's `FUN_1070_0681` itself: the first equipped item with E3 ability `code`. */
+export function e3AbilEquip(pc: Player, code: number): Item | null {
   for (let i = 0; i < NUM_INVEN_SLOTS; i++) {
     const item = pc.items[i]!;
-    if (pc.equip[i] && item.variety !== ItemType.NO_ITEM && item.e3Ability === code) return true;
+    if (pc.equip[i] && item.variety !== ItemType.NO_ITEM && item.e3Ability === code) return item;
   }
-  return false;
+  return null;
 }
 
 /**

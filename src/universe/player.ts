@@ -7,9 +7,9 @@
 
 import { Direction, Location, loc, percent } from '../core/location';
 import { GameRng } from '../core/rng';
-import { Item, ItemAbil, ItemPreset, defaultItem, presetItem } from '../data/item';
+import { Item, ItemAbil, ItemPreset, ItemType, defaultItem, presetItem } from '../data/item';
 import { Spell } from '../data/spell';
-import { getProtLevel, hasAbilEquip, hasE3AbilEquip } from './inventory';
+import { e3AbilEquip, getProtLevel, hasAbilEquip, hasE3AbilEquip } from './inventory';
 import { Living, SpellNote, giveHelp, livingSound, printResult } from './living';
 import { Party } from './party';
 import { hasFeatureFlag } from '../game/featureFlags';
@@ -211,7 +211,8 @@ export class Player extends Living {
     } else if (which >= Skill.MAGE_SPELLS && which <= Skill.ITEM_LORE) {
       bulkBonus = getProtLevel(this, ItemAbil.BOOST_MAGIC);
     }
-    const boosted = (this.skills[which] ?? 0) + getProtLevel(this, ItemAbil.BOOST_STAT, which);
+    // Exile III's Micah's Gloves raise no skill; see `statAdj`.
+    const boosted = (this.skills[which] ?? 0) + getProtLevel(this, ItemAbil.BOOST_STAT, which, true);
     return Math.min(20, boosted) + bulkBonus;
   }
 
@@ -244,7 +245,11 @@ export class Player extends Living {
       if (this.traits[Trait.STRENGTH]) tr++;
       if (this.race === Race.VAHNATAI) tr -= 2;
     }
-    if (hasAbilEquip(this, ItemAbil.BOOST_STAT, which)) tr++;
+    if (hasAbilEquip(this, ItemAbil.BOOST_STAT, which, true)) tr++;
+    // Exile III's Micah's Gloves (its code 99) add one to dexterity's, worn
+    // in the first sixteen slots (`stat_adj`, `10b0:87af`; DIVERGENCES.md #23).
+    if (which === Skill.DEXTERITY && this.items.slice(0, 16)
+      .some((item, i) => this.equip[i] && item.variety !== ItemType.NO_ITEM && item.e3Ability === 99)) tr++;
     return tr;
   }
 
@@ -289,8 +294,15 @@ export class Player extends Living {
   poison(howMuch: number, rng: GameRng): void {
     if (!this.isAlive) return;
     howMuch -= Math.trunc(
-      getProtLevel(this, ItemAbil.STATUS_PROTECTION, Status.POISON) / 2);
-    howMuch -= Math.trunc(getProtLevel(this, ItemAbil.FULL_PROTECTION) / 3);
+      getProtLevel(this, ItemAbil.STATUS_PROTECTION, Status.POISON, true) / 2);
+    howMuch -= Math.trunc(getProtLevel(this, ItemAbil.FULL_PROTECTION, -1, true) / 3);
+    // Exile III's items (`poison_pc`, `10b0:933f`; DIVERGENCES.md #23): its
+    // code 1 takes level + 1 off (no item of E3's has it), 77 (the Amber
+    // Periapt, Steel Plate) and 127 (Resistance) one each.
+    const ward = e3AbilEquip(this, 1);
+    if (ward) howMuch -= ward.itemLevel + 1;
+    if (hasE3AbilEquip(this, 77)) howMuch--;
+    if (hasE3AbilEquip(this, 127)) howMuch--;
 
     if (this.traits[Trait.FRAIL] && howMuch > 1) howMuch++;
     if (this.traits[Trait.FRAIL] && howMuch === 1 && rng.getRan(1, 0, 1) === 0) howMuch++;
@@ -313,7 +325,9 @@ export class Player extends Living {
       return;
     }
     howMuch -= Math.trunc(
-      getProtLevel(this, ItemAbil.STATUS_PROTECTION, Status.DISEASE) / 2);
+      getProtLevel(this, ItemAbil.STATUS_PROTECTION, Status.DISEASE, true) / 2);
+    // Exile III's 77 takes one off (`disease_pc`, `10b0:183a`).
+    if (hasE3AbilEquip(this, 77)) howMuch--;
     if (this.traits[Trait.FRAIL] && howMuch > 1) howMuch++;
     if (this.traits[Trait.FRAIL] && howMuch === 1 && rng.getRan(1, 0, 1) === 0) howMuch++;
     this.applyStatus(Status.DISEASE, howMuch);
@@ -382,11 +396,13 @@ export class Player extends Living {
   dumbfound(howMuch: number, rng: GameRng): void {
     if (!this.isAlive) return;
     let r1 = rng.getRan(1, 0, 90);
-    if (hasAbilEquip(this, ItemAbil.WILL)) {
+    // Exile III's Ring of Will is its code 75 (`10b0:16e6`), with the same
+    // words and roll as 1997's 53; its BoE ability sits out of both tests.
+    if (hasAbilEquip(this, ItemAbil.WILL, -1, true) || hasE3AbilEquip(this, 75)) {
       printResult('  Ring of Will glows.');
       r1 -= 10;
     }
-    howMuch -= Math.trunc(getProtLevel(this, ItemAbil.STATUS_PROTECTION, Status.DUMB) / 4);
+    howMuch -= Math.trunc(getProtLevel(this, ItemAbil.STATUS_PROTECTION, Status.DUMB, true) / 4);
     if (r1 < this.level) howMuch -= 2;
     if (howMuch <= 0) {
       printResult(`  ${this.name} saved.`);

@@ -10,6 +10,7 @@
  */
 
 import { e3JobKill } from './e3Jobs';
+import { e3DamageResist } from './e3Items';
 import { Location, dist } from '../core/location';
 import { SIGHT_BLOCKED } from '../core/sight';
 import { FieldType } from '../data/fields';
@@ -153,10 +154,11 @@ export async function damagePc(
     if (univ.rng.getRan(1, 1, 100) < 2 * (hitChance(pc.skill(Skill.LUCK)) - 20)) howMuch -= 1;
   }
 
-  let protFromDmg = getProtLevel(pc, ItemAbil.DAMAGE_PROTECTION, damType);
+  // Exile III's items leave these three to `e3DamageResist` (DIVERGENCES.md #23).
+  let protFromDmg = getProtLevel(pc, ItemAbil.DAMAGE_PROTECTION, damType, true);
   // Acid used to be a kind of magic damage, so magic protection still counts.
   if (damType === DamageType.ACID) {
-    protFromDmg += getProtLevel(pc, ItemAbil.DAMAGE_PROTECTION, DamageType.MAGIC);
+    protFromDmg += getProtLevel(pc, ItemAbil.DAMAGE_PROTECTION, DamageType.MAGIC, true);
   }
   if (protFromDmg > 0) {
     // Against weapons it subtracts; against anything else it halves, which
@@ -166,19 +168,19 @@ export async function damagePc(
     else howMuch = Math.trunc(howMuch / 2);
   }
 
-  if (getProtLevel(pc, ItemAbil.PROTECT_FROM_SPECIES, attackerRace) > 0) {
+  if (getProtLevel(pc, ItemAbil.PROTECT_FROM_SPECIES, attackerRace, true) > 0) {
     howMuch = Math.trunc(howMuch / 2);
   }
   // Protection from humanoids also covers the specific humanoid races — but not
   // HUMANOID itself, or it would count twice.
   if (isHumanoid(attackerRace) && !isHuman(attackerRace) && attackerRace !== Race.HUMANOID) {
-    if (getProtLevel(pc, ItemAbil.PROTECT_FROM_SPECIES, Race.HUMANOID) > 0) {
+    if (getProtLevel(pc, ItemAbil.PROTECT_FROM_SPECIES, Race.HUMANOID, true) > 0) {
       howMuch = Math.trunc(howMuch / 2);
     }
   }
   // Protection from undead covers skeletons too.
   if (attackerRace === Race.SKELETAL) {
-    if (getProtLevel(pc, ItemAbil.PROTECT_FROM_SPECIES, Race.UNDEAD) > 0) {
+    if (getProtLevel(pc, ItemAbil.PROTECT_FROM_SPECIES, Race.UNDEAD, true) > 0) {
       howMuch = Math.trunc(howMuch / 2);
     }
   }
@@ -192,10 +194,11 @@ export async function damagePc(
     else if (magicRes < 0) howMuch *= 2;
   }
 
-  const fullProt = getProtLevel(pc, ItemAbil.FULL_PROTECTION);
+  const fullProt = getProtLevel(pc, ItemAbil.FULL_PROTECTION, -1, true);
   if (MAJOR_RESISTS.has(damType) && fullProt > 0) {
     howMuch = Math.trunc(howMuch / (fullProt >= 7 ? 4 : 2));
   }
+  howMuch = e3DamageResist(pc, damType, howMuch);
 
   // The PC half of the same marked-damage branch (boe.party.cpp:2634). Note it
   // booms at the *party's* square in town rather than the PC's, which only

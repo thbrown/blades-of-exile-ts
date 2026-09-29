@@ -11,7 +11,9 @@
  * `project/exile3.c` addresses are Ghidra's; see `tools/e3convert/FORMATS.md`.
  */
 import { ItemType, type Item } from '../data/item';
-import { NUM_INVEN_SLOTS, type Player } from '../universe/player';
+import { DamageType } from '../data/monster';
+import { e3AbilEquip } from '../universe/inventory';
+import type { Player } from '../universe/player';
 import type { Living } from '../universe/living';
 import { Creature } from '../universe/creature';
 import { Race, Status } from '../universe/skills';
@@ -42,16 +44,26 @@ export const E3Abil = {
   DANCING: 95,
   /** Asp Gloves: now and then, poison 2. */
   ASP_GLOVES: 98,
+  /** Halves magic damage (the Onyx Charm). */
+  MAGIC_RES: 2,
+  /** Halves fire damage: the Ruby Charm, the Ring of Fire Res., Robes — and the Iceshield. */
+  FIRE_RES: 16,
+  /** Halves an undead creature's blows (the Silver Ankh). */
+  UNDEAD_WARD: 48,
+  /** Halves cold damage (the Ring of Warmth). */
+  COLD_RES: 66,
+  /** "Ring of Will glows.": a better roll against being dumbfounded. */
+  WILL: 75,
+  /** One off each dose of poison and of disease (the Amber Periapt, Steel Plate). */
+  POISON_DISEASE: 77,
+  /**
+   * Halves fire, poison, magic and cold damage, takes one off a dose of
+   * poison and two off a sleep (the Ring of Resistance, Pachtar's Plate).
+   */
+  RESISTANCE: 127,
 } as const;
 
-/** E3's `FUN_1070_0681`: the first equipped item with E3 ability `code`. */
-export function e3AbilEquip(pc: Player, code: number): Item | null {
-  for (let i = 0; i < NUM_INVEN_SLOTS; i++) {
-    const item = pc.items[i]!;
-    if (pc.equip[i] && item.variety !== ItemType.NO_ITEM && item.e3Ability === code) return item;
-  }
-  return null;
-}
+export { e3AbilEquip };
 
 /**
  * The melee adjustments E3's attack (`1018:0edd`) makes for three rings and
@@ -168,4 +180,30 @@ export function e3CombatRoundItems(univ: Universe, pc: Player): void {
     univ.addStringToBuf(`${pc.name} feels ill.`);
     pc.poison(2, univ.rng);
   }
+}
+
+/**
+ * What E3's `damage_pc` (`10b0:9676`) does to a hit for the items it tests,
+ * in place of BoE's DAMAGE_PROTECTION, PROTECT_FROM_SPECIES and
+ * FULL_PROTECTION (which skip E3's items). Each only ever halves — E3 has
+ * none of 1997's "strength 7 or more quarters it" — so the order among them
+ * and against the magic-resistance status doesn't matter. The Demonslayer
+ * wards off demons' blows while it is wielded. The Iceshield really is a
+ * *fire* ward in E3 (code 16, as the Ruby Charm); bladbase made it cold's.
+ *
+ * Code 1 in `poison_pc` and the fire ×3/4 on party+0x4c are not items; they
+ * are left to `Player.poison` and to nothing, respectively (no item carries
+ * code 1, and nothing in the port sets the second).
+ */
+export function e3DamageResist(pc: Player, damType: DamageType, howMuch: number): number {
+  const halve = (code: number, ...types: DamageType[]) => {
+    if (types.includes(damType) && e3AbilEquip(pc, code)) howMuch = Math.trunc(howMuch / 2);
+  };
+  halve(E3Abil.UNDEAD_WARD, DamageType.UNDEAD);
+  halve(E3Abil.DEMONSLAYER, DamageType.DEMON);
+  halve(E3Abil.MAGIC_RES, DamageType.MAGIC);
+  halve(E3Abil.FIRE_RES, DamageType.FIRE);
+  halve(E3Abil.COLD_RES, DamageType.COLD);
+  halve(E3Abil.RESISTANCE, DamageType.FIRE, DamageType.POISON, DamageType.MAGIC, DamageType.COLD);
+  return howMuch;
 }

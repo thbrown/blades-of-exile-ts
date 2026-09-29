@@ -20,7 +20,7 @@ import { placeSpellPattern } from './spellPatterns';
 import { getSummonMonster, summonMonster } from './monsterPlace';
 import { ItemAbil } from '../data/item';
 import { Creature } from '../universe/creature';
-import { getProtLevel, hasAbilEquip } from '../universe/inventory';
+import { getProtLevel, hasAbilEquip, hasE3AbilEquip } from '../universe/inventory';
 import { Living, SpellNote, livingSound } from '../universe/living';
 import { Player } from '../universe/player';
 import { MainStatus, Status } from '../universe/skills';
@@ -514,10 +514,18 @@ export async function monsterBasicAbil(
   const mTarget = target instanceof Creature ? target : null;
   const strength = abil.gen.strength;
   const percentOf = (v: number, p: number): number => Math.trunc((v * p) / 100);
+  // Exile III's Silver Ankh (its code 48; `1018:0edd`, and 1997's
+  // monster_attack, COMBAT.CPP:2352, tests the same number) wards off an
+  // undead touch that drains, stuns or freezes, before any dice for it. Its
+  // life-saving items don't (DIVERGENCES.md #23).
+  const ankh = pcTarget !== null && abil.gen.type === MonstGen.TOUCH && hasE3AbilEquip(pcTarget, 48);
+  // OBoE's ward against the same two, which E3's items sit out of.
+  const lifeSaver = pcTarget !== null && hasAbilEquip(pcTarget, ItemAbil.LIFE_SAVING, -1, true) !== null;
 
   switch (key) {
     case MonstAbil.DAMAGE:
     case MonstAbil.DAMAGE2: {
+      if (ankh && abil.gen.extra === DamageType.COLD) break;
       // The die size depends on how the attack arrives: a breath is bigger
       // than a ray, and a spit or a touch bigger still.
       let sides = 6;
@@ -546,7 +554,7 @@ export async function monsterBasicAbil(
     case MonstAbil.STUN:
       // A life-saving item shrugs a stun off entirely; short of that it
       // behaves as a status like any other (the C++ falls through to it).
-      if (pcTarget && hasAbilEquip(pcTarget, ItemAbil.LIFE_SAVING)) break;
+      if (lifeSaver || ankh) break;
       applyGeneralStatus(session, monst, abil, target);
       break;
 
@@ -592,7 +600,7 @@ export async function monsterBasicAbil(
       // Only ever aimed at a PC, and a life-saving item stops it outright —
       // note it isn't *spent*, unlike the way it works against death.
       if (!pcTarget) break;
-      if (hasAbilEquip(pcTarget, ItemAbil.LIFE_SAVING)) break;
+      if (lifeSaver || ankh) break;
       drainPc(pcTarget, percentOf(monst.mon.level, strength));
       break;
 

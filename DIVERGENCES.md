@@ -573,6 +573,16 @@ from a Ring and Boots of Speed, and the four worn items that act once a
 combat round. BoE's rule skips an item with an E3 code (`notE3`); the item
 keeps a BoE ability so that its description still names one.
 
+And, 2026-09-29, its wards: poison, disease and dumbfounding by E3's codes;
+damage resistances that always halve (E3 never quarters) and stack by kind,
+with the Iceshield a *fire* ward as E3 has it; the Silver Ankh, not a
+life-saving item, against undead drain, stun and icy touch; Aescal's Ring
+ending disease; Micah's Gloves adding to dexterity's adjustment rather than
+the skill. **An E3 item is cursed by its code (14, 95), not bladbase's
+flag**, which curses five more items, and lifting the curse zeroes the code,
+so uncursed Dancing Boots stop dancing. What *using* an item does is still
+BoE's.
+
 The rest of E3's rules are the scenario's own, by flag, as `bash` is: Exile
 III's lock picking is `pick-lock` = `exile3` (`10d8:3f67`, in `doors.ts`),
 and its traps are mapped kind by kind in the converter (`SpecBuilder.trap`).

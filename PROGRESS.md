@@ -14463,21 +14463,47 @@ the rest of the TODO(E3-3) list.
           Only when worn; BoE's OCCASIONAL_STATUS skips E3 items.
         - [x] *Strengths the converter can fix*: regeneration 3×(level+1),
           so `increase_age`'s 0..strength/3 is E3's 0..level+1; uranium 2.
-        - [ ] Still to read: status saves (75, 77, 118, 120, 122, 127 and
-          code 1, in `poison_pc` `10b0:933f` and its siblings near
-          `1098:`/`10b0:` 51980–55200 in the C), damage resistances
-          (55406: 48, 50, 2, 16, 66, 127), life saving (9), the Silver Ankh
-          (48, XP drain, 10324), Aescal's Ring (67, 12768), Micah's Gloves
-          (99), lockpicks (11) and Nimble Gloves (61, 66841), curses (14,
-          95 compares), and the use-item switch (`59914`) for every potion,
-          scroll and wand.
+        - [x] *Status saves, resistances, wards and curses* (2026-09-29).
+          `poison_pc` (`10b0:933f`): 77 and 127 one off each (code 1 would
+          take level+1; no item has it). `disease_pc` (`183a`): 77 one off.
+          `dumbfound_pc` (`16e6`): the Ring of Will is 75, same words and
+          roll as 1997's 53. `damage_pc` (`9676`, `e3DamageResist`): 48 halves
+          undead blows, 50 (Demonslayer) demons', 2 magic, 16 fire — **the
+          Iceshield is a fire ward**, bladbase made it cold's — 66 cold, 127
+          fire/poison/magic/cold; always ÷2, never 1997's ÷4 at strength 7.
+          *The Silver Ankh* (48, `1018:0edd`'s touch tail) stops drain, stun
+          and icy touch before any dice; E3's life-saving items don't.
+          *Aescal's Ring* (67) ends disease at the round's roll. *Micah's
+          Gloves* (99, `stat_adj` `10b0:87af`) +1 to dexterity's adjustment
+          in slots 0–15, no skill. *Curses*: an item is cursed iff its code
+          is 14 or 95 (`1070:1320`), so five 14s bladbase left clean are
+          cursed now; Remove Curse and the healer zero the code
+          (`uncurse`), so uncursed Dancing Boots stop dancing. **Agree
+          already**: acid (122), life saving (9), sleep (done before), lock
+          picking (11, 61 under `pick-lock`). BoE's rules skip E3 items
+          (`notE3`) in each of these.
+          **Found, not ported** (not items): E3's magic-resistance *status*
+          halves magic damage too (OBoE's only fire/cold); a fire ×3/4 on
+          party+0x4c; nimble fingers +1 to dexterity's `stat_adj`; E3's
+          disease end-roll ignores good constitution; its luck save in
+          `kill_pc` is 0–100.
+        - [ ] Left (the TODO(E3-3) in `tables.ts`): the use-item switch
+          (`10c0:2c92`, ~550 lines of C with every far call's arguments
+          dropped — read it in `nedis.py`, case by case), and `give_to_pc`'s
+          Lodestone (129 → 14, worn at once) and Airy Stone (117 → 0), which
+          also rewrite a byte at +0x13 of the in-memory item (20 and −20).
+          `item_weight` (`1070:094b`) reads the weight byte by stack offset;
+          whether that is +0x11 (FORMATS.md's layout) or +0x13 is unpinned.
         - *Tool note*: a message literal pushed as `push cs; push off` is in
           the *caller's* code segment — `nedis.py --str 1018:4360` — not DS.
+        - *Tool note*: `nedis.py --all > all.s` in the scratchpad (~390k
+          lines, a minute) finds a `push <code>; call FUN_1070_0681` whose
+          argument the decompiler dropped — that is how Micah's Gloves
+          turned up.
 
-All checks pass: 1,441 tests, both sweeps, verify-screen (with TOUCH)/party
-and verify-e3 (the personality swaps, 2026-09-28). Before it: 1,440 tests
-(the monster extras). (Corpus not re-run: no RNG call moved; the HAIL path
-only gained a field reset.) **Next session starts here**: the TODO sweep's
-last few — `grep -rn "TODO(" src/ tools/`: one TODO(E3-3) (E3's own item
-ability semantics, `tables.ts`), then TODO(M9)/TODO(campaign)/TODO(M8),
-which may be left for the user to rule on.
+All checks pass (2026-09-29): 1,450 tests, both sweeps, verify-screen (with
+TOUCH), verify-party and verify-e3. (Corpus not re-run: every change is
+behind an E3 item code, and no RNG call moved for anything else.) **Next
+session starts here**: the one TODO(E3-3) left in `tables.ts` — E3's
+use-item switch, then the Lodestone and Airy Stone — then
+TODO(M9)/TODO(campaign)/TODO(M8), which may be left for the user to rule on.

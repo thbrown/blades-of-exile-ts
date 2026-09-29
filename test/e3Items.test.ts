@@ -4,14 +4,15 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { GameRng } from '../src/core/rng';
 import { ItemAbil, ItemType } from '../src/data/item';
 import { Scenario } from '../src/data/scenario';
-import { E3Abil, e3ActionPoints, e3AttackAdj, e3CombatRoundItems, e3MissileHitBonus, e3OnMeleeHit, e3SpecDam } from '../src/game/e3Items';
+import { DamageType } from '../src/data/monster';
+import { E3Abil, e3ActionPoints, e3AttackAdj, e3CombatRoundItems, e3DamageResist, e3MissileHitBonus, e3OnMeleeHit, e3SpecDam } from '../src/game/e3Items';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { Creature } from '../src/universe/creature';
-import { hasAbilEquip } from '../src/universe/inventory';
+import { getProtLevel, hasAbilEquip, uncurse } from '../src/universe/inventory';
 import { PartyPreset, Player } from '../src/universe/player';
-import { Race, Status } from '../src/universe/skills';
+import { Race, Skill, Status } from '../src/universe/skills';
 import { Universe } from '../src/universe/universe';
 
 const opcodes = buildOpcodeTable(
@@ -110,5 +111,78 @@ describe("Exile III's item rules (src/game/e3Items.ts)", () => {
     expect(pc.status[Status.HASTE_SLOW]).toBe(1);
     expect(pc.status[Status.BLESS_CURSE]).toBe(-2);
     expect(log).toEqual(['Helm of speed glows.', `${pc.name} starts dancing!`]);
+  });
+
+  it('resistances halve once, whatever the strength, and only for their own kind', () => {
+    const { pc } = setup();
+    pc.equip.fill(false);
+    // Pachtar's Plate: BoE's FULL_PROTECTION 11 would quarter a fireball.
+    wear(pc, 20, E3Abil.RESISTANCE, 11, ItemAbil.FULL_PROTECTION);
+    expect(getProtLevel(pc, ItemAbil.FULL_PROTECTION, -1, true)).toBe(0);
+    expect(e3DamageResist(pc, DamageType.FIRE, 40)).toBe(20);
+    expect(e3DamageResist(pc, DamageType.WEAPON, 40)).toBe(40);
+    // The Iceshield is a fire ward in E3, and stacks with Resistance.
+    wear(pc, 21, E3Abil.FIRE_RES, 6, ItemAbil.DAMAGE_PROTECTION);
+    expect(e3DamageResist(pc, DamageType.FIRE, 40)).toBe(10);
+    expect(e3DamageResist(pc, DamageType.COLD, 40)).toBe(20);
+    // The Silver Ankh against the undead, the Demonslayer against demons.
+    wear(pc, 22, E3Abil.UNDEAD_WARD, 0, ItemAbil.DAMAGE_PROTECTION);
+    wear(pc, 23, E3Abil.DEMONSLAYER, 18, ItemAbil.SLAYER_WEAPON);
+    expect(e3DamageResist(pc, DamageType.UNDEAD, 9)).toBe(4);
+    expect(e3DamageResist(pc, DamageType.DEMON, 9)).toBe(4);
+  });
+
+  it('poison, disease and dumbfounding go by E3\'s codes', () => {
+    const { pc } = setup();
+    pc.equip.fill(false);
+    pc.traits.fill(false);
+    const high = { getRan: (_n: number, _min: number, max: number) => max } as unknown as GameRng;
+    // Steel Plate (77): one off, where BoE's STATUS_PROTECTION 9 took four.
+    wear(pc, 20, E3Abil.POISON_DISEASE, 9, ItemAbil.STATUS_PROTECTION);
+    pc.items[20]!.abilData = Status.POISON;
+    pc.status[Status.POISON] = 0;
+    pc.poison(4, high);
+    expect(pc.status[Status.POISON]).toBe(3);
+    pc.status[Status.DISEASE] = 0;
+    pc.disease(4, high);
+    expect(pc.status[Status.DISEASE]).toBe(3);
+    // Resistance (127) takes one more off a dose of poison.
+    wear(pc, 21, E3Abil.RESISTANCE, 11, ItemAbil.FULL_PROTECTION);
+    pc.status[Status.POISON] = 0;
+    pc.poison(4, high);
+    expect(pc.status[Status.POISON]).toBe(2);
+    // E3's Ring of Will is its 75, with 1997's roll: 90 − 10 against level.
+    pc.equip.fill(false);
+    wear(pc, 22, E3Abil.WILL, 0, ItemAbil.WILL);
+    pc.level = 81;
+    pc.status[Status.DUMB] = 0;
+    pc.dumbfound(2, high);
+    expect(pc.status[Status.DUMB] ?? 0).toBe(0);
+  });
+
+  it('Micah\'s Gloves add to dexterity\'s adjustment, not to the skill', () => {
+    const { pc } = setup();
+    pc.equip.fill(false);
+    const before = pc.statAdj(Skill.DEXTERITY);
+    const skill = pc.skill(Skill.DEXTERITY);
+    wear(pc, 10, 99, 1, ItemAbil.BOOST_STAT);
+    pc.items[10]!.abilData = Skill.DEXTERITY;
+    expect(pc.statAdj(Skill.DEXTERITY)).toBe(before + 1);
+    expect(pc.skill(Skill.DEXTERITY)).toBe(skill);
+    // Past the sixteenth slot E3 doesn't look.
+    pc.items[20] = pc.items[10]!;
+    pc.equip[20] = true;
+    pc.items[10] = { ...pc.items[10]!, variety: ItemType.NO_ITEM };
+    pc.equip[10] = false;
+    expect(pc.statAdj(Skill.DEXTERITY)).toBe(before);
+  });
+
+  it('lifting a curse zeroes E3\'s curse code, so Dancing Boots stop dancing', () => {
+    const { pc } = setup();
+    wear(pc, 20, E3Abil.DANCING, 1, ItemAbil.SLOW_WEARER);
+    pc.items[20]!.cursed = true;
+    uncurse(pc.items[20]!);
+    expect(pc.items[20]!.cursed).toBe(false);
+    expect(pc.items[20]!.e3Ability).toBe(0);
   });
 });
