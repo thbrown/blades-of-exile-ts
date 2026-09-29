@@ -873,8 +873,15 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
   it('turns E3\'s message spots into one-shot special nodes', () => {
     const krizsan = scen.towns[0]!;
     const spot = krizsan.specialLocs.find((l) => l.x === 24 && l.y === 7)!;
-    const node = krizsan.specials.get(spot.spec)!;
+    // First, "Show room descriptions more than once" (flag (306, 3)): unset,
+    // the one-shot message; set, a plain one while the spot is still there.
+    const pref = krizsan.specials.get(spot.spec)!;
+    expect([pref.type, pref.sd1, pref.sd2, pref.ex1a]).toEqual([SpecType.IF_SDF_EQ, 306, 3, 0]);
+    const node = krizsan.specials.get(pref.ex1b)!;
     expect(node.type).toBe(SpecType.ONCE_DISPLAY_MSG);
+    const again = krizsan.specials.get(pref.jumpto)!;
+    expect([again.type, again.sd1, again.sd2, again.ex1a]).toEqual([SpecType.IF_SDF_EQ, node.sd1, node.sd2, 250]);
+    expect(krizsan.specials.get(again.jumpto)!.type).toBe(SpecType.DISPLAY_MSG);
     expect(krizsan.specStrs[node.m1]).toMatch(/^This is the inn's common room/);
     // A flag of the converter's own, in a column E3 never uses.
     expect([node.sd1, node.sd2]).toEqual([0, 16]);
