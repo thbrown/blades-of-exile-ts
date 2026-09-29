@@ -14383,6 +14383,15 @@ the rest of the TODO(E3-3) list.
         Arrows, Iron Razordisks: E3 ability 92) lands on them. `if-near`
         (164), `explode-spots` = `exile3`, and IF_CONTEXT's TARGET spell
         test restored (a port gap).
+      - [x] **Breath** (2026-09-28). E3's breath byte is kind × 10 + a row
+        of a dice table (`1018:78ca`, `DS:0878`; FORMATS.md), so its dragon's
+        14 is cold for 6d8 and a 9 is fire for 25d8 — the converter had been
+        passing the byte through as the dice and borrowing the kind from
+        bladbase. E3 also breathes at 7 squares where BoE does at 8
+        (`E3_BREATH_RANGE`). *Found by* the monster dialog (`1008:18e7`),
+        which picks "Breathes fire/ice/acid" by the byte's size. The
+        remaining monster extras (radiation, attitude, summon type, face,
+        loot) keep their TODO(E3-3).
 
 All checks pass: 1,420 tests, both sweeps, verify-screen (with TOUCH)/party
 (this round). Before it: 1,419 tests, both sweeps, verify-screen (with TOUCH)/party

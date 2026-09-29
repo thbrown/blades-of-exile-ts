@@ -20,10 +20,11 @@ import { E3_ZONES_HIGH, E3_ZONES_WIDE, readE3Outdoors, type E3Outdoor, type E3Ou
 import { ItemAbil } from '../../src/data/item';
 import { FieldType } from '../../src/data/fields';
 import { DamageType } from '../../src/data/monster';
+import { MonstAbil, MonstGen } from '../../src/data/monsterAbility';
 import { decodeBmp, type Rgba } from '../../src/fileio/legacy/bmp';
 import { PIC_CUSTOM_FULL } from '../../src/data/special';
 import { BG_RECTS, E3_PATTERN_SLOTS } from '../../src/render/tiling';
-import { E3_ABILITY_TO_LEGACY, E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3ItemAbilities, readE3Items, readE3Monsters, readE3RoadJoins, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
+import { E3_ABILITY_TO_LEGACY, E3_BREATH_RANGE, E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3ItemAbilities, readE3Items, readE3Monsters, readE3RoadJoins, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3PresetItem, type E3Town } from './town';
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
 import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
@@ -835,6 +836,8 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     // E3's `make_town_hostile` gives BoE's guard boost (health ×3, two
     // statuses 8) to monsters 91 and 92 alone (1070:24e6).
     mon.guard = E3_BOOSTED_GUARDS.includes(n);
+    const breath = mon.abil[MonstAbil.DAMAGE2];
+    if (breath?.gen.type === MonstGen.BREATH) breath.gen.range = E3_BREATH_RANGE;
     return mon;
   });
   // Items: E3's table through the legacy importer, pictured from one custom

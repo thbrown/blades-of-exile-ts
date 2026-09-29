@@ -97,7 +97,7 @@ E3 keeps its terrain types in code and data, not in a file:
   |---|---|---|---|
   | 0 | level | 3000 | mage level |
   | 200 | hp (i16) | 3200 | priest level |
-  | 600 | armor | 3400 | breath damage |
+  | 600 | armor | 3400 | breath: kind × 10 + dice row |
   | 800 | skill | 3600 | poison |
   | 1000/1400/1800 | attacks (i16, `dice*100 + sides`) | 3800 | treasure |
   | 2200 / 2400 | a1 / a2–3 attack type | 4000 | special skill |
@@ -110,8 +110,13 @@ E3 keeps its terrain types in code and data, not in a file:
   renamed. Every field above agrees on all 176, except that BoE rebalanced the
   attack dice (E3's guard hits 2d10, BoE's 3d10), changed 5 breaths and 3
   special skills, and renumbered pictures for its own sheets.
-  **Not in E3's tables** (in code somewhere): breath type, radiation, default
-  attitude, summon type, facial picture, loot. 177–190 are E3's own unique
+  **The breath byte** is two numbers (`monst_breathe`, `1018:78ca`): the
+  tens are the kind (0 fire, 1 cold, 2 magic — "acid" in the monster
+  dialog), and the units a row of the ten words at `DS:0878`
+  (0 1 2 3 4 5 7 10 17 23), plus 2, d8. E3 breathes at 7 squares, not 8.
+  bladbase kept the byte as the dice and gave the kind a field of its own.
+  **Not in E3's tables** (in code somewhere): radiation, default attitude,
+  summon type, facial picture, loot. 177–190 are E3's own unique
   characters (Rentar-Ihrno, Athron, Sulfras, Erika …).
   **Sprites**: MONST1–9 use BoE's layout. There are 20 sprites a sheet in
   column pairs (idx < 10 in columns 0/1, else 2/3), with the attack pose 4

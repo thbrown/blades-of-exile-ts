@@ -239,6 +239,7 @@ export const E3_MONSTER_COUNT = 190;
  */
 export function readE3Monsters(exe: Uint8Array, strings: Map<number, string>): LegacyMonster[] {
   const t = readNeSegment(exe, 39);
+  const breathDice = readE3BreathDice(exe);
   const v = new DataView(t.buffer, t.byteOffset, t.byteLength);
   const u8 = (off: number, n: number) => t[off + n] ?? 0;
   const i16 = (off: number, n: number) => v.getInt16(off + 2 * n, true);
@@ -248,14 +249,18 @@ export function readE3Monsters(exe: Uint8Array, strings: Map<number, string>): L
   for (let n = 0; n <= E3_MONSTER_COUNT; n++) {
     // Fields E3's table lacks: borrowed from BoE's bladbase for 1–176, the
     // monsters the two games share; E3's unique 177–190 get BoE's defaults.
-    // TODO(E3-3): find where E3 keeps them (its code).
+    // (The breath type isn't one of them: E3 packs it into the breath byte.)
+    // TODO(E3-3): find where E3 keeps the radiation, default attitude, summon
+    // type, facial picture and corpse item (its code).
     const x = BLADBASE_EXTRAS[n - 1] ?? [0, 0, 0, 1, 0, 0, 0, 0];
     out.push({
       level: u8(0, n), mName: n === 0 ? '' : strings.get(600 + n) ?? `Monster ${n}`,
       mHealth: i16(200, n), armor: u8(600, n), skill: u8(800, n),
       a: [i16(1000, n), i16(1400, n), i16(1800, n)],
       a1Type: u8(2200, n), a23Type: u8(2400, n), mType: u8(2600, n), speed: u8(2800, n),
-      mu: u8(3000, n), cl: u8(3200, n), breath: u8(3400, n), breathType: x[0] ?? 0,
+      mu: u8(3000, n), cl: u8(3200, n),
+      breath: u8(3400, n) === 0 ? 0 : (breathDice[u8(3400, n) % 10] ?? 0) + 2,
+      breathType: Math.trunc(u8(3400, n) / 10),
       treasure: u8(3800, n), specSkill: u8(4000, n), poison: u8(3600, n),
       corpseItem: x[6] ?? 0, corpseItemChance: x[7] ?? 0, immunities: resist(n),
       xWidth: u8(4400, n) || 1, yWidth: u8(4600, n) || 1,
@@ -265,6 +270,24 @@ export function readE3Monsters(exe: Uint8Array, strings: Map<number, string>): L
   }
   return out;
 }
+
+/**
+ * E3's breath byte holds two numbers (`monst_breathe`, `1018:78ca`): the tens
+ * are the kind — 0 fire, 1 cold, 2 magic ("acid" in the monster dialog,
+ * `1008:18e7`), the same damage types and missiles as 1997's `type[]` and
+ * `missile_t[]` — and the units index this table at `DS:0878`, whose entry
+ * plus 2 is the number of d8 rolled. So Exile's dragon, 14, breathes cold for
+ * 6d8, not 14d8. BoE's bladbase kept the byte and moved the kind to a field
+ * of its own, which is why it reads as a much stronger breath there.
+ */
+export function readE3BreathDice(exe: Uint8Array): number[] {
+  const ds = readNeSegment(exe, neAutoDataSegment(exe));
+  const v = new DataView(ds.buffer, ds.byteOffset, ds.byteLength);
+  return Array.from({ length: 10 }, (_, i) => v.getInt16(0x878 + 2 * i, true));
+}
+
+/** E3 breathes at 7 squares or closer (`1018:51f0`); 1997 and OBoE at 8. */
+export const E3_BREATH_RANGE = 7;
 
 export const E3_ITEM_COUNT = 415;
 

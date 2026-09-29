@@ -11,7 +11,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { TerObstruct, TerSpec } from '../src/data/terrain';
 import type { Scenario } from '../src/data/scenario';
 import { ItemAbil, ItemType, useMagic } from '../src/data/item';
-import { MonstTime } from '../src/data/monster';
+import { DamageType, MonstTime } from '../src/data/monster';
+import { MonstAbil } from '../src/data/monsterAbility';
 import { ShopItemType, ShopPrompt } from '../src/data/shop';
 import { TalkNodeType } from '../src/data/talking';
 import { SpecType } from '../src/data/special';
@@ -74,6 +75,18 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     // Both of the fort's entrances note which side the party came in by.
     expect(scen.outdoors[8]![9]!.specialLocs.some((s) => s.x === 36 && s.y === 36)).toBe(true);
     expect(scen.outdoors[1]![8]!.specialLocs.some((s) => s.x === 20 && s.y === 25)).toBe(true);
+  });
+
+  it('reads the kind of breath out of the breath byte, and its dice from a table', () => {
+    // E3's byte is kind * 10 + a row of `DS:0878` (`1018:78ca`).
+    const breath = (m: number) => {
+      const a = scen.scenMonsters[m]!.abil[MonstAbil.DAMAGE2]!;
+      return [a.gen.extra, a.gen.strength, a.gen.range];
+    };
+    expect(breath(73)).toEqual([DamageType.FIRE, 6, 7]); // 4: 4 + 2
+    expect(breath(74)).toEqual([DamageType.COLD, 6, 7]); // 14
+    expect(breath(162)).toEqual([DamageType.MAGIC, 19, 7]); // 28: 17 + 2
+    expect(breath(170)).toEqual([DamageType.FIRE, 25, 7]); // 9: 23 + 2
   });
 
   it("enters towns by E3's town terrains, 217 to 231", () => {
