@@ -418,7 +418,8 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
       // Exile III writes its creatures' records directly (DIVERGENCES.md
       // #21), and only ever to one that is here (`active > 0`).
       const monsters = town?.monsters ?? [];
-      const talking = ctx.session.talk?.monsterIndex ?? -1;
+      // -2 is the creature being talked to, or being hailed.
+      const talking = ctx.session.talk?.monsterIndex ?? ctx.session.hailing;
       const which = spec.ex1a === -1 ? monsters
         : [monsters[spec.ex1a === -2 ? talking : spec.ex1a]].flatMap((m) => (m ? [m] : []));
       if (spec.ex1a < -2 || (spec.ex1a >= 0 && spec.ex1a >= monsters.length)) {
@@ -438,6 +439,10 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
             monst.active = CreatureStatus.DEAD;
             if (univ.party.sdLegit(monst.spec1, monst.spec2)) univ.party.setSdf(monst.spec1, monst.spec2, 1);
             break;
+          // From a HAIL special: the conversation it opens is held as
+          // personality ex1c, keeping the creature's own name and opening
+          // words when ex2b is set (DIVERGENCES.md #29).
+          case 4: ctx.session.talkAs = { personality: spec.ex1c, ownGreeting: spec.ex2b !== 0 }; break;
           default: break;
         }
       }

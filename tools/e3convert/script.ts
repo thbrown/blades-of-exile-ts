@@ -711,6 +711,15 @@ export class SpecBuilder {
   }
 
   /**
+   * From a creature's HAIL special: talk as engine personality
+   * `personality`, keeping the creature's own name and opening words when
+   * `ownGreeting` is set (`town-creature` 4 on slot -2, DIVERGENCES.md #29).
+   */
+  talkAs(personality: number, ownGreeting: boolean): Step {
+    return (next) => this.node('town-creature', { ex1: [-2, 4, personality], ex2: [0, ownGreeting ? 1 : 0] }, next);
+  }
+
+  /**
    * `if (FUN_1080_0000(party, (x, y)) < limit)`: the party — in combat, the
    * acting PC — is nearer than `limit`. The engine's `if-near` is an
    * exile-js opcode (`SpecType.IF_NEAR`).

@@ -59,6 +59,8 @@ export interface SpotScript {
   hostile: number;
   /** Each creature slot's `<onkill>` node, or -1 (`KillScript`). */
   kills: number[];
+  /** Each creature slot's `<ontalk>` node, or -1 (`KillScript`'s shape too). */
+  talks: number[];
   /** Each outdoor group's `<onmeet>`, `<onwin>` and `<onflee>` nodes, or -1 (`GroupScript`). */
   groups: GroupNodes[];
   /** The town's `<timer>`s: every `freq` ticks, `node` (`TimerScript`). */
@@ -107,6 +109,9 @@ export type TownEntryScript = (b: SpecBuilder, dead: boolean) => Step[];
  */
 export type KillScript = (b: SpecBuilder, slot: number) => { key: string; steps: Step[] } | null;
 
+/** What talking to the creature in a slot does first (its HAIL special), in the same shape. */
+export type TalkScript = KillScript;
+
 /**
  * What meeting, beating and running from each of a zone's outdoor groups
  * does (`towns/encounters.ts`): one entry a group, null where nothing
@@ -143,6 +148,7 @@ export function e3SpotScript(
   spots: E3Spot[], place: { zone: number } | { town: number },
   src: ScriptSource, terrainAt: (x: number, y: number) => number, own?: PlaceScript, onEntry?: TownEntryScript,
   onKill?: KillScript, onGroups?: GroupScript, onHostile?: EntryScript, onTimers?: TimerScript,
+  onTalk?: TalkScript,
 ): SpotScript {
   const isTown = 'town' in place;
   const block = isTown ? e3TownMessageBlock(place.town) : e3ZoneMessageBlock(place.zone);
@@ -206,14 +212,18 @@ export function e3SpotScript(
   const entry = onEntry ? b.compile(onEntry(b, false)) : -1;
   const entryDead = onEntry ? b.compile(onEntry(b, true)) : -1;
   const hostile = onHostile ? b.compile(onHostile(b)) : -1;
-  const killNodes = new Map<string, number>();
-  const kills = (src.creatures ?? []).map((_, slot) => {
-    const k = onKill?.(b, slot);
-    if (!k) return -1;
-    const n = killNodes.get(k.key) ?? b.compile(k.steps);
-    killNodes.set(k.key, n);
-    return n;
-  });
+  const perSlot = (script: KillScript | undefined) => {
+    const nodes = new Map<string, number>();
+    return (src.creatures ?? []).map((_, slot) => {
+      const k = script?.(b, slot);
+      if (!k) return -1;
+      const n = nodes.get(k.key) ?? b.compile(k.steps);
+      nodes.set(k.key, n);
+      return n;
+    });
+  };
+  const kills = perSlot(onKill);
+  const talks = perSlot(onTalk);
   const groupNodes = new Map<string, GroupNodes>();
   const groups = (onGroups?.(b) ?? []).map((g) => {
     const compile = (steps: Step[] | null) => (steps ? b.compile(steps) : -1);
@@ -222,5 +232,5 @@ export function e3SpotScript(
     return n;
   });
   const timers = (onTimers?.(b) ?? []).map((t) => ({ freq: t.freq, node: b.compile(t.steps) }));
-  return { spec: b.spec, strings: b.strings, marks, spots: listed, entry, entryDead, hostile, kills, groups, timers };
+  return { spec: b.spec, strings: b.strings, marks, spots: listed, entry, entryDead, hostile, kills, talks, groups, timers };
 }

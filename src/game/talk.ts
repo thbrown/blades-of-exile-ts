@@ -73,6 +73,8 @@ export class TalkState {
   /** Index into the town's creature list, or -1 when a special started this. */
   readonly monsterIndex: number;
   readonly monsterType: number;
+  /** The name the conversation shows, which the notes file it under. */
+  private readonly speaker: string;
   readonly facePic: number;
   /** "Name:" as shown above the reply. */
   title = '';
@@ -126,14 +128,21 @@ export class TalkState {
     personality: number,
     monsterType: number,
     facePic: number,
+    /**
+     * Whose name and opening words the conversation shows, where a HAIL
+     * special has it talk as another personality but keep the creature's
+     * own greeting (Exile III's Anaximander, `session.talkAs`).
+     */
+    greeter = personality,
   ) {
     this.monsterIndex = monsterIndex;
     this.personality = personality;
     this.monsterType = monsterType;
     this.facePic = facePic;
 
-    const person = this.person;
-    this.title = `${person?.title ?? ''}:`;
+    const person = this.univ.scenario.townTalk[Math.floor(greeter / 10)]?.people[greeter % 10] ?? null;
+    this.speaker = person?.title ?? '';
+    this.title = `${this.speaker}:`;
     this.str1 = person?.look ?? '';
     this.str2 = '';
     this.history.push({ canRecord: true, specialNode: false, node: -1, text: [this.str1, ''] });
@@ -279,7 +288,7 @@ export class TalkState {
         // `univ.town->name`, not the town the personality belongs to — so a
         // speaker a special node summoned from elsewhere is filed here.
         const { party } = this.univ;
-        if (party.saveTalk(this.person?.title ?? '', this.univ.town?.record.name ?? '',
+        if (party.saveTalk(this.speaker, this.univ.town?.record.name ?? '',
           this.str1, this.str2, this.univ.scenario.id)) {
           giveHelp(57, 0);
           livingSound(0);

@@ -634,6 +634,21 @@ as classes: Summon Beast has its own where BoE uses class 1, monsters 73 and
 74 are on two lists, and some are on one twice to weight the draw. With the
 flag set, Exile III's summons never fail.
 
+### 29. A creature that talks as someone else (2026-09-28)
+
+**DECIDED: a fifth action on this port's `town-creature` (205), run from
+the creature's HAIL special.** Exile III's talk start (`1020:1484`) swaps
+two personalities with the plot: Seles (41) becomes 46 once the portal
+plot starts, and Anaximander (20) becomes his weary self (19) once the
+slime, the Filth Factory or the troglodyte war is reported. BoE has no way to
+change who a creature is. `town-creature` action 4 with slot -2 has the
+conversation the HAIL precedes held as personality `ex1c`, and job deliveries
+go by it as E3's do. With `ex2b` set the name and opening words stay the
+creature's own. That is Anaximander's case: E3 takes those from the
+personality it was called with before swapping its copy, and 19 has no
+name. The change lasts for the one conversation, since E3 decides it again
+each time.
+
 ---
 
 ## Agreements worth recording

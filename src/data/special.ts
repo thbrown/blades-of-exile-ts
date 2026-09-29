@@ -225,10 +225,14 @@ export enum SpecType {
    * An exile-js opcode, not in BoE or OBoE: change the town's creature in
    * slot `ex1a` (-1 every creature, -2 the one being talked to), only where
    * it is here. `ex1b` names what: 0 wakes it to hunt the party (`active`
-   * 2), 1 sets its health to `ex1c`, 2 takes it away, and 3 takes it away
-   * and sets its death flag, as a conversation's END_DIE does. `ex2a`, when
-   * positive, keeps to creatures of attitude `ex2a - 1`. Exile III writes
-   * its creatures' records directly (DIVERGENCES.md #21).
+   * 2), 1 sets its health to `ex1c`, 2 takes it away, 3 takes it away
+   * and sets its death flag, as a conversation's END_DIE does, and 4 —
+   * from the creature's HAIL special — has the conversation held as
+   * personality `ex1c`, with its own name and opening words kept when `ex2b`
+   * is set. `ex2a`, when positive, keeps to creatures of attitude
+   * `ex2a - 1`. Exile III writes its creatures' records directly
+   * (DIVERGENCES.md #21), and swaps two personalities as a conversation
+   * starts (#29).
    */
   TOWN_SET_CREATURE = 205,
   /**

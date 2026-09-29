@@ -14415,12 +14415,23 @@ the rest of the TODO(E3-3) list.
         *Tool note*: `nedis.py` needs capstone; a venv in the scratchpad
         (`python3 -m venv …; pip install capstone`) does it without touching
         the system Python.
+      - [x] **Personalities swapped as a conversation starts** (2026-09-28,
+        DIVERGENCES #29). E3's talk start (`1020:1484`) has Seles (41) talk
+        as 46 once the portal plot starts (0xc91), and Anaximander (20) as
+        his weary 19 once 0xc85, 0xc87 or 0xc8a is set. **Found on the
+        way**: Seles's swap had no TODO at all, and Anaximander's keeps his
+        own title and opening look — E3 reads those from the personality it
+        was called with (`1020:183c`, `18a6`) before swapping its copy, and
+        19 has no name. `town-creature` (205) action 4, from the creature's
+        HAIL special (`<ontalk>`, `towns/talkStart.ts`), sets
+        `session.talkAs` for the one conversation; slot -2 names the hailed
+        creature (`session.hailing`); job deliveries go by the swapped
+        personality as E3's do. `TalkState` takes a `greeter`.
 
-All checks pass: 1,440 tests, both sweeps, verify-screen (with TOUCH)/party
-and verify-e3 (the monster extras, 2026-09-28). Before it: 1,420 tests, both
-sweeps, verify-screen (with TOUCH)/party. Before it: 1,419 tests, both sweeps, verify-screen (with TOUCH)/party
-(corpus not re-run: none of today's changes touches an RNG call, and the
-replay driver doesn't use `main.ts`'s key handler). **Next session starts here**: the TODO sweep's
-last dozen — `grep -rn "TODO(" src/ tools/`: two TODO(E3-3) (E3's own item
-ability semantics, `tables.ts`; Anaximander's personality, `talk.ts`), then
-TODO(M9)/TODO(campaign)/TODO(M8), which may be left for the user to rule on.
+All checks pass: 1,441 tests, both sweeps, verify-screen (with TOUCH)/party
+and verify-e3 (the personality swaps, 2026-09-28). Before it: 1,440 tests
+(the monster extras). (Corpus not re-run: no RNG call moved; the HAIL path
+only gained a field reset.) **Next session starts here**: the TODO sweep's
+last few — `grep -rn "TODO(" src/ tools/`: one TODO(E3-3) (E3's own item
+ability semantics, `tables.ts`), then TODO(M9)/TODO(campaign)/TODO(M8),
+which may be left for the user to rule on.

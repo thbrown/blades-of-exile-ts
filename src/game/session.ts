@@ -359,6 +359,18 @@ export class GameSession {
   recorder: ReplayRecorder | null = null;
   /** Non-null while a conversation is open. */
   talk: TalkState | null = null;
+  /**
+   * While a creature's HAIL special runs, its town slot, so `town-creature`
+   * slot -2 can name it before the conversation opens; -1 otherwise.
+   */
+  hailing = -1;
+  /**
+   * What a HAIL special's `town-creature` "talk as" leaves for the
+   * conversation it precedes (DIVERGENCES.md #29): the personality to talk
+   * as, and whether the creature still gives its own name and opening
+   * words. Cleared as each hail starts.
+   */
+  talkAs: { personality: number; ownGreeting: boolean } | null = null;
   /** Non-null while a shop is open. */
   shop: ShopState | null = null;
   /**
@@ -3537,9 +3549,12 @@ export class GameSession {
 
     // A creature can carry a HAIL special that runs first and, if it blocks,
     // stands in for the conversation entirely (boe.actions.cpp:830).
+    this.talkAs = null;
     if (monst.specialOnTalk >= 0) {
+      this.hailing = town.monsters.indexOf(monst);
       const { blocked } = await this.runSpecial(
-        SpecCtx.HAIL, SpecCtxType.TOWN, monst.specialOnTalk, monst.curLoc);
+        SpecCtx.HAIL, SpecCtxType.TOWN, monst.specialOnTalk, monst.curLoc)
+        .finally(() => { this.hailing = -1; });
       if (blocked) return spentTurn();
     }
     if (!monst.isFriendly) {
@@ -3565,10 +3580,17 @@ export class GameSession {
     // A creature's own face overrides its monster template's default one.
     const template = this.univ.scenario.scenMonsters[monst.number];
     const face = monst.facialPic >= 0 ? monst.facialPic : (template?.defaultFacialPic ?? -1);
+    // A HAIL special may have the creature talk as another personality
+    // (Exile III's, `1020:1484`), which its deliveries go by too.
+    // (Read through a cast: TS still thinks the hail's `null` stands.)
+    const talkAs = this.talkAs as GameSession['talkAs'];
+    this.talkAs = null;
+    const personality = talkAs?.personality ?? monst.personality;
     // Exile III pays for its jobs' deliveries as a conversation starts
     // (e3Jobs.ts); nothing happens in any other scenario.
-    await deliverE3Jobs(this, monst.personality);
-    this.startTalkMode(town.monsters.indexOf(monst), monst.personality, monst.number, face);
+    await deliverE3Jobs(this, personality);
+    this.startTalkMode(town.monsters.indexOf(monst), personality, monst.number, face,
+      talkAs?.ownGreeting ? monst.personality : personality);
     return true;
   }
 
@@ -3578,10 +3600,11 @@ export class GameSession {
     personality: number,
     monsterType: number,
     facePic: number,
+    greeter = personality,
   ): void {
     this.preTalkMode = this.mode;
     this.mode = GameMode.TALKING;
-    this.talk = new TalkState(this.univ, monsterIndex, personality, monsterType, facePic);
+    this.talk = new TalkState(this.univ, monsterIndex, personality, monsterType, facePic, greeter);
     // A talk SHOP node asks for `cancel_when_empty` (boe.dlgutil.cpp:1000) and
     // then tries the rest of the party; only when nobody can buy does the node
     // fall through to its "nothing available" line.

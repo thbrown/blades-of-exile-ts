@@ -437,6 +437,43 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     void dialogs;
   });
 
+  it('swaps personalities as a conversation starts: Anaximander grows weary, Seles worried', async () => {
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    session.attachSpecials(new Proxy({}, { get: () => () => Promise.resolve(0) }) as never);
+    const univ = session.univ;
+    const talkTo = async (town: number, personality: number) => {
+      session.talk = null;
+      session.startTownMode(town, FORCED_ENTRY);
+      const who = univ.town!.monsters.find((m) => m.isAlive && m.personality === personality)!;
+      expect(who.specialOnTalk).toBeGreaterThanOrEqual(0);
+      univ.party.townLoc = { x: who.curLoc.x, y: who.curLoc.y + 1 };
+      session.center = { ...univ.party.townLoc };
+      expect(await session.talkTo(who.curLoc)).toBe(true);
+      const talk = session.talk!;
+      const look = talk.str1;
+      talk.handleNode(-10);
+      return { title: talk.title, opening: look, look: talk.str1, personality: talk.personality };
+    };
+    // Anaximander (E3 20, engine 19) before the plot moves.
+    let anax = await talkTo(21, 19);
+    expect(anax.personality).toBe(19);
+    expect(anax.look).not.toMatch(/weary/);
+    // The slime dead (0xc85): Look answers as the weary one (engine 18),
+    // but the screen opens on his own name and look, as E3's does.
+    univ.party.setSdf(...partyFlag(0xc85), 1);
+    anax = await talkTo(21, 19);
+    expect(anax.personality).toBe(18);
+    expect(anax.title).toBe('Anaximander:');
+    expect(anax.opening).not.toMatch(/weary/);
+    expect(anax.look).toMatch(/worn and weary/);
+    // Seles (E3 41) is 46 outright once the portal plot starts (0xc91).
+    expect((await talkTo(40, 40)).personality).toBe(40);
+    univ.party.setSdf(...partyFlag(0xc91), 1);
+    const seles = await talkTo(40, 40);
+    expect(seles.personality).toBe(45);
+    expect(seles.opening).toMatch(/flickers ominously/);
+  });
+
   it("runs E3's outdoor group scripts: the Nephilim patrol, and a lair's loot", async () => {
     const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
     const said: string[] = [];
