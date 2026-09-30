@@ -10,6 +10,19 @@
 export const BOE_WIDTH = 605;
 export const BOE_HEIGHT = 430;
 
+/**
+ * The compact screen (View → Hide Toolbar): no toolbar under the terrain
+ * view, the transcript ending level with the status bar, and the screen cut
+ * off just below them, so it scales up larger on a short window. Not in the
+ * original. Talking and shopping use the whole left column, so the screen
+ * is its full height again while they're up (`gameScreen`).
+ */
+export const COMPACT_HEIGHT = 386;
+export const COMPACT_TRANSCRIPT_BOTTOM = 381;
+
+/** How tall the game screen is right now: `BOE_HEIGHT`, or `COMPACT_HEIGHT`. */
+export const gameScreen = { h: BOE_HEIGHT };
+
 export interface UiRect {
   top: number;
   left: number;

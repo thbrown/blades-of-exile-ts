@@ -14838,9 +14838,16 @@ TODO(M8) (1).
         `scenario.xml` will be noisy.
       - `verify-screen.mjs`'s TOUCH step now covers talk-aim, the talk
         strips, both sheets and a dialog strip over the inventory sheet.
-      - **Not done: hiding the canvas's own toolbar** when the pads are up.
-        The toolbar is part of the 605×430 screen, and dropping it would mean
-        a second layout of the original's window. Left for the user to decide.
+      - **View → Hide Toolbar** (2026-09-30, pref `HideToolbar`, off by
+        default, for the user to try). The toolbar alone frees nothing — the
+        transcript also runs to the bottom — so the compact screen drops the
+        toolbar, ends the transcript level with the status bar (7 lines, not
+        11) and cuts the screen to `COMPACT_HEIGHT` 386, which scales ~11%
+        larger. `gameScreen.h` in `layout.ts` is the live height the desktop
+        lays out with. **Talking and shopping draw to 430 again**, since
+        their words run down the whole left column, so the game shrinks back
+        while they're up — a visible jump. Toolbar clicks go nowhere; keys
+        and the pads do everything it did. verify-screen checks the scale.
 
 All checks pass (2026-09-29): 1,494 tests, tsc, both sweeps, verify-screen,
 verify-party and verify-e3.

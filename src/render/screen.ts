@@ -24,6 +24,8 @@ import { Player } from '../universe/player';
 import { Colours } from './colours';
 import {
   BOE_HEIGHT,
+  COMPACT_TRANSCRIPT_BOTTOM,
+  gameScreen,
   BOE_WIDTH,
   BTN_SRC_RECTS,
   ITEM_BOTTOM_BUTTONS,
@@ -254,6 +256,18 @@ export class Screen {
    */
   startupBackdrop = false;
 
+  /**
+   * View → Hide Toolbar (`COMPACT_HEIGHT`): no toolbar, and a transcript
+   * that ends level with the status bar. The host keeps `gameScreen.h` in
+   * step; while talking or shopping the screen is drawn whole.
+   */
+  compact = false;
+
+  /** Whether this draw is the cut-down one: compact, and not a conversation or shop. */
+  private isCompact(session: GameSession): boolean {
+    return this.compact && !session.shop && !session.talk;
+  }
+
   draw(session: GameSession): void {
     const { ctx } = this;
     ctx.imageSmoothingEnabled = false;
@@ -287,6 +301,11 @@ export class Screen {
     this.drawPcStats(session);
     this.drawPanel('inven');
     this.drawInventory(session);
+    if (this.isCompact(session)) {
+      this.drawCompactTranscriptPanel();
+      this.drawTranscript(session);
+      return;
+    }
     this.drawPanel('transcript');
     this.drawTranscript(session);
     this.drawToolbar(session);
@@ -298,7 +317,7 @@ export class Screen {
   /** put_background (boe.graphics.cpp:653) — the pattern behind everything. */
   private putBackground(session: GameSession): void {
     const pats = this.store.get('pixpats');
-    const full: UiRect = { top: 0, left: 0, bottom: BOE_HEIGHT, right: BOE_WIDTH };
+    const full: UiRect = { top: 0, left: 0, bottom: gameScreen.h, right: BOE_WIDTH };
     if (!pats) {
       this.ctx.fillStyle = Colours.BLACK;
       this.ctx.fillRect(0, 0, BOE_WIDTH, BOE_HEIGHT);
@@ -329,6 +348,21 @@ export class Screen {
     const img = this.store.get(PANEL_IMAGES[which]);
     if (!img) return;
     this.ctx.drawImage(img, rect.left, rect.top);
+  }
+
+  /**
+   * The transcript's frame cut short for the compact screen: its top down to
+   * the new bottom, then its last two rows (the bottom edge) under that.
+   */
+  private drawCompactTranscriptPanel(): void {
+    const img = this.store.get(PANEL_IMAGES.transcript);
+    if (!img) return;
+    const rect = WIN_RECTS.transcript;
+    const edge = 2;
+    const h = COMPACT_TRANSCRIPT_BOTTOM - rect.top;
+    const w = img.width;
+    this.ctx.drawImage(img, 0, 0, w, h - edge, rect.left, rect.top, w, h - edge);
+    this.ctx.drawImage(img, 0, img.height - edge, w, edge, rect.left, rect.top + h - edge, w, edge);
   }
 
   /** Fill a panel's interior with the pattern the C++ erases to (bg[6]). */
@@ -1879,12 +1913,17 @@ export class Screen {
   /** print_buf (boe.text.cpp:1077) — newest messages at the bottom. */
   private drawTranscript(session: GameSession): void {
     const panel = WIN_RECTS.transcript;
-    this.erasePanel(panel, TRANSCRIPT_TEXT);
+    // Compact, the text stops as far above the shortened frame's bottom as
+    // it stops above the whole one's.
+    const inner = this.isCompact(session)
+      ? { ...TRANSCRIPT_TEXT, bottom: TRANSCRIPT_TEXT.bottom - (panel.bottom - COMPACT_TRANSCRIPT_BOTTOM) }
+      : TRANSCRIPT_TEXT;
+    this.erasePanel(panel, inner);
     const area: UiRect = {
-      top: panel.top + TRANSCRIPT_TEXT.top,
-      left: panel.left + TRANSCRIPT_TEXT.left,
-      bottom: panel.top + TRANSCRIPT_TEXT.bottom,
-      right: panel.left + TRANSCRIPT_TEXT.right,
+      top: panel.top + inner.top,
+      left: panel.left + inner.left,
+      bottom: panel.top + inner.bottom,
+      right: panel.left + inner.right,
     };
     const maxWidth = width(area) - 4;
     const style = { size: 12, colour: Colours.BLACK } as const;
@@ -1951,6 +1990,8 @@ export class Screen {
 
   /** Which toolbar button (if any) a click at screen coords landed on. */
   buttonAt(x: number, y: number): PlacedButton | null {
+    // Compact, there's no toolbar to click (and nothing drawn where it was).
+    if (this.compact) return null;
     const origin = WIN_RECTS.actBtns;
     const lx = x - origin.left;
     const ly = y - origin.top;

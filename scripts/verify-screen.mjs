@@ -3317,6 +3317,20 @@ await tPanel({ left: 305, top: 20, right: 576, bottom: 110 });
 touch.partyRows = await tp.evaluate(() => [...document.querySelectorAll('.sheet-row .sheet-name')].map((e) => e.textContent));
 await tp.tap('.sheet-close');
 await tp.waitForTimeout(200);
+// View → Hide Toolbar: the screen loses its toolbar and is cut short
+// (COMPACT_HEIGHT), so it scales up; toggled back, it's whole again.
+const tScale = () => tp.evaluate(() => ({ scale: window.__desktop.scale, h: document.querySelector('#canvas').height }));
+const tView = async (label) => {
+  await tp.locator('#game-menu-bar .menu-item', { hasText: 'View' }).first().click();
+  await tp.locator('#game-menu-bar .menu-item.open .dropdown li', { hasText: label }).first().click();
+  await tp.waitForTimeout(300);
+};
+touch.compact = { before: await tScale() };
+await tView('Hide Toolbar');
+touch.compact.on = await tScale();
+await tp.screenshot({ path: `${SHOTS}/67-touch-compact.png` });
+await tView('Hide Toolbar');
+touch.compact.off = await tScale();
 // View → Touch Controls turns them off, and says so with its tick.
 await tp.locator('#game-menu-bar .menu-item', { hasText: 'View' }).first().click();
 touch.menuTicked = (await tp.locator('#game-menu-bar .menu-item.open .dropdown li', { hasText: 'Touch Controls' }).first().textContent())?.startsWith('✓') === true;
@@ -3352,7 +3366,8 @@ const touchOk = touch.desktopHidden && touch.townSet === 'MAGE PRIEST LOOK TALK 
   touch.talkPlaced !== null && touch.talkAim?.x === touch.talkPlaced.x && touch.talkAim?.y === touch.talkPlaced.y &&
   touch.talkWords.includes('Ask About...') && touch.talkDone &&
   touch.invSheet.shown && touch.invSheet.rows > 0 && touch.infoStrip.dialog && touch.infoStrip.sheetHidden &&
-  touch.infoStrip.buttons.length > 0 && touch.sheetBack && touch.partyRows.length === 6;
+  touch.infoStrip.buttons.length > 0 && touch.sheetBack && touch.partyRows.length === 6 &&
+  touch.compact.on.scale > touch.compact.before.scale && touch.compact.off.scale === touch.compact.before.scale;
 
 console.log('ERRORS:', errors.length ? errors.join(' | ') : 'none');
 await browser.close();

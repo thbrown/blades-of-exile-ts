@@ -17,7 +17,7 @@
  * That was the only layout before this existed.
  */
 
-import { BOE_HEIGHT, BOE_WIDTH } from './layout';
+import { BOE_HEIGHT, BOE_WIDTH, gameScreen } from './layout';
 
 /** `DisplayMode` as OBoE stores it (boe.dlgutil.cpp:1392). The numbers are the pref's. */
 export enum DisplayMode {
@@ -68,20 +68,20 @@ export const desktop: Desktop = { w: BOE_WIDTH, h: BOE_HEIGHT, gameX: 0, gameY: 
  * behaved before any of this existed. The screen never gets clipped.
  */
 export function layoutDesktop(room: DesktopRoom, mode: DisplayMode, uiScale: number): Desktop {
-  const fit = Math.max(0.25, Math.min(room.width / BOE_WIDTH, room.height / BOE_HEIGHT));
+  const fit = Math.max(0.25, Math.min(room.width / BOE_WIDTH, room.height / gameScreen.h));
   const scale = uiScale === UI_SCALE_FIT ? fit : Math.min(uiScale, fit);
   if (mode === DisplayMode.SMALL_WINDOW) {
-    return { w: BOE_WIDTH, h: BOE_HEIGHT, gameX: 0, gameY: 0, scale };
+    return { w: BOE_WIDTH, h: gameScreen.h, gameX: 0, gameY: 0, scale };
   }
   const w = Math.max(BOE_WIDTH, Math.floor(room.width / scale));
-  const h = Math.max(BOE_HEIGHT, Math.floor(room.height / scale));
+  const h = Math.max(gameScreen.h, Math.floor(room.height / scale));
   // compute_viewport also leaves a 7px buffer at the sides and 28px above
   // the bottom for a taskbar. Both are there for the OS, and a browser page
   // has its own margins, so neither is kept here.
   const left = 0;
   const right = w - BOE_WIDTH;
   const top = 0;
-  const bottom = h - BOE_HEIGHT;
+  const bottom = h - gameScreen.h;
   const at = (gameX: number, gameY: number): Desktop => ({ w, h, gameX, gameY, scale });
   switch (mode) {
     case DisplayMode.TOP_LEFT: return at(left, top);
@@ -117,7 +117,7 @@ export function placeBesideGame(
   d: Desktop, w: number, h: number, home: { x: number; y: number },
 ): { x: number; y: number } {
   const gameRight = d.gameX + BOE_WIDTH;
-  const gameBottom = d.gameY + BOE_HEIGHT;
+  const gameBottom = d.gameY + gameScreen.h;
   const topY = Math.max(0, Math.min(d.gameY, d.h - h));
   const leftX = Math.max(0, Math.min(d.gameX, d.w - w));
   if (d.w - gameRight >= w + BESIDE_GAP) return { x: gameRight + BESIDE_GAP, y: topY };

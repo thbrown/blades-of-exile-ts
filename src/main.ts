@@ -123,7 +123,7 @@ import { BG_DARK, BG_LIGHT, setDefaultDialogBackground, setExile3Dialogs } from 
 import { changeCursor, cursorCss, setScenarioCursors } from './platform/cursors';
 import { giveHelp, setGiveHelp, setLivingSound } from './universe/living';
 import { killPc } from './game/damage';
-import { BOE_HEIGHT, BOE_WIDTH, ToolbarButton, WIN_RECTS } from './render/layout';
+import { BOE_HEIGHT, BOE_WIDTH, COMPACT_HEIGHT, ToolbarButton, WIN_RECTS, gameScreen } from './render/layout';
 
 import { CHROME_SHEETS, Screen, equippedKind, inventoryLabel, toolbarButtons, toolbarMode } from './render/screen';
 import { itemGraphic } from './render/itemPics';
@@ -730,7 +730,21 @@ async function main(): Promise<void> {
     aimPicks = aim.picks;
     screen.aimAt = autoAim(session, aim);
   };
+  /**
+   * View → Hide Toolbar: the compact screen (`COMPACT_HEIGHT`), except while
+   * a conversation or a shop has the whole left column. A change of height
+   * refits the canvas, so the game grows or shrinks to the window.
+   */
+  const syncCompact = (): void => {
+    const on = getBoolPref('HideToolbar') && !screen.startupBackdrop;
+    screen.compact = on;
+    const h = on && !session.talk && !session.shop ? COMPACT_HEIGHT : BOE_HEIGHT;
+    if (h === gameScreen.h) return;
+    gameScreen.h = h;
+    fitDesktop();
+  };
   const redraw = (): void => {
+    syncCompact();
     syncAim();
     // The desktop around the game screen gets the same background pattern.
     // OBoE's put_background tiles its whole window (boe.graphics.cpp:683).
@@ -739,7 +753,7 @@ async function main(): Promise<void> {
     // at its offset, and that offset stays set afterwards. The map and
     // dialogs belong to the desktop, so they're drawn without it.
     ctx.setTransform(1, 0, 0, 1, desktop.gameX, desktop.gameY);
-    if (desktop.w !== BOE_WIDTH || desktop.h !== BOE_HEIGHT) {
+    if (desktop.w !== BOE_WIDTH || desktop.h !== gameScreen.h) {
       const whole = {
         left: -desktop.gameX, top: -desktop.gameY,
         right: desktop.w - desktop.gameX, bottom: desktop.h - desktop.gameY,
@@ -2799,7 +2813,7 @@ async function main(): Promise<void> {
       const x = dx - desktop.gameX;
       const y = dy - desktop.gameY;
       // The desktop around the game screen is only background.
-      if (x < 0 || y < 0 || x >= BOE_WIDTH || y >= BOE_HEIGHT) return;
+      if (x < 0 || y < 0 || x >= BOE_WIDTH || y >= gameScreen.h) return;
       // The party stats list: clicking a name makes that PC active, the HP and
       // SP columns read themselves out, and the two icons are Info and Trade
       // Places (handle_action's PC-area branch, boe.actions.cpp:1739).
@@ -3477,6 +3491,13 @@ async function main(): Promise<void> {
           // On by default on a phone or tablet (`touchControlsOn`).
           { label: tick(touch, 'Touch Controls'), action: () => { setTouchControls(!touch); redraw(); } },
           { label: '\u2003 Touch Controls Layout…', action: openTouchLayoutPanel, enabled: () => touchControlsOn() },
+          {
+            // Not in the original: the screen without its toolbar, cut short
+            // so it scales up larger (`COMPACT_HEIGHT`). The keys and the
+            // touch pads still do everything the toolbar did.
+            label: tick(getBoolPref('HideToolbar'), 'Hide Toolbar'),
+            action: () => { setPref('HideToolbar', !getBoolPref('HideToolbar')); redraw(); },
+          },
           MENU_SEPARATOR,
           ...modes.map(([m, label]): MenuItem => ({
             label: tick(mode === m, label), action: () => setDesktopPrefs(m, scale),
