@@ -383,11 +383,23 @@ export function readE3Item(it: Item, inGameAbil: string, scen: Scenario): ItemRe
  * The item's numbers as the combat code uses them — what the sheet's
  * "Damage", "Bonus", "Defend" and "Encumbrance" boxes stand for.
  *
- * "To hit +N" is against the same item with no bonus: a blow rolls 1–100
- * plus its adjustments and lands at or under the hit chance for the skill
- * (`pcAttackWeapon`, missiles.ts), and each bonus point takes 5 off the roll,
- * so N more in a hundred blows land, until they all do.
+ * A melee blow does 1–level + bonus, +2 from the only or main weapon and −1
+ * from the off hand (`pcAttackWeapon`); the ranges here fold those in, before
+ * strength, blessing and the like. A two-handed weapon is always the only one.
+ *
+ * The hit chance: a blow rolls 1–100 plus its adjustments and lands at or
+ * under the hit chance for the wielder's skill (`pcAttackWeapon`,
+ * missiles.ts), and each bonus point takes 5 off the roll, so it adds 5
+ * percentage points to the chance of landing (50% becomes 55%), up to a sure
+ * hit.
  */
+/** "; hit chance +N points (50% → M%)" for a bonus, or nothing. */
+function hitChance(b: number): string {
+  if (!b) return '';
+  const sign = b > 0 ? '+' : '−';
+  return `; hit chance ${sign}${Math.abs(b) * 5} points (50% → ${Math.max(0, Math.min(100, 50 + b * 5))}%)`;
+}
+
 export function combatLine(it: Item): string {
   const L = it.itemLevel;
   const b = it.bonus;
@@ -395,15 +407,15 @@ export function combatLine(it: Item): string {
     case ItemType.ONE_HANDED:
     case ItemType.TWO_HANDED: {
       const skill = it.weapType >= 0 ? `; rolls on ${weaponSkillName(it.weapType)}` : '';
-      // A two-handed weapon is always the only one, so always "primary".
+      const range = (add: number): string => `${1 + b + add}–${L + b + add}`;
       const hands = it.variety === ItemType.TWO_HANDED
-        ? `Hits for 1–${L}${b ? ` + ${b}` : ''} + 2 (two-handed, so always the main weapon)`
-        : `Hits for 1–${L}${b ? ` + ${b}` : ''} (+2 as the only or main weapon, −1 in the off hand)`;
-      return `${hands}${b ? `; to hit +${b * 5}` : ''}${skill}.`;
+        ? `Hits for ${range(2)}`
+        : `Hits for ${range(2)} as the only or main weapon, ${range(-1)} in the off hand`;
+      return `${hands}${hitChance(b)}${skill}.`;
     }
     case ItemType.BOW:
     case ItemType.CROSSBOW:
-      return `Launcher: ${b ? `to hit +${b * 5}` : 'no to-hit bonus'}; damage is the ammunition’s.`;
+      return `Launcher: ${b ? hitChance(b).slice(2) : 'no change to the hit chance'}; damage is the ammunition’s.`;
     case ItemType.ARROW:
     case ItemType.BOLTS:
     case ItemType.THROWN_MISSILE:
@@ -422,7 +434,7 @@ export function combatLine(it: Item): string {
       if (it.protection > 0) parts.push(`+1–${it.protection} protection`);
       else if (it.protection < 0) parts.push(`1–${-it.protection} more damage through`);
       if (it.awkward > 0) {
-        parts.push(`encumbrance ${it.awkward}: your own blows to hit −${it.awkward * 5}, ` +
+        parts.push(`encumbrance ${it.awkward}: your own hit chance −${it.awkward * 5} points, ` +
           'and every 3 costs an action point (Defense skill may shrug one off)');
       }
       return `${parts.join('; ')}.`;

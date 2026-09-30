@@ -51,7 +51,22 @@ export function buildTerrainSheets(read: (name: string) => Uint8Array): Rgba[] {
       blit(anim, (4 * Math.floor(k / 5) + f) * W, (k % 5) * H, sheet3, (cell % 10) * W, Math.floor(cell / 10) * H, W, H);
     }
   }
-  return [stack(bmp('TER1'), bmp('TER2')), stack(bmp('TER3'), bmp('TER4')), stack(bmp('TER5'), null), sheet3];
+  const sheet0 = stack(bmp('TER1'), bmp('TER2'));
+  // Picture 74, terrain 86 "Pit/Combat Border", is solid white in TER2.BMP,
+  // and E3 draws it opaque (`trans` 0 at `1060:02ec`), so its pits by the Keep
+  // of Rentar-Ihrno are white squares. BoE's copy of the cell is black: made
+  // black here at the user's word (E3-SUSPECTED-BUGS.md #14).
+  fillCell(sheet0, PIT_PICTURE, [0, 0, 0, 255]);
+  return [sheet0, stack(bmp('TER3'), bmp('TER4')), stack(bmp('TER5'), null), sheet3];
+}
+
+/** E3's picture for the pit, terrain 86 (`e3TerrainPic` 1074). */
+export const PIT_PICTURE = 74;
+
+function fillCell(sheet: Rgba, cell: number, rgba: [number, number, number, number]): void {
+  const x0 = (cell % 10) * W;
+  const y0 = Math.floor(cell / 10) * H;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) sheet.data.set(rgba, ((y0 + y) * sheet.width + x0 + x) * 4);
 }
 
 /**

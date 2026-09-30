@@ -14683,3 +14683,12 @@ licence rule holds. Both use the main menu's granite and marble
   (`1060:0000`) calls its blitter `1058:1015` with `trans` = 0 (`push 0` at
   `1060:02ec`); only `trans` = 1 takes the white-masking path, so E3 paints
   it white too. Checked 2026-09-29.
+- **Then made black**, at the user's word: `buildTerrainSheets` paints picture
+  74 black (E3-SUSPECTED-BUGS.md #14). This is always on, not behind "Fix
+  known bugs", since it's art rather than a rule. It changes the conversion,
+  so the served and in-browser copies are both redone.
+- **Items page wording**: a weapon's damage is now given as its ranges with
+  the +2 (main hand) and −1 (off hand) folded in ("Hits for 5–12 as the only
+  or main weapon, 2–9 in the off hand"; a two-handed weapon has one range).
+  "To hit +N" became "hit chance +N points (50% → M%)". The unidentified
+  name no longer carries an "unidentified:" prefix.

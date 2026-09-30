@@ -61,11 +61,11 @@ describe('Exile III item readings', () => {
 
   it('spells out what the combat numbers mean', () => {
     const sword = { ...item(0, ItemType.ONE_HANDED, 8), bonus: 2 };
-    expect(combatLine(sword)).toMatch(/^Hits for 1–8 \+ 2 \(\+2 as the only or main weapon.*to hit \+10/);
-    // A two-handed weapon is never in the off hand.
+    expect(combatLine(sword)).toBe('Hits for 5–12 as the only or main weapon, 2–9 in the off hand; '
+      + 'hit chance +10 points (50% → 60%).');
+    // A two-handed weapon is always the only one: its +2 is folded in.
     const great = { ...item(0, ItemType.TWO_HANDED, 12), bonus: 1 };
-    expect(combatLine(great)).toMatch(/^Hits for 1–12 \+ 1 \+ 2 \(two-handed/);
-    expect(combatLine(great)).not.toContain('off hand');
+    expect(combatLine(great)).toBe('Hits for 4–15; hit chance +5 points (50% → 55%).');
     const plate = { ...item(0, ItemType.ARMOR, 5), awkward: 2 };
     expect(combatLine(plate)).toMatch(/^blocks 1–5 of each blow; encumbrance 2/);
   });

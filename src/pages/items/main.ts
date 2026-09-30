@@ -275,9 +275,10 @@ function renderTable(card: HTMLElement, rows: Row[]): void {
   legend.append(
     el('strong', undefined, 'Reading it. '),
     '“In the game” is the item sheet, which names each item’s BoE ability. “By the code” is what Exile III’s ',
-    'rules do. “To hit +N” is against the same item with no bonus: a blow rolls 1–100 and lands at or under ',
-    'the wielder’s hit chance, and each bonus point takes 5 off the roll, so N more blows in a hundred land. ',
-    'Damage is before strength, blessing and the like.',
+    'rules do. Damage ranges are before strength, blessing and the like. “Hit chance +N points” is how much ',
+    'more likely each blow is to land than with the same item and no bonus: a swing that would land half the ',
+    'time lands (50 + N)% of the time. (E3 rolls 1–100 and each bonus point takes 5 off the roll.) The small ',
+    'grey name under an item is what it’s called until identified.',
   );
   card.append(controls, legend, wrap, empty);
 
@@ -354,7 +355,7 @@ function rowEl(r: Row): HTMLTableRowElement {
   const words = el('div', 'name-words');
   words.append(el('strong', undefined, r.item.fullName));
   const sub: string[] = [];
-  if (r.item.name && r.item.name !== r.item.fullName) sub.push(`unidentified: ${r.item.name}`);
+  if (r.item.name && r.item.name !== r.item.fullName) sub.push(r.item.name);
   if (r.variantOf !== null) sub.push(`variant of #${r.variantOf}`);
   if (r.item.e3Ability >= 0) sub.push(`E3 code ${r.item.e3Ability}`);
   if (sub.length) words.append(el('small', undefined, sub.join(' · ')));
