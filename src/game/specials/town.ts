@@ -691,8 +691,10 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
         ctx.host.sound(spec.ex1a);
       } else univ.addStringToBuf('You are reunited.');
       // *Gotcha*: `if(spec.ex2a);` is an **empty statement** in the C++
-      // (boe.specials.cpp:4159). Its comment says ex2a should bring the others
-      // to the party rather than the reverse, and it does nothing whatever.
+      // (boe.specials.cpp:4159), the head of an `if … else if`. Its comment
+      // says ex2a should bring the others to the party rather than the
+      // reverse; what it does is skip the move back, so with any non-zero
+      // ex2a (-1 included) everyone stays where the lone PC stands.
       if (spec.ex2a) break;
       if (univ.party.leftIn === -1 || univ.party.townNum === univ.party.leftIn) {
         univ.party.townLoc = { ...univ.party.leftAt };

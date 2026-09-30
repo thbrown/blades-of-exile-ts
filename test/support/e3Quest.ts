@@ -25,6 +25,7 @@ import { buildOpcodeTable } from '../../src/fileio/specialParse';
 import { killMonst } from '../../src/game/damage';
 import { doRest } from '../../src/game/rest';
 import { FORCED_ENTRY, GameSession } from '../../src/game/session';
+import { GameMode } from '../../src/game/modes';
 import type { ChoiceButton, SpecialHost } from '../../src/game/specials/context';
 import { SpecCtx, SpecCtxType } from '../../src/game/specials/context';
 import { castTownSpell, startTownTargeting } from '../../src/game/spellTarget';
@@ -38,6 +39,9 @@ import { partyFlag } from '../../tools/e3convert/script';
 const DEFAULT_YES = /^(Yes|Take|Climb|Pray|Get|Read|Pull|Push|Drink|Touch|Onward|Approach|Step In|Give|Pay|Buy|Enter|Go In|Open|Search|Help|OK|Accept|Use|Descend|Ascend)$/i;
 
 const STEPS: [number, number][] = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [-1, -1], [1, -1], [-1, 1]];
+
+/** A creature by name or talk title, or by personality number. */
+export type Who = string | RegExp | number;
 
 export async function loadExile3(dir: string): Promise<Scenario> {
   const opcodes = buildOpcodeTable(
@@ -187,6 +191,14 @@ export class QuestRunner {
     throw new Error(`no square to step onto (${x},${y}) from`);
   }
 
+  /** Stand still for `n` turns (Space, `handle_pause`). */
+  async pause(n = 1): Promise<void> {
+    for (let i = 0; i < n; i++) {
+      await this.session.pause();
+      await this.settle();
+    }
+  }
+
   /** Use the square (x, y) from beside it (the U key). */
   async use(x: number, y: number): Promise<void> {
     for (const [dx, dy] of STEPS) {
@@ -237,8 +249,13 @@ export class QuestRunner {
     await this.settle();
   }
 
-  /** Living creatures in town whose name (or talk title) matches. */
-  creatures(name: string | RegExp): Creature[] {
+  /**
+   * Living creatures in town whose name (or talk title) matches, or, given a
+   * number, whose personality is that one (for towns where everyone shares a
+   * name, like the spiders' caves).
+   */
+  creatures(name: Who): Creature[] {
+    if (typeof name === 'number') return this.town.monsters.filter((m) => m.isAlive && m.personality === name);
     const re = typeof name === 'string' ? new RegExp(name, 'i') : name;
     return this.town.monsters.filter((m) => m.isAlive && (re.test(m.getName()) || re.test(this.title(m))));
   }
@@ -249,7 +266,7 @@ export class QuestRunner {
   }
 
   /** Kill every living creature that matches, as the party (death specials run). */
-  async kill(name: string | RegExp): Promise<number> {
+  async kill(name: Who): Promise<number> {
     const them = this.creatures(name);
     for (const m of them) killMonst(this.univ, m, 0, undefined, this.session);
     await this.settle();
@@ -266,7 +283,7 @@ export class QuestRunner {
    * Talk to the creature whose name or title matches, asking about each
    * keyword in turn; returns the replies. The party is put beside them.
    */
-  async talk(name: string | RegExp, ...keywords: string[]): Promise<string[]> {
+  async talk(name: Who, ...keywords: string[]): Promise<string[]> {
     const who = this.creatures(name)[0];
     if (!who) throw new Error(`nobody called ${name} in town ${this.townNum}`);
     const spot = STEPS.map(([dx, dy]) => ({ x: who.curLoc.x + dx, y: who.curLoc.y + dy }))
@@ -293,12 +310,37 @@ export class QuestRunner {
   }
 
   /**
+   * The outdoor fight with a group standing beside the party (one a special
+   * just placed, say): met as a step would meet it (or already begun, when
+   * the step's own turn met it), every hostile in the arena killed, and
+   * combat ended, so the group's win script runs. Returns false if the
+   * meeting was called off or the group ran.
+   */
+  async fightOutdoors(): Promise<boolean> {
+    if (this.session.mode !== GameMode.COMBAT) {
+      const fought = await this.session.checkOutdoorEncounter();
+      await this.settle();
+      if (!fought) return false;
+    }
+    for (const m of this.univ.town!.monsters) if (m.isAlive && !m.isFriendly) killMonst(this.univ, m, 0, undefined, this.session);
+    await this.settle();
+    if (!this.session.endCombat()) throw new Error(`combat won't end: ${this.univ.transcript.slice(-3).join(' / ')}`);
+    await this.settle();
+    return true;
+  }
+
+  /**
    * Whether the party could walk from `from` to `to` in this town, through
    * doors (opened by a step or picked) but not walls, portcullises or water;
    * `boat` lets it cross water a boat can. Special spots don't count, so a
    * stair or a blocking message in the way doesn't stop the path.
    */
   canReach(from: Location, to: Location, opts: { boat?: boolean } = {}): boolean {
+    return this.pathLength(from, to, opts) >= 0;
+  }
+
+  /** Steps on the shortest such path from `from` to `to` (as `canReach` walks), or -1. */
+  pathLength(from: Location, to: Location, opts: { boat?: boolean } = {}): number {
     const town = this.town;
     const passable = (x: number, y: number): boolean => {
       if (!town.isOnMap(x, y)) return false;
@@ -308,20 +350,21 @@ export class QuestRunner {
       if (ter.special === TerSpec.CHANGE_WHEN_STEP_ON || ter.special === TerSpec.UNLOCKABLE) return true;
       return !this.session.townIsBlocked({ x, y });
     };
-    const seen = new Set([`${from.x},${from.y}`]);
+    const dist = new Map([[`${from.x},${from.y}`, 0]]);
     const queue = [from];
     while (queue.length) {
       const p = queue.shift()!;
-      if (p.x === to.x && p.y === to.y) return true;
+      const d = dist.get(`${p.x},${p.y}`)!;
+      if (p.x === to.x && p.y === to.y) return d;
       for (const [dx, dy] of STEPS) {
         const n = { x: p.x + dx, y: p.y + dy };
         const k = `${n.x},${n.y}`;
-        if (seen.has(k) || !passable(n.x, n.y)) continue;
-        seen.add(k);
+        if (dist.has(k) || !passable(n.x, n.y)) continue;
+        dist.set(k, d + 1);
         queue.push(n);
       }
     }
-    return false;
+    return -1;
   }
 
   // ------------------------------------------------------------------ state

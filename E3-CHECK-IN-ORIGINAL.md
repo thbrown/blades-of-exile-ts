@@ -77,6 +77,34 @@ quest steps.
   which is the top-right button's portcullis.
 - **Question:** is the first way down open from the start in the original?
 
+### 5. Shayder's mayor: gold as well as the ring? (2026-09-30)
+
+- **Where:** Shayder's City Hall, Mayor Bernathy, at about (51,37).
+- **Do:** after burning the Filth Factory, ask her about "mission" and
+  note what the party gains.
+- **The port:** the Gold Skill Ring, and no gold. That's what E3's talk
+  script does (`talkScripts.ts`, script 131): one item,
+  flag 0xca to 2. Tuxedo Jack's walkthrough says "500 gold and a Gold
+  Skill Ring".
+- **Question:** does she pay 500 gold too? If so, the gold is somewhere
+  the port hasn't read.
+
+### 6. The Anama: does learning Mage Spells again throw a member out? (2026-09-30)
+
+- **Where:** anywhere a trainer sells skills, after joining the Anama
+  (Ahonar in Shayder, "join", once three priests have heard a yes).
+- **Do:** raise a PC's Mage Spells skill at a trainer; then go back to
+  Shayder's temple and try the members-only doors and the altar.
+- **The port:** nothing happens. Joining sets Mage Spells to 0 and the
+  flag 0xac to 3, and the only way the port knows to lose membership is
+  walking through the upper temple's treasure barrier (0xac to 2, and
+  Shayder turns hostile). Tuxedo Jack's walkthrough says a member can
+  leave "by either increasing your Mage Skill or robbing their temple".
+  No E3 message about it has turned up, and the trainer's code wasn't
+  checked for it.
+- **Question:** can a member train Mage Spells at all, and does it end
+  the membership (or make Shayder hostile)?
+
 ## Waiting on a ruling (already written up elsewhere)
 
 - **DIVERGENCES.md #30 and #31**, marked "open for the user".

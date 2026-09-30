@@ -357,8 +357,12 @@ export class SpecBuilder {
     };
   }
 
+  /**
+   * AFFECT_HP's `ex1b` is its sign (0 heals, anything else hurts), so it has
+   * to be written: left out, it comes out -1 and every heal was a wound.
+   */
   heal(amount: number): Step {
-    return (next) => this.node('hp', { ex1: [amount] }, next);
+    return (next) => this.node('hp', { ex1: [amount, 0] }, next);
   }
 
   restoreSp(amount: number): Step {
@@ -1475,9 +1479,13 @@ export class SpecBuilder {
     return this.ifFlagAtLeast(SPLIT, 1, then, otherwise);
   }
 
-  /** `FUN_10e0_0907`: the party is whole again where it split (TOWN_REUNITE_PARTY). */
+  /**
+   * `FUN_10e0_0907`: the party is whole again where it split
+   * (TOWN_REUNITE_PARTY). `ex2a` must be 0: any other value, the -1 an unset
+   * field comes out as included, leaves everyone where the lone PC stands.
+   */
   reuniteParty(): Step {
-    return this.seq([this.setFlag(SPLIT, 0), (next) => this.node('unite-party', { ex1: [10] }, next)]);
+    return this.seq([this.setFlag(SPLIT, 0), (next) => this.node('unite-party', { ex1: [10], ex2: [0] }, next)]);
   }
 
   /** The engine's item number for E3's `item` made readable with `ability` (`notes.ts`). */

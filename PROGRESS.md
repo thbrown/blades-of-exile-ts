@@ -15005,13 +15005,59 @@ one quest at a time**, to keep each session's context small.
     refuses the step, so the door never flips. Whether E3 opens a secret
     door under a message spot hasn't been checked in its move code
     (`1010:807c` on). Move Mountains gets in either way.
-- [ ] **Next: the roaches** (walkthrough A "2. Cockroaches", B chapter 2):
-  Farport's ferry, the Spider Caves ("spider", "friendly"), the spiders'
-  fight outdoors, the Roach Lair's map, Kuper's skiff to Kneece ("gift"),
-  the Filth Factory (the control room's Halt Slime Flow at (42,15) and the
-  run to the door, level 2's levers and portal, the scales at (26,36), the
-  Phoenix Egg), then Levy's Ring of Free Action.
-- [ ] Giants and troglodytes, golems, the endgame's alien beasts, then the
-  five artifact quests.
+- [x] **The roaches** (2026-09-30), seven tests: the mission and the
+  map (Bernathy's "mission"; the spiders' guard "spider" and chief
+  "friendly"; zone 55's spot 1 at (9,9), Attack, the fight won, 0xa83 to
+  2, once; the chief's second answer puts the roach lair on the map; its
+  map spot at (7,5), or the Filth Spreader's "located", puts the Filth
+  Factory there); Kuper's skiff (Olga's ticket, 0x5aa, spent on the
+  crossing) to Kneece, the barrier at (29,22), Purgatos's "device" giving
+  the Phoenix Egg only once the factory is found, and only once, and the
+  free ride back; the Filth Factory's level 1 (spot 17 lets one PC into
+  the control room, the panel's 2 halts the flow, spot 18 reunites, the
+  dry trench reaches the stairs with turns to spare, and 130 turns later
+  the flow is back and the way shut); level 2 (cap the pipes, run the
+  machinery, the wall at (52,34) bursts, the four portals to (3,3), the
+  scales at (26,36), the heart at (25,28) refusing without the egg and
+  burning with it: 0xc87, the factory off the map, no roaches left; the
+  stairs up and west off the edge); and the rewards (Bernathy's Gold
+  Skill Ring once, Anaximander's report and Amulet of Rapid Returning,
+  Berra takes the scales, Levy's Ring of Free Action, Solberg's two
+  spells, and roaches 143–147 gone from town on entry).
+  - **The Anama**, at the user's request (a side quest, but most of the
+    island is about it), three tests: three priests' yeses (Father Rice
+    "beliefs", Mother Loomis "share", Mother Melamed "philosophy"; each
+    counts once) and Ahonar's "join" (mage skill to priest skill, mage
+    spells from 30 forgotten, the rings; the members-only doors (spot 9),
+    the altar's heal, the upper temple's prayer books, and its treasure
+    barrier making Shayder hostile); three noes and Ahonar never asks; and
+    Geoffrey's ring from Lorelei opening the doors until Ahonar takes it.
+  - **Found and fixed: every E3 heal hurt.** `SpecBuilder.heal` wrote
+    `ex1: [amount]`, and an unset `ex1b` comes out -1, which AFFECT_HP reads
+    as "take". Shayder's altar, the Tower of Magi's bed and every other
+    heal node (about two dozen, towns and outdoors) dealt the damage
+    instead. Now `[amount, 0]`.
+  - **Found and fixed: a reunited party stayed where the lone PC stood.**
+    `reuniteParty` left `ex2a` unset (-1), and TOWN_REUNITE_PARTY's
+    `if(spec.ex2a); else if …` (boe.specials.cpp:4208, ported as is)
+    skips the move back for any non-zero value. Broke the Filth Factory's
+    control room, Tinraya's, and three dungeons' splits. Now `ex2: [0]`.
+    *Gotcha* for the next builder: **any sign or mode field left out of a
+    node is -1, not 0**; `sp`, `xp`, `gold` and the rest already pass it.
+  - Runner verbs added: `fightOutdoors` (meets a group beside the party,
+    or finishes the fight the step's own turn began, kills the hostiles,
+    ends combat so its win script runs), `pause(n)`, `pathLength`, and a
+    personality number for `talk`/`creatures`/`kill` (the spiders are all
+    "Spider").
+  - New check-in questions 5 and 6: whether Bernathy pays 500 gold as
+    well (walkthrough B says so; E3's script gives only the ring), and
+    whether training Mage Spells throws an Anama member out.
+  - *Not covered*: the side content along the way that isn't the quest's
+    (Shayder's sewers and their Wand of Fireballs, the factory's caches,
+    the stone circles).
+- [ ] **Next: the giants and troglodytes** (walkthrough A "3. Giants &
+  Troglodytes", B chapter 3).
+- [ ] Then golems, the endgame's alien beasts, then the five artifact
+  quests.
 
-All checks pass (2026-09-30): 1,500 tests, tsc, both sweeps, verify-e3.
+All checks pass (2026-09-30): 1,508 tests, tsc, both sweeps, verify-e3.

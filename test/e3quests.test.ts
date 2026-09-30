@@ -12,7 +12,8 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Scenario } from '../src/data/scenario';
 import { Spell } from '../src/data/spell';
-import { Status } from '../src/universe/skills';
+import { GameMode } from '../src/game/modes';
+import { Skill, Status } from '../src/universe/skills';
 import { emitScenario } from '../tools/e3convert/emitNode';
 import { findE3Dir } from '../tools/e3convert/install';
 import { partySpecItem } from '../tools/e3convert/script';
@@ -194,6 +195,323 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       await q.enter(24, { x: 10, y: 10 });
       await q.talk(/Solberg/, 'rewa');
       expect(q.party.pcs.some((pc) => pc.mageSpells[0x1f]), q.tail()).toBe(true);
+    });
+  });
+  describe('the roaches', () => {
+    it("Shayder's mission, the spiders' fight, and the roaches' map to the Filth Factory", async () => {
+      const q = new QuestRunner(scen);
+      // Mayor Bernathy asks for help (0xca), with its journal entry.
+      await q.enter(4);
+      const [mission] = await q.talk(/Bernathy/, 'miss');
+      expect(q.flag(0xca), mission).toBe(1);
+
+      // The Friendly, Happy Spiders: the guard lets the party by ("spider"),
+      // and the chief asks for help against the roaches ("friendly").
+      await q.enter(48, { x: 22, y: 43 });
+      await q.talk(177, 'spid');
+      const [before] = await q.talk(175, 'frie');
+      expect(q.flag(0xa83), before).toBe(1);
+      expect(scen.towns[92]!.canFind).toBe(false);
+
+      // Northwest of the caves, zone 55's spot 1 (9,9): Help, and the fight.
+      const [sx, sy] = [1, 6];
+      await q.outdoors(sx, sy, 10, 10);
+      q.answer('Attack');
+      await q.step(9, 9);
+      expect(await q.fightOutdoors(), q.tail() + q.univ.transcript.slice(-6).join(' / ')).toBe(true);
+      expect(q.flag(0xa83), q.tail()).toBe(2);
+      // Once only.
+      await q.step(9, 10);
+      await q.step(9, 9);
+      expect(q.session.mode, q.tail()).toBe(GameMode.OUTDOORS);
+      expect(q.party.outC.some((g) => g.exists)).toBe(false);
+
+      // The chief says where the roaches live, and the lair goes on the map.
+      await q.enter(48, { x: 22, y: 43 });
+      const [after] = await q.talk(175, 'frie');
+      expect(after).not.toBe(before);
+      expect(scen.towns[92]!.canFind, after).toBe(true);
+
+      // The Happy, Friendly Roaches: their map (spot 11 at (7,5)) puts the
+      // Filth Factory on the world map, and the Filth Spreader says where.
+      expect(scen.towns[26]!.canFind).toBe(false);
+      await q.enter(92, { x: 12, y: 1 });
+      await q.step(7, 5);
+      expect(scen.towns[26]!.canFind, q.tail()).toBe(true);
+      // Asked first, the Filth Spreader does the same (a BUY_TOWN_LOC node).
+      const r = new QuestRunner(scen);
+      await r.enter(92, { x: 12, y: 1 });
+      expect(scen.towns[26]!.canFind).toBe(false);
+      const [located] = await r.talk(/Filth Spreader/, 'loca');
+      expect(located, r.tail()).toMatch(/north of the biggest human town/);
+      expect(scen.towns[26]!.canFind, r.tail()).toBe(true);
+    });
+    it("Kuper's skiff to Kneece, and Purgatos's Phoenix Egg once the factory is found", async () => {
+      const q = new QuestRunner(scen);
+      await q.enter(131, { x: 24, y: 40 });
+      // The middle dock (spot 2) is refused until Olga sells a ticket (0x5aa).
+      await q.step(24, 43);
+      expect(q.townNum, q.tail()).toBe(131);
+      await q.talk(/Olga/, 'purc');
+      expect(q.flag(0x5aa), q.tail()).toBeGreaterThan(0);
+      await q.step(24, 43);
+      expect(q.townNum, q.tail()).toBe(135);
+      expect(q.flag(0x5aa)).toBe(0);
+      const landing = { ...q.at };
+
+      // Purgatos's house, past the barrier at (29,22) (spot 7).
+      const purgatos = q.creatures(/Purgatos/)[0]!;
+      expect(q.canReach(landing, { x: 29, y: 22 }), 'to the barrier').toBe(true);
+      await q.step(29, 22);
+      expect(q.at, q.tail()).toEqual({ x: 29, y: 22 });
+      expect(q.canReach({ x: 29, y: 22 }, purgatos.curLoc), 'to Purgatos').toBe(true);
+
+      // Before the Filth Factory is on the map, he has nothing to give.
+      const [early] = await q.talk(/Purgatos/, 'devi');
+      expect(q.hasSpecItem(38), early).toBe(false);
+      scen.towns[26]!.canFind = true;
+      const [egg] = await q.talk(/Purgatos/, 'devi');
+      expect(q.hasSpecItem(38), egg).toBe(true);
+      expect(egg).not.toBe(early);
+      // Once.
+      q.party.specItems.delete(38);
+      await q.talk(/Purgatos/, 'devi');
+      expect(q.hasSpecItem(38)).toBe(false);
+
+      // And home for nothing, from the dock at (25,4).
+      await q.step(25, 4);
+      expect(q.townNum, q.tail()).toBe(131);
+    });
+    it('The Anama: three priests hear a yes, Ahonar takes the party in, and the ring opens their doors', async () => {
+      const q = new QuestRunner(scen);
+      const YES = 0x57f, NO = 0x580, ANAMA = 0xac, RINGS = partySpecItem(0x5a);
+      await q.enter(4);
+      const [tooSoon] = await q.talk(/Ahonar/, 'join');
+      expect(q.flag(ANAMA), tooSoon).toBe(0);
+      // Members only: the temple's inner doors (Shayder's spot 9) refuse the party.
+      const [dx, dy] = spot(4, 9);
+      await q.step(dx, dy);
+      expect(q.at, q.tail()).not.toEqual({ x: dx, y: dy });
+
+      // Around the island, each priest asks once whether the party believes.
+      const priests: [number, RegExp, string][] = [
+        [127, /Father Rice/, 'beli'], [129, /Mother Loomis/, 'shar'], [131, /Mother Melamed/, 'phil'],
+      ];
+      for (const [t, who, word] of priests) {
+        await q.enter(t);
+        q.answer('Yes');
+        await q.talk(who, word);
+      }
+      expect(q.flag(YES), q.tail()).toBe(3);
+      // Asked again, a priest doesn't count twice.
+      await q.talk(/Mother Melamed/, 'phil');
+      expect(q.flag(YES)).toBe(3);
+      expect(q.flag(NO)).toBe(0);
+
+      // Joining: mage skill turns to priest skill, the mage spells from 30 on
+      // are forgotten, and every PC wears the ring.
+      await q.enter(4);
+      const before = q.party.pcs.map((pc): [number, number] => [pc.skills[Skill.MAGE_SPELLS]!, pc.skills[Skill.PRIEST_SPELLS]!]);
+      for (const pc of q.party.pcs) pc.mageSpells[31] = true;
+      const [joined] = await q.talk(/Ahonar/, 'join');
+      expect(q.flag(ANAMA), `${joined}\n${q.tail()}`).toBe(3);
+      expect(q.hasSpecItem(RINGS)).toBe(true);
+      q.party.pcs.forEach((pc, i) => {
+        const [mage, priest] = before[i]!;
+        expect(pc.skills[Skill.MAGE_SPELLS], pc.name).toBe(0);
+        expect(pc.skills[Skill.PRIEST_SPELLS], pc.name).toBe(Math.min(7, priest + Math.max(2, mage)));
+        expect(pc.mageSpells[31], pc.name).toBe(false);
+      });
+      await q.step(dx, dy);
+      expect(q.at, q.tail()).toEqual({ x: dx, y: dy });
+      // The altar heals members.
+      q.party.pcs[0]!.curHealth = 1;
+      const [ax, ay] = spot(4, 21);
+      await q.step(ax, ay);
+      expect(q.party.pcs[0]!.curHealth, q.tail()).toBeGreaterThan(1);
+
+      // The upper temple's prayer books teach members priest spells.
+      await q.enter(91, { x: 10, y: 10 });
+      const [bx, by] = spot(91, 14);
+      await q.step(bx, by);
+      expect(q.party.pcs.some((pc) => pc.priestSpells[30]), q.tail()).toBe(true);
+      // Its treasure's barrier makes enemies of the Anama, and Shayder turns on the party.
+      const [tx, ty] = spot(91, 2);
+      await q.step(tx, ty);
+      expect(q.flag(ANAMA), q.tail()).toBe(2);
+      await q.enter(4);
+      expect(q.creatures(/Ahonar/)[0]!.isFriendly, q.tail()).toBe(false);
+    });
+
+    it('The Anama: three noes, and Ahonar never asks', async () => {
+      const q = new QuestRunner(scen);
+      const priests: [number, RegExp, string][] = [
+        [127, /Father Rice/, 'beli'], [129, /Mother Loomis/, 'shar'], [132, /Gavlax/, 'fait'],
+        [4, /Lockhart/, 'beli'], [131, /Mother Melamed/, 'phil'],
+      ];
+      for (const [t, who, word] of priests.slice(0, 3)) {
+        await q.enter(t);
+        q.answer('Leave|No');
+        await q.talk(who, word);
+      }
+      expect(q.flag(0x580), q.tail()).toBe(3);
+      for (const [t, who, word] of priests.slice(3)) {
+        await q.enter(t);
+        q.answer('Yes');
+        await q.talk(who, word);
+      }
+      expect(q.flag(0x57f), q.tail()).toBe(2);
+      await q.enter(4);
+      const [refused] = await q.talk(/Ahonar/, 'join');
+      expect(q.flag(0xac), refused).toBe(0);
+      expect(q.log.at(-2) ?? '', 'no question asked').not.toMatch(/^\[choice/);
+    });
+    it("The Anama: a ring bought in Lorelei opens their doors, until Ahonar takes it back", async () => {
+      const q = new QuestRunner(scen);
+      const RINGS = partySpecItem(0x5a);
+      await q.enter(12);
+      q.party.gold = 3000;
+      const [sold] = await q.talk(/Geoffrey/, 'ring');
+      expect(q.hasSpecItem(RINGS), sold).toBe(true);
+      expect(q.party.gold).toBe(500);
+      await q.enter(4);
+      const [dx, dy] = spot(4, 9);
+      await q.step(dx, dy);
+      expect(q.at, q.tail()).toEqual({ x: dx, y: dy });
+      await q.talk(/Ahonar/, 'join');
+      expect(q.hasSpecItem(RINGS), q.tail()).toBe(false);
+      expect(q.flag(0x580)).toBe(5);
+    });
+    it('Filth Factory 1: one PC into the control room, the slime flow halted, and the dry trench to the stairs', async () => {
+      const q = new QuestRunner(scen);
+      await q.enter(26, { x: 4, y: 32 });
+      const entry = { x: 4, y: 32 };
+      const [cx, cy] = spot(26, 17), [px, py] = spot(26, 14), [ux, uy] = spot(26, 18), [sx, sy] = spot(26, 21);
+      expect(q.canReach(entry, { x: cx, y: cy }), 'to the control room door').toBe(true);
+      // The stairs down are past the slime river while it flows.
+      expect(q.canReach(entry, { x: sx, y: sy }), 'stairs, flowing').toBe(false);
+
+      // The control room lets one in (spot 17): the rest wait outside.
+      q.pick = 0;
+      await q.step(cx, cy);
+      expect(q.party.isSplit(), q.tail()).toBe(true);
+      const solo = { ...q.at };
+      expect(q.canReach(solo, { x: px, y: py }), 'to the panel').toBe(true);
+      await q.clearHostiles();
+
+      // The panel: 2 halts the flow (0 walks away).
+      q.number(2, 0);
+      await q.step(px, py);
+      expect(q.flag(0x191), q.tail()).toBeGreaterThanOrEqual(119);
+      expect(q.town.record.terrain[47]![33]).toBe(141);
+      expect(q.town.record.terrain[50]![34]).toBe(210);
+
+      // Back out (spot 18) and together again, then down the dry trench.
+      const toExit = q.pathLength({ x: px, y: py }, { x: ux, y: uy });
+      expect(toExit, 'panel to the way out').toBeGreaterThan(0);
+      await q.step(ux, uy);
+      expect(q.party.isSplit(), q.tail()).toBe(false);
+      const toStairs = q.pathLength(q.at, { x: sx, y: sy });
+      expect(toStairs, 'to the stairs, dry').toBeGreaterThan(0);
+      // The walkthroughs say run: the flow restarts 120 turns on.
+      expect(toExit + toStairs, 'turns to spare').toBeLessThan(120);
+
+      // Left too long, the flow comes back and the way shuts.
+      await q.pause(130);
+      expect(q.flag(0x191), q.tail()).toBe(0);
+      expect(q.town.record.terrain[50]![34], q.tail()).toBe(71);
+      expect(q.canReach(q.at, { x: sx, y: sy }), 'stairs, flowing again').toBe(false);
+    });
+    it('Filth Factory 2: the capped pipes burst, the portals run to the heart, the scales, and the Phoenix Egg', async () => {
+      const q = new QuestRunner(scen);
+      await q.enter(27, { x: 0x37, y: 0xd });
+      const arrival = { ...q.at };
+      const at = (id: number) => { const [x, y] = spot(27, id); return { x, y }; };
+      const caps = at(22), machinery = at(24), portal = at(16);
+      expect(q.canReach(arrival, caps), 'to the caps').toBe(true);
+      expect(q.canReach(arrival, machinery), 'to the machinery').toBe(true);
+      // The portal is walled off behind the sampling room's pipes.
+      expect(q.canReach(arrival, portal), 'portal, walled').toBe(false);
+
+      // Cap the pipes, start the machinery, and wait: they burst the wall.
+      await q.step(caps.x, caps.y);
+      expect(q.flag(0x199), q.tail()).toBe(1);
+      await q.step(machinery.x, machinery.y);
+      expect(q.flag(0x19a), q.tail()).toBeGreaterThan(0);
+      await q.pause(12);
+      expect(q.town.record.terrain[52]![34], q.tail()).toBe(0);
+      expect(q.canReach(q.at, portal), 'portal, open').toBe(true);
+
+      // Through the portals, four times, to the northwest corner.
+      await q.step(portal.x, portal.y);
+      for (const id of [15, 18, 17]) {
+        const p = at(id);
+        expect(q.canReach(q.at, p), `to portal ${id} from ${JSON.stringify(q.at)}`).toBe(true);
+        await q.step(p.x, p.y);
+      }
+      expect(q.at, q.tail()).toEqual({ x: 3, y: 3 });
+
+      // Round the filth to the scales (spot 5), then the heart (spot 2).
+      const scales = at(5), heart = at(2);
+      expect(q.canReach(q.at, scales), 'to the scales').toBe(true);
+      await q.step(scales.x, scales.y);
+      expect(q.hasSpecItem(partySpecItem(0x42)), q.tail()).toBe(true);
+      expect(q.canReach(q.at, heart), 'to the heart').toBe(true);
+      // Without the egg there's nothing to do there.
+      await q.step(heart.x, heart.y);
+      expect(q.flag(0xc87), q.tail()).toBe(0);
+      q.party.specItems.add(38);
+      await q.step(heart.x, heart.y);
+      expect(q.flag(0xc87), q.tail()).toBe(1);
+      expect(q.hasSpecItem(38)).toBe(false);
+      expect(scen.towns[26]!.canFind).toBe(false);
+      expect(q.town.monsters.some((m) => m.isAlive && !m.isFriendly), 'the roaches').toBe(false);
+
+      // And out: the stairs up (spot 19), then west off the map's edge.
+      const up = at(19);
+      expect(q.canReach(q.at, up), 'to the stairs up').toBe(true);
+      await q.step(up.x, up.y);
+      expect(q.townNum, q.tail()).toBe(26);
+      expect(q.canReach(q.at, { x: 0, y: 36 }), `out west from ${JSON.stringify(q.at)}`).toBe(true);
+    });
+    it('The roaches reported and rewarded: Bernathy, Anaximander, Berra, Levy and Solberg; the roaches gone', async () => {
+      const q = new QuestRunner(scen);
+      const ROACH_KINDS = [143, 144, 145, 146, 147];
+      await q.enter(26, { x: 4, y: 32 });
+      expect(q.town.monsters.some((m) => m.isAlive && ROACH_KINDS.includes(m.number)), 'roaches before').toBe(true);
+
+      // The mission, then the factory burned (the heart's own flags, as Filth Factory 2 sets them).
+      await q.enter(4);
+      await q.talk(/Bernathy/, 'miss');
+      q.setFlag(0xc87, 1);
+      q.party.specItems.add(partySpecItem(0x42));
+      await q.enter(26, { x: 4, y: 32 });
+      expect(q.town.monsters.some((m) => m.isAlive && ROACH_KINDS.includes(m.number)), 'roaches after').toBe(false);
+
+      // Bernathy's reward, once.
+      await q.enter(4);
+      const [thanks] = await q.talk(/Bernathy/, 'miss');
+      expect(q.flag(0xca), thanks).toBe(2);
+      expect(q.hasItem(/Gold Skill Ring/), thanks).toBe(true);
+      const [again] = await q.talk(/Bernathy/, 'miss');
+      expect(again).not.toBe(thanks);
+
+      // Anaximander hears the report and hands over the Amulet of Rapid Returning.
+      await q.enter(21, { x: 10, y: 10 });
+      await q.step(...spot(21, 1));
+      expect(q.flag(0xc87), q.tail()).toBe(2);
+      expect(q.hasSpecItem(partySpecItem(0x1a)), q.tail()).toBe(true);
+      // Berra takes the scales as evidence.
+      await q.talk(/Berra/, 'evid');
+      expect(q.hasSpecItem(partySpecItem(0x42)), q.tail()).toBe(false);
+      expect(q.flag(0xc97)).toBe(1);
+      // Levy's reward, and Solberg's two spells.
+      const [ring] = await q.talk(/Levy/, 'rewa');
+      expect(q.flag(0xc87), ring).toBe(3);
+      expect(q.hasItem(/Ring of Free Action/), ring).toBe(true);
+      await q.enter(24, { x: 10, y: 10 });
+      await q.talk(/Solberg/, 'rewa');
+      expect(q.party.pcs.some((pc) => pc.mageSpells[0x28] && pc.mageSpells[0x2b]), q.tail()).toBe(true);
     });
   });
 });
