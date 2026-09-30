@@ -83,7 +83,7 @@ import { FocusEvent, animPending, setAnimWaiter, setFocusSink } from './game/ani
 import { Missile, setMissileSink } from './game/missileAnim';
 import { pickNextPc } from './game/combat';
 import { GameRng } from './core/rng';
-import { DialogHost } from './dialogs/dialog';
+import { DialogHost, type TouchChoice, type TouchView } from './dialogs/dialog';
 import { STRING_TABLES, getStr, loadStringTables, overrideStrings, stringCount } from './data/strings';
 import { Colours } from './render/colours';
 import { TerSpec } from './data/terrain';
@@ -102,7 +102,7 @@ import {
   AUTOSAVE_TRIGGER_DEFAULTS, AutosaveReason, MAX_AUTOSAVE_DEFAULT, getAutosavePrefs, setAutosavePrefs,
   setAutosaveSink,
 } from './game/autosave';
-import { MENU_SEPARATOR, MenuItem, installFullScreenButton, installMenuBar } from './platform/menu';
+import { MENU_SEPARATOR, MenuItem, installFullScreenButton, installMenuBar, installMenuToggle } from './platform/menu';
 import { StartupLibrary, StartupScenario, showStartupScreen } from './platform/startup';
 import { LibraryCatalog, libraryUrl } from './fileio/libraryCatalog';
 import {
@@ -123,17 +123,23 @@ import { BG_DARK, BG_LIGHT, setDefaultDialogBackground, setExile3Dialogs } from 
 import { changeCursor, cursorCss, setScenarioCursors } from './platform/cursors';
 import { giveHelp, setGiveHelp, setLivingSound } from './universe/living';
 import { killPc } from './game/damage';
-import { BOE_HEIGHT, BOE_WIDTH, ToolbarButton } from './render/layout';
+import { BOE_HEIGHT, BOE_WIDTH, ToolbarButton, WIN_RECTS } from './render/layout';
 
-import { CHROME_SHEETS, Screen, toolbarButtons, toolbarMode } from './render/screen';
+import { CHROME_SHEETS, Screen, equippedKind, inventoryLabel, toolbarButtons, toolbarMode } from './render/screen';
+import { itemGraphic } from './render/itemPics';
+import { offersUse } from './game/e3ItemUse';
+import { ITEM_SHOP_TITLES, specIcon, specPrice } from './game/itemShop';
+import { curWeight, maxWeight } from './universe/inventory';
+import { TouchSheet, type SheetRow, type SheetView } from './platform/touchSheet';
 import { TouchControls, setTouchControls, touchControlsOn } from './platform/touchControls';
-import { aimSpaceAction, autoAim, currentAim, moveAim } from './game/aimCursor';
+import { openTouchLayoutPanel } from './platform/touchLayout';
+import { type Aiming, aimSpaceAction, autoAim, currentAim, moveAim, talkAim } from './game/aimCursor';
 import { tilePattern } from './render/tiling';
 import {
   DEFAULT_UI_SCALE, DisplayMode, UI_SCALES, UI_SCALE_FIT, desktop, placeBesideGame,
 } from './render/desktop';
 import { MAP_DEFAULT_POS, MAP_H, MAP_W } from './render/mapScreen';
-import { CAPTION_H, WINDOW_TITLES, drawCaption, windowFrames, type ChromeFlavour } from './render/windowChrome';
+import { CAPTION_H, WINDOW_TITLES, drawCaption, inRect, windowFrames, type ChromeFlavour } from './render/windowChrome';
 import { ShopHit, shopItemInfo } from './render/shopScreen';
 import { SheetStore } from './render/sheets';
 import { PartyPreset, Player } from './universe/player';
@@ -695,6 +701,8 @@ async function main(): Promise<void> {
   let shownCursor = '';
   // Made once the toolbar's handler exists, below; redraws before then skip it.
   let touchPads: TouchControls | undefined;
+  /** The inventory and party sheets, made once their handlers exist. */
+  let touchSheet: TouchSheet | undefined;
   /**
    * The aim the keyboard cursor belongs to (`game/aimCursor.ts`). A new
    * spell, missile or multi-target pick puts the cursor back on the nearest
@@ -702,8 +710,16 @@ async function main(): Promise<void> {
    */
   let aimToken: unknown = null;
   let aimPicks = -1;
+  /**
+   * Talk's aim (`talkAim`), with touch controls on and Talk armed. Filled in
+   * once `pending` exists, below; until then nothing is armed.
+   */
+  let talkAimNow: () => Aiming | null = () => null;
+  /** What's being aimed: a spell, a missile, or (by finger) whom to talk to. */
+  const aimNow = (): Aiming | null => currentAim(session) ?? talkAimNow();
   const syncAim = (): void => {
-    const aim = currentAim(session);
+    const aim = aimNow();
+    screen.aimTalk = aim?.targets === 'people';
     if (!aim) {
       screen.aimAt = null;
       aimToken = null;
@@ -756,6 +772,7 @@ async function main(): Promise<void> {
       shownCursor = css;
     }
     touchPads?.sync();
+    touchSheet?.sync(touchControlsOn());
   };
   const dialogs = new DialogHost(ctx, store, () => redraw());
   windowFrames.on = true;
@@ -1937,6 +1954,188 @@ async function main(): Promise<void> {
     redraw();
   };
 
+  /**
+   * The item panel's page buttons (handle_action, boe.actions.cpp:1784): six
+   * PCs, Special Items, Quests and Help. The canvas and the touch sheet both
+   * come here.
+   */
+  const pressItemBottom = (bottom: number): void => {
+    sound.play(Snd.BUTTON);
+    if (bottom === 6) screen.itemWindow.setStatWindow(univ, ItemWinMode.SPECIAL);
+    else if (bottom === 7) screen.itemWindow.setStatWindow(univ, ItemWinMode.QUESTS);
+    else if (bottom === 8) {
+      void showDialogAction('help-inventory');
+    } else {
+      univ.curPc = bottom;
+      screen.itemWindow.setStatWindowForPc(univ, bottom);
+    }
+    setStatus();
+    redraw();
+  };
+
+  /**
+   * A PC row's parts (handle_action's PC-area branch, boe.actions.cpp:1739):
+   * the name makes them active, HP and SP read out, and the two icons are Info
+   * and Trade Places. The canvas and the touch sheet both come here.
+   */
+  const pressPcRow = (index: number, part: 'name' | 'hp' | 'sp' | 'info' | 'trade'): void => {
+    const pc = univ.party.pcs[index];
+    if (!pc || pc.mainStatus === MainStatus.ABSENT) return;
+    sound.play(Snd.BUTTON);
+    // The HP and SP read-outs are blank for a PC who isn't alive, so a
+    // click there does nothing rather than reporting on a corpse.
+    const aliveOnly = part === 'hp' || part === 'sp';
+    if (!aliveOnly || pc.mainStatus === MainStatus.ALIVE) {
+      if (part === 'name') {
+        session.switchPc(index);
+        screen.itemWindow.setStatWindowForPc(univ, univ.curPc);
+      } else if (part === 'hp') {
+        session.printPcHp(index);
+      } else if (part === 'sp') {
+        session.printPcSp(index);
+      } else if (part === 'trade') {
+        session.tradePlaces(index);
+        screen.itemWindow.setStatWindowForPc(univ, univ.curPc);
+      } else {
+        showPcInfo(index);
+      }
+    }
+    setStatus();
+    redraw();
+  };
+
+  /**
+   * The inventory and the party, as full-screen sheets for a finger
+   * (`platform/touchSheet.ts`): a tap on either panel opens its sheet. Every
+   * button is one of the panel's own clicks, through `handleInventoryClick`,
+   * `pressItemBottom` and `pressPcRow`.
+   */
+  let sheetOpen: 'inventory' | 'party' | null = null;
+  const pcIcon = (pic: number): SheetRow['icon'] => {
+    const g = pcGraphic(pic, Direction.S);
+    const sheet = g ? store.get(g.sheetName) : undefined;
+    return g && sheet ? { sheet, rect: g.rect, key: `pc${pic}` } : null;
+  };
+  const inventorySheet = (): SheetView => {
+    const win = screen.itemWindow;
+    const pcs = univ.party.pcs;
+    const service = session.itemShop;
+    const page = screen.itemPage;
+    const pc = pcs[page] ?? univ.currentPc;
+    const tabs = service ? [] : [
+      ...pcs.flatMap((p, i) => (p.mainStatus === MainStatus.ALIVE
+        ? [{ id: String(i), label: p.name, on: win.mode === i }] : [])),
+      { id: '6', label: 'Special', on: win.mode === ItemWinMode.SPECIAL },
+      // Exile III's jobs page draws its own way (e3Jobs.ts); left to the canvas.
+      ...(e3JobsBase(univ) === null ? [{ id: '7', label: 'Quests', on: win.mode === ItemWinMode.QUESTS }] : []),
+    ];
+    if (!service && win.mode >= ItemWinMode.SPECIAL) {
+      const quests = win.mode === ItemWinMode.QUESTS;
+      const rows: SheetRow[] = win.specItemArray.flatMap((entry, i): SheetRow[] => {
+        if (quests) {
+          const quest = univ.scenario.quests[entry % QUEST_COMPLETED_OFFSET];
+          if (!quest) return [];
+          const status = entry >= QUEST_COMPLETED_OFFSET * 2 ? ' (failed)'
+            : entry >= QUEST_COMPLETED_OFFSET ? ' (completed)' : '';
+          return [{ id: String(i), title: quest.name + status, actions: [{ id: 'info', label: 'Info' }] }];
+        }
+        const spec = univ.scenario.specialItems[entry];
+        if (!spec) return [];
+        const actions = [{ id: 'info', label: 'Info' }];
+        if (specItemUseable(spec)) actions.unshift({ id: 'use', label: 'Use' });
+        return [{ id: String(i), title: spec.name, actions }];
+      });
+      return { title: quests ? 'Quests/Jobs' : 'Special items', tabs, rows,
+        empty: quests ? 'No quests.' : 'No special items.' };
+    }
+    const rows: SheetRow[] = [];
+    pc.items.forEach((item, slot) => {
+      if (!item || item.variety === 0) return;
+      const g = itemGraphic(item.graphicNum);
+      const sheet = g ? store.get(g.sheetName) : undefined;
+      const icon = g && sheet ? { sheet, rect: g.rect, key: `item${item.graphicNum}` } : null;
+      const equipped = pc.equip[slot] === true;
+      if (service) {
+        const price = specPrice(service, pc, slot);
+        if (price === null) return;
+        const verb = specIcon(service.mode);
+        rows.push({ id: String(slot), title: inventoryLabel(item), icon,
+          actions: [{ id: 'spec', label: `${verb[0]!.toUpperCase()}${verb.slice(1)} (${price})`, primary: true }] });
+        return;
+      }
+      // A shop draws no row buttons at all (handle_item_shop_action), which
+      // leaves the name's equip toggle and the description.
+      const actions = [
+        { id: 'name', label: equipped ? 'Unequip' : 'Equip', primary: !equipped },
+        ...(!session.shop && offersUse(item) ? [{ id: 'use', label: 'Use' }] : []),
+        ...(!session.shop ? [{ id: 'give', label: 'Give' }, { id: 'drop', label: 'Drop' }] : []),
+        { id: 'info', label: 'Info' },
+      ];
+      rows.push({
+        id: String(slot), title: inventoryLabel(item), icon, actions,
+        tone: equipped ? `equipped ${equippedKind(item)}` : '',
+        detail: equipped ? 'Equipped' : undefined,
+      });
+    });
+    return {
+      title: service ? ITEM_SHOP_TITLES[service.mode] : `${pc.name}'s inventory`,
+      subtitle: `Carrying ${curWeight(pc)} of ${maxWeight(pc)}`,
+      tabs, rows, empty: service ? 'Nothing here they want.' : 'Nothing in the pack.',
+    };
+  };
+  const partySheet = (): SheetView => {
+    const switching = session.currentSwitch < 6 ? session.currentSwitch : null;
+    const rows: SheetRow[] = [];
+    univ.party.pcs.forEach((pc, i) => {
+      if (pc.mainStatus === MainStatus.ABSENT) return;
+      const alive = pc.mainStatus === MainStatus.ALIVE;
+      const swap = switching === null ? 'Swap' : switching === i ? 'Cancel swap' : 'Swap here';
+      rows.push({
+        id: String(i), title: `${i + 1}. ${pc.name}`, icon: pcIcon(pc.whichGraphic),
+        on: i === univ.curPc,
+        detail: alive ? `HP ${pc.curHealth}/${pc.maxHealth}   SP ${pc.curSp}/${pc.maxSp}`
+          : MainStatus[pc.mainStatus]?.toLowerCase(),
+        actions: [
+          { id: 'name', label: 'Select', primary: i !== univ.curPc },
+          { id: 'info', label: 'Info' },
+          { id: 'trade', label: swap },
+        ],
+      });
+    });
+    return {
+      title: 'Party', tabs: [], rows, empty: '',
+      subtitle: switching !== null ? `Swap ${univ.party.pcs[switching]?.name ?? ''} with whom?` : undefined,
+    };
+  };
+  touchSheet = new TouchSheet({
+    view: () => {
+      if (sheetOpen === null || dialogs.active || document.body.classList.contains('starting')) return null;
+      // Dropping arms a square to drop on; the sheet gets out of the way.
+      if (session.mode === GameMode.DROP_TOWN || session.mode === GameMode.DROP_COMBAT) {
+        sheetOpen = null;
+        return null;
+      }
+      return sheetOpen === 'inventory' ? inventorySheet() : partySheet();
+    },
+    tab: (id) => pressItemBottom(Number(id)),
+    act: (row, action) => {
+      if (sheetOpen === 'party') {
+        pressPcRow(Number(row), action as 'name' | 'info' | 'trade');
+        return;
+      }
+      sound.play(Snd.BUTTON);
+      const part = action as 'name' | 'use' | 'give' | 'drop' | 'info' | 'spec';
+      // Using an item can go on to ask for a target, which is on the game screen.
+      if (part === 'use') sheetOpen = null;
+      void handleInventoryClick(Number(row), part);
+      redraw();
+    },
+    close: () => {
+      sheetOpen = null;
+      redraw();
+    },
+  });
+
   // Browsers only allow audio after a user gesture, so the first keypress or
   // click is what actually starts it.
   const wakeSound = (): void => {
@@ -1960,6 +2159,9 @@ async function main(): Promise<void> {
 
   /** What the next direction or view click should do instead of moving. */
   let pending: 'talk' | 'look' | 'use' | 'bash' | 'pick' | null = null;
+  /** A fresh one each time Talk is armed, so its cursor starts over. */
+  let talkToken = {};
+  talkAimNow = () => (pending === 'talk' && touchControlsOn() ? talkAim(session, talkToken) : null);
 
   /**
    * `handle_use_space_select` / `handle_bash_pick_select` (boe.actions.cpp:930
@@ -1982,6 +2184,7 @@ async function main(): Promise<void> {
       return;
     }
     pending = 'talk';
+    talkToken = {};
     univ.addStringToBuf('Talk: Select someone.');
   };
 
@@ -2040,6 +2243,32 @@ async function main(): Promise<void> {
     await session.chooseTalkNode(node);
     setStatus();
     redraw();
+  };
+
+  /**
+   * A conversation, for a finger (`platform/touchDialog.ts`): the reply's
+   * lit words down the left, the preset words down the right. Only words the
+   * talk screen actually drew, so nothing is offered that a click couldn't
+   * reach.
+   */
+  const talkTouchView = (): TouchView | null => {
+    const talk = session.talk;
+    if (!talk) return null;
+    const seen = new Set<string>();
+    const left: TouchChoice[] = [];
+    const right: TouchChoice[] = [];
+    for (const word of talk.words) {
+      if (word.rect === null) continue;
+      if (word.preset) {
+        right.push({ name: `talk:${word.node}`, label: word.word });
+        continue;
+      }
+      const key = `${word.word.toLowerCase()}:${word.node}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      left.push({ name: `talk:${word.node}`, label: word.word });
+    }
+    return { left, leftHeading: left.length ? 'Topics' : 'No new topics', right, rightPairs: true };
   };
 
   /** Buy, inspect, scroll or leave — the shop screen's four actions. */
@@ -2483,11 +2712,27 @@ async function main(): Promise<void> {
       pressToolbar(which);
     },
     sheet: () => store.get('buttons'),
-    aiming: () => (screen.aimAt !== null && currentAim(session) !== null
+    aiming: () => (screen.aimAt !== null && aimNow() !== null
       ? { space: aimSpaceAction(session) } : null),
     spells: {
       dialog: () => (dialogs.active instanceof CastDialog ? dialogs.active : null),
       answer: (dialog, name) => dialogs.answerScreen(dialog, name),
+    },
+    dialog: {
+      // The cast dialog has strips of its own.
+      view: () => (document.body.classList.contains('starting') || dialogs.active instanceof CastDialog
+        ? null : dialogs.active ? dialogs.touchView() : session.talk ? talkTouchView() : null),
+      press: (name) => {
+        const talkWord = /^talk:(-?\d+)$/.exec(name);
+        if (talkWord) {
+          if (session.talk && !dialogs.active) void activateTalkWord(Number(talkWord[1]));
+          return;
+        }
+        sound.play(Snd.BUTTON);
+        dialogs.touchPress(name);
+      },
+      type: (field, text) => dialogs.touchType(field, text),
+      enter: () => { dialogs.handleKey('Enter'); },
     },
   });
 
@@ -2501,7 +2746,7 @@ async function main(): Promise<void> {
       // While a spell or missile is aimed, a direction moves its cursor
       // instead of acting on the square beside the caster, as the original's
       // arrows do; Enter then takes the cursor's square as a click would.
-      if (screen.aimAt !== null && currentAim(session) !== null) {
+      if (screen.aimAt !== null && aimNow() !== null) {
         screen.aimAt = moveAim(session, screen.aimAt, dir);
         screen.hover = null;
         redraw();
@@ -2562,32 +2807,22 @@ async function main(): Promise<void> {
       // This comes *before* the shop, because the C++ dispatches on which
       // window the click landed in and the PC panel is its own window — which
       // is how you switch who's shopping without leaving the shop.
+      // With touch controls, a tap anywhere on the party or item panel opens
+      // its sheet (`touchSheet`) instead: the panels' own buttons are a few
+      // pixels wide at a phone's scale.
+      if (touchControlsOn() && inRect(WIN_RECTS.pcStats, x, y)) {
+        sheetOpen = 'party';
+        redraw();
+        return;
+      }
+      if (touchControlsOn() && inRect(WIN_RECTS.inven, x, y)) {
+        sheetOpen = 'inventory';
+        redraw();
+        return;
+      }
       const pcHit = screen.pcRowHit(x, y);
       if (pcHit) {
-        const pc = univ.party.pcs[pcHit.index];
-        if (pc && pc.mainStatus !== MainStatus.ABSENT) {
-          sound.play(Snd.BUTTON);
-          // The HP and SP read-outs are blank for a PC who isn't alive, so a
-          // click there does nothing rather than reporting on a corpse.
-          const aliveOnly = pcHit.part === 'hp' || pcHit.part === 'sp';
-          if (!aliveOnly || pc.mainStatus === MainStatus.ALIVE) {
-            if (pcHit.part === 'name') {
-              session.switchPc(pcHit.index);
-              screen.itemWindow.setStatWindowForPc(univ, univ.curPc);
-            } else if (pcHit.part === 'hp') {
-              session.printPcHp(pcHit.index);
-            } else if (pcHit.part === 'sp') {
-              session.printPcSp(pcHit.index);
-            } else if (pcHit.part === 'trade') {
-              session.tradePlaces(pcHit.index);
-              screen.itemWindow.setStatWindowForPc(univ, univ.curPc);
-            } else {
-              showPcInfo(pcHit.index);
-            }
-          }
-          setStatus();
-          redraw();
-        }
+        pressPcRow(pcHit.index, pcHit.part);
         return;
       }
       if (session.shop) {
@@ -2608,17 +2843,7 @@ async function main(): Promise<void> {
       if (!session.itemShop) {
         const bottom = screen.itemBottomHit(x, y);
         if (bottom !== null) {
-          sound.play(Snd.BUTTON);
-          if (bottom === 6) screen.itemWindow.setStatWindow(univ, ItemWinMode.SPECIAL);
-          else if (bottom === 7) screen.itemWindow.setStatWindow(univ, ItemWinMode.QUESTS);
-          else if (bottom === 8) {
-            void showDialogAction('help-inventory');
-          } else {
-            univ.curPc = bottom;
-            screen.itemWindow.setStatWindowForPc(univ, bottom);
-          }
-          setStatus();
-          redraw();
+          pressItemBottom(bottom);
           return;
         }
       }
@@ -2806,7 +3031,7 @@ async function main(): Promise<void> {
       // now takes real time, where before it was over within the keystroke.
       if (midAction()) return;
       // Enter shoots at the aim cursor's square — the click on it, exactly.
-      if (key === 'Enter' && screen.aimAt !== null && currentAim(session) !== null) {
+      if (key === 'Enter' && screen.aimAt !== null && aimNow() !== null) {
         void actOn(screen.aimAt);
         setStatus();
         redraw();
@@ -3251,6 +3476,7 @@ async function main(): Promise<void> {
         return [
           // On by default on a phone or tablet (`touchControlsOn`).
           { label: tick(touch, 'Touch Controls'), action: () => { setTouchControls(!touch); redraw(); } },
+          { label: '\u2003 Touch Controls Layout…', action: openTouchLayoutPanel, enabled: () => touchControlsOn() },
           MENU_SEPARATOR,
           ...modes.map(([m, label]): MenuItem => ({
             label: tick(mode === m, label), action: () => setDesktopPrefs(m, scale),
@@ -3356,6 +3582,7 @@ async function main(): Promise<void> {
         { label: 'About Blades of Exile', action: () => { void showDialogAction('about-boe'); } },
       ],
     }]);
+    installMenuToggle(menuHost, refitDesktop);
     installFullScreenButton(menuHost);
     // The bar is hidden while empty, so the canvas has just moved down.
     refitDesktop();

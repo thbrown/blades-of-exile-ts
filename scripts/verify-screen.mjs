@@ -3182,6 +3182,33 @@ touch.look = await tLast();
 await tp.tap('.touch-actions [data-key="Escape"]');
 await tp.waitForTimeout(200);
 touch.esc = await tLast();
+// Talk aimed by finger: Talk puts a cursor on the nearest townsperson, two
+// squares off here, and the pad's middle talks to them. The conversation
+// comes up with its words as strips (platform/touchDialog.ts), and Done
+// there ends it.
+touch.talkPlaced = await tp.evaluate(() => {
+  const u = window.__univ; const s = window.__session; const p = u.party.townLoc;
+  const m = u.town.monsters.find((c) => c.isAlive && c.personality >= 0 && c.attitude !== 1 && c.attitude !== 3);
+  if (!m) return null;
+  for (const [dx, dy] of [[2, 0], [-2, 0], [0, 2], [0, -2]]) {
+    const at = { x: p.x + dx, y: p.y + dy };
+    if (u.town.monsterAt(at) || s.canSeeLight(p, at) >= 4) continue;
+    m.curLoc = at;
+    window.__redraw();
+    return at;
+  }
+  return null;
+});
+await tp.tap('.touch-actions [data-button="TALK"]');
+await tp.waitForTimeout(200);
+touch.talkAim = await tp.evaluate(() => window.__screen.aimAt && { ...window.__screen.aimAt });
+await tp.tap('.touch-dpad .touch-button.centre');
+await tp.waitForTimeout(500);
+touch.talkWords = await tp.evaluate(() => [...document.querySelectorAll('#touch-dialog .td-btn')].map((b) => b.textContent));
+await tp.screenshot({ path: `${SHOTS}/65-touch-talk.png` });
+await tp.locator('#touch-dialog .td-btn', { hasText: 'Done' }).first().tap();
+await tp.waitForTimeout(300);
+touch.talkDone = await tp.evaluate(() => !window.__session.talk && document.querySelector('#touch-dialog').hidden);
 // A long press two squares north of the party: a look, not a walk.
 const tSq = await tp.evaluate(() => {
   const c = document.querySelector('#canvas'); const r = c.getBoundingClientRect(); const s = r.width / c.width;
@@ -3255,6 +3282,41 @@ touch.fired = await tp.evaluate((from) => ({
   mode: window.__session.mode, aim: window.__screen.aimAt,
   said: window.__univ.transcript.slice(from),
 }), tLines);
+// The inventory and the party open as sheets (platform/touchSheet.ts) when
+// their panels are tapped; Info from a row brings its dialog up with the
+// dialog's buttons as a strip, and the sheet comes back when it closes.
+const tPanel = async (rect) => {
+  const at = await tp.evaluate((r) => {
+    const c = document.querySelector('#canvas'); const b = c.getBoundingClientRect(); const k = b.width / c.width;
+    const d = window.__desktop;
+    return { x: b.left + (d.gameX + (r.left + r.right) / 2) * k, y: b.top + (d.gameY + (r.top + r.bottom) / 2) * k };
+  }, rect);
+  await tp.touchscreen.tap(at.x, at.y);
+  await tp.waitForTimeout(300);
+};
+await tPanel({ left: 305, top: 150, right: 576, bottom: 250 });
+touch.invSheet = await tp.evaluate(() => ({
+  shown: document.querySelector('#touch-sheet').hidden === false,
+  title: document.querySelector('.sheet-title')?.textContent,
+  rows: document.querySelectorAll('.sheet-row').length,
+}));
+await tp.screenshot({ path: `${SHOTS}/66-touch-inventory.png` });
+await tp.locator('.sheet-row >> nth=0').locator('.sheet-act', { hasText: 'Info' }).tap();
+await tp.waitForTimeout(300);
+touch.infoStrip = await tp.evaluate(() => ({
+  dialog: !!window.__dialogs.active,
+  sheetHidden: document.querySelector('#touch-sheet').hidden,
+  buttons: [...document.querySelectorAll('#touch-dialog .td-btn')].map((b) => b.textContent),
+}));
+await tp.keyboard.press('Escape');
+await tp.waitForTimeout(300);
+touch.sheetBack = await tp.evaluate(() => !window.__dialogs.active && document.querySelector('#touch-sheet').hidden === false);
+await tp.tap('.sheet-close');
+await tp.waitForTimeout(200);
+await tPanel({ left: 305, top: 20, right: 576, bottom: 110 });
+touch.partyRows = await tp.evaluate(() => [...document.querySelectorAll('.sheet-row .sheet-name')].map((e) => e.textContent));
+await tp.tap('.sheet-close');
+await tp.waitForTimeout(200);
 // View → Touch Controls turns them off, and says so with its tick.
 await tp.locator('#game-menu-bar .menu-item', { hasText: 'View' }).first().click();
 touch.menuTicked = (await tp.locator('#game-menu-bar .menu-item.open .dropdown li', { hasText: 'Touch Controls' }).first().textContent())?.startsWith('✓') === true;
@@ -3286,7 +3348,11 @@ const touchOk = touch.desktopHidden && touch.townSet === 'MAGE PRIEST LOOK TALK 
   touch.aimMoved?.x === 8 && touch.aimMoved?.y === 9 && touch.fireLabel === '◎' &&
   touch.scrolled.far.aim.x === 14 && touch.scrolled.far.centre.x === touch.scrolled.from.x + 14 - (touch.scrolled.from.x + 4) &&
   touch.scrolled.back.x === 8 && touch.scrolled.back.y === 8 &&
-  touch.fired.mode === 9 && touch.fired.aim === null && touch.fired.said.some((l) => /takes|miss|resist/i.test(l));
+  touch.fired.mode === 9 && touch.fired.aim === null && touch.fired.said.some((l) => /takes|miss|resist/i.test(l)) &&
+  touch.talkPlaced !== null && touch.talkAim?.x === touch.talkPlaced.x && touch.talkAim?.y === touch.talkPlaced.y &&
+  touch.talkWords.includes('Ask About...') && touch.talkDone &&
+  touch.invSheet.shown && touch.invSheet.rows > 0 && touch.infoStrip.dialog && touch.infoStrip.sheetHidden &&
+  touch.infoStrip.buttons.length > 0 && touch.sheetBack && touch.partyRows.length === 6;
 
 console.log('ERRORS:', errors.length ? errors.join(' | ') : 'none');
 await browser.close();

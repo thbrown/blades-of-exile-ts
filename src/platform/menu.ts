@@ -12,6 +12,8 @@
  * would be the only one in the project.
  */
 
+import { getBoolPref, setPref } from './prefs';
+
 export interface MenuItem {
   label: string;
   /** Shown right-aligned; purely a hint, the binding lives in the key handler. */
@@ -156,7 +158,8 @@ export function installMenuBar(host: HTMLElement, menus: Menu[]): MenuBar {
 export function installFullScreenButton(host: HTMLElement): void {
   if (!document.fullscreenEnabled) return;
   const button = document.createElement('div');
-  button.className = 'menu-item menu-right';
+  // `menu-keep`: still there with the bar folded away (`installMenuToggle`).
+  button.className = 'menu-item menu-keep';
   const label = (): void => {
     const full = document.fullscreenElement !== null;
     button.title = full ? 'Exit Full Screen' : 'Full Screen';
@@ -178,3 +181,35 @@ export function installFullScreenButton(host: HTMLElement): void {
   document.addEventListener('fullscreenchange', label);
   host.append(button);
 }
+
+/**
+ * A button that folds the menu bar away, leaving only itself and the Full
+ * Screen button floating over the top right of the game, which then has the
+ * whole window. For a phone held sideways, where 28px is a lot. Not in the
+ * original, whose menus were the OS's. `onChange` is told after it folds or
+ * unfolds, since the canvas has room to refit.
+ */
+export function installMenuToggle(host: HTMLElement, onChange: () => void): void {
+  const button = document.createElement('div');
+  button.className = 'menu-item menu-right menu-keep';
+  const label = (): void => {
+    const hidden = getBoolPref(MENU_HIDDEN_PREF);
+    document.body.classList.toggle('menu-hidden', hidden);
+    button.title = hidden ? 'Show the Menu Bar' : 'Hide the Menu Bar';
+    button.setAttribute('aria-label', button.title);
+    // A chevron pointing the way the bar will go.
+    const path = hidden ? 'M3 6l5 5 5-5' : 'M3 10l5-5 5 5';
+    button.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+      stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg>`;
+  };
+  label();
+  button.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    setPref(MENU_HIDDEN_PREF, !getBoolPref(MENU_HIDDEN_PREF));
+    label();
+    onChange();
+  });
+  host.append(button);
+}
+
+const MENU_HIDDEN_PREF = 'MenuBarHidden';

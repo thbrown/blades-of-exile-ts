@@ -33,6 +33,7 @@ import { e3DayReached, e3Event, e3Flag } from './flags';
 import { VILLAGE_SIZE, buildE3Village, ruinableBuildings, villageTemplate, type RuinableBuilding } from './village';
 import { ENTRANCE_MARK_SPOT, e3SpotScript, type GroupNodes, type GroupScript, type KillScript, type PlaceScript, type SpotScript, type TalkScript } from './specials';
 import { e3TalkStart } from './towns/talkStart';
+import { e3MuteHail, e3MutePersonalities } from './towns/muteTalk';
 import { e3GroupForced, e3GroupSteps } from './towns/encounters';
 import { e3KillAfter, e3KillCase } from './towns/kills';
 import { FORT_ENTRANCES, FORT_START_ZONE, town21 } from './towns/town21';
@@ -593,6 +594,8 @@ interface TownTables {
   hidden(t: number): boolean;
   /** The face E3's talk screen gives personality `p` over its monster's, 1-based (`readE3PersonalityFaces`). */
   face(p: number): number | undefined;
+  /** The engine's small-talk personality for an E3 personality that never talks (`towns/muteTalk.ts`). */
+  mute(p: number): number | undefined;
 }
 
 function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, strings: Map<number, string>, script: SpotScript, tables: TownTables): string {
@@ -600,7 +603,8 @@ function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, st
   const r = t.village ? { top: 0, left: 0, bottom: size - 1, right: size - 1 } : t.inTownRect;
   const creatures = townCreatures(t)
     .map((c, i) => (c.number > 0
-      ? creatureXml(c, i, personalityOf.get(`${t.number}:${i}`) ?? -1, script.kills[i], tables.face(c.personality), script.talks[i])
+      ? creatureXml(c, i, tables.mute(c.personality) ?? personalityOf.get(`${t.number}:${i}`) ?? -1,
+        script.kills[i], tables.face(c.personality), script.talks[i])
       : '')).join('');
   const items = t.presetItems.map((p, i) => (p.itemCode < 0 ? '' : `    <item id="${i}">
         <type>${tables.type(p)}</type>
@@ -693,12 +697,19 @@ function townKillScript(town: number, creatures: E3CreatureStart[]): KillScript 
   };
 }
 
-/** A town's HAIL specials: E3's personality swaps (`towns/talkStart.ts`). */
-function townTalkScript(creatures: E3CreatureStart[]): TalkScript {
+/**
+ * A town's HAIL specials: E3's personality swaps (`towns/talkStart.ts`), and
+ * the Anama, who never talk (`towns/muteTalk.ts`).
+ */
+function townTalkScript(creatures: E3CreatureStart[], exeString: (seg: number, off: number) => string): TalkScript {
   return (b, slot) => {
     const c = creatures[slot];
-    const steps = c && c.number > 0 ? e3TalkStart(b, c.personality) : null;
-    return steps ? { key: `${c!.personality}`, steps } : null;
+    if (!c || c.number <= 0) return null;
+    const swap = e3TalkStart(b, c.personality);
+    if (swap) return { key: `${c.personality}`, steps: swap };
+    // Tests the creature's own attitude, so one node per slot.
+    const mute = e3MuteHail(b, slot, c.personality, exeString);
+    return mute ? { key: `${c.personality}:${slot}`, steps: mute } : null;
   };
 }
 
@@ -895,6 +906,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   const stampedIndex = (item: number, ability: number) =>
     stampedItems.findIndex(([i, a]) => i === item && a === ability);
   const personalityFaces = readE3PersonalityFaces(files.exe);
+  let mutePersonalities = new Map<number, number>();
   const townTables: TownTables = {
     type: (p) => {
       if (isGoldOrFood(p.itemCode) || p.ability < 0) return p.itemCode;
@@ -905,10 +917,12 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     charges: (p) => (isGoldOrFood(p.itemCode) ? p.ability : p.charges > 0 ? p.charges : -1),
     hidden: (t) => hiddenTowns.has(t),
     face: (p) => personalityFaces.get(p),
+    mute: (p) => mutePersonalities.get(p),
   };
   const e3Abilities = [...tableAbilities, ...shopTables.food.map(() => 0), ...noteItems.map(([, a]) => a),
     ...stampedItems.map(([, a]) => a)];
   scen = new SpecBuilder(e3Src, (label) => Math.max(0, BASIC_BUTTONS.indexOf(label)));
+  mutePersonalities = e3MutePersonalities(scen, e3Src.exeString!);
   // First sightings (towns/sightings.ts): each plague monster's onsight node.
   // A range of monsters shares one script, so one node.
   const sightNodes = new Map<unknown, number>();
@@ -1045,7 +1059,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
       (x, y) => terrain[x]?.[y] ?? 0, TOWN_SCRIPTS.get(t.number),
       ruin ? (b, dead) => [...villageRuinSteps(b, t, ruin.record, ruin.buildings), ...entry?.(b, dead) ?? []] : entry,
       townKillScript(t.number, creatures), undefined, HOSTILE_SCRIPTS.get(t.number), TIMER_SCRIPTS.get(t.number),
-      townTalkScript(creatures));
+      townTalkScript(creatures, e3Src.exeString!));
     write(`${base}.xml`, townXml(t, townName(strings, t.number), talk.personalityOf, strings, script, townTables));
     write(`${base}.map`, townMap(t, terrain, strings, script, vehicles));
     write(`${base}.spec`, script.spec);

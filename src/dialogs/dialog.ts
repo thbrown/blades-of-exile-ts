@@ -387,6 +387,19 @@ export class Dialog {
     }
   }
 
+  /** The rows, then the buttons, for the touch overlay. */
+  touchView(): TouchView {
+    const right: TouchChoice[] = [];
+    for (const row of this.spec.rows ?? []) {
+      right.push({
+        name: row.name, label: row.key ? `${row.key}. ${row.label}` : row.label,
+        disabled: row.disabled, on: row.highlight,
+      });
+    }
+    for (const b of this.spec.buttons) right.push({ name: b.name, label: b.label });
+    return { right };
+  }
+
   /** The button or row (if any) at a screen position. */
   buttonAt(x: number, y: number): { name: string } | null {
     for (const btn of this.placed) {
@@ -439,7 +452,46 @@ export interface ClickMods {
   ctrl?: boolean;
 }
 
+/**
+ * One of a dialog's controls, as the touch overlay lists it
+ * (`platform/touchDialog.ts`): its name, which `touchPress` takes back, and
+ * the words for a finger-sized button.
+ */
+export interface TouchChoice {
+  name: string;
+  label: string;
+  /** A second, smaller line under the label. */
+  detail?: string;
+  /** Lit: the LED that's on, the PC who's chosen. */
+  on?: boolean;
+  /** Shown but not pressable. */
+  disabled?: boolean;
+}
+
+/** A dialog laid out for a finger: its choices, and its text field if it has one. */
+export interface TouchView {
+  /** Down the right: the dialog's buttons, in the order it defines them. */
+  right: TouchChoice[];
+  rightHeading?: string;
+  /** Short words, many of them: two to a row (the talk screen's presets). */
+  rightPairs?: boolean;
+  /** Down the left, when a dialog has a list to pick from (get-items' pile). */
+  left?: TouchChoice[];
+  leftHeading?: string;
+  /** The field typing goes into, for a real `<input>` a phone will type into. */
+  field?: { name: string; text: string };
+}
+
 export interface ModalScreen {
+  /**
+   * The touch overlay's view of this screen, and how it presses one of the
+   * choices — as a click on that control would, returning the name to close
+   * on or null to stay. Screens without these get no overlay.
+   */
+  touchView?(): TouchView | null;
+  touchPress?(name: string): string | null;
+  /** Replace a field's text with what the phone's keyboard typed. */
+  touchType?(name: string, text: string): void;
   draw(): void;
   onClick(x: number, y: number, mods?: ClickMods): string | null;
   /**
@@ -690,6 +742,30 @@ export class DialogHost {
     if (this.current || this.screen !== screen) return;
     if (name === null) this.redraw();
     else this.close(name);
+  }
+
+  /** The top dialog as the touch overlay shows it, or null for none. */
+  touchView(): TouchView | null {
+    if (this.screen) return this.screen.touchView?.() ?? null;
+    return this.current?.touchView() ?? null;
+  }
+
+  /** Press one of `touchView`'s choices on the top dialog. */
+  touchPress(name: string): void {
+    if (this.screen) {
+      const answer = this.screen.touchPress?.(name) ?? null;
+      if (answer === null) this.redraw();
+      else this.close(answer);
+      return;
+    }
+    const choice = this.current?.touchView().right.find((c) => c.name === name && !c.disabled);
+    if (choice) this.close(choice.name);
+  }
+
+  /** Put what a phone's keyboard typed into the top dialog's field. */
+  touchType(name: string, text: string): void {
+    this.screen?.touchType?.(name, text);
+    this.redraw();
   }
 
   handleKey(key: string): boolean {

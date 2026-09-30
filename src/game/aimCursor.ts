@@ -31,6 +31,24 @@ export interface Aiming {
    */
   token: unknown;
   picks: number;
+  /**
+   * What the cursor starts on: an enemy for a spell or a shot, anybody for
+   * Talk (`talkAim`).
+   */
+  targets?: 'hostile' | 'people';
+}
+
+/**
+ * Talk, aimed: the touch pad's way to pick someone further off than the
+ * squares beside the party — across a shop counter, say. The original takes
+ * a click anywhere in sight (`handle_talk`), which a mouse can do and a
+ * finger on a phone can barely; the pad's eight directions only reach the
+ * adjacent squares. Confirming is the click on the square, as for a spell.
+ */
+export function talkAim(session: GameSession, token: unknown): Aiming | null {
+  if (!session.univ.town || session.mode !== GameMode.TOWN) return null;
+  // handle_talk has no range, only its sight test; the view is the limit.
+  return { from: session.univ.party.townLoc, range: 2 * VIEW_RADIUS + 1, chosen: [], token, picks: 0, targets: 'people' };
 }
 
 /**
@@ -62,7 +80,9 @@ function onView(session: GameSession, at: Location): boolean {
 
 /** Whether a shot from `from` could land on `at`: in sight, and in reach. */
 export function canAimAt(session: GameSession, aim: Aiming, at: Location): boolean {
-  return session.canSeeLight(aim.from, at) < SIGHT_BLOCKED && dist(aim.from, at) <= aim.range;
+  // handle_talk's own sight gate is stricter, `< 4` (see `GameSession.talkTo`).
+  const sight = aim.targets === 'people' ? 4 : SIGHT_BLOCKED;
+  return session.canSeeLight(aim.from, at) < sight && dist(aim.from, at) <= aim.range;
 }
 
 /**
@@ -74,14 +94,18 @@ export function canAimAt(session: GameSession, aim: Aiming, at: Location): boole
 export function autoAim(session: GameSession, aim: Aiming): Location {
   const town = session.univ.town;
   const seen: Location[] = [];
+  const people = aim.targets === 'people';
+  const friendly: Location[] = [];
   for (const monst of town?.monsters ?? []) {
     if (!monst.isAlive || monst.mon.invisible) continue;
-    if (monst.attitude !== Attitude.HOSTILE_A && monst.attitude !== Attitude.HOSTILE_B) continue;
+    const hostile = monst.attitude === Attitude.HOSTILE_A || monst.attitude === Attitude.HOSTILE_B;
+    if (!hostile && !people) continue;
     if (!session.partyCanSeeMonst(monst)) continue;
     const at = monst.curLoc;
     if (!onView(session, at)) continue;
     if (aim.chosen.some((c) => c.x === at.x && c.y === at.y)) continue;
     seen.push({ ...at });
+    if (!hostile) friendly.push({ ...at });
   }
   const nearest = (from: readonly Location[]): Location | null => {
     let best: Location | null = null;
@@ -92,6 +116,11 @@ export function autoAim(session: GameSession, aim: Aiming): Location {
     }
     return best;
   };
+  // Talk would rather start on someone who'll talk back than on a rat.
+  if (people) {
+    const talkable = nearest(friendly.filter((p) => canAimAt(session, aim, p)));
+    if (talkable) return talkable;
+  }
   return nearest(seen.filter((p) => canAimAt(session, aim, p))) ?? nearest(seen) ?? { ...aim.from };
 }
 

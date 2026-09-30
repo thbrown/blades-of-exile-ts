@@ -514,6 +514,13 @@ where the mode allows the border arrows at all. What reaches
 the rules is the same click, so recordings can't tell, and finding the target
 draws no dice (`test/aimCursor.test.ts`). `src/game/aimCursor.ts`.
 
+*Extended 2026-09-29, again at the user's request*: with touch controls on,
+**Talk** gets the same cursor (`talkAim`). It starts on the nearest visible
+townsperson — anyone rather than a hostile — and the pad's middle talks to
+the square, which is the click `handle_talk` already takes anywhere in sight.
+The pad's eight directions alone only reached the adjacent squares, so a
+shopkeeper across a counter needed a precise tap on a phone's small view.
+
 ### 21. Naming a town creature by its slot (2026-09-28)
 
 **DECIDED: two exile-js opcodes, `if-creature` (163, IF_THEN) and
@@ -751,6 +758,32 @@ Two smaller things found beside it:
   saved `exploding` first. Not ported. The one E3 stack is four arrows, and
   that shot would need the whole ordinary path run on another item. Noted
   here in case it matters.
+
+### 32. The targeting line's colour (2026-09-29)
+
+**DECIDED: the original's white.** 1997's `draw_targeting_line` draws a 2px
+`white_pen` (RGB 255,255,255). OBoE draws `{128,128,128}` with
+`sf::BlendAdd`, which lands light over most terrain as well. This port drew
+an opaque mid-grey, which matched neither. A player can see it, so the
+original wins. `render/screen.ts` `drawTargetingLine`.
+
+### 33. Exile III's creatures that won't talk (2026-09-29)
+
+**DECIDED: Exile III's own rule, by the converter.** E3's talk handler
+(`1010:26c0`) checks eight personalities after "Creature is hostile." and a
+summoned creature's "No response.", and prints a line of its own for each
+instead of opening a conversation: the townsperson (0), the guard (7), the
+soldier (8), the creature (9), the apprentice (126), the undead (232), Gale's
+incoherent people (342), and the Anama member (142), who nods to a party
+holding special item 39 and moves on otherwise. The converter had passed
+7–9 and the rest through as real personalities, so Fort Emergence's guards
+opened talk block 0's placeholder slots ("n7", "l7"). Now the fixed seven are
+BoE's small talk — a personality below -1000 names a scenario string, printed
+as "Talk: …" after the same two checks, in E3's order — and the Anama is a
+HAIL special that prints and blocks, falling through for a hostile one so
+the hostile line still comes first. 342 also tests the town number (below
+20), which holds everywhere it's used (Gale, 16–19). No engine change.
+`tools/e3convert/towns/muteTalk.ts`.
 
 ## Agreements worth recording
 

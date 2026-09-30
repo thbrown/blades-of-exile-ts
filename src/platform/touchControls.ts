@@ -18,6 +18,8 @@
 import { ToolbarButton, buttonIconRect, placeButtons } from '../render/layout';
 import type { ToolbarMode } from '../render/screen';
 import { getBoolPref, setPref } from './prefs';
+import { TouchDialogPanel, type TouchDialogHost } from './touchDialog';
+import { applyPadLayout } from './touchLayout';
 import { TouchSpellPanel, type TouchSpellHost } from './touchSpells';
 
 const PREF = 'TouchControls';
@@ -52,6 +54,8 @@ export interface TouchPadHost {
   aiming(): { space: 'cast' | 'rotate' | null } | null;
   /** The cast dialog, for the spell panel (`touchSpells.ts`). */
   spells: TouchSpellHost;
+  /** Every other dialog, for the dialog strips (`touchDialog.ts`). */
+  dialog: TouchDialogHost;
 }
 
 /** A key the toolbar has no button for, and the modes it's offered in. */
@@ -97,9 +101,11 @@ export class TouchControls {
   private repeat: { timer: number; pointer: number } | null = null;
   private triedLandscape = false;
   private readonly spells: TouchSpellPanel;
+  private readonly dialog: TouchDialogPanel;
 
   constructor(private readonly host: TouchPadHost) {
     this.spells = new TouchSpellPanel(host.spells);
+    this.dialog = new TouchDialogPanel(host.dialog);
     this.root = document.createElement('div');
     this.root.id = 'touch-pads';
     this.left = document.createElement('div');
@@ -109,10 +115,27 @@ export class TouchControls {
     this.root.append(this.left, this.right);
     this.buildDpad();
     document.body.append(this.root);
+    applyPadLayout();
 
     const cover = document.createElement('div');
     cover.id = 'rotate-cover';
     cover.innerHTML = '<div class="rotate-phone" aria-hidden="true"></div><p>Turn your phone sideways to play.</p>';
+    // Or have the page turn it: full screen plus a landscape lock turns the
+    // game sideways even with the phone's auto-rotate off, which is the
+    // setting a player would otherwise have to go and flip. Only offered
+    // where both can be asked for (Android; an iPhone has neither).
+    const orientation = globalThis.screen?.orientation as (ScreenOrientation & { lock?: unknown }) | undefined;
+    if (document.fullscreenEnabled && typeof orientation?.lock === 'function') {
+      const turn = document.createElement('button');
+      turn.type = 'button';
+      turn.className = 'rotate-button';
+      turn.textContent = 'Play full screen, sideways';
+      turn.addEventListener('click', () => {
+        this.triedLandscape = false;
+        void this.goLandscape();
+      });
+      cover.append(turn);
+    }
     document.body.append(cover);
 
     // The first touch in the game asks for full screen and a landscape lock,
@@ -128,6 +151,7 @@ export class TouchControls {
     const on = touchControlsOn();
     document.body.classList.toggle('touch-controls', on);
     this.spells.sync(on);
+    this.dialog.sync(on);
     const mode = on ? this.host.mode() : null;
     this.root.hidden = mode === null;
     if (mode === null) {

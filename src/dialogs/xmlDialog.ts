@@ -27,7 +27,7 @@ import {
   KEY_PLACEHOLDER, LedControl, LedState, PaneControl, PictControl, PictType, TextControl, measureDialog,
   pictNaturalSize,
 } from './dialogXml';
-import { ModalScreen } from './dialog';
+import type { ModalScreen, TouchChoice, TouchView } from './dialog';
 import { drawPictAt } from './pict';
 import { windowFrames } from '../render/windowChrome';
 
@@ -723,6 +723,78 @@ export class XmlDialog implements ModalScreen {
     return handler(this) === 'close' ? name : null;
   }
 
+  // ------------------------------------------------------- touch
+
+  /**
+   * The dialog's controls for the touch overlay: every button, LED and link a
+   * click could land on, named as the player would read them. A button whose
+   * face is only its shortcut (select-pc's "1"…"6") takes the words beside it
+   * as well, since those are what it picks.
+   */
+  touchView(): TouchView {
+    this.pickFocus();
+    const right: TouchChoice[] = [];
+    for (const c of this.clickable()) {
+      if (!c.name || this.hidden.has(c.name) || c.kind === 'pict') continue;
+      if (c.kind === 'led') {
+        const label = oneLine(this.getText(c.name)) || oneLine(this.labels.get(c.name)?.text ?? '') || humanise(c.name);
+        right.push({ name: c.name, label, on: this.getLed(c.name) !== 'off' });
+        continue;
+      }
+      let label = oneLine(this.fillKey(c, this.getText(c.name)));
+      const key = (this.keys.get(c.name) ?? c.defKey ?? '').trim();
+      if (c.kind === 'button' && (label.length <= 2 || label === key)) {
+        const beside = this.textBeside(c);
+        if (beside) label = key.length === 1 ? `${key.toUpperCase()}. ${beside}` : beside;
+      }
+      if (!label) label = oneLine(this.labels.get(c.name)?.text ?? '');
+      if (!label && c.kind === 'button') label = ARROW_FACES[c.type] ?? '';
+      if (!label) label = humanise(c.name);
+      right.push({ name: c.name, label });
+    }
+    const view: TouchView = { right };
+    const focus = this.focus;
+    if (focus !== null && !this.hidden.has(focus)) view.field = { name: focus, text: this.getText(focus) };
+    return view;
+  }
+
+  /** A click on `name`, without the click. */
+  touchPress(name: string): string | null {
+    this.pressed = null;
+    return this.activate(name);
+  }
+
+  /** The whole of a field's text, as a phone's keyboard left it. */
+  touchType(name: string, text: string): void {
+    const control = this.def.byName.get(name);
+    if (control?.kind !== 'field') return;
+    const max = control.maxChars;
+    const next = max !== undefined && max >= 0 ? text.slice(0, max) : text;
+    this.textOverride.set(name, next);
+    this.caret.set(name, next.length);
+    this.selectedAll.delete(name);
+  }
+
+  /** The nearest visible words to the right of a control, on its line. */
+  private textBeside(control: DialogControl): string {
+    const b = this.screenRect(control);
+    let best = '';
+    let bestGap = 280;
+    for (const t of this.def.controls) {
+      if (t.kind !== 'text' || (t.name && this.hidden.has(t.name))) continue;
+      const r = this.screenRect(t);
+      const mid = (r.top + r.bottom) / 2;
+      if (mid < b.top - 4 || mid > b.bottom + 4) continue;
+      const gap = r.left - b.right;
+      if (gap < -4 || gap >= bestGap) continue;
+      const text = oneLine(t.name ? this.getText(t.name) : t.text);
+      if (!text) continue;
+      best = text;
+      bestGap = gap;
+    }
+    return best;
+  }
+
   /** Every control a click can land on, in draw order. */
   private clickable(): DialogControl[] {
     const out: DialogControl[] = [];
@@ -1173,3 +1245,19 @@ const KEY_NAMES: Record<string, string> = {
   Tab: 'tab',
   ' ': 'space',
 };
+
+/** What a button with no words on its face shows on the touch overlay. */
+const ARROW_FACES: Partial<Record<string, string>> = {
+  left: '◀', right: '▶', up: '▲', down: '▼', help: '?',
+};
+
+/** Dialog text on one line: `|` and newlines are line breaks in game text. */
+function oneLine(text: string): string {
+  return text.replace(/[|\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** A control's name as words, for one with nothing else to go by. */
+function humanise(name: string): string {
+  const words = name.replace(/[-_]+/g, ' ').replace(/([a-z])([A-Z0-9])/g, '$1 $2').trim();
+  return words ? words[0]!.toUpperCase() + words.slice(1) : name;
+}

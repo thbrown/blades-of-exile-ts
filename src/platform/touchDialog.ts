@@ -1,0 +1,138 @@
+/**
+ * Any dialog, for a finger: its buttons as a strip down the right, as the
+ * spell picker's party strip is (`touchSpells.ts`), and a list down the
+ * left when it has one to pick from (get-items' pile). The dialog stays up
+ * and live between them. A text field gets a real `<input>` at the top of
+ * the strip, which is what brings a phone's keyboard up — the canvas can't.
+ *
+ * It is only a face, as the spell strips are: what's listed is the dialog's
+ * own `touchView`, and a tap is `touchPress` on the control by name, which
+ * does what a click on it does.
+ */
+
+import type { TouchChoice, TouchView } from '../dialogs/dialog';
+
+export interface TouchDialogHost {
+  /** The top dialog's choices, or null when there's none (or it has its own strips). */
+  view(): TouchView | null;
+  press(name: string): void;
+  type(field: string, text: string): void;
+  /** Enter, for the field: the dialog's default button. */
+  enter(): void;
+}
+
+export class TouchDialogPanel {
+  private readonly root: HTMLElement;
+  private readonly input: HTMLInputElement;
+  private shown = '';
+  private field: string | null = null;
+
+  constructor(private readonly host: TouchDialogHost) {
+    this.root = document.createElement('div');
+    this.root.id = 'touch-dialog';
+    this.root.hidden = true;
+    document.body.append(this.root);
+
+    // One input for the panel's life, so rebuilding the strips never takes
+    // the keyboard down in the middle of a word.
+    this.input = document.createElement('input');
+    this.input.type = 'text';
+    this.input.className = 'td-field';
+    this.input.autocomplete = 'off';
+    this.input.setAttribute('autocapitalize', 'off');
+    this.input.spellcheck = false;
+    this.input.enterKeyHint = 'done';
+    this.input.placeholder = 'Tap to type';
+    this.input.addEventListener('input', () => {
+      if (this.field !== null) this.host.type(this.field, this.input.value);
+    });
+    // Typed here, a key is the input's alone: the game listens on the window
+    // and would type it into the canvas field a second time.
+    this.input.addEventListener('keydown', (ev) => {
+      // Escape still reaches the game, which cancels the dialog with it.
+      if (ev.key === 'Escape') {
+        this.input.blur();
+        return;
+      }
+      ev.stopPropagation();
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        this.input.blur();
+        this.host.enter();
+      }
+    });
+  }
+
+  sync(on: boolean): void {
+    const view = on ? this.host.view() : null;
+    this.root.hidden = view === null;
+    if (view === null) {
+      this.shown = '';
+      this.field = null;
+      if (document.activeElement === this.input) this.input.blur();
+      return;
+    }
+    const newField = view.field !== undefined && view.field.name !== this.field;
+    this.field = view.field?.name ?? null;
+    // The field's text is left out of the key: typing changes it, and the
+    // strips don't need rebuilding for that.
+    const key = JSON.stringify({ ...view, field: view.field?.name ?? null });
+    if (view.field && document.activeElement !== this.input) this.input.value = view.field.text;
+    if (key !== this.shown) {
+      this.shown = key;
+      this.build(view);
+    }
+    // A field that has just appeared takes the focus, which on Android brings
+    // the keyboard straight up: the tap that opened the dialog ("Ask About…",
+    // Rename) still counts as the gesture. An iPhone wants the input tapped.
+    if (newField) {
+      this.input.focus({ preventScroll: true });
+      this.input.select();
+    }
+  }
+
+  private build(view: TouchView): void {
+    const children: HTMLElement[] = [];
+    if (view.left) children.push(this.strip('ts-left', view.leftHeading, view.left, null));
+    const right = this.strip('ts-right', view.rightHeading, view.right, view.field ? this.input : null);
+    if (view.rightPairs) right.classList.add('td-pairs');
+    children.push(right);
+    this.root.replaceChildren(...children);
+  }
+
+  private strip(side: string, heading: string | undefined, choices: TouchChoice[], field: HTMLElement | null): HTMLElement {
+    const strip = document.createElement('div');
+    strip.className = `ts-strip td-strip ${side}`;
+    if (heading) {
+      const h = document.createElement('div');
+      h.className = 'ts-heading';
+      h.textContent = heading;
+      strip.append(h);
+    }
+    if (field) strip.append(field);
+    const list = document.createElement('div');
+    list.className = 'ts-list';
+    for (const choice of choices) list.append(this.button(choice));
+    strip.append(list);
+    return strip;
+  }
+
+  private button(choice: TouchChoice): HTMLButtonElement {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.tabIndex = -1;
+    b.className = `ts-btn td-btn${choice.on ? ' on' : ''}`;
+    b.disabled = choice.disabled === true;
+    const label = document.createElement('span');
+    label.className = 'td-label';
+    label.textContent = choice.label;
+    b.append(label);
+    if (choice.detail) {
+      const detail = document.createElement('small');
+      detail.textContent = choice.detail;
+      b.append(detail);
+    }
+    b.addEventListener('click', () => this.host.press(choice.name));
+    return b;
+  }
+}

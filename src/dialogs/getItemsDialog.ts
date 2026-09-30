@@ -19,7 +19,7 @@ import type { GameSession } from '../game/session';
 import { SheetStore } from '../render/sheets';
 import type { UiRect } from '../render/layout';
 import { curWeight, itemWeight, maxWeight } from '../universe/inventory';
-import type { ModalScreen } from './dialog';
+import type { ModalScreen, TouchChoice, TouchView } from './dialog';
 import { getDialogDef } from './dialogStore';
 import { XmlDialog } from './xmlDialog';
 
@@ -159,6 +159,53 @@ export class GetItemsDialog implements ModalScreen {
       dlg.setText('prompt',
         `${who.name} is carrying ${curWeight(who)} out of ${maxWeight(who)}.`);
     }
+  }
+
+  /**
+   * For a finger: the whole pile down the left, not just the eight rows on
+   * show, and the party down the right. Tapping an item further down pages
+   * the screen to it first, with the dialog's own arrows, then takes it — so
+   * the pick sees the same clicks a mouse would have made.
+   */
+  touchView(): TouchView {
+    if (this.steal) return this.steal.touchView();
+    const pcs = this.session.univ.party.pcs;
+    const right: TouchChoice[] = [];
+    for (let i = 0; i < 6; i++) {
+      const pc = pcs[i];
+      if (!pc || !this.pick.usable(i)) continue;
+      right.push({
+        name: `pc${i + 1}`, label: `${i + 1}. ${pc.name}`,
+        detail: `${curWeight(pc)} / ${maxWeight(pc)}`, on: this.pick.who === i,
+      });
+    }
+    right.push({ name: 'done', label: 'Done' });
+    const left = this.pick.items.map((item, i): TouchChoice => ({
+      name: `take:${i}`,
+      label: item.ident ? item.fullName : item.name,
+      detail: [interestingString(item), `Weight: ${itemWeight(item)}`].filter(Boolean).join('  '),
+    }));
+    return { left, leftHeading: 'Take', right, rightHeading: 'Who picks up' };
+  }
+
+  touchPress(name: string): string | null {
+    if (this.steal) {
+      const answer = this.steal.touchPress(name);
+      if (answer !== null) this.answerSteal(answer);
+      return null;
+    }
+    const take = /^take:(\d+)$/.exec(name);
+    if (!take) return this.dlg.touchPress(name);
+    const index = Number(take[1]);
+    if (index >= this.pick.items.length) return null;
+    // Page to it as the arrows do, a page at a time.
+    for (let guard = 0; guard < 64 && index < this.pick.first; guard++) this.pick.click('up');
+    for (let guard = 0; guard < 64 && index >= this.pick.first + ROWS; guard++) this.pick.click('down');
+    const row = index - this.pick.first;
+    if (row < 0 || row >= ROWS) return null;
+    const answer = this.dlg.touchPress(`item${row + 1}-key`);
+    this.refresh();
+    return answer;
   }
 
   // The dialog underneath does the drawing and the dispatching.

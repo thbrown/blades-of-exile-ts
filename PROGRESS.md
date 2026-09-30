@@ -14791,3 +14791,56 @@ matched all 10,518 of its draws.)
 **Next session starts here**: the user's rulings on DIVERGENCES #30 and #31
 and on E3-SUSPECTED-BUGS #15–17; then TODO(M9) (5), TODO(campaign) (4) and
 TODO(M8) (1).
+
+- [x] **Mobile round: dialogs, talk, get, inventory and party for a finger
+      (2026-09-29).** From the user's play-testing notes. None of it is in
+      either original; every button goes through the route a click takes.
+      - **Any dialog** (`platform/touchDialog.ts`): its buttons as a strip
+        down the right, a list down the left when it has one. Dialogs gained
+        `touchView`/`touchPress`/`touchType` (`ModalScreen`, `Dialog`,
+        `XmlDialog`, `GetItemsDialog`); `DialogHost` routes them. A button
+        whose face is only its shortcut takes the words beside it, so
+        select-pc lists "1. Jenneke". A **text field** gets a real `<input>`
+        at the top of the strip, focused as it appears, which brings an
+        Android keyboard up (an iPhone wants it tapped). **Get items**: the
+        whole pile on the left (tapping one past the eighth pages the dialog
+        with its own arrows first), who picks up on the right.
+      - **Talking**: the reply's lit words on the left, the presets two to a
+        row on the right; Ask About's field opens the keyboard. Only words
+        the talk screen drew are listed.
+      - **Talk, aimed** (DIVERGENCES #20, extended): Talk puts the aim cursor
+        on the nearest townsperson, and the pad's middle talks to them —
+        across a counter, say.
+      - **Inventory and party sheets** (`platform/touchSheet.ts`): a tap on
+        either panel opens a full-screen sheet. Inventory: PC / Special /
+        Quests tabs, a row per item with Equip, Use (where `offersUse`),
+        Give, Drop, Info; in a sell/identify service, one priced button.
+        Party: Select, Info, Swap (twice, as Trade Places is). Canvas and
+        sheet share `pressItemBottom`, `pressPcRow`, `handleInventoryClick`.
+        Use and Drop close the sheet, since they may want a square.
+      - **View → Touch Controls Layout…** (`platform/touchLayout.ts`): size,
+        x/y offset and opacity per pad, live, as `--tl-*`/`--tr-*` CSS
+        properties.
+      - **The rotate cover** has a "Play full screen, sideways" button where
+        the browser can lock orientation (Android): full screen plus
+        `orientation.lock('landscape')`, which works with auto-rotate off.
+      - **Hide the menu bar**: a chevron beside Full Screen folds the bar to
+        just those two buttons floating top right, and the canvas refits into
+        the 28px (pref `MenuBarHidden`). The last button keeps a margin
+        (plus `safe-area-inset-right`) clear of a phone's rounded corner.
+      - **Targeting line is white** (DIVERGENCES #32).
+      - **Exile III's guards don't talk** (DIVERGENCES #33): nor soldiers,
+        townspeople, apprentices, undead, Gale's incoherent or (unless you
+        hold their token) the Anama. They were opening placeholder talk.
+        *Gotcha*: the mute lines are the first scenario strings the
+        converter adds now, so every other scenario string index moved by
+        eight — fine, since everything uses `text()`'s return, but a diff of
+        `scenario.xml` will be noisy.
+      - `verify-screen.mjs`'s TOUCH step now covers talk-aim, the talk
+        strips, both sheets and a dialog strip over the inventory sheet.
+      - **Not done: hiding the canvas's own toolbar** when the pads are up.
+        The toolbar is part of the 605×430 screen, and dropping it would mean
+        a second layout of the original's window. Left for the user to decide.
+
+All checks pass (2026-09-29): 1,494 tests, tsc, both sweeps, verify-screen,
+verify-party and verify-e3.

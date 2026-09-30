@@ -8,7 +8,7 @@
 import { E3_JOBS_ON_PANEL, JOB_STR, e3HeldJobs, e3JobText, e3JobsBase } from '../game/e3Jobs';
 import { offersUse } from '../game/e3ItemUse';
 import { Direction, Location, dist } from '../core/location';
-import { ItemAbil, ItemType } from '../data/item';
+import { type Item, ItemAbil, ItemType } from '../data/item';
 import { variety } from '../data/itemVariety';
 import { EffectPattern, SpellPat, WALL_ROTATIONS, getBuiltinPattern } from '../data/pattern';
 import { groundFromTer, terFromGround } from '../data/scenario';
@@ -514,6 +514,11 @@ export class Screen {
    * a mouse over the terrain still aims as the original does.
    */
   aimAt: Location | null = null;
+  /**
+   * The cursor is Talk's (`talkAim`): drawn on its own, with no line or
+   * footprint, yellow where `handle_talk` could see the square.
+   */
+  aimTalk = false;
 
   /**
    * What the game is currently aiming, if anything: the pattern that will land
@@ -546,7 +551,7 @@ export class Screen {
   }
 
   /**
-   * draw_targeting_line (boe.graphics.cpp:1708) — the grey line from the
+   * draw_targeting_line (boe.graphics.cpp:1708) — the white line from the
    * caster to the cursor, and a white frame around every square the spell's
    * pattern would cover. Drawn only while the cursor is on a square that is
    * both in sight and in range, so losing the crosshair *is* the "you can't
@@ -554,6 +559,16 @@ export class Screen {
    */
   private drawTargetingLine(session: GameSession): void {
     const keyed = this.hover === null && this.aimAt !== null;
+    if (keyed && this.aimTalk && session.univ.town) {
+      const at = this.aimAt!;
+      const q = at.x - session.center.x + 4;
+      const r = at.y - session.center.y + 4;
+      if (q < 0 || r < 0 || q >= TER_VIEW_TILES || r >= TER_VIEW_TILES) return;
+      const spot = terrainSpotPos(q, r);
+      this.drawAimCursor({ x: spot.x + TILE_W / 2, y: spot.y + TILE_H / 2 },
+        session.canSeeLight(session.center, at) < 4);
+      return;
+    }
     const aim = this.hover === null && !keyed ? null : this.aiming(session);
     if (!aim) return;
     // Outdoors the C++ skips it entirely (`if(!is_out()) draw_targeting_line()`).
@@ -596,8 +611,11 @@ export class Screen {
     ctx.clip();
 
     // The line runs from the middle of the caster's square to the cursor.
+    // White: the 1997 original's `white_pen` (2px, RGB 255,255,255). OBoE
+    // draws {128,128,128} with `sf::BlendAdd`, which lands light too, but
+    // this port had it as opaque grey — neither of them.
     const fromSpot = terrainSpotPos(from.x - center.x + 4, from.y - center.y + 4);
-    ctx.strokeStyle = 'rgb(128,128,128)';
+    ctx.strokeStyle = Colours.WHITE;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(fromSpot.x + TILE_W / 2, fromSpot.y + TILE_H / 2);
@@ -1582,20 +1600,8 @@ export class Screen {
       if (!item || item.variety === ItemType.NO_ITEM) continue;
 
       const equipped = pc.equip[iNum] === true;
-      let colour: string = Colours.BLACK;
-      if (equipped) {
-        if (item.variety === ItemType.ONE_HANDED || item.variety === ItemType.TWO_HANDED)
-          colour = Colours.PINK;
-        else if (variety(item.variety).isArmour) colour = Colours.GREEN;
-        else colour = Colours.BLUE;
-      }
-
-      let label = item.ident ? item.fullName : item.name;
-      // Charges show for stacks, ammo and lockpicks; see put_item_screen.
-      let showCharges = item.maxCharges > 1 || item.charges > 1;
-      if (item.missile < 0 && item.ability !== ItemAbil.LOCKPICKS) showCharges &&= item.ident;
-      showCharges &&= item.ability !== ItemAbil.MESSAGE;
-      if (showCharges) label += ` (${item.charges})`;
+      const colour: string = equipped ? EQUIPPED_COLOURS[equippedKind(item)] : Colours.BLACK;
+      const label = inventoryLabel(item);
 
       const nameRect = at(row.name);
       drawStringEllipsis(
@@ -1963,4 +1969,23 @@ export class Screen {
     if (q < 0 || r < 0 || q >= TER_VIEW_TILES || r >= TER_VIEW_TILES) return null;
     return { q, r };
   }
+}
+
+/** What an equipped item is, for its colour: weapons pink, armour green, the rest blue. */
+export function equippedKind(item: Item): 'weapon' | 'armour' | 'other' {
+  if (item.variety === ItemType.ONE_HANDED || item.variety === ItemType.TWO_HANDED) return 'weapon';
+  return variety(item.variety).isArmour ? 'armour' : 'other';
+}
+
+const EQUIPPED_COLOURS = { weapon: Colours.PINK, armour: Colours.GREEN, other: Colours.BLUE } as const;
+
+/** An inventory row's words: the name as known, and the charges where they show. */
+export function inventoryLabel(item: Item): string {
+  let label = item.ident ? item.fullName : item.name;
+  // Charges show for stacks, ammo and lockpicks; see put_item_screen.
+  let showCharges = item.maxCharges > 1 || item.charges > 1;
+  if (item.missile < 0 && item.ability !== ItemAbil.LOCKPICKS) showCharges &&= item.ident;
+  showCharges &&= item.ability !== ItemAbil.MESSAGE;
+  if (showCharges) label += ` (${item.charges})`;
+  return label;
 }
