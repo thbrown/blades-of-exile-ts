@@ -17,13 +17,40 @@ import { Item, ItemType, interestingString } from '../data/item';
 import { GetItemsPick, ITEMS_IN_WINDOW, NOBODY, ROW_KEYS } from '../game/getItems';
 import type { GameSession } from '../game/session';
 import { SheetStore } from '../render/sheets';
-import type { UiRect } from '../render/layout';
+import { BOE_HEIGHT, gameScreen, type UiRect } from '../render/layout';
 import { curWeight, itemWeight, maxWeight } from '../universe/inventory';
 import type { ModalScreen, TouchChoice, TouchView } from './dialog';
+import type { DialogControl, DialogDef } from './dialogXml';
 import { getDialogDef } from './dialogStore';
 import { XmlDialog } from './xmlDialog';
 
 const ROWS = ITEMS_IN_WINDOW;
+
+/**
+ * get-items.xml without its row of party buttons, for View → Hide Toolbar.
+ * Not in either original. The whole dialog is taller than the compact
+ * screen it's centred on (`COMPACT_HEIGHT`), and with touch controls the
+ * strip down the left already picks who picks up; the keyboard's 1–6 still
+ * do (`onKey`). Done and the carrying line move up into the row's place.
+ */
+function withoutPartyRow(def: DialogDef): DialogDef {
+  // Measuring starts again from `fileRect`, so that's what moves.
+  const at = (c: DialogControl, top: number, left: number, w = c.fileRect.right - c.fileRect.left,
+    h = c.fileRect.bottom - c.fileRect.top): DialogControl => {
+    const rect = { top, left, bottom: top + h, right: left + w };
+    return { ...c, rect, fileRect: { ...rect } };
+  };
+  const controls = def.controls.flatMap((c): DialogControl[] => {
+    if (/^pc\d(-g)?$/.test(c.name)) return [];
+    if (c.name === 'done') return [at(c, 350, 337)];
+    if (c.name === 'prompt') return [at(c, 350, 80, 250, 30)];
+    return [c];
+  });
+  const byName = new Map(def.byName);
+  for (const name of def.byName.keys()) if (/^pc\d(-g)?$/.test(name)) byName.delete(name);
+  for (const c of controls) if (c.name) byName.set(c.name, c);
+  return { ...def, controls, byName };
+}
 
 /**
  * The screen's *state* is `GetItemsPick`, shared with the replay driver; this
@@ -42,6 +69,8 @@ export class GetItemsDialog implements ModalScreen {
    * does anyway.
    */
   private steal: XmlDialog | null = null;
+  /** Opened on the compact screen, without the party row (`withoutPartyRow`). */
+  private readonly compact: boolean;
 
   constructor(
     private ctx: CanvasRenderingContext2D,
@@ -51,7 +80,9 @@ export class GetItemsDialog implements ModalScreen {
     title: string,
   ) {
     this.pick = new GetItemsPick(session, items);
-    this.dlg = new XmlDialog(ctx, store, getDialogDef('get-items'));
+    this.compact = gameScreen.h < BOE_HEIGHT;
+    const def = getDialogDef('get-items');
+    this.dlg = new XmlDialog(ctx, store, this.compact ? withoutPartyRow(def) : def);
     this.dlg.setText('title', title);
 
     for (const id of ['up', 'down', 'pc1', 'pc2', 'pc3', 'pc4', 'pc5', 'pc6']) {
@@ -162,8 +193,8 @@ export class GetItemsDialog implements ModalScreen {
   }
 
   /**
-   * For a finger: the whole pile down the left, not just the eight rows on
-   * show, and the party down the right. Tapping an item further down pages
+   * For a finger: the whole pile down the right, not just the eight rows on
+   * show, and the party down the left. Tapping an item further down pages
    * the screen to it first, with the dialog's own arrows, then takes it — so
    * the pick sees the same clicks a mouse would have made.
    */
@@ -185,7 +216,7 @@ export class GetItemsDialog implements ModalScreen {
       label: item.ident ? item.fullName : item.name,
       detail: [interestingString(item), `Weight: ${itemWeight(item)}`].filter(Boolean).join('  '),
     }));
-    return { left, leftHeading: 'Take', right, rightHeading: 'Who picks up' };
+    return { left, leftHeading: 'Take', right, rightHeading: 'Who picks up', mirrored: true };
   }
 
   touchPress(name: string): string | null {
@@ -237,6 +268,8 @@ export class GetItemsDialog implements ModalScreen {
       if (name !== null) this.answerSteal(name);
       return null;
     }
+    // The party row's own keys went with it; they still pick who picks up.
+    if (this.compact && /^[1-6]$/.test(key)) return this.dlg.touchPress(`pc${key}`);
     return this.dlg.onKey(key);
   }
 }

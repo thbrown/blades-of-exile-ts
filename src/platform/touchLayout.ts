@@ -18,11 +18,14 @@ export interface PadLayout {
   /** CSS pixels from where the pad sits by default; +x is right, +y down. */
   x: number;
   y: number;
-  /** 1 is as drawn (the buttons are already translucent); lower fades them. */
+  /**
+   * The buttons' alpha: 1 is solid, lower lets the game through. The arrows
+   * and icons fade with it, but less, so they stay legible (`--ink`).
+   */
   opacity: number;
 }
 
-const DEFAULT: PadLayout = { scale: 1, x: 0, y: 0, opacity: 1 };
+const DEFAULT: PadLayout = { scale: 1, x: 0, y: 0, opacity: 0.6 };
 
 interface Setting {
   field: keyof PadLayout;

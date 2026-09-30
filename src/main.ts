@@ -125,12 +125,8 @@ import { giveHelp, setGiveHelp, setLivingSound } from './universe/living';
 import { killPc } from './game/damage';
 import { BOE_HEIGHT, BOE_WIDTH, COMPACT_HEIGHT, ToolbarButton, WIN_RECTS, gameScreen } from './render/layout';
 
-import { CHROME_SHEETS, Screen, equippedKind, inventoryLabel, toolbarButtons, toolbarMode } from './render/screen';
-import { itemGraphic } from './render/itemPics';
-import { offersUse } from './game/e3ItemUse';
-import { ITEM_SHOP_TITLES, specIcon, specPrice } from './game/itemShop';
-import { curWeight, maxWeight } from './universe/inventory';
-import { TouchSheet, type SheetRow, type SheetView } from './platform/touchSheet';
+import { CHROME_SHEETS, Screen, toolbarButtons, toolbarMode } from './render/screen';
+import { TouchSheet } from './platform/touchSheet';
 import { TouchControls, setTouchControls, touchControlsOn } from './platform/touchControls';
 import { openTouchLayoutPanel } from './platform/touchLayout';
 import { type Aiming, aimSpaceAction, autoAim, currentAim, moveAim, talkAim } from './game/aimCursor';
@@ -2019,131 +2015,53 @@ async function main(): Promise<void> {
   };
 
   /**
-   * The inventory and the party, as full-screen sheets for a finger
-   * (`platform/touchSheet.ts`): a tap on either panel opens its sheet. Every
-   * button is one of the panel's own clicks, through `handleInventoryClick`,
-   * `pressItemBottom` and `pressPcRow`.
+   * The party and inventory panels, blown up for a finger
+   * (`platform/touchSheet.ts`): a tap on either panel opens it over the game
+   * at the screen's size, and a tap there is the panel's own click, in the
+   * order the canvas asks: the party rows, then the item scrollbar, the page
+   * buttons along the bottom and the rows.
    */
   let sheetOpen: 'inventory' | 'party' | null = null;
-  const pcIcon = (pic: number): SheetRow['icon'] => {
-    const g = pcGraphic(pic, Direction.S);
-    const sheet = g ? store.get(g.sheetName) : undefined;
-    return g && sheet ? { sheet, rect: g.rect, key: `pc${pic}` } : null;
-  };
-  const inventorySheet = (): SheetView => {
-    const win = screen.itemWindow;
-    const pcs = univ.party.pcs;
-    const service = session.itemShop;
-    const page = screen.itemPage;
-    const pc = pcs[page] ?? univ.currentPc;
-    const tabs = service ? [] : [
-      ...pcs.flatMap((p, i) => (p.mainStatus === MainStatus.ALIVE
-        ? [{ id: String(i), label: p.name, on: win.mode === i }] : [])),
-      { id: '6', label: 'Special', on: win.mode === ItemWinMode.SPECIAL },
-      // Exile III's jobs page draws its own way (e3Jobs.ts); left to the canvas.
-      ...(e3JobsBase(univ) === null ? [{ id: '7', label: 'Quests', on: win.mode === ItemWinMode.QUESTS }] : []),
-    ];
-    if (!service && win.mode >= ItemWinMode.SPECIAL) {
-      const quests = win.mode === ItemWinMode.QUESTS;
-      const rows: SheetRow[] = win.specItemArray.flatMap((entry, i): SheetRow[] => {
-        if (quests) {
-          const quest = univ.scenario.quests[entry % QUEST_COMPLETED_OFFSET];
-          if (!quest) return [];
-          const status = entry >= QUEST_COMPLETED_OFFSET * 2 ? ' (failed)'
-            : entry >= QUEST_COMPLETED_OFFSET ? ' (completed)' : '';
-          return [{ id: String(i), title: quest.name + status, actions: [{ id: 'info', label: 'Info' }] }];
-        }
-        const spec = univ.scenario.specialItems[entry];
-        if (!spec) return [];
-        const actions = [{ id: 'info', label: 'Info' }];
-        if (specItemUseable(spec)) actions.unshift({ id: 'use', label: 'Use' });
-        return [{ id: String(i), title: spec.name, actions }];
-      });
-      return { title: quests ? 'Quests/Jobs' : 'Special items', tabs, rows,
-        empty: quests ? 'No quests.' : 'No special items.' };
+  const clickPanel = (x: number, y: number): void => {
+    const pcHit = screen.pcRowHit(x, y);
+    if (pcHit) {
+      pressPcRow(pcHit.index, pcHit.part);
+      return;
     }
-    const rows: SheetRow[] = [];
-    pc.items.forEach((item, slot) => {
-      if (!item || item.variety === 0) return;
-      const g = itemGraphic(item.graphicNum);
-      const sheet = g ? store.get(g.sheetName) : undefined;
-      const icon = g && sheet ? { sheet, rect: g.rect, key: `item${item.graphicNum}` } : null;
-      const equipped = pc.equip[slot] === true;
-      if (service) {
-        const price = specPrice(service, pc, slot);
-        if (price === null) return;
-        const verb = specIcon(service.mode);
-        rows.push({ id: String(slot), title: inventoryLabel(item), icon,
-          actions: [{ id: 'spec', label: `${verb[0]!.toUpperCase()}${verb.slice(1)} (${price})`, primary: true }] });
+    if (session.shop) return;
+    if (!session.itemShop && screen.itemSbar.handleClick(x, y)) {
+      sound.play(Snd.BUTTON);
+      screen.itemWindow.scroll = screen.itemSbar.getPosition();
+      redraw();
+      return;
+    }
+    if (!session.itemShop) {
+      const bottom = screen.itemBottomHit(x, y);
+      if (bottom !== null) {
+        pressItemBottom(bottom);
         return;
       }
-      // A shop draws no row buttons at all (handle_item_shop_action), which
-      // leaves the name's equip toggle and the description.
-      const actions = [
-        { id: 'name', label: equipped ? 'Unequip' : 'Equip', primary: !equipped },
-        ...(!session.shop && offersUse(item) ? [{ id: 'use', label: 'Use' }] : []),
-        ...(!session.shop ? [{ id: 'give', label: 'Give' }, { id: 'drop', label: 'Drop' }] : []),
-        { id: 'info', label: 'Info' },
-      ];
-      rows.push({
-        id: String(slot), title: inventoryLabel(item), icon, actions,
-        tone: equipped ? `equipped ${equippedKind(item)}` : '',
-        detail: equipped ? 'Equipped' : undefined,
-      });
-    });
-    return {
-      title: service ? ITEM_SHOP_TITLES[service.mode] : `${pc.name}'s inventory`,
-      subtitle: `Carrying ${curWeight(pc)} of ${maxWeight(pc)}`,
-      tabs, rows, empty: service ? 'Nothing here they want.' : 'Nothing in the pack.',
-    };
-  };
-  const partySheet = (): SheetView => {
-    const switching = session.currentSwitch < 6 ? session.currentSwitch : null;
-    const rows: SheetRow[] = [];
-    univ.party.pcs.forEach((pc, i) => {
-      if (pc.mainStatus === MainStatus.ABSENT) return;
-      const alive = pc.mainStatus === MainStatus.ALIVE;
-      const swap = switching === null ? 'Swap' : switching === i ? 'Cancel swap' : 'Swap here';
-      rows.push({
-        id: String(i), title: `${i + 1}. ${pc.name}`, icon: pcIcon(pc.whichGraphic),
-        on: i === univ.curPc,
-        detail: alive ? `HP ${pc.curHealth}/${pc.maxHealth}   SP ${pc.curSp}/${pc.maxSp}`
-          : MainStatus[pc.mainStatus]?.toLowerCase(),
-        actions: [
-          { id: 'name', label: 'Select', primary: i !== univ.curPc },
-          { id: 'info', label: 'Info' },
-          { id: 'trade', label: swap },
-        ],
-      });
-    });
-    return {
-      title: 'Party', tabs: [], rows, empty: '',
-      subtitle: switching !== null ? `Swap ${univ.party.pcs[switching]?.name ?? ''} with whom?` : undefined,
-    };
+    }
+    const invenHit = screen.inventoryHit(x, y, session.itemShop !== null);
+    if (!invenHit) return;
+    sound.play(Snd.BUTTON);
+    // Using an item can go on to ask for a target, which is on the game screen.
+    if (invenHit.part === 'use') sheetOpen = null;
+    void handleInventoryClick(invenHit.row, invenHit.part);
+    redraw();
   };
   touchSheet = new TouchSheet({
-    view: () => {
+    panel: () => {
       if (sheetOpen === null || dialogs.active || document.body.classList.contains('starting')) return null;
       // Dropping arms a square to drop on; the sheet gets out of the way.
       if (session.mode === GameMode.DROP_TOWN || session.mode === GameMode.DROP_COMBAT) {
         sheetOpen = null;
         return null;
       }
-      return sheetOpen === 'inventory' ? inventorySheet() : partySheet();
+      return sheetOpen === 'inventory' ? WIN_RECTS.inven : WIN_RECTS.pcStats;
     },
-    tab: (id) => pressItemBottom(Number(id)),
-    act: (row, action) => {
-      if (sheetOpen === 'party') {
-        pressPcRow(Number(row), action as 'name' | 'info' | 'trade');
-        return;
-      }
-      sound.play(Snd.BUTTON);
-      const part = action as 'name' | 'use' | 'give' | 'drop' | 'info' | 'spec';
-      // Using an item can go on to ask for a target, which is on the game screen.
-      if (part === 'use') sheetOpen = null;
-      void handleInventoryClick(Number(row), part);
-      redraw();
-    },
+    source: () => ({ canvas, x: desktop.gameX, y: desktop.gameY }),
+    tap: clickPanel,
     close: () => {
       sheetOpen = null;
       redraw();

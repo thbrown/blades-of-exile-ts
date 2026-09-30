@@ -480,6 +480,11 @@ export interface TouchView {
   leftHeading?: string;
   /** The field typing goes into, for a real `<input>` a phone will type into. */
   field?: { name: string; text: string };
+  /**
+   * Draw `right` down the left of the screen and `left` down the right —
+   * for a party, which the player wants on the left wherever it's picked.
+   */
+  mirrored?: boolean;
 }
 
 export interface ModalScreen {

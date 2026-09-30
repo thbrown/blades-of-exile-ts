@@ -14848,6 +14848,46 @@ TODO(M8) (1).
         their words run down the whole left column, so the game shrinks back
         while they're up — a visible jump. Toolbar clicks go nowhere; keys
         and the pads do everything it did. verify-screen checks the scale.
+      - **Second round of the user's notes (2026-09-30).**
+        - **The inventory and party sheets are gone**: a tap on either panel
+          now opens *the panel itself*, blown up (`touchSheet.ts`): its
+          pixels copied from the game canvas on every redraw, sized to fit
+          with room for a black-and-white ✕, and a tap on it mapped back to
+          game-screen coordinates and run through `clickPanel` in `main.ts`
+          — the canvas's own order: party rows, item scrollbar, page
+          buttons, item rows. A tap off the panel closes it too. The
+          row/tab builders (`inventorySheet`, `partySheet`) are deleted.
+        - **Pad opacity is the buttons' own alpha now**, not CSS `opacity`
+          on the pad, so 100% is a solid button (it used to top out at the
+          stylesheet's 0.38 background). Arrows and toolbar icons fade with
+          it through `--ink` = 0.3 + 0.7 × alpha. Default is 0.6.
+        - **The pad's arrows are SVG**, each centred on the origin of its
+          box: the font's arrow glyphs sat off-centre by different amounts.
+          The middle button's face is `data-face` (`pause`/`fire`), which
+          verify-screen now reads instead of the glyph.
+        - **The party is on the left** in the spell picker and in get-items
+          (`TouchView.mirrored`). The spell picker's ◀ ▶ moved bottom right,
+          Cast and ✕ bottom left.
+        - **Get-items on the compact screen drops its party row**
+          (`withoutPartyRow` in `getItemsDialog.ts`): the dialog was 437 tall
+          on a 386 screen, so its top was cut off. Done and the carrying line
+          move up into the row's place and it comes out exactly 386; keys
+          1–6 are routed by hand since their `def-key`s left with the
+          buttons. *Gotcha*: `measureDialog` rebuilds every rect from
+          `fileRect`, so moving a control means moving that; and `byName`
+          must not get the unnamed controls, or `''` resolves to the last of
+          them (the empty item frame drew the keyboard help).
+        - **Strips ignore taps for 400ms after they appear** (`FRESH_MS` in
+          `touchDialog.ts`): the tap on the pad's middle that opens a
+          conversation was being followed by a second landing on Done,
+          which comes up under the same thumb.
+        - **Talk's presets are centred on the movement pad** they replace
+          (and follow its Up/down offset), not at the top of the strip.
+        - The rotate cover's full-screen button is black and white.
+        - *Flaky*: verify-screen's TOUCH spark cast (`touch.fired.said`)
+          failed twice then passed on an unchanged tree. It passed on the
+          baseline too, and standalone it says "Guard takes 1" every time;
+          suspect timing with the monsters at `pace=1`.
 
 All checks pass (2026-09-29): 1,494 tests, tsc, both sweeps, verify-screen,
 verify-party and verify-e3.

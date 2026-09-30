@@ -3,9 +3,10 @@
  * while touch controls are on, laid out as the movement pads are. The dialog
  * itself stays up and stays live — its caster buttons, Other Spells and the
  * rest still answer a tap — and the strips are the parts a thumb needs
- * bigger: on the left one level's spells, with ◀ ▶ to step through the
- * levels (a long press on one describes it); on the right the party, when
- * the spell is cast on one of them, and Cast under it.
+ * bigger: on the right one level's spells, with ◀ ▶ to step through the
+ * levels (a long press on one describes it); on the left the party, when
+ * the spell is cast on one of them, and Cast under it. The party is on the
+ * left wherever it's picked from (get-items too, `touchDialog.ts`).
  *
  * It is only a face. Every tap presses one of the dialog's own controls by
  * its C++ id (`CastDialog.pressControl` → `SpellPick.click`), the ids the
@@ -35,7 +36,7 @@ export class TouchSpellPanel {
   private readonly root: HTMLElement;
   /** The view last drawn, so a redraw that changes nothing rebuilds nothing. */
   private shown = '';
-  /** Which level the left strip lists; null until a dialog opens. */
+  /** Which level the spell strip lists; null until a dialog opens. */
   private level: number | null = null;
   private dialog: CastDialog | null = null;
 
@@ -73,7 +74,7 @@ export class TouchSpellPanel {
     this.host.answer(dialog, dialog.pressControl(id));
   }
 
-  /** Step the left strip a level, flipping the dialog's page when it crosses 4↔5. */
+  /** Step the spell strip a level, flipping the dialog's page when it crosses 4↔5. */
   private stepLevel(dialog: CastDialog, view: CastView, by: number): void {
     const next = Math.max(MIN_LEVEL, Math.min(MAX_LEVEL, (this.level ?? 1) + by));
     if (next === this.level) return;
@@ -101,10 +102,10 @@ export class TouchSpellPanel {
       return b;
     };
 
-    // Left: this level's spells — the caster's own, dim where they can't
+    // Right: this level's spells — the caster's own, dim where they can't
     // cast them now, as the dialog's unlit LEDs are.
-    const left = el('div', 'ts-strip ts-left');
-    left.append(el('div', 'ts-heading', `Level ${level}`));
+    const spells = el('div', 'ts-strip ts-right');
+    spells.append(el('div', 'ts-heading', `Level ${level}`));
     const list = el('div', 'ts-list');
     const mine = view.slots.filter((s) => s.level === level && s.known);
     if (mine.length === 0) list.append(el('div', 'ts-none', 'No spells'));
@@ -129,29 +130,29 @@ export class TouchSpellPanel {
       b.addEventListener('contextmenu', (ev) => ev.preventDefault());
       list.append(b);
     }
-    // Bottom left, level with Cast on the right.
+    // Bottom right, level with Cast on the left.
     const steps = el('div', 'ts-steps');
     steps.append(
       button('ts-step', '◀', () => this.stepLevel(dialog, view, -1), level <= MIN_LEVEL),
       button('ts-step', '▶', () => this.stepLevel(dialog, view, 1), level >= MAX_LEVEL),
     );
-    left.append(list);
+    spells.append(list);
 
-    // Right: who it's for, when the spell is cast on a party member.
-    const right = el('div', 'ts-strip ts-right');
+    // Left: who it's for, when the spell is cast on a party member.
+    const party = el('div', 'ts-strip ts-left');
     if (view.needsTarget) {
-      right.append(el('div', 'ts-heading', 'Target'));
+      party.append(el('div', 'ts-heading', 'Target'));
       for (const pc of view.party) {
         if (!pc.present) continue;
         const chip = button(`ts-pc${pc.index === view.target ? ' on' : ''}${pc.alive ? '' : ' dim'}`,
           '', () => this.press(dialog, `target${pc.index + 1}`));
         chip.title = pc.name;
         chip.append(el('span', 'ts-name', `${pc.index + 1}. ${pc.name}`), el('small', '', `${pc.hp} HP`));
-        right.append(chip);
+        party.append(chip);
       }
     }
 
-    // Bottom right: Cast, and Cancel beside it.
+    // Bottom left: Cast, and Cancel beside it.
     const chosen = view.slots.find((s) => s.spell === view.spell);
     const foot = el('div', 'ts-foot');
     const cancel = button('ts-cancel', '✕', () => this.press(dialog, 'cancel'));
@@ -162,6 +163,6 @@ export class TouchSpellPanel {
       button('ts-cast', 'CAST', () => this.press(dialog, 'cast'), !chosen),
     );
 
-    this.root.replaceChildren(left, right, steps, foot);
+    this.root.replaceChildren(party, spells, steps, foot);
   }
 }

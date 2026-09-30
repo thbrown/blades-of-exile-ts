@@ -21,11 +21,20 @@ export interface TouchDialogHost {
   enter(): void;
 }
 
+/**
+ * How long a strip that has just appeared ignores taps. The tap that opens a
+ * conversation is on the pad's middle, and the talk strip's Done comes up
+ * right under that thumb: a quick second tap would end the talk unread.
+ */
+const FRESH_MS = 400;
+
 export class TouchDialogPanel {
   private readonly root: HTMLElement;
   private readonly input: HTMLInputElement;
   private shown = '';
   private field: string | null = null;
+  /** When the strips last appeared (`FRESH_MS`). */
+  private shownAt = 0;
 
   constructor(private readonly host: TouchDialogHost) {
     this.root = document.createElement('div');
@@ -65,6 +74,7 @@ export class TouchDialogPanel {
 
   sync(on: boolean): void {
     const view = on ? this.host.view() : null;
+    if (view !== null && this.root.hidden) this.shownAt = performance.now();
     this.root.hidden = view === null;
     if (view === null) {
       this.shown = '';
@@ -93,8 +103,9 @@ export class TouchDialogPanel {
 
   private build(view: TouchView): void {
     const children: HTMLElement[] = [];
-    if (view.left) children.push(this.strip('ts-left', view.leftHeading, view.left, null));
-    const right = this.strip('ts-right', view.rightHeading, view.right, view.field ? this.input : null);
+    const [leftSide, rightSide] = view.mirrored ? ['ts-right', 'ts-left'] : ['ts-left', 'ts-right'];
+    if (view.left) children.push(this.strip(leftSide, view.leftHeading, view.left, null));
+    const right = this.strip(rightSide, view.rightHeading, view.right, view.field ? this.input : null);
     if (view.rightPairs) right.classList.add('td-pairs');
     children.push(right);
     this.root.replaceChildren(...children);
@@ -132,7 +143,10 @@ export class TouchDialogPanel {
       detail.textContent = choice.detail;
       b.append(detail);
     }
-    b.addEventListener('click', () => this.host.press(choice.name));
+    b.addEventListener('click', () => {
+      if (performance.now() - this.shownAt < FRESH_MS) return;
+      this.host.press(choice.name);
+    });
     return b;
   }
 }

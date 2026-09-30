@@ -3263,7 +3263,7 @@ await tp.waitForTimeout(150);
 touch.aimMoved = await tp.evaluate(() => window.__screen.aimAt && { ...window.__screen.aimAt });
 await tp.tap('.touch-dpad .touch-button[title="North"]');
 await tp.waitForTimeout(150);
-touch.fireLabel = await tp.evaluate(() => document.querySelector('.touch-button.centre').textContent);
+touch.fireLabel = await tp.evaluate(() => document.querySelector('.touch-button.centre').dataset.face);
 // Past the edge of the view the cursor takes the view with it (screen_shift,
 // as the border arrows do), and coming back leaves the view where it went.
 const tCentre0 = await tp.evaluate(() => ({ ...window.__session.center }));
@@ -3282,9 +3282,10 @@ touch.fired = await tp.evaluate((from) => ({
   mode: window.__session.mode, aim: window.__screen.aimAt,
   said: window.__univ.transcript.slice(from),
 }), tLines);
-// The inventory and the party open as sheets (platform/touchSheet.ts) when
-// their panels are tapped; Info from a row brings its dialog up with the
-// dialog's buttons as a strip, and the sheet comes back when it closes.
+// The inventory and the party open blown up (platform/touchSheet.ts) when
+// their panels are tapped: the panel's own pixels, and a tap on them is the
+// panel's own click. Info from a row brings its dialog up with the dialog's
+// buttons as a strip, and the panel comes back when it closes.
 const tPanel = async (rect) => {
   const at = await tp.evaluate((r) => {
     const c = document.querySelector('#canvas'); const b = c.getBoundingClientRect(); const k = b.width / c.width;
@@ -3294,15 +3295,38 @@ const tPanel = async (rect) => {
   await tp.touchscreen.tap(at.x, at.y);
   await tp.waitForTimeout(300);
 };
+// Tap the blown-up panel where the game screen's own hit test finds `what`.
+const tZoomTap = async (what) => {
+  const at = await tp.evaluate((what) => {
+    const s = window.__screen; const v = document.querySelector('.sheet-panel');
+    const box = v.getBoundingClientRect();
+    for (const [name, r] of [['inven', { top: 132, left: 305, bottom: 276, right: 576 }],
+      ['pcStats', { top: 7, left: 305, bottom: 123, right: 576 }]]) {
+      if (v.width !== r.right - r.left || v.height !== r.bottom - r.top) continue;
+      for (let y = r.top; y < r.bottom; y++) for (let x = r.left; x < r.right; x++) {
+        const hit = name === 'inven' ? s.inventoryHit(x, y) : s.pcRowHit(x, y);
+        const found = name === 'inven' ? hit?.row === 0 && hit.part === what.part
+          : hit?.index === what.index && hit.part === what.part;
+        if (found) {
+          return { x: box.left + (x - r.left + 0.5) * box.width / v.width,
+            y: box.top + (y - r.top + 0.5) * box.height / v.height };
+        }
+      }
+    }
+    return null;
+  }, what);
+  if (!at) throw new Error(`nothing on the blown-up panel for ${JSON.stringify(what)}`);
+  await tp.touchscreen.tap(at.x, at.y);
+  await tp.waitForTimeout(300);
+};
 await tPanel({ left: 305, top: 150, right: 576, bottom: 250 });
-touch.invSheet = await tp.evaluate(() => ({
-  shown: document.querySelector('#touch-sheet').hidden === false,
-  title: document.querySelector('.sheet-title')?.textContent,
-  rows: document.querySelectorAll('.sheet-row').length,
-}));
+touch.invSheet = await tp.evaluate(() => {
+  const v = document.querySelector('.sheet-panel');
+  return { shown: document.querySelector('#touch-sheet').hidden === false,
+    size: [v.width, v.height], wide: v.getBoundingClientRect().width };
+});
 await tp.screenshot({ path: `${SHOTS}/66-touch-inventory.png` });
-await tp.locator('.sheet-row >> nth=0').locator('.sheet-act', { hasText: 'Info' }).tap();
-await tp.waitForTimeout(300);
+await tZoomTap({ part: 'info' });
 touch.infoStrip = await tp.evaluate(() => ({
   dialog: !!window.__dialogs.active,
   sheetHidden: document.querySelector('#touch-sheet').hidden,
@@ -3314,9 +3338,13 @@ touch.sheetBack = await tp.evaluate(() => !window.__dialogs.active && document.q
 await tp.tap('.sheet-close');
 await tp.waitForTimeout(200);
 await tPanel({ left: 305, top: 20, right: 576, bottom: 110 });
-touch.partyRows = await tp.evaluate(() => [...document.querySelectorAll('.sheet-row .sheet-name')].map((e) => e.textContent));
+const tWasPc = await tp.evaluate(() => window.__univ.curPc);
+await tZoomTap({ index: 1, part: 'name' });
+touch.partyPick = { was: tWasPc, now: await tp.evaluate(() => window.__univ.curPc) };
+await tp.evaluate((pc) => { window.__univ.curPc = pc; window.__redraw(); }, tWasPc);
 await tp.tap('.sheet-close');
 await tp.waitForTimeout(200);
+touch.sheetClosed = await tp.evaluate(() => document.querySelector('#touch-sheet').hidden);
 // View → Hide Toolbar: the screen loses its toolbar and is cut short
 // (COMPACT_HEIGHT), so it scales up; toggled back, it's whole again.
 const tScale = () => tp.evaluate(() => ({ scale: window.__desktop.scale, h: document.querySelector('#canvas').height }));
@@ -3359,14 +3387,15 @@ const touchOk = touch.desktopHidden && touch.townSet === 'MAGE PRIEST LOOK TALK 
   touch.menuTicked && touch.menuOff &&
   touch.aimFoes.n === 2 && touch.panel &&
   touch.aimStart?.x === 8 && touch.aimStart?.y === 8 &&
-  touch.aimMoved?.x === 8 && touch.aimMoved?.y === 9 && touch.fireLabel === '◎' &&
+  touch.aimMoved?.x === 8 && touch.aimMoved?.y === 9 && touch.fireLabel === 'fire' &&
   touch.scrolled.far.aim.x === 14 && touch.scrolled.far.centre.x === touch.scrolled.from.x + 14 - (touch.scrolled.from.x + 4) &&
   touch.scrolled.back.x === 8 && touch.scrolled.back.y === 8 &&
   touch.fired.mode === 9 && touch.fired.aim === null && touch.fired.said.some((l) => /takes|miss|resist/i.test(l)) &&
   touch.talkPlaced !== null && touch.talkAim?.x === touch.talkPlaced.x && touch.talkAim?.y === touch.talkPlaced.y &&
   touch.talkWords.includes('Ask About...') && touch.talkDone &&
-  touch.invSheet.shown && touch.invSheet.rows > 0 && touch.infoStrip.dialog && touch.infoStrip.sheetHidden &&
-  touch.infoStrip.buttons.length > 0 && touch.sheetBack && touch.partyRows.length === 6 &&
+  touch.invSheet.shown && touch.invSheet.size.join('x') === '271x144' && touch.invSheet.wide > 271 * 2 &&
+  touch.infoStrip.dialog && touch.infoStrip.sheetHidden &&
+  touch.infoStrip.buttons.length > 0 && touch.sheetBack && touch.partyPick.now === 1 && touch.sheetClosed &&
   touch.compact.on.scale > touch.compact.before.scale && touch.compact.off.scale === touch.compact.before.scale;
 
 console.log('ERRORS:', errors.length ? errors.join(' | ') : 'none');

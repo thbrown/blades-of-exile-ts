@@ -74,12 +74,26 @@ const EXTRA_KEYS: readonly ExtraKey[] = [
 ];
 
 /** The eight directions as keys the router already reads (input.ts). */
-const DPAD: readonly (readonly [string, string, string])[] = [
-  // [key, arrow, title]
-  ['Home', '↖', 'North-west'], ['ArrowUp', '↑', 'North'], ['PageUp', '↗', 'North-east'],
-  ['ArrowLeft', '←', 'West'], [' ', '•', 'Pause / stand ready (Space)'], ['ArrowRight', '→', 'East'],
-  ['End', '↙', 'South-west'], ['ArrowDown', '↓', 'South'], ['PageDown', '↘', 'South-east'],
+const DPAD: readonly (readonly [string, number | null, string])[] = [
+  // [key, the arrow's heading in degrees clockwise from north, title]
+  ['Home', 315, 'North-west'], ['ArrowUp', 0, 'North'], ['PageUp', 45, 'North-east'],
+  ['ArrowLeft', 270, 'West'], [' ', null, 'Pause / stand ready (Space)'], ['ArrowRight', 90, 'East'],
+  ['End', 225, 'South-west'], ['ArrowDown', 180, 'South'], ['PageDown', 135, 'South-east'],
 ];
+
+/**
+ * The pad's faces, drawn rather than typed: the font's arrow glyphs each sit
+ * a little off the middle of their box, differently for every direction.
+ * Each is centred on the origin of a 24-unit box, so it's in the middle of
+ * the button whichever way it points.
+ */
+const svg = (body: string): string =>
+  `<svg class="touch-glyph" viewBox="-12 -12 24 24" aria-hidden="true">${body}</svg>`;
+const arrowFace = (deg: number): string => svg(`<path d="M0 8V-8M-6-2 0-8 6-2" transform="rotate(${deg})" `
+  + 'fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>');
+const PAUSE_FACE = svg('<circle r="2.6" fill="currentColor"/>');
+const FIRE_FACE = svg('<circle r="7" fill="none" stroke="currentColor" stroke-width="2"/>'
+  + '<circle r="2.6" fill="currentColor"/>');
 
 /** Held, a direction repeats: first after this long, then at this rate. */
 const REPEAT_DELAY_MS = 380;
@@ -160,8 +174,9 @@ export class TouchControls {
     }
     const aiming = this.host.aiming();
     // While aiming, the middle of the pad fires at the cursor (Enter), not Space.
-    if (this.centre) {
-      this.centre.textContent = aiming ? '◎' : '•';
+    if (this.centre && this.centre.dataset['face'] !== (aiming ? 'fire' : 'pause')) {
+      this.centre.dataset['face'] = aiming ? 'fire' : 'pause';
+      this.centre.innerHTML = aiming ? FIRE_FACE : PAUSE_FACE;
       this.centre.title = aiming ? 'Fire at the target (Enter)' : 'Pause / stand ready (Space)';
       this.centre.classList.toggle('fire', aiming !== null);
     }
@@ -175,10 +190,11 @@ export class TouchControls {
   }
 
   private buildDpad(): void {
-    for (const [key, arrow, title] of DPAD) {
+    for (const [key, heading, title] of DPAD) {
       const b = this.padButton(title);
-      b.textContent = arrow;
+      b.innerHTML = heading === null ? PAUSE_FACE : arrowFace(heading);
       if (key === ' ') {
+        b.dataset['face'] = 'pause';
         b.classList.add('centre');
         this.centre = b;
       }
