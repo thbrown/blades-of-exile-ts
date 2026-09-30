@@ -15055,7 +15055,7 @@ one quest at a time**, to keep each session's context small.
   - *Not covered*: the side content along the way that isn't the quest's
     (Shayder's sewers and their Wand of Fireballs, the factory's caches,
     the stone circles).
-- [x] **The giants and troglodytes** (2026-09-30), seven tests. It could
+- [x] **The giants and troglodytes** (2026-09-30), eight tests. It could
   not be finished before today, for five separate reasons, all fixed:
   - Sharimik's triad: Knight's "mission", Levin's price (1000 gold, 0xf1),
     the hermit's Ritual (town 100, "trog"), the Troglo Temple (53, stairs
@@ -15120,13 +15120,17 @@ one quest at a time**, to keep each session's context small.
     bugs". New check-in questions 7–11.
   - Runner verb added: `walk(x, y)` (from where the party stands; a door
     or false wall gets its second step).
-  - *Not covered*: the Giant's Forge and Smite, the lower caves' snake pit
-    and Naga fight, the Troglo Temple's treasure rooms, Castle Troglo's
+  - **Smite** (at the user's request): the lower caves' passage (spot 11)
+    into the Giant's Forge (town 55), the hammer at (23,43) across the lava
+    from both ways in, taken, E3's giant-bane (ability 51, `e3SpecDam`:
+    20–31 a blow against giants, nothing against ogres), and back out
+    (spot 15). Nothing was missing for it.
+  - *Not covered*: the lower caves' snake pit and Naga fight, the Troglo Temple's treasure rooms, Castle Troglo's
     loot after the war, and the doomguard.
 - [ ] **Next: the golems** (walkthrough A "4. Golems", B chapter 4).
 - [ ] Then the endgame's alien beasts, then the five artifact quests.
 
-All checks pass (2026-09-30): 1,515 tests, tsc, both sweeps, verify-screen,
+All checks pass (2026-09-30): 1,516 tests, tsc, both sweeps, verify-screen,
 verify-party and verify-e3.
 
 **Gotchas from the giants and troglodytes (2026-09-30):**

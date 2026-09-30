@@ -23,6 +23,7 @@ import { SLIME_POOLS } from '../tools/e3convert/towns/slimePit';
 import { QuestRunner, loadExile3 } from './support/e3Quest';
 import { WallSearch, type WallState } from './support/e3Walls';
 import { WALL_FLOOR, WALL_NORTH, WALL_SOUTH, moveE3Walls } from '../src/game/e3MovingWalls';
+import { E3Abil, e3SpecDam } from '../src/game/e3Items';
 import { TerSpec } from '../src/data/terrain';
 
 const dir = findE3Dir();
@@ -984,6 +985,43 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       await q.enter(24, { x: 10, y: 10 });
       await q.talk(31, 'earn');
       expect(q.party.pcs.some((pc) => pc.mageSpells[0x32] && pc.mageSpells[0x34]), q.tail()).toBe(true);
+    });
+
+    it("The Giant's Forge: the passage from the lower caves, Smite on its pedestal, and what it does to giants", async () => {
+      const q = new QuestRunner(scen);
+      // The long passage from the lower caves (spot 11) comes out at (42,44).
+      await q.enter(31);
+      await q.step(...spot(31, 11));
+      expect(q.townNum, q.tail()).toBe(55);
+      const entry = { ...q.at };
+      // The hammer lies at (23,43), across the lava (the walkthroughs cast
+      // Firewalk), past the message by its alcove (spot 2).
+      const smite = q.town.items.find((it) => it.variety !== 0 && it.fullName === 'Smite')!;
+      expect(smite.itemLoc).toEqual({ x: 23, y: 43 });
+      expect(q.canReach(entry, smite.itemLoc), 'from the passage').toBe(true);
+      expect(q.canReach({ x: 37, y: 5 }, smite.itemLoc), 'from the main gate').toBe(true);
+      // Its guardians, and two of the Forge's others for later.
+      expect(q.creatures(/Black Shade/).length).toBeGreaterThan(0);
+      const giant = q.creatures(/Hill Giant Chief/)[0]!;
+      const ogre = q.creatures(/^Ogre$/)[0]!;
+      await q.clearHostiles();
+      q.place({ x: 22, y: 43 });
+      const onFloor = q.session.reachableItems(q.at).items;
+      expect(onFloor, 'within reach').toContain(smite);
+      q.session.takeItem(smite, 0);
+      expect(q.hasItem(/^Smite$|Hammer/), q.tail()).toBe(true);
+      const hammer = q.party.pcs[0]!.items.find((it) => it.fullName === 'Smite')!;
+      expect(hammer.e3Ability).toBe(E3Abil.GIANT_BANE);
+      // Against giants it adds 20–31 a blow (`calc_spec_dam`), and nothing against anything else.
+      for (let i = 0; i < 20; i++) {
+        const extra = e3SpecDam(q.univ, hammer.e3Ability, giant);
+        expect(extra).toBeGreaterThanOrEqual(20);
+        expect(extra).toBeLessThanOrEqual(31);
+      }
+      expect(e3SpecDam(q.univ, hammer.e3Ability, ogre)).toBe(0);
+      // And back to the caves the way the party came (spot 15).
+      await q.step(...spot(55, 15));
+      expect(q.townNum, q.tail()).toBe(31);
     });
   });
 });
