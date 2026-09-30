@@ -9,7 +9,7 @@
 
 import { Alchemy, AlchemyRecipe, alchemyCharges, alchemyFailChance, alchemyName, alchemyPotion, canMakeAlchemy, alchemyRecipe } from '../data/alchemy';
 import { Item, ItemAbil, ItemType } from '../data/item';
-import { GiveStatus, giveItem, hasAbil, removeCharge } from '../universe/inventory';
+import { GiveStatus, e3AbilSlot, giveItem, hasAbil, removeCharge } from '../universe/inventory';
 
 // Re-exported for the callers that found it here first; `has_abil` is a
 // `cPlayer` method and now lives beside `hasAbilEquip` in `universe/inventory`.
@@ -17,6 +17,7 @@ export { hasAbil };
 import { NUM_INVEN_SLOTS, Player } from '../universe/player';
 import { Skill } from '../universe/skills';
 import { Universe } from '../universe/universe';
+import { bugFixed } from './bugFixes';
 import { placeItem } from './loot';
 import type { GameSession } from './session';
 
@@ -79,6 +80,10 @@ export function makePotion(
   const pc = univ.party.pcs[pcNum];
   const info = alchemyRecipe(which);
   if (!pc || !info) return;
+  if (univ.scenario.featureFlags['alchemy'] === 'exile3') {
+    e3MakePotion(session, pc, which, sound);
+    return;
+  }
   const say = (line: string): void => univ.addStringToBuf(line);
 
   if (hasSpace(pc) < 0) {
@@ -128,4 +133,85 @@ export function makePotion(
     say('No room in inventory. Potion placed on floor.');
     placeItem(univ, potion, univ.party.townLoc);
   } else say('Alchemy: Successful.');
+}
+
+/**
+ * Exile III's recipes (`10b0:88f4`, tables in DGROUP): BoE's first seventeen,
+ * in the same order and at the same difficulties, but with ingredients named
+ * by E3 ability code and the scenario's own items as the products.
+ */
+export const E3_ALCHEMY: Readonly<Record<'ingred1' | 'ingred2' | 'difficulty' | 'fail' | 'product', readonly number[]>> = {
+  /** `DS:30ba`. 55 is both Wormgrass and Asp Fangs, so either will do. */
+  ingred1: [52, 53, 52, 53, 55, 54, 54, 55, 58, 55, 58, 52, 58, 56, 57, 56, 56],
+  /** `DS:30dc`, 0 for none. Recipes 9 and 11 differ from BoE's. */
+  ingred2: [0, 0, 0, 55, 0, 0, 0, 54, 0, 54, 52, 55, 53, 0, 0, 55, 57],
+  /** `DS:30fe`. */
+  difficulty: [1, 1, 1, 3, 3, 4, 5, 5, 7, 9, 9, 10, 12, 12, 9, 14, 19],
+  /** `DS:3120`, indexed by skill above difficulty. */
+  fail: [50, 40, 30, 20, 10, 8, 6, 4, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  /** `DS:3148`: the item each recipe makes. */
+  product: [272, 273, 176, 276, 177, 265, 256, 268, 350, 274, 285, 178, 257, 179, 351, 266, 217],
+};
+
+/**
+ * E3's `do_alchemy` (`10b0:88f4`) once the PC and recipe are chosen — 1997's,
+ * with E3's tables. It differs from the BoE path above in four ways:
+ *   - the roll is `get_ran(1,0,100)` on the *raw* Alchemy skill, and a
+ *     failure draws `get_ran(1,0,1)` besides (1997 has both; OBoE neither);
+ *   - the second ingredient is taken from the slot found *before* the first
+ *     was used, so when the first runs out and the pack shifts up, a charge
+ *     comes off whatever moved into that slot. 1997 does the same; OBoE takes
+ *     the higher slot first, as the fix does (E3-SUSPECTED-BUGS.md #17);
+ *   - the product is the scenario's item, identified, one charge more at five
+ *     over the difficulty and another at eleven, and a new picture only if it
+ *     is a potion (the poisons and the balm keep theirs);
+ *   - with no room for it, E3 says so and the potion is lost: it has none
+ *     of 1997's "Potion placed on floor".
+ */
+function e3MakePotion(
+  session: GameSession, pc: Player, which: Alchemy, sound?: (n: number) => void,
+): void {
+  const univ = session.univ;
+  const t = E3_ALCHEMY;
+  const say = (line: string): void => univ.addStringToBuf(line);
+  const need1 = t.ingred1[which];
+  const need2 = t.ingred2[which];
+  const made = t.product[which];
+  if (need1 === undefined || need2 === undefined || made === undefined) return;
+
+  if (hasSpace(pc) < 0) {
+    say("Alchemy: Can't carry another item.");
+    return;
+  }
+  const slot1 = e3AbilSlot(pc, need1);
+  const slot2 = need2 > 0 ? e3AbilSlot(pc, need2) : 0;
+  if (slot1 === NUM_INVEN_SLOTS || slot2 === NUM_INVEN_SLOTS) {
+    say("Alchemy: Don't have ingredients.");
+    return;
+  }
+  sound?.(8);
+  if (need2 > 0 && bugFixed(17) && slot1 < slot2) {
+    removeCharge(pc, slot2);
+    removeCharge(pc, slot1);
+  } else {
+    removeCharge(pc, slot1);
+    if (need2 > 0) removeCharge(pc, slot2);
+  }
+
+  const skill = pc.skills[Skill.ALCHEMY] ?? 0;
+  const over = skill - t.difficulty[which]!;
+  if ((t.fail[over] ?? 0) > univ.rng.getRan(1, 0, 100)) {
+    say('Alchemy: Failed.');
+    univ.rng.getRan(1, 0, 1);
+    sound?.(41);
+    return;
+  }
+  const template = univ.scenario.scenItems[made];
+  if (!template) return;
+  const potion: Item = { ...template, ident: true };
+  if (over >= 5) potion.charges++;
+  if (over >= 11) potion.charges++;
+  if (potion.variety === ItemType.POTION) potion.graphicNum += univ.rng.getRan(1, 0, 2);
+  if (giveItem(pc, univ.party, potion).status !== GiveStatus.OK) say('No room in inventory.');
+  else say('Alchemy: Successful.');
 }

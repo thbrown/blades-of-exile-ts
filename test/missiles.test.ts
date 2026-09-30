@@ -7,11 +7,12 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { GameRng } from '../src/core/rng';
 import { Item, ItemAbil, ItemType, defaultItem } from '../src/data/item';
-import { Attitude } from '../src/data/monster';
+import { Attitude, DamageType } from '../src/data/monster';
 import { Scenario } from '../src/data/scenario';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
+import { setBugFixes } from '../src/game/bugFixes';
 import { GameMode } from '../src/game/modes';
 import { calcSpecDam, fireMissile, isLoaded, loadMissile } from '../src/game/missiles';
 import { GameSession } from '../src/game/session';
@@ -170,6 +171,54 @@ describe('fire_missile', () => {
     if (!isLoaded(loaded)) throw new Error('should be armed');
     await fireMissile(s, loaded, monst.curLoc);
     expect(pc.items[1]!.charges).toBe(1);
+  });
+
+  it('a stack of returning razordisks drops to one, unless E3 bug #15 is fixed', async () => {
+    for (const fixed of [false, true]) {
+      const { s, monst, pc } = aFight();
+      Object.assign(pc.items[1]!, { ability: ItemAbil.RETURNING_MISSILE, charges: 8, e3Ability: 65 });
+      setBugFixes(fixed);
+      try {
+        const loaded = loadMissile(s.univ);
+        if (!isLoaded(loaded)) throw new Error('should be armed');
+        await fireMissile(s, loaded, monst.curLoc);
+      } finally {
+        setBugFixes(false);
+      }
+      expect(pc.items[1]!.charges).toBe(fixed ? 8 : 1);
+    }
+  });
+
+  /** Exploding arrows at bladbase strength 25, as Exile III's are. */
+  function explodingArrows(pc: Player, e3Ability: number): void {
+    Object.assign(pc.items[1]!, {
+      ability: ItemAbil.EXPLODING_WEAPON, abilStrength: 25, abilData: DamageType.FIRE, e3Ability,
+    });
+  }
+
+  it('an exploding arrow is spent like any other', async () => {
+    const { s, monst, pc } = aFight();
+    explodingArrows(pc, -1);
+    const loaded = loadMissile(s.univ);
+    if (!isLoaded(loaded)) throw new Error('should be armed');
+    await fireMissile(s, loaded, monst.curLoc);
+    expect(s.univ.transcript).toContain('  The arrow explodes!');
+    expect(pc.items[1]!.charges).toBe(9);
+  });
+
+  it("BoE's blast takes strength × 2 dice, Exile III's is 4d6 fire", async () => {
+    for (const [e3Ability, lo, hi] of [[-1, 50, 300], [92, 1, 24]] as const) {
+      const { s, monst, pc } = aFight();
+      explodingArrows(pc, e3Ability);
+      monst.health = monst.maxHealth = 1000;
+      monst.mon.resist[DamageType.FIRE] = 100;
+      const loaded = loadMissile(s.univ);
+      if (!isLoaded(loaded)) throw new Error('should be armed');
+      await fireMissile(s, loaded, monst.curLoc);
+      const dealt = 1000 - monst.health;
+      expect(dealt).toBeGreaterThanOrEqual(lo);
+      expect(dealt).toBeLessThanOrEqual(hi);
+    }
   });
 });
 

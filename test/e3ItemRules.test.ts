@@ -55,8 +55,15 @@ describe('Exile III item readings', () => {
     expect(readE3Item(item(14, ItemType.RING, 0, 'Gold Weight Ring'), '', scen).verdict).toBe('differs');
   });
 
-  it('marks the abilities still run by BoE’s rule as unread', () => {
-    expect(readE3Item(item(46, ItemType.RING), 'Regenerate', scen).verdict).toBe('unread');
+  it('has read every code in the item table: none is left unread', () => {
+    expect(RULE_CODES.filter((c) => readE3Item(item(c, ItemType.RING), '', scen).verdict === 'unread')).toEqual([]);
+    expect(readE3Item(item(46, ItemType.RING), 'Regenerate', scen).verdict).toBe('agrees');
+  });
+
+  it('calls exploding arrows only partly right: E3’s blast is a fixed 4d6 fire', () => {
+    const r = readE3Item(item(92, ItemType.ARROW), 'Explodes', scen);
+    expect(r.effect).toContain('4d6 fire');
+    expect(r.verdict).toBe('partly');
   });
 
   it('spells out what the combat numbers mean', () => {

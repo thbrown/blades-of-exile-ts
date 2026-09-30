@@ -22,7 +22,7 @@ import { Spell, SPELLS, spellName } from '../data/spell';
 import { ItemAbil, ItemType } from '../data/item';
 import { FieldType } from '../data/fields';
 import { Skill, MainStatus, PartyStatus, Status, Trait } from '../universe/skills';
-import { getProtLevel, hasAbil, hasAbilEquip, uncurse } from '../universe/inventory';
+import { e3TakeBalm, getProtLevel, hasAbil, hasAbilEquip, takeItem, uncurse } from '../universe/inventory';
 import { livingSound, SpellNote } from '../universe/living';
 import { Player } from '../universe/player';
 import { crumbleWall } from './fieldEffects';
@@ -595,7 +595,30 @@ export function doPriestSpell(
       } else {
         // RAISE_DEAD and RESURRECT always charge, freebie or not — the C++
         // deducts outside the freebie check here.
-        pc.curSp -= SPELLS[spellNum]?.cost ?? 0;
+        if (univ.scenario.featureFlags['balm'] === 'exile3') {
+          // Exile III charges first, then looks for the balm (`10b0:5407`).
+          pc.curSp -= SPELLS[spellNum]?.cost ?? 0;
+          if (!e3TakeBalm(pc)) {
+            // E3 then prints its scratch line again (`10b0:5a0c`), whatever
+            // was last formatted into it; not reproduced.
+            univ.addStringToBuf('  Need resurrection balm.');
+            break;
+          }
+        } else {
+          // The scenario flag `resurrection-balm` (boe.party.cpp:1184): the
+          // caster must carry one, and uses it up. Checked before the charge,
+          // so a refusal costs nothing. 1997 required it always (PARTY.C,
+          // `pc_has_abil(pc_num,160)`); OBoE's legacy scenarios declare it.
+          if (univ.scenario.featureFlags['resurrection-balm'] !== undefined) {
+            const balm = hasAbil(pc, ItemAbil.RESURRECTION_BALM);
+            if (!balm) {
+              univ.addStringToBuf(`  ${pc.name} needs resurrection balm.`);
+              break;
+            }
+            takeItem(pc, balm.slot);
+          }
+          pc.curSp -= SPELLS[spellNum]?.cost ?? 0;
+        }
         if (spellNum === Spell.RAISE_DEAD) {
           if (target.mainStatus === MainStatus.DEAD) {
             // The higher the caster's level the less likely this is. Below

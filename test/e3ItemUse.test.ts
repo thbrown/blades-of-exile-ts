@@ -11,7 +11,7 @@ import { Scenario } from '../src/data/scenario';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
-import { e3UsesOwnRules, e3WithdrawalTick, offersUse } from '../src/game/e3ItemUse';
+import { e3UraniumTick, e3UsesOwnRules, e3WithdrawalTick, offersUse } from '../src/game/e3ItemUse';
 import { useItem } from '../src/game/itemUse';
 import { GameMode } from '../src/game/modes';
 import { GameSession } from '../src/game/session';
@@ -216,6 +216,36 @@ describe("Exile III's use_item (src/game/e3ItemUse.ts)", () => {
       expect(clock).toBeLessThanOrEqual(100);
     } finally {
       delete scen.featureFlags['skribbane'];
+    }
+  });
+
+  it('the Uranium bar rolls every 500th tick, bar or no bar, and diseases everyone on a 3', () => {
+    const s = inTown();
+    const party = s.univ.party;
+    scen.featureFlags['uranium'] = 'exile3:7';
+    const rng = s.univ.rng;
+    const realGetRan = rng.getRan.bind(rng);
+    let draws = 0;
+    rng.getRan = (n, lo, hi) => { draws++; return realGetRan(n, lo, hi); };
+    try {
+      const fired: number[] = [];
+      const run = (): void => {
+        const age = party.age - (party.age % 500);
+        party.age = age + 50_000;
+        e3UraniumTick(s, age, (node) => fired.push(node));
+      };
+      run();
+      // A hundred rolls, and nobody carries a bar.
+      expect(draws).toBe(100);
+      expect(fired).toEqual([]);
+      held(s, 110, 0, { variety: ItemType.NON_USE_OBJECT, ability: ItemAbil.OCCASIONAL_STATUS });
+      run();
+      expect(fired.length).toBeGreaterThan(0);
+      expect(fired.every((n) => n === 7)).toBe(true);
+      expect(party.pcs.some((pc) => (pc.status[Status.DISEASE] ?? 0) > 0)).toBe(true);
+    } finally {
+      rng.getRan = realGetRan;
+      delete scen.featureFlags['uranium'];
     }
   });
 

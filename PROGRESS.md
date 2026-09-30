@@ -14739,53 +14739,55 @@ Mindduel's crystal check (`1018:2dde`) was one of those.
   (message 0x34:0x27, sound 3), `alchemy` = `exile3` and `balm` =
   `exile3`. **Nothing reads those three yet.**
 
-**Still to do (next session, in this order):**
-1. **Exploding missiles** (E3 code 92, `1018:3bd6`): the ammo's own byte,
-   then a fixed type 54 = **4d6 fire**, radius 2 (pattern `10f8:07da`,
-   checked), where the port runs `strength × 2` d6 (the Exploding Arrows'
-   bladbase 25 gives 50d6). In `missiles.ts`, where it tests
-   `ItemAbil.EXPLODING_WEAPON`: for `ammo.e3Ability >= 0`, test code 92 and
-   use 4 dice of fire.
-2. **Uranium bar** (110, `1010:5e72`): every 500 turns E3 *always* rolls
-   `get_ran(1,0,5)`; on 3, if anyone carries code 110, it shows the node and
-   gives every PC `disease(2)`. Add `e3UraniumTick` beside
-   `e3WithdrawalTick` in `specialIncreaseAge.ts`, and skip `e3Ability >= 0`
-   items in BoE's OCCASIONAL_STATUS loops (`increaseAge.ts:309`,
-   `rest.ts:73`).
-3. **Alchemy** (flag `alchemy`, `10b0:88f4`). E3's 17 recipes are BoE's
-   first 17 in order, with the same difficulties (`DS:30fe`) and the same
-   fail table (`DS:3120`: 50,40,30,20,10,8,6,4,2,0…). The differences:
-   - ingredients by E3 code (`DS:30ba` / `DS:30dc`:
-     52,53,52,53,55,54,54,55,58,55,58,52,58,56,57,56,56 /
-     0,0,0,55,0,0,0,54,0,54,52,55,53,0,0,55,57), so Wormgrass and Asp Fangs
-     (both 55) are interchangeable, and recipes 9 (Weak Power:
-     55 + **54**) and 11 (Strong Poison: **52** + 55) differ from BoE's;
-   - the product is E3's own item (`DS:3148`:
-     272,273,176,276,177,265,256,268,350,274,285,178,257,179,351,266,217),
-     identified, its charges + 1 at skill − difficulty ≥ 5 and + 1 more at
-     ≥ 11;
-   - the picture moves by `get_ran(1,0,2)` only if the product is a potion;
-   - the roll is `get_ran(1,0,100)` on the raw Alchemy skill, failure when
-     it is under the table's figure, and a failure draws `get_ran(1,0,1)`.
-   Add an E3 branch to `game/alchemy.ts` `makePotion`, and a test that
-   reads the tables from the EXE.
-4. **Resurrection Balm** (13, flag `balm`): E3's Raise Dead (0x28) and
-   Resurrect (0x38) look for the balm with `1070:06f4`, which returns 24 for
-   "none", **but compare the result with 16** (`10b0:57cf`). So no balm, no
-   refusal: `1070:0b93` "takes" slot 24 and the spell goes on. A balm
-   anywhere but slot 16 is used up; one in slot 16 gets "needs a balm". Port
-   exactly that in `spellTown.ts` (RAISE_DEAD/RESURRECT). New
-   **E3-SUSPECTED-BUGS #16**, whose fix under the preference requires the
-   balm.
-5. **New E3-SUSPECTED-BUGS #15**: the Steel Razordisks come 8 to a stack
-   and return, and a returning missile's charges are set to 1, so the stack
-   drops to 1 after one throw (E3's `1018:3b8x`, and BoE's too). Probably
-   meant: a returning missile keeps its charges. Wire it under the
-   preference in `missiles.ts` `spendAmmo`. Extend #12's entry to cover
+**Then, the same day, all six done.** Every E3 item ability now runs by
+E3's rule or by a BoE rule E3's code was checked against. The items page
+shows **70 differ, 22 partly, 0 unread**, and its Unread chip is hidden
+while it is empty.
+1. **Exploding missiles** (92, `missiles.ts`): the blast is 4d6 fire,
+   radius 2, whatever the arrow. **A port bug found beside it and fixed**:
+   the exploding branch returned before `spendAmmo`, so exploding arrows
+   never ran out. OBoE spends after both branches (boe.combat.cpp:1738).
+2. **Uranium bar** (110, `e3UraniumTick` in `e3ItemUse.ts`, called from
+   `specialIncreaseAge.ts`): the always-made roll, the node, then
+   `disease(2)` for all six. BoE's OCCASIONAL_STATUS loops skip E3 items.
+   New helpers `e3AbilSlot` (`1070:06f4`) and `e3PartyHasAbil`
+   (`1070:0752`) in `inventory.ts`. *Gotcha*: a queued `fire` winds
+   `party.age` back, so a tick loop must read the age before it starts.
+3. **Alchemy** (`e3MakePotion` in `alchemy.ts`, tables `E3_ALCHEMY`,
+   checked against DGROUP by a test). E3 has 1997's dice (`get_ran(1,0,100)`,
+   plus a `get_ran(1,0,1)` on failure) and 1997's stale second slot
+   (**E3-SUSPECTED-BUGS #17**). With no room, E3 says "No room in
+   inventory." and the potion is lost.
+4. **Resurrection Balm** (`e3TakeBalm` in `inventory.ts`): the slot-16
+   compare, as planned, plus one thing the plan missed. E3's
+   `take_item(pc, 24)` shifts nothing and then **empties slot 23**, so
+   casting without a balm destroys the caster's last pack item. E3 charges
+   the spell points before it looks (**#16**). **OBoE's `resurrection-balm`
+   scenario flag is wired too** (it was "not yet" in DIVERGENCES.md): the
+   caster must carry one, and it is checked before the charge.
+5. **#15** is wired in `spendAmmo` for E3 items. #12's entry now covers
    trap disarming.
-6. **The items page** (`src/pages/items/e3ItemRules.ts`): turn every
-   entry above from `boe(...)` into E3 rules citing these addresses, with
-   verdicts: 9, 25, 46, 49, 65, 93, 122, 17, 68 agree; 92, 110, 52–58,
-   13 differ; 61 also counts in traps. Update DIVERGENCES #23. Test
-   `e3Trap.ts` (the disarm sums, a strong dart's +3, flames at 15d8), and
-   run `verify-screen.mjs`.
+6. **The items page** has every entry rewritten (`same(...)` for the nine
+   that match BoE), DIVERGENCES #23 is updated, and `test/e3Trap.test.ts`
+   covers the disarm sum at its boundary, a strong dart and 15d8 flames.
+
+**New, open for the user: DIVERGENCES #31.** 1997 and E3 spend a missile
+*before* testing range and sight, so a refused shot loses an arrow, and an
+exploding arrow can't be refused at all. OBoE, and this port, spend only on
+a shot that flies. Also noted there and not ported: E3's last exploding
+arrow doesn't explode, because E3 re-reads the slot after the stack runs out.
+
+**Unchecked leads**: E3's `disease_pc` (`10b0:183a`) saves on
+`get_ran(1,0,100)`, where `Player.disease` rolls 1–100. That is dice only,
+and not ported. E3 prints a stale scratch line after "Need resurrection
+balm." (`10b0:5a0c`), also not ported.
+
+All checks pass (2026-09-29): 1,494 tests, tsc, both sweeps, verify-screen,
+verify-party and verify-e3. **Corpus re-run**: 51 of 87 files agree all
+the way, none parts on a rule, and 24 are finished, all as before.
+(`VoDT_04-05-2025_14-17-38` came back "not comparable" once, because a save
+dump was printed into the middle of a draw line. A fresh run of that one file
+matched all 10,518 of its draws.)
+**Next session starts here**: the user's rulings on DIVERGENCES #30 and #31
+and on E3-SUSPECTED-BUGS #15–17; then TODO(M9) (5), TODO(campaign) (4) and
+TODO(M8) (1).

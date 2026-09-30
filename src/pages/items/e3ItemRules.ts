@@ -8,9 +8,10 @@
  * it: `game/e3ItemUse.ts` (E3's `use_item`, `10c0:2c92`), `game/e3Items.ts`
  * (its attack, damage and once-a-round rules), and the wards in
  * `universe/player.ts`, `universe/inventory.ts`, `game/doors.ts` and
- * `game/increaseAge.ts`. Where no E3 rule has been ported, the engine still
- * applies BoE's rule for the BoE ability, and the entry says so ("unread"):
- * those are the places E3's own code hasn't been checked.
+ * `game/increaseAge.ts`. Where E3's code was read and found to match BoE's
+ * rule for the BoE ability, the engine runs BoE's and the entry says so
+ * (`same`). Every code in E3's item table has been read (2026-09-29); an
+ * "unread" verdict is left only for a code with no entry at all.
  *
  * **Keep these in step with the rules.** `test/e3ItemRules.test.ts` fails
  * when an E3 item has a code with no entry, or a Use case has no entry.
@@ -26,7 +27,7 @@ import { E3_USE_CODE } from '../../game/e3ItemUse';
  * - `agrees`: the item sheet's words fit what the code does.
  * - `partly`: they name the right idea but miss or misstate part of it.
  * - `differs`: they say something the code doesn't do.
- * - `unread`: the engine runs BoE's rule for it; E3's own is not yet read.
+ * - `unread`: a code with no entry here; nothing is known about it.
  * - `none`: nothing to compare (no ability either way).
  */
 export type Verdict = 'agrees' | 'partly' | 'differs' | 'unread' | 'none';
@@ -58,7 +59,6 @@ const USE = 'e3ItemUse.ts · use_item 10c0:2c92';
 const ATTACK = 'e3Items.ts · calc_spec_dam 1018:1915';
 const ROUND = 'e3Items.ts · combat round 1018:43f2';
 const DAMAGE = 'e3Items.ts · damage_pc 10b0:9676';
-const BOE = 'BoE rule (no E3 rule ported)';
 
 const mon = (scen: Scenario, n: number): string => scen.scenMonsters[n]?.name || `monster ${n}`;
 const re = (s: string): RegExp => new RegExp(s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
@@ -84,19 +84,18 @@ function worn(effect: string, where: string, agrees?: RegExp, note?: string, ver
   return { effect: () => effect, where, agrees, note, verdict };
 }
 
-/** BoE's rule for the BoE ability, which the engine still applies. */
-function boe(effect: string, agrees: RegExp, where: string): Rule {
+/** An ingredient of E3's alchemy (`10b0:88f4`, `DS:30ba`/`DS:30dc`). */
+function ingredient(recipes: string, sheet: RegExp, note?: string): Rule {
   return {
-    effect: () => effect,
-    where: `${BOE} · ${where}`,
-    agrees,
-    verdict: 'unread',
-    note: 'The engine applies BoE’s rule for this ability; Exile III’s own code for it hasn’t been read yet.',
+    effect: () => `An alchemy ingredient, found by its E3 code: ${recipes}.`,
+    where: 'alchemy.ts · e3MakePotion 10b0:88f4', agrees: sheet, note,
   };
 }
 
-const ALCHEMY = (it: Item): string =>
-  `An alchemy ingredient. BoE’s recipes look for it by its BoE ability (${it.fullName}).`;
+/** A BoE ability whose rule E3's own code was read and found to match. */
+function same(effect: string, where: string, agrees: RegExp): Rule {
+  return { effect: () => effect, where: `${where} (E3’s rule matches BoE’s)`, agrees };
+}
 
 const RULES: Record<number, Rule> = {
   0: { effect: () => 'No ability.', where: '—' },
@@ -114,7 +113,8 @@ const RULES: Record<number, Rule> = {
       '(its Nimble Fingers test is inverted — E3-SUSPECTED-BUGS #12).',
     where: `${USE} · poisonWeapon.ts`, agrees: /poison weapon/i,
   },
-  9: boe('Saves the wearer from death once, then is used up (BoE’s Life Saving).', /life saving/i, 'damage.ts'),
+  9: same('Saves the wearer from death once, then is used up. Not from being turned to stone.',
+    'damage.ts · kill_pc 10b0:9e2d', /life saving/i),
   10: {
     effect: () => '“You have a vision.” Reveals the whole town map. (1997 added a town flag that blocks it; E3 has none.)',
     where: USE, agrees: /magic map/i,
@@ -125,16 +125,20 @@ const RULES: Record<number, Rule> = {
     where: 'doors.ts · pick-lock = exile3 (10d8:3f67)', agrees: /lockpick/i,
   },
   12: { effect: (it) => `“You have light.” Adds ${it.itemLevel * 50} to the party’s light.`, where: USE, agrees: /light/i },
-  13: { effect: ALCHEMY, where: `${BOE} · alchemy.ts`, agrees: /resurrection balm/i, verdict: 'unread',
-    note: 'Used by BoE’s alchemy recipes; E3’s own alchemy hasn’t been compared.' },
+  13: {
+    effect: () => 'Raise Dead and Resurrect use it up, but E3 compares the slot it finds with 16 where “none” is 24: ' +
+      'without a balm the spell works anyway and the caster’s last pack slot is emptied, and only a balm in ' +
+      'slot 16 is refused (E3-SUSPECTED-BUGS #16). Alchemy makes it (recipe 14).',
+    where: 'inventory.ts · e3TakeBalm 10b0:57cf', agrees: /resurrection balm/i, verdict: 'partly',
+    note: 'The sheet implies the spells need it; in E3 they almost never do.',
+  },
   14: {
     effect: () => 'Cursed: once equipped it can’t be taken off (E3 1070:1320). No ability beyond its ordinary numbers.',
     where: 'inventory.ts · E3 code 14',
   },
   15: { effect: (it) => `“You feel strange.” Magic resistance +${it.itemLevel + 6}–${it.itemLevel + 9}.`, where: USE },
   16: worn('Halves FIRE damage taken while worn.', DAMAGE, /fire protection/i),
-  17: { effect: ALCHEMY, where: `${BOE} · alchemy.ts`, agrees: /sapphire/i, verdict: 'unread',
-    note: 'Used by BoE’s alchemy recipes; E3’s own alchemy hasn’t been compared.' },
+  17: same('Magic Map needs one in the pack and spends a charge of it.', 'spellTown.ts · 10b0:3f86', /sapphire/i),
   18: { effect: (it) => `“You feel stronger.” Blessed by ${it.itemLevel * 2 + 3}.`, where: USE, agrees: /^bless/i },
   19: cast(Spell.POISON, 'A green ray emerges.'),
   20: { effect: (it) => `“Your energy increases.” Restores ${it.itemLevel * 15 + 15} spell points.`, where: USE, agrees: /restore spell/i },
@@ -145,7 +149,8 @@ const RULES: Record<number, Rule> = {
   22: cast(Spell.FIRESTORM, 'You fling a missile.'),
   23: cast(Spell.KILL, 'It turns black and hums.'),
   24: { effect: () => '“You are healed fully.” Heals 200 health.', where: USE, agrees: /^heal/i },
-  25: boe('Protects the wearer from being turned to stone (BoE’s rule).', /petrify/i, 'damage.ts'),
+  25: same('Worn, it makes the save against being turned to stone certain (the roll becomes 20).',
+    'damage.ts · 1018:7101', /petrify/i),
   26: { effect: (it) => `“You speed up.” Hasted by ${it.itemLevel + 2}.`, where: USE, agrees: /haste/i },
   27: {
     effect: (it) => `“You feel strange.” Invulnerable for ${it.itemLevel + 6}–${it.itemLevel + 7} rounds.`,
@@ -190,30 +195,39 @@ const RULES: Record<number, Rule> = {
   43: cast(Spell.STRENGTHEN_TARGET, 'It shoots a fiery red ray.'),
   44: cast(Spell.DISPEL_UNDEAD, 'It shoots a white ray.'),
   45: cast(Spell.RAVAGE_SPIRIT, 'It shoots a golden ray.'),
-  46: boe('Regenerates health over time by BoE’s rule, at the bladbase strength.', /regenerate/i, 'increaseAge.ts, rest.ts'),
+  46: {
+    effect: (it) => `Worn, regenerates 0–${it.itemLevel + 1} health a turn (outdoors, 1 turn in 11, four times as much).`,
+    where: 'increaseAge.ts, rest.ts (E3’s level + 1 is bladbase’s strength / 3)', agrees: /regenerate/i,
+  },
   47: worn('Now and then in combat (1 in 11 a round) blesses the wearer by 1.', ROUND, /bless/i),
   48: worn('Halves undead damage, and wards off an undead touch’s drain, stun and icy chill.',
     `${DAMAGE} · monsterAbilities.ts`, /undead/i),
-  49: boe('Adds to weapon poison applied (BoE’s Poison Augment: +2 melee, +1 missiles).', /poison augment/i, 'combat.ts, missiles.ts'),
+  49: same('Worn, adds to weapon poison applied: +2 in melee, +1 with missiles.', 'combat.ts, missiles.ts', /poison augment/i),
   50: worn('Adds 25–35 damage against demons, and halves demon damage taken while wielded.', `${ATTACK} · ${DAMAGE}`,
     /demon/i, 'The sheet names only the slaying half; the ward against demons is not mentioned.', 'partly'),
   51: worn('Adds 20–31 damage against giants.', ATTACK, /giant/i),
-  52: { effect: ALCHEMY, where: `${BOE} · alchemy.ts`, agrees: /holly/i, verdict: 'unread', note: 'Used by BoE’s alchemy recipes; E3’s own alchemy hasn’t been compared.' },
-  53: { effect: ALCHEMY, where: `${BOE} · alchemy.ts`, agrees: /comfrey/i, verdict: 'unread', note: 'Used by BoE’s alchemy recipes; E3’s own alchemy hasn’t been compared.' },
-  54: { effect: ALCHEMY, where: `${BOE} · alchemy.ts`, agrees: /nettle/i, verdict: 'unread', note: 'Used by BoE’s alchemy recipes; E3’s own alchemy hasn’t been compared.' },
-  55: { effect: ALCHEMY, where: `${BOE} · alchemy.ts`, agrees: /wormgrass|asptongue/i, verdict: 'unread', note: 'Two E3 items share this code but carry different BoE ingredients (Wormgrass, Asptongue). Used by BoE’s recipes; E3’s own alchemy hasn’t been compared.' },
-  56: { effect: ALCHEMY, where: `${BOE} · alchemy.ts`, agrees: /mandrake/i, verdict: 'unread', note: 'Used by BoE’s alchemy recipes; E3’s own alchemy hasn’t been compared.' },
-  57: { effect: ALCHEMY, where: `${BOE} · alchemy.ts`, agrees: /ember/i, verdict: 'unread', note: 'Used by BoE’s alchemy recipes; E3’s own alchemy hasn’t been compared.' },
-  58: { effect: ALCHEMY, where: `${BOE} · alchemy.ts`, agrees: /graymold/i, verdict: 'unread', note: 'Used by BoE’s alchemy recipes; E3’s own alchemy hasn’t been compared.' },
+  52: ingredient('Weak Curing (1), Weak Poison (3), Strong Poison (12, with a 55)', /holly/i),
+  53: ingredient('Weak Healing (2), Weak Speed (4, with a 55), Strong Healing (13, with a 58)', /comfrey/i),
+  54: ingredient('Medium Healing (6), Strong Curing (7), Medium Speed (8, with a 55), Weak Energy (10, with a 55)', /nettle/i, 'BoE’s Weak Power wants Asptongue with the Wormgrass; E3’s wants this.'),
+  55: ingredient('Medium Poison (5), and the second ingredient of Weak Speed, Medium Speed, Weak Energy, Strong Poison and Medium Energy', /wormgrass|asptongue/i, 'Wormgrass and Asp Fangs are both code 55, so E3 takes either where a recipe wants one.'),
+  56: ingredient('Killer Poison (14), Medium Energy (16, with a 55), Brew of Knowledge (17, with a 57)', /mandrake/i),
+  57: ingredient('Resurrection Balm (15), and Brew of Knowledge with a 56', /ember/i),
+  58: ingredient('Graymold Salve (9), Clarity (11, with a 52), Strong Healing with a 53', /graymold/i),
   59: { effect: () => '“You apply the salve.” Takes 3 off every PC’s disease.', where: USE, agrees: /cure disease/i },
   60: { effect: () => '“That’s good stuff! (Hic.)” Curses the drinker by 3.', where: USE },
-  61: worn('Picking a lock is 12 easier — but only in the first sixteen pack slots.', 'doors.ts · 10d8:3f67', /thiev/i),
+  61: worn('Picking a lock is 12 easier, worn in the first sixteen pack slots; worn anywhere, +2 to the skill for disarming a trap.',
+    'doors.ts · 10d8:3f67 · e3Trap.ts 10e0:03ae', /thiev/i),
   63: { effect: () => '“You feel light headed.” Loses 10–100 experience.', where: USE, agrees: /drain experience/i },
-  65: boe('A missile that comes back: throwing or firing it spends no charge (BoE’s rule).', /returning/i, 'missiles.ts'),
+  65: {
+    effect: () => 'A missile that comes back: a throw sets its charges to 1 rather than spending one, so a stack ' +
+      'drops to one after the first throw (E3-SUSPECTED-BUGS #15).',
+    where: 'missiles.ts · spendAmmo 1018:3b1e', agrees: /returning/i, verdict: 'partly',
+    note: 'True of a single dart or arrow; the Steel Razordisks lose all but one.',
+  },
   66: worn('Halves COLD damage taken while worn.', DAMAGE, /cold protection/i),
   67: worn('Cures disease: while worn, disease runs straight to 0, and none is caught.',
     'increaseAge.ts · E3 code 67', /disease/i),
-  68: { effect: ALCHEMY, where: `${BOE} · alchemy.ts`, agrees: /smoky/i, verdict: 'unread', note: 'Used by BoE’s alchemy recipes; E3’s own alchemy hasn’t been compared.' },
+  68: same('Mindduel needs one in the pack and spends a charge of it.', 'spellCombatTarget.ts · 1018:2dde', /smoky/i),
   70: worn('Missiles only: the first one worn adds its level + 1 to the hit bonus (5% each), and nothing to damage.',
     'e3Items.ts · e3MissileHitBonus 1018:38ba', /accuracy/i),
   71: summon((it, scen) => `${it.itemLevel + 1} × ${mon(scen, 99 + Math.trunc(it.itemLevel / 2))} for 6–24 rounds`),
@@ -244,8 +258,12 @@ const RULES: Record<number, Rule> = {
   89: summon((_, scen) => `a ${mon(scen, 14)}, then ${mon(scen, 13)}s, for 6–24 rounds; the loop tests i against a fresh 4–6 roll each time round, so usually 2–5 in all`),
   90: cast(Spell.SHOCKSTORM, 'Sparks fly.'),
   91: summon((_, scen) => `${mon(scen, 103)} for 6–24 rounds`),
-  92: boe('Explodes on hitting (BoE’s Exploding Weapon, at the bladbase strength).', /explodes/i, 'combat.ts, missiles.ts'),
-  93: boe('Missiles fired with it spend a charge twice (BoE’s Drain Missiles).', /drain missiles/i, 'missiles.ts'),
+  92: {
+    effect: () => 'Missiles only: never rolls to hit; bursts on the square for 4d6 fire in a radius of 2, whatever the arrow.',
+    where: 'missiles.ts · 1018:3bd6', agrees: /explod/i, verdict: 'partly',
+    note: 'BoE’s Exploding Weapon would roll strength × 2 dice, 50d6 at bladbase’s 25; E3’s blast is fixed.',
+  },
+  93: same('Worn, missiles fired spend a second charge (none for a returning missile).', 'missiles.ts · 1018:3b24', /drain missiles/i),
   94: worn('+1 action point in combat.', 'e3Items.ts · e3ActionPoints 10b0:a0ce', /speed/i),
   95: worn('Cursed. Now and then in combat (1 in 11 a round) “starts dancing!”: curse 2. No action points lost.',
     ROUND, /dancing|curse/i, 'The sheet says Slow Wearer, which in BoE costs action points; E3’s boots never do.'),
@@ -260,8 +278,12 @@ const RULES: Record<number, Rule> = {
   101: worn('', 'e3Items.ts · e3AttackAdj 1018:0edd', undefined),
   102: { effect: () => 'No ability: a quest object.', where: '—' },
   103: { effect: () => 'No ability: a quest object.', where: '—' },
-  110: boe('Every 500 turns, 1 in 6: the whole party catches disease (BoE’s Occasional Status, bladbase strength).',
-    /disease/i, 'increaseAge.ts'),
+  110: {
+    effect: () => 'Carried by anyone living: every 500 turns, 1 in 6, a message and disease 2 for every PC. ' +
+      'The roll is made whether or not anyone has one.',
+    where: 'e3ItemUse.ts · e3UraniumTick 1010:5e72', agrees: /disease/i, verdict: 'partly',
+    note: 'BoE’s Occasional Status rolls per bar and diseases by the bladbase strength, 3; E3’s is one roll, disease 2.',
+  },
   111: { effect: () => 'No ability: a quest object.', where: '—' },
   115: { effect: () => '“You are filled with battle lust!” Bless and haste set to 8 (not added).', where: USE, agrees: /bless|haste|battle/i },
   117: {
@@ -275,7 +297,7 @@ const RULES: Record<number, Rule> = {
   119: { effect: () => '“Everyone is now awake!” Wakes the whole party.', where: USE },
   120: worn('Immune to paralysis, and 2 off a sleep.', 'player.ts · sleep_pc 10b0:19dd', /free action/i),
   121: { effect: () => '“Your skin tingles refreshingly.” Ends acid.', where: USE, agrees: /acid/i },
-  122: boe('Protects from acid (BoE’s Status Protection, bladbase strength).', /acid/i, 'player.ts'),
+  122: same('Worn, the wearer can’t be covered in acid.', 'player.ts · acid', /acid/i),
   123: cast(Spell.CLOUD_SLEEP_LARGE, 'It creates a cloud of gas.'),
   124: cast(Spell.ACID_SPRAY, 'Acid sprays from the tip!'),
   125: cast(Spell.PARALYZE_BEAM, 'It shoots a silvery beam.'),

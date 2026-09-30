@@ -74,6 +74,8 @@ export function doRest(
     for (const pc of party.pcs) {
       for (const item of pc.items) {
         if (item.ability !== ItemAbil.OCCASIONAL_STATUS) continue;
+        // Exile III's Uranium bar, its one such item, goes by E3's rule (`e3UraniumTick`).
+        if (item.e3Ability >= 0) continue;
         if ((item.abilData as number) > 15) continue;
         if (!abilGroup(item)) continue;
         if (univ.rng.getRan(1, 0, 5) !== 3) continue;

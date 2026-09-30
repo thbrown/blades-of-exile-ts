@@ -46,6 +46,9 @@ export const KNOWN_BUGS: Readonly<Record<number, KnownBug>> = {
   11: { title: 'The Airy Stone weighs 236 once taken', ruling: 'bug' },
   12: { title: "Exile III's poisons and lock picking help everyone but the nimble", ruling: 'bug' },
   13: { title: 'Good Constitution does nothing to end disease in Exile III', ruling: 'undecided' },
+  15: { title: 'A stack of returning missiles drops to one after a throw', ruling: 'undecided' },
+  16: { title: 'Raise Dead and Resurrect need no Resurrection Balm', ruling: 'undecided' },
+  17: { title: "Alchemy takes the second ingredient's charge from the wrong item", ruling: 'undecided' },
 };
 
 let enabled = false;

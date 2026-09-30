@@ -61,6 +61,12 @@ export const E3Abil = {
    * poison and two off a sleep (the Ring of Resistance, Pachtar's Plate).
    */
   RESISTANCE: 127,
+  /** Exploding Arrows: the blast is 4d6 fire, whatever the arrow (`1018:3bd6`). */
+  EXPLODING: 92,
+  /** Uranium bar: now and then, disease for the whole party (`1010:5e72`). */
+  URANIUM: 110,
+  /** Resurrection Balm, spent by Raise Dead and Resurrect (`10b0:57cf`). */
+  BALM: 13,
 } as const;
 
 export { e3AbilEquip };

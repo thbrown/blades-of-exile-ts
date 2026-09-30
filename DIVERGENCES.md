@@ -595,6 +595,19 @@ The rest of E3's rules are the scenario's own, by flag, as `bash` is: Exile
 III's lock picking is `pick-lock` = `exile3` (`10d8:3f67`, in `doors.ts`),
 and its traps are mapped kind by kind in the converter (`SpecBuilder.trap`).
 
+And, 2026-09-29, **every item-ability test in EXILE3.EXE has been read** (all
+52 calls to its four item tests). Nine codes do what BoE's rule does and run
+by it: life saving, petrify, regeneration, poison augment, returning
+missiles, drain missiles, acid, and the Sapphire and Smoky Crystal as spell
+components. The rest now run E3's own rules. Exploding Arrows (92) burst for
+a fixed 4d6 fire (`missiles.ts`). The Uranium bar (110) is one roll every
+500 turns, made whether or not anyone carries one (`uranium` =
+`exile3:<node>`, `e3UraniumTick`). Alchemy (`alchemy` = `exile3`,
+`e3MakePotion`) uses E3's tables and 1997's dice. The Resurrection Balm (13)
+goes by E3's slot-16 test (`balm` = `exile3`, `e3TakeBalm`). Traps are
+`trap` = `exile3` (`e3Trap.ts`). E3-SUSPECTED-BUGS #15–17 are the new odd
+cases found.
+
 ### 24. A village falling to ruin (2026-09-28)
 
 **DECIDED: an exile-js opcode, `copy-ter` (206, TOWN), and a hidden town
@@ -705,6 +718,40 @@ lock picked, so it wants a flag, like `pick-lock`, if it is wanted.
 nimble. BoE's side is unchanged; the open question is only whether a BoE
 scenario should ever get 1997's inverted test.
 
+### 31. A missile spent before its range is checked (2026-09-29)
+
+**OPEN — for the user to rule on.** 1997's `fire_missile` (`COMBAT.C`) and
+Exile III's (`1018:38ba`) take the ammunition's charge *first*, then test
+the range and the line of sight, and an exploding arrow skips both tests:
+
+```c
+/* 1997 and E3 */                             // OBoE, boe.combat.cpp:1597
+charges--; (take_item at 0)                   if(dist(...) > range) "Out of range."
+if (exploding) { ...blast...; return; }       else if(can_see_light(...) >= 5) ...
+if (dist(...) > range) "  Out of range."      else { if(exploding) ... else ...
+else if (can_see(...) == 5) "Can't see"            ...; charges-- }
+```
+
+So in the original a shot out of range or out of sight loses an arrow, and an
+exploding arrow can be aimed anywhere at all, through walls. OBoE spends only
+on a shot that flies. A player could tell both. This port follows OBoE for
+every scenario, Exile III included; E3's other missile rules (its hit bonus,
+its blast) are E3's. Following the original would move no dice for a
+refused shot, but it changes ammunition counts that later turns read, so it
+would want a flag if it is wanted.
+
+Two smaller things found beside it:
+- **Fixed, a port bug**: the exploding branch returned before spending the
+  arrow, so exploding arrows never ran out. OBoE's charge loop comes after
+  both branches (boe.combat.cpp:1738), and 1997 spends up front, so both
+  references spend it.
+- E3 reads the ammunition slot again *after* spending, so the last exploding
+  arrow of a stack (taken out, the pack shifted up) doesn't explode, and the
+  shot goes on as an ordinary one with whatever moved into the slot. 1997
+  saved `exploding` first. Not ported. The one E3 stack is four arrows, and
+  that shot would need the whole ordinary path run on another item. Noted
+  here in case it matters.
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**
@@ -743,7 +790,7 @@ whether *this file* has checked it against 1997.
 | `pacifist-spellcast-check` | legacy "lets the player select combat spells and click 'Cast' which will fail" | not yet |
 | `store-spell-target` / `store-spell-caster` | "fixed" | not yet |
 | `conveyor-belts` | "Diagonal conveyor belts and big monster physics" | not yet — 3 corpus files refuse on it |
-| `resurrection-balm` | scenario-declared | not yet |
+| `resurrection-balm` | scenario-declared | **yes** (2026-09-29, `spellTown.ts`: the caster must carry a balm and uses it up; checked before the charge) |
 | `target-lock` V1/V2 | screen-shift policy when targeting | not yet — UI, likely no rules effect |
 | `talk-go-back` StackV1 | talk-mode history | not yet — UI |
 | `file-picker-dialog` V1 | in-game save picker | not yet — UI, but see the `pick-save` harness gap |

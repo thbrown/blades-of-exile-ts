@@ -1114,8 +1114,9 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     scan(scen.scenSpecials);
     for (const t of scen.towns) scan(t.specials);
     for (const row of scen.outdoors) for (const o of row) scan(o.specials);
-    // 11-13 are fixed in the engine: the Airy Stone, E3's nimble test and its disease roll.
-    const inEngine = new Set([11, 12, 13]);
+    // 11-13 and 15-17 are fixed in the engine: the Airy Stone, E3's nimble
+    // test, its disease roll, the returning stack, the balm and alchemy's slot.
+    const inEngine = new Set([11, 12, 13, 15, 16, 17]);
     const wired = Object.entries(KNOWN_BUGS).filter(([n, b]) => Number(n) < 100 && !b.unwired && !inEngine.has(Number(n)));
     expect([...named].sort((a, b) => a - b)).toEqual(wired.map(([n]) => Number(n)));
   });

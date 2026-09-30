@@ -24,10 +24,11 @@ import { ItemType, canUse, type Item } from '../data/item';
 import { Attitude, DamageType } from '../data/monster';
 import { SpellPat } from '../data/pattern';
 import { Spell } from '../data/spell';
-import { removeCharge } from '../universe/inventory';
+import { e3PartyHasAbil, removeCharge } from '../universe/inventory';
 import { MainStatus, PartyStatus, Skill, Status, Trait } from '../universe/skills';
 import type { Player } from '../universe/player';
 import { damagePc } from './damage';
+import { E3Abil } from './e3Items';
 import { GameMode } from './modes';
 import { summonMonster } from './monsterPlace';
 import { poisonWeapon } from './poisonWeapon';
@@ -118,6 +119,32 @@ export function e3WithdrawalTick(
     }
     party.setSdf(...HERB_ADDICTION, party.getSdf(...HERB_ADDICTION) - 1);
     if (party.getSdf(...HERB_ADDICTION) > 10) party.setSdf(...HERB_CLOCK, 100);
+  }
+}
+
+/**
+ * The Uranium bar (E3 code 110), from E3's clock (`1010:5e58`): on every
+ * five hundredth tick E3 *always* rolls `get_ran(1,0,5)` — a draw whether or
+ * not anyone has a bar — and on a 3, if a living PC carries one, it shows
+ * 0x34:0x27 (the `uranium` flag's node, fired through `fire`) and gives all
+ * six slots `disease(2)`, living or not, as E3's loop does (`disease_pc`
+ * itself skips the dead). BoE's OCCASIONAL_STATUS would roll once per bar
+ * and disease by the bladbase strength, 3; it leaves E3's items to this.
+ */
+export function e3UraniumTick(
+  session: GameSession, ageBefore: number, fire: (node: number, at: number) => void,
+): void {
+  const flag = session.univ.scenario.featureFlags['uranium'];
+  if (flag === undefined || !flag.startsWith('exile3:')) return;
+  const node = Number(flag.slice('exile3:'.length));
+  const { party, rng } = session.univ;
+  // Read once: a queued `fire` winds `party.age` back to `j`.
+  const age = party.age;
+  for (let j = ageBefore + 1; j <= age; j++) {
+    if (j % 500 !== 0) continue;
+    if (rng.getRan(1, 0, 5) !== 3 || !e3PartyHasAbil(party, E3Abil.URANIUM)) continue;
+    fire(node, j);
+    for (const p of party.pcs) p.disease(2, rng);
   }
 }
 

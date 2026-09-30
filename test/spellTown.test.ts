@@ -7,12 +7,13 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { GameRng } from '../src/core/rng';
 import { FieldType } from '../src/data/fields';
-import { ItemAbil, ItemType } from '../src/data/item';
+import { Item, ItemAbil, ItemType, defaultItem } from '../src/data/item';
 import { Scenario } from '../src/data/scenario';
 import { SPELLS, Spell } from '../src/data/spell';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
+import { setBugFixes } from '../src/game/bugFixes';
 import { GameMode } from '../src/game/modes';
 import { GameSession } from '../src/game/session';
 import { castSpell, doMageSpell, doPriestSpell, giveFood, increaseLight } from '../src/game/spellTown';
@@ -349,6 +350,71 @@ describe('do_priest_spell', () => {
     for (let i = 0; i < 30 && item.cursed; i++) doPriestSpell(s, 0, Spell.CURSE_REMOVE);
     expect(item.cursed).toBe(false);
     expect(item.unsellable).toBe(false);
+  });
+
+  describe('the Resurrection Balm', () => {
+    /** PC 0 casts Resurrect on the dead PC 1, with the scenario flags given. */
+    function resurrect(
+      flags: Record<string, string>, pack: (pc: Player) => void, fixed = false,
+    ): { s: GameSession; pc: Player; target: Player } {
+      const s = inTown();
+      const pc = caster(s);
+      for (let i = 0; i < pc.items.length; i++) pc.items[i] = defaultItem();
+      pack(pc);
+      const target = s.univ.party.pcs[1]!;
+      target.mainStatus = MainStatus.DEAD;
+      s.spellTarget = 1;
+      Object.assign(scen.featureFlags, flags);
+      setBugFixes(fixed);
+      try {
+        doPriestSpell(s, 0, Spell.RESURRECT);
+      } finally {
+        for (const k of Object.keys(flags)) delete scen.featureFlags[k];
+        setBugFixes(false);
+      }
+      return { s, pc, target };
+    }
+    const balm = (): Item => ({ ...defaultItem(), variety: ItemType.NON_USE_OBJECT,
+      ability: ItemAbil.RESURRECTION_BALM, e3Ability: 13, fullName: 'Balm', charges: 1 });
+    const cost = SPELLS[Spell.RESURRECT]?.cost ?? 0;
+
+    it('is not needed without a flag', () => {
+      const { target } = resurrect({}, () => {});
+      expect(target.mainStatus).toBe(MainStatus.ALIVE);
+    });
+
+    it('`resurrection-balm` needs one, uses it, and charges nothing without', () => {
+      const without = resurrect({ 'resurrection-balm': 'required' }, () => {});
+      expect(without.target.mainStatus).toBe(MainStatus.DEAD);
+      expect(without.pc.curSp).toBe(100);
+      expect(without.s.univ.transcript.at(-1)).toBe(`  ${without.pc.name} needs resurrection balm.`);
+      const withBalm = resurrect({ 'resurrection-balm': 'required' }, (pc) => { pc.items[3] = balm(); });
+      expect(withBalm.target.mainStatus).toBe(MainStatus.ALIVE);
+      expect(withBalm.pc.items.some((i) => i.e3Ability === 13)).toBe(false);
+    });
+
+    it("Exile III's refuses only a balm in slot 16, and without one empties slot 23", () => {
+      const e3 = { balm: 'exile3' };
+      const none = resurrect(e3, (pc) => { pc.items[23] = { ...balm(), e3Ability: 90, fullName: 'last' }; });
+      expect(none.target.mainStatus).toBe(MainStatus.ALIVE);
+      expect(none.pc.items[23]!.variety).toBe(ItemType.NO_ITEM);
+      const at16 = resurrect(e3, (pc) => { pc.items[16] = balm(); });
+      expect(at16.target.mainStatus).toBe(MainStatus.DEAD);
+      expect(at16.s.univ.transcript.at(-1)).toBe('  Need resurrection balm.');
+      // E3 charges before it looks.
+      expect(at16.pc.curSp).toBe(100 - cost);
+      const at3 = resurrect(e3, (pc) => { pc.items[3] = balm(); });
+      expect(at3.target.mainStatus).toBe(MainStatus.ALIVE);
+      expect(at3.pc.items[3]!.variety).toBe(ItemType.NO_ITEM);
+    });
+
+    it('with bug #16 fixed, Exile III requires the balm wherever it is', () => {
+      const e3 = { balm: 'exile3' };
+      expect(resurrect(e3, () => {}, true).target.mainStatus).toBe(MainStatus.DEAD);
+      const at16 = resurrect(e3, (pc) => { pc.items[16] = balm(); }, true);
+      expect(at16.target.mainStatus).toBe(MainStatus.ALIVE);
+      expect(at16.pc.items[16]!.variety).toBe(ItemType.NO_ITEM);
+    });
   });
 });
 

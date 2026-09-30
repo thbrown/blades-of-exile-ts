@@ -150,7 +150,7 @@ async function main(): Promise<void> {
     (() => {
       const s = document.createElement('span');
       s.append('Where the two part, the verdict says so. Read from ', repo,
-        ', which follow Exile III’s own code where it has been read.');
+        ', which follow Exile III’s own code: every item ability in it has been read.');
       return s;
     })(),
   ], 'items'));
@@ -238,7 +238,9 @@ function renderTable(card: HTMLElement, rows: Row[]): void {
     });
     return b;
   });
-  chips.append(...chipEls);
+  // Every E3 code has been read, so Unread is normally empty: show its chip
+  // only if an item turns up with a code that has no entry.
+  chips.append(...chipEls.filter((b) => b.dataset['v'] !== 'unread' || counts.has('unread')));
   const shown = el('span', 'shown');
   shown.setAttribute('aria-live', 'polite');
   controls.append(filter, group, sortSel, chips, shown);

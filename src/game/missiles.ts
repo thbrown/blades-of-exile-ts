@@ -24,11 +24,12 @@ import { Spell } from '../data/spell';
 import { placeSpellPattern } from './spellPatterns';
 import { takeAp } from './combat';
 import { onHitItemAbility, onHitTargetSpecial } from './weaponAbilities';
-import { e3MissileHitBonus, e3SpecDam } from './e3Items';
+import { E3Abil, e3MissileHitBonus, e3SpecDam } from './e3Items';
 import { damageMonst, damagePc, handleMarkedDamage, hitChance } from './damage';
 import { endBoomAnim, runBoomAnim, startBoomAnim } from './booms';
 import { animSettle } from './anim';
 import { drawTerrain } from './textBar';
+import { bugFixed } from './bugFixes';
 import { GameMode } from './modes';
 import type { GameSession } from './session';
 
@@ -313,9 +314,15 @@ export async function fireMissile(
     // A volley, as in `pc_attack_weapon`'s exploding blade and for the same
     // reason (boe.combat.cpp:1620).
     startBoomAnim();
+    // Exile III's blast takes nothing from the arrow: `1018:3c7b` pushes
+    // damage type 54, which its pattern code reads as 4d6 fire, where BoE's
+    // takes `strength × 2` dice (the Exploding Arrows' 25 would be 50d6).
+    const blast = ammo.e3Ability === E3Abil.EXPLODING
+      ? { type: DamageType.FIRE, dice: 4 }
+      : { type: ammo.abilData as DamageType, dice: ammo.abilStrength * 2 };
     try {
       await placeSpellPattern(session, SpellPat.RADIUS_2, aim, {
-        damage: { type: ammo.abilData as DamageType, dice: ammo.abilStrength * 2 },
+        damage: blast,
         whoHit: univ.curPc,
       });
     } finally {
@@ -329,6 +336,10 @@ export async function fireMissile(
     // spell), as Exile III's slime pools and Agate Tower do (`1018:9a2b`,
     // DIVERGENCES.md #27). OBoE's exploding missiles tell no square.
     if (univ.scenario.featureFlags['explode-spots'] === 'exile3') await session.castSpellOnSpace(aim, Spell.NONE);
+    // The arrow is spent like any other: the C++'s charge loop sits after
+    // both arms (boe.combat.cpp:1738). Only the poisoned-weapon countdown is
+    // skipped, behind its `if(!exploding)`.
+    spendAmmo(univ, loaded);
     return;
   }
 
@@ -442,7 +453,10 @@ function spendAmmo(univ: Universe, loaded: LoadedMissile): void {
   const ammo = firer.items[loaded.ammoSlot]!;
   if (ammo.variety === ItemType.MISSILE_NO_AMMO) return;
   if (ammo.ability !== ItemAbil.RETURNING_MISSILE) ammo.charges--;
-  else ammo.charges = 1;
+  // Exile III's Steel Razordisks come eight to a stack and return, so one
+  // throw leaves one (E3's `1018:3b1e` has the same `= 1`). With the bug
+  // fixed, a returning stack keeps its count (E3-SUSPECTED-BUGS.md #15).
+  else if (!(ammo.e3Ability >= 0 && bugFixed(15))) ammo.charges = 1;
   if (hasAbilEquip(firer, ItemAbil.DRAIN_MISSILES)
     && ammo.ability !== ItemAbil.RETURNING_MISSILE) ammo.charges--;
   if (ammo.charges <= 0) takeItem(firer, loaded.ammoSlot);

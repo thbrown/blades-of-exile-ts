@@ -573,6 +573,51 @@ export function e3AbilEquip(pc: Player, code: number): Item | null {
 }
 
 /**
+ * E3's `FUN_1070_06f4`: the first slot of `pc`'s pack, worn or not, holding
+ * an item with E3 ability `code`, or `NUM_INVEN_SLOTS` (24) for none — E3's
+ * own "none", which some callers compare against the wrong number
+ * (`10b0:57cf`, the Resurrection Balm).
+ */
+export function e3AbilSlot(pc: Player, code: number): number {
+  for (let i = 0; i < NUM_INVEN_SLOTS; i++) {
+    const item = pc.items[i]!;
+    if (item.variety !== ItemType.NO_ITEM && item.e3Ability === code) return i;
+  }
+  return NUM_INVEN_SLOTS;
+}
+
+/**
+ * Exile III's Resurrection Balm test for Raise Dead and Resurrect
+ * (`10b0:57cf`): false means "Need resurrection balm". E3 compares the slot
+ * with **16** where "none" is 24, so only a balm in slot 16 refuses. With no
+ * balm it calls `take_item(pc, 24)` (`1070:0b93`), which shifts nothing and
+ * then empties slot 23, so the spell goes on and the caster's last pack slot
+ * is lost. Under the bug fix (E3-SUSPECTED-BUGS.md #16) the balm is
+ * required, as in 1997's BoE.
+ */
+export function e3TakeBalm(pc: Player): boolean {
+  const slot = e3AbilSlot(pc, 13);
+  if (bugFixed(16)) {
+    if (slot === NUM_INVEN_SLOTS) return false;
+    takeItem(pc, slot);
+    return true;
+  }
+  if (slot === 16) return false;
+  if (slot === NUM_INVEN_SLOTS) {
+    pc.items[NUM_INVEN_SLOTS - 1] = defaultItem();
+    pc.equip[NUM_INVEN_SLOTS - 1] = false;
+    return true;
+  }
+  takeItem(pc, slot);
+  return true;
+}
+
+/** E3's `FUN_1070_0752`: whether a living PC carries an item with E3 ability `code`. */
+export function e3PartyHasAbil(party: Party, code: number): boolean {
+  return party.pcs.some((pc) => pc.isAlive && e3AbilSlot(pc, code) < NUM_INVEN_SLOTS);
+}
+
+/**
  * cPlayer::take_item (pc.cpp:916) — empty a slot. The pack has no holes in it:
  * everything below the slot shifts up, which is why the inventory list always
  * reads as a contiguous run.

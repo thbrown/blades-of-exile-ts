@@ -14,7 +14,10 @@ import { Scenario } from '../src/data/scenario';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
-import { alchemyChoices, hasAbil, hasSpace, makePotion } from '../src/game/alchemy';
+import { E3_ALCHEMY, alchemyChoices, hasAbil, hasSpace, makePotion } from '../src/game/alchemy';
+import { setBugFixes } from '../src/game/bugFixes';
+import { findE3Dir, readE3Files } from '../tools/e3convert/install';
+import { neAutoDataSegment, readNeSegment } from '../tools/e3convert/ne';
 import { GameSession } from '../src/game/session';
 import { NUM_INVEN_SLOTS, PartyPreset, Player } from '../src/universe/player';
 import { Skill, Status } from '../src/universe/skills';
@@ -238,5 +241,96 @@ describe('do_alchemy', () => {
     expect(hasAbil(pc, ItemAbil.COMFREY)).toBeNull();
     makePotion(s, 0, Alchemy.HEAL_WEAK);
     expect(s.univ.transcript.at(-1)).toContain("Don't have ingredients");
+  });
+});
+
+/** Exile III's `do_alchemy` (`10b0:88f4`), under the `alchemy` = `exile3` flag. */
+describe("Exile III's alchemy", () => {
+  /** An E3 plant: E3 ability `code`, BoE's ability left empty. */
+  function e3Plant(code: number, charges = 1): Item {
+    return { ...ingredient(ItemAbil.NONE, charges), e3Ability: code };
+  }
+
+  /** PC 0 with skill `skill` and the pack given, and the flag set for `body`. */
+  function withE3(skill: number, pack: Item[], body: (s: GameSession, pc: Player) => void): void {
+    const s = inTown();
+    const pc = s.univ.party.pcs[0]!;
+    clearPack(pc);
+    pc.skills[Skill.ALCHEMY] = skill;
+    pack.forEach((item, i) => { pc.items[i] = item; });
+    const saved = scen.scenItems.slice();
+    scen.featureFlags['alchemy'] = 'exile3';
+    for (const n of E3_ALCHEMY.product) {
+      scen.scenItems[n] = { ...defaultItem(), variety: ItemType.POTION, fullName: `E3 item ${n}`,
+        charges: 1, graphicNum: 60, e3Ability: 3 };
+    }
+    try {
+      body(s, pc);
+    } finally {
+      delete scen.featureFlags['alchemy'];
+      scen.scenItems = saved;
+      setBugFixes(false);
+    }
+  }
+
+  it("makes the scenario's own item, identified, with E3's extra charges", () => {
+    withE3(13, [e3Plant(53)], (s, pc) => {
+      makePotion(s, 0, Alchemy.HEAL_WEAK);
+      expect(s.univ.transcript.at(-1)).toBe('Alchemy: Successful.');
+      const potion = pc.items.find((i) => i.fullName === 'E3 item 273')!;
+      expect(potion.ident).toBe(true);
+      // Twelve over the difficulty: one more at five, another at eleven.
+      expect(potion.charges).toBe(3);
+      expect(potion.graphicNum).toBeGreaterThanOrEqual(60);
+      expect(potion.graphicNum).toBeLessThanOrEqual(62);
+      expect(pc.items.some((i) => i.e3Ability === 53)).toBe(false);
+    });
+  });
+
+  it('takes Asp Fangs where BoE wants Wormgrass: both are code 55', () => {
+    withE3(13, [e3Plant(55)], (s) => {
+      makePotion(s, 0, Alchemy.POISON_MED);
+      expect(s.univ.transcript.at(-1)).toBe('Alchemy: Successful.');
+    });
+  });
+
+  it('takes the second charge from a stale slot, unless bug #17 is fixed', () => {
+    // Speed (recipe 3) wants 53 then 55. The 53 runs out and the pack shifts
+    // up, so E3's second removal lands on the slot the 55 has left.
+    const other = (): Item => ({ ...ingredient(ItemAbil.NONE, 3), e3Ability: 90, fullName: 'other' });
+    for (const fixed of [false, true]) {
+      withE3(13, [e3Plant(53), e3Plant(55, 2), other()], (s, pc) => {
+        setBugFixes(fixed);
+        makePotion(s, 0, Alchemy.SPEED_WEAK);
+        const left = (code: number): number => pc.items.find((i) => i.e3Ability === code)!.charges;
+        expect(left(55)).toBe(fixed ? 1 : 2);
+        expect(left(90)).toBe(fixed ? 3 : 2);
+      });
+    }
+  });
+
+  it('rolls 0–100 on the raw skill, and a failure draws once more', () => {
+    withE3(1, [e3Plant(53)], (s) => {
+      const rolls: [number, number][] = [];
+      s.univ.rng.getRan = (_n, lo, hi) => { rolls.push([lo, hi]); return 0; };
+      makePotion(s, 0, Alchemy.HEAL_WEAK);
+      expect(s.univ.transcript.at(-1)).toBe('Alchemy: Failed.');
+      expect(rolls).toEqual([[0, 100], [0, 1]]);
+    });
+  });
+
+  const dir = findE3Dir();
+  it.skipIf(!dir)("matches the tables in EXILE3.EXE's DGROUP", () => {
+    const exe = readE3Files(dir!).exe;
+    const ds = readNeSegment(exe, neAutoDataSegment(exe));
+    const words = (at: number, n: number): number[] =>
+      Array.from({ length: n }, (_, i) => ds[at + 2 * i]! | (ds[at + 2 * i + 1]! << 8));
+    expect(words(0x30ba, 17)).toEqual(E3_ALCHEMY.ingred1);
+    expect(words(0x30dc, 17)).toEqual(E3_ALCHEMY.ingred2);
+    expect(words(0x30fe, 17)).toEqual(E3_ALCHEMY.difficulty);
+    expect(words(0x3120, 20)).toEqual(E3_ALCHEMY.fail);
+    expect(words(0x3148, 17)).toEqual(E3_ALCHEMY.product);
+    // And the difficulties are BoE's first seventeen.
+    expect(ALCHEMY_RECIPES.slice(0, 17).map((r) => r.difficulty)).toEqual(E3_ALCHEMY.difficulty);
   });
 });
