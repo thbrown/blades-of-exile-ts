@@ -471,6 +471,18 @@ function sectorMap(z: E3Outdoor, zone: number, strings: Map<number, string>, scr
   return mapFile(z.terrain, 48, marks);
 }
 
+/**
+ * A town's difficulty: the second string of its block, read as a number and
+ * held to 0–150, as E3's town loader does (`10d8:2089`–`20db`). It is
+ * `1160:0002`, which E3 reads in lock picking, bashing, traps and the chance
+ * of wandering monsters. 39 towns have the editor's "Diff" there; E3 parses
+ * that into an uninitialised word, taken here as 0.
+ */
+export function townDifficulty(strings: Map<number, string>, t: number): number {
+  const n = parseInt(strings.get(30002 + 20 * t) ?? '', 10);
+  return Number.isFinite(n) ? Math.max(0, Math.min(150, n)) : 0;
+}
+
 function townName(strings: Map<number, string>, t: number): string {
   // Each town has a 20-string block from 30001; the first is its name.
   const name = strings.get(30001 + 20 * t);
@@ -608,7 +620,7 @@ function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, st
     <size>${size}</size>
     <name>${esc(name)}</name>
     <bounds top="${r.top}" left="${r.left}" bottom="${r.bottom}" right="${r.right}" />
-    <difficulty>0</difficulty>
+    <difficulty>${townDifficulty(strings, t.number)}</difficulty>
     <lighting>${LIGHTING[t.lighting] ?? 'lit'}</lighting>
 ${script.entry >= 0 ? `    <onenter condition="alive">${script.entry}</onenter>\n    <onenter condition="dead">${script.entryDead}</onenter>\n` : ''}${script.hostile >= 0 ? `    <onoffend>${script.hostile}</onoffend>\n` : ''}${script.timers.map((tm) => `    <timer freq="${tm.freq}">${tm.node}</timer>\n`).join('')}    <flags>
 ${chopXml(t)}${tables.hidden(t.number) ? '        <hidden>true</hidden>\n' : ''}    </flags>
@@ -694,7 +706,7 @@ function scenarioXml(
   start: { town: number; loc: { x: number; y: number } },
   outStart: { sector: { x: number; y: number }; loc: { x: number; y: number } },
   shops: Shop[], specialItems: SpecItem[], specStrings: string[], newDay: number, roadJoins: number[],
-  jobBase: number, skribbane: number[], journal: string[], cursors: E3Cursor[], townCount: number,
+  jobBase: number, skribbane: number[], journal: string[], cursors: E3Cursor[], townCount: number, uranium: number,
 ): string {
   return `${XML_HEAD}<scenario boes="2.0.0">
     <title>Exile III: Ruined World</title>
@@ -712,6 +724,11 @@ function scenarioXml(
         <road-joins>${roadJoins.join(',')}</road-joins>
         <job-boards>exile3:${jobBase}</job-boards>
         <skribbane>exile3:${skribbane.join(',')}</skribbane>
+        <uranium>exile3:${uranium}</uranium>
+        <trap>exile3</trap>
+        <alchemy>exile3</alchemy>
+        <balm>exile3</balm>
+        <town-difficulty>exile3</town-difficulty>
         <monster-sightings>exile3</monster-sightings>
         <hostile-movers>${E3_HOSTILE_MOVERS}</hostile-movers>
         <town-timers>repeat</town-timers>
@@ -1063,12 +1080,15 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   // 0x14 (the first ten herbs), 0x15 (after) and 0x16 (withdrawal), each
   // `FUN_1008_37de(0x37, i, 57)`.
   const skribbane = [0x14, 0x15, 0x16].map((i) => scen.compile([scen.msg(0x37, i)]));
+  // The Uranium bar's message (src/game/e3Uranium.ts): `FUN_1008_37de(0x34,
+  // 0x27, 3)` at `1010:5e8b`.
+  const uranium = scen.compile([scen.msg(0x34, 0x27, 0, undefined, 3)]);
   // Last, since the places' scripts may add scenario strings and nodes.
   write('scenario.spec', scen.spec);
   // Last, since the places' scripts can add shops of their own.
   shops.push(...talk.shops);
   const cursors = readE3Cursors(resources);
-  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, skribbane, e3JournalStrings((id) => strings.get(id) ?? ''), cursors, townCount));
+  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, skribbane, e3JournalStrings((id) => strings.get(id) ?? ''), cursors, townCount, uranium));
   const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(read), ...e3MapSheets(read)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
   // E3's own sounds, which a scenario's `sounds/SNDn.wav` puts in place of

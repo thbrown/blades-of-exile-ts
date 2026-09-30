@@ -22,6 +22,7 @@ import { Spell, SPELLS, isPriestSide, spellName } from '../data/spell';
 import { TerSpec } from '../data/terrain';
 import { getProtLevel } from '../universe/inventory';
 import { livingSound } from '../universe/living';
+import type { Universe } from '../universe/universe';
 import { Skill, Trait } from '../universe/skills';
 import { SpecCtx } from './specials/context';
 import { unlockDoor } from './doors';
@@ -292,7 +293,7 @@ export async function castTownSpell(session: GameSession, where: Location): Prom
       // flag2 of 10 is the scenario designer's "never openable" marker.
       const r1 = terSpec.flag2 === 10
         ? 10000
-        : univ.rng.getRan(1, 1, 100) - 5 * adj + 5 * town.record.difficulty
+        : univ.rng.getRan(1, 1, 100) - 5 * adj + 5 * spellDifficulty(univ)
           + terSpec.flag2 * 7;
       if (r1 < 135 - combatPercent(level)) {
         univ.addStringToBuf('  Door unlocked.');
@@ -310,7 +311,7 @@ export async function castTownSpell(session: GameSession, where: Location): Prom
       const force = town.hasField(where.x, where.y, FieldType.BARRIER_FORCE);
       if (fire || force) {
         let r1 = univ.rng.getRan(1, 1, 100) - 5 * adj
-          + 5 * Math.trunc(town.record.difficulty / 10)
+          + 5 * Math.trunc(spellDifficulty(univ) / 10)
           + 25 * (town.record.strongBarriers ? 1 : 0);
         // A fire barrier is very slightly easier than a force one.
         if (fire) r1 -= 8;
@@ -338,4 +339,16 @@ export async function castTownSpell(session: GameSession, where: Location): Prom
         `  Error: Spell ${spellName(spell)} not implemented for town mode.`);
       break;
   }
+}
+
+/**
+ * The town difficulty the Unlock and Dispel Barrier spells read. With
+ * `town-difficulty` = `exile3` the town carries Exile III's own (0–150,
+ * `townDifficulty` in the converter), which E3 reads only in lock picking,
+ * bashing, traps and the wandering-monster roll — never in its spells — so
+ * these take none of it.
+ */
+function spellDifficulty(univ: Universe): number {
+  if (univ.scenario.featureFlags['town-difficulty'] === 'exile3') return 0;
+  return univ.town?.record.difficulty ?? 0;
 }

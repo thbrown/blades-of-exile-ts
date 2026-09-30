@@ -14,6 +14,7 @@ import { Race, Skill, Status, Trait } from '../universe/skills';
 import type { GameSession } from './session';
 import { damagePc, hitParty } from './damage';
 import { makeTownHostile } from './townAttitude';
+import { e3RunTrap } from './e3Trap';
 
 /** eTrapType (boe.consts.hpp:81). */
 export enum TrapType {
@@ -51,6 +52,8 @@ export async function runTrap(
   diff: number,
 ): Promise<boolean> {
   const univ: Universe = session.univ;
+  // Exile III's own trap, by the scenario's flag (e3Trap.ts).
+  if (univ.scenario.featureFlags['trap'] === 'exile3') return e3RunTrap(session, pcNum, trapType, trapLevel, diff);
   const rng = univ.rng;
   const numHits = 1 + trapLevel;
   const difficulty = univ.town?.record.difficulty ?? 0;

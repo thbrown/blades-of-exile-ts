@@ -14699,3 +14699,93 @@ licence rule holds. Both use the main menu's granite and marble
   stubs from fields.png, reaching into road or `road-joins` terrain, across
   sector edges). Wording: "Hits for 5–12 (−3 off hand); +10% hit chance",
   and the legend says bonuses add.
+
+### E3's "Unread" item abilities, read from EXILE3.EXE (2026-09-29)
+
+The items page's 28 "unread" items were the abilities the engine still ran by
+BoE's rule. **All 52 of E3's item-ability tests are now listed**: calls to
+`1070:0681` (worn), `1070:06f4` (in the pack), `1070:0752` (anyone in the
+party) and `1070:079e` (use one up), found with
+`nedis.py --all`, which also catches code Ghidra never made a function of.
+Mindduel's crystal check (`1018:2dde`) was one of those.
+(capstone in a venv: `python3 -m venv v && v/bin/pip install capstone`.)
+
+**Confirmed to match the port as it is:**
+- 9 life saving (`kill_pc` `10b0:9e2d`)
+- 25 petrify (`1018:7101`: 20)
+- 46 regeneration (E3's level + 1 equals bladbase's strength / 3)
+- 49 poison augment (+2 melee, +1 missile)
+- 65 returning (charges set to 1)
+- 93 Bow of Kag
+- 122 acid
+- 17 Sapphire (Magic Map, `10b0:3f86`)
+- 68 Smoky Crystal (Mindduel)
+
+**Done this session:**
+- **Town difficulty was missing**, a converter bug. E3 keeps it as the
+  second string of each town's block (`10d8:2089`, held to 0–150; 39 towns
+  have "Diff" = 0), and the converter wrote 0 for every town. It feeds E3's
+  lock picking and bashing (already E3 rules, so they now work as E3's),
+  both wandering-monster rolls (`1010:367d` long wait `== 10`, `1010:39e6`
+  per turn `== 2`, both BoE's already) and traps. `townDifficulty` in
+  `emit.ts` now emits it. The flag `town-difficulty` = `exile3` keeps the
+  Unlock and Dispel Barrier spells off it (E3's never read it;
+  `spellDifficulty` in `spellTarget.ts`).
+- **Traps by E3's rule**: `src/game/e3Trap.ts`, flag `trap` = `exile3`
+  (`10e0:03ae`). Covers the disarm formula (Thieving item +2, raw skills,
+  + 3 − difficulty / 10, roll 0–100, bug #12's Nimble inversion) and the
+  kind-by-kind effects; the file header lists the differences.
+- The converter also now writes the flags `uranium` = `exile3:<node>`
+  (message 0x34:0x27, sound 3), `alchemy` = `exile3` and `balm` =
+  `exile3`. **Nothing reads those three yet.**
+
+**Still to do (next session, in this order):**
+1. **Exploding missiles** (E3 code 92, `1018:3bd6`): the ammo's own byte,
+   then a fixed type 54 = **4d6 fire**, radius 2 (pattern `10f8:07da`,
+   checked), where the port runs `strength × 2` d6 (the Exploding Arrows'
+   bladbase 25 gives 50d6). In `missiles.ts`, where it tests
+   `ItemAbil.EXPLODING_WEAPON`: for `ammo.e3Ability >= 0`, test code 92 and
+   use 4 dice of fire.
+2. **Uranium bar** (110, `1010:5e72`): every 500 turns E3 *always* rolls
+   `get_ran(1,0,5)`; on 3, if anyone carries code 110, it shows the node and
+   gives every PC `disease(2)`. Add `e3UraniumTick` beside
+   `e3WithdrawalTick` in `specialIncreaseAge.ts`, and skip `e3Ability >= 0`
+   items in BoE's OCCASIONAL_STATUS loops (`increaseAge.ts:309`,
+   `rest.ts:73`).
+3. **Alchemy** (flag `alchemy`, `10b0:88f4`). E3's 17 recipes are BoE's
+   first 17 in order, with the same difficulties (`DS:30fe`) and the same
+   fail table (`DS:3120`: 50,40,30,20,10,8,6,4,2,0…). The differences:
+   - ingredients by E3 code (`DS:30ba` / `DS:30dc`:
+     52,53,52,53,55,54,54,55,58,55,58,52,58,56,57,56,56 /
+     0,0,0,55,0,0,0,54,0,54,52,55,53,0,0,55,57), so Wormgrass and Asp Fangs
+     (both 55) are interchangeable, and recipes 9 (Weak Power:
+     55 + **54**) and 11 (Strong Poison: **52** + 55) differ from BoE's;
+   - the product is E3's own item (`DS:3148`:
+     272,273,176,276,177,265,256,268,350,274,285,178,257,179,351,266,217),
+     identified, its charges + 1 at skill − difficulty ≥ 5 and + 1 more at
+     ≥ 11;
+   - the picture moves by `get_ran(1,0,2)` only if the product is a potion;
+   - the roll is `get_ran(1,0,100)` on the raw Alchemy skill, failure when
+     it is under the table's figure, and a failure draws `get_ran(1,0,1)`.
+   Add an E3 branch to `game/alchemy.ts` `makePotion`, and a test that
+   reads the tables from the EXE.
+4. **Resurrection Balm** (13, flag `balm`): E3's Raise Dead (0x28) and
+   Resurrect (0x38) look for the balm with `1070:06f4`, which returns 24 for
+   "none", **but compare the result with 16** (`10b0:57cf`). So no balm, no
+   refusal: `1070:0b93` "takes" slot 24 and the spell goes on. A balm
+   anywhere but slot 16 is used up; one in slot 16 gets "needs a balm". Port
+   exactly that in `spellTown.ts` (RAISE_DEAD/RESURRECT). New
+   **E3-SUSPECTED-BUGS #16**, whose fix under the preference requires the
+   balm.
+5. **New E3-SUSPECTED-BUGS #15**: the Steel Razordisks come 8 to a stack
+   and return, and a returning missile's charges are set to 1, so the stack
+   drops to 1 after one throw (E3's `1018:3b8x`, and BoE's too). Probably
+   meant: a returning missile keeps its charges. Wire it under the
+   preference in `missiles.ts` `spendAmmo`. Extend #12's entry to cover
+   trap disarming.
+6. **The items page** (`src/pages/items/e3ItemRules.ts`): turn every
+   entry above from `boe(...)` into E3 rules citing these addresses, with
+   verdicts: 9, 25, 46, 49, 65, 93, 122, 17, 68 agree; 92, 110, 52–58,
+   13 differ; 61 also counts in traps. Update DIVERGENCES #23. Test
+   `e3Trap.ts` (the disarm sums, a strong dart's +3, flames at 15d8), and
+   run `verify-screen.mjs`.
