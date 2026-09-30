@@ -720,20 +720,23 @@
         gap: 6px;
       }
       /* Each pad's size, offset and opacity are the player's
-         (platform/touchLayout.ts, View → Touch Controls Layout). */
+         (platform/touchLayout.ts, View → Touch Controls Layout). Opacity is
+         the buttons' own alpha, not the pad's `opacity`, so that 100% is a
+         solid button: the background takes it straight, and the arrows and
+         icons (`--ink`) never fade past legible. */
       .touch-actions {
         left: 8px;
         grid-template-columns: repeat(2, var(--pad));
         transform: translate(var(--tl-x, 0px), calc(-50% + var(--tl-y, 0px))) scale(var(--tl-scale, 1));
         transform-origin: left center;
-        opacity: var(--tl-opacity, 1);
+        --alpha: var(--tl-opacity, 0.6);
       }
       .touch-dpad {
         right: 8px;
         grid-template-columns: repeat(3, var(--pad));
         transform: translate(var(--tr-x, 0px), calc(-50% + var(--tr-y, 0px))) scale(var(--tr-scale, 1));
         transform-origin: right center;
-        opacity: var(--tr-opacity, 1);
+        --alpha: var(--tr-opacity, 0.6);
       }
       #touch-layout {
         position: fixed;
@@ -811,10 +814,11 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background: rgba(20, 20, 20, 0.38);
-        border: 1px solid rgba(255, 255, 255, 0.35);
+        --ink: calc(0.3 + 0.7 * var(--alpha, 0.6));
+        background: rgb(20 20 20 / var(--alpha, 0.6));
+        border: 1px solid rgb(255 255 255 / calc(0.2 + 0.5 * var(--alpha, 0.6)));
         border-radius: 8px;
-        color: rgba(255, 255, 255, 0.85);
+        color: rgb(255 255 255 / var(--ink));
         font: bold 22px 'BoEText', system-ui, sans-serif;
         touch-action: none;
         user-select: none;
@@ -826,15 +830,19 @@
         background: rgba(255, 255, 255, 0.3);
         border-color: rgba(255, 255, 255, 0.7);
       }
-      .touch-button.centre {
-        font-size: 16px;
+      /* The pad's arrows and middle (touchControls.ts), drawn centred. */
+      .touch-glyph {
+        display: block;
+        width: 55%;
+        height: 55%;
+        pointer-events: none;
       }
       /* Aiming: the middle fires, and the button for Space stands out. */
       .touch-button.centre.fire,
       .touch-button.aim {
-        background: rgba(120, 90, 10, 0.55);
-        border-color: rgba(255, 220, 0, 0.8);
-        color: #ffe680;
+        background: rgb(120 90 10 / calc(0.25 + 0.75 * var(--alpha, 0.6)));
+        border-color: rgb(255 220 0 / var(--ink));
+        color: rgb(255 230 128 / var(--ink));
       }
       .touch-button.text {
         font-size: 13px;
@@ -842,7 +850,7 @@
       .touch-icon {
         width: 64%;
         image-rendering: pixelated;
-        opacity: 0.9;
+        opacity: var(--ink);
         pointer-events: none;
       }
       .touch-icon.wide {
@@ -932,10 +940,10 @@
         text-shadow: 0 1px 2px #000;
         padding: 0 2px;
       }
-      /* ◀ ▶ bottom left, mirroring ✕ and CAST bottom right. */
+      /* ◀ ▶ bottom right under the spells, mirroring ✕ and CAST bottom left. */
       .ts-steps {
         position: absolute;
-        left: 6px;
+        right: 6px;
         bottom: 6px;
         width: var(--strip);
         display: flex;
@@ -968,11 +976,11 @@
         font-size: 10px;
         opacity: 0.8;
       }
-      /* Cast and Cancel sit under the party, bottom right: the middle of
+      /* Cast and Cancel sit under the party, bottom left: the middle of
          the bottom is the dialog's own Other Spells, Cancel and Cast. */
       .ts-foot {
         position: absolute;
-        right: 6px;
+        left: 6px;
         bottom: 6px;
         width: var(--strip);
         display: flex;
@@ -1015,10 +1023,15 @@
       #touch-dialog .td-strip {
         bottom: 6px;
       }
+      /* The talk screen's presets sit level with the movement pad they
+         replace, following it up or down (--tr-y), rather than at the top. */
+      .td-pairs {
+        translate: 0 var(--tr-y, 0px);
+      }
       .td-pairs .ts-list {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        align-content: start;
+        align-content: safe center;
       }
       .td-pairs .td-btn {
         padding: 2px 4px;
@@ -1054,158 +1067,49 @@
         color: #000;
         min-width: 0;
       }
-      /* The inventory and party as sheets for a finger
-         (platform/touchSheet.ts): over everything but the menu bar. */
+      /* The party and inventory panels blown up for a finger
+         (platform/touchSheet.ts): the panel itself, pixel for pixel, as
+         large as fits, over everything but the menu bar. */
       #touch-sheet {
         position: fixed;
         inset: var(--menu-h, 28px) 0 0 0;
         z-index: 8;
         display: flex;
+        align-items: center;
         justify-content: center;
-        background: rgba(0, 0, 0, 0.55);
-        font: 14px 'BoEText', system-ui, sans-serif;
-        color: #eee;
+        background: rgba(0, 0, 0, 0.7);
       }
       #touch-sheet[hidden] {
         display: none;
       }
-      .sheet-card {
-        display: flex;
-        flex-direction: column;
-        width: min(760px, 100%);
-        max-height: 100%;
-        box-sizing: border-box;
-        padding: 8px calc(10px + env(safe-area-inset-right, 0px)) 8px calc(10px + env(safe-area-inset-left, 0px));
-        background: rgba(28, 28, 28, 0.97);
-      }
-      .sheet-head {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-      .sheet-titles {
-        flex: 1;
-        min-width: 0;
-      }
-      .sheet-title {
-        font-weight: bold;
-        font-size: 15px;
-      }
-      .sheet-subtitle {
-        font-size: 12px;
-        color: #bbb;
-      }
-      .sheet-close {
-        flex: none;
-        width: 44px;
-        height: 40px;
-        font-size: 18px;
-      }
-      .sheet-tabs {
-        display: flex;
-        gap: 4px;
-        overflow-x: auto;
-        padding: 6px 0;
-        scrollbar-width: none;
-      }
-      .sheet-tab {
-        flex: none;
-        min-height: 36px;
-        padding: 0 12px;
-      }
-      .sheet-tab.on {
-        background: rgba(120, 90, 10, 0.75);
-        border-color: rgba(255, 220, 0, 0.85);
-        color: #ffe680;
-      }
-      .sheet-rows {
-        flex: 1;
-        min-height: 0;
-        overflow-y: auto;
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
-      .sheet-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 4px 6px;
-        border-radius: 6px;
-        background: rgba(255, 255, 255, 0.06);
-      }
-      .sheet-row.on {
-        outline: 1px solid rgba(255, 220, 0, 0.7);
-      }
-      .sheet-icon {
-        flex: none;
-        width: 28px;
-        height: 36px;
-        object-fit: contain;
+      .sheet-panel {
+        display: block;
         image-rendering: pixelated;
+        border: 1px solid #000;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.7);
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
       }
-      .sheet-text {
-        flex: 1;
-        min-width: 0;
-      }
-      .sheet-name {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      /* Equipped, in the item panel's colours: weapons pink, armour green. */
-      .sheet-name.equipped {
-        font-style: italic;
-        color: #9cc4ff;
-      }
-      .sheet-name.equipped.weapon {
-        color: #ff9cc8;
-      }
-      .sheet-name.equipped.armour {
-        color: #8fe08f;
-      }
-      .sheet-detail {
-        font-size: 11px;
-        color: #aaa;
-      }
-      .sheet-actions {
-        flex: none;
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: 4px;
-      }
-      .sheet-act,
-      .sheet-tab,
       .sheet-close {
-        font: inherit;
-        color: #eee;
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.3);
+        position: absolute;
+        top: 6px;
+        right: calc(6px + env(safe-area-inset-right, 0px));
+        width: 44px;
+        height: 44px;
+        font: bold 20px 'BoEText', system-ui, sans-serif;
+        color: #fff;
+        background: #000;
+        border: 1px solid #fff;
         border-radius: 6px;
         -webkit-tap-highlight-color: transparent;
         touch-action: manipulation;
       }
-      .sheet-act {
-        min-width: 52px;
-        min-height: 36px;
-        padding: 0 8px;
-        font-size: 13px;
-      }
-      .sheet-act.primary {
-        background: rgba(107, 84, 24, 0.9);
-        border-color: rgba(255, 220, 0, 0.85);
-        color: #f3dc98;
-      }
-      .sheet-act:active,
-      .sheet-tab:active,
       .sheet-close:active {
-        background: rgba(255, 255, 255, 0.3);
-      }
-      .sheet-empty {
-        padding: 16px;
-        color: #aaa;
-        text-align: center;
+        background: #fff;
+        color: #000;
       }
       /* A finger on the canvas: no zoom or pan, no text selection, no
          iOS callout on a long press (which is the right button here). */
@@ -1252,11 +1156,15 @@
       .rotate-button {
         font: bold 15px 'BoEText', system-ui, sans-serif;
         padding: 12px 20px;
-        color: #f3dc98;
-        background: rgba(107, 84, 24, 0.9);
-        border: 1px solid rgba(255, 220, 0, 0.85);
+        color: #fff;
+        background: #000;
+        border: 1px solid #fff;
         border-radius: 8px;
         -webkit-tap-highlight-color: transparent;
+      }
+      .rotate-button:active {
+        background: #fff;
+        color: #000;
       }
       .rotate-phone {
         width: 46px;
@@ -1276,10 +1184,10 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="/exile-js/assets/main-PyzXDAZC.js"></script>
-    <link rel="modulepreload" crossorigin href="/exile-js/assets/tiling-D9KmgWRA.js">
-    <link rel="modulepreload" crossorigin href="/exile-js/assets/e3ItemUse-DSWZ8q2O.js">
-    <link rel="modulepreload" crossorigin href="/exile-js/assets/terrainPics-ChA1yNgE.js">
+    <script type="module" crossorigin src="/exile-js/assets/main-DXypG6uB.js"></script>
+    <link rel="modulepreload" crossorigin href="/exile-js/assets/tiling-DDHLewrZ.js">
+    <link rel="modulepreload" crossorigin href="/exile-js/assets/e3ItemUse-C7z7VCFG.js">
+    <link rel="modulepreload" crossorigin href="/exile-js/assets/terrainPics-C70P38cx.js">
   </head>
   <body>
     <nav id="game-menu-bar"></nav>
