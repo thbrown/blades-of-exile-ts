@@ -393,11 +393,13 @@ export function readE3Item(it: Item, inGameAbil: string, scen: Scenario): ItemRe
  * percentage points to the chance of landing (50% becomes 55%), up to a sure
  * hit.
  */
-/** "; hit chance +N points (50% → M%)" for a bonus, or nothing. */
+/**
+ * "; +N% hit chance" for a bonus, or nothing. Percentage points: every
+ * adjustment moves the same 1–100 roll, so they add.
+ */
 function hitChance(b: number): string {
   if (!b) return '';
-  const sign = b > 0 ? '+' : '−';
-  return `; hit chance ${sign}${Math.abs(b) * 5} points (50% → ${Math.max(0, Math.min(100, 50 + b * 5))}%)`;
+  return `; ${b > 0 ? '+' : '−'}${Math.abs(b) * 5}% hit chance`;
 }
 
 export function combatLine(it: Item): string {
@@ -407,10 +409,8 @@ export function combatLine(it: Item): string {
     case ItemType.ONE_HANDED:
     case ItemType.TWO_HANDED: {
       const skill = it.weapType >= 0 ? `; rolls on ${weaponSkillName(it.weapType)}` : '';
-      const range = (add: number): string => `${1 + b + add}–${L + b + add}`;
-      const hands = it.variety === ItemType.TWO_HANDED
-        ? `Hits for ${range(2)}`
-        : `Hits for ${range(2)} as the only or main weapon, ${range(-1)} in the off hand`;
+      // The main hand's +2 is in the range; the off hand swings for 3 less.
+      const hands = `Hits for ${3 + b}–${L + b + 2}${it.variety === ItemType.TWO_HANDED ? '' : ' (−3 off hand)'}`;
       return `${hands}${hitChance(b)}${skill}.`;
     }
     case ItemType.BOW:
@@ -434,7 +434,7 @@ export function combatLine(it: Item): string {
       if (it.protection > 0) parts.push(`+1–${it.protection} protection`);
       else if (it.protection < 0) parts.push(`1–${-it.protection} more damage through`);
       if (it.awkward > 0) {
-        parts.push(`encumbrance ${it.awkward}: your own hit chance −${it.awkward * 5} points, ` +
+        parts.push(`encumbrance ${it.awkward}: −${it.awkward * 5}% to your own hit chance, ` +
           'and every 3 costs an action point (Defense skill may shrug one off)');
       }
       return `${parts.join('; ')}.`;

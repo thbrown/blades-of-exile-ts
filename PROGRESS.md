@@ -14621,7 +14621,7 @@ else the browser converts the installer once (`prepareExile3`), so the
 licence rule holds. Both use the main menu's granite and marble
 (`src/pages/pages.css`).
 
-- **`items.html`** (`src/pages/items/`): all 475 items in a sortable,
+- **`exile3/items.html`** (`src/pages/items/`): all 475 items in a sortable,
   filterable table that turns into cards on a phone, with the filter kept in
   the URL. **"In the game"** is exactly what the item sheet says: its field
   logic now lives in `src/data/itemInfo.ts` `itemInfoFields`, and
@@ -14645,7 +14645,7 @@ licence rule holds. Both use the main menu's granite and marble
   dexterity), the Iceshield says cold (it's fire), and Poison Darts' venom
   does nothing on a missile. These are the sheet's words against E3's rules;
   none is fixed yet.
-- **`map.html`** (`src/pages/map/`): a slippy map of the whole outdoor grid.
+- **`exile3/map.html`** (`src/pages/map/`): a slippy map of the whole outdoor grid.
   Each sector is a tile, drawn at full size, ¼ and ⅛, with the larger sizes
   made as they come into view. You can drag, pinch, scroll and double-click.
   Towns come from `cityLocs`, clustered by gate; named places from
@@ -14692,3 +14692,10 @@ licence rule holds. Both use the main menu's granite and marble
   or main weapon, 2–9 in the off hand"; a two-handed weapon has one range).
   "To hit +N" became "hit chance +N points (50% → M%)". The unidentified
   name no longer carries an "unidentified:" prefix.
+- **Pages moved under `exile3/`** (`exile3/items.html`, `exile3/map.html`),
+  in case other scenarios get their own. The build's installer copy
+  (`vite.config.ts` `exile3Installer`) now replaces only its own files in
+  `exile3/`, not the whole directory. **The map draws roads** (`place_road`'s
+  stubs from fields.png, reaching into road or `road-joins` terrain, across
+  sector edges). Wording: "Hits for 5–12 (−3 off hand); +10% hit chance",
+  and the legend says bonuses add.

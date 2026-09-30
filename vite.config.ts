@@ -1,4 +1,4 @@
-import { cpSync, createReadStream, existsSync, rmSync, statSync } from 'node:fs';
+import { cpSync, createReadStream, existsSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
@@ -56,8 +56,10 @@ function exile3Installer(): Plugin {
     closeBundle() {
       if (!existsSync(join(process.cwd(), outDir))) return;
       rmSync(join(process.cwd(), outDir, 'scenarios', 'exile3'), { recursive: true, force: true });
+      // The installer goes beside the Exile III pages (exile3/*.html), so
+      // only its own files are replaced, not the whole directory.
       const to = join(process.cwd(), outDir, 'exile3');
-      rmSync(to, { recursive: true, force: true });
+      for (const f of readdirSync(vendor)) rmSync(join(to, f), { recursive: true, force: true });
       cpSync(vendor, to, { recursive: true });
     },
   };
@@ -100,8 +102,9 @@ export default defineConfig(({ command }) => ({
     rollupOptions: {
       input: {
         main: join(process.cwd(), 'index.html'),
-        items: join(process.cwd(), 'items.html'),
-        map: join(process.cwd(), 'map.html'),
+        // Under exile3/, in case other scenarios get pages of their own.
+        items: join(process.cwd(), 'exile3', 'items.html'),
+        map: join(process.cwd(), 'exile3', 'map.html'),
       },
     },
   },

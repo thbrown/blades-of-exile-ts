@@ -22,6 +22,7 @@ import '../pages.css';
 import './map.css';
 import { SECTOR_SIZE } from '../../data/outdoors';
 import { Scenario } from '../../data/scenario';
+import { ROAD_DEST, ROAD_SRC } from '../../render/layout';
 import { terrainGraphic } from '../../render/terrainPics';
 import { SheetStore, TILE_H, TILE_W } from '../../render/sheets';
 import { el, installBackdrop, loadExile3, searchable } from '../common';
@@ -186,8 +187,41 @@ const CACHE_LIMIT: Record<number, number> = { 1: 12, 4: 48 };
 
 class Pyramid {
   private readonly caches = new Map<number, Map<string, HTMLCanvasElement>>(LODS.map((l) => [l, new Map()]));
+  /** The terrains a road reaches into: Exile III's own list (`road-joins`). */
+  private readonly roadJoins: Set<number>;
 
-  constructor(private scen: Scenario, private store: SheetStore) {}
+  constructor(private scen: Scenario, private store: SheetStore) {
+    this.roadJoins = new Set((scen.featureFlags['road-joins'] ?? '').split(',').filter((n) => n)
+      .map((n) => parseInt(n, 10)));
+  }
+
+  /**
+   * `extend_road_terrain`, as the game's screen has it (`extendRoad`): a road
+   * reaches into a neighbour that is road, or a terrain on the join list.
+   * Across sector edges too, and off the edge of the world.
+   */
+  private roadReaches(wx: number, wy: number): boolean {
+    const sx = Math.floor(wx / SECTOR_SIZE);
+    const sy = Math.floor(wy / SECTOR_SIZE);
+    const sec = this.scen.outdoors[sx]?.[sy];
+    if (!sec) return true;
+    const x = wx - sx * SECTOR_SIZE;
+    const y = wy - sy * SECTOR_SIZE;
+    return (sec.roads[x]?.[y] ?? false) || this.roadJoins.has(sec.terrain[x]?.[y] ?? -1);
+  }
+
+  /** `place_road`: the centre, and a stub toward each neighbour it reaches. */
+  private drawRoad(ctx: CanvasRenderingContext2D, fields: ImageBitmap, wx: number, wy: number, px: number, py: number): void {
+    const blit = (src: typeof ROAD_SRC.centre, dest: typeof ROAD_DEST.centre): void => {
+      ctx.drawImage(fields, src.left, src.top, src.right - src.left, src.bottom - src.top,
+        px + dest.left, py + dest.top, dest.right - dest.left, dest.bottom - dest.top);
+    };
+    blit(ROAD_SRC.centre, ROAD_DEST.centre);
+    if (this.roadReaches(wx, wy - 1)) blit(ROAD_SRC.vertical, ROAD_DEST.top);
+    if (this.roadReaches(wx + 1, wy)) blit(ROAD_SRC.horizontal, ROAD_DEST.right);
+    if (this.roadReaches(wx, wy + 1)) blit(ROAD_SRC.vertical, ROAD_DEST.bottom);
+    if (this.roadReaches(wx - 1, wy)) blit(ROAD_SRC.horizontal, ROAD_DEST.left);
+  }
 
   /** A sector at full size, from its terrain pictures (animation frame 0). */
   private renderFull(sx: number, sy: number): HTMLCanvasElement {
@@ -204,6 +238,16 @@ class Pyramid {
         if (!g || !img) continue;
         const r = g.rect;
         ctx.drawImage(img, r.left, r.top, r.width, r.height, x * TILE_W, y * TILE_H, TILE_W, TILE_H);
+      }
+    }
+    // Roads over the terrain, as the game lays them.
+    const fields = this.store.get('fields');
+    if (fields) {
+      for (let x = 0; x < SECTOR_SIZE; x++) {
+        for (let y = 0; y < SECTOR_SIZE; y++) {
+          if (!sec.roads[x]![y]) continue;
+          this.drawRoad(ctx, fields, sx * SECTOR_SIZE + x, sy * SECTOR_SIZE + y, x * TILE_W, y * TILE_H);
+        }
       }
     }
     return c;
@@ -283,7 +327,7 @@ async function main(): Promise<void> {
 
   let e3;
   try {
-    e3 = await loadExile3(['ter1', 'ter2', 'ter3', 'ter4', 'ter5', 'teranim'], status);
+    e3 = await loadExile3(['ter1', 'ter2', 'ter3', 'ter4', 'ter5', 'teranim', 'fields'], status);
   } catch (e) {
     what.textContent = `Exile III could not be loaded: ${e instanceof Error ? e.message : String(e)}`;
     what.className = 'problem';

@@ -275,10 +275,11 @@ function renderTable(card: HTMLElement, rows: Row[]): void {
   legend.append(
     el('strong', undefined, 'Reading it. '),
     '“In the game” is the item sheet, which names each item’s BoE ability. “By the code” is what Exile III’s ',
-    'rules do. Damage ranges are before strength, blessing and the like. “Hit chance +N points” is how much ',
-    'more likely each blow is to land than with the same item and no bonus: a swing that would land half the ',
-    'time lands (50 + N)% of the time. (E3 rolls 1–100 and each bonus point takes 5 off the roll.) The small ',
-    'grey name under an item is what it’s called until identified.',
+    'rules do. Damage ranges are for the main hand, before strength, blessing and the like. ',
+    '“+30% hit chance” is added straight on: a blow that would land 40% of the time lands 70% of the time, ',
+    'and bonuses stack by adding, so +30% and +30% is +60%, up to a sure hit. (E3 rolls 1–100, and every ',
+    'bonus and penalty moves that one roll.) The small grey name under an item is what it’s called until ',
+    'identified.',
   );
   card.append(controls, legend, wrap, empty);
 
