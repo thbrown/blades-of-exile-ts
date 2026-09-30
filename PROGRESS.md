@@ -1210,7 +1210,7 @@ Notes for M2 implementer:
         deploy with new converter code reconverts.
       - the card is fixed (`EXILE3_CARD`) when no `scenario.xml` is served,
         and the installed copy is kept off the "added" list.
-    - `vite preview` needs `--base /exile-js/` to behave like Pages (the
+    - `vite preview` needs `--base /blades-of-exile-ts/` to behave like Pages (the
       config sets the base only for `build`).
     - The card's picture is the one the game captures the first time Exile
       III is played in that browser (`captureTerrainView`, as for any
@@ -12677,7 +12677,7 @@ user. It moves to the bucket once the scenario editor is ported.
   name: two archive copies are `x.exs 1` (Finder duplicates).
 - Removing a scenario means rewriting git history now, not just deleting it
   from a bucket.
-- Test the built site with `docs/` mounted at `/exile-js/` on a plain static
+- Test the built site with `docs/` mounted at `/blades-of-exile-ts/` on a plain static
   server. `vite preview` serves from `/` and 404s every asset.
 
 **Startup screen, reworked (2026-09-23).** There's an About section
@@ -14932,3 +14932,9 @@ verify-party and verify-e3.
 
 All checks pass (2026-09-30): 1,496 tests, tsc, both sweeps, verify-screen
 (twice), verify-party and verify-e3.
+
+- 2026-09-30: repo renamed to `blades-of-exile-ts`. Pages now serves at
+  `/blades-of-exile-ts/` — `vite.config.ts`'s build `base`, the README link,
+  and the GitHub links in the startup screen and items page follow it.
+  localStorage keys (`exile-js:*`) stay as they are: same origin, so saves
+  and prefs survive the rename.

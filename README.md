@@ -1,6 +1,6 @@
 # exile-js
 
-**Play it:** https://thbrown.github.io/exile-js/
+**Play it:** https://thbrown.github.io/blades-of-exile-ts/
 
 Dear fellow human,
 

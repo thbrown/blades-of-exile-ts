@@ -144,7 +144,7 @@ async function main(): Promise<void> {
   installBackdrop();
   const page = document.getElementById('page')!;
   const repo = el('a', undefined, 'the port’s rules');
-  repo.href = 'https://github.com/thbrown/exile-js/blob/main/src/pages/items/e3ItemRules.ts';
+  repo.href = 'https://github.com/thbrown/blades-of-exile-ts/blob/main/src/pages/items/e3ItemRules.ts';
   page.append(masthead('Exile III Items', [
     'Every item in Exile III: what the game’s item sheet tells you, beside what the code actually does with it.',
     (() => {

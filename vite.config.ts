@@ -91,9 +91,9 @@ function devLibrary(): Plugin {
 }
 
 export default defineConfig(({ command }) => ({
-  // GitHub Pages serves this repo at /exile-js/; keep the dev server at root
+  // GitHub Pages serves this repo at /blades-of-exile-ts/; keep the dev server at root
   // so local URLs (and verify-screen.mjs) don't need to change.
-  base: command === 'build' ? '/exile-js/' : '/',
+  base: command === 'build' ? '/blades-of-exile-ts/' : '/',
   plugins: [devLibrary(), embedLibrary(), exile3Installer()],
   define: { __EXILE3_VERSION__: JSON.stringify(exile3ConversionVersion()) },
   build: {

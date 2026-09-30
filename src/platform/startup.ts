@@ -133,7 +133,7 @@ export interface StartupOptions {
   party?: StartupParty;
 }
 
-const REPO_URL = 'https://github.com/thbrown/exile-js';
+const REPO_URL = 'https://github.com/thbrown/blades-of-exile-ts';
 const WIKIPEDIA_URL = 'https://en.wikipedia.org/wiki/Blades_of_Exile';
 
 /** The icons in `scenpics` — 5 columns, 7 rows. */
