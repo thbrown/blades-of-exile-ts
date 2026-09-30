@@ -9,7 +9,8 @@
  * |---|---|
  * | 100–199 | shows one string, `block*300 + (n - 100)` |
  * | 200 and up | shows two, `n - 200` and `n - 199` (the town's 255 is an empty slot) |
- * | 50–59 | nothing |
+ * | 50 | walks the party onto the square even if it's blocked: a ford, a secret passage |
+ * | 51–59 | nothing |
  * | below 100 | that zone's or town's own code: E3-3 |
  *
  * The string block is `zone / 10 + 80` outdoors. In a town it is
@@ -168,7 +169,25 @@ export function e3SpotScript(
   spots.forEach((s, k) => {
     if (s.loc.x === 0 && s.loc.y === 0) return;
     if (isTown && s.id === 255) return;
-    // 50–59 are markers, which do nothing when stepped on.
+    // 50 is a way through. Both move codes force the step when the spot at
+    // the destination is 50 — outdoors `1010:71aa`, BoE 1997's `if (spec_num
+    // == 50) forced = TRUE` (ACTIONS.CPP:2683); in town `1010:807c`, where
+    // the forced flag lets `1010:83a3` past a blocked square — so the party
+    // walks onto water, walls and pillars that otherwise stop it. 128 squares
+    // in the zones carry it, among them the three water squares between
+    // Delan's "FORD HERE" signs (a player confirmed E3 crosses there), and
+    // 102 in the towns, mostly cave walls, pillars and water. The engine's
+    // way to say "forced" is a CANT_ENTER that allows (ex1a 0) with ex2a
+    // set, which also makes a town run it on a blocked square. Until
+    // 2026-09-30 this was dropped with the markers, and nothing could be
+    // crossed.
+    if (s.id === 50) {
+      const n = b.node('block-move', { ex1: [0], ex2: [1] }, -1);
+      marks.push({ x: s.loc.x, y: s.loc.y, node: n });
+      listed.push({ x: s.loc.x, y: s.loc.y, id: s.id, node: n });
+      return;
+    }
+    // The rest of 50–59 are markers, which do nothing when stepped on.
     if (s.id >= 50 && s.id < 60) return;
     let n: number;
     if (s.id < 100) {

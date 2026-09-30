@@ -154,6 +154,23 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     scen.towns[22]!.canFind = false;
   });
 
+  it("wades the fords: spot 50 walks the party onto water (1010:71aa)", async () => {
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    session.attachSpecials(new Proxy({}, { get: () => () => Promise.resolve(0) }) as never);
+    const party = session.univ.party;
+    const here = () => party.globalToLocal(party.outLoc);
+    session.debugLeaveTown();
+    // Zone 82 (1,9), by Delan: between the two FORD HERE signs, row 4 is
+    // grass, water, the island, water, water, grass.
+    session.positionParty(1, 9, 29, 4);
+    for (let i = 0; i < 5; i++) await session.move(Direction.E);
+    expect(here()).toEqual({ x: 34, y: 4 });
+    // Two rows down the same river has no ford.
+    session.positionParty(1, 9, 31, 6);
+    await session.move(Direction.E);
+    expect(here()).toEqual({ x: 31, y: 6 });
+  });
+
   it('draws roads as ground with the road field, as BoE 1997 does', () => {
     // A grass road takes grass's picture; the hub and arms come from the field.
     expect(scen.terTypes[233]?.picture).toBe(scen.terTypes[2]?.picture);
@@ -1012,6 +1029,13 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(krizsan.areaDesc.map((a) => a.descr)).toContain("Jinx's Smithy");
     const zone = scen.outdoors[0]![0]!;
     expect(zone.signLocs[0]?.text).toMatch(/^VALORIM IS DECLARED UNDER QUARANTINE/);
+    // Past the first ten zones the strings sit ten zones to a 300-string
+    // block: zone 82, by Delan, has its two ford signs, not the "Sign" filler.
+    const delan = scen.outdoors[1]![9]!;
+    expect(delan.signLocs.map((s) => s.text.split('|')[0]!.trim()))
+      .toEqual(['Delis - 50 miles west.', 'FORD HERE', 'FORD HERE', 'Delan - 25 mi. w.']);
+    const signs = scen.outdoors.flat().flatMap((o) => o?.signLocs ?? []);
+    expect(signs.filter((s) => s.text === 'Sign')).toEqual([]);
   });
 
   it('has wandering monsters, in towns and on the world', () => {

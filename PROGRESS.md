@@ -970,7 +970,8 @@ Notes for M2 implementer:
     - `TODO(E3-3)`: ruined variants (block `b+1`) on a placement's day, or
       once the village has fallen.
   - **Signs and room names** (2026-09-24). Sign `k` of zone `z` is string
-    `27001 + 20z + k`, and of town `t` it is `30005 + 20t + k`, after the
+    `27001 + 300⌊z/10⌋ + 20(z mod 10) + k` (corrected 2026-09-30; it said
+    `27001 + 20z + k`, right for zones 0–9 only), and of town `t` it is `30005 + 20t + k`, after the
     town's name. The sign terrains (110, 127, 142, 213, 214, 252) are exactly
     the terrains under E3's sign locations. The code that reads signs has not
     been found. Room names come from the town records.
@@ -1059,7 +1060,8 @@ Notes for M2 implementer:
     - `FUN_10c0_443a` puts up a once-only message and brings in one of the
       zone's special encounter groups. E3 places the group on its `50 + k`
       marker spot (the 50–59 numbers mark those places, which is why they
-      do nothing when stepped on). The engine places it by the party.
+      do nothing when stepped on — except 50, which forces the step: see
+      2026-09-30). The engine places it by the party.
     - The id-below-10 guard applies outdoors too: E3 moves a dead spot off
       the map.
   - 2026-09-25: **Shayder** (towns 4–7, `towns/shayder.ts`,
@@ -14891,3 +14893,42 @@ TODO(M8) (1).
 
 All checks pass (2026-09-29): 1,494 tests, tsc, both sweeps, verify-screen,
 verify-party and verify-e3.
+
+- [x] **Play-testing notes, third round (2026-09-30).**
+  - **Signs read "Sign"** in most of Exile III. The converter took zone `z`'s
+    sign strings from `27001 + 20z`, but E3 lays them out ten zones to a
+    300-string block (`block*300 + i`, the fetch every E3 message uses), so
+    from zone 10 on every sign read another zone's text or the table's
+    "Sign" filler. `zoneSignBase` in `emit.ts` has the right formula, pinned
+    by content: zone 12's seven sign spots get the seven Burma-Shave
+    strings, zone 89 gets "FORT EMERGENCE", and every zone's signs name its
+    own towns. No sign in the scenario reads "Sign" now (a test checks).
+  - **The fords can be crossed.** The user confirmed E3 walks straight
+    across the river between Delan's two "FORD HERE" signs (zone 82). E3's
+    water is blocked (3) like everywhere else; what lets the party in is
+    **spot number 50**: both move codes force the step when the spot at the
+    destination is 50 (outdoors `1010:71aa`, in town `1010:807c` then
+    `1010:83a3`), which is BoE 1997's `if (spec_num == 50) forced = TRUE`.
+    The converter dropped 50–59 as markers that do nothing. Spot 50 is now a
+    `block-move` node with ex1a 0, ex2a 1 (the engine's "forced"), in zones
+    (128 squares) and towns (102, mostly cave walls, pillars and water —
+    E3's secret passages). A test wades zone 82's ford and is refused two
+    rows down. *Not checked in play*: any of the 102 town squares.
+  - **Spell range on the aim cursor.** The pad/keyboard cursor
+    (`moveAim`) now stops at the spell's or missile's reach, the cast's own
+    `dist(from, at) <= range`; a cursor that starts out of reach (the
+    fallback in `autoAim`) can still come closer. Sight isn't clamped. The
+    mouse is unchanged: it points anywhere and just loses the crosshair.
+  - **The wait's fade on a phone held sideways** covered the wrong place:
+    `waitFade.ts` placed the veil in game-screen pixels, but the canvas is
+    the whole desktop and the game sits at `desktop.gameX/gameY` in it —
+    off the corner whenever the window is wider than the game.
+  - **verify-screen's flaky Spark** (noted above) is dice, not timing. The
+    Guard resists magic, and a Spark rolled low hits for 0, which prints
+    nothing, as `damage_monst` doesn't. Which roll it gets depends on the
+    monsters' real-time turns. The check now asks for the spell point to be
+    spent. The range clamp moved the aim test's cursor to x=13 (Spark's 6
+    from x=7) instead of 14, which the check now expects.
+
+All checks pass (2026-09-30): 1,496 tests, tsc, both sweeps, verify-screen
+(twice), verify-party and verify-e3.

@@ -38,7 +38,11 @@ encounter. There is exactly one `push 5051` in the code, at file offset
   `special_id[which]` (at `-0x46ea`).
 - Encounter numbers 100–199 and ≥ 200 are generic kinds that are driven by
   flags (`encounter-100`, `encounter-200`). The range 50–59 returns
-  immediately. The rest are unique scripts.
+  immediately. The rest are unique scripts. **50 is not only a marker**: both
+  move codes read the spot number back out of `FUN_10c0_0c97` and force the
+  step when it is 50 (outdoors `1010:71aa`, in town `1010:807c`, tested
+  against blockage at `1010:83a3`), BoE 1997's `spec_num == 50`. That is how
+  the fords are crossed (2026-09-30).
 - The Vilovsky branch reads almost like source: `fancy_choice(5050)`, then
   flag checks, `fancy_choice(5051)`, `take_gold(5000,1)`, then set flags, play
   sounds 0x97 and 0x9d, and raise a skill of each of the 6 PCs. The PC record

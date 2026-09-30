@@ -130,9 +130,19 @@ export function autoAim(session: GameSession, aim: Aiming): Location {
  * border arrows round the terrain do in those modes (`isScrollable`) — and
  * otherwise stops at the edge: a town spell can't scroll the view, in the
  * original either.
+ *
+ * Given the `aim`, it also stops at the edge of the spell's reach
+ * (`dist(from, at) <= range`, the test the cast itself makes): a step that
+ * would leave the range, or go further out when the cursor started outside
+ * it, is refused. A mouse can point anywhere and just loses the crosshair;
+ * a finger on the pad has no reason to walk the cursor somewhere it can't
+ * cast. Sight is not clamped — a wall between is still worth seeing.
  */
-export function moveAim(session: GameSession, at: Location, dir: Direction): Location {
+export function moveAim(session: GameSession, at: Location, dir: Direction, aim?: Aiming): Location {
   const next = shiftLoc(at, dir);
+  if (aim && dist(aim.from, next) > aim.range && dist(aim.from, next) >= dist(aim.from, at)) {
+    return at;
+  }
   const c = session.center;
   const over = (v: number, mid: number): number => (v > mid + VIEW_RADIUS ? 1 : v < mid - VIEW_RADIUS ? -1 : 0);
   const dx = over(next.x, c.x);

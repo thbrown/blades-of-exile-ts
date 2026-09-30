@@ -3266,22 +3266,28 @@ await tp.waitForTimeout(150);
 touch.fireLabel = await tp.evaluate(() => document.querySelector('.touch-button.centre').dataset.face);
 // Past the edge of the view the cursor takes the view with it (screen_shift,
 // as the border arrows do), and coming back leaves the view where it went.
+// Six taps east ask for x=14, but Spark reaches 6 from the caster at x=7, so
+// the cursor stops at 13 (`moveAim`'s range clamp).
 const tCentre0 = await tp.evaluate(() => ({ ...window.__session.center }));
 for (let i = 0; i < 6; i++) { await tp.tap('.touch-dpad .touch-button[title="East"]'); await tp.waitForTimeout(60); }
 const tFar = await tp.evaluate(() => ({ aim: { ...window.__screen.aimAt }, centre: { ...window.__session.center } }));
-for (let i = 0; i < 6; i++) { await tp.tap('.touch-dpad .touch-button[title="West"]'); await tp.waitForTimeout(60); }
+for (let i = 0; i < tFar.aim.x - 8; i++) { await tp.tap('.touch-dpad .touch-button[title="West"]'); await tp.waitForTimeout(60); }
 touch.scrolled = { from: tCentre0, far: tFar,
   back: await tp.evaluate(() => ({ ...window.__screen.aimAt })) };
 await tp.screenshot({ path: `${SHOTS}/64-touch-aim.png` });
 const tLines = await tp.evaluate(() => window.__univ.transcript.length);
+const tSp = await tp.evaluate(() => window.__univ.party.pcs[3].curSp);
 await tp.tap('.touch-dpad .touch-button.centre');
-// At the original's pace the spark's flight takes its time; wait for the word.
-await tp.waitForFunction((from) => window.__univ.transcript.slice(from)
-  .some((l) => /takes|miss|resist/i.test(l)), tLines, { timeout: 10000 }).catch(() => undefined);
+// At the original's pace the spark's flight takes its time; wait for the
+// point to be spent and targeting to be over.
+await tp.waitForFunction((sp) => window.__univ.party.pcs[3].curSp < sp
+  && window.__session.spellTargeting === null, tSp, { timeout: 10000 }).catch(() => undefined);
 touch.fired = await tp.evaluate((from) => ({
   mode: window.__session.mode, aim: window.__screen.aimAt,
   said: window.__univ.transcript.slice(from),
+  sp: window.__univ.party.pcs[3].curSp,
 }), tLines);
+touch.fired.spent = tSp - touch.fired.sp;
 // The inventory and the party open blown up (platform/touchSheet.ts) when
 // their panels are tapped: the panel's own pixels, and a tap on them is the
 // panel's own click. Info from a row brings its dialog up with the dialog's
@@ -3388,9 +3394,12 @@ const touchOk = touch.desktopHidden && touch.townSet === 'MAGE PRIEST LOOK TALK 
   touch.aimFoes.n === 2 && touch.panel &&
   touch.aimStart?.x === 8 && touch.aimStart?.y === 8 &&
   touch.aimMoved?.x === 8 && touch.aimMoved?.y === 9 && touch.fireLabel === 'fire' &&
-  touch.scrolled.far.aim.x === 14 && touch.scrolled.far.centre.x === touch.scrolled.from.x + 14 - (touch.scrolled.from.x + 4) &&
+  touch.scrolled.far.aim.x === 13 && touch.scrolled.far.centre.x === 13 - 4 &&
   touch.scrolled.back.x === 8 && touch.scrolled.back.y === 8 &&
-  touch.fired.mode === 9 && touch.fired.aim === null && touch.fired.said.some((l) => /takes|miss|resist/i.test(l)) &&
+  // The Spark was cast: its point is spent. What it did is up to the dice —
+  // the Guard resists magic, and a hit rounded down to 0 prints nothing (as
+  // `damage_monst` doesn't), which is what made this check flaky.
+  touch.fired.mode === 9 && touch.fired.aim === null && touch.fired.spent === 1 &&
   touch.talkPlaced !== null && touch.talkAim?.x === touch.talkPlaced.x && touch.talkAim?.y === touch.talkPlaced.y &&
   touch.talkWords.includes('Ask About...') && touch.talkDone &&
   touch.invSheet.shown && touch.invSheet.size.join('x') === '271x144' && touch.invSheet.wide > 271 * 2 &&

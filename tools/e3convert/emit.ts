@@ -401,7 +401,8 @@ function isUnusedLoc(l: { x: number; y: number }): boolean {
 
 /**
  * The signs with something written on them: location `k` reads string
- * `first + k` (zone `z`'s from 27001 + 20z, town `t`'s from 30005 + 20t).
+ * `first + k` (zone `z`'s from `zoneSignBase(z)`, town `t`'s from
+ * 30005 + 20t).
  */
 function signs(locs: { x: number; y: number }[], strings: Map<number, string>, first: number): { k: number; x: number; y: number; text: string }[] {
   return locs.flatMap((l, k) => {
@@ -439,8 +440,24 @@ ${monsters}        <onmeet>${nodes.meet}</onmeet>
 `;
 }
 
+/**
+ * Where zone `z`'s sign strings start. The zones sit ten to a 300-string
+ * block (`block*300 + i`, the fetch every E3 message goes through), twenty
+ * strings each, from block 90 — so a block's last hundred are empty, and
+ * zone 82's signs are at 29441, not 28641. This was `27001 + 20z` until
+ * 2026-09-30, which is right for zones 0–9 only: everywhere else a sign
+ * read another zone's text or the table's "Sign" filler (the ford by Delan
+ * said "Sign" instead of "FORD HERE"). Pinned by content: zone 12's seven
+ * sign spots get block 17's seven strings (the Burma-Shave run), zone 89,
+ * the start, gets "FORT EMERGENCE", and every zone's text names its own
+ * towns.
+ */
+export function zoneSignBase(z: number): number {
+  return 90 * 300 + Math.floor(z / 10) * 300 + (z % 10) * 20 + 1;
+}
+
 function zoneSigns(z: E3Outdoor, zone: number, strings: Map<number, string>) {
-  return signs(z.signLocs, strings, 27001 + 20 * zone);
+  return signs(z.signLocs, strings, zoneSignBase(zone));
 }
 
 function specStringsXml(script: SpotScript): string {

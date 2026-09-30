@@ -98,6 +98,21 @@ describe('the aim cursor', () => {
     expect(s.center).toEqual({ x: c.x + 2, y: c.y - 1 });
   });
 
+  it("stops at the edge of the spell's range", () => {
+    const s = fight([]);
+    s.mode = GameMode.SPELL_TARGET;
+    const from = s.univ.currentPc.combatPos;
+    const aim = aimFor(s, 2);
+    const edge = { x: from.x + 2, y: from.y };
+    expect(moveAim(s, edge, Direction.E, aim)).toEqual(edge);
+    // Along the edge is fine where it stays in reach; back in always is.
+    expect(moveAim(s, edge, Direction.W, aim)).toEqual({ x: from.x + 1, y: from.y });
+    // A cursor that started out of reach may still come closer.
+    const far = { x: from.x + 4, y: from.y };
+    expect(moveAim(s, far, Direction.W, aim)).toEqual({ x: from.x + 3, y: from.y });
+    expect(moveAim(s, far, Direction.E, aim)).toEqual(far);
+  });
+
   it('never draws from the RNG', () => {
     const s = fight([{ x: 9, y: 9 }, { x: 8, y: 8 }]);
     const { gameCalls, gameDraws, uniqueDraws } = s.univ.rng;

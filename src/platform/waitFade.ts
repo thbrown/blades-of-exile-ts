@@ -9,6 +9,7 @@
  * did, so no draw or clock moves.
  */
 
+import { desktop } from '../render/desktop';
 import { TER_VIEW_TILES, terrainSpotPos } from '../render/layout';
 
 const TILE_W = 28;
@@ -42,8 +43,11 @@ export async function aroundWaitFade<T>(
   registerIris();
 
   // The 9x9 tiles only, in the canvas's own pixels mapped onto however it is
-  // scaled on the page.
-  const origin = terrainSpotPos(0, 0);
+  // scaled on the page. The canvas is the whole desktop, and the game screen
+  // sits at (gameX, gameY) in it — off the corner whenever the window is
+  // wider or taller than the game, as a phone held sideways always is.
+  const spot = terrainSpotPos(0, 0);
+  const origin = { x: desktop.gameX + spot.x, y: desktop.gameY + spot.y };
   const sx = canvas.offsetWidth / canvas.width;
   const sy = canvas.offsetHeight / canvas.height;
   const veil = document.createElement('div');

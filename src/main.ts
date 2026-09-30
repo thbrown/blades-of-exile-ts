@@ -2678,8 +2678,9 @@ async function main(): Promise<void> {
       // While a spell or missile is aimed, a direction moves its cursor
       // instead of acting on the square beside the caster, as the original's
       // arrows do; Enter then takes the cursor's square as a click would.
-      if (screen.aimAt !== null && aimNow() !== null) {
-        screen.aimAt = moveAim(session, screen.aimAt, dir);
+      const aim = screen.aimAt !== null ? aimNow() : null;
+      if (screen.aimAt !== null && aim !== null) {
+        screen.aimAt = moveAim(session, screen.aimAt, dir, aim);
         screen.hover = null;
         redraw();
         return;
