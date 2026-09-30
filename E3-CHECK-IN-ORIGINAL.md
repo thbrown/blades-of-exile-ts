@@ -165,6 +165,46 @@ quest steps.
   out of reach.
 - **Question:** do the women answer "escape" in the original?
 
+### 12. Zalifar and the spire, before the drake (2026-09-30)
+
+- **Where:** the Remote Aerie, north-east of Gale (fly east from (315,106)).
+- **Do:** before going near the drake, ask Zalifar about "spire".
+- **The port:** he tells where the golems' spire is and it goes on the
+  map, as E3's talk data says; "assistance" is the only answer that waits
+  for the drake.
+- **Question:** does the original answer "spire" straight away?
+
+### 13. The spires' barrier rings (2026-09-30)
+
+- **Where:** any of the four golem spires round the Tower of Shifting
+  Floors.
+- **Do:** walk round the ring of barriers before dispelling anything.
+- **The port:** one diagonal side of each ring is missing (a town holds 50
+  preset fields; a ring needs 56), so the party can walk in
+  (E3-SUSPECTED-BUGS.md #20).
+- **Question:** is there a gap in the ring in the original?
+
+### 14. Killing Dalakros (2026-09-30)
+
+- **Where:** the Drake Aerie, south-west of Greendale.
+- **Do:** refuse him the food, kill him, and ask Zalifar about
+  "assistance".
+- **The port:** Zalifar helps. His answer waits on the flag the drake sets
+  when the party swears; E3's turn code copies the drake's death into it
+  (`10c0:6fb8`), which the port does as he dies. Until today killing him
+  left Zalifar asking for help with the drake.
+- **Question:** does Zalifar help right away, or only a turn later?
+
+### 15. Flying (2026-09-30)
+
+- **Where:** anywhere outdoors, with the Orb of Thralni.
+- **Do:** fly and come down on lava; try the orb in the far north
+  (zone columns 1–2 of the top rows) and in a boat.
+- **The port:** lava burns everyone (8d10) and doesn't kill; the far north
+  says "Use orb: For some reason, it fails."; a boat says "Use: Leave boat
+  first." Until today no special item could be Used and nothing could fly.
+- **Question:** do those match, and does the orb's flight last six moves?
+
 ## Waiting on a ruling (already written up elsewhere)
 
 - **DIVERGENCES.md #30 and #31**, marked "open for the user".

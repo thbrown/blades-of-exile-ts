@@ -45,6 +45,7 @@ import {
 } from './wandering';
 import { setUpCombat, startOutdoorCombat } from './outCombat';
 import { E3_ARENA_BORDER } from './e3Arena';
+import { e3FlightRefusal, e3SpecItems, e3UsesSpecItem, useE3SpecItem } from './e3Flight';
 import { increaseAgeEffects } from './increaseAge';
 import { processFields, syncForceCages } from './processFields';
 import type { TownTarget } from './spellTarget';
@@ -76,6 +77,7 @@ import { makeTownHostile } from './townAttitude';
 import { OUT_HALF_DIM, OUT_MAX_DIM } from '../universe/curOut';
 import { Population, TOWN_NUM_OUTDOORS } from '../universe/party';
 import { Universe } from '../universe/universe';
+import { specItemUseable } from '../data/quest';
 import { GameMode, PreModes, isCombat, isOut, isTown } from './modes';
 import { bashDoor as bashDoorAt, pickLock as pickLockAt } from './doors';
 import { TalkAction, TalkState } from './talk';
@@ -1156,6 +1158,15 @@ export class GameSession {
     if (atWorldEdge) {
       this.univ.addStringToBuf("You've reached the world's edge.");
       return false;
+    }
+    // Exile III's refusals to a flying party (`e3Flight.ts`), which come
+    // after the window slides and before the square is tested.
+    if (this.flying && e3SpecItems(this.univ)) {
+      const refused = e3FlightRefusal(this.univ, realDest);
+      if (refused) {
+        this.univ.addStringToBuf(refused);
+        return false;
+      }
     }
 
     // The boat/horse block runs before `party.direction` is set in the C++
@@ -3442,6 +3453,18 @@ export class GameSession {
       this.updateExplored(this.univ.party.outLoc);
     }
     return true;
+  }
+
+  /**
+   * `use_spec_item` (boe.specials.cpp:576): the item is a hook, not a thing
+   * in a pack, so all it does is run its node, outside combat. Exile III's
+   * Orb and Amulet are its own code instead (`e3Flight.ts`).
+   */
+  async useSpecItem(which: number): Promise<void> {
+    const spec = this.univ.scenario.specialItems[which];
+    if (!spec || !specItemUseable(spec) || isCombat(this.mode)) return;
+    if (e3UsesSpecItem(this.univ, which)) await useE3SpecItem(this, which);
+    else await this.runSpecial(SpecCtx.USE_SPEC_ITEM, SpecCtxType.SCEN, spec.special, this.univ.party.getLoc());
   }
 
   // `select_pc`'s candidate list lives in `game/selectPc.ts`, with all eight

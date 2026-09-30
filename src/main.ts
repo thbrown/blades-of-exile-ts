@@ -70,7 +70,6 @@ import { setTargetLockPref } from './game/targetMode';
 import { NotesKind, notesRefusal } from './game/notes';
 import { ItemWinMode, QUEST_COMPLETED_OFFSET } from './game/itemWindow';
 import { BASIC_BUTTON_KEYS } from './game/specials/oneshot';
-import { specItemUseable } from './data/quest';
 import { trappedMonsters } from './game/soulCrystal';
 import { cancelTownTargeting, castTownSpell, startTownTargeting } from './game/spellTarget';
 import { CastDialog } from './dialogs/castDialog';
@@ -1910,11 +1909,7 @@ async function main(): Promise<void> {
     const spec = univ.scenario.specialItems[entry];
     if (!spec) return;
     if (part === 'use') {
-      // use_spec_item (boe.specials.cpp:576) — the item is a hook, not a thing
-      // in a pack, so all it does is run its node.
-      if (specItemUseable(spec) && !isCombat(session.mode))
-        await session.runSpecial(
-          SpecCtx.USE_SPEC_ITEM, SpecCtxType.SCEN, spec.special, univ.party.getLoc());
+      await session.useSpecItem(entry);
     } else {
       // `put_spec_item_info` (boe.infodlg.cpp:703): a cStrDlog with the
       // item's name for a title and the scenario's intro picture beside it.

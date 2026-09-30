@@ -25,6 +25,9 @@ import { WallSearch, type WallState } from './support/e3Walls';
 import { WALL_FLOOR, WALL_NORTH, WALL_SOUTH, moveE3Walls } from '../src/game/e3MovingWalls';
 import { E3Abil, e3SpecDam } from '../src/game/e3Items';
 import { TerSpec } from '../src/data/terrain';
+import { Direction } from '../src/core/location';
+import { MainStatus, PartyStatus, Trait } from '../src/universe/skills';
+import { GENERATORS } from '../tools/e3convert/towns/shiftingFloors';
 
 const dir = findE3Dir();
 
@@ -1022,6 +1025,563 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       // And back to the caves the way the party came (spot 15).
       await q.step(...spot(55, 15));
       expect(q.townNum, q.tail()).toBe(31);
+    });
+  });
+
+  describe('the golems', () => {
+    /** The special items the chain turns on. */
+    const ORB = 6, AMULET = 7, WAND = 8;
+    const LATE_WAR = 0xc92;
+    /** Look at a blocked square, step on an open one: how a spot is set off. */
+    const touch = async (q: QuestRunner, x: number, y: number): Promise<void> => {
+      if (q.session.townIsBlocked({ x, y })) await q.look(x, y);
+      else await q.step(x, y);
+    };
+    const said = (q: QuestRunner, from: number): string[] => q.univ.transcript.slice(from);
+    /** An open square beside (x, y), to cast at it from. */
+    const beside = (q: QuestRunner, x: number, y: number): { x: number; y: number } => {
+      for (const [dx, dy] of [[0, 1], [1, 0], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]] as const) {
+        const p = { x: x + dx, y: y + dy };
+        if (q.town.isOnMap(p.x, p.y) && !q.session.townIsBlocked(p)) return p;
+      }
+      throw new Error(`nowhere beside (${x},${y})`);
+    };
+
+    it("The Orb of Thralni: stolen, the portal to deep Exile, the Cult's key, clean hands, the vault, and the way home", async () => {
+      const q = new QuestRunner(scen);
+      // The plot clock sets 0xc92 (past day 109, or at war with the
+      // troglodytes); Anaximander then tells of the theft.
+      q.setFlag(LATE_WAR, 1);
+      await q.enter(21);
+      await q.step(...spot(21, 1));
+      expect(q.flag(LATE_WAR), q.tail()).toBe(2);
+
+      // The Portal Fortress's portal (spot 2) goes somewhere else without the orb.
+      await q.enter(40);
+      await q.step(...spot(40, 2));
+      expect(q.townNum, q.tail()).toBe(134);
+
+      // The Cult of the Sacred Item (town 49).
+      await q.enter(49);
+      await q.clearHostiles();
+      const MARBLE_KEY = 12;
+      // The padlocked doors refuse without the marble key.
+      const [lx, ly] = spot(49, 20);
+      await q.step(lx, ly);
+      expect(q.town.record.terrain[lx + 1]![ly], q.tail()).toBe(106);
+      // The key, in the chest at (34,39) (spot 9).
+      await touch(q, 34, 39);
+      expect(q.hasSpecItem(MARBLE_KEY), q.tail()).toBe(true);
+      await q.step(lx, ly);
+      expect(q.town.record.terrain[lx + 1]![ly], q.tail()).toBe(0x67);
+
+      // The Purification Walk: an unwashed party is burned at each ward;
+      // touching the fountain before it lets the party by.
+      const hurt = (): number => q.party.pcs.reduce((n, pc) => n + pc.curHealth, 0);
+      const [wx, wy] = spot(49, 14);
+      let before = hurt();
+      await q.step(wx, wy);
+      expect(hurt(), q.tail()).toBeLessThan(before);
+      for (const [fountain, ward] of [[1, 14], [2, 15], [3, 16]] as const) {
+        q.answer(/Touch/);
+        await touch(q, ...spot(49, fountain));
+        expect(q.flag(0x26d + fountain), q.tail()).toBe(1);
+        before = hurt();
+        await q.step(...spot(49, ward));
+        expect(hurt(), q.tail()).toBe(before);
+      }
+
+      // The vault: the Orb (spot 5), the Wand of Unusual Results (7), and a uranium bar (6).
+      for (const id of [5, 6, 7]) await touch(q, ...spot(49, id));
+      expect(q.hasSpecItem(ORB), q.tail()).toBe(true);
+      expect(q.hasSpecItem(WAND), q.tail()).toBe(true);
+      // Only once.
+      q.party.specItems.delete(ORB);
+      await touch(q, ...spot(49, 5));
+      expect(q.hasSpecItem(ORB), q.tail()).toBe(false);
+      q.party.specItems.add(ORB);
+
+      // The cultists' portal (spot 12) is dead; the device (22) re-energises it.
+      await q.clearHostiles();
+      await q.step(...spot(49, 12));
+      expect(q.townNum).toBe(49);
+      await q.clearHostiles();
+      await q.step(...spot(49, 22));
+      await q.step(...spot(49, 12));
+      expect(q.flag(LATE_WAR), q.tail()).toBe(3);
+      expect(q.townNum, q.tail()).not.toBe(49);
+
+      // Anaximander is glad, once.
+      await q.enter(21);
+      await q.step(...spot(21, 1));
+      expect(q.flag(LATE_WAR), q.tail()).toBe(4);
+    });
+
+    it('The Orb flies: over the mountains to the Remote Aerie, down to land, and not over the high peaks', async () => {
+      const q = new QuestRunner(scen);
+      q.party.specItems.add(ORB);
+      // Only outdoors.
+      await q.enter(16);
+      let from = q.univ.transcript.length;
+      await q.useSpecItem(ORB);
+      expect(said(q, from)).toEqual(['Use orb: Only when outdoors.']);
+
+      // Walkthrough B's square below the aerie's peaks, (315,106): east is mountain.
+      await q.outdoorsAt(315, 106);
+      expect(await q.go(Direction.E)).toEqual([false]);
+      from = q.univ.transcript.length;
+      await q.useSpecItem(ORB);
+      expect(said(q, from)).toEqual(['Use: You rub the orb and start flying!']);
+      expect(q.party.partyStatus[PartyStatus.FLIGHT]).toBe(6);
+      from = q.univ.transcript.length;
+      await q.useSpecItem(ORB);
+      expect(said(q, from)).toEqual(['Use: Not while already flying.']);
+      // Over two peaks to the hidden clearing at (318,106).
+      expect(await q.go(Direction.E, Direction.E, Direction.E)).toEqual([true, true, true]);
+      expect(q.global).toEqual({ x: 318, y: 106 });
+      // The aerie (318,107) waits for the party to land.
+      from = q.univ.transcript.length;
+      expect(await q.go(Direction.S)).toEqual([false]);
+      expect(said(q, from)).toContain('Moved: You have to land first.');
+      // Six turns aloft: three spent flying, three more to come down.
+      await q.pause(3);
+      expect(q.party.partyStatus[PartyStatus.FLIGHT], q.univ.transcript.slice(-4).join(' / ')).toBe(0);
+      expect(q.univ.transcript).toContain('  You land safely.');
+      expect(q.party.pcs.every((pc) => pc.isAlive)).toBe(true);
+      await q.go(Direction.S);
+      expect(q.townNum, q.tail()).toBe(106);
+
+      // The high peaks (terrain 0x17) stop a flight: the drake's, walkthrough A's T2's.
+      await q.outdoorsAt(268, 139);
+      q.party.partyStatus[PartyStatus.FLIGHT] = 6;
+      expect(await q.go(Direction.W, Direction.S, Direction.SW)).toEqual([false, true, true]);
+      expect(q.global).toEqual({ x: 267, y: 141 });
+    });
+
+    it("The Orb's landings and refusals: mountains, water and lava, the ocean's edge, the caves' ceilings", async () => {
+      const q = new QuestRunner(scen);
+      /** Come down on (gx, gy): two turns left in the air, and wait them out. */
+      const land = async (gx: number, gy: number): Promise<string[]> => {
+        for (const pc of q.party.pcs) { pc.mainStatus = MainStatus.ALIVE; pc.curHealth = pc.maxHealth; }
+        await q.outdoorsAt(gx, gy);
+        q.party.partyStatus[PartyStatus.FLIGHT] = 2;
+        const from = q.univ.transcript.length;
+        await q.pause(2);
+        return said(q, from).filter((l) => l.startsWith('  '));
+      };
+      /** A square of the whole map whose terrain passes `test`, searching the given box. */
+      const find = (test: (t: number) => boolean, x0: number, x1: number, y0: number, y1: number): [number, number] => {
+        for (let x = x0; x <= x1; x++) {
+          for (let y = y0; y <= y1; y++) {
+            const t = scen.outdoors[Math.floor(x / 48)]![Math.floor(y / 48)]!.terrain[x % 48]![y % 48]!;
+            if (test(t)) return [x, y];
+          }
+        }
+        throw new Error('none');
+      };
+      expect(await land(317, 106)).toEqual(['  You plummet to your deaths.']);
+      expect(q.party.pcs.some((pc) => pc.isAlive)).toBe(false);
+      expect(await land(324, 101)).toEqual(['  You fall into the water and', '  rapidly drown.']);
+      expect(q.party.pcs.some((pc) => pc.isAlive)).toBe(false);
+      const lava = find((t) => t === 0x4b, 0, 335, 0, 479);
+      const hp = () => q.party.pcs.reduce((n, pc) => n + pc.curHealth, 0);
+      expect(await land(...lava)).toContain('  You land in lava!');
+      expect(hp()).toBeLessThan(q.party.pcs.reduce((n, pc) => n + pc.maxHealth, 0));
+      expect(await land(315, 106)).toEqual(['  You land safely.']);
+
+      // The ocean past the surface's east edge (east of x 324).
+      for (const pc of q.party.pcs) { pc.mainStatus = MainStatus.ALIVE; pc.curHealth = pc.maxHealth; }
+      const terAt = (x: number, y: number): number => scen.outdoors[Math.floor(x / 48)]![Math.floor(y / 48)]!.terrain[x % 48]![y % 48]!;
+      const flyable = (x: number, y: number): boolean => scen.terTypes[terAt(x, y)]!.flyOver || scen.terTypes[terAt(x, y)]!.blockage === 0;
+      const water = (x: number, y: number): boolean => terAt(x, y) >= 0x32 && terAt(x, y) <= 0x40;
+      const oy = [...Array(470).keys()].find((y) => y > 10 && water(323, y) && water(324, y) && water(325, y))!;
+      await q.outdoorsAt(323, oy);
+      q.party.partyStatus[PartyStatus.FLIGHT] = 6;
+      expect(await q.go(Direction.E)).toEqual([true]);
+      let from = q.univ.transcript.length;
+      expect(await q.go(Direction.E)).toEqual([false]);
+      expect(said(q, from)).toEqual(['Fly: Not over the ocean!']);
+      // The caves' west edge (x under 341), and fine a step inside it.
+      const cy = [...Array(480).keys()].find((y) => [340, 341, 342].every((x) => flyable(x, y)))!;
+      await q.outdoorsAt(342, cy);
+      q.party.partyStatus[PartyStatus.FLIGHT] = 6;
+      expect(await q.go(Direction.W)).toEqual([true]);
+      from = q.univ.transcript.length;
+      expect(await q.go(Direction.W)).toEqual([false]);
+      expect(said(q, from)).toEqual(['Fly: Ceiling too low.']);
+
+      // The orb fails in the far north, zone columns 1 and 2 of the top row.
+      q.party.specItems.add(ORB);
+      q.party.partyStatus[PartyStatus.FLIGHT] = 0;
+      await q.outdoorsAt(70, 20);
+      from = q.univ.transcript.length;
+      await q.useSpecItem(ORB);
+      expect(said(q, from)).toEqual(['Use orb: For some reason, it fails.']);
+    });
+
+    it('The Amulet of Rapid Returning: to Fort Emergence from the surface, and where it will not work', async () => {
+      const q = new QuestRunner(scen);
+      q.party.specItems.add(AMULET);
+      const FORT_SIDE: [number, number] = [291, 33];
+      q.party.setSdf(...FORT_SIDE, 1);
+      const use = async (): Promise<string[]> => {
+        const from = q.univ.transcript.length;
+        await q.useSpecItem(AMULET);
+        return said(q, from);
+      };
+      // In the far north, too far; in the caves, not on the surface; in town, no.
+      await q.outdoorsAt(200, 60);
+      expect(await use()).toEqual(["Amulet doesn't work.", "  You're too far from Fort Emergence."]);
+      await q.outdoorsAt(342, 400);
+      expect(await use()).toEqual(["Amulet doesn't work.", '  You need to be on the surface.']);
+      await q.outdoorsAt(310, 156);
+      await q.enter(16);
+      expect(await use()).toEqual(['  Can only cast outdoors.']);
+      // Outside Gale: to the fort, by its caves-side door.
+      await q.outdoorsAt(310, 156);
+      expect(await use()).toContain('  You are moved...');
+      expect(q.townNum, q.tail()).toBe(21);
+      expect(q.global).toEqual({ x: 420, y: 468 });
+      expect(q.party.getSdf(...FORT_SIDE)).toBe(0);
+    });
+
+    it('The Wand of Unusual Results: something odd, 120 times, and then nothing', async () => {
+      const q = new QuestRunner(scen);
+      q.party.specItems.add(WAND);
+      await q.outdoorsAt(310, 156);
+      const odd = /rash|swell|dumber|energetic|fish|hungry|lilacs|romantic|fingernails|Grass|iron|cash/;
+      let from = q.univ.transcript.length;
+      await q.useSpecItem(WAND);
+      expect(said(q, from)[0]).toBe('You wave the wand.');
+      expect(said(q, from).some((l) => odd.test(l)), said(q, from).join(' / ')).toBe(true);
+      expect(q.flag(0x457)).toBe(1);
+      q.setFlag(0x457, 121);
+      from = q.univ.transcript.length;
+      await q.useSpecItem(WAND);
+      expect(said(q, from)).toEqual(['You wave the wand.', 'Nothing happens.']);
+    });
+
+    it("Zalifar and the drake: surrender the food and swear, or fight; then the spire's place", async () => {
+      // Zalifar names the spire's place to anyone who asks (a question for the original, E3-CHECK-IN-ORIGINAL.md #12).
+      {
+        const r = new QuestRunner(scen);
+        await r.enter(106);
+        const [spire] = await r.talk(/Zalifar/, 'spire');
+        expect(spire).toMatch(/northwest of Tevrono/);
+        expect(scen.towns[32]!.canFind).toBe(true);
+      }
+      // Dalakros fought and killed.
+      {
+        const r = new QuestRunner(scen);
+        await r.enter(107);
+        r.answer(/No|Leave|Refuse/);
+        await r.step(...spot(107, 3));
+        expect(r.creatures(/Dalakros|Drake/).some((m) => !m.isFriendly), r.tail()).toBe(true);
+        await r.kill(/Dalakros|Drake/);
+        await r.enter(106);
+        const [assist] = await r.talk(/Zalifar/, 'assistance');
+        expect(assist, r.tail()).toMatch(/encounter with Dalakros/);
+      }
+      const q = new QuestRunner(scen);
+      await q.enter(106);
+      const [drake, recently] = await q.talk(/Zalifar/, 'drake', 'recently');
+      expect(drake).toMatch(/southwest of Greendale/);
+      expect(recently).toMatch(/ensure it will never attack/);
+      // Not yet.
+      const [before] = await q.talk(/Zalifar/, 'assistance');
+      expect(before).toMatch(/assist me in dealing with a drake/);
+
+      // The Drake Aerie: all the food, and Dalakros talks.
+      q.party.food = 200;
+      await q.enter(107);
+      await q.step(...spot(107, 3));
+      expect(q.party.food, q.tail()).toBe(0);
+      expect(q.creatures(/Dalakros|Drake/).every((m) => m.isFriendly)).toBe(true);
+      const [agree] = await q.talk(/Dalakros/, 'agree');
+      expect(agree, q.tail()).toMatch(/I will not attack humans/);
+
+      // Zalifar tells of the spire, and puts the Tower of Shifting Floors on the map.
+      await q.enter(106);
+      expect(scen.towns[32]!.canFind).toBe(false);
+      const [assist, spire, circles] = await q.talk(/Zalifar/, 'assistance', 'spire', 'circles');
+      expect(assist, q.tail()).toMatch(/encounter with Dalakros/);
+      expect(spire, q.tail()).toMatch(/northwest of Tevrono/);
+      expect(circles).toMatch(/four stone circles/);
+      expect(scen.towns[32]!.canFind, q.tail()).toBe(true);
+    });
+
+    it("The road north: the bridge's soldiers, the golems' posts, a way round to Tevrono, and the woods before the tower", async () => {
+      const q = new QuestRunner(scen);
+      // The bridge north of Gale (zone 24's spot 4): help the soldiers, once.
+      await q.outdoorsAt(305, 130);
+      q.answer('Attack');
+      await q.go(Direction.N);
+      expect(await q.fightOutdoors(), q.tail()).toBe(true);
+      let asked = q.log.length;
+      await q.outdoorsAt(305, 130);
+      await q.go(Direction.N);
+      expect(q.log.slice(asked).some((l) => l.startsWith('[choice]')), q.tail()).toBe(false);
+      expect(q.global).toEqual({ x: 305, y: 129 });
+      // Turning away there is for good, and the bridge is open all the same.
+      {
+        const r = new QuestRunner(scen);
+        await r.outdoorsAt(305, 130);
+        r.answer('Leave');
+        await r.go(Direction.N);
+        asked = r.log.length;
+        await r.outdoorsAt(305, 130);
+        await r.go(Direction.N);
+        expect(r.log.slice(asked).some((l) => l.startsWith('[choice]'))).toBe(false);
+        expect(r.global).toEqual({ x: 305, y: 129 });
+      }
+      // The golems' three posts on the road (zone 24's spots 1–3) hold the
+      // party off (`10a0:19ca`) until they are fought, which spends the spot;
+      // the road's own square at (299,101) is one. Turned down, the road
+      // stays shut, but there is a way round, from the bridge to Tevrono's gate.
+      const posts = new Set(['292,100', '299,101', '306,102']);
+      const terAt = (x: number, y: number): number => scen.outdoors[Math.floor(x / 48)]![Math.floor(y / 48)]!.terrain[x % 48]![y % 48]!;
+      const walkable = (x: number, y: number): boolean => !posts.has(`${x},${y}`) && scen.terTypes[terAt(x, y)]!.blockage === 0;
+      const outdoorPath = (from: [number, number], to: [number, number]): number => {
+        const seen = new Map([[from.join(), 0]]);
+        const queue = [from];
+        while (queue.length) {
+          const [x, y] = queue.shift()!;
+          const d = seen.get(`${x},${y}`)!;
+          if (x === to[0] && y === to[1]) return d;
+          for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
+            const n: [number, number] = [x + dx, y + dy];
+            if (seen.has(n.join()) || (n[0] !== to[0] || n[1] !== to[1]) && !walkable(...n)) continue;
+            seen.set(n.join(), d + 1);
+            queue.push(n);
+          }
+        }
+        return -1;
+      };
+      expect(outdoorPath([305, 128], [300, 88]), 'to Tevrono').toBeGreaterThan(0);
+      await q.outdoorsAt(299, 102);
+      q.answer('Leave');
+      await q.go(Direction.N);
+      expect(q.global, q.tail()).toEqual({ x: 299, y: 102 });
+      q.answer('Attack');
+      await q.go(Direction.N);
+      expect(q.global, q.tail()).toEqual({ x: 299, y: 102 });
+      expect(await q.fightOutdoors(), q.tail()).toBe(true);
+      await q.outdoorsAt(299, 102);
+      await q.go(Direction.N);
+      expect(q.global).toEqual({ x: 299, y: 101 });
+
+      // The woods east of the tower (zone 14's spots 3 and 2): a Woodsman
+      // sneaks by, and nobody else does without a fight.
+      {
+        const r = new QuestRunner(scen);
+        for (const pc of r.party.pcs) pc.traits.fill(false);
+        await r.outdoorsAt(286, 58);
+        r.answer(/Sneak|Yes/);
+        await r.go(Direction.W);
+        expect(r.session.mode === GameMode.COMBAT || r.party.outC.some((g) => g.exists), r.tail()).toBe(true);
+      }
+      q.party.pcs[0]!.traits[Trait.WOODSMAN] = true;
+      await q.outdoorsAt(286, 58);
+      q.answer(/Sneak|Yes/);
+      await q.go(Direction.W);
+      expect(q.party.outC.some((g) => g.exists), q.tail()).toBe(false);
+    });
+
+    it('The four spires: each a ring of force barriers, a Power Crystal inside, and its flag for the tower', async () => {
+      const q = new QuestRunner(scen);
+      q.party.pcs[0]!.level = 30;
+      for (const [k, town] of [167, 168, 169, 170].entries()) {
+        await q.enter(town);
+        const crystal = q.creatures(/Crystal/)[0]!;
+        expect(crystal, `the crystal in ${town}`).toBeDefined();
+        const ring = (): number => {
+          let n = 0;
+          for (let x = 0; x < 48; x++) for (let y = 0; y < 48; y++) if (q.town.fields[x]![y]!.has(FieldType.BARRIER_FORCE)) n++;
+          return n;
+        };
+        // E3's town record has room for 50 preset fields, and each spire's
+        // ring would take 56: one diagonal of it is missing (47, E3-SUSPECTED-BUGS.md #20).
+        expect(ring(), `${town}`).toBe(47);
+        expect(q.canReach(q.party.townLoc, crystal.curLoc), `${town} open on one side`).toBe(true);
+        // Dispel Barrier takes one down, as the walkthroughs do.
+        const [bx, by] = [23, town === 167 ? 9 : 10];
+        const barrier = [[bx, by], [bx, 37], [bx, 36]].find(([x, y]) => q.town.fields[x!]![y!]!.has(FieldType.BARRIER_FORCE))!;
+        q.place({ x: barrier[0]!, y: barrier[1]! - 1 });
+        for (let i = 0; i < 20 && q.town.fields[barrier[0]!]![barrier[1]!]!.has(FieldType.BARRIER_FORCE); i++) {
+          await q.spell(Spell.DISPEL_BARRIER, barrier[0]!, barrier[1]!);
+        }
+        expect(ring(), q.univ.transcript.slice(-3).join(' / ')).toBe(46);
+        // The crystal's death: its word, and the flag level 3's gate reads.
+        const before = q.log.length;
+        await q.kill(/Crystal/);
+        expect(q.flag(0x713 + 10 * k), `${town}`).toBe(1);
+        expect(q.log.slice(before).some((l) => /crystal/i.test(l)), q.tail()).toBe(true);
+      }
+    });
+
+    it("The Tower of Shifting Floors, level 1: the stairs, and Dispel Barrier on its golem generators", async () => {
+      const q = new QuestRunner(scen);
+      await q.enter(32);
+      const clangs = (): number => q.univ.transcript.filter((l) => /distant clang/.test(l)).length;
+      // The generators at work: a golem every eighth turn or so.
+      await q.clearHostiles();
+      await q.pause(40);
+      expect(clangs(), q.univ.transcript.slice(-5).join(' / ')).toBeGreaterThan(0);
+      // Each one dispelled: its dialog, 6 experience each, its flag, and floor.
+      // (The golems killed above levelled the party; 6 is felt at level 1.)
+      for (const pc of q.party.pcs) { pc.level = 1; pc.experience = 0; pc.mainStatus = MainStatus.ALIVE; pc.curHealth = pc.maxHealth; }
+      const xp = q.party.pcs[0]!.experience;
+      for (const { x, y } of GENERATORS) {
+        q.place(beside(q, x, y));
+        await q.spell(Spell.DISPEL_BARRIER, x, y);
+        expect(q.town.record.terrain[x]![y], `${x},${y}\n${q.tail(3)}`).toBe(0);
+      }
+      expect(q.party.pcs[0]!.experience).toBeGreaterThan(xp);
+      expect(q.log.filter((l) => /ceases operation/.test(l)).length).toBe(GENERATORS.length);
+      for (const g of GENERATORS) expect(q.party.getSdf(...g.flag)).toBe(1);
+      // And no more golems.
+      await q.clearHostiles();
+      const heard = clangs();
+      await q.pause(80);
+      expect(clangs()).toBe(heard);
+      // Dispel Barrier anywhere else in the tower: nothing to dispel.
+      q.place({ x: 20, y: 20 });
+      await q.spell(Spell.DISPEL_BARRIER, 21, 20);
+      expect(q.log.filter((l) => /ceases operation/.test(l)).length).toBe(GENERATORS.length);
+      // Coming back, they stay broken (the entry case).
+      await q.enter(32);
+      for (const { x, y } of GENERATORS) expect(q.town.record.terrain[x]![y]).toBe(0);
+
+      // The stairs: up at (2,2) to level 2's (5,5), down at (23,61) to the basement's (24,29).
+      await q.step(...spot(32, 11));
+      expect([q.townNum, q.at], q.tail()).toEqual([33, { x: 5, y: 5 }]);
+      await q.enter(32);
+      await q.step(...spot(32, 12));
+      expect([q.townNum, q.at], q.tail()).toEqual([108, { x: 24, y: 29 }]);
+    });
+
+    it('The basement: with Belt Beta set, straight north along the middle belt and out beside the last spire', async () => {
+      /** Walk north from just below the belts, up to 12 times; the row reached. */
+      const north = async (beta: number): Promise<number> => {
+        const r = new QuestRunner(scen);
+        r.setFlag(0x4c4, beta);
+        await r.enter(108, { x: 12, y: 13 });
+        for (let i = 0; i < 12 && r.session.inTown && r.at.y > 6; i++) await r.go(Direction.N);
+        return r.session.inTown ? r.at.y : -1;
+      };
+      expect(await north(0), 'Beta as it starts').toBeGreaterThan(6);
+      expect(await north(1), 'Beta set').toBeLessThanOrEqual(6);
+      // The belt's far end is the door out: zone 14's (34,4), beside the
+      // Northern Spire, as the stairs down from the tower set it.
+      const q = new QuestRunner(scen);
+      q.setFlag(0x4c4, 1);
+      await q.enter(32);
+      await q.step(...spot(32, 12));
+      expect(q.townNum).toBe(108);
+      q.place({ x: 12, y: 13 });
+      for (let i = 0; i < 20 && q.session.inTown; i++) await q.go(Direction.N);
+      expect(q.session.inTown, q.tail()).toBe(false);
+      expect(q.global).toEqual({ x: 274, y: 51 });
+      await q.go(Direction.N, Direction.N);
+      expect(q.townNum, q.tail()).toBe(167);
+    });
+
+    it("The tower's level 2: the control panel's belts, the library, the lever, and the Star belt to the stairs up", async () => {
+      const q = new QuestRunner(scen);
+      await q.enter(33);
+      const ALPHA = 0x4c3, BETA = 0x4c4, STAR = 0x4c5;
+      // The panel (spot 21): Belt Alpha and Belt Beta pressed, Star left alone.
+      await q.clearHostiles();
+      q.number(5, 7, 0);
+      await q.step(...spot(33, 21));
+      expect([q.flag(ALPHA), q.flag(BETA), q.flag(STAR)], q.tail()).toEqual([1, 1, 0]);
+      expect([q.town.record.terrain[5]![51], q.town.record.terrain[6]![51]]).toEqual([249, 249]);
+
+      // Belt Alpha south lets the party down to the library (spots 23 and 24).
+      const toLibrary = async (alpha: number): Promise<boolean> => {
+        const r = new QuestRunner(scen);
+        r.setFlag(ALPHA, alpha);
+        await r.enter(33, { x: 6, y: 50 });
+        await r.clearHostiles();
+        await r.go(Direction.S, Direction.S, Direction.S);
+        return r.at.y >= 53;
+      };
+      expect(await toLibrary(0)).toBe(false);
+      expect(await toLibrary(1)).toBe(true);
+      for (const pc of q.party.pcs) pc.level = 5;
+      await touch(q, ...spot(33, 23));
+      await touch(q, ...spot(33, 24));
+      expect(q.party.pcs.some((pc) => pc.priestSpells[Spell.DIVINE_THUD - 100]), q.tail()).toBe(true);
+      expect(q.party.pcs.some((pc) => pc.mageSpells[Spell.MINDDUEL]), q.tail()).toBe(true);
+
+      // The lever behind the secret door (spot 22) turns the belt at (59,48).
+      const belt = q.town.record.terrain[59]![48];
+      await q.step(...spot(33, 22));
+      expect(q.town.record.terrain[59]![48], q.tail()).toBe(belt === 247 ? 249 : 247);
+
+      // The Star belt, (32,10)–(32,11): as it starts it carries the party up
+      // from the east-running belt to the stairs (spot 17); set, it won't.
+      const toStairs = async (star: number): Promise<number> => {
+        const r = new QuestRunner(scen);
+        r.setFlag(STAR, star);
+        await r.enter(33, { x: 32, y: 12 });
+        await r.clearHostiles();
+        for (let i = 0; i < 10 && r.townNum === 33; i++) await r.go(Direction.N);
+        return r.townNum;
+      };
+      expect(await toStairs(1)).toBe(33);
+      expect(await toStairs(0)).toBe(60);
+    });
+
+    it("The tower's level 3: the gate waits on the four spires, and the Mind Crystal ends the golem plague", async () => {
+      const q = new QuestRunner(scen);
+      await q.enter(60);
+      const crystal = q.creatures(/Crystal/)[0]!;
+      expect(crystal, q.town.monsters.filter((m) => m.isAlive).map((m) => m.getName()).join()).toBeDefined();
+      await q.kill(/Golem/);
+      const [gx, gy] = spot(60, 2);
+      // With a spire standing, the gate refuses.
+      q.setFlag(0x713, 1); q.setFlag(0x71d, 1); q.setFlag(0x727, 1);
+      await q.step(gx, gy);
+      expect(q.at, q.tail()).not.toEqual({ x: gx, y: gy });
+      q.setFlag(0x731, 1);
+      await q.step(gx, gy);
+      expect(q.at, q.tail()).toEqual({ x: gx, y: gy });
+      // The crystal, past the belt maze.
+      expect(q.canReach(q.at, crystal.curLoc), 'reachable').toBe(true);
+      await q.kill(/Crystal/);
+      expect(q.flag(0xc8c), q.tail()).toBe(1);
+      expect(q.hasSpecItem(partySpecItem(0x46)), q.tail()).toBe(true);
+      expect(q.town.monsters.some((m) => m.isAlive), 'every golem gone').toBe(false);
+      // The golems are gone from the tower on return, too.
+      await q.enter(32);
+      expect(q.town.monsters.some((m) => m.isAlive && [159, 160, 161, 162, 163].includes(m.number))).toBe(false);
+      // And the stairs back down (spot 11).
+      await q.enter(60);
+      await q.step(...spot(60, 11));
+      expect(q.townNum, q.tail()).toBe(33);
+    });
+
+    it('The golems reported and rewarded: Anaximander, Berra, Levy and X; Pasi and Vladimir', async () => {
+      const q = new QuestRunner(scen);
+      q.setFlag(0xc8c, 1);
+      const HOT_SHARDS = partySpecItem(0x46);
+      q.party.specItems.add(HOT_SHARDS);
+      await q.enter(21, { x: 10, y: 10 });
+      await q.step(...spot(21, 1));
+      expect(q.flag(0xc8c), q.tail()).toBe(2);
+      // Berra takes the hot shards, and the evidence starts on its way (0xc93).
+      await q.talk(/Berra/, 'evid');
+      expect(q.hasSpecItem(HOT_SHARDS), q.tail()).toBe(false);
+      expect(q.flag(0xc93)).toBe(1);
+      const items = () => q.party.pcs.reduce((n, pc) => n + pc.items.filter((it) => it.variety !== 0).length, 0);
+      const before = items();
+      const [reward] = await q.talk(/Levy/, 'rewa');
+      expect(q.flag(0xc8c), reward).toBe(3);
+      expect(items(), reward).toBe(before + 1);
+      await q.enter(24, { x: 10, y: 10 });
+      await q.talk(31, 'earn');
+      expect(q.party.pcs.some((pc) => pc.mageSpells[0x36] && pc.mageSpells[0x39]), q.tail()).toBe(true);
     });
   });
 });

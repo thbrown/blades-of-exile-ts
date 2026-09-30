@@ -10,6 +10,9 @@
  * follows); a case whose flag has already been spent falls through to it,
  * as E3's `else` chain does.
  *
+ * The same list carries the other spell E3 hard-codes the same way: Dispel
+ * Barrier on the golem generators (the last cases).
+ *
  * The squares are altars, which no step reaches, so none needs a guard
  * against being walked on. The third argument of E3's message calls is the
  * sound (57), as everywhere; the screen flashes before the Troglo Temple's
@@ -20,6 +23,7 @@ import { Spell } from '../../../src/data/spell';
 import type { PlaceScript } from '../specials';
 import { partyFlag as f, townSpotFlag, type SpecBuilder, type Step } from '../script';
 import { greatCircleSmash } from './dungeons';
+import { GENERATORS } from './shiftingFloors';
 
 /** The spot ids the Ritual's squares take (E3's own go up to 26, the slime pools' from 80). */
 export const SANCTIFY_SPOT = 70;
@@ -28,6 +32,8 @@ interface Sanctified {
   towns: number[];
   at: [number, number][];
   steps: (b: SpecBuilder) => Step[];
+  /** The spell the square answers, if not the Ritual. */
+  spell?: Spell;
 }
 
 /** Answered: the steps, and the block that stops "Nothing happens." */
@@ -89,6 +95,15 @@ const CASES: Sanctified[] = [
     towns: [62], at: [[23, 24]],
     steps: (b) => [b.ifFlagEq(townSpotFlag(62, 1), 0, greatCircleSmash(b, [b.blockMove()]))],
   },
+  // Not the Ritual: Dispel Barrier on one of the Tower of Shifting Floors'
+  // sixteen golem generators (`10b0:66f5`, in E3's own dispel, after the
+  // fields and the magic locks) stops it for good: dialog 0xcf9, 6
+  // experience each (`10b0:1ff2`), its flag, and floor where it stood. E3
+  // asks nothing of the flag, so a spent one does it all again.
+  ...GENERATORS.map(({ flag, x, y }): Sanctified => ({
+    towns: [32], at: [[x, y]], spell: Spell.DISPEL_BARRIER,
+    steps: (b) => done(b, [b.dialog(0xcf9), b.xp(6), b.setFlag(flag, 1), b.setTer(x, y, 0)]),
+  })),
 ];
 
 /** The Ritual's squares in `town`, as spots to add after E3's own. */
@@ -106,7 +121,7 @@ export function withSanctify(town: number, script: PlaceScript | undefined): Pla
     let k = 0;
     for (const c of here) {
       for (const _ of c.at) {
-        m.set(SANCTIFY_SPOT + k++, [b.ifSpellTargeted(Spell.RITUAL_SANCTIFY, c.steps(b))]);
+        m.set(SANCTIFY_SPOT + k++, [b.ifSpellTargeted(c.spell ?? Spell.RITUAL_SANCTIFY, c.steps(b))]);
       }
     }
     return m;

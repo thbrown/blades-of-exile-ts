@@ -29,6 +29,7 @@ import { MainStatus, PartyStatus, Race, Status, Trait, statusInfo } from '../uni
 import { MAX_FOOD, MAX_GOLD, Party } from '../universe/party';
 import { Universe } from '../universe/universe';
 import { damagePc, hitParty } from './damage';
+import { e3Land, e3SpecItems } from './e3Flight';
 import { hasAbil } from './alchemy';
 import { drainPc } from './itemUse';
 import { increaseLight } from './spellTown';
@@ -266,7 +267,10 @@ export async function increaseAgeEffects(session: GameSession): Promise<void> {
   if (party.partyStatus[PartyStatus.FLIGHT] === 2) {
     univ.addStringToBuf('You are starting to descend.');
   }
-  if (party.partyStatus[PartyStatus.FLIGHT] === 1) {
+  if (party.partyStatus[PartyStatus.FLIGHT] === 1 && e3SpecItems(univ)) {
+    // Exile III's own landing (`e3Flight.ts`).
+    await e3Land(univ);
+  } else if (party.partyStatus[PartyStatus.FLIGHT] === 1) {
     // Landing is checked against the **outdoor** map at `out_loc`, whatever
     // mode the party is in (boe.actions.cpp:3428): come down on something
     // that blocks movement — deep water, a mountain — and the whole party

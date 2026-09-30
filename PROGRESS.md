@@ -15127,11 +15127,93 @@ one quest at a time**, to keep each session's context small.
     (spot 15). Nothing was missing for it.
   - *Not covered*: the lower caves' snake pit and Naga fight, the Troglo Temple's treasure rooms, Castle Troglo's
     loot after the war, and the doomguard.
-- [ ] **Next: the golems** (walkthrough A "4. Golems", B chapter 4).
-- [ ] Then the endgame's alien beasts, then the five artifact quests.
+- [x] **The golems** (2026-09-30), thirteen tests. It could not be
+  finished before today: nothing could fly, and E3's flight is the only
+  way to the Remote Aerie, the Drake Aerie and the Western Spire.
+  - **The Orb of Thralni** (a side quest the golems need): the plot's
+    0xc92, Anaximander's news, the Portal Fortress's portal to the Arrival
+    Platform without the orb, the Cult of the Sacred Item (the marble key
+    in the chest at (34,39), the padlocks, the three fountains' Touch
+    before the wards, the vault's Orb, Wand and uranium bar, once; the
+    dead portal, re-energised at spot 22, home), Anaximander's thanks.
+  - Flying: walkthrough B's (315,106), over two peaks to the clearing at
+    (318,106), "have to land first" at the aerie, down safely after six
+    turns, in; the high peaks (0x17) refuse; landings on mountains, water
+    and lava; the ocean's edge and the caves' ceiling; the orb failing in
+    the far north. The Amulet of Rapid Returning (from Gale's outdoors to
+    the fort's caves side; refused in the far north, the caves and town).
+    The Wand of Unusual Results (its twelve oddities, 120 uses).
+  - Zalifar ("drake", "recently"), the Drake Aerie both ways (all the
+    food and "agree", or refused, the traps, and Dalakros killed), then
+    "assistance", "spire" (town 32 on the map) and "circles".
+  - The road north: the bridge's soldiers (Attack, or Leave for good),
+    zone 24's golem posts (shut until fought; the road's square at
+    (299,101) is one, and there's a way round from the bridge to Tevrono),
+    and the woods before the tower (a Woodsman sneaks by).
+  - The four spires: each ring, Dispel Barrier on it, the crystal's word
+    and flag (0x713 + 10k).
+  - The tower: level 1's stairs, and all sixteen golem generators
+    dispelled (dialog 0xcf9, 6 experience, floor), after which the
+    distant clangs stop, and they stay broken on return; the basement,
+    where only Belt Beta set lets a party walk north up the middle belts
+    and out beside the Northern Spire (walked through the engine's belts);
+    level 2's panel (Alpha and Beta), Alpha to the library (walked) and its
+    two books, the lever at (57,35), and the Star belt up to the stairs
+    (walked, both ways); level 3's gate on the four spires, and the Mind
+    Crystal (0xc8c, the hot shards, every golem gone, and none on return).
+  - Rewards: Anaximander, Berra (the hot shards start "Dealing with the
+    Evidence", 0xc93), Levy, and X's two spells.
+  - **Found and fixed: no special item could be Used, and nothing could
+    fly.** New flag **`special-items` = `exile3:<node>`**
+    (`src/game/e3Flight.ts`, DIVERGENCES.md #36): E3's Use button for the
+    Orb and the Amulet, its two refusals in flight, and its landings; the
+    converter sets `fly` on the terrains E3 flies over and writes the Wand
+    as a node (`tools/e3convert/specItems.ts`). `GameSession.useSpecItem`
+    is the Use button's path now, the UI's and the runner's.
+  - **Found and fixed: Dispel Barrier didn't break the golem generators.**
+    The converter said nothing in E3 set their flags; E3's own dispel does
+    (`10b0:66f5`), for the sixteen squares in town 32. They're spell
+    spots in `towns/sanctify.ts`, beside the Ritual's.
+  - **Found and fixed: killing Dalakros didn't count.** Zalifar waits on
+    (107,8), which only swearing sets; E3's turn code copies the drake's
+    death flag (107,9) into it every turn (`10c0:6fb8`). His death sets
+    both now (`KILL_SCRIPTS`).
+  - **Found and fixed: an encounter spot asked again after its fight.**
+    E3's `FUN_10c0_443a` writes 20 to the spot's flag as the group is met,
+    which kills the spot; the engine's once-node writes 250, which the
+    converter's spent-spot guard didn't see, so the bridge asked "help the
+    soldiers?" forever and zone 24's posts never opened.
+    `SpecBuilder.onceEncounter` leaves E3's 20 now (every zone's).
+  - New suspected E3 bug #20 (each spire's ring is missing a side: the
+    town record holds 50 fields, the ring needs 56), not wired. New
+    check-in questions 12–15.
+  - Runner verbs added: `outdoorsAt(gx, gy)` and `global` (the whole
+    map's squares, as walkthrough B numbers them), `go(...dirs)`, and
+    `useSpecItem(k)`. `spell` casts at the caster's own level now (Dispel
+    Barrier rolls against it).
+  - `verify-e3.mjs` flies the orb over the aerie's peaks by the arrow keys.
+  - *Not covered*: Tevrono itself (General Baziron, whom walkthrough A
+    skips), the level 1 belt maze to the stairs and level 3's (their paths
+    are only `canReach`), the stone circles, and the province maps.
+- [ ] **Next: the endgame's alien beasts** (walkthrough A's "Endgame",
+  B's "Time for the Cleaning Lady!" and on).
+- [ ] Then the five artifact quests.
 
-All checks pass (2026-09-30): 1,516 tests, tsc, both sweeps, verify-screen,
+All checks pass (2026-09-30): 1,529 tests, tsc, both sweeps, verify-screen,
 verify-party and verify-e3.
+
+**Gotchas from the golems (2026-09-30):**
+- Adding a scenario-level node (or changing what a builder step emits)
+  renumbers every node after it; a test that names a node by number breaks.
+  Look the node up from its spot.
+- A spot's flag of 20 is E3's "spent" (the converter guards spots below 10
+  with it); the engine's once-nodes write 250. A builder step for an E3
+  one-shot helper must leave 20 if the spot can be stepped on again.
+- The E3 turn code (`FUN_10c0_61c4` and `10c0:6fxx`) has more one-line
+  flag copies like the drake's; `grep 'es:\[0x4b[0-9a-f]\]'` in a
+  `nedis.py --all` dump finds writes to a town's flags.
+- `nedis.py --str SEG:OFF` prints a code segment's string; a message
+  string in E3's Use code lives in the same segment as the code.
 
 **Gotchas from the giants and troglodytes (2026-09-30):**
 - A second `QuestRunner` built mid-test resets the shared scenario's towns

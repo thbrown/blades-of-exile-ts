@@ -426,6 +426,29 @@ console.log('THUGS:', JSON.stringify({ before: thugsBefore, ...thugs }));
 await shot('06-thugs');
 if (thugs.alive !== thugsBefore + 4 || !thugs.hostile.every(Boolean)) errors.push(`the thugs did not come in hostile: ${JSON.stringify({ thugsBefore, thugs })}`);
 
+// The Orb of Thralni (src/game/e3Flight.ts): used below the Remote Aerie's
+// peaks, (315,106), then over them by the arrow keys to the clearing at (318,106).
+const orb = await page.evaluate(async () => {
+  const s = window.__session;
+  s.univ.party.specItems.add(6);
+  s.debugLeaveTown();
+  s.positionParty(6, 2, 27, 10);
+  await s.useSpecItem(6);
+  window.__redraw?.();
+  return { flight: s.univ.party.partyStatus[1], said: s.univ.transcript.slice(-1)[0] };
+});
+for (let i = 0; i < 3; i++) {
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(300);
+}
+const flown = await page.evaluate(() => {
+  const p = window.__session.univ.party;
+  return { x: p.sector.x * 48 + p.locInSec.x, y: p.sector.y * 48 + p.locInSec.y, flight: p.partyStatus[1] };
+});
+console.log('ORB:', JSON.stringify({ ...orb, flown }));
+await shot('07-orb');
+if (orb.flight !== 6 || flown.x !== 318 || flown.y !== 106) errors.push(`the orb did not fly the party over the peaks: ${JSON.stringify({ orb, flown })}`);
+
 // The test panel (`?debug=1`, src/platform/debugPanel.ts): into Shayder, and
 // Step onto spot #18, the ferry, which should ask.
 await page.goto('http://localhost:5199/?scenario=exile3&pace=1&debug=1');
@@ -441,7 +464,7 @@ await ferryRow.locator('button:text("Step")').click().catch(() => {});
 await page.waitForTimeout(800);
 const panelAsked = await page.evaluate(() => window.__dialogs.active?.getText?.('str1') ?? null);
 console.log('PANEL:', JSON.stringify({ row: panelRow, asked: panelAsked?.slice(0, 40) }));
-await shot('07-panel');
+await shot('08-panel');
 if (!panelRow || !/ferry/.test(panelAsked ?? '')) errors.push(`the test panel did not step onto the ferry: ${JSON.stringify({ panelRow, panelAsked })}`);
 
 await browser.close();

@@ -565,12 +565,17 @@ export class SpecBuilder {
    * and the zone's special encounter `group`. E3 places the group on its
    * marker spot (encounter number `50 + k`); the engine's node places it by
    * the party, which is a step or two away.
+   *
+   * E3 skips it once the flag is above 0, and writes 20 as the group is met
+   * (`10c0:4453`), which marks a spot's own flag spent (`specials.ts`), so a
+   * question asked before it isn't asked again. The engine's node writes
+   * its own 250, so the 20 follows it.
    */
   onceEncounter(flag: Flag, block: number, a: number, b: number, group: number): Step {
-    return (next) => this.node('once-out-encounter', {
+    return this.ifFlagEq(flag, 0, [(next) => this.node('once-out-encounter', {
       sdf: flag, msg: [a > 0 ? this.e3(block, a) : -1, b > 0 ? this.e3(block, b) : -1], ex1: [group],
       pic: this.src.encounterPic?.(group),
-    }, next);
+    }, next), this.setFlag(flag, 20)]);
   }
 
   gold(n: number): Step {
@@ -921,9 +926,9 @@ export class SpecBuilder {
       this.ifChance(Math.round(100 / (n - k)), then, [otherwise]), (next) => next);
   }
 
-  /** Every PC's disease cleared (E3 zeroes the status word directly). */
-  cureDiseaseAll(): Step {
-    return (next) => this.node('status', { ex1: [8, 0, STATUS_DISEASE] }, next);
+  /** Every PC's disease down by `n` (8, E3 zeroing the status word directly, clears it). */
+  cureDiseaseAll(n = 8): Step {
+    return (next) => this.node('status', { ex1: [n, 0, STATUS_DISEASE] }, next);
   }
 
   /**

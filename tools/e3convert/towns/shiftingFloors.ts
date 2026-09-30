@@ -38,10 +38,9 @@ const PANEL_SETTINGS = new Map<number, { flag: Flag; off: number; on: number }>(
  * 1140:0190; the flags are party+0xc0a on for the first ten and party+0xc00
  * on for the other six (`10c0:720e`, `10d8:1dff`).
  *
- * **Nothing in E3 sets these flags**: no code writes them, and no talk node or
- * creature's death flag names them, so every generator runs for the whole
- * game. The spawner and the entry case (`towns/entry.ts`) test them anyway, as
- * E3 does.
+ * Dispel Barrier on a generator's square sets its flag (`10b0:66f5`, in
+ * E3's dispel; `towns/sanctify.ts` has it), and nothing clears one. The
+ * spawner and the entry case (`towns/entry.ts`) test them.
  */
 export const GENERATORS: { flag: Flag; x: number; y: number }[] = [
   ...[[8, 3], [12, 7], [2, 13], [14, 13], [30, 20], [23, 26], [6, 25], [11, 41], [16, 54], [4, 57]]

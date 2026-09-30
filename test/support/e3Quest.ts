@@ -13,7 +13,7 @@
 import { readFileSync } from 'node:fs';
 import { vi } from 'vitest';
 import { GameRng } from '../../src/core/rng';
-import type { Location } from '../../src/core/location';
+import type { Direction, Location } from '../../src/core/location';
 import type { Scenario } from '../../src/data/scenario';
 import { restoreScenarioState } from '../../src/data/scenarioState';
 import { SpellPat } from '../../src/data/pattern';
@@ -160,6 +160,17 @@ export class QuestRunner {
     await this.settle();
   }
 
+  /** Outdoors at square (gx, gy) of the whole map, as the walkthroughs number them. */
+  async outdoorsAt(gx: number, gy: number): Promise<void> {
+    await this.outdoors(Math.floor(gx / 48), Math.floor(gy / 48), gx % 48, gy % 48);
+  }
+
+  /** Where the party is on the whole outdoor map. */
+  get global(): Location {
+    const { sector, locInSec } = this.party;
+    return { x: sector.x * 48 + locInSec.x, y: sector.y * 48 + locInSec.y };
+  }
+
   /** Stand on a town square, with no step taken. */
   place(at: Location): void {
     this.party.townLoc = { ...at };
@@ -205,6 +216,22 @@ export class QuestRunner {
       await this.session.moveTo({ x, y });
       await this.settle();
     }
+  }
+
+  /** Arrow-key steps from where the party stands; whether each went through. */
+  async go(...dirs: Direction[]): Promise<boolean[]> {
+    const moved: boolean[] = [];
+    for (const d of dirs) {
+      moved.push(await this.session.move(d));
+      await this.settle();
+    }
+    return moved;
+  }
+
+  /** Use special item `k` from the special-items page. */
+  async useSpecItem(k: number): Promise<void> {
+    await this.session.useSpecItem(k);
+    await this.settle();
   }
 
   /** Stand still for `n` turns (Space, `handle_pause`). */
@@ -257,10 +284,11 @@ export class QuestRunner {
 
   /**
    * Cast a town spell at (x, y) through the real targeting (`cast_town_spell`),
-   * as a freebie from PC `pc`, so nobody has to know it or have the points.
+   * as a freebie from PC `pc`, so nobody has to know it or have the points,
+   * at the PC's own level.
    */
   async spell(spell: Spell, x: number, y: number, pc = 0, pattern = SpellPat.SINGLE): Promise<void> {
-    startTownTargeting(this.session, spell, pc, true, pattern);
+    startTownTargeting(this.session, spell, pc, true, pattern, this.party.pcs[pc]!.level);
     await castTownSpell(this.session, { x, y });
     await this.settle();
   }

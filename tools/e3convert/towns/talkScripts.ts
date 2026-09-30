@@ -40,6 +40,12 @@ const URSAGI_KILLED: [number, number] = [291, 32];
  */
 export const KILL_SCRIPTS = new Map<number, (b: SpecBuilder) => Step[]>([
   [51, (b) => [b.incFlag(URSAGI_KILLED)]],
+  // Dalakros, the only creature in the Drake Aerie. His death flag is
+  // (107,9), and Zalifar's help waits on (107,8), which only swearing to
+  // him sets; E3's per-turn code copies the one into the other
+  // (`10c0:6fb8`: `if (flag(107,9)) flag(107,8) = 1`, every turn). Nothing
+  // else sets (107,9), so his death does both here, a turn sooner.
+  [107, (b) => [b.setFlag(f(0x4ba), 1)]],
 ]);
 
 /** Crisper's reply by flag 0x22e (0x35 + it). */

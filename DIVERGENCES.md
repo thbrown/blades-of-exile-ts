@@ -820,6 +820,39 @@ crossed. E3's crush also follows a *belt* that carries the party into a
 wall (the same routine), so under the flag the port's BoE belts crush too,
 in any town: the Tower of Shifting Floors' are the ones it touches.
 
+### 36. Flying, and the special items that fly (2026-09-30)
+
+**DECIDED: a scenario flag, `special-items` = `exile3:<node>`, with Exile
+III's rules in the engine (`src/game/e3Flight.ts`), and E3's fly-over list
+as terrain data.** Exile III's special-item button (`FUN_10c0_1f96`) does
+something for three items, and the golem plague can't be finished without
+one: the Orb of Thralni (item 6) gives six turns of flight, which is the
+only way into the Remote Aerie, the Drake Aerie and the Western Spire. The
+port had no way to Use any E3 special item, and every E3 terrain had
+`fly` false, so flight did nothing even when cast. Now:
+- **What can be flown over** is BoE's own `fly_over`: the converter sets it
+  on the terrains E3's outdoor move lets a flying party onto (`1010:7945`:
+  cave wall, mountains, water, rocks, lava, pits). The high peaks (0x17)
+  aren't among them.
+- **The Orb** (outdoors, not in a boat or on a horse, not in zone columns 1
+  and 2 of E3's top window row) and **the Amulet of Rapid Returning** (item
+  7: from the surface, zone rows 2 and down, into Fort Emergence by its
+  caves-side door; `node` sets the fort's side) are the engine's. BoE's
+  `AFFECT_PARTY_STATUS` can't stand in for the orb: OBoE writes every
+  status into Stealth (`specials/affect.ts`), and no node reads where the
+  party is outdoors. The Wand of Unusual Results (item 8) is an ordinary
+  node. The province maps (0–5, 9) show a picture in E3, which the port
+  has no dialog for, and stay unusable.
+- **Two refusals** while flying (`1010:7315`–`7442`), "Fly: Ceiling too
+  low." near the caves' edges and "Fly: Not over the ocean!" past the
+  surface's, written against E3's window corner; the engine's window slides
+  on the same rule but stops elsewhere, so they are translated to the whole
+  map's squares at those edges (the caves' top row still reads the corner).
+- **Landing** (`1010:5be2`): water drowns, mountains and pits kill, lava
+  burns (8d10 fire), anything else is safe. BoE kills on anything that
+  blocks, and lava doesn't.
+OBoE ignores the flag: the items can't be Used and nothing flies.
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

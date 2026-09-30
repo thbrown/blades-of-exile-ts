@@ -765,9 +765,10 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     // Zone 45 (0,5), spot 8 at (31,37): the roaches' hills, which find the
     // lair once the Filth Factory (town 26) shows on the map.
     session.positionParty(0, 5, 31, 37);
+    const node = scen.outdoors[0]![5]!.specialLocs.find((l) => l.x === 31 && l.y === 37)!.spec;
     const step = async (): Promise<string> => {
       said.length = 0;
-      await session.runSpecial(SpecCtx.OUT_MOVE, SpecCtxType.OUTDOOR, 23, univ.party.locInSec);
+      await session.runSpecial(SpecCtx.OUT_MOVE, SpecCtxType.OUTDOOR, node, univ.party.locInSec);
       return said.join(' ');
     };
     const hidden = await step();

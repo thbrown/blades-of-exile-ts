@@ -65,7 +65,8 @@ import { dailyPlot } from './towns/plot';
 import { townStatesXml } from './towns/townStates';
 import { SpecBuilder, type ScriptSource, type Step } from './script';
 import { BASIC_BUTTONS } from '../../src/game/specials/oneshot';
-import { makeSpecItem, type SpecItem } from '../../src/data/quest';
+import type { SpecItem } from '../../src/data/quest';
+import { e3SpecialItems } from './specItems';
 import type { Shop } from '../../src/data/shop';
 
 const ATTITUDE = ['docile', 'hostile-a', 'friendly', 'hostile-b'];
@@ -100,6 +101,18 @@ const TOWN_SCRIPTS = new Map<number, PlaceScript>([
 
 /** E3's special items: strings 1801 on, and the engine's limit too. */
 const E3_SPECIAL_ITEMS = 50;
+
+/**
+ * What a flying party may cross: E3's outdoor move lets it onto a blocked
+ * square of these terrains (`1010:7945`), the cave wall, mountains, water,
+ * rocks, lava and pits. That is BoE's `fly_over`. Only the outdoors reads
+ * it, as E3 flies only there. The rest of E3's flying is the engine's
+ * (`src/game/e3Flight.ts`).
+ */
+const E3_FLY_OVER = new Set([0x16, ...range(0x18, 0x23), ...range(0x32, 0x40), 0x47, 0x4a, 0x4b, 0x56]);
+function range(a: number, b: number): number[] {
+  return Array.from({ length: b - a + 1 }, (_, i) => a + i);
+}
 
 /**
  * The monsters E3's `make_town_hostile` gets moving and alerts (1070:2455,
@@ -377,7 +390,7 @@ function terrainXml(types: E3TerrainType[], hiddenAs: Map<number, number>): stri
         <map>${pic}</map>
         <blockage>${BLOCKAGE[t.blockage] ?? 'none'}</blockage>
         <transform>${TRANSFORM.get(id) ?? id}</transform>
-        <fly>false</fly>
+        <fly>${E3_FLY_OVER.has(id)}</fly>
         <boat>${t.boat}</boat>
         <ride>${t.blockage < 3}</ride>
         <archetype>false</archetype>
@@ -737,7 +750,7 @@ function scenarioXml(
   outStart: { sector: { x: number; y: number }; loc: { x: number; y: number } },
   shops: Shop[], specialItems: SpecItem[], specStrings: string[], newDay: number, roadJoins: number[],
   jobBase: number, skribbane: number[], journal: string[], cursors: E3Cursor[], townCount: number, uranium: number, crushed: number,
-  crumbles: number[],
+  crumbles: number[], amuletNode: number,
 ): string {
   return `${XML_HEAD}<scenario boes="2.0.0">
     <title>Exile III: Ruined World</title>
@@ -774,6 +787,7 @@ function scenarioXml(
         <explode-spots>exile3</explode-spots>
         <pick-lock>exile3</pick-lock>
         <crumble>exile3:${crumbles.join(',')}</crumble>
+        <special-items>exile3:${amuletNode}</special-items>
         <disease>exile3</disease>
         <summons>exile3</summons>
         <dungeon-sound>${E3_DUNGEON_SOUND}</dungeon-sound>
@@ -1000,13 +1014,9 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   const talk = convertE3Talk(readE3Talk(strings), speakers, shopTables, E3_TOWN_COUNT, shops.length, foodBase, scen);
   const newDay = scen.dailyReset(DAILY_FLAGS, dailyPlot(scen));
   e3Src.shop = talk.shop;
-  // Special items: a name and a description each, from string 1801.
-  const specialItems = Array.from({ length: E3_SPECIAL_ITEMS }, (_, k) => {
-    const item = makeSpecItem();
-    item.name = strings.get(1801 + 2 * k) ?? '';
-    item.descr = strings.get(1802 + 2 * k) ?? '';
-    return item;
-  });
+  // Special items: a name and a description each, from string 1801, and
+  // what Using three of them does (`specItems.ts`).
+  const { items: specialItems, amuletNode } = e3SpecialItems(scen, (id) => strings.get(id) ?? '', E3_SPECIAL_ITEMS);
 
   // For the browser's test panel (`?debug=1`): E3's spot numbers, so a
   // spot can be matched with its line in `towns/`.
@@ -1129,7 +1139,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   // Last, since the places' scripts can add shops of their own.
   shops.push(...talk.shops);
   const cursors = readE3Cursors(resources);
-  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, skribbane, e3JournalStrings((id) => strings.get(id) ?? ''), cursors, townCount, uranium, crushed, readE3Crumbles(files.exe)));
+  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, skribbane, e3JournalStrings((id) => strings.get(id) ?? ''), cursors, townCount, uranium, crushed, readE3Crumbles(files.exe), amuletNode));
   const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(read), ...e3MapSheets(read)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
   // E3's own sounds, which a scenario's `sounds/SNDn.wav` puts in place of
