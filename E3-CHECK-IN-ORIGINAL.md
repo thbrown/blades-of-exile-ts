@@ -105,6 +105,66 @@ quest steps.
 - **Question:** can a member train Mage Spells at all, and does it end
   the membership (or make Shayder hostile)?
 
+### 7. King Vothkaro's question (2026-09-30)
+
+- **Where:** Castle Troglo, the throne room, after the cell door opens
+  the second time.
+- **Do:** talk to Vothkaro. When he asks "Have you read the scroll I left
+  you?", answer the button that isn't Yes.
+- **The port:** a line of text and no conversation (`FUN_1020_1484`,
+  `1020:14bf`); asked again later, the same question. Yes moves the
+  story on and the conversation opens.
+- **Question:** is that what happens? And does he ask at all once the
+  story has passed that point?
+
+### 8. The giants' rune panel (2026-09-30)
+
+- **Where:** the lower Caves of the Giants, the rune behind the padlocked
+  door (about (50,23)).
+- **Do:** press the two buttons at the bottom left of the ring, then the
+  two on the right. Note whether all seven runes light and the door
+  opens. Then try Tuxedo Jack's 7, 5, 6, 2, 4, 6 and note which buttons
+  his numbers mean.
+- **The port:** the engine's prompt can only name the buttons, so it
+  names them by where they sit in E3's ring (bottom, lower left, upper
+  left, top, upper right, lower right, bottom right). Walkthrough A's
+  order lights all seven; Tuxedo Jack's numbers do too, but only read as
+  some other numbering of the same seven buttons.
+- **Question:** do the positions match what you see?
+
+### 9. The Concealed Tunnel's moving walls (2026-09-30)
+
+- **Where:** the Concealed Tunnel, past the barrels' barrier.
+- **Do:** stand in a wall's path with room behind you, then with a wall
+  behind you; and stand a creature (a summoned one will do) in a wall's
+  path.
+- **The port:** a wall that reaches the party carries it a square; one
+  that would carry it into a wall kills the whole party ("…raspberry
+  jam"), or in a fight only the PC it reached. A wall goes straight over
+  a creature ahead of it (E3-SUSPECTED-BUGS.md #19).
+- **Question:** is that what happens, and does a creature stop a wall?
+
+### 10. The Barrier Cavern's crystal (2026-09-30)
+
+- **Where:** the Barrier Cavern, the crystal on its pedestal.
+- **Do:** smash it, and look at the two great barriers before leaving.
+- **The port:** they vanish at once. (Until today they stayed up until
+  the party came back into the cavern, a converter bug.)
+- **Question:** do they vanish at once in the original?
+
+### 11. The giants' four prisoners (2026-09-30)
+
+- **Where:** the upper Caves of the Giants, after finding the concealed
+  way out.
+- **Do:** ask each of the four prisoners about "escape", two men and two
+  women.
+- **The port:** all four go. The women have no words of their own; E3's
+  talk nodes carry a second personality in their last field, and the
+  men's "escape" names theirs. Until today the port read only the first,
+  so the women couldn't be freed and Bruskrud's last two rewards were
+  out of reach.
+- **Question:** do the women answer "escape" in the original?
+
 ## Waiting on a ruling (already written up elsewhere)
 
 - **DIVERGENCES.md #30 and #31**, marked "open for the user".

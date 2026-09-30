@@ -43,6 +43,7 @@ import { monstInflictFields, processFields } from './processFields';
 import { specialIncreaseAge } from './specialIncreaseAge';
 import { isPoisonableWeap } from './poisonWeapon';
 import { pushThings } from './pushThings';
+import { moveE3Walls, pushOffE3Walls } from './e3MovingWalls';
 import { monstCastMage, monstCastPriest } from './monsterSpells';
 import { placeSpellPattern } from './spellPatterns';
 import { pointOnScreen } from './session';
@@ -1878,7 +1879,10 @@ export async function combatRunMonst(session: GameSession): Promise<void> {
   specialIncreaseAge(session);
   // Conveyor belts move whoever is standing on one, once a round
   // (boe.combat.cpp:2019). It spends no draws unless someone is shoved into a
-  // stone block, which is what made its absence so hard to see.
+  // stone block, which is what made its absence so hard to see. Exile III's
+  // moving walls first (e3MovingWalls.ts).
+  moveE3Walls(session);
+  await pushOffE3Walls(session);
   await pushThings(session);
   // Poison, disease and acid bite far more often in combat than they do on the
   // road: every other round rather than every fiftieth turn.

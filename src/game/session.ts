@@ -86,6 +86,7 @@ import { specialIncreaseAge } from './specialIncreaseAge';
 import { deliverE3Jobs } from './e3Jobs';
 import { alterSpace } from './specials/general';
 import { pushThings } from './pushThings';
+import { moveE3Walls, pushOffE3Walls } from './e3MovingWalls';
 import { ONCE_DONE } from './specials/oneshot';
 import { Spell } from '../data/spell';
 import { castSpell } from './spellTown';
@@ -829,6 +830,9 @@ export class GameSession {
     // or 10 — that's what the C++ passes (the default argument), so an outdoor
     // turn ticks a party timer down by one, not by the time that passed.
     specialIncreaseAge(this, 1);
+    // Exile III's moving walls go first, and carry the party (e3MovingWalls.ts).
+    moveE3Walls(this);
+    await pushOffE3Walls(this);
     // Conveyor belts, between the timers and the fields (boe.actions.cpp:3597).
     await pushThings(this);
     // The fields do their work here, before the monsters move — increase_age

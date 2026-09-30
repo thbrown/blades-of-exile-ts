@@ -44,6 +44,7 @@ import { gale } from './towns/gale';
 import { townEntryScript } from './towns/entry';
 import { HOSTILE_SCRIPTS } from './towns/hostile';
 import { POOL_SPOT, SLIME_POOLS, level2Timers, slimePit } from './towns/slimePit';
+import { sanctifySpots, withSanctify } from './towns/sanctify';
 import { towerOfMagi } from './towns/towerOfMagi';
 import { filthFactory } from './towns/filthFactory';
 import { castleTroglo } from './towns/castleTroglo';
@@ -722,8 +723,9 @@ function townTalkScript(creatures: E3CreatureStart[], exeString: (seg: number, o
   return (b, slot) => {
     const c = creatures[slot];
     if (!c || c.number <= 0) return null;
-    const swap = e3TalkStart(b, c.personality);
-    if (swap) return { key: `${c.personality}`, steps: swap };
+    const swap = e3TalkStart(b, c.personality, slot);
+    // Keyed by slot too where the steps test the creature's own attitude.
+    if (swap) return { key: `${c.personality}:${slot}`, steps: swap };
     // Tests the creature's own attitude, so one node per slot.
     const mute = e3MuteHail(b, slot, c.personality, exeString);
     return mute ? { key: `${c.personality}:${slot}`, steps: mute } : null;
@@ -734,7 +736,7 @@ function scenarioXml(
   start: { town: number; loc: { x: number; y: number } },
   outStart: { sector: { x: number; y: number }; loc: { x: number; y: number } },
   shops: Shop[], specialItems: SpecItem[], specStrings: string[], newDay: number, roadJoins: number[],
-  jobBase: number, skribbane: number[], journal: string[], cursors: E3Cursor[], townCount: number, uranium: number,
+  jobBase: number, skribbane: number[], journal: string[], cursors: E3Cursor[], townCount: number, uranium: number, crushed: number,
   crumbles: number[],
 ): string {
   return `${XML_HEAD}<scenario boes="2.0.0">
@@ -754,6 +756,7 @@ function scenarioXml(
         <job-boards>exile3:${jobBase}</job-boards>
         <skribbane>exile3:${skribbane.join(',')}</skribbane>
         <uranium>exile3:${uranium}</uranium>
+        <moving-walls>exile3:${crushed}:54,71</moving-walls>
         <trap>exile3</trap>
         <alchemy>exile3</alchemy>
         <balm>exile3</balm>
@@ -1070,12 +1073,14 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
       spots = spots.map((s) => (pool(s.loc) >= 0 ? { ...s, id: POOL_SPOT + pool(s.loc) } : s));
       spots.push(...SLIME_POOLS.flatMap(([x, y], i) => (spots.some((s) => s.id === POOL_SPOT + i) ? [] : [{ loc: { x, y }, id: POOL_SPOT + i }])));
     }
+    // The Ritual of Sanctification's squares (`towns/sanctify.ts`), after the rest.
+    spots.push(...sanctifySpots(t.number));
     const creatures = townCreatures(t);
     const entry = townEntryScript(t.number, new Set(creatures.map((c) => c.number)),
       creatures.filter((c) => c.number >= 138 && c.number <= 141).map((c) => c.startLoc), t.entryMsg, t.deadMsg);
     const ruin = ruins.get(t.number);
     const script = e3SpotScript(spots, { town: t.number }, { ...e3Src, creatures, terrain },
-      (x, y) => terrain[x]?.[y] ?? 0, TOWN_SCRIPTS.get(t.number),
+      (x, y) => terrain[x]?.[y] ?? 0, withSanctify(t.number, TOWN_SCRIPTS.get(t.number)),
       ruin ? (b, dead) => [...villageRuinSteps(b, t, ruin.record, ruin.buildings), ...entry?.(b, dead) ?? []] : entry,
       townKillScript(t.number, creatures), undefined, HOSTILE_SCRIPTS.get(t.number), TIMER_SCRIPTS.get(t.number),
       townTalkScript(creatures, e3Src.exeString!));
@@ -1116,12 +1121,15 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   // The Uranium bar's message (src/game/e3Uranium.ts): `FUN_1008_37de(0x34,
   // 0x27, 3)` at `1010:5e8b`.
   const uranium = scen.compile([scen.msg(0x34, 0x27, 0, undefined, 3)]);
+  // The moving walls' crush (src/game/e3MovingWalls.ts): `FUN_1008_37de(0x3d,
+  // 0x29, 55)` at `10c0:5c2a`, in towns 54 and 71 (`10c0:6aa2`).
+  const crushed = scen.compile([scen.msg(0x3d, 0x29, 0, undefined, 0x37)]);
   // Last, since the places' scripts may add scenario strings and nodes.
   write('scenario.spec', scen.spec);
   // Last, since the places' scripts can add shops of their own.
   shops.push(...talk.shops);
   const cursors = readE3Cursors(resources);
-  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, skribbane, e3JournalStrings((id) => strings.get(id) ?? ''), cursors, townCount, uranium, readE3Crumbles(files.exe)));
+  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, skribbane, e3JournalStrings((id) => strings.get(id) ?? ''), cursors, townCount, uranium, crushed, readE3Crumbles(files.exe)));
   const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(read), ...e3MapSheets(read)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
   // E3's own sounds, which a scenario's `sounds/SNDn.wav` puts in place of

@@ -8,7 +8,7 @@
  * | +1 … +10 | the ten personalities' names |
  * | +11 + 3i … | look, name and job text for personality i |
  * | +41 + i | its reply to an unknown word |
- * | +51 + 3j | node j: `pers^key1^key2^type^e1^e2^e3^e4^99`, then its two replies (`pers` is global and 1-based) |
+ * | +51 + 3j | node j: `pers^key1^key2^type^e1^e2^e3^e4^pers2`, then its two replies (`pers` is global and 1-based) |
  *
  * A creature's personality `p` (1-based; 0 is none) is block `(p-1) / 10`,
  * slot `(p-1) % 10` — the talk code's own arithmetic (`FUN_1020_1d1d`).
@@ -28,6 +28,17 @@
  *   which no E3 town uses.
  * - Types 29 and up (only 100+ occur) are scripted: `FUN_1020_2eb0` switches
  *   on the type. They are E3-3's.
+ *
+ * **A node can answer for two personalities.** Its last field, 99 on most,
+ * is a second one: E3 loads only the talked-to block's nodes (`1020:4b0e`)
+ * and takes a node whose first *or* second word is the speaker's
+ * (`FUN_1098_a77b`). Seven pairs share nodes this way — Anaximander's two
+ * selves (19, 20), Seles's (41, 46), a smith's (86, 87), Bernathy and his
+ * assistant (146, 149), and 151/152, 161/167 and the giants' two prisoners
+ * (302, 303). A node missing the field keeps the previous one's, as the
+ * `sscanf` leaves its stack word alone; 99, where it lands outside the
+ * block, or on nobody, changes nothing. E3 also takes a node of
+ * personality 8 for anyone; block 0 has none.
  *
  * Two personalities are swapped as a conversation starts — Seles's and
  * Anaximander's, with the plot — which the creatures' HAIL specials do
@@ -113,6 +124,8 @@ function usesExtras(type: number): boolean {
 export interface E3TalkNodeRaw {
   /** The personality it belongs to: global, 1-based. */
   pers: number;
+  /** A second personality it answers for (0 for none). */
+  pers2: number;
   link1: string;
   link2: string;
   type: number;
@@ -121,11 +134,13 @@ export interface E3TalkNodeRaw {
   str2: string;
 }
 
-export function parseE3TalkNode(def: string): Omit<E3TalkNodeRaw, 'str1' | 'str2'> | null {
+/** `prevPers2` is the node before's second personality, which a node without one keeps. */
+export function parseE3TalkNode(def: string, prevPers2 = 0): Omit<E3TalkNodeRaw, 'str1' | 'str2'> | null {
   const f = def.split('^');
   if (f.length < 8) return null;
   const int = (i: number) => parseInt(f[i] ?? '0', 10) || 0;
-  return { pers: int(0), link1: (f[1] ?? '').slice(0, 4), link2: (f[2] ?? '').slice(0, 4), type: int(3), extras: [int(4), int(5), int(6), int(7)] };
+  const pers2 = /^-?\d/.test(f[8] ?? '') ? int(8) : prevPers2;
+  return { pers: int(0), pers2, link1: (f[1] ?? '').slice(0, 4), link2: (f[2] ?? '').slice(0, 4), type: int(3), extras: [int(4), int(5), int(6), int(7)] };
 }
 
 export interface E3TalkRaw {
@@ -148,10 +163,12 @@ export function readE3Talk(strings: Map<number, string>): E3TalkRaw {
       p.dunno = e3Text(strings.get(base + 41 + i));
       people.push(p);
     }
+    let pers2 = 0;
     for (let j = 0; base + 51 + 3 * j < base + 300; j++) {
       const def = strings.get(base + 51 + 3 * j);
       if (def === undefined) continue;
-      const raw = parseE3TalkNode(def);
+      const raw = parseE3TalkNode(def, pers2);
+      if (raw) pers2 = raw.pers2;
       if (!raw || raw.pers < 1) continue;
       nodes.push({ ...raw, str1: e3Text(strings.get(base + 52 + 3 * j)), str2: e3Text(strings.get(base + 53 + 3 * j)) });
     }
@@ -343,7 +360,14 @@ export function convertE3Talk(
   const speeches = Array.from({ length: blocks }, emptySpeech);
   const personalityOf = new Map<string, number>();
   const nodesOf = new Map<number, E3TalkNodeRaw[]>();
-  for (const n of raw.nodes) nodesOf.set(n.pers, [...(nodesOf.get(n.pers) ?? []), n]);
+  const blockOf = (p: number) => Math.floor((p - 1) / 10);
+  for (const n of raw.nodes) {
+    nodesOf.set(n.pers, [...(nodesOf.get(n.pers) ?? []), n]);
+    // Its second personality, if E3 would ever see it with this node (the same block).
+    if (n.pers2 > 0 && n.pers2 !== n.pers && blockOf(n.pers2) === blockOf(n.pers) && n.pers2 <= raw.people.length) {
+      nodesOf.set(n.pers2, [...(nodesOf.get(n.pers2) ?? []), n]);
+    }
+  }
 
   // Each personality's speakers, grouped by the extras its nodes would read.
   const groups = new Map<number, { extras: [number, number]; speakers: E3Speaker[] }[]>();

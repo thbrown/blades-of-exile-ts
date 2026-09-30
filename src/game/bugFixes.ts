@@ -49,6 +49,8 @@ export const KNOWN_BUGS: Readonly<Record<number, KnownBug>> = {
   15: { title: 'A stack of returning missiles drops to one after a throw', ruling: 'undecided' },
   16: { title: 'Raise Dead and Resurrect need no Resurrection Balm', ruling: 'undecided' },
   17: { title: "Alchemy takes the second ingredient's charge from the wrong item", ruling: 'undecided' },
+  18: { title: "The Ritual of Sanctification on the spiders' altar can be repeated", ruling: 'undecided' },
+  19: { title: 'A moving wall looks for a creature on its own square, not the one ahead', ruling: 'undecided' },
 };
 
 let enabled = false;

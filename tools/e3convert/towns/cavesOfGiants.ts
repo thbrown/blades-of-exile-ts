@@ -15,6 +15,11 @@ const GIANTS_KEY = partySpecItem(0x2e);
 const RUNES: Flag[] = Array.from({ length: 7 }, (_, k) => f(0xc28 + k));
 /** Which runes each of the seven buttons toggles (DGROUP 0x2ba). */
 const RUNE_BUTTONS = [[1, 2, 0], [4, 5, 3], [1, 0], [1, 2], [6, 5], [5], [3, 6]];
+/**
+ * Where each button sits in the ring on E3's panel (controls 5–11), since
+ * the engine's prompt can only name them: the walkthroughs go by position.
+ */
+const RUNE_BUTTON_PLACES = ['bottom', 'lower left', 'upper left', 'top', 'upper right', 'lower right', 'bottom right'];
 const PANEL: Flag = [291, 18];
 
 function upper(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]> {
@@ -88,7 +93,7 @@ function lower(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]> 
     [23, [b.ledPanel(0xcf4, RUNE_BUTTONS.map((toggles) => [
       ...toggles.map((k) => b.ifFlagEq(RUNES[k]!, 0, [b.setFlag(RUNES[k]!, 1)], [b.setFlag(RUNES[k]!, 0)])),
       ...showRunes(), runeDoor(),
-    ]), PANEL, RUNE_BUTTONS.map((_, i) => `button ${i + 1}`))]],
+    ]), PANEL, RUNE_BUTTON_PLACES)]],
     [24, lever(0x407b, [[0x3b, 7, 0]])],
     [25, lever(0x4082, [[0x38, 6, 0]])],
   ]);

@@ -10,6 +10,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { FieldType } from '../src/data/fields';
 import type { Scenario } from '../src/data/scenario';
 import { Spell } from '../src/data/spell';
 import { GameMode } from '../src/game/modes';
@@ -17,8 +18,12 @@ import { Skill, Status } from '../src/universe/skills';
 import { emitScenario } from '../tools/e3convert/emitNode';
 import { findE3Dir } from '../tools/e3convert/install';
 import { partySpecItem } from '../tools/e3convert/script';
+import { e3Event } from '../tools/e3convert/flags';
 import { SLIME_POOLS } from '../tools/e3convert/towns/slimePit';
 import { QuestRunner, loadExile3 } from './support/e3Quest';
+import { WallSearch, type WallState } from './support/e3Walls';
+import { WALL_FLOOR, WALL_NORTH, WALL_SOUTH, moveE3Walls } from '../src/game/e3MovingWalls';
+import { TerSpec } from '../src/data/terrain';
 
 const dir = findE3Dir();
 
@@ -512,6 +517,473 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       await q.enter(24, { x: 10, y: 10 });
       await q.talk(/Solberg/, 'rewa');
       expect(q.party.pcs.some((pc) => pc.mageSpells[0x28] && pc.mageSpells[0x2b]), q.tail()).toBe(true);
+    });
+  });
+  describe('the giants and troglodytes', () => {
+    /** An open square beside (x, y), to cast at it from. */
+    const beside = (q: QuestRunner, x: number, y: number): { x: number; y: number } => {
+      for (const [dx, dy] of [[0, 1], [1, 0], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]] as const) {
+        const p = { x: x + dx, y: y + dy };
+        if (q.town.isOnMap(p.x, p.y) && !q.session.townIsBlocked(p)) return p;
+      }
+      throw new Error(`nowhere beside (${x},${y})`);
+    };
+    /** The Ritual of Sanctification, cast on (x, y) from beside it. */
+    const sanctify = async (q: QuestRunner, x: number, y: number): Promise<string[]> => {
+      q.place(beside(q, x, y));
+      const before = q.univ.transcript.length;
+      await q.spell(Spell.RITUAL_SANCTIFY, x, y);
+      return q.univ.transcript.slice(before);
+    };
+    /** The moving walls of the town the runner is in, as `WallSearch` lists them. */
+    const wallsOf = (q: QuestRunner): number[] => {
+      const out: number[] = [];
+      for (let x = 0; x < 48; x++) {
+        for (let y = 0; y < 48; y++) {
+          const t = q.town.record.terrain[x]![y]!;
+          if (t === WALL_NORTH) out.push(WallSearch.cellOf(x, y) * 4 + 1);
+          if (t === WALL_SOUTH) out.push(WallSearch.cellOf(x, y) * 4 + 2);
+        }
+      }
+      return out;
+    };
+    const KNIGHT = 0xe8, LEVIN = 0xf1, CORIE = 0xf2, TROGLO_STAGE = 0x1a4;
+    const PASS = partySpecItem(0x5e), SCROLL = partySpecItem(0x62);
+
+    it("Sharimik's triad: Knight's mission, Levin's price, the hermit's Ritual, and the Troglo Temple's altars", async () => {
+      // (A second runner resets the shared scenario's towns, so side checks come first.)
+      // Kneeling at the dark altar (spot 5) kills the party, until it is sanctified.
+      {
+        const r = new QuestRunner(scen);
+        await r.enter(101, { x: 20, y: 20 });
+        await r.step(...spot(101, 5));
+        expect(r.party.pcs.some((pc) => pc.isAlive), r.tail()).toBe(false);
+      }
+      const q = new QuestRunner(scen);
+      q.party.gold = 5000;
+      await q.enter(8);
+      await q.talk(/Mayor Knight/, 'miss');
+      expect(q.flag(KNIGHT), q.tail()).toBe(1);
+      // Levin names his price, then takes it.
+      await q.talk(/Levin/, 'miss', 'miss');
+      expect(q.flag(LEVIN), q.tail()).toBe(1);
+      expect(q.party.gold).toBe(4000);
+      // Corie wants the troglodytes' altar sanctified first.
+      await q.talk(/Commander Corie/, 'miss');
+      expect(q.flag(CORIE), q.tail()).toBe(0);
+      await q.talk(/Mayor Knight/, 'miss');
+      expect(q.hasSpecItem(PASS), q.tail()).toBe(false);
+
+      // The hermit in the hills teaches the Ritual (priest spell 8).
+      await q.enter(100);
+      await q.talk(/Hermit/, 'trog');
+      expect(q.party.pcs.some((pc) => pc.priestSpells[8]), q.tail()).toBe(true);
+
+      // The Troglo Temple (town 53): the stairs to the altars (spot 11).
+      await q.enter(53);
+      await q.step(...spot(53, 11));
+      expect(q.townNum, q.tail()).toBe(101);
+      await q.clearHostiles();
+      // Anywhere else, the Ritual does nothing.
+      expect(await sanctify(q, 20, 20)).toContain('  Nothing happens.');
+      // The dark altar: the hordlings come, and its deadly spot dies.
+      const said = await sanctify(q, 25, 13);
+      expect(said, q.tail()).not.toContain('  Nothing happens.');
+      expect(q.flag(0x47f), q.tail()).toBe(1);
+      expect(q.flag(0x47b)).toBe(20);
+      expect(q.creatures(/Hordling/).some((m) => !m.isFriendly), q.tail()).toBe(true);
+      // Only once.
+      expect(await sanctify(q, 25, 13)).toContain('  Nothing happens.');
+      await q.clearHostiles();
+      // The altar beside it no longer asks, or kills.
+      const asked = q.log.length;
+      await q.step(...spot(101, 5));
+      expect(q.log.slice(asked).some((l) => /kneel/.test(l)), q.tail()).toBe(false);
+      expect(q.party.pcs.every((pc) => pc.isAlive), q.tail()).toBe(true);
+      // The inner altar: a haakai.
+      await sanctify(q, 28, 25);
+      expect(q.flag(0x47e), q.tail()).toBe(1);
+      expect(q.flag(0x47c)).toBe(20);
+      expect(q.creatures(/Haakai/).length, q.tail()).toBeGreaterThan(0);
+
+      // Corie agrees, and the mayor hands over the papers for Castle Troglo.
+      await q.enter(8);
+      await q.talk(/Commander Corie/, 'miss');
+      expect(q.flag(CORIE), q.tail()).toBe(1);
+      await q.talk(/Mayor Knight/, 'miss');
+      expect(q.flag(KNIGHT), q.tail()).toBe(2);
+      expect(q.hasSpecItem(PASS), q.tail()).toBe(true);
+    });
+
+    it("Castle Troglo: the pass through the hills, the cell, Vothkaro's question, and Elhioc behind the dials", async () => {
+      // Asked whether the party read his scroll, Leave, and Vothkaro won't talk.
+      {
+        const r = new QuestRunner(scen);
+        r.setFlag(TROGLO_STAGE, 3);
+        await r.enter(28);
+        r.answer('Leave');
+        await expect(r.talk(/Vothkaro/, 'here')).rejects.toThrow(/won't talk/);
+        expect(r.flag(TROGLO_STAGE)).toBe(3);
+      }
+      const q = new QuestRunner(scen);
+      q.party.specItems.add(PASS);
+      q.setFlag(KNIGHT, 2);
+      // Zone 58's checkpoint (spot 2): the pass lets the party by without a fight.
+      await q.outdoors(4, 6, 37, 10);
+      await q.step(37, 9);
+      expect(q.session.mode, q.tail()).toBe(GameMode.OUTDOORS);
+      expect(q.party.outC.some((g) => g.exists), q.tail()).toBe(false);
+
+      // The gates (spot 2): blindfolded, to the cell, its door locked.
+      const CELL = { x: 0x36, y: 0x30 }, DOOR = { x: 0x38, y: 0x30 };
+      const door = () => q.town.record.terrain[DOOR.x]![DOOR.y];
+      await q.enter(28);
+      await q.step(...spot(28, 2));
+      expect(q.flag(TROGLO_STAGE), q.tail()).toBe(1);
+      expect(q.at).toEqual(CELL);
+      expect(door()).toBe(0x6a);
+      // 25 turns later the door opens.
+      await q.pause(25);
+      expect(door(), q.tail()).toBe(0x67);
+      expect(q.flag(TROGLO_STAGE)).toBe(2);
+      // Wandering off: marched back with a note, and locked in again.
+      const [px, py] = spot(28, 5);
+      expect(q.canReach(CELL, { x: px, y: py })).toBe(true);
+      await q.step(px, py);
+      expect(q.at, q.tail()).toEqual(CELL);
+      expect(door()).toBe(0x6a);
+      expect(q.hasItem(/paper/i), q.tail()).toBe(true);
+      await q.pause(25);
+      expect(door(), q.tail()).toBe(0x67);
+      expect(q.flag(TROGLO_STAGE)).toBe(3);
+
+      // Vothkaro asks whether the party read the scroll (checked above);
+      // yes, and he asks the party to deal with Elhioc.
+      await q.talk(/Vothkaro/, 'here');
+      expect(q.flag(TROGLO_STAGE), q.tail()).toBe(5);
+
+      // Back at the cell: his letter on the table, and the secret door down.
+      const [sx, sy] = spot(28, 12);
+      expect(q.canReach(CELL, { x: sx, y: sy }), 'stairs before').toBe(false);
+      await q.step(px, py);
+      expect(q.town.record.terrain[0x34]![0x33], q.tail()).toBe(0x65);
+      expect(q.canReach(CELL, { x: sx, y: sy }), 'stairs after').toBe(true);
+      await q.step(sx, sy);
+      expect(q.townNum, q.tail()).toBe(29);
+
+      // The combination gate (spot 14): dials 5, 4, 3, 2, 0, 2 open the way to Elhioc.
+      const elhioc = q.creatures(/Elhioc/)[0]!;
+      const [gx, gy] = spot(29, 14);
+      expect(q.canReach({ x: gx, y: gy }, elhioc.curLoc), 'shut').toBe(false);
+      q.number(...[1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 4, 4, 6, 6, 0]);
+      await q.step(gx, gy);
+      expect(q.canReach({ x: gx, y: gy }, elhioc.curLoc), `open\n${q.tail()}`).toBe(true);
+      await q.kill(/Elhioc/);
+      expect(q.flag(TROGLO_STAGE), q.tail()).toBe(6);
+      // His spellbook (spot 11): Wall of Blades and Major Cleansing, for a seasoned party.
+      for (const pc of q.party.pcs) pc.level = 5;
+      // Through the false wall at (6,7).
+      q.place({ x: 6, y: 8 });
+      await q.walk(6, 7);
+      await q.step(...spot(29, 11));
+      expect(q.party.pcs.some((pc) => pc.priestSpells[0x9f - 100] && pc.priestSpells[0xa1 - 100]), q.tail()).toBe(true);
+
+      // Up the stairs (spot 18): Vothkaro's scroll for the mayor.
+      await q.step(...spot(29, 18));
+      expect(q.townNum, q.tail()).toBe(28);
+      expect(q.flag(TROGLO_STAGE)).toBe(7);
+      expect(q.hasSpecItem(SCROLL)).toBe(true);
+      expect(q.hasSpecItem(PASS)).toBe(false);
+
+      // Knight takes it, and his library's rune door lets the party at the tome.
+      await q.enter(8);
+      const [lx, ly] = spot(8, 16);
+      await q.step(lx, ly);
+      expect(q.at, 'the door refuses').not.toEqual({ x: lx, y: ly });
+      await q.talk(/Mayor Knight/, 'miss');
+      expect(q.flag(KNIGHT), q.tail()).toBe(3);
+      expect(q.hasSpecItem(SCROLL)).toBe(false);
+      await q.step(lx, ly);
+      expect(q.town.record.terrain[0x34]![0x33], q.tail()).toBe(0x67);
+      await q.walk(0x34, 0x33);
+      expect(q.at, q.tail()).toEqual({ x: 0x34, y: 0x33 });
+      await q.walk(...spot(8, 17));
+      expect(q.party.pcs.some((pc) => pc.mageSpells[0x29]), q.tail()).toBe(true);
+    });
+
+    it("Lorelei's commander, the giants' gap, the caves' prisoners and trophies, and the lower caves' runes", async () => {
+      const q = new QuestRunner(scen);
+      const MISSIONS = [0xc3b, 0xc2f, 0xc30, 0xc31];
+      // Commander Bruskrud asks for help against the giants (0x122).
+      await q.enter(12);
+      await q.talk(/Bruskrud/, 'miss');
+      expect(q.flag(0x122), q.tail()).toBe(1);
+
+      // Zone 49's gap (spot 3): the giants block the road.
+      await q.outdoors(4, 5, 38, 29);
+      q.answer('Attack');
+      await q.step(37, 29);
+      expect(await q.fightOutdoors(), q.tail()).toBe(true);
+      expect(q.session.mode).toBe(GameMode.OUTDOORS);
+
+      // The upper caves (town 30): a dead soldier's four boxes, the trophies.
+      await q.enter(30);
+      await q.clearHostiles();
+      const trophies = [45, 46, 47, 48];
+      // A box is searched by looking at it from beside it.
+      for (const id of [23, 24, 25, 26]) await q.look(...spot(30, id));
+      expect(trophies.every((k) => q.hasSpecItem(k)), q.tail()).toBe(true);
+      // The prisoners won't go until the party has found the way out (spot 21).
+      const [before] = await q.talk(/Prisoner/, 'esca');
+      expect(MISSIONS.every((m) => q.flag(m) === 0), before).toBe(true);
+      await q.step(...spot(30, 21));
+      expect(q.flag(0x1b0), q.tail()).toBe(1);
+      // All four, both kinds (a node of the male prisoner's answers for the female one too).
+      expect(new Set(q.creatures(/Prisoner/).map((m) => m.personality)).size).toBe(2);
+      for (let i = 0; i < 4; i++) {
+        const [freed] = await q.talk(/Prisoner/, 'esca');
+        expect(q.flag(MISSIONS[i]!), `prisoner ${i}: ${freed}`).toBe(1);
+      }
+      expect(q.creatures(/Prisoner/).length).toBe(0);
+
+      // Bruskrud pays 300 a trophy and 500 a rescue, one of each each time.
+      await q.enter(12);
+      const gold = q.party.gold;
+      for (let i = 0; i < 4; i++) await q.talk(/Bruskrud/, 'miss');
+      expect(q.party.gold - gold, q.tail()).toBe(4 * 800);
+      expect(trophies.some((k) => q.hasSpecItem(k))).toBe(false);
+      expect(MISSIONS.every((m) => q.flag(m) === 2)).toBe(true);
+
+      // Down to the lower caves (spot 14 of the upper).
+      await q.enter(30);
+      await q.step(...spot(30, 14));
+      expect(q.townNum, q.tail()).toBe(31);
+      // The padlocked door (spot 22) wants the giant's key, from the box at spot 1.
+      const [dx, dy] = spot(31, 22);
+      await q.step(dx, dy);
+      expect(q.town.record.terrain[0x2f]![0x17], q.tail()).toBe(0x8a);
+      await q.look(4, 34);
+      expect(q.hasSpecItem(partySpecItem(0x2e)), q.tail()).toBe(true);
+      await q.step(dx, dy);
+      expect(q.town.record.terrain[0x2f]![0x17], q.tail()).toBe(0x87);
+      // The runes (spot 23): walkthrough A's two bottom-left buttons and then
+      // the two on the right light all seven; the door at (54,23) opens, and
+      // the Concealed Tunnel (town 54) goes on the map.
+      expect(scen.towns[54]!.canFind).toBe(false);
+      q.number(1, 2, 5, 6, 0);
+      await q.step(...spot(31, 23));
+      expect(q.town.record.terrain[0x36]![0x17], q.tail()).toBe(0x8d);
+      expect(scen.towns[54]!.canFind, q.tail()).toBe(true);
+    });
+
+    it('The Concealed Tunnel: five barrels gone lift the barrier at its door', async () => {
+      const q = new QuestRunner(scen);
+      await q.enter(54);
+      const entry = { ...q.at };
+      const barrels = () => {
+        const out: [number, number][] = [];
+        for (let x = 0; x < 48; x++) for (let y = 0; y < 48; y++) if (q.town.hasField(x, y, FieldType.OBJECT_BARREL)) out.push([x, y]);
+        return out;
+      };
+      expect(barrels().length).toBe(5);
+      // The invisible barrier (spot 2) before the door at (24,42).
+      const [bx, by] = spot(54, 2);
+      expect(q.canReach(entry, { x: bx, y: by })).toBe(true);
+      await q.step(bx, by);
+      expect(q.at, q.tail()).not.toEqual({ x: bx, y: by });
+
+      // One barrel, pushed for real: walled in at (26,39), it trades places
+      // with the party (the 1997 `push_loc` gives back the pusher's square),
+      // then goes south into the pit at (27,43).
+      q.place({ x: 27, y: 39 });
+      for (const [x, y] of [[26, 39], [27, 40], [27, 39], [27, 40], [27, 41], [27, 42]] as const) await q.walk(x, y);
+      expect(q.town.hasField(26, 39, FieldType.OBJECT_BARREL) || q.town.hasField(27, 42, FieldType.OBJECT_BARREL), q.tail()).toBe(false);
+      expect(barrels().length, JSON.stringify(barrels())).toBe(4);
+      // The rest, as if pushed the same way: with any one left, the barrier holds.
+      for (const [x, y] of barrels().slice(1)) q.town.setField(x, y, FieldType.OBJECT_BARREL, false);
+      await q.step(bx, by);
+      expect(q.at, q.tail()).not.toEqual({ x: bx, y: by });
+      for (const [x, y] of barrels()) q.town.setField(x, y, FieldType.OBJECT_BARREL, false);
+      await q.step(bx, by);
+      expect(q.at, q.tail()).toEqual({ x: bx, y: by });
+      await q.walk(24, 42);
+      expect(q.at, q.tail()).toEqual({ x: 24, y: 42 });
+    });
+
+    it('The Concealed Tunnel: its walls move, carry and crush, and the party can time its way to both levers and the stairs', async () => {
+      // The walls: a north wall with two squares of open floor ahead carries
+      // a party standing just in front of it one square on; with a wall
+      // two ahead instead, the same wall crushes it.
+      for (const blocked of [false, true]) {
+        const r = new QuestRunner(scen);
+        await r.enter(54, { x: 24, y: 42 });
+        await r.clearHostiles();
+        // Spirits rising where a wall stands hold it for a turn (E3 asks for a
+        // creature on the wall's own square), so none rise here.
+        r.setFlag(0x2a1, 20);
+        const ter = (x: number, y: number) => r.town.record.terrain[x]?.[y];
+        const open = (x: number, y: number) => ter(x, y) === WALL_FLOOR && r.town.fields[x]![y]!.size === 0;
+        let front: { x: number; y: number } | undefined;
+        for (let x = 1; x < 48 && !front; x++) {
+          for (let y = 3; y < 48 && !front; y++) if (ter(x, y) === WALL_NORTH && open(x, y - 1) && open(x, y - 2)) front = { x, y: y - 1 };
+        }
+        expect(front).toBeDefined();
+        const { x, y } = front!;
+        if (blocked) r.town.record.terrain[x]![y - 1] = 100;
+        r.place(front!);
+        await r.pause(1);
+        if (blocked) {
+          expect(r.party.pcs.some((pc) => pc.isAlive), r.univ.transcript.slice(-3).join(' / ')).toBe(false);
+          expect(r.log.some((l) => /raspberry jam/.test(l)), r.tail()).toBe(true);
+        } else {
+          expect(r.at, r.univ.transcript.slice(-3).join(' / ')).toEqual({ x, y: y - 1 });
+          expect(r.party.pcs.every((pc) => pc.isAlive)).toBe(true);
+          expect(r.univ.transcript).toContain('You get pushed.');
+        }
+      }
+      // The search's model of the walls against the engine's: 60 turns, nobody pushing.
+      {
+        const r = new QuestRunner(scen);
+        await r.enter(54, { x: 24, y: 42 });
+        const model = new WallSearch(r);
+        let walls = model.start.walls;
+        for (let t = 0; t < 60; t++) {
+          walls = model.stepWalls(walls, new Set(model.start.crates));
+          moveE3Walls(r.session);
+          expect(wallsOf(r).join(), `turn ${t}`).toBe(walls.join());
+        }
+      }
+      // A search over the party's steps, waits and crate pushes, with the
+      // walls as E3 moves them (its model checked against the engine below),
+      // from the door (24,42): the red portal (spot 11) to the north caverns,
+      // lever 18 at (11,27) for the portcullises at x = 10, the room with
+      // the crates (pushing only the four in its northeast corner), lever 19
+      // at (21,4) for those at x = 7, and the stairs down (spot 15).
+      const q = new QuestRunner(scen);
+      await q.enter(54, { x: 24, y: 42 });
+      await q.clearHostiles();
+      // The model leaves out creatures, so the spirits (spot 1) stay away,
+      // and doors and false walls start open (each costs a real party a turn).
+      q.setFlag(0x2a1, 20);
+      for (let x = 0; x < 48; x++) {
+        for (let y = 0; y < 48; y++) {
+          const info = q.univ.terrainType(q.town.record.terrain[x]![y]!);
+          if (info.special === TerSpec.CHANGE_WHEN_STEP_ON && info.flag1 >= 0) q.town.record.terrain[x]![y] = info.flag1;
+        }
+      }
+      const c = WallSearch.cellOf;
+      const levers = [
+        { at: spot(54, 18), opens: [[10, 18], [10, 19]] as [number, number][] },
+        { at: spot(54, 19), opens: [[7, 18], [7, 19]] as [number, number][] },
+      ];
+      const ws = new WallSearch(q, levers, new Map([[c(...spot(54, 11)), c(40, 6)], [c(...spot(54, 12)), c(5, 43)]]));
+      const inRoom = (st: WallState) => { const p = WallSearch.at(st); return p.x >= 11 && p.x <= 18 && p.y >= 8 && p.y <= 9; };
+      const [sx, sy] = spot(54, 15);
+      ws.pushable = () => false;
+      const legs = [
+        ws.search(ws.start, (st) => st.party === c(40, 6), 200),
+      ];
+      legs.push(ws.search(legs[0]!.state, (st) => (st.levers & 1) === 1, 200));
+      legs.push(ws.search(legs[1]!.state, inRoom, 200));
+      ws.pushable = (x, y) => x >= 17 && x <= 18 && y >= 4 && y <= 9;
+      legs.push(ws.search(legs[2]!.state, (st) => (st.levers & 3) === 3, 200, 1_000_000));
+      ws.pushable = () => false;
+      legs.push(ws.search(legs[3]!.state, (st) => st.party === c(sx, sy), 200, 1_000_000));
+      expect(legs.every(Boolean), `legs ${legs.map((l) => l?.moves.length).join(', ')}`).toBe(true);
+
+      // The same moves through the engine: the party where the model says,
+      // and the walls too, every turn, until the stairs take it down.
+      // (Only the lever room's crates were ever pushed.)
+      ws.pushable = (x, y) => x >= 17 && x <= 18 && y >= 4 && y <= 9;
+      let st = ws.start;
+      const moves = legs.flatMap((l) => l!.moves);
+      for (const [i, [dx, dy]] of moves.entries()) {
+        st = ws.after(st, dx, dy)!;
+        const from = { ...q.at };
+        if (dx === 0 && dy === 0) await q.pause(1); else await q.walk(from.x + dx, from.y + dy);
+        if (q.townNum !== 54) { expect(i, 'left early').toBe(moves.length - 1); break; }
+        expect(q.at, `move ${i} (${dx},${dy}) from ${JSON.stringify(from)}\n${q.tail(3)}`).toEqual(WallSearch.at(st));
+        expect(wallsOf(q).join(), `walls after move ${i}`).toBe(st.walls.join());
+      }
+      expect(q.townNum, q.tail()).toBe(103);
+    });
+
+    it("The Barrier Cavern: the crystal smashed, the war begun again, the shards, and the ways out", async () => {
+      const q = new QuestRunner(scen);
+      await q.enter(103, { x: 26, y: 17 });
+      await q.clearHostiles();
+      const has255 = () => q.town.record.terrain.some((col) => col.some((t) => t === 255 || t === 256));
+      expect(has255(), 'the barriers').toBe(true);
+      const [cx, cy] = spot(103, 1);
+      // The crystal's pages: what it is, then whether to smash it.
+      q.answer('OK', /Smash|Yes|Break|Destroy/);
+      await q.step(cx, cy);
+      expect(q.flag(0xc8a), q.tail()).toBe(1);
+      expect(has255(), 'the barriers down').toBe(false);
+      expect(q.party.keyTimes.has(e3Event(2)), 'event 2').toBe(true);
+      // Five spots in the two peoples' towns are spent.
+      for (const f of [0x1bd, 0x1a1, 0x19f, 0x19e, 0x1ab]) expect(q.flag(f), f.toString(16)).toBe(20);
+      // Both sides come for the party.
+      expect(q.town.monsters.some((m) => m.isAlive && !m.isFriendly), q.tail()).toBe(true);
+      await q.clearHostiles();
+      // Afterwards, a few shards of the crystal for the fort, once.
+      const SHARDS = partySpecItem(0x44);
+      await q.step(cx, cy + 2);
+      await q.step(cx, cy);
+      expect(q.hasSpecItem(SHARDS), q.tail()).toBe(true);
+      q.party.specItems.delete(SHARDS);
+      await q.step(cx, cy + 2);
+      await q.step(cx, cy);
+      expect(q.hasSpecItem(SHARDS)).toBe(false);
+
+      // The barriers are gone from the troglodytes' caves and the giants' too.
+      for (const t of [29, 31]) {
+        await q.enter(t);
+        expect(has255(), `town ${t}`).toBe(false);
+      }
+      // Three ways out: to the giants' lower caves, the troglodytes' caves,
+      // and back up the Concealed Tunnel, whose far end clears its barrels
+      // and opens its portcullises for the way home.
+      for (const [id, town] of [[11, 31], [12, 29], [14, 54]] as const) {
+        await q.enter(103, { x: 26, y: 17 });
+        await q.step(...spot(103, id));
+        expect(q.townNum, `spot ${id}\n${q.tail()}`).toBe(town);
+      }
+      await q.step(...spot(54, 14));
+      expect(q.town.record.terrain[7]![18]).toBe(0x6d);
+      expect(q.town.record.terrain[10]![19]).toBe(0x6d);
+      expect(q.town.fields.some((col) => col.some((f) => f.has(FieldType.OBJECT_BARREL)))).toBe(false);
+    });
+
+    it('The giants and troglodytes reported and rewarded: Knight, Anaximander, Berra, Levy and X', async () => {
+      const q = new QuestRunner(scen);
+      q.setFlag(0xc8a, 1);
+      q.party.specItems.add(partySpecItem(0x44));
+      // Mayor Knight, whose papers went unused: the war settles his mission too.
+      q.setFlag(KNIGHT, 2);
+      q.party.specItems.add(PASS);
+      await q.enter(8);
+      await q.talk(/Mayor Knight/, 'miss');
+      expect(q.flag(KNIGHT), q.tail()).toBe(3);
+      expect(q.hasSpecItem(PASS)).toBe(false);
+      // Anaximander hears it (0xc8a to 2).
+      await q.enter(21, { x: 10, y: 10 });
+      await q.step(...spot(21, 1));
+      expect(q.flag(0xc8a), q.tail()).toBe(2);
+      // Berra takes the shards as evidence.
+      await q.talk(/Berra/, 'evid');
+      expect(q.hasSpecItem(partySpecItem(0x44)), q.tail()).toBe(false);
+      expect(q.flag(0xc9e)).toBe(1);
+      // Levy's reward, once.
+      const items = () => q.party.pcs.reduce((n, pc) => n + pc.items.filter((it) => it.variety !== 0).length, 0);
+      const before = items();
+      const [reward] = await q.talk(/Levy/, 'rewa');
+      expect(q.flag(0xc8a), reward).toBe(3);
+      expect(items(), reward).toBe(before + 1);
+      // 'X', in the Tower of Magi, teaches two mage spells for it.
+      await q.enter(24, { x: 10, y: 10 });
+      await q.talk(31, 'earn');
+      expect(q.party.pcs.some((pc) => pc.mageSpells[0x32] && pc.mageSpells[0x34]), q.tail()).toBe(true);
     });
   });
 });

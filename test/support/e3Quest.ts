@@ -1,7 +1,7 @@
 /**
  * A headless quest runner for the converted Exile 3: a `GameSession` with a
  * scripted dialog host and a handful of verbs a walkthrough is written in —
- * enter a town, step on a square, use one, talk to someone about a keyword,
+ * enter a town, step on a square, walk into a door, use one, talk to someone about a keyword,
  * cast at a square, kill what stands in the way — and a log of everything
  * the game said, so a failing step can print what happened.
  *
@@ -189,6 +189,22 @@ export class QuestRunner {
       return;
     }
     throw new Error(`no square to step onto (${x},${y}) from`);
+  }
+
+  /**
+   * Walk from where the party stands onto the square beside it, (x, y), as
+   * the arrow keys would; a door or false wall that changes as it's walked
+   * into gets a second step, as a player would take.
+   */
+  async walk(x: number, y: number): Promise<void> {
+    const ter = () => (this.session.isOutdoors ? -1 : this.town.record.terrain[x]![y]!);
+    const before = ter();
+    await this.session.moveTo({ x, y });
+    await this.settle();
+    if ((this.at.x !== x || this.at.y !== y) && ter() !== before) {
+      await this.session.moveTo({ x, y });
+      await this.settle();
+    }
   }
 
   /** Stand still for `n` turns (Space, `handle_pause`). */

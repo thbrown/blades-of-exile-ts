@@ -192,6 +192,14 @@ export enum SpecType {
    * Exile III's scripts behind one.
    */
   IF_FIXED = 165,
+  /**
+   * An exile-js opcode, not in BoE or OBoE: jump to `ex1b` if at least
+   * `ex2a` squares of the town carry field `ex1a`. Exile III's Concealed
+   * Tunnel holds its barrier while a barrel is left anywhere in it, and BoE's
+   * IF_FIELDS, which could have counted them, tests the wrong column
+   * (DIVERGENCES.md #34).
+   */
+  IF_FIELD_COUNT = 166,
 
   MAKE_TOWN_HOSTILE = 170,
   TOWN_RUN_MISSILE = 171,

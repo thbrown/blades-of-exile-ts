@@ -785,6 +785,41 @@ the hostile line still comes first. 342 also tests the town number (below
 20), which holds everywhere it's used (Gale, 16–19). No engine change.
 `tools/e3convert/towns/muteTalk.ts`.
 
+### 34. Counting a field across a town (2026-09-30)
+
+**DECIDED: an exile-js opcode, `if-field-count` (166).** Exile III's
+Concealed Tunnel (town 54) keeps an invisible barrier across its door while a
+barrel is left anywhere in the town (`1088:22b8` tests all 64×64 squares), so
+the party has to push all five into pits or water. BoE's IF_FIELDS counts a
+field over a rectangle, but OBoE's (boe.specials.cpp:3502) and so this port's
+test the square `(i, j)` where `i` is the running count, not the column, so it
+can't count anything off column 0 until something there counts; this port
+keeps that, as scenarios may rely on it. `if-field-count` jumps to `ex1b` when
+at least `ex2a` squares of the town carry field `ex1a`. Before it, the
+converter read a flag that only the tunnel's far end (spot 14) set, and the
+tunnel couldn't be crossed.
+
+### 35. Walls that move (2026-09-30)
+
+**DECIDED: a scenario flag, `moving-walls` = `exile3:<node>:<towns>`, with
+Exile III's rules in the engine (`src/game/e3MovingWalls.ts`).** In Exile
+III's Concealed Tunnel (town 54) and town 71 the adobe walls (terrain 132)
+creep north and the basalt walls (117) south, a square a turn over floor
+(150), turning around when they can't go on (`10c0:6aa2`, in the per-turn
+town code). A crate, barrel, web, quickfire or barrier ahead stops one. A
+wall that comes onto the party carries it along, and carried onto a square
+that blocks, the party dies (`FUN_10c0_58b1`, E3's `push_things`, which has
+the two walls in its direction table beside the belts); in a fight, the one
+PC, with no saving throw. BoE has nothing like it: no node moves terrain
+every turn, and a conveyor terrain can't be a wall. Under the flag the walls
+move just before `push_things`, as E3's two calls come in that order, in
+town and in combat; `node` is the crush message. OBoE ignores the flag and
+the walls stand still, which leaves the tunnel's levers out of reach. The
+port had no moving walls at all before this, so the tunnel couldn't be
+crossed. E3's crush also follows a *belt* that carries the party into a
+wall (the same routine), so under the flag the port's BoE belts crush too,
+in any town: the Tower of Shifting Floors' are the ones it touches.
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

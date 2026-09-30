@@ -41,6 +41,7 @@ import { DamageType } from '../data/monster';
 import { Race } from '../universe/skills';
 import { damagePc, hitParty } from './damage';
 import { pointOnScreen } from './session';
+import { e3Crush } from './e3MovingWalls';
 import type { GameSession } from './session';
 
 /** `univ.scenario.get_feature_flag("conveyor-belts") == "V2"`. */
@@ -216,6 +217,8 @@ export async function pushThings(session: GameSession): Promise<void> {
       univ.addStringToBuf('You get pushed.');
       session.center = { ...univ.party.townLoc };
       session.updateExplored(session.center);
+      // Exile III's: carried into a wall, the party is crushed (e3MovingWalls.ts).
+      await e3Crush(session, univ.party.townLoc, -1);
       await landOn(session, univ.party.townLoc, -1);
     }
   }
@@ -231,6 +234,7 @@ export async function pushThings(session: GameSession): Promise<void> {
       pc.combatPos = to;
       univ.addStringToBuf('Someone gets pushed.');
       session.updateExplored(pc.combatPos);
+      await e3Crush(session, pc.combatPos, i);
       await landOn(session, pc.combatPos, i);
       if (crossedScreen(session, from, to, 1, 1)) redraw = true;
       // The C++ sets its redraw flag unconditionally in this branch, whatever

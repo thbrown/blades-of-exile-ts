@@ -14,19 +14,30 @@
  *   screen still opens on the plain "fidgety, nervous man"; Look, Name, Job
  *   and every keyword answer as the weary one. Personality 19 has no name
  *   of its own, which is why that matters.
+ * - **King Vothkaro** (268), until Castle Troglo's story reaches 4, asks
+ *   whether the party has read the scroll (dialog 0xcd8, `FUN_10e0_0097`):
+ *   yes moves the story to 4 and the conversation opens; no is a line of
+ *   block 57 and no conversation (`1020:14bf`). E3 asks after its hostile
+ *   test, so a hostile king (odd attitude) isn't asked.
  *
  * Numbers here are E3's, 1-based; the engine's are one less (neither is a
  * shopkeeper, so neither is cloned, `talk.ts`).
  */
 
 import { partyFlag as f, type SpecBuilder, type Step } from '../script';
+import { TROGLO_STAGE } from './castleTroglo';
 
 const SELES = 41;
 const ANAXIMANDER = 20;
+const VOTHKARO = 268;
 
-/** What a creature of E3 personality `p` does as a conversation starts, or null. */
-export function e3TalkStart(b: SpecBuilder, p: number): Step[] | null {
+/** What a creature of E3 personality `p`, in town slot `slot`, does as a conversation starts, or null. */
+export function e3TalkStart(b: SpecBuilder, p: number, slot: number): Step[] | null {
   switch (p) {
+    case VOTHKARO:
+      return [b.ifCreature(slot, { attitude: 1 }, [], [b.ifCreature(slot, { attitude: 3 }, [], [
+        b.ifFlagBelow(TROGLO_STAGE, 4, [b.askDialog(0xcd8, [b.setFlag(TROGLO_STAGE, 4)], [b.msg(57, 0x7b), b.blockMove()])]),
+      ])])];
     case SELES:
       return [b.ifFlagAtLeast(f(0xc91), 1, [b.talkAs(46 - 1, false)])];
     case ANAXIMANDER: {

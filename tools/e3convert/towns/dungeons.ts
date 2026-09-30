@@ -349,9 +349,6 @@ function trogloTemple(b: SpecBuilder): Map<number, Step[]> {
   ]);
 }
 
-/** The Concealed Tunnel's barrels are gone (spot 14): a converter flag, see below. */
-const TUNNEL_CLEARED: Flag = [291, 28];
-
 /** The Concealed Tunnel (town 54): `FUN_1088_2248`, block 61. */
 function concealedTunnel(b: SpecBuilder): Map<number, Step[]> {
   const B = 61, spot = (id: number) => townSpotFlag(54, id);
@@ -359,13 +356,16 @@ function concealedTunnel(b: SpecBuilder): Map<number, Step[]> {
   const teleport = (x: number, y: number): Step[] => [b.askDialog(0xdd5, [b.msg(B, 0x25), b.moveParty(x, y)])];
   return new Map<number, Step[]>([
     [1, [b.msg(B, 0x24), b.setFlag(spot(1), 20), b.bringIn(200, 1)]],
-    // An invisible barrier while any barrel is left in the tunnel (E3 looks
-    // at every square; here, whether spot 14 has cleared them).
-    [2, [b.ifFlagEq(TUNNEL_CLEARED, 0, [b.msg(B, 0x28), b.blockMove()])]],
+    // An invisible barrier while any barrel is left in the tunnel, anywhere
+    // (1088:22b8, every square). Until 2026-09-30 this read a flag only spot
+    // 14 set, and spot 14 is behind the barrier: the tunnel couldn't be
+    // crossed.
+    [2, [b.ifFieldCount(FieldType.OBJECT_BARREL, 1, [b.msg(B, 0x28), b.blockMove()])]],
     [11, teleport(0x28, 6)], [12, teleport(5, 0x2b)],
-    // Every barrel vanishes and the portcullises open, once ((7,18) opened says so).
+    // The way back from the Barrier Cavern: every barrel vanishes and the
+    // portcullises open, once ((7,18) opened says so).
     [14, [b.ifTer(7, 0x12, 0x6d, [], [
-      b.removeField(0, 0, 63, 63, FieldType.OBJECT_BARREL), b.setFlag(TUNNEL_CLEARED, 1),
+      b.removeField(0, 0, 63, 63, FieldType.OBJECT_BARREL),
       ...[[7, 0x12], [7, 0x13], [0xa, 0x12], [0xa, 0x13]].map(([x, y]) => b.setTer(x!, y!, 0x6d)), b.msg(B, 0x26),
     ])]],
     [15, [b.askDialog(0xdd4, [b.changeTown(0x67, 0x1a, 0x11)]), b.blockMove()]],
@@ -519,16 +519,27 @@ function guardedTunnel(b: SpecBuilder): Map<number, Step[]> {
  * The Great Circle (town 62), where the stone circles lead: `FUN_1088_5233`,
  * block 62. Smashing the altar frees three haakai, who want everything.
  */
-function greatCircle(b: SpecBuilder): Map<number, Step[]> {
-  const B = 62, spot = (id: number) => townSpotFlag(62, id);
-  const smash = (): Step[] => [
-    b.setFlag(f(0x867), 1), b.setFlag(spot(1), 20), b.townVisible(62),
+/**
+ * Smashing the Great Circle's altar, by its spot or by the Ritual of
+ * Sanctification (`towns/sanctify.ts`), which adds `yesTail` to the
+ * haakai's bargain.
+ */
+export function greatCircleSmash(b: SpecBuilder, yesTail: Step[] = []): Step[] {
+  const B = 62;
+  return [
+    b.setFlag(f(0x867), 1), b.setFlag(townSpotFlag(62, 1), 20), b.townVisible(62),
     b.askDialog(0xe27, [
       // The haakai take the party's gold, every magic item it carries, and
       // those lying here.
       b.msg(B, 0xf), (next) => b.node('gold', { ex1: [30000, 1] }, next), b.takeMagicItems(true), b.msg(B, 0x13),
+      ...yesTail,
     ], [b.msg(B, 0x10), b.bringIn(200, 1)]),
   ];
+}
+
+function greatCircle(b: SpecBuilder): Map<number, Step[]> {
+  const B = 62;
+  const smash = (): Step[] => greatCircleSmash(b);
   return new Map<number, Step[]>([
     // After three stone circles (flag 0xb41), the compulsion can't be refused.
     [1, [b.askDialog(0xe26, smash(), [b.ifFlagBelow(f(0xb41), 3, [b.blockMove()], [b.msg(B, 0x11), ...smash()])])]],

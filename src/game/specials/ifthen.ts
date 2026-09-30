@@ -486,6 +486,18 @@ export async function ifThenSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       if (bugFixed(spec.ex1a)) ctx.nextSpec = spec.ex1b;
       break;
 
+    case SpecType.IF_FIELD_COUNT: {
+      // DIVERGENCES.md #34.
+      const town = univ.town;
+      if (!town) break;
+      let count = 0;
+      for (let x = 0; x < town.record.maxDim; x++)
+        for (let y = 0; y < town.record.maxDim; y++)
+          if (town.hasField(x, y, spec.ex1a as FieldType)) count++;
+      if (count >= spec.ex2a) ctx.nextSpec = spec.ex1b;
+      break;
+    }
+
     case SpecType.IF_QUEST: {
       if (spec.ex1a < 0 || spec.ex1a >= univ.scenario.quests.length) {
         univ.addStringToBuf('The scenario tried to update a non-existent quest.');

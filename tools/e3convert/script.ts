@@ -761,6 +761,28 @@ export class SpecBuilder {
     return (next) => this.node('if-context', { ex1: [16, -1, this.seq(then)(next)] }, next);
   }
 
+  /**
+   * `ifTargeted` for one spell only: IF_CONTEXT's TARGET arm with `ex1b`
+   * the spell, which lets any other spell by. A block in `then` intercepts
+   * the spell (its `s1`), so its own effect doesn't follow.
+   */
+  ifSpellTargeted(spell: number, then: Step[]): Step {
+    return (next) => this.node('if-context', { ex1: [16, spell, this.seq(then)(next)] }, next);
+  }
+
+  /**
+   * At least `min` squares of the town carry field `field`: E3 scans the
+   * whole town (as `FUN_1038_0469` in a 64×64 loop). The engine's
+   * `if-field-count` is an exile-js opcode (`SpecType.IF_FIELD_COUNT`).
+   */
+  ifFieldCount(field: number, min: number, then: Step[], otherwise: Step[] = []): Step {
+    return (next) => {
+      const yes = this.seq(then)(next);
+      const no = this.seq(otherwise)(next);
+      return this.node('if-field-count', { ex1: [field, yes], ex2: [min] }, no);
+    };
+  }
+
   /** `if (entry_dir < 9)`: the party walked in, rather than a script putting it here. */
   ifWalkedIn(then: Step[]): Step {
     return this.ifEntryDir(0, 8, then);

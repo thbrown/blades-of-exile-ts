@@ -259,7 +259,10 @@ function barrierCavern(b: SpecBuilder): Map<number, Step[]> {
         b.setEvent(2), b.setFlag(spot(1), 1), b.dialog(0xfc0), b.damageAll(0x32, 3), b.dialog(0xfc1), b.xp(25), b.journal(0xb),
         b.bringIn(200, 1), b.setFlag(f(0xc8a), 1),
         ...[0x1bd, 0x1a1, 0x19f, 0x19e, 0x1ab].map((a) => b.setFlag(f(a), 20)),
-        b.replaceTerrain(0xff, 0),
+        // The barriers: terrain 255, which the converter makes 256 where it
+        // blocks sight (town 103 is one). Until 2026-09-30 only 255 was
+        // replaced, so they stayed up until the party came back in.
+        b.replaceTerrain(0xff, 0), b.replaceTerrain(256, 0),
       ]),
     ])]],
     [2, [b.setFlag(spot(2), 20), b.dialog(0xfc2)]],

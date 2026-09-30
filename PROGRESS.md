@@ -14997,8 +14997,8 @@ one quest at a time**, to keep each session's context small.
     between two pictures of rubble.
   - Found on the way: `FUN_10b0_682f` is E3's Ritual of Sanctification
     (spell 108): a dozen town-and-square cases (the Agate Tower at (12,19),
-    flag 0x253, among them), and "Nothing happens." otherwise. **Not
-    ported**; check it when a quest reaches one of those squares.
+    flag 0x253, among them), and "Nothing happens." otherwise. **Ported
+    2026-09-30** with the giants and troglodytes (`towns/sanctify.ts`).
   - **Open question:** the shade's room also has a secret door at (36,39)
     (terrain 101, step-change), but the message spot on it (113) comes out
     as a `block-move` chain by the converter's `WALK_INTO` rule, which
@@ -15055,9 +15055,88 @@ one quest at a time**, to keep each session's context small.
   - *Not covered*: the side content along the way that isn't the quest's
     (Shayder's sewers and their Wand of Fireballs, the factory's caches,
     the stone circles).
-- [ ] **Next: the giants and troglodytes** (walkthrough A "3. Giants &
-  Troglodytes", B chapter 3).
-- [ ] Then golems, the endgame's alien beasts, then the five artifact
-  quests.
+- [x] **The giants and troglodytes** (2026-09-30), seven tests. It could
+  not be finished before today, for five separate reasons, all fixed:
+  - Sharimik's triad: Knight's "mission", Levin's price (1000 gold, 0xf1),
+    the hermit's Ritual (town 100, "trog"), the Troglo Temple (53, stairs
+    up to 101) and its two altars sanctified (the hordlings and their dark
+    altar's deadly spot 5 dead; the haakai and spot 6), Corie's yes (0xf2,
+    which reads the dark altar's flag 0x47f), and the mayor's papers.
+  - Castle Troglo: zone 58's checkpoint lets the papers by; the cell, its
+    25-turn door, the note for wandering, Vothkaro's question (Leave: no
+    talk), his "here" (stage 5), the letter and the secret door, the
+    caves' dial gate (5, 4, 3, 2, 0, 2), Elhioc (stage 6), his spellbook
+    past the false wall at (6,7), the scroll up the stairs (stage 7), and
+    Knight's library door and tome (Dispel Barrier).
+  - The giants: Bruskrud's mission (0x122), zone 49's gap fight, the
+    upper caves' four trophy boxes (searched by Look), the way out (0x1b0)
+    and all four prisoners, Bruskrud's 800 a time, the lower caves' key,
+    padlock and rune panel (the door at (54,23) and town 54 on the map).
+  - The Concealed Tunnel: five barrels (one pushed for real, walled in,
+    swapping squares with the party and then into the pit) lift the
+    barrier; its walls carry and crush; and a search (`test/support/
+    e3Walls.ts`) finds the party a way through the moving walls to both
+    levers and the stairs (143 turns, pushing only the lever room's four
+    corner crates), replayed move by move through the engine, which agrees
+    on the party's square and every wall every turn.
+  - The Barrier Cavern: the crystal (an OK page, then Smash), 0xc8a,
+    event 2, the barriers down at once, five spots in the two peoples'
+    towns spent, both sides coming, the shards once, the three ways out,
+    and the tunnel's far end clearing its barrels for the way home.
+  - Rewards: Knight's mission settled by the war, Anaximander's report,
+    Berra's shards, Levy's item, and 'X' (personality 31, "earn") in the
+    Tower of Magi teaching two mage spells.
+  - **Found and fixed: the Ritual of Sanctification did nothing** (it
+    printed "Nothing happens." everywhere). `towns/sanctify.ts` ports all
+    twelve of `FUN_10b0_682f`'s cases as spots on the altar squares, each an
+    IF_CONTEXT TARGET node for spell 108 (`SpecBuilder.ifSpellTargeted`);
+    an answered case blocks, which intercepts the spell. Corie could never
+    say yes without it.
+  - **Found and fixed: Vothkaro never asked about the scroll.**
+    `FUN_1020_1484`'s case for personality 268 (`talkStart.ts`).
+  - **Found and fixed: two of the four prisoners had no words.** E3's talk
+    nodes have a ninth field, a **second personality** the node also
+    answers for (`FUN_1098_a77b` takes either word; the loader's `sscanf`
+    at `1020:4b7d` fills it). Seven pairs share nodes: Anaximander's two
+    selves, Seles's, Bernathy's, the giants' prisoners and three more.
+    A node missing the field keeps the previous one's (`talk.ts`).
+  - **Found and fixed: the Concealed Tunnel's barrier never lifted.** It
+    read a flag only the tunnel's far end set. E3 counts barrels across
+    the town; BoE's IF_FIELDS can't (it tests the wrong column, kept), so
+    a new opcode, **`if-field-count` (166)**, DIVERGENCES.md #34.
+  - **Found and fixed: no walls ever moved.** E3's per-turn code moves the
+    tunnel's (and town 71's) adobe and basalt walls, and its `push_things`
+    carries the party with them and crushes it against a wall. New flag
+    **`moving-walls`**, `src/game/e3MovingWalls.ts`, DIVERGENCES.md #35;
+    the crush also applies to belts, as in E3.
+  - **Found and fixed: the Barrier Cavern's barriers stayed up** until
+    re-entry: the crystal replaced terrain 255, which the converter had
+    made 256 there (opaque). Now both, as `entry.ts` already did.
+  - The giants' rune panel names its buttons by their place in E3's ring
+    (bottom, lower left, …): walkthrough A's "two bottom left, then two on
+    the right" works; walkthrough B's numbers are some other numbering.
+  - New suspected E3 bugs #18 (the spiders' altar ritual repeats) and #19
+    (a moving wall ignores a creature ahead), both wired to "Fix known
+    bugs". New check-in questions 7–11.
+  - Runner verb added: `walk(x, y)` (from where the party stands; a door
+    or false wall gets its second step).
+  - *Not covered*: the Giant's Forge and Smite, the lower caves' snake pit
+    and Naga fight, the Troglo Temple's treasure rooms, Castle Troglo's
+    loot after the war, and the doomguard.
+- [ ] **Next: the golems** (walkthrough A "4. Golems", B chapter 4).
+- [ ] Then the endgame's alien beasts, then the five artifact quests.
 
-All checks pass (2026-09-30): 1,508 tests, tsc, both sweeps, verify-e3.
+All checks pass (2026-09-30): 1,515 tests, tsc, both sweeps, verify-screen,
+verify-party and verify-e3.
+
+**Gotchas from the giants and troglodytes (2026-09-30):**
+- A second `QuestRunner` built mid-test resets the shared scenario's towns
+  (the constructor's `restoreScenarioState`) under the first one. Build
+  side checks' runners *before* the main one.
+- Chests and boxes are blocked squares: search them with `look`, not
+  `step`.
+- Terrain 255 is converted to 256 in towns where it blocks sight
+  (`townTer255`), so a script that replaces 255 must replace 256 as well.
+- A step onto a portal or message spot in the engine may take no turn;
+  anything timing turns (the wall search) has to agree, which the replay
+  against the engine catches.
