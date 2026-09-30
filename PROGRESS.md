@@ -14676,3 +14676,10 @@ licence rule holds. Both use the main menu's granite and marble
   measured against. The header sticks while scrolling: there's no scroll box
   around the table, and below 1240px the table becomes cards. The verdict
   column is now "Exile III vs BoE".
+- **The white squares by the Keep of Rentar-Ihrno are Exile III's own art**, not
+  a port bug. They are terrain 86, "Pit/Combat Border", E3 picture 74 =
+  TER2.BMP cell 24, which is solid white (all 1,008 pixels 255,255,255).
+  BoE's ter2.png has the same cell solid black. E3's `draw_one_terrain_spot`
+  (`1060:0000`) calls its blitter `1058:1015` with `trans` = 0 (`push 0` at
+  `1060:02ec`); only `trans` = 1 takes the white-masking path, so E3 paints
+  it white too. Checked 2026-09-29.
