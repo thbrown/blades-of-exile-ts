@@ -162,7 +162,7 @@ if-town-visible
 if-entry-dir
 if-creature
 if-near
-
+if-fixed
 
 
 
