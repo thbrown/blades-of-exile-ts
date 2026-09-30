@@ -122,6 +122,48 @@ export function dispelFields(session: GameSession, where: Location, mode: number
   if (univ.rng.getRan(1, 1, 12) + adj < 3) breakForceCage(session, where);
 }
 
+/** What an E3 wall crumbles into: cave rubble, or surface rubble. */
+const E3_CAVE_RUBBLE = 0x4f;
+const E3_SURFACE_RUBBLE = 0x61;
+
+/**
+ * **`crumble` = `exile3:<terrains>`**, a scenario's flag: Exile III's
+ * `crumble_wall` (`FUN_10b0_6d91`), which crumbles the terrains on a list of
+ * its own (`DS:30b0`, 111–113, 128–130 and 143–145) where BoE asks for
+ * CRUMBLING terrain. E3 marks none of its terrain CRUMBLING, so without this
+ * Move Mountains does nothing in Exile III.
+ */
+function e3Crumbles(session: GameSession): number[] | null {
+  const flag = session.univ.scenario.featureFlags['crumble'];
+  if (flag === undefined || !flag.startsWith('exile3:')) return null;
+  return flag.slice('exile3:'.length).split(',').map(Number);
+}
+
+/**
+ * E3's ground under the view, `DS:3dd2`, which picks the rubble: its terrain
+ * drawing (`1050:4000` on) sets it to 2 at each grass square it draws (2,
+ * 22–49) and to 0 at each cave floor (0, 1), so the last of those in the 9×9
+ * view wins; in Fort Emergence (town 21) it is always 0. E3's draw order
+ * across the view has not been pinned down; x outer, y inner is assumed, and
+ * it only decides between two pictures of rubble on a view holding both.
+ */
+function e3Ground(session: GameSession): number {
+  const { univ } = session;
+  const town = univ.town;
+  if (!town || univ.party.townNum === 21) return 0;
+  let ground = 0;
+  const c = univ.party.townLoc;
+  for (let x = c.x - 4; x <= c.x + 4; x++) {
+    for (let y = c.y - 4; y <= c.y + 4; y++) {
+      if (!town.isOnMap(x, y)) continue;
+      const t = town.record.terrain[x]![y]!;
+      if (t === 2 || (t > 0x15 && t < 0x32)) ground = 2;
+      if (t < 2) ground = 0;
+    }
+  }
+  return ground;
+}
+
 /**
  * crumble_wall (boe.party.cpp:1482) — a CRUMBLING terrain turns into whatever
  * `flag1` names. `flag2 >= 2` marks a wall too solid to smash.
@@ -131,6 +173,14 @@ export function crumbleWall(session: GameSession, where: Location): void {
   const town = univ.town;
   if (!town || !town.isOnMap(where.x, where.y)) return;
   const ter = town.record.terrain[where.x]![where.y]!;
+  const e3 = e3Crumbles(session);
+  if (e3) {
+    if (!e3.includes(ter)) return;
+    livingSound(60);
+    town.record.terrain[where.x]![where.y] = e3Ground(session) < 2 ? E3_CAVE_RUBBLE : E3_SURFACE_RUBBLE;
+    univ.addStringToBuf('  Barrier crumbles.');
+    return;
+  }
   const info = univ.terrainType(ter);
   if (info.special !== TerSpec.CRUMBLING || info.flag2 >= 2) return;
   // The C++ notes this is probably the wrong sound, and keeps it anyway.

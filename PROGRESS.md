@@ -14938,3 +14938,76 @@ All checks pass (2026-09-30): 1,496 tests, tsc, both sweeps, verify-screen
   and the GitHub links in the startup screen and items page follow it.
   localStorage keys (`exile-js:*`) stay as they are: same origin, so saves
   and prefs survive the rename.
+
+### E3's main quests, one chain at a time (started 2026-09-30)
+
+At the user's request: make sure every main quest can be finished. The five
+plagues (slimes, roaches, giants and troglodytes, golems, and the endgame's
+alien beasts) and the five artifact quests (Pachtar's Plate, the Fury
+Crossbow, the Black Halberd, the Knowledge Brew, the Ring of Endless Magery).
+The steps come from two GameFAQs walkthroughs the user supplied (Paul
+"headbanger"'s and Tuxedo Jack's). They're not committed, so ask the user for
+them (they were on their desktop as `walkthroughA`/`walkthroughB`). **Work goes
+one quest at a time**, to keep each session's context small.
+
+- **The quest runner**, `test/support/e3Quest.ts` (`QuestRunner`): a
+  headless `GameSession` on the converted scenario, with a scripted dialog
+  host (`answer(/label/)`, `number(n)`, `text(s)`; unanswered choices press
+  the "go ahead" button), and verbs a walkthrough is written in: `enter`,
+  `outdoors`, `step`, `look` (searching a bookshelf or crate is Look from
+  beside it, `adj_town_look`, not walking into it), `use`, `talk(name,
+  ...keywords)`, `spell` (real `cast_town_spell` targeting, as a freebie),
+  `castAt` (a spell or blast landing on a square's special), `kill`,
+  `clearHostiles`, `canReach` (a path through doors but not walls,
+  portcullises or water, with `boat`), and `flag(0xNNN)`. Travel is a teleport
+  and fights are `killMonst`, so the tests prove a chain's *logic* and its
+  paths, not that a party can win it.
+  - *Gotcha*: a town's `record` **is** the scenario's `Town`, and play
+    writes terrain on it (as OBoE's does). The browser reloads the page for
+    a new game, but a runner sharing one parsed scenario has to
+    `restoreScenarioState` first, or a portcullis opened in one test is open
+    in the next. The constructor does.
+- **Quest tests**: `test/e3quests.test.ts`, one `describe` per chain.
+- [x] **The slimes** (2026-09-30), four tests: the Agate Tower (Jordan,
+  bookshelf → the Slime Pit on the map, a fireball on the slime maker);
+  Colchis (Move Mountains into the shade's room, "gift", the Basic Necklace
+  and Helm of Alertness, which then ward acid and sleep); the Slime Pit's
+  pedestal (each button opens exactly one way down to level 2, each way
+  reaches all five pools, and button 2's way needs level 2's boat); and the
+  chain (mayor's mission, spot 3's wall shut until the pools burn, five
+  pools, the Alien Slime, the rune, the mayor's 1500 gold once,
+  Anaximander's two reports, Berra takes the rune, Levy's Strong Skill
+  Potion, Solberg's two spells in the Tower of Magi).
+  - **Found and fixed: Move Mountains did nothing in Exile III.** BoE
+    crumbles CRUMBLING terrain; E3's `crumble_wall` (`FUN_10b0_6d91`, called
+    from `cast_town_spell`'s Move Mountains arm `10b0:61ed`) has a list of
+    its own at `DS:30b0`: terrains 111–113, 128–130 and 143–145, the plain,
+    cracked and moldy walls of stone, basalt and adobe. A match becomes
+    rubble, cave (0x4f) or surface (0x61) by `DS:3dd2`, the ground E3's
+    terrain drawing last saw (2 for grass, 0 for cave floor, always 0 in the
+    fort). New flag **`crumble` = `exile3:<terrains>`**
+    (`tables.ts` `readE3Crumbles`, `fieldEffects.ts` `crumbleWall`). The
+    user asked "doesn't the moldy wall collapse?", and E3's own spell help
+    says the same: "It doesn't work on all walls." *Not pinned*: the draw
+    order across the 9×9 view (x outer is assumed), which only picks
+    between two pictures of rubble.
+  - Found on the way: `FUN_10b0_682f` is E3's Ritual of Sanctification
+    (spell 108): a dozen town-and-square cases (the Agate Tower at (12,19),
+    flag 0x253, among them), and "Nothing happens." otherwise. **Not
+    ported**; check it when a quest reaches one of those squares.
+  - **Open question:** the shade's room also has a secret door at (36,39)
+    (terrain 101, step-change), but the message spot on it (113) comes out
+    as a `block-move` chain by the converter's `WALK_INTO` rule, which
+    refuses the step, so the door never flips. Whether E3 opens a secret
+    door under a message spot hasn't been checked in its move code
+    (`1010:807c` on). Move Mountains gets in either way.
+- [ ] **Next: the roaches** (walkthrough A "2. Cockroaches", B chapter 2):
+  Farport's ferry, the Spider Caves ("spider", "friendly"), the spiders'
+  fight outdoors, the Roach Lair's map, Kuper's skiff to Kneece ("gift"),
+  the Filth Factory (the control room's Halt Slime Flow at (42,15) and the
+  run to the door, level 2's levers and portal, the scales at (26,36), the
+  Phoenix Egg), then Levy's Ring of Free Action.
+- [ ] Giants and troglodytes, golems, the endgame's alien beasts, then the
+  five artifact quests.
+
+All checks pass (2026-09-30): 1,500 tests, tsc, both sweeps, verify-e3.

@@ -119,6 +119,17 @@ export function readE3RoadJoins(exe: Uint8Array): number[] {
 }
 
 /**
+ * `DS:30b0`: the nine terrains Move Mountains crumbles (`FUN_10b0_6d91`, E3's
+ * `crumble_wall`, from the spell's arm at `10b0:61ed`): the plain, cracked
+ * and moldy walls of stone, basalt and adobe (111–113, 128–130, 143–145).
+ * BoE marks such terrain CRUMBLING; E3 keeps a list.
+ */
+export function readE3Crumbles(exe: Uint8Array): number[] {
+  const ds = readNeSegment(exe, neAutoDataSegment(exe));
+  return Array.from(ds.subarray(0x30b0, 0x30b0 + 9));
+}
+
+/**
  * `DS:29b2`: `can_find_town` for a new party, which `FUN_10b0_053c` copies
  * to party+0x8485. The towns whose byte is 0 start off the map: E3 hides 15
  * (22, 26, 32, 54, 70, 71, 74–79, 86, 87, 92) until a script, a map or a
