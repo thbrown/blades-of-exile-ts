@@ -14610,3 +14610,50 @@ may need the user's ruling — and DIVERGENCES #30, open for the user.
 **Superseded, same day**: see "Fix known bugs" just above. Next: port the
 talk-start rewards (`FUN_1020_1484`, the gap above), then wire #5; the user
 is ruling on the known bugs.
+
+### Two Exile III reference pages: the items and the map (2026-09-29)
+
+At the user's request, to help the bug hunt: two more Vite entries beside the
+game, built into the site with it (`vite.config.ts` `rollupOptions.input`).
+Neither carries any Exile III data. They load it as the game does
+(`src/pages/common.ts` `loadExile3`): the dev server's converted copy, or
+else the browser converts the installer once (`prepareExile3`), so the
+licence rule holds. Both use the main menu's granite and marble
+(`src/pages/pages.css`).
+
+- **`items.html`** (`src/pages/items/`): all 475 items in a sortable,
+  filterable table that turns into cards on a phone, with the filter kept in
+  the URL. **"In the game"** is exactly what the item sheet says: its field
+  logic now lives in `src/data/itemInfo.ts` `itemInfoFields`, and
+  `putItemInfo` runs it. **"By the code"** is `e3ItemRules.ts`: one entry per
+  E3 ability code, written from the rules the port runs (`e3ItemUse.ts`,
+  `e3Items.ts`, the wards in `player.ts`/`inventory.ts`/`doors.ts`/
+  `increaseAge.ts`), with this item's numbers and the combat formula spelled
+  out. The verdict is differs / partly / unread (the engine still runs BoE's
+  rule; E3's own code for it hasn't been read) / agrees.
+  `test/e3ItemRules.test.ts` fails if a `use_item` case or an item-table code
+  has no entry. Gotcha: a spell's name has to be looked up lazily, because
+  the string tables load after the module does. Otherwise every name is ''
+  and every pattern matches.
+- **What it shows today: 70 differ, 11 partly, 28 unread.** The item sheet
+  names the *bladbase* ability, read through E3's byte +8 (which BoE takes as
+  harm/help), so every healing potion's sheet says "Drain Health", curing
+  says "Cause Poison", strength says "Curse", speed "Slow", skill "Drain
+  Skill Points". Crystal and Prismatic Wands have their spells swapped
+  (44 casts Dispel Undead, 45 Ravage Spirit). The Wand of Vorb says "Heal"
+  (it deals 250 to its user), Micah's Gloves say "Intelligence" (it's
+  dexterity), the Iceshield says cold (it's fire), and Poison Darts' venom
+  does nothing on a missile. These are the sheet's words against E3's rules;
+  none is fixed yet.
+- **`map.html`** (`src/pages/map/`): a slippy map of the whole outdoor grid.
+  Each sector is a tile, drawn at full size, ¼ and ⅛, with the larger sizes
+  made as they come into view. You can drag, pinch, scroll and double-click.
+  Towns come from `cityLocs`, clustered by gate; named places from
+  `areaDesc`; regions from sector names. A search box flies to a result, a
+  card gives the sector and square, the URL hash keeps the view, and a
+  readout shows the terrain under the mouse.
+- **Unchecked lead, from the map:** town 0 (Krizsan) is the target of
+  entrances in sectors (0,3), (2,5), (3,8) and (4,0) as well as its real gate
+  in (2,9) (`e3convert.test.ts`). Possibly E3 marks an unused or hidden
+  entrance slot with 0; worth checking against `town.ts`/`outdoor.ts`
+  before anyone walks into one.

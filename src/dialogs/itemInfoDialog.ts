@@ -10,12 +10,10 @@
  * pack without closing.
  */
 
-import { Item, ItemType, SKILL_INVALID } from '../data/item';
-import { getAbilName, weaponSkillName } from '../data/itemAbilName';
-import { ItemAbil } from '../data/item';
+import { Item, ItemType } from '../data/item';
+import { itemInfoFields } from '../data/itemInfo';
 import { Scenario } from '../data/scenario';
 import { getStr } from '../data/strings';
-import { itemWeight } from '../universe/inventory';
 import { NUM_INVEN_SLOTS } from '../universe/player';
 import { Universe } from '../universe/universe';
 import { SheetStore } from '../render/sheets';
@@ -44,77 +42,16 @@ export function putItemInfo(dlg: XmlDialog, item: Item, scen: Scenario): void {
     return;
   }
 
-  dlg.setText('name', item.fullName);
-  dlg.setNum('weight', itemWeight(item));
-  // `|||` ends the part of the description the player is allowed to read; the
-  // rest is the designer's note.
-  dlg.setText('desc', item.desc.split('|||')[0] ?? '');
-  // A stack of charges is worth its value times the count.
-  dlg.setNum('val', item.charges > 0 ? item.value * item.charges : item.value);
-
-  if (item.ability !== ItemAbil.NONE) {
-    if (item.concealed) {
-      dlg.setText('abil', '???');
-    } else {
-      let abil = getAbilName(item);
-      if (item.ability === ItemAbil.SUMMONING || item.ability === ItemAbil.MASS_SUMMONING) {
-        abil = abil.replace('%s', scen.scenMonsters[item.abilData]?.name ?? '');
-      }
-      dlg.setText('abil', abil);
-    }
-  }
-  if (item.charges > 0) dlg.setNum('use', item.charges);
-  if (item.protection > 0) dlg.setNum('def', item.protection);
-
-  switch (item.variety) {
-    case ItemType.ONE_HANDED:
-    case ItemType.TWO_HANDED:
-    case ItemType.BOW:
-    case ItemType.CROSSBOW:
-    case ItemType.THROWN_MISSILE:
-    case ItemType.MISSILE_NO_AMMO:
-      // A weapon with no ability of its own advertises the skill it rolls
-      // against instead — the ability field does double duty. The C++ then
-      // falls through into the ammunition case, which shares the two lines
-      // below; TypeScript won't allow a non-empty fallthrough, so they are
-      // written out in both arms.
-      if (item.ability === ItemAbil.NONE && item.weapType !== SKILL_INVALID)
-        dlg.setText('abil', `Key skill: ${weaponSkillName(item.weapType)}`);
-      dlg.setNum('dmg', item.itemLevel);
-      dlg.setNum('bonus', item.bonus);
-      break;
-    case ItemType.ARROW:
-    case ItemType.BOLTS:
-      dlg.setNum('dmg', item.itemLevel);
-      dlg.setNum('bonus', item.bonus);
-      break;
-    case ItemType.POTION:
-    case ItemType.RING:
-    case ItemType.SCROLL:
-    case ItemType.TOOL:
-    case ItemType.WAND:
-    case ItemType.NECKLACE:
-      dlg.setNum('lvl', item.itemLevel);
-      break;
-    case ItemType.SHIELD:
-    case ItemType.ARMOR:
-    case ItemType.HELM:
-    case ItemType.GLOVES:
-    case ItemType.SHIELD_2:
-    case ItemType.BOOTS:
-      // The C++ has its own TODO about this: armour folds bonus and protection
-      // together into "Bonus" and puts the item level under "Defend", which is
-      // the other way round from a weapon. Kept.
-      dlg.setNum('bonus', item.bonus + item.protection);
-      dlg.setNum('def', item.itemLevel);
-      dlg.setNum('enc', item.awkward);
-      break;
-    case ItemType.WEAPON_POISON:
-      dlg.setNum('lvl', item.itemLevel);
-      break;
-    default:
-      // no item, gold, food, non-use and the two unused kinds: nothing to add.
-      break;
+  const f = itemInfoFields(item, scen);
+  dlg.setText('name', f.name);
+  dlg.setNum('weight', f.weight);
+  dlg.setText('desc', f.desc);
+  dlg.setNum('val', f.val);
+  if (f.abil) dlg.setText('abil', f.abil);
+  // The fields `itemInfoFields` leaves undefined stay blank, as cleared above.
+  for (const name of ['dmg', 'bonus', 'def', 'enc', 'use', 'lvl'] as const) {
+    const n = f[name];
+    if (n !== undefined) dlg.setNum(name, n);
   }
 }
 

@@ -96,6 +96,14 @@ export default defineConfig(({ command }) => ({
   define: { __EXILE3_VERSION__: JSON.stringify(exile3ConversionVersion()) },
   build: {
     outDir: 'docs',
+    // The game, and the two Exile III reference pages (src/pages/).
+    rollupOptions: {
+      input: {
+        main: join(process.cwd(), 'index.html'),
+        items: join(process.cwd(), 'items.html'),
+        map: join(process.cwd(), 'map.html'),
+      },
+    },
   },
   server: {
     port: 5199,
