@@ -1098,6 +1098,14 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     }
   });
 
+  it("Gointz's sale frees New Cotra's boat, the one boat that starts as someone's", () => {
+    const owned = scen.boats.map((v, i) => ({ v, i })).filter(({ v }) => v.property);
+    expect(owned).toHaveLength(1);
+    expect(owned[0]!.v.whichTown).toBe(42);
+    const frees = [...scen.scenSpecials.values()].filter((n) => n.type === SpecType.CHANGE_BOAT_OWNER);
+    expect(frees.map((n) => [n.ex1a, n.ex2a])).toEqual([[owned[0]!.i, 1]]);
+  });
+
   it('writes every wired known bug behind if-fixed, and nothing else', () => {
     const named = new Set<number>();
     const scan = (nodes: Map<number, SpecialNode>) => {
@@ -1106,8 +1114,9 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     scan(scen.scenSpecials);
     for (const t of scen.towns) scan(t.specials);
     for (const row of scen.outdoors) for (const o of row) scan(o.specials);
-    const wired = Object.entries(KNOWN_BUGS).filter(([n, b]) => Number(n) < 100 && !b.unwired && Number(n) !== 11 && Number(n) !== 12);
-    // 11 and 12 are the engine's (the Airy Stone, and E3's nimble test).
+    // 11-13 are fixed in the engine: the Airy Stone, E3's nimble test and its disease roll.
+    const inEngine = new Set([11, 12, 13]);
+    const wired = Object.entries(KNOWN_BUGS).filter(([n, b]) => Number(n) < 100 && !b.unwired && !inEngine.has(Number(n)));
     expect([...named].sort((a, b) => a - b)).toEqual(wired.map(([n]) => Number(n)));
   });
 

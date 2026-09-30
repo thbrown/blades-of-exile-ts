@@ -724,6 +724,7 @@ function scenarioXml(
         <room-descriptions>exile3</room-descriptions>
         <explode-spots>exile3</explode-spots>
         <pick-lock>exile3</pick-lock>
+        <disease>exile3</disease>
         <summons>exile3</summons>
         <dungeon-sound>${E3_DUNGEON_SOUND}</dungeon-sound>
         <cursors>${cursors.map((c) => `${c.name}:${c.hotspot.x}:${c.hotspot.y}`).join(',')}</cursors>

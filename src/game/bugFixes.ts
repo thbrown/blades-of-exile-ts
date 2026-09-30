@@ -39,11 +39,13 @@ export const KNOWN_BUGS: Readonly<Record<number, KnownBug>> = {
   },
   6: { title: 'The Nephilim village never remembers the party helped', ruling: 'undecided' },
   7: { title: 'The river ferry back is free, though it says 10 gold', ruling: 'undecided' },
-  8: { title: "Gointz's boat is paid for and never freed", ruling: 'undecided' },
+  // 8 is withdrawn: Gointz's sale does free his boat (party+0x1307 is boat
+  // 2's `property`; E3's boats are at party+0x12ea). It was a port error.
   9: { title: "Masok's first line is overwritten before it is shown", ruling: 'undecided' },
   10: { title: "The army camp's towers lead to Krizsan", ruling: 'undecided' },
-  11: { title: 'The Airy Stone weighs 236 once taken', ruling: 'undecided' },
-  12: { title: "Exile III's poisons and lock picking help everyone but the nimble", ruling: 'undecided' },
+  11: { title: 'The Airy Stone weighs 236 once taken', ruling: 'bug' },
+  12: { title: "Exile III's poisons and lock picking help everyone but the nimble", ruling: 'bug' },
+  13: { title: 'Good Constitution does nothing to end disease in Exile III', ruling: 'undecided' },
 };
 
 let enabled = false;

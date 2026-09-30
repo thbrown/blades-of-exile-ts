@@ -15,7 +15,9 @@ import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { KNOWN_BUGS, bugFixed, setBugFixes } from '../src/game/bugFixes';
 import { GameSession } from '../src/game/session';
 import { SpecCtx, SpecCtxType, SpecialHost } from '../src/game/specials/context';
+import { handleDisease } from '../src/game/increaseAge';
 import { curWeight, giveItem } from '../src/universe/inventory';
+import { Status, Trait } from '../src/universe/skills';
 import { PartyPreset } from '../src/universe/player';
 import { Universe } from '../src/universe/universe';
 
@@ -98,5 +100,37 @@ describe('the Airy Stone (E3-SUSPECTED-BUGS.md #11)', () => {
     expect(pc.items[at.slot]!.weight).toBe(-20);
     pc.items[1] = { ...defaultItem(), variety: ItemType.NON_USE_OBJECT, weight: 50 };
     expect(curWeight(pc)).toBe(30);
+  });
+});
+
+describe("Exile III's disease end-roll (E3-SUSPECTED-BUGS.md #13)", () => {
+  /** How often, in 800 goes, a Good Constitution PC shakes a one-point disease. */
+  function cures(fixed: boolean): number {
+    setBugFixes(fixed);
+    const s = inTown();
+    scen.featureFlags['disease'] = 'exile3';
+    try {
+      const pc = s.univ.party.pcs[0]!;
+      pc.traits[Trait.GOOD_CONST] = true;
+      for (const p of s.univ.party.pcs.slice(1)) p.status[Status.DISEASE] = 0;
+      let n = 0;
+      for (let i = 0; i < 800; i++) {
+        pc.status[Status.DISEASE] = 1;
+        handleDisease(s);
+        if (pc.status[Status.DISEASE] === 0) n++;
+      }
+      return n;
+    } finally {
+      delete scen.featureFlags['disease'];
+    }
+  }
+
+  it('ignores Good Constitution as E3 shipped (1 in 8), and uses it when fixed (3 in 8)', () => {
+    const shipped = cures(false);
+    const fixed = cures(true);
+    expect(shipped).toBeGreaterThan(50);
+    expect(shipped).toBeLessThan(150);
+    expect(fixed).toBeGreaterThan(240);
+    expect(fixed).toBeLessThan(360);
   });
 });

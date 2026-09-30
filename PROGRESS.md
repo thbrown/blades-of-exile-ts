@@ -1572,9 +1572,10 @@ Notes for M2 implementer:
     - `moveCreature`: E3 writes a creature's `m_loc` (+5/+6 of the 0x5c
       record) directly; TOWN_RELOCATE_CREATURE can only move to the node's
       own spot, so it's destroy-monst plus a forced place-monst.
-    - Gotchas: **party+0x12ea–0x6939 is `creature_save[4]`** (4 × 5,524
-      bytes: 60 × 0x5c creatures and two words), which is what makes
-      Gointz's 0x1307 a bug (#8). **Town-segment writes are terrain** at
+    - Gotchas: ~~party+0x12ea–0x6939 is `creature_save[4]`~~ **wrong**
+      (corrected 2026-09-29): **party+0x12ea is the boat table**, 30 × 10
+      bytes, `property` at +9 (`1010:8263`), so Gointz's 0x1307 is boat 2's
+      and his sale works. **Town-segment writes are terrain** at
       0x2abe + 64x + y (the gremlins, 138/139) or creature fields from
       0x1427 (Bohen-Ihrno's pair, 163; Vahkohs, 140). `FUN_1070_0464(item,
       charges)` is give-item with a charges override (-1: none).
@@ -14583,6 +14584,22 @@ clears it**, since recordings are made against the bugs.
   with dialog 0x1217, then `FUN_10b0_1ff2(5)` (not yet identified) and 200 added to the dword at party+4 (probably gold). Only Seles's and
   Anaximander's personality swaps and the job deliveries are ported
   (`towns/talkStart.ts`, `e3Jobs.ts`). #5's fix belongs in Baziron's.
+
+**Rulings and corrections, same day.** The user ruled #11 (Airy Stone) and
+#12 (Nimble Fingers) bugs. **#8 is withdrawn**: the user remembered buying
+Gointz's boat, and they were right. E3's town boarding test reads a boat's
+`property` at party+0x12f3 + 10k (`1010:8263`), so the boat table starts at
+party+0x12ea, and 0x1307 is boat 2's owner byte (New Cotra, town 42, the
+only boat that starts as someone's). The old "creature_save at 0x12ea"
+gotcha was wrong; nothing else relied on it. The sale now always frees the
+boat (`giveBoat(2)`), and `e3convert.test.ts` checks that it's the New Cotra
+one. **New #13**, from player lore about Good Constitution and disease: E3's
+`handle_disease` (`1018:acbb`) computes the −2 and then tests a *fresh*
+`get_ran(1,0,7)`. The port was playing E3 by 1997/OBoE's rule, where the
+trait works; now `disease` = `exile3` plays E3's (with its extra draw), and
+the preference plays the kept roll. (Unchecked lead: the EXE's outdoor
+boarding strings have no "Not your boat." beside them, as the town ones do,
+so E3 may not test `property` outdoors.)
 
 All checks pass (2026-09-29, after the Skribbane Herb): 1,462 tests, both
 sweeps, verify-screen (with TOUCH), verify-party and verify-e3. (Corpus not

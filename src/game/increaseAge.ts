@@ -17,6 +17,7 @@
  * lives in `pushThings.ts` now and is called from `afterPartyTurnInner`.)
  */
 
+import { bugFixed } from './bugFixes';
 import { DamageType } from '../data/monster';
 import { TRACE_AGE } from '../core/trace';
 import { tryAutoSave } from './autosave';
@@ -138,6 +139,7 @@ export function handleDisease(session: GameSession): void {
   const sick = livePcs(session).filter((pc) => (pc.status[Status.DISEASE] ?? 0) > 0);
   if (sick.length === 0) return;
   univ.addStringToBuf('Disease:');
+  const e3 = univ.scenario.featureFlags['disease'] === 'exile3';
   for (const pc of sick) {
     const roll = univ.rng.getRan(1, 1, 10);
     switch (roll) {
@@ -153,6 +155,15 @@ export function handleDisease(session: GameSession): void {
     }
     let r1 = univ.rng.getRan(1, 0, 7);
     if (pc.traits[Trait.GOOD_CONST]) r1 -= 2;
+    if (e3) {
+      // Exile III (`disease` = `exile3`, `1018:acbb`) works the roll out as
+      // above and then tests a fresh one, so Good Constitution does nothing:
+      // known bug 13 (E3-SUSPECTED-BUGS.md), the kept roll under "Fix known
+      // bugs". Only Aescal's Ring cures besides.
+      const cured = bugFixed(13) ? r1 <= 0 : univ.rng.getRan(1, 0, 7) <= 0;
+      if (cured || hasE3AbilEquip(pc, 67)) moveToZero(pc, Status.DISEASE);
+      continue;
+    }
     // Exile III's Aescal's Ring (its code 67, `1018:ad14`; 1997's number too,
     // COMBAT.CPP:3988) always does; E3's items sit out of BoE's test.
     if (r1 <= 0 || hasAbilEquip(pc, ItemAbil.STATUS_PROTECTION, Status.DISEASE, true)

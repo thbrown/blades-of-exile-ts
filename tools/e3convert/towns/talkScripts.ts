@@ -20,7 +20,11 @@ export const ELISA_FED = e3DailyFlag(1);
 export const DAILY_FLAGS = [LEVY_PAID, ELISA_FED, HAWKE_DAY];
 /** A scratch flag of the converter's: whether a buyer (119, 137, 150) took anything. */
 const SOLD_ANY: [number, number] = [291, 10];
-/** Gointz's boat sold (talk script 116), for E3's party+0x1307. */
+/**
+ * Gointz's boat sold (talk script 116): E3 reads boat 2's `property` byte
+ * (party+0x1307; its boats are at party+0x12ea), which only this sale
+ * clears, so a flag of the converter's stands in for the test.
+ */
 const GOINTZ_SOLD: [number, number] = [291, 20];
 /**
  * Creatures killed in the ursagi's caves (town 51), for Delenn (135). E3
@@ -311,13 +315,11 @@ export const TALK_SCRIPTS = new Map<number, TalkScript>([
   [110, (b) => [b.ifSpecItem(31, [
     b.reply(0x26), b.giveSpecItem(25), b.takeSpecItem(31), b.setFlag(f(0x223), 2),
   ], [b.switchFlag(f(0x223), [[b.reply(0x25)], [b.reply(0x26)], [b.reply(0x27)]])])]],
-  // Gointz sells his boat for 500 gold. E3 marks it sold in party+0x1307, a
-  // byte of the first saved town's creatures, and never frees the boat (E3's
-  // boat 2, New Cotra's), so the party pays and cannot board it
-  // (E3-SUSPECTED-BUGS.md #8). GOINTZ_SOLD stands in for that byte, read as
-  // not yet zero. Under "Fix known bugs" the sale frees the boat.
+  // Gointz sells his boat for 500 gold: E3's boat 2, the only one that
+  // starts as someone's, moored in New Cotra (town 42). The sale clears its
+  // `property` byte (party+0x1307, `1020:3532`), and it is the party's.
   [116, (b) => [b.ifFlagEq(GOINTZ_SOLD, 1, [b.reply(0x3a)], [
-    b.ifGold(500, [b.reply(0x39), b.takeGold(500), b.setFlag(GOINTZ_SOLD, 1), b.ifFixed(8, [b.giveBoat(2)], [])], [b.reply(0x38)]),
+    b.ifGold(500, [b.reply(0x39), b.takeGold(500), b.setFlag(GOINTZ_SOLD, 1), b.giveBoat(2)], [b.reply(0x38)]),
   ])]],
   // Crisper pays 300 gold for the ice pudding (zone 88's spot 5 flag).
   [117, (b) => [b.ifFlagAtLeast(f(0xbc9), 1, [

@@ -317,6 +317,11 @@ mage spells +0x28, priest +0x2a), `max_health` (+0x52), `cur_health`,
 `status[15]` (+0x60; disease, status 7, is +0x6e). The mage spell book is at
 +0x6bc (`-0x741e`), one byte a spell.
 
+Boats are 10-byte records from party+0x12ea (30 of them), in the same
+layout as horses: the town boarding test reads `property` at 0x12f3 + 10k
+(`1010:8263`). Their starting values are at `DS:2be0`, the horses' at
+`DS:2d0c`.
+
 Creatures with `spec1` 200–204 start absent (`10d8:0d36`), and
 `FUN_1090_4053(code, attitude)` brings in those whose `spec1` is `code`. The
 converter writes the code as the creature's `<encounter>`.
