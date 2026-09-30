@@ -29,12 +29,53 @@ import { el, installBackdrop, loadExile3, searchable } from '../common';
 const ZW = SECTOR_SIZE * TILE_W;
 const ZH = SECTOR_SIZE * TILE_H;
 const MAX_SCALE = 3;
+/** Label colours: the capitals, and town-0 exits left in the data. */
+const CAPITAL = '#ffcf4a';
+const STRAY = '#ff6a55';
 
 type Kind = 'town' | 'place' | 'region';
+
+/**
+ * The three lands in Exile III's outdoor grid, each shown on its own: the
+ * surface in columns 0–6, and in columns 7–8 the Vahnatai caves at the top
+ * and Exile's upper caves at the foot, with unused sectors between. E3's own
+ * rule for "underground" is the same column test (`emit.ts`, `villageZone`).
+ */
+interface Land {
+  id: string;
+  label: string;
+  /** Sectors, inclusive. */
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+const LANDS: Land[] = [
+  { id: 'valorim', label: 'Valorim', x0: 0, y0: 0, x1: 6, y1: 9 },
+  { id: 'exile', label: 'Exile', x0: 7, y0: 6, x1: 8, y1: 9 },
+  { id: 'vahnatai', label: 'Vahnatai Caves', x0: 7, y0: 0, x1: 8, y1: 1 },
+];
+const landOf = (sx: number, sy: number): Land | undefined =>
+  LANDS.find((l) => sx >= l.x0 && sx <= l.x1 && sy >= l.y0 && sy <= l.y1);
+
+/** The capitals: the five cities (four town records each) and Keep of Tinraya. */
+const CAPITALS = new Set([...Array(20).keys(), 35]);
+
+/**
+ * Exits to town 0 that aren't Krizsan's gate in sector (2,9). E3 left town 0,
+ * the editor's default, on the army camp's towers in (4,0), which a party can
+ * walk into, and on three huts — (0,3), (2,5), (3,8) — that only a blocking
+ * spot can reach. E3-SUSPECTED-BUGS.md #10.
+ */
+const isStrayExit = (town: number, sx: number, sy: number): boolean => town === 0 && !(sx === 2 && sy === 9);
 
 interface Place {
   kind: Kind;
   name: string;
+  land: string;
+  capital?: boolean;
+  /** A town-0 exit that isn't Krizsan's (`isStrayExit`). */
+  stray?: boolean;
   /** World pixels, the label's anchor. */
   x: number;
   y: number;
@@ -56,6 +97,8 @@ function collectPlaces(scen: Scenario): Place[] {
 
   for (let sx = 0; sx < scen.outWidth; sx++) {
     for (let sy = 0; sy < scen.outHeight; sy++) {
+      const land = landOf(sx, sy)?.id;
+      if (!land) continue;
       const sec = scen.outdoors[sx]![sy]!;
       // Towns: cluster a town's entrances lying within a few squares.
       const clusters: { town: number; pts: { x: number; y: number }[] }[] = [];
@@ -69,12 +112,14 @@ function collectPlaces(scen: Scenario): Place[] {
       for (const k of clusters) {
         const lx = k.pts.reduce((a, p) => a + p.x, 0) / k.pts.length;
         const ly = k.pts.reduce((a, p) => a + p.y, 0) / k.pts.length;
-        const name = scen.towns[k.town]?.name || `Town ${k.town}`;
+        const stray = isStrayExit(k.town, sx, sy);
+        const town = scen.towns[k.town]?.name || `Town ${k.town}`;
+        const name = stray ? `Exit to ${town}` : town;
         out.push({
-          kind: 'town', name, town: k.town, gates: k.pts.length,
+          kind: 'town', name, land, town: k.town, gates: k.pts.length, stray, capital: !stray && CAPITALS.has(k.town),
           x: sx * ZW + (lx + 0.5) * TILE_W, y: sy * ZH + (ly + 0.5) * TILE_H,
           sector: { x: sx, y: sy }, square: { x: Math.round(lx), y: Math.round(ly) },
-          region: region(sx, sy), text: searchable(`${name} ${region(sx, sy)}`),
+          region: region(sx, sy), text: stray ? '' : searchable(`${name} ${region(sx, sy)}`),
         });
       }
       // Places: an area description, its rects in one sector merged.
@@ -91,7 +136,7 @@ function collectPlaces(scen: Scenario): Place[] {
         const lx = (r.l + r.r) / 2;
         const ly = (r.t + r.b) / 2;
         out.push({
-          kind: 'place', name, x: sx * ZW + (lx + 0.5) * TILE_W, y: sy * ZH + (ly + 0.5) * TILE_H,
+          kind: 'place', name, land, x: sx * ZW + (lx + 0.5) * TILE_W, y: sy * ZH + (ly + 0.5) * TILE_H,
           sector: { x: sx, y: sy }, square: { x: Math.round(lx), y: Math.round(ly) },
           region: region(sx, sy), text: searchable(`${name} ${region(sx, sy)}`),
         });
@@ -104,7 +149,8 @@ function collectPlaces(scen: Scenario): Place[] {
   for (let sx = 0; sx < scen.outWidth; sx++) {
     for (let sy = 0; sy < scen.outHeight; sy++) {
       const name = region(sx, sy);
-      if (!name || seen.has(`${sx},${sy}`)) continue;
+      const land = landOf(sx, sy);
+      if (!name || !land || seen.has(`${sx},${sy}`)) continue;
       const run: [number, number][] = [];
       const todo: [number, number][] = [[sx, sy]];
       seen.add(`${sx},${sy}`);
@@ -114,7 +160,7 @@ function collectPlaces(scen: Scenario): Place[] {
         for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
           const nx = x + dx;
           const ny = y + dy;
-          if (nx < 0 || ny < 0 || nx >= scen.outWidth || ny >= scen.outHeight) continue;
+          if (landOf(nx, ny) !== land) continue;
           if (seen.has(`${nx},${ny}`) || region(nx, ny) !== name) continue;
           seen.add(`${nx},${ny}`);
           todo.push([nx, ny]);
@@ -123,7 +169,7 @@ function collectPlaces(scen: Scenario): Place[] {
       const cx = run.reduce((a, [x]) => a + x, 0) / run.length;
       const cy = run.reduce((a, [, y]) => a + y, 0) / run.length;
       out.push({
-        kind: 'region', name, x: (cx + 0.5) * ZW, y: (cy + 0.5) * ZH,
+        kind: 'region', name, land: land.id, x: (cx + 0.5) * ZW, y: (cy + 0.5) * ZH,
         sector: { x: Math.round(cx), y: Math.round(cy) }, square: { x: 24, y: 24 },
         region: name, text: searchable(name),
       });
@@ -250,7 +296,9 @@ async function main(): Promise<void> {
   // The overview: every sector at ⅛, a few a frame.
   const total = scen.outWidth * scen.outHeight;
   for (let i = 0; i < total; i++) {
-    pyramid.get(Math.floor(i / scen.outHeight), i % scen.outHeight, 8);
+    const sx = Math.floor(i / scen.outHeight);
+    const sy = i % scen.outHeight;
+    if (landOf(sx, sy)) pyramid.get(sx, sy, 8);
     if (i % 6 === 5) {
       status('Drawing the world…', i / total);
       await new Promise(requestAnimationFrame);
@@ -263,8 +311,9 @@ async function main(): Promise<void> {
 
 class MapView {
   private readonly ctx: CanvasRenderingContext2D;
-  private readonly worldW: number;
-  private readonly worldH: number;
+  /** The land on show, and its bounds in world pixels. */
+  private land: Land = LANDS[0]!;
+  private landButtons: HTMLButtonElement[] = [];
   /** The world pixel at the canvas's centre, and CSS pixels per world pixel. */
   private cx: number;
   private cy: number;
@@ -289,10 +338,8 @@ class MapView {
     private readonly places: Place[],
   ) {
     this.ctx = canvas.getContext('2d')!;
-    this.worldW = scen.outWidth * ZW;
-    this.worldH = scen.outHeight * ZH;
-    this.cx = this.worldW / 2;
-    this.cy = this.worldH / 2;
+    this.cx = this.left + this.width / 2;
+    this.cy = this.top + this.height / 2;
 
     const chrome = this.buildChrome();
     root.append(chrome.search, chrome.zoom);
@@ -309,15 +356,32 @@ class MapView {
 
   // --- geometry ---
 
+  private get left(): number { return this.land.x0 * ZW; }
+  private get top(): number { return this.land.y0 * ZH; }
+  private get width(): number { return (this.land.x1 - this.land.x0 + 1) * ZW; }
+  private get height(): number { return (this.land.y1 - this.land.y0 + 1) * ZH; }
+
   private minScale(): number {
-    return Math.min(this.cssW / this.worldW, this.cssH / this.worldH) * 0.9;
+    return Math.min(this.cssW / this.width, this.cssH / this.height) * 0.9;
   }
 
   private clamp(): void {
     this.s = Math.max(this.minScale(), Math.min(MAX_SCALE, this.s));
-    // Keep some of the world on screen.
-    this.cx = Math.max(0, Math.min(this.worldW, this.cx));
-    this.cy = Math.max(0, Math.min(this.worldH, this.cy));
+    // Keep some of the land on screen.
+    this.cx = Math.max(this.left, Math.min(this.left + this.width, this.cx));
+    this.cy = Math.max(this.top, Math.min(this.top + this.height, this.cy));
+  }
+
+  /** Show another land, fitted to the screen unless `fit` is false. */
+  private setLand(land: Land, fit = true): void {
+    if (land !== this.land) this.select(null, false);
+    this.land = land;
+    for (const b of this.landButtons) {
+      const on = b.dataset['land'] === land.id;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    }
+    if (fit) this.fit();
   }
 
   private toScreen(wx: number, wy: number): [number, number] {
@@ -340,9 +404,10 @@ class MapView {
   }
 
   private fit(): void {
+    this.flight = null;
     this.s = this.minScale();
-    this.cx = this.worldW / 2;
-    this.cy = this.worldH / 2;
+    this.cx = this.left + this.width / 2;
+    this.cy = this.top + this.height / 2;
     this.draw();
   }
 
@@ -357,7 +422,7 @@ class MapView {
     this.draw();
   }
 
-  // --- the URL: #x,y,zoom in squares, and the chosen town ---
+  // --- the URL: #land@x,y,zoom in squares, and the chosen place ---
 
   private writeHash(): void {
     clearTimeout(this.hashTimer);
@@ -365,13 +430,20 @@ class MapView {
       const tx = (this.cx / TILE_W).toFixed(1);
       const ty = (this.cy / TILE_H).toFixed(1);
       const sel = this.selected ? `,${encodeURIComponent(this.selected.name)}` : '';
-      history.replaceState(null, '', `#${tx},${ty},${this.s.toFixed(3)}${sel}`);
+      history.replaceState(null, '', `#${this.land.id}@${tx},${ty},${this.s.toFixed(3)}${sel}`);
     }, 250);
   }
 
   private readHash(): boolean {
-    const [x, y, s, ...name] = location.hash.slice(1).split(',');
-    if (x === undefined || y === undefined || s === undefined) return false;
+    const [landId, view = ''] = location.hash.slice(1).split('@');
+    const land = LANDS.find((l) => l.id === landId);
+    if (!land) return false;
+    this.setLand(land, false);
+    const [x, y, s, ...name] = view.split(',');
+    if (x === undefined || y === undefined || s === undefined) {
+      this.fit();
+      return true;
+    }
     const [nx, ny, ns] = [Number(x), Number(y), Number(s)];
     if (![nx, ny, ns].every(Number.isFinite)) return false;
     this.cx = nx * TILE_W;
@@ -421,10 +493,10 @@ class MapView {
     ctx.imageSmoothingQuality = 'high';
     const [wx0, wy0] = this.toWorld(0, 0);
     const [wx1, wy1] = this.toWorld(this.cssW, this.cssH);
-    const sx0 = Math.max(0, Math.floor(wx0 / ZW));
-    const sy0 = Math.max(0, Math.floor(wy0 / ZH));
-    const sx1 = Math.min(this.scen.outWidth - 1, Math.floor(wx1 / ZW));
-    const sy1 = Math.min(this.scen.outHeight - 1, Math.floor(wy1 / ZH));
+    const sx0 = Math.max(this.land.x0, Math.floor(wx0 / ZW));
+    const sy0 = Math.max(this.land.y0, Math.floor(wy0 / ZH));
+    const sx1 = Math.min(this.land.x1, Math.floor(wx1 / ZW));
+    const sy1 = Math.min(this.land.y1, Math.floor(wy1 / ZH));
     const budget = performance.now() + 12;
     let behind = false;
     for (let sx = sx0; sx <= sx1; sx++) {
@@ -446,15 +518,17 @@ class MapView {
       ctx.strokeStyle = 'rgba(255,255,255,0.12)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      for (let sx = 0; sx <= this.scen.outWidth; sx++) {
+      const [lx0, ly0] = this.toScreen(this.left, this.top);
+      const [lx1, ly1] = this.toScreen(this.left + this.width, this.top + this.height);
+      for (let sx = this.land.x0; sx <= this.land.x1 + 1; sx++) {
         const [x] = this.toScreen(sx * ZW, 0);
-        ctx.moveTo(Math.round(x) + 0.5, 0);
-        ctx.lineTo(Math.round(x) + 0.5, this.cssH);
+        ctx.moveTo(Math.round(x) + 0.5, ly0);
+        ctx.lineTo(Math.round(x) + 0.5, ly1);
       }
-      for (let sy = 0; sy <= this.scen.outHeight; sy++) {
+      for (let sy = this.land.y0; sy <= this.land.y1 + 1; sy++) {
         const [, y] = this.toScreen(0, sy * ZH);
-        ctx.moveTo(0, Math.round(y) + 0.5);
-        ctx.lineTo(this.cssW, Math.round(y) + 0.5);
+        ctx.moveTo(lx0, Math.round(y) + 0.5);
+        ctx.lineTo(lx1, Math.round(y) + 0.5);
       }
       ctx.stroke();
     }
@@ -501,38 +575,56 @@ class MapView {
       const t = ((now - this.pulseStart) % 1600) / 1600;
       ctx.beginPath();
       ctx.arc(x, y, 8 + 22 * t, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(255, 214, 90, ${1 - t})`;
+      ctx.strokeStyle = `rgba(120, 220, 255, ${1 - t})`;
       ctx.lineWidth = 3;
       ctx.stroke();
-      this.pin(x, y, '#ffd65a', 7);
+      this.pin(x, y, '#78dcff', 7);
       label(sel, sel.kind === 'region' ? '22px BoEDungeon, Georgia, serif' : 'bold 15px system-ui, sans-serif',
-        '#ffd65a', '#000', sel.kind === 'town' ? -16 : 0, true);
+        '#78dcff', '#000', sel.kind === 'town' ? -16 : 0, true);
     }
 
-    // Towns: a pin always, the name when there's room.
-    const towns = this.places.filter((p) => p.kind === 'town' && p !== sel);
+    const here = this.places.filter((p) => p.land === this.land.id && p !== sel);
+    // Towns: a pin always, the name when there's room — capitals first, in
+    // gold. A stray exit is a small red ring, named only close up.
+    const towns = here.filter((p) => p.kind === 'town' && !p.stray)
+      .sort((a, b) => Number(b.capital ?? false) - Number(a.capital ?? false));
+    const strays = here.filter((p) => p.stray);
     for (const p of towns) {
       const [x, y] = this.toScreen(p.x, p.y);
-      if (onScreen(x, y)) this.pin(x, y, '#f4f4f4', s < 0.06 ? 3 : 4.5);
+      const r = (s < 0.06 ? 3 : 4.5) + (p.capital ? 1.5 : 0);
+      if (onScreen(x, y)) this.pin(x, y, p.capital ? CAPITAL : '#f4f4f4', r);
+    }
+    for (const p of strays) {
+      const [x, y] = this.toScreen(p.x, p.y);
+      if (!onScreen(x, y) || s < 0.06) continue;
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = STRAY;
+      ctx.stroke();
     }
     const regions = (): void => {
       if (s >= 0.2) return;
       const size = Math.round(Math.max(14, Math.min(24, s * 330)));
-      for (const p of this.places) {
-        if (p.kind === 'region' && p !== sel) {
+      for (const p of here) {
+        if (p.kind === 'region') {
           label(p, `${size}px BoEDungeon, Georgia, serif`, 'rgba(255,255,255,0.8)', 'rgba(0,0,0,0.75)', 0);
         }
       }
     };
-    // Zoomed right out, the regions are the map; closer in, the towns are.
+    // The capitals always win their place. Then, zoomed right out, the
+    // regions are the map; closer in, the other towns are.
+    const townFont = `bold ${s < 0.06 ? 11 : 13}px system-ui, sans-serif`;
+    const capitalFont = `bold ${s < 0.06 ? 13 : 15}px system-ui, sans-serif`;
+    for (const p of towns) if (p.capital) label(p, capitalFont, CAPITAL, 'rgba(0,0,0,0.95)', -14);
     const zoomedOut = s < 0.07;
     if (zoomedOut) regions();
-    const townFont = `bold ${s < 0.06 ? 11 : 13}px system-ui, sans-serif`;
-    for (const p of towns) label(p, townFont, '#fff', 'rgba(0,0,0,0.9)', -13);
+    for (const p of towns) if (!p.capital) label(p, townFont, '#fff', 'rgba(0,0,0,0.9)', -13);
+    if (s >= 0.2) for (const p of strays) label(p, 'italic 11px system-ui, sans-serif', '#ffb3a8', 'rgba(0,0,0,0.9)', -12);
     // Places once zoomed in a little.
     if (s >= 0.09) {
-      for (const p of this.places) {
-        if (p.kind === 'place' && p !== sel) label(p, 'italic 12px Georgia, serif', '#f3e7c4', 'rgba(0,0,0,0.85)', 0);
+      for (const p of here) {
+        if (p.kind === 'place') label(p, 'italic 12px Georgia, serif', '#f3e7c4', 'rgba(0,0,0,0.85)', 0);
       }
     }
     if (!zoomedOut) regions();
@@ -574,8 +666,16 @@ class MapView {
     close.type = 'button';
     close.setAttribute('aria-label', 'Close');
     close.addEventListener('click', () => this.select(null));
-    const kind = p.kind === 'town' ? 'Town' : p.kind === 'place' ? 'Place' : 'Region';
+    const kind = p.stray ? 'A stray town exit' : p.kind === 'town' ? (p.capital ? 'Capital' : 'Town')
+      : p.kind === 'place' ? 'Place' : 'Region';
     this.card.append(close, el('h2', undefined, p.name), el('div', 'map-card-kind', kind));
+    if (p.stray) {
+      this.card.append(el('p', 'map-card-note', p.sector.x === 4 && p.sector.y === 0
+        ? 'Exile III left town 0 on the army camp’s towers, and stepping onto one really does enter Krizsan. '
+          + 'E3-SUSPECTED-BUGS.md #10.'
+        : 'Exile III left town 0 on this hut. Trees ring it and a spot that blocks guards the one way in, '
+          + 'so no party reaches it. E3-SUSPECTED-BUGS.md #10.'));
+    }
     const dl = el('dl');
     const row = (k: string, v: string): void => { dl.append(el('dt', undefined, k), el('dd', undefined, v)); };
     if (p.kind !== 'region' && p.region) row('Region', p.region);
@@ -586,9 +686,10 @@ class MapView {
       row('Square', `${p.square.x}, ${p.square.y}`);
     }
     if (p.kind === 'town') {
-      const elsewhere = this.places.filter((q) => q.kind === 'town' && q.town === p.town && q !== p);
+      const elsewhere = this.places.filter((q) => q.kind === 'town' && !q.stray && q.town === p.town && q !== p);
       if (elsewhere.length) {
-        row('Also entered at', elsewhere.map((q) => `sector ${q.sector.x}, ${q.sector.y}`).join('; '));
+        row(p.stray ? 'The town’s own gate' : 'Also entered at',
+          elsewhere.map((q) => `sector ${q.sector.x}, ${q.sector.y}`).join('; '));
       }
     }
     this.card.append(dl);
@@ -607,7 +708,7 @@ class MapView {
     const h = this.card.offsetHeight;
     // Clear of the label, which is centred on the place.
     const left = Math.max(12, Math.min(this.cssW - w - 12, x + 64));
-    const top = Math.max(84, Math.min(this.cssH - h - 12, y - h / 2));
+    const top = Math.max(124, Math.min(this.cssH - h - 12, y - h / 2));
     this.card.style.left = `${left}px`;
     this.card.style.top = `${top}px`;
   }
@@ -713,7 +814,7 @@ class MapView {
     let best: Place | null = null;
     let bestD = 14;
     for (const p of this.places) {
-      if (p.kind !== 'town') continue;
+      if (p.kind !== 'town' || p.land !== this.land.id) continue;
       const [px, py] = this.toScreen(p.x, p.y);
       const d = Math.hypot(px - x, py - y);
       if (d < bestD) {
@@ -732,7 +833,7 @@ class MapView {
     const sx = Math.floor(tx / SECTOR_SIZE);
     const sy = Math.floor(ty / SECTOR_SIZE);
     const sec = this.scen.outdoors[sx]?.[sy];
-    if (!sec || tx < 0 || ty < 0) {
+    if (!sec || tx < 0 || ty < 0 || landOf(sx, sy) !== this.land) {
       this.readout.hidden = true;
       return;
     }
@@ -767,7 +868,20 @@ class MapView {
     list.setAttribute('role', 'listbox');
     list.hidden = true;
     box.append(input);
-    search.append(back, box, list);
+    // Which land is on show: one at a time, as the game has them.
+    const lands = el('div', 'map-lands');
+    lands.setAttribute('role', 'group');
+    lands.setAttribute('aria-label', 'Land shown');
+    this.landButtons = LANDS.map((l) => {
+      const b = el('button', l === this.land ? 'on' : undefined, l.label);
+      b.type = 'button';
+      b.dataset['land'] = l.id;
+      b.setAttribute('aria-pressed', String(l === this.land));
+      b.addEventListener('click', () => this.setLand(l));
+      return b;
+    });
+    lands.append(...this.landButtons);
+    search.append(back, box, lands, list);
 
     const kindRank: Record<Kind, number> = { town: 0, place: 1, region: 2 };
     let results: Place[] = [];
@@ -784,7 +898,9 @@ class MapView {
         li.setAttribute('role', 'option');
         li.setAttribute('aria-selected', String(i === active));
         li.append(el('span', `map-result-icon ${p.kind}`), el('span', 'map-result-name', p.name),
-          el('span', 'map-result-where', p.kind === 'region' ? 'Region' : p.region));
+          el('span', 'map-result-where', [p.kind === 'region' ? 'Region' : p.region,
+            p.land !== this.land.id ? LANDS.find((l) => l.id === p.land)?.label : '']
+            .filter((w) => w).join(' · ')));
         li.addEventListener('pointerdown', (e) => {
           e.preventDefault();
           choose(p);
@@ -819,6 +935,9 @@ class MapView {
       results = [];
       render();
       input.blur();
+      // A place in another land shows that land first, then flies there.
+      const land = LANDS.find((l) => l.id === p.land);
+      if (land && land !== this.land) this.setLand(land);
       this.select(p);
     };
     input.addEventListener('input', find);
@@ -862,7 +981,7 @@ class MapView {
     zoom.append(
       button('+', 'Zoom in', () => this.zoomAt(this.cssW / 2, this.cssH / 2, 1.6)),
       button('−', 'Zoom out', () => this.zoomAt(this.cssW / 2, this.cssH / 2, 1 / 1.6)),
-      button('⤢', 'Show the whole world', () => this.fit()),
+      button('⤢', 'Show the whole land', () => this.fit()),
     );
 
     const card = el('aside', 'map-card');

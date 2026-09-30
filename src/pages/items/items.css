@@ -1,7 +1,15 @@
 .table-wrap {
-  overflow-x: auto;
+  /* No overflow here: a scroll box would hold the sticky header inside it
+     instead of the window. Below 1240px the table becomes cards. */
   border: 1px solid #000;
   background: rgba(255, 255, 255, 0.55);
+}
+.legend {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  max-width: 70rem;
 }
 table.items {
   width: 100%;
@@ -14,7 +22,8 @@ table.items th {
   top: 0;
   z-index: 1;
   background: #d6d6d6;
-  border-bottom: 1px solid #000;
+  /* A border scrolls away from a sticky cell; a shadow stays with it. */
+  box-shadow: inset 0 -1px 0 #000, 0 2px 4px rgba(0, 0, 0, 0.2);
   text-align: left;
   padding: 0;
   white-space: nowrap;
@@ -57,16 +66,16 @@ table.items tr.v-differs td[data-col='verdict'] {
 table.items tbody tr:hover td {
   background: rgba(255, 255, 255, 0.6);
 }
-td[data-col='sheet'] { min-width: 8rem; }
-td[data-col='code'] { min-width: 15rem; }
-td[data-col='verdict'] { min-width: 11rem; width: 15rem; }
+td[data-col='sheet'] { min-width: 7rem; }
+td[data-col='code'] { min-width: 13rem; }
+td[data-col='verdict'] { min-width: 9rem; width: 14rem; }
 td[data-col='type'] { white-space: nowrap; }
 
 .name {
   display: flex;
   gap: 8px;
   align-items: flex-start;
-  min-width: 11rem;
+  min-width: 9rem;
 }
 .pic {
   flex: none;
@@ -139,7 +148,7 @@ td small {
   display: none;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 1239px) {
   .sort-select {
     display: inline-block;
   }

@@ -14657,3 +14657,22 @@ licence rule holds. Both use the main menu's granite and marble
   in (2,9) (`e3convert.test.ts`). Possibly E3 marks an unused or hidden
   entrance slot with 0; worth checking against `town.ts`/`outdoor.ts`
   before anyone walks into one.
+
+**Same day, the user's second pass over the pages.**
+- **The extra Krizsans are E3's own data**, converted faithfully: exits to
+  town 0 on the army camp's towers in (4,0) (walkable, E3-SUSPECTED-BUGS #10)
+  and on three huts that no party can reach: (0,3), (2,5) and (3,8). The
+  one in (3,8) is newly added to #10. The map shows them as red "Exit to
+  Krizsan" rings, with a card saying which kind each is, and leaves them out
+  of search.
+- **The map shows one land at a time**: Valorim (columns 0–6), Exile
+  (columns 7–8, rows 6–9) and the Vahnatai Caves (columns 7–8, rows 0–1).
+  A toggle picks the land, a search result in another land switches to it,
+  and the hash is `#land@x,y,zoom[,name]`.
+- **Capitals** (towns 0–19 and 35, Keep of Tinraya) are gold and labelled
+  first. The selection is light blue now.
+- **Items**: a two-handed weapon no longer mentions an off hand. "To hit
+  +N" replaces "N% more likely to land", with a legend saying what it is
+  measured against. The header sticks while scrolling: there's no scroll box
+  around the table, and below 1240px the table becomes cards. The verdict
+  column is now "Exile III vs BoE".

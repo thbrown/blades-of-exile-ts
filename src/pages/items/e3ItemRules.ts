@@ -382,6 +382,11 @@ export function readE3Item(it: Item, inGameAbil: string, scen: Scenario): ItemRe
 /**
  * The item's numbers as the combat code uses them — what the sheet's
  * "Damage", "Bonus", "Defend" and "Encumbrance" boxes stand for.
+ *
+ * "To hit +N" is against the same item with no bonus: a blow rolls 1–100
+ * plus its adjustments and lands at or under the hit chance for the skill
+ * (`pcAttackWeapon`, missiles.ts), and each bonus point takes 5 off the roll,
+ * so N more in a hundred blows land, until they all do.
  */
 export function combatLine(it: Item): string {
   const L = it.itemLevel;
@@ -390,12 +395,15 @@ export function combatLine(it: Item): string {
     case ItemType.ONE_HANDED:
     case ItemType.TWO_HANDED: {
       const skill = it.weapType >= 0 ? `; rolls on ${weaponSkillName(it.weapType)}` : '';
-      return `Hits for 1–${L}${b ? ` + ${b}` : ''} (+2 as the only or main weapon, −1 in the off hand)` +
-        `${b ? `; ${b * 5}% more likely to land` : ''}${skill}.`;
+      // A two-handed weapon is always the only one, so always "primary".
+      const hands = it.variety === ItemType.TWO_HANDED
+        ? `Hits for 1–${L}${b ? ` + ${b}` : ''} + 2 (two-handed, so always the main weapon)`
+        : `Hits for 1–${L}${b ? ` + ${b}` : ''} (+2 as the only or main weapon, −1 in the off hand)`;
+      return `${hands}${b ? `; to hit +${b * 5}` : ''}${skill}.`;
     }
     case ItemType.BOW:
     case ItemType.CROSSBOW:
-      return `Launcher: ${b ? `shots ${b * 5}% more likely to land` : 'no to-hit bonus'}; damage is the ammunition’s.`;
+      return `Launcher: ${b ? `to hit +${b * 5}` : 'no to-hit bonus'}; damage is the ammunition’s.`;
     case ItemType.ARROW:
     case ItemType.BOLTS:
     case ItemType.THROWN_MISSILE:
@@ -414,7 +422,7 @@ export function combatLine(it: Item): string {
       if (it.protection > 0) parts.push(`+1–${it.protection} protection`);
       else if (it.protection < 0) parts.push(`1–${-it.protection} more damage through`);
       if (it.awkward > 0) {
-        parts.push(`encumbrance ${it.awkward}: your own blows ${it.awkward * 5}% likelier to miss, ` +
+        parts.push(`encumbrance ${it.awkward}: your own blows to hit −${it.awkward * 5}, ` +
           'and every 3 costs an action point (Defense skill may shrug one off)');
       }
       return `${parts.join('; ')}.`;

@@ -83,6 +83,41 @@ body.map-body {
   outline: 2px solid #000;
   outline-offset: 1px;
 }
+.map-lands {
+  flex-basis: 100%;
+  display: flex;
+  border: 1px solid #000;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.map-lands button {
+  flex: 1;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 6px;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid #000;
+  color: #444;
+  cursor: pointer;
+}
+.map-lands button:first-child {
+  border-left: 0;
+}
+.map-lands button.on {
+  background: #fff;
+  color: #000;
+  font-weight: bold;
+}
+.map-lands button:focus-visible {
+  outline: 2px solid #000;
+  outline-offset: -3px;
+}
+.map-card-note {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
 .map-results {
   flex-basis: 100%;
   list-style: none;
@@ -246,12 +281,12 @@ body.map-body {
   }
   .map-zoom {
     bottom: auto;
-    top: 76px;
+    top: 112px;
     right: 8px;
   }
   .map-readout {
     bottom: auto;
-    top: 76px;
+    top: 112px;
     left: 8px;
   }
   .map-search {

@@ -76,7 +76,8 @@ const COLUMNS: Column[] = [
   { id: 'wt', label: 'Wt', title: 'Weight', num: true, key: (r) => r.sheet.weight },
   { id: 'sheet', label: 'In the game', title: 'What the item sheet says', key: (r) => r.sheet.abil.toLowerCase() },
   { id: 'code', label: 'By the code', title: 'What the code does', key: (r) => r.reading.effect.toLowerCase() },
-  { id: 'verdict', label: 'Verdict', key: (r) => VERDICT_RANK[r.reading.verdict] },
+  { id: 'verdict', label: 'Exile III vs BoE', title: 'Does the item sheet (BoE’s words) match what Exile III’s code does?',
+    key: (r) => VERDICT_RANK[r.reading.verdict] },
 ];
 
 // --- state, kept in the URL ------------------------------------------------
@@ -270,7 +271,15 @@ function renderTable(card: HTMLElement, rows: Row[]): void {
   table.append(thead, tbody);
   wrap.append(table);
   const empty = el('p', 'empty', 'No item matches.');
-  card.append(controls, wrap, empty);
+  const legend = el('p', 'legend');
+  legend.append(
+    el('strong', undefined, 'Reading it. '),
+    '“In the game” is the item sheet, which names each item’s BoE ability. “By the code” is what Exile III’s ',
+    'rules do. “To hit +N” is against the same item with no bonus: a blow rolls 1–100 and lands at or under ',
+    'the wielder’s hit chance, and each bonus point takes 5 off the roll, so N more blows in a hundred land. ',
+    'Damage is before strength, blessing and the like.',
+  );
+  card.append(controls, legend, wrap, empty);
 
   const trs = new Map<Row, HTMLTableRowElement>(rows.map((r) => [r, rowEl(r)]));
 
@@ -381,7 +390,7 @@ function rowEl(r: Row): HTMLTableRowElement {
   const verdict: Node[] = [el('span', `badge ${r.reading.verdict}`,
     VERDICTS.find((v) => v.id === r.reading.verdict)!.label)];
   if (r.reading.note) verdict.push(el('small', 'note', r.reading.note));
-  cell('verdict', 'Verdict', verdict);
+  cell('verdict', 'Exile III vs BoE', verdict);
   return tr;
 }
 
