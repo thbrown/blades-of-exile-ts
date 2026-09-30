@@ -14941,6 +14941,10 @@ All checks pass (2026-09-30): 1,496 tests, tsc, both sweeps, verify-screen
 
 ### E3's main quests, one chain at a time (started 2026-09-30)
 
+**Questions for the user to check in the original game go in
+`E3-CHECK-IN-ORIGINAL.md`** (started the same day): where to go, what to
+do, what the port does now. Add to it whenever a quest raises one.
+
 At the user's request: make sure every main quest can be finished. The five
 plagues (slimes, roaches, giants and troglodytes, golems, and the endgame's
 alien beasts) and the five artifact quests (Pachtar's Plate, the Fury
