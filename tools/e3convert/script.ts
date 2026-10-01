@@ -264,8 +264,11 @@ export class SpecBuilder {
     const d = this.src.dialogs.get(id);
     if (!d) throw new Error(`E3 dialog ${id} not found`);
     // The dialog's picture: its first `5_n` control. A node shows one, and
-    // twenty of E3's dialogs have two.
-    const tag = d.controls.filter((c) => /^5_\d+$/.test(c.text)).sort((a, b) => a.id - b.id)[0];
+    // twenty of E3's dialogs have two. The province maps (950–957) put a
+    // 36×36 icon first and the 240×240 map (`5_36xx`) second; the map is the
+    // point of them, so it wins.
+    const tags = d.controls.filter((c) => /^5_\d+$/.test(c.text)).sort((a, b) => a.id - b.id);
+    const tag = tags.find((c) => /^5_36\d\d$/.test(c.text)) ?? tags[0];
     const pic = tag ? this.src.dialogPic?.(Number(tag.text.slice(2))) : undefined;
     const texts = d.controls.filter((c) => !/^\d+_\d+$/.test(c.text)).sort((a, b) => a.y - b.y || a.x - b.x);
     const buttons = d.controls.filter((c) => /^[01]_\d+$/.test(c.text)).sort((a, b) => a.id - b.id)

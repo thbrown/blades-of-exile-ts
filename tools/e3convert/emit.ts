@@ -201,9 +201,9 @@ function e3Panels(read: E3Read): [string, Rgba][] {
  * 1997's `draw_dialog_graphic` (DLOGTOOL.CPP), which E3's (`1028:3856`)
  * shares: under 300 a terrain picture, 400–579 a monster sprite (E3 takes
  * a raw sprite index, under 180), 700 up a dialog picture, 1000 up a talking
- * face, and 900 up one of the ten black-and-white maps and carvings: each is
- * a scenario sheet of its own from `mapBase` (`e3MapSheets`), shown whole
- * (PIC_CUSTOM_FULL, 111).
+ * face, 900 up one of the ten black-and-white maps and carvings, and 3600
+ * up one of the eight province maps: each is a scenario sheet of its own
+ * from `mapBase` (`e3MapSheets`), shown whole (PIC_CUSTOM_FULL, 111).
  */
 export function e3DialogPic(tag: number, spritePic: Map<number, number>, mapBase = -1): [number, number] | undefined {
   if (tag < 240) return [e3TerrainPic(tag), 1];
@@ -214,6 +214,7 @@ export function e3DialogPic(tag: number, spritePic: Map<number, number>, mapBase
   if (tag >= 700 && tag < 800) return [tag - 700, 4];
   if (tag >= 1000 && tag < 1100) return [tag - 1000, 5];
   if (tag >= 900 && tag < 900 + E3_MAP_COUNT && mapBase >= 0) return [mapBase + tag - 900, PIC_CUSTOM_FULL];
+  if (tag >= 3600 && tag < 3600 + E3_BIG_MAP_COUNT && mapBase >= 0) return [mapBase + E3_MAP_COUNT + tag - 3600, PIC_CUSTOM_FULL];
   return undefined;
 }
 
@@ -221,12 +222,20 @@ export function e3DialogPic(tag: number, spritePic: Map<number, number>, mapBase
 const E3_MAP_COUNT = 10;
 
 /**
+ * BIGMAPS.BMP's 240×240 province maps, four across (`5_3600`–`5_3607`):
+ * dialogs 950–957, which the special items 0–5 and 9 show (`specItems.ts`)
+ * and the map to Black Halberd (954) is read from.
+ */
+const E3_BIG_MAP_COUNT = 8;
+
+/**
  * DLOGMAPS.BMP, 1997's B&W graphic sheet (`draw_dialog_graphic`'s case 9:
- * 120×120 cells, three across), cut into one sheet a picture.
+ * 120×120 cells, three across), cut into one sheet a picture, then
+ * BIGMAPS.BMP's province maps the same way.
  */
 function e3MapSheets(read: E3Read): Rgba[] {
   const all = decodeBmp(read('DLOGMAPS.BMP'));
-  return Array.from({ length: E3_MAP_COUNT }, (_, k) => {
+  const carvings = Array.from({ length: E3_MAP_COUNT }, (_, k) => {
     const x0 = 120 * (k % 3), y0 = 120 * Math.floor(k / 3);
     const data = new Uint8ClampedArray(120 * 120 * 4);
     for (let y = 0; y < 120; y++) {
@@ -235,6 +244,17 @@ function e3MapSheets(read: E3Read): Rgba[] {
     }
     return { width: 120, height: 120, data };
   });
+  const big = decodeBmp(read('BIGMAPS.BMP'));
+  const provinces = Array.from({ length: E3_BIG_MAP_COUNT }, (_, k) => {
+    const x0 = 240 * (k % 4), y0 = 240 * Math.floor(k / 4);
+    const data = new Uint8ClampedArray(240 * 240 * 4);
+    for (let y = 0; y < 240; y++) {
+      const from = ((y0 + y) * big.width + x0) * 4;
+      data.set(big.data.subarray(from, from + 240 * 4), y * 240 * 4);
+    }
+    return { width: 240, height: 240, data };
+  });
+  return [...carvings, ...provinces];
 }
 
 const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="no" ?>\n';

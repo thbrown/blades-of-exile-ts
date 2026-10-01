@@ -28,7 +28,8 @@ import { E3Abil, e3DamageResist, e3SpecDam } from '../src/game/e3Items';
 import { DamageType } from '../src/data/monster';
 import { ELECTRUM_KEY } from '../tools/e3convert/towns/gale';
 import { TerObstruct, TerSpec } from '../src/data/terrain';
-import { SpecType } from '../src/data/special';
+import { PIC_CUSTOM_FULL, SpecType } from '../src/data/special';
+import { specItemUseable } from '../src/data/quest';
 import { Direction, type Location } from '../src/core/location';
 import { MainStatus, PartyStatus, Trait } from '../src/universe/skills';
 import { GENERATORS } from '../tools/e3convert/towns/shiftingFloors';
@@ -2252,6 +2253,27 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       expect([q.townNum, q.at], q.tail()).toEqual([PIT, { x: 18, y: 44 }]);
       expect(q.canReach(q.at, { x: 4, y: 24 })).toBe(true);
     });
+  });
+
+  it('the province maps: special items 0–5 and 9 show BIGMAPS.BMP', async () => {
+    // FUN_10c0_1f96's jump table: each opens its dialog, whose picture is
+    // `5_3600 + k`, a 240×240 map of its own.
+    const maps: [number, RegExp][] = [
+      [0, /Krizsan/], [1, /Upper Exile/], [2, /Bigail/], [3, /Karnold/], [4, /Midori/], [5, /Monoroe/], [9, /Footracer/],
+    ];
+    for (const [k, title] of maps) {
+      const spec = scen.specialItems[k]!;
+      expect(specItemUseable(spec), `item ${k}`).toBe(true);
+      const node = scen.scenSpecials.get(spec.special)!;
+      expect(node.pictype, `item ${k}`).toBe(PIC_CUSTOM_FULL);
+      const png = readFileSync(join(out, `graphics/sheet${node.pic}.png`));
+      expect([png.readUInt32BE(16), png.readUInt32BE(20)], `item ${k}`).toEqual([240, 240]);
+      const q = new QuestRunner(scen);
+      q.party.specItems.add(k);
+      const said = q.log.length;
+      await q.useSpecItem(k);
+      expect(q.log.slice(said).join('\n'), `item ${k}`).toMatch(title);
+    }
   });
 
   describe('the Black Halberd', () => {
