@@ -252,7 +252,7 @@ in the disassembly are these offsets + 4.
 | 0x0ac | `lighting` | same |
 | 0x0ae | `start_locs[4]` | same |
 | 0x0b6 | `exit_specs[4]` | BoE has `exit_locs` first |
-| 0x0be | `exit_locs[4]` | pinned 2026-09-30: north, south, east, west (BoE: n, w, s, e), in the zone the party is in; x below 1 unused. E3's end_town_mode `FUN_10d8_252b` reads them as `es:[0xc2]`–`[0xc8]`. The "cross" in towns 0–19 is the four squares round each village's own place in its zone |
+| 0x0be | `exit_locs[4]` | pinned 2026-09-30: north, south, east, west (BoE: n, w, s, e), in the zone the party is in; x below 1 unused. E3's end_town_mode `FUN_10d8_252b` reads them as `es:[0xc2]`–`[0xc8]`. Towns 0–19 have all four, a cross round one square of their zone |
 | 0x0c6 | `in_town_rect` | same, read Mac-order; but E3's code compares x with the first field (`1080:02e9`), E3-SUSPECTED-BUGS.md #21 |
 | 0x0ce | `preset_items[64]` × 10 B | same layout, but `ability` (i16) is gold's or food's amount and otherwise the item's ability byte (+10); `charges` (u8) is its own (town loader `10d8:1531`, `notes.ts`) |
 | 0x34e | `max_num_monst` | same |

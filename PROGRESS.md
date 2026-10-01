@@ -15273,7 +15273,7 @@ one quest at a time**, to keep each session's context small.
     entrance; without it, walking out put the party on the keep's doorstep
     and straight back in, and nothing west of Tinraya (the New Factory, the
     Vahnatai lands, the end) could be reached. `emit.ts` writes them as
-    `<exit>`s now; 25 towns have some (the twenty villages, 35, 36, 50, 63 and 82).
+    `<exit>`s now; 25 towns have some (0–19, 35, 36, 50, 63 and 82).
   - Runner: `canReach`/`pathLength` follow E3's ways through (spot 50,
     the converter's forcing CANT_ENTER) as a player walks them; the Murder
     Cave's secret passages and stalagmites are all ways through.
