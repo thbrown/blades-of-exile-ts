@@ -1183,8 +1183,9 @@ describe("Exile III converted in memory, as the browser does", () => {
       { id: 'exile3', fileName: 'exile3.boes', kind: 'boes', data: gzipSync(writeTar(entries)) }, opcodes);
     expect(loaded.scenario.title).toBe('Exile III: Ruined World');
     expect(loaded.scenario.towns.length).toBe(222);
-    // Terrain, monsters and items, then the ten maps and carvings.
-    expect(loaded.sheets.length).toBe(22);
+    // Terrain, monsters and items, then the ten maps and carvings and the
+    // eight province maps.
+    expect(loaded.sheets.length).toBe(30);
     // Its instant help, in its own words, over the game's.
     expect(loaded.strings.get('help')?.split('\n')[0]).toMatch(/^Welcome to Exile III/);
     // E3's own hundred sounds, in place of the engine's; 16, entering a town,
