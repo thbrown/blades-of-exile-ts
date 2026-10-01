@@ -51,6 +51,7 @@ export const KNOWN_BUGS: Readonly<Record<number, KnownBug>> = {
   17: { title: "Alchemy takes the second ingredient's charge from the wrong item", ruling: 'undecided' },
   18: { title: "The Ritual of Sanctification on the spiders' altar can be repeated", ruling: 'undecided' },
   19: { title: 'A moving wall looks for a creature on its own square, not the one ahead', ruling: 'undecided' },
+  22: { title: "The intro movie's dying creatures never roll their death cry", ruling: 'undecided' },
 };
 
 let enabled = false;

@@ -1610,6 +1610,8 @@ Notes for M2 implementer:
 
 ## Findings / gotchas log
 
+- (2026-10-01) **Ghidra's decompile of E3's movie script `3148` is fiction in places**: it shows a skip-the-walking flag (`local_b`) set to `'\x10'`, `'3'`, `'5'`, but `[bp - 9]` is written once, to 0, in the whole function; it also mislabels the jump table's cases. Read the movies from `nedis.py 1098:3148` and its printed jump table only. Also: a `?scenario=` link starts the game before `main.ts` installs `onScenarioIntro`, so it never shows intros or the E3 movie; a UI check of them has to come in through the startup screen (`verify-e3.mjs`'s last section).
+- (2026-10-01) **Editing `src/` while a `verify-*.mjs` run is going makes vite reload the page under it**, and the run then times out somewhere unrelated (a touch-dialog tap, "Loading valleydy…" in the shot). Finish the edits, then run the checks.
 - (2026-09-25) **A vehicle number in a `.map` file resizes the scenario's list to it — down as well as up** (`loadTownMapData`, OBoE's too), so a later town naming a lower number deletes every vehicle above it. Number them in load order (town, x, y). E3's converter does (`vehicleNumbers`).
 - (2026-09-25) **Check an opcode name against `SpecType` before using it.** The names are `specials-opcodes.txt`'s lines by position (as in OBoE), and several read wrong: `relocate` is `TOWN_RELOCATE_CREATURE` (party relocation is `set-sector`), `stair-generic` is `TOWN_GENERIC_BUTTON` and `button-generic` is `TOWN_GENERIC_STAIR`, and `town-attitude` is `MAKE_TOWN_HOSTILE` (one creature is `set-attitude`). `buildOpcodeTable` plus `SpecType[...]` is a one-line check.
 - (2026-09-23) **E3 data is big-endian and `[x][y]`.** Read it with `LegacyReader(data, true)`. The terrain byte is `x*48 + y`. *(Corrected 2026-09-24: I first claimed `outdoor-to-json.js`'s output was transposed, but `display.js` draws `map[i*48+j]` at column `i`, so it was right all along.)* Everything that Ghidra shows as `DS:-0x500e + …` is a zone field. The town record is loaded at `DS:0004`, so subtract 4.
@@ -15773,45 +15775,66 @@ The user's list, and what each turned out to be:
 - [x] **Touch: a toggle reset the strip's scroll.** `TouchDialogPanel.build`
       rebuilt every button on any change; a strip whose buttons are the same
       set now keeps its `scrollTop`.
-- [ ] **The intro movie** — found, not ported. See below.
+- [x] **The intro movie** (2026-10-01) — ported. See below.
 
-### Exile III's movies: found, not ported (2026-10-01)
+### Exile III's intro movie, ported (2026-10-01)
 
-E3 has three scripted cutscenes, played on the game's own map renderer,
-frame by frame, from code in segment `1098`:
+Starting Exile III from the beginning — the startup screen, with a new party
+or the one in memory — now plays E3's intro, "Exile (verb) - To banish or
+expel ..." (`src/game/e3Movie.ts`, on screen by `src/render/e3MovieScreen.ts`,
+from `session.onScenarioIntro` in `main.ts`). A saved game never plays it.
+**Escape or a click skips it** (E3's own "Click mouse to continue." is in the
+corner); on touch the overlay has one **Skip** button and the corner line is
+left off. `test/e3Movie.test.ts` plays it headless through all 218 frames;
+`verify-e3.mjs` plays it in Chromium from the startup screen and skips it into
+Fort Emergence.
 
-- `FUN_1098_08bd(n)` starts movie `n`: sets `DAT_1178_3d5a = 1`,
-  `DAT_1178_53c0 = n`, the frame counter `DAT_1178_3dd6 = n*300 - 1`, and
-  builds the stage. Movies 0 and 1 (`n < 2`) get four PCs (graphics 0, 10,
-  20, 30), a 32×32 map copied from `seg 1160:0x7e22` into the town's
-  terrain, and thirty creatures from `seg 1168:-0x7d46` (14 bytes each);
-  town number `0x54`. Movie 2 loads town `0x42` (66) with the real party.
-- `FUN_1098_103c` advances one frame: 0 → `FUN_1098_47dd` (the intro),
-  1 → `FUN_1098_3148`, 2 → `FUN_1098_1dcb`. It is called from the screen
-  update (`23574`) and the timer `FUN_1050_0b03` (`46793`), which runs it
-  while the game is at the start (`DAT_1178_3d0e == 1`, movie 0) or in a
-  movie (`3d5a == 1`, movies 1 and 2).
-- **When the intro plays**: the title screen's buttons (`FUN_10c8_0000`,
-  rects at `DS:56aa`) — **New Game** (1) and **Intro** (4) both call
-  `FUN_1098_0e09; FUN_1098_08bd(0); FUN_1050_075c(0)`, and New Game then
-  `FUN_1010_6b20`, the party creation (dialog 1065 "CREATING A PARTY", the
-  editor). Since the start flag stays set until 6b20 finishes, **the intro
-  plays behind party creation**: that is the hook for "play the intro when
-  joining Exile III without a party". At frame `0xf0` it loops
-  (`3dd6 = -1; 08bd()`).
-- **The intro's script** (`47dd`, ~850 decompiled lines): a `switch` on the
-  frame. Helpers, unread yet: `6b63` (a location from a table), `627a`
-  (draw a caption from `seg 1098`'s strings), `691f`/`6e17`/`6e5b`
-  (missile, then boom: `6e17(from, to, missile, …)`), `6130`, `6bba`
-  (redraw), `6c69`/`6ee7`/`7a1b`/`6d04` (a spell pattern of booms),
-  `FUN_1050_59c2` (a creature's attack/animation), `FUN_1030_0404(snd)`
-  sound. Captions are in segment 1098 at file offset `0xd0dfc` on
-  ("Exile (verb) - / To banish or expel ... / from one's native land." …
-  "someone named Anaximander to get your"); the ending's from `0xcf6d5`
-  ("I have found out you are Anama." … "THE END", the credits).
-- **The decompiler drops the far calls' arguments** throughout, so every
-  case needs `nedis.py 1098:47dd` beside it. Movie 1 (`3148`) is the
-  victory ceremony; movie 2 (`1dcb`) is unidentified.
+**Which movie is which — the notes before this had them wrong.** E3 has
+three, all in segment `1098`, started by `FUN_1098_08bd(n)` (frame counter
+`DS:3dd6 = n*300 - 1`) and stepped by `FUN_1098_103c`:
+
+| n | script | what | played from |
+|---|---|---|---|
+| 0 | `47dd`, frames 0–239 | the party raiding Varik's temple ("Let's go!" … "Oh, shut up.") | the title screen's background loop: `08bd(0)` at startup (`1050:048f`) and after the intro |
+| 1 | `3148`, frames 300–517 | **the intro**: Exile's history, then "You." and the briefing | `FUN_1098_0e09(1)` from New Game and Intro (`10c8:00b7`, `:010a`) |
+| 2 | `1dcb` | the ending: the fortress falls, the ceremony, the credits | `0e09(2)` at `1078:5ad8` |
+
+The title buttons call `0e09(1)` *then* `08bd(0)` — the earlier note read
+the `08bd(0)` and missed the argument. Literal strings sit in front of the
+function that uses them: `0x29f9`–`0x313d` ("Exile (verb) -" … "Good luck.")
+belong to `3148`, `0x1079`–`0x1db2` (the ending and credits) to `1dcb`,
+`0x4579`–`0x47d0` to `47dd`.
+
+**How E3 plays a movie** (all read from the disassembly; the decompile of
+`3148` is unusable — see the gotchas log):
+
+- **The stage is TOWN.DAT town 84, "Anim Data"** (`FUN_1040_4075`: `0x54`
+  for movies 0 and 1, `0x42` for 2), already in the converted scenario. Its
+  30 creature slots go down on their start squares; four PCs get graphics 0,
+  10, 20, 30 and x = 50 (off the map); `overall_mode` is 10, combat, so
+  `draw_terrain` draws them one by one.
+- **The frame script** writes squares directly and posts captions
+  (`627a(text, at)` into `DS:508f`/`5190`, drawn once by the next
+  `draw_terrain`, `1050:48bd`: a 90 × 10 box at `28·q − 17, 36·r + 3`,
+  centred, black ringed with white). A per-creature state (`DS:53ce`, PCs at
+  `53c2`) of 6 walks it to a target (`545e`/`5452`); 100 + n fights creature n,
+  swinging (`boom_space`, blood) when adjacent on alternate frames
+  (`62b0`/`6597`, eight directions in a fixed order; a PC walking into a door
+  opens it: 120→124, 103→107, 108→109).
+- **The drawing is Blades of Exile 1997's**, `cartoon_happening` and all:
+  `6e17`/`6e5b` are `run_a_missile`/`run_a_boom`, `6c69`/`6ee7`/`7a1b`/`6d04`
+  `start_missile_anim`/`add_explosion`/`do_explosion_anim`/`end_missile_anim`,
+  `59c2` is `boom_space` (same sound table), `6130` is `kill_monst`'s death
+  cry. The constants match NEWGRAPH.CPP (explosion sounds 5/10/53, waits
+  1500/1410/1100 ms). E3's `Delay(n)` is `n × 16` ms; `0e09` waits 48 ticks
+  between frames.
+- **Movie 1 loops** at frame 518 (`08bd(1)` again) until a click. The port
+  plays it once (DIVERGENCES.md #40).
+
+**Left out**: movies 0 and 2, since the port has neither E3's title screen
+nor its ending yet (`TODO(E3-movies)` in `e3Movie.ts`). E3 plays the intro
+*before* party creation; here a party is made on the startup screen, so the
+movie comes after, on entering the scenario.
 
 ### Play-test fixes: maps from E3 saves, the item scrollbar, party cards, the name (2026-10-01)
 

@@ -135,6 +135,7 @@ import { TouchControls, setTouchControls, touchControlsOn } from './platform/tou
 import { openTouchLayoutPanel } from './platform/touchLayout';
 import { type Aiming, aimSpaceAction, autoAim, currentAim, moveAim, talkAim } from './game/aimCursor';
 import { tilePattern } from './render/tiling';
+import { E3MovieScreen } from './render/e3MovieScreen';
 import {
   DEFAULT_UI_SCALE, DisplayMode, UI_SCALES, UI_SCALE_FIT, desktop, placeBesideGame,
 } from './render/desktop';
@@ -1222,11 +1223,50 @@ async function main(): Promise<void> {
    * the message node before the one that ended it — so neither does this.
    */
   /**
+   * Exile III's intro movie, "Exile (verb) - ..." (`render/e3MovieScreen.ts`),
+   * on a new game only: E3's New Game plays it before the party is made
+   * (`10c8:00b7`), and a saved game never gets here. Escape, a click or the
+   * touch overlay's Skip ends it. Its dice are a stream of its own, so the
+   * game's draws — and every replay — are where they would be without it.
+   */
+  const playExile3Intro = async (): Promise<void> => {
+    const dice = new GameRng();
+    dice.seedGame(Date.now() >>> 0);
+    const movie = new E3MovieScreen(ctx, store, univ.scenario, {
+      sound: (n) => sound.play(n),
+      repaint: () => redraw(),
+      background: (c, rect) => {
+        const pats = store.get('pixpats');
+        if (pats) tilePattern(c, pats, screen.backgroundIndex(session), rect);
+        else {
+          c.fillStyle = '#000';
+          c.fillRect(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
+        }
+      },
+      ran: (min, max) => dice.getRan(1, min, max),
+      prompt: () => !touchControlsOn(),
+    });
+    await dialogs.runScreenQueued(() => {
+      // Closes itself at the end; a skip closes it first and stops it here.
+      void movie.play().then(
+        () => dialogs.answerScreen(movie, 'done'),
+        (e: unknown) => {
+          console.error(e);
+          dialogs.answerScreen(movie, 'done');
+        });
+      return movie;
+    });
+    movie.skip();
+    redraw();
+  };
+
+  /**
    * `put_party_in_scen`'s intro (boe.party.cpp:231): `custom_choice_dialog`
    * with the scenario's intro messages, its intro picture (PIC_SCEN) and
    * `basic_buttons[0]`, Done — shown if any of the messages has text.
    */
   session.onScenarioIntro = async () => {
+    if (name === EXILE3_ID) await playExile3Intro();
     const { introMsgs, introPic, introMessPic } = univ.scenario;
     if (!introMsgs.some((m) => m !== '')) return;
     // The C++ redraws the game screen first (`redraw_screen`, boe.party.cpp:220),

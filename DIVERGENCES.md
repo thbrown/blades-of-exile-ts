@@ -896,6 +896,24 @@ copy and reads the PC's own number once, as the dialog opens, so the figure
 never moves. A player can tell, and no draw depends on it, so the port
 follows 1997 (`RaceAbilPick.tnl`, `src/dialogs/partyEditor.ts`).
 
+### 40. Exile III's intro movie (2026-10-01)
+
+Not a 1997/OBoE question — neither has the movie — but where the port's
+showing of E3's (`src/game/e3Movie.ts`) differs from E3's own:
+
+- **It plays once.** E3's `3148` restarts at frame 518 and `0e09` loops it
+  until a click. Here it plays before a new game and then gets out of the way.
+- **It comes after the party is made**, on entering the scenario: E3's New
+  Game plays it first and builds the party after, but this port makes parties
+  on the startup screen, before any scenario.
+- **Its dice are its own** (a separate `GameRng`), not the game stream E3's
+  `get_ran` draws on. A player can't tell; the replay corpus would.
+- **Escape skips it as well as a click**, and on touch the overlay's Skip.
+- Two guesses where E3's code doesn't say: the window background is the
+  game's pattern (E3's `FUN_1058_1695` reads its pattern from a stack slot
+  its caller never set), and animated terrain steps once a frame (E3's
+  `anim_ticks` runs off a timer).
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

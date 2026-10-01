@@ -467,6 +467,36 @@ console.log('PANEL:', JSON.stringify({ row: panelRow, asked: panelAsked?.slice(0
 await shot('08-panel');
 if (!panelRow || !/ferry/.test(panelAsked ?? '')) errors.push(`the test panel did not step onto the ferry: ${JSON.stringify({ panelRow, panelAsked })}`);
 
+// The intro movie (src/game/e3Movie.ts): a new game from the startup screen —
+// not a `?scenario=` link, which skips intros — plays it, and Escape skips it
+// into Fort Emergence. The first line is up within a few seconds.
+await page.goto('http://localhost:5199/?pace=1');
+await page.waitForSelector('.startup-party');
+if ((await page.evaluate(() => document.querySelector('.startup-party')?.innerText ?? '')).includes('No party in memory')) {
+  await page.click('text=Make New Party');
+  await page.waitForFunction(() => window.__dialogs?.active?.def?.byName.has('okay'), null, { timeout: 30000 });
+  await page.keyboard.press('Enter'); // new-party.xml: Create
+  await page.waitForFunction(() => window.__dialogs?.active?.def?.byName.has('delete6'), null, { timeout: 30000 });
+  await page.keyboard.press('Enter'); // the editor: Done
+  await page.waitForSelector('.startup-party li', { timeout: 30000 });
+}
+await page.click('.startup-card[data-id="exile3"]');
+const movieUp = await page.waitForFunction(() => window.__dialogs?.active?.kind === 'e3-movie', null, { timeout: 60000 })
+  .then(() => true, () => false);
+await page.waitForTimeout(5000);
+await shot('09-movie');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(800);
+const afterMovie = await page.evaluate(() => ({
+  open: window.__dialogs?.active?.kind ?? (window.__dialogs?.active ? 'a dialog' : null),
+  townNum: window.__session?.univ.party.townNum,
+}));
+console.log('MOVIE:', JSON.stringify({ movieUp, afterMovie }));
+await shot('10-after-movie');
+if (!movieUp || afterMovie.open !== null || afterMovie.townNum !== 21) {
+  errors.push(`the intro movie did not play and skip into Fort Emergence: ${JSON.stringify({ movieUp, afterMovie })}`);
+}
+
 await browser.close();
 if (errors.length) {
   console.error('ERRORS:\n' + errors.join('\n'));

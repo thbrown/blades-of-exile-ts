@@ -359,6 +359,24 @@ quest steps.
   undead appear after Zkal's death, or does B mean the tower's own
   wanderers?
 
+### 26. The intro movie's look and pace (2026-10-01)
+
+- **Where:** the title screen, **Intro** (or New Game); no save needed.
+- **Do:** watch the whole of "Exile (verb) - ..." through to "Good luck.",
+  timing it, and take a screenshot or two: one during the history, one
+  during the battle.
+- **Why:** the script was read from the EXE (`1098:3148`) and plays the
+  same frames, but three things depend on the running game: the pace (the
+  port waits 48 × 16 ms between frames, as `0e09`'s `Delay`s add up, and
+  missiles and explosions take their 1997 times), what fills the window
+  around the picture (the port tiles the game's background pattern; E3's
+  `FUN_1058_1695` takes its pattern from a stack slot nobody set), and the
+  caption font (the port uses its bold face at 10 pixels).
+- **The port:** about three and a half minutes from the first line to
+  "Good luck.", on the background pattern, the picture centred 30 pixels up.
+- **Question:** how long does it take? What is behind the picture? Do the
+  captions look like the port's?
+
 ## Waiting on a ruling (already written up elsewhere)
 
 - **DIVERGENCES.md #30 and #31**, marked "open for the user".
