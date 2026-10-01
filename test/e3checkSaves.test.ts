@@ -276,6 +276,21 @@ describe.skipIf(!dir)('saves for E3-CHECK-IN-ORIGINAL.md', () => {
       todo: "The Lair of Drakos is on the map. Go east into it, to the floor of pillars (x 19-25, y 26-28). From (21,30) make walkthrough A's moves: NW, W, E, W, E, E, E, E, W, E, then N. Does north open?",
       make: async (q) => { scen.towns[74]!.canFind = true; await at(q, 122, 312); },
     },
+    {
+      file: 'Q21.SAV', question: "#21, the way back across the Pit of the Wyrm's charged floor",
+      todo: 'The Pit of the Wyrm is on the map, just east. Go down to level 2, pull the lever behind the southernmost crypt door '
+        + '(the rune at the end of the mausoleum hall unseals them), and cross the floor room from its door at (15,42): '
+        + 'E, N, N, E, S, E, S, E, E, N, N, E, then N twice to the bier. Then make walkthrough A\'s way back from (21,39): S first. '
+        + 'Does it zap?',
+      make: async (q) => { scen.towns[76]!.canFind = true; await at(q, 260, 130); },
+    },
+    {
+      file: 'Q22.SAV', question: '#22, walking to the Pit of the Wyrm through the mountain passes',
+      todo: 'The Pit of the Wyrm is on the map. From here, east of Bremerton, walk (no flying) north round the lake by the bridge at '
+        + '(227,129), east through the hills, and try the mountains at (273,129) and (272,129) heading west, then (261,127) and '
+        + '(260,127). Do they let you through?',
+      make: async (q) => { scen.towns[76]!.canFind = true; await at(q, 235, 131); },
+    },
   ];
 
   it('makes every save, and each loads back here to the same place', async () => {

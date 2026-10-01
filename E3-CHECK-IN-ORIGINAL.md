@@ -11,7 +11,7 @@ Coordinates are town squares (x, y), as the port's debug panel
 
 **Saved games for the original** (2026-09-30): `E3_CHECK_SAVES=e3data/check-saves
 npx vitest run test/e3checkSaves.test.ts` writes one `exile3.sav` per
-question, `Q01.SAV` to `Q20.SAV` (#3 has ten, `Q03A`–`Q03J`), and a
+question, `Q01.SAV` to `Q22.SAV` (#3 has ten, `Q03A`–`Q03J`), and a
 `README.TXT` saying what each holds and where to walk. Each has a strong
 party outdoors near the place, with the question's flags and items set.
 Add a recipe there when adding a question. (`File > Export as Exile III
@@ -268,6 +268,42 @@ quest steps.
   north does, and comes out at (23,25), beside walkthrough B's (22,25).
 - **Question:** do A's moves open the way north? If they do, which way
   does each row move as you step along y 29?
+
+### 21. The way back across the Pit of the Wyrm's floor (2026-10-01)
+
+- **Where:** the Pit of the Wyrm, level 2: the floor room past the door at
+  (15,42) (the lever behind the southernmost crypt door makes it), a grid
+  at x 16–21, y 40–42, with the bier's door at (21,39).
+- **Do:** cross by walkthrough A's moves (east, north, north, east, south,
+  east, south, east, east, north, north, east, north). Then come back by
+  A's "start at (21,39)": south, west, south, west, west, north, west,
+  south, west, south.
+- **Why:** each square stepped on charges the whole grid and makes only its
+  own few neighbours safe (`1088:454c` on), so the square the party last
+  stood on is charged. After the crossing that is (21,40), right below the
+  bier's door.
+- **The port:** A's way across works, as does B's ("right, up, up, …").
+  A's first step back, south onto (21,40), zaps ("bolts of lightning") and
+  the party stays put. A's second, west, is a wall. Southwest onto (20,40)
+  is safe, and from there A's moves after its first two take the party
+  back to the door.
+- **Question:** does south from the bier's door zap in the original too?
+  (A throw, which the port gives for stepping on (19,40), (21,41) or
+  (17,42) when they're safe, makes (21,40) safe again.)
+
+### 22. Walking to the Pit of the Wyrm (2026-10-01)
+
+- **Where:** east of Bremerton. The Pit's entrance is at (261,130) of the
+  world map, the walkthroughs' coordinates.
+- **Do:** without flying, go north round the lake by the bridge at
+  (227,129), east through the hills, then west through the mountains at
+  (273,129) and (272,129), and again at (261,127) and (260,127).
+- **Why:** those four mountain squares carry E3's spot 50, the "way
+  through" that lets the party step onto Delan's ford. Both walkthroughs fly
+  the rivers instead.
+- **The port:** lets the party through all four, so the Pit can be walked
+  to.
+- **Question:** are they passes in the original too?
 
 ## Waiting on a ruling (already written up elsewhere)
 

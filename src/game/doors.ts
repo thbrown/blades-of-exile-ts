@@ -202,3 +202,74 @@ export function unlockDoor(univ: Universe, where: Location, terrain: number): vo
   town.record.terrain[where.x]![where.y] = univ.terrainType(terrain).flag1;
   town.record.doorUnlocked.push({ ...where });
 }
+
+/** What Exile III's Unlock spell does to each terrain it is cast on. */
+export interface E3Unlocks {
+  /** Locked doors it rolls against, each to the terrain a success leaves. */
+  roll: Map<number, number>;
+  /** Doors past magic: "Didn't work." every time. */
+  proof: Set<number>;
+  already: Set<number>;
+  open: Set<number>;
+  portcullis: Set<number>;
+}
+
+/**
+ * **`unlock` = `exile3:roll=104>103,…;proof=…;already=…;open=…;portcullis=…`**,
+ * a scenario's flag: Exile III's Unlock spell (`10b0:6402`), which goes by a
+ * table of terrains of its own (`readE3Unlocks` in the converter) where BoE's
+ * goes by the door's flag2. Null without the flag.
+ */
+export function e3Unlocks(univ: Universe): E3Unlocks | null {
+  const flag = univ.scenario.featureFlags['unlock'];
+  if (flag === undefined || !flag.startsWith('exile3:')) return null;
+  const out: E3Unlocks = { roll: new Map(), proof: new Set(), already: new Set(), open: new Set(), portcullis: new Set() };
+  for (const part of flag.slice('exile3:'.length).split(';')) {
+    const [kind, list = ''] = part.split('=');
+    for (const entry of list.split(',').filter(Boolean)) {
+      if (kind === 'roll') {
+        const [from, to] = entry.split('>').map(Number);
+        out.roll.set(from!, to!);
+      } else if (kind === 'proof' || kind === 'already' || kind === 'open' || kind === 'portcullis') {
+        out[kind].add(Number(entry));
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Exile III's Unlock arm (`10b0:6402`–`653d`): `get_ran(1,0,100)`, less five
+ * a point of Intelligence, plus five for every ten of the town's difficulty
+ * (`1160:0002`, the word its lock picking adds whole); under `135 −
+ * combat_percent[min(level, 19)]` (the caster's own level: `chance`) the door opens.
+ * Unlike 1997's there is no flag2 term and no door-by-difficulty, so a door
+ * past picking can still be unlocked if the table rolls for it. A success
+ * leaves the run's *closed* door, which the next step opens; a door
+ * unlocked here and replayed on re-entry (`doorUnlocked`) comes back open,
+ * as a picked one does.
+ */
+export function e3UnlockSpell(univ: Universe, table: E3Unlocks, where: Location, adj: number, chance: number,
+  sound: (n: number) => void): void {
+  const town = univ.town!;
+  const terrain = town.record.terrain[where.x]![where.y]!;
+  const to = table.roll.get(terrain);
+  if (to !== undefined) {
+    const r = univ.rng.getRan(1, 0, 100) - 5 * adj + 5 * Math.trunc(town.record.difficulty / 10);
+    if (chance > r) {
+      univ.addStringToBuf('  Door unlocked.');
+      sound(9);
+      town.record.terrain[where.x]![where.y] = to;
+      town.record.doorUnlocked.push({ ...where });
+    } else {
+      sound(41);
+      univ.addStringToBuf("  Didn't work.");
+    }
+  } else if (table.proof.has(terrain)) {
+    sound(41);
+    univ.addStringToBuf("  Didn't work.");
+  } else if (table.already.has(terrain)) univ.addStringToBuf('  Door already unlocked.');
+  else if (table.open.has(terrain)) univ.addStringToBuf("  It's open, silly!");
+  else if (table.portcullis.has(terrain)) univ.addStringToBuf("  Doesn't work on portculli.");
+  else univ.addStringToBuf('  Wrong terrain type.');
+}

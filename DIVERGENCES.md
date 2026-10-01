@@ -600,7 +600,10 @@ unusable pending its strings (`TODO(E3-3)` in that file).
 
 The rest of E3's rules are the scenario's own, by flag, as `bash` is: Exile
 III's lock picking is `pick-lock` = `exile3` (`10d8:3f67`, in `doors.ts`),
-and its traps are mapped kind by kind in the converter (`SpecBuilder.trap`).
+its Unlock spell `unlock` = `exile3:…` (`10b0:6402`, `e3UnlockSpell`; added
+2026-10-01: a table of terrains rather than flag2, so a door past picking can
+still be unlocked, and a success leaves the door closed, not open), and its
+traps are mapped kind by kind in the converter (`SpecBuilder.trap`).
 
 And, 2026-09-29, **every item-ability test in EXILE3.EXE has been read** (all
 52 calls to its four item tests). Nine codes do what BoE's rule does and run

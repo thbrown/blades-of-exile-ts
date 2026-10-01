@@ -14732,7 +14732,9 @@ Mindduel's crystal check (`1018:2dde`) was one of those.
   per turn `== 2`, both BoE's already) and traps. `townDifficulty` in
   `emit.ts` now emits it. The flag `town-difficulty` = `exile3` keeps the
   Unlock and Dispel Barrier spells off it (E3's never read it;
-  `spellDifficulty` in `spellTarget.ts`).
+  `spellDifficulty` in `spellTarget.ts`). **Wrong, corrected 2026-10-01**:
+  both arms add `difficulty / 10 * 5` (`10b0:643d`, `10b0:6591`), and the
+  flag is gone (see the Fury Crossbow).
 - **Traps by E3's rule**: `src/game/e3Trap.ts`, flag `trap` = `exile3`
   (`10e0:03ae`). Covers the disarm formula (Thieving item +2, raw skills,
   + 3 − difficulty / 10, roll 0–100, bug #12's Nimble inversion) and the
@@ -15328,12 +15330,83 @@ one quest at a time**, to keep each session's context small.
   - *Not covered*: the Efreets, Gorgons and Ice Drakes (killed as they
     turn up), the level 1 cache at (37,31), level 2's other treasure, and
     the trip to the island (the ferry is the roaches' test).
-- [ ] **Next: the other four artifact quests** (the Fury Crossbow, the
-  Black Halberd, the Knowledge Brew, the Ring of Endless Magery), one per
-  session.
+- [x] **The Fury Crossbow** (2026-10-01), six tests in `describe('the Fury
+  Crossbow')`, walkthrough A's "Fury Crossbow" and B's "The Fury Crossbow".
+  It could not be finished before today: the mausoleum's door was shut for
+  good (below).
+  - Judith (personality 163): in Shayder on days where `day % 3 == 2` (time
+    flag 5), Hectar's when it's 0 (3), and also in Bavner; "arti", then
+    "loca", BUY_TOWN_LOC for 1000 gold (refused at 999, once only), puts
+    the Pit of the Wyrm (76) on the map. From Bremerton (234,131) it is
+    over the rivers, as both walkthroughs fly, *or* on foot through two of
+    E3's mountain passes (spot 50) at (272–273,129) and (260–261,127):
+    check-in #22. The entrance at (261,130) lets the party in at (4,24)
+    only once it's on the map.
+  - Level 1: "being watched" (spot 1), B's ruin (the locked door at (6,6),
+    Unlock, the chest at (4,5)'s two scrolls), the giants' dig (spot 3),
+    the stairs at (18,43). **B's ruined garrison** (side content): the
+    secret passage south of (21,41), the odd wall (spot 4), Move Mountains
+    on the moldy adobe at (33,43), the sacrificial pit's slimes (spot 5),
+    Move Mountains again north of (46,38), and the box's Wand of Nullity
+    and Bronze Serpent Ring.
+  - Level 2: B's false wall south of (30,21) as the only way to the
+    mausoleum door (14,15) (locked; Unlock), the crypt doors past magic
+    (138) until the rune at (14,26) makes them 135, B's three crypts (Dart
+    of Returning, Potion of Bliss, Ambrosia), the lever at (16,26) that
+    makes the floor room's door at (15,42).
+  - The floor puzzle, walked: A's (and B's) moves across, the bier's
+    message and second step through its door, the crossbow off the bier
+    (Get; "Crossbow", unidentified, +7) and the bolts beside it; a zap, a
+    throw to the door at half health, and after the bier a throw to its
+    door instead; the way back, and the stairs at (5,46) up to (18,44).
+  - A's way back from (21,39) starts south onto (21,40), which is charged
+    after the crossing and zaps; southwest works, and A's moves after its
+    first two then reach the door. Check-in #21.
+  - **Found and fixed: Exile III's Unlock spell wasn't ported.** BoE's
+    gives up on flag2 10, and the converter writes 10 for both of E3's
+    "past picking" doors (`base + 4`, `base + 5`). E3's arm (`10b0:6402`)
+    goes by a table of 38 terrains at `10b0:679c`: it rolls for `base + 3`
+    *and* `base + 4`, refuses `base + 5`, and leaves a success *closed*
+    (`base + 2`), not open. New flag **`unlock` = `exile3:roll=104>103,…;
+    proof=…;already=…;open=…;portcullis=…`** (`readE3Unlocks` reads the
+    table from the EXE; `e3UnlockSpell` in `doors.ts`). The Pit's two
+    locked doors are 137 (adobe `base + 4`), so nothing could get to the
+    lever, and the crossbow couldn't be reached. Its roll:
+    `get_ran(1,0,100) − 5·adj + 5·(difficulty / 10)` under
+    `135 − combat_percent[min(level, 19)]`, the caster's own level.
+  - **Found and fixed: E3's spells do read the town difficulty.** The
+    `town-difficulty` = `exile3` flag (2026-09-29) kept Unlock and Dispel
+    Barrier off it, on the reading that E3's never look. Both arms add
+    `difficulty / 10 * 5` from `1160:0002` (`10b0:643d`, `10b0:6591`), the
+    word E3's pick adds whole. The flag is gone; `spellDifficulty` reads the
+    real one.
+  - *Not ported, noted*: E3's Dispel Barrier rolls `get_ran(1,0,100)` where
+    the port (OBoE's) rolls 1–100, and has no strong-barriers term. Only
+    the dice differ, so it stays.
+  - The `outdoorPath` search (the endgame's) is shared at the top of the
+    file now.
+  - *Not covered*: the Dark Wyrms and the giants (the runner kills), the
+    light that level 2 swallows, the ruin's other rooms, and the trip
+    there from the Isle of Bigail.
+- [ ] **Next: the other three artifact quests** (the Black Halberd, the
+  Knowledge Brew, the Ring of Endless Magery), one per session.
 
-All checks pass (2026-09-30): 1,554 tests, tsc, both sweeps, verify-screen,
+All checks pass (2026-10-01): 1,572 tests, tsc, both sweeps, verify-screen,
 verify-party and verify-e3.
+
+**Gotchas from the Fury Crossbow (2026-10-01):**
+- `QuestRunner.canReach` counts a locked door (UNLOCKABLE) as open, and
+  the destination square as open whatever it is. Test a sealed door by its
+  terrain, and a wall by a square past it.
+- `adjTownLook` finds only *contained* items (a chest's). Items lying on a
+  table come from `session.reachableItems` (Get); the Fury Crossbow test's
+  `loot` takes both.
+- A step that a spot refuses (a throw, a zap) reports `false` from `go`,
+  even when the spot moved the party.
+- A refused step outdoors still spends the turn, and can start a wandering
+  fight (town 200 is the arena). Stand the party again before the next try.
+- Judith and other time-flag 3–5 creatures are only in town on their day:
+  set `party.age` before `enter`.
 
 **Gotchas from Pachtar's Plate (2026-09-30):**
 - `searchBelts` puts back terrain and flags after each trial, not

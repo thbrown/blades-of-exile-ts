@@ -26,7 +26,7 @@ import { MonstAbil, MonstGen } from '../../src/data/monsterAbility';
 import { decodeBmp, type Rgba } from '../../src/fileio/legacy/bmp';
 import { PIC_CUSTOM_FULL } from '../../src/data/special';
 import { BG_RECTS, E3_PATTERN_SLOTS } from '../../src/render/tiling';
-import { E3_ABILITY_TO_LEGACY, E3_BREATH_RANGE, E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3Crumbles, readE3ItemAbilities, readE3Items, readE3Monsters, readE3PersonalityFaces, readE3RoadJoins, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
+import { E3_ABILITY_TO_LEGACY, E3_BREATH_RANGE, E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3Crumbles, readE3ItemAbilities, readE3Unlocks, readE3Items, readE3Monsters, readE3PersonalityFaces, readE3RoadJoins, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3PresetItem, type E3Town } from './town';
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
 import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
@@ -317,7 +317,8 @@ function specialXml(t: E3TerrainType, id: number, hiddenAs: Map<number, number>)
     // (`10d8:4224`) breaks the lock at or under 25, or 10 for the basalt door
     // (121), and never for the doors past picking. E3's pick
     // (`FUN_10d8_3f67`) is the `pick-lock` = `exile3` flag's: flag2 only
-    // says whether the door can be picked at all.
+    // says whether the door can be picked at all. E3's Unlock spell goes by
+    // its own table, the `unlock` flag (`readE3Unlocks`), not by flag2.
     : ['unlock', sp.to, sp.pickable ? 1 : 10, !sp.pickable ? 0 : id === 121 ? 10 : 25];
   return `        <special>
             <type>${type}</type>
@@ -764,7 +765,7 @@ function scenarioXml(
   outStart: { sector: { x: number; y: number }; loc: { x: number; y: number } },
   shops: Shop[], specialItems: SpecItem[], specStrings: string[], newDay: number, roadJoins: number[],
   jobBase: number, skribbane: number[], journal: string[], cursors: E3Cursor[], townCount: number, uranium: number, crushed: number,
-  crumbles: number[], amuletNode: number,
+  crumbles: number[], amuletNode: number, unlocks: string,
 ): string {
   return `${XML_HEAD}<scenario boes="2.0.0">
     <title>Exile III: Ruined World</title>
@@ -787,7 +788,6 @@ function scenarioXml(
         <trap>exile3</trap>
         <alchemy>exile3</alchemy>
         <balm>exile3</balm>
-        <town-difficulty>exile3</town-difficulty>
         <monster-sightings>exile3</monster-sightings>
         <hostile-movers>${E3_HOSTILE_MOVERS}</hostile-movers>
         <town-timers>repeat</town-timers>
@@ -801,6 +801,7 @@ function scenarioXml(
         <explode-spots>exile3</explode-spots>
         <pick-lock>exile3</pick-lock>
         <crumble>exile3:${crumbles.join(',')}</crumble>
+        <unlock>exile3:${unlocks}</unlock>
         <special-items>exile3:${amuletNode}</special-items>
         <disease>exile3</disease>
         <summons>exile3</summons>
@@ -1160,7 +1161,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   // Last, since the places' scripts can add shops of their own.
   shops.push(...talk.shops);
   const cursors = readE3Cursors(resources);
-  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, skribbane, e3JournalStrings((id) => strings.get(id) ?? ''), cursors, townCount, uranium, crushed, readE3Crumbles(files.exe), amuletNode));
+  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, skribbane, e3JournalStrings((id) => strings.get(id) ?? ''), cursors, townCount, uranium, crushed, readE3Crumbles(files.exe), amuletNode, readE3Unlocks(files.exe)));
   const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(read), ...e3MapSheets(read)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
   // E3's own sounds, which a scenario's `sounds/SNDn.wav` puts in place of

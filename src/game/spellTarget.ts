@@ -25,7 +25,7 @@ import { livingSound } from '../universe/living';
 import type { Universe } from '../universe/universe';
 import { Skill, Trait } from '../universe/skills';
 import { SpecCtx } from './specials/context';
-import { unlockDoor } from './doors';
+import { e3UnlockSpell, e3Unlocks, unlockDoor } from './doors';
 import { breakForceCage } from './fieldEffects';
 import { GameMode } from './modes';
 import { placeSpellPattern } from './spellPatterns';
@@ -286,6 +286,13 @@ export async function castTownSpell(session: GameSession, where: Location): Prom
       break;
 
     case Spell.UNLOCK: {
+      const e3 = e3Unlocks(univ);
+      if (e3) {
+        // E3 reads the caster's level as it stands (`10b0:6462`), no magery.
+        const pcLevel = target.freebie || !pc ? level : pc.level;
+        e3UnlockSpell(univ, e3, where, adj, 135 - combatPercent(pcLevel), livingSound);
+        break;
+      }
       if (terSpec.special !== TerSpec.UNLOCKABLE) {
         univ.addStringToBuf('  Wrong terrain type.');
         break;
@@ -342,13 +349,14 @@ export async function castTownSpell(session: GameSession, where: Location): Prom
 }
 
 /**
- * The town difficulty the Unlock and Dispel Barrier spells read. With
- * `town-difficulty` = `exile3` the town carries Exile III's own (0–150,
- * `townDifficulty` in the converter), which E3 reads only in lock picking,
- * bashing, traps and the wandering-monster roll — never in its spells — so
- * these take none of it.
+ * The town difficulty the Unlock and Dispel Barrier spells read. Exile III's
+ * (0–150, `townDifficulty` in the converter) is read by both of its arms
+ * too, as `difficulty / 10 * 5` (Unlock `10b0:643d`, Dispel Barrier
+ * `10b0:6591`), which is the shape Dispel Barrier's roll already has; E3's
+ * Unlock has its own (`e3UnlockSpell`). Until 2026-10-01 a `town-difficulty`
+ * = `exile3` flag kept both spells off it, on the mistaken reading that E3's
+ * spells never looked.
  */
 function spellDifficulty(univ: Universe): number {
-  if (univ.scenario.featureFlags['town-difficulty'] === 'exile3') return 0;
   return univ.town?.record.difficulty ?? 0;
 }

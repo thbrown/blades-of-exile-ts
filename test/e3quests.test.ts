@@ -53,6 +53,36 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
     return [s.x, s.y];
   };
 
+  /** The terrain of square (x, y) of the whole outdoor map. */
+  const terAt = (x: number, y: number): number => scen.outdoors[Math.floor(x / 48)]![Math.floor(y / 48)]!.terrain[x % 48]![y % 48]!;
+  /**
+   * Steps from `from` to `to` over the whole outdoor map, on squares whose
+   * terrain `ok` allows and E3's ways through (spot 50: fords and passes),
+   * avoiding `avoid`; or -1.
+   */
+  const outdoorPath = (from: [number, number], to: [number, number], ok: (t: number) => boolean, avoid = new Set<string>()): number => {
+    const ways = new Set<string>();
+    scen.outdoors.forEach((col, sx) => col.forEach((o, sy) => o.specialLocs.forEach((l) => {
+      const n = o.specials.get(l.spec);
+      if (n?.type === SpecType.CANT_ENTER && n.ex1a === 0 && n.ex2a === 1) ways.add(`${sx * 48 + l.x},${sy * 48 + l.y}`);
+    })));
+    const seen = new Map([[from.join(), 0]]);
+    const queue = [from];
+    while (queue.length) {
+      const [x, y] = queue.shift()!;
+      const d = seen.get(`${x},${y}`)!;
+      if (x === to[0] && y === to[1]) return d;
+      for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
+        const n: [number, number] = [x + dx, y + dy];
+        if (n[0] < 0 || n[1] < 0 || n[0] >= 432 || n[1] >= 480 || seen.has(n.join()) || avoid.has(n.join())) continue;
+        if ((n[0] !== to[0] || n[1] !== to[1]) && !ways.has(n.join()) && !ok(terAt(...n))) continue;
+        seen.set(n.join(), d + 1);
+        queue.push(n);
+      }
+    }
+    return -1;
+  };
+
   describe('the slimes', () => {
     it('Agate Tower: Jordan\'s notes find the Slime Pit, and a fireball ends his slime maker', async () => {
       const q = new QuestRunner(scen);
@@ -1934,6 +1964,291 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
     }, 1800000);
   });
 
+  describe('the Fury Crossbow', () => {
+    /**
+     * Judith (Shayder, Bavner and Hectar) sells the Pit of the Wyrm's
+     * location, and the crossbow lies on a bier past the floor puzzle on its
+     * second level. Walkthrough A's "Fury Crossbow" and B's "The Fury
+     * Crossbow".
+     */
+    const PIT = 76, PIT2 = 77;
+    /** A late-game party (the walkthroughs fight thirty mutant giants and the Dark Wyrms), the Pit on the map. */
+    const veterans = (q: QuestRunner): void => {
+      for (const pc of q.party.pcs) { pc.level = 30; pc.maxHealth = 600; pc.curHealth = 600; }
+      scen.towns[PIT]!.canFind = true;
+    };
+    const P = (q: QuestRunner, x: number, y: number): number => q.town.record.terrain[x]![y]!;
+    /**
+     * Takes every item on (x, y) whose name matches, from beside it: what a
+     * search turns up inside (a chest, `adj_town_look`) and what lies on it in
+     * reach of Get (a table); returns their full names.
+     */
+    const loot = async (q: QuestRunner, x: number, y: number, re: RegExp): Promise<string[]> => {
+      const beside = [[0, 1], [1, 0], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]]
+        .map(([dx, dy]) => ({ x: x + dx!, y: y + dy! }))
+        .find((p) => !q.session.townIsBlocked(p) && q.canReach(q.at, p));
+      if (!beside) throw new Error(`nowhere beside (${x},${y})`);
+      q.place(beside);
+      const found = new Set([...(await q.session.adjTownLook({ x, y })) ?? [],
+        ...q.session.reachableItems(beside).items.filter((it) => it.itemLoc.x === x && it.itemLoc.y === y)]);
+      const taken = [...found].filter((it) => re.test(it.fullName));
+      for (const it of taken) q.session.takeItem(it, 0);
+      return taken.map((it) => it.fullName);
+    };
+
+    /** Unlock cast at (x, y) until it works ("Didn't work." is a roll), as a player would. */
+    const unlock = async (q: QuestRunner, x: number, y: number): Promise<void> => {
+      const shut = P(q, x, y);
+      for (let k = 0; k < 20 && P(q, x, y) === shut; k++) await q.spell(Spell.UNLOCK, x, y);
+      expect(P(q, x, y), q.univ.transcript.slice(-3).join(' / ')).not.toBe(shut);
+    };
+
+    it("Judith: the Pit of the Wyrm on the map for 1000 gold; east of Bremerton, over the rivers", async () => {
+      const q = new QuestRunner(scen);
+      // She's in Shayder (and Bavner and Hectar, walkthrough A's "alternates").
+      for (const t of [129, 130]) expect(scen.towns[t]!.creatures.some((m) => m?.personality === 163), `town ${t}`).toBe(true);
+      // In Shayder on days that leave 2 over a multiple of three (her
+      // time flag, 5), Hectar's on the next (3), and nowhere on the third.
+      await q.enter(4);
+      expect(q.creatures(/Judith/).length, 'day 1').toBe(0);
+      q.party.age = 3700;
+      await q.enter(4);
+      expect(q.creatures(/Judith/).length, 'day 2').toBe(1);
+      const [rumour] = await q.talk(/Judith/, 'arti');
+      expect(rumour).toMatch(/Fury Crossbow.*thousand gold/);
+      q.party.gold = 999;
+      const [no] = await q.talk(/Judith/, 'loca');
+      expect(no).toMatch(/thousand gold.*No less/);
+      expect(scen.towns[PIT]!.canFind).toBe(false);
+      expect(q.party.gold).toBe(999);
+      q.party.gold = 1500;
+      const [yes] = await q.talk(/Judith/, 'loca');
+      expect(yes).toMatch(/Pit of the Wyrm.*due east of a city called Bremerton/);
+      expect(scen.towns[PIT]!.canFind).toBe(true);
+      expect(q.party.gold).toBe(500);
+      // Once.
+      const [again] = await q.talk(/Judith/, 'loca');
+      expect(again).toMatch(/already learned/);
+      expect(q.party.gold).toBe(500);
+
+      // East of Bremerton (234,131), over the rivers (walkthrough A "fly
+      // across the river", B twice, at (246,129) and (254,120)); or on foot,
+      // north round the lake and through two of E3's mountain passes (spot
+      // 50) at (272,129)–(273,129) and (260,127)–(261,127).
+      const dry = (t: number) => scen.terTypes[t]!.blockage <= TerObstruct.BLOCK_SIGHT;
+      const flying = (t: number) => dry(t) || scen.terTypes[t]!.flyOver;
+      const passes = new Set(['272,129', '273,129', '260,127', '261,127']);
+      expect(outdoorPath([234, 131], [260, 130], dry, passes), 'on foot, no passes').toBe(-1);
+      expect(outdoorPath([234, 131], [260, 130], dry), 'through the passes').toBeGreaterThan(0);
+      expect(outdoorPath([234, 131], [260, 130], flying, passes), 'flying').toBeGreaterThan(0);
+
+      // The entrance at (261,130) lets the party in only now, at (4,24).
+      const r = new QuestRunner(scen);
+      await r.outdoorsAt(260, 130);
+      await r.go(Direction.E);
+      expect(r.party.townNum === PIT, 'not on the map').toBe(false);
+      scen.towns[PIT]!.canFind = true;
+      await r.outdoorsAt(260, 130);
+      await r.go(Direction.E);
+      expect([r.townNum, r.at]).toEqual([PIT, { x: 4, y: 24 }]);
+    });
+
+    it("The Pit, level 1: the watchers' ruin and its chest, the giants' dig, and the stairs down", async () => {
+      const q = new QuestRunner(scen);
+      veterans(q);
+      await q.outdoorsAt(260, 130);
+      await q.go(Direction.E);
+      await q.clearHostiles();
+      const start = { ...q.at };
+      // Walkthrough A's "being watched", where the path turns east.
+      await q.step(11, 17);
+      expect(q.tail(1)).toMatch(/You feel as if you're being watched/);
+      // B's ruin (A passes it by): its door at (6,6) is locked past picking
+      // (137), but E3's Unlock opens it, to the closed door (135); the chest
+      // at (4,5) holds two scrolls and gold.
+      expect(q.canReach(start, { x: 6, y: 7 })).toBe(true);
+      expect(scen.terTypes[P(q, 6, 6)]!.special).toBe(TerSpec.UNLOCKABLE);
+      q.place({ x: 6, y: 7 });
+      await unlock(q, 6, 6);
+      expect(P(q, 6, 6)).toBe(135);
+      await q.walk(6, 6);
+      expect(P(q, 6, 6)).toBe(139);
+      expect(await loot(q, 4, 5, /Scroll/)).toEqual(expect.arrayContaining(['Scroll: Flame', 'Scroll: Major Haste']));
+      // The giants' dig (spot 3), and the stairs at (18,43): "A slimy
+      // passage slopes down into utter darkness."
+      await q.step(17, 29);
+      expect(q.tail(1)).toMatch(/continuing the dig/);
+      expect(q.canReach(start, { x: 18, y: 43 })).toBe(true);
+      await q.step(18, 43);
+      expect([q.townNum, q.at], q.tail()).toEqual([PIT2, { x: 5, y: 45 }]);
+    });
+
+    it('The Pit, level 1: the ruined garrison behind moldy walls (walkthrough B), its slimes, and the Wand of Nullity', async () => {
+      const q = new QuestRunner(scen);
+      veterans(q);
+      await q.enter(PIT, { x: 4, y: 24 });
+      await q.clearHostiles();
+      const start = { ...q.at };
+      // The secret passage south of (21,41), to the odd wall (spot 4).
+      expect(q.canReach(start, { x: 32, y: 43 })).toBe(true);
+      await q.step(31, 43);
+      expect(q.tail(1)).toMatch(/This wall is clearly very odd/);
+      // Its moldy adobe at (33,43) walls the garrison in; Move Mountains breaks it.
+      expect(P(q, 33, 43)).toBe(144);
+      expect(q.canReach(start, { x: 35, y: 43 })).toBe(false);
+      q.place({ x: 32, y: 43 });
+      await q.spell(Spell.MOVE_MOUNTAINS, 33, 43);
+      expect(q.univ.transcript, q.tail()).toContain('  Barrier crumbles.');
+      expect(q.canReach(start, { x: 35, y: 43 })).toBe(true);
+      // The sacrificial pit's room (spot 5): slimes ooze out.
+      const slimes = q.creatures(/Mung Slime/).length;
+      await q.step(40, 43);
+      expect(q.log.slice(-2).join('\n')).toMatch(/sacrificial pit, several creatures ooze out/);
+      expect(q.creatures(/Mung Slime/).length).toBeGreaterThan(slimes);
+      await q.kill(/Mung Slime/);
+      // The box at (46,36) is behind the wall north of (46,38): Move Mountains again.
+      expect(q.canReach(start, { x: 46, y: 38 })).toBe(true);
+      expect(q.canReach(start, { x: 46, y: 36 })).toBe(false);
+      q.place({ x: 46, y: 38 });
+      await q.spell(Spell.MOVE_MOUNTAINS, 46, 37);
+      expect(q.canReach(start, { x: 46, y: 36 }), q.tail()).toBe(true);
+      expect(await loot(q, 46, 36, /./)).toEqual(expect.arrayContaining(['Wand of Nullity', 'Bronze Serpent Ring']));
+    });
+
+    /** Floor squares of the puzzle (x 16–21, y 40–42), '.' safe (186), '#' charged (193). */
+    const grid = (q: QuestRunner): string[] => [40, 41, 42].map((y) =>
+      [16, 17, 18, 19, 20, 21].map((x) => (P(q, x, y) === 0xba ? '.' : '#')).join(''));
+    const { N, NE, E, S, W, SW } = Direction;
+    /** Walkthrough A's way across, from the door at (15,42) (B's "right, up, up, …" is the same). */
+    const ACROSS = [E, N, N, E, S, E, S, E, E, N, N, E];
+    /** Level 2, the Dark Wyrms dead and the lever pulled, at the floor room's door. */
+    const atTheFloor = async (q: QuestRunner): Promise<void> => {
+      veterans(q);
+      await q.enter(PIT2, { x: 5, y: 45 });
+      await q.clearHostiles();
+      await q.step(16, 26);
+      q.place({ x: 14, y: 42 });
+      await q.go(E, E);
+    };
+
+    it("The Pit, level 2: the mausoleum past the false wall, the rune, its three crypts, and the lever", async () => {
+      const q = new QuestRunner(scen);
+      veterans(q);
+      await q.enter(PIT2, { x: 5, y: 45 });
+      await q.clearHostiles();
+      const start = { ...q.at };
+      // B's false wall south of (30,21) is the only way to the mausoleum's door.
+      expect(q.canReach(start, { x: 14, y: 14 })).toBe(true);
+      const wall = P(q, 30, 22);
+      q.town.record.terrain[30]![22] = P(q, 31, 22);
+      expect(q.canReach(start, { x: 14, y: 14 }), 'without it').toBe(false);
+      q.town.record.terrain[30]![22] = wall;
+      // Its door (14,15) is locked: Unlock, and in.
+      expect(scen.terTypes[P(q, 14, 15)]!.special).toBe(TerSpec.UNLOCKABLE);
+      q.place({ x: 14, y: 14 });
+      await unlock(q, 14, 15);
+      await q.walk(14, 15);
+      expect(q.log.slice(-2).join('\n'), q.tail()).toMatch(/You break into a mausoleum/);
+      // The crypts' doors are sealed until the rune at the hall's end, (14,26):
+      // past magic (138), so Unlock never works.
+      const doors = [17, 19, 23, 25].map((y) => ({ x: 15, y }));
+      expect(doors.map((d) => P(q, d.x, d.y))).toEqual([138, 138, 138, 138]);
+      q.place({ x: 14, y: 17 });
+      for (let k = 0; k < 10; k++) await q.spell(Spell.UNLOCK, 15, 17);
+      expect(P(q, 15, 17)).toBe(138);
+      expect(q.univ.transcript.at(-1)).toBe("  Didn't work.");
+      await q.step(14, 26);
+      expect(q.tail(1)).toMatch(/the doors to the north glow slightly/);
+      expect(doors.map((d) => P(q, d.x, d.y))).toEqual([135, 135, 135, 135]);
+      await q.kill(/Spectre/);
+      // B's three crypts: a Dart of Returning, a Potion of Bliss, Ambrosia.
+      expect(await loot(q, 16, 16, /Dart/)).toEqual(['Dart of Returning']);
+      expect(await loot(q, 16, 20, /Bliss/)).toEqual(['Potion of Bliss']);
+      expect(await loot(q, 16, 22, /Ambrosia/)).toEqual(['Ambrosia']);
+
+      // The floor room has no way in until the southernmost crypt's lever
+      // (16,26) puts a door at (15,42): "Nothing happens, as far as you can tell."
+      const bier = { x: 20, y: 37 };
+      expect(P(q, 15, 42)).toBe(132);
+      expect(q.canReach(start, bier)).toBe(false);
+      await q.step(16, 26);
+      expect(q.tail(1)).toMatch(/You pull the lever. Nothing happens/);
+      expect(P(q, 15, 42)).toBe(135);
+      expect(q.canReach(start, bier)).toBe(true);
+    });
+
+    it("The Pit, level 2: walkthrough A's way across the charged floor, the bier, and the Fury Crossbow", async () => {
+      const q = new QuestRunner(scen);
+      await atTheFloor(q);
+      expect(q.at).toEqual({ x: 15, y: 42 });
+      // Only the square by the door is safe to start.
+      expect(grid(q)).toEqual(['######', '######', '.#####']);
+      const moved = await q.go(...ACROSS);
+      expect(moved, q.tail()).toEqual(ACROSS.map(() => true));
+      expect(q.at).toEqual({ x: 21, y: 40 });
+      // North: the crypt's door at (21,39) opens on the bier's sight, and a second step goes in.
+      expect(await q.go(N)).toEqual([false]);
+      expect(q.tail(1)).toMatch(/A skeleton lies on a massive marble bier/);
+      expect(await q.go(N)).toEqual([true]);
+      // The crossbow lies on the bier, unidentified.
+      const found = (await loot(q, 19, 36, /Crossbow/));
+      expect(found).toEqual(['Fury Crossbow']);
+      const pc = q.party.pcs[0]!;
+      const bow = pc.items.find((it) => it.fullName === 'Fury Crossbow')!;
+      expect([bow.name, bow.ident, bow.bonus]).toEqual(['Crossbow', false, 7]);
+      await loot(q, 18, 36, /Bolts/);
+      expect(q.hasItem(/Magic Bolts/)).toBe(true);
+    });
+
+    it("The Pit, level 2: the floor's zaps and its throw back, and the way back out (check-in #21)", async () => {
+      const q = new QuestRunner(scen);
+      await atTheFloor(q);
+      const hp = () => q.party.pcs[0]!.curHealth;
+      // A charged square zaps and refuses the step.
+      let before = hp();
+      expect(await q.go(E, NE)).toEqual([true, false]);
+      expect(q.tail(1)).toMatch(/bolts of lightning arc out towards you/);
+      expect(hp()).toBeLessThan(before);
+      expect(q.at).toEqual({ x: 16, y: 42 });
+      // A safe square with no safe squares of its own, (17,42), throws the
+      // party back to the door, drained to half health.
+      before = hp();
+      expect(await q.go(E)).toEqual([false]);
+      expect(q.tail(1)).toMatch(/You suddenly find yourself somewhere else/);
+      expect(q.at).toEqual({ x: 15, y: 42 });
+      expect(hp()).toBe(Math.floor(before / 2));
+      // The throw makes both ends safe: (16,42) by the door, (21,40) by the bier.
+      expect(grid(q)).toEqual(['#####.', '######', '.#####']);
+
+      // Across to the bier.
+      await q.go(...ACROSS, N, N);
+      expect(q.at).toEqual({ x: 21, y: 39 });
+      // Walkthrough A's way back starts south, onto (21,40), which went
+      // charged when the party stood on it: it zaps, and A's next step, west,
+      // is a wall. Southwest is safe, and A's moves after its first two take
+      // the party back to the door.
+      expect(grid(q)).toEqual(['####.#', '######', '######']);
+      expect(await q.go(S), q.tail()).toEqual([false]);
+      expect(q.tail(1)).toMatch(/bolts of lightning/);
+      expect(await q.go(W)).toEqual([false]);
+      const BACK = [SW, S, W, W, N, W, S, W, S, W];
+      expect(await q.go(...BACK), q.tail()).toEqual(BACK.map(() => true));
+      expect(q.at).toEqual({ x: 15, y: 42 });
+
+      // Once the bier is seen, a throw lands the party at its door instead.
+      // (16,42) went charged on the way out; round by (16,41) to (17,42).
+      expect(await q.go(NE, S, E)).toEqual([true, true, false]);
+      expect(q.tail(1)).toMatch(/You suddenly find yourself somewhere else/);
+      expect(q.at, q.tail()).toEqual({ x: 21, y: 39 });
+      // And out: the stairs at (5,46), up to level 1's (18,44) side.
+      q.place({ x: 14, y: 42 });
+      expect(q.canReach(q.at, { x: 5, y: 46 })).toBe(true);
+      await q.step(5, 46);
+      expect([q.townNum, q.at], q.tail()).toEqual([PIT, { x: 18, y: 44 }]);
+      expect(q.canReach(q.at, { x: 4, y: 24 })).toBe(true);
+    });
+  });
+
   describe('the endgame', () => {
     const said = (q: QuestRunner, from: number): string[] => q.univ.transcript.slice(from);
     /** Look at a blocked square, step on an open one: how a spot is set off. */
@@ -2674,31 +2989,7 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
     }, 1800000);
 
     it("The ways between: through Footracer's gate to Tinraya, over lava to the New Factory, and on to the Great Walls and the keep", async () => {
-      const terAt = (x: number, y: number): number => scen.outdoors[Math.floor(x / 48)]![Math.floor(y / 48)]!.terrain[x % 48]![y % 48]!;
-      // E3's ways through (spot 50): fords and passes.
-      const ways = new Set<string>();
-      scen.outdoors.forEach((col, sx) => col.forEach((o, sy) => o.specialLocs.forEach((l) => {
-        const n = o.specials.get(l.spec);
-        if (n?.type === SpecType.CANT_ENTER && n.ex1a === 0 && n.ex2a === 1) ways.add(`${sx * 48 + l.x},${sy * 48 + l.y}`);
-      })));
-      /** Steps from `from` to `to` over squares `ok` allows (and the ways through), or -1. */
-      const path = (from: [number, number], to: [number, number], ok: (t: number) => boolean, avoid = new Set<string>()): number => {
-        const seen = new Map([[from.join(), 0]]);
-        const queue = [from];
-        while (queue.length) {
-          const [x, y] = queue.shift()!;
-          const d = seen.get(`${x},${y}`)!;
-          if (x === to[0] && y === to[1]) return d;
-          for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
-            const n: [number, number] = [x + dx, y + dy];
-            if (n[0] < 0 || n[1] < 0 || n[0] >= 432 || n[1] >= 480 || seen.has(n.join()) || avoid.has(n.join())) continue;
-            if ((n[0] !== to[0] || n[1] !== to[1]) && !ways.has(n.join()) && !ok(terAt(...n))) continue;
-            seen.set(n.join(), d + 1);
-            queue.push(n);
-          }
-        }
-        return -1;
-      };
+      const path = outdoorPath;
       const LAVA = 0x4b;
       // Open ground (town entrances and the like keep monsters off, and are left out).
       const dry = (t: number) => scen.terTypes[t]!.blockage <= TerObstruct.BLOCK_SIGHT;

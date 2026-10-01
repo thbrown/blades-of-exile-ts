@@ -89,7 +89,8 @@ function doorSpecial(t: number): E3TerrainSpecial | null {
     if (t === base + 2) return { kind: 'step-change', to: base + 6, sound: DOOR_SOUND };
     // `base + 3`: locked, and a successful pick adds 3 (`base + 6`, open).
     if (t === base + 3) return { kind: 'unlock', to: base + 6, pickable: true };
-    // `base + 4`, `base + 5`: locked past picking.
+    // `base + 4`, `base + 5`: locked past picking. Unlock still opens
+    // `base + 4` (`readE3Unlocks`); `base + 5` is past magic too.
     if (t === base + 4 || t === base + 5) return { kind: 'unlock', to: base + 6, pickable: false };
     // `base + 6`, open: Use closes it again (`base + 2`), as BoE's open door
     // does. **Not found in E3's code**: its Use (`FUN_10c0_425c`) has no door
@@ -127,6 +128,35 @@ export function readE3RoadJoins(exe: Uint8Array): number[] {
 export function readE3Crumbles(exe: Uint8Array): number[] {
   const ds = readNeSegment(exe, neAutoDataSegment(exe));
   return Array.from(ds.subarray(0x30b0, 0x30b0 + 9));
+}
+
+/**
+ * Exile III's Unlock spell, as the `unlock` = `exile3:…` flag (`doors.ts`).
+ * Its arm in `cast_town_spell` (`10b0:6402`) jumps on `terrain − 103`
+ * through a table of 38 words at `10b0:679c`; this reads the table and names
+ * each handler. `641a` rolls, and on success makes the door `t − 1` for 104,
+ * 121 and 136 and `t − 2` otherwise (`10b0:6494`–`64f2`): both the closed
+ * door of the run, `base + 2`, not the open one a pick gives. `651b` is the
+ * door past magic ("Didn't work.", sound 41); `650f` "Door already
+ * unlocked.", `6515` "It's open, silly!", `6531` "Doesn't work on
+ * portculli.", `6537` "Wrong terrain type.". The rolled doors are each
+ * run's `base + 3` *and* `base + 4`, though both of `base + 4` and `base + 5`
+ * are past picking: the Pit of the Wyrm's two locked doors (137) are spell
+ * only.
+ */
+export function readE3Unlocks(exe: Uint8Array): string {
+  const code = readNeSegment(exe, (0x10b0 - 0x1000) / 8 + 1);
+  const v = new DataView(code.buffer, code.byteOffset, code.byteLength);
+  const kinds = new Map([[0x641a, 'roll'], [0x651b, 'proof'], [0x650f, 'already'], [0x6515, 'open'], [0x6531, 'portcullis']]);
+  const by = new Map<string, string[]>();
+  for (let i = 0; i < 38; i++) {
+    const t = 103 + i;
+    const kind = kinds.get(v.getUint16(0x679c + 2 * i, true));
+    if (!kind) continue;
+    const entry = kind === 'roll' ? `${t}>${[0x68, 0x79, 0x88].includes(t) ? t - 1 : t - 2}` : String(t);
+    by.set(kind, [...(by.get(kind) ?? []), entry]);
+  }
+  return [...by].map(([k, ts]) => `${k}=${ts.join(',')}`).join(';');
 }
 
 /**
