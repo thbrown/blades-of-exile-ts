@@ -732,6 +732,20 @@ export class XmlDialog implements ModalScreen {
    * as well, since those are what it picks.
    */
   touchView(): TouchView {
+    if (this.touchFace) return this.touchFace.view();
+    return this.controlsTouchView();
+  }
+
+  /**
+   * A face of the dialog's own for the touch overlay, in place of its
+   * controls listed in order: the training grid, say, as a list of skills to
+   * pick and a −/+ pair for the one picked. Its presses go through
+   * `pressControl`, so they are still clicks on the dialog's controls.
+   */
+  touchFace: { view(): TouchView; press(name: string): string | null } | null = null;
+
+  /** Every control a click could land on, as `touchView` lists them by default. */
+  controlsTouchView(): TouchView {
     this.pickFocus();
     const right: TouchChoice[] = [];
     for (const c of this.clickable()) {
@@ -758,11 +772,18 @@ export class XmlDialog implements ModalScreen {
     return view;
   }
 
-  /** A click on `name`, without the click. */
+  /** A press on one of `touchView`'s choices. */
   touchPress(name: string): string | null {
+    if (this.touchFace) return this.touchFace.press(name);
+    return this.pressControl(name);
+  }
+
+  /** A click on control `name`, without the click. */
+  pressControl(name: string): string | null {
     this.pressed = null;
     return this.activate(name);
   }
+
 
   /** The whole of a field's text, as a phone's keyboard left it. */
   touchType(name: string, text: string): void {

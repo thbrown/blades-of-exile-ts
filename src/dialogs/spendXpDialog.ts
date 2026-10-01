@@ -17,7 +17,7 @@ import { SheetStore } from '../render/sheets';
 import { giveHelp } from '../universe/living';
 import { MainStatus, Skill } from '../universe/skills';
 import { Universe } from '../universe/universe';
-import { ModalScreen } from './dialog';
+import { ModalScreen, type TouchChoice } from './dialog';
 import { getDialogDef } from './dialogStore';
 import { strDialog } from './strDialog';
 import { XmlDialog } from './xmlDialog';
@@ -152,5 +152,61 @@ export function spendXpDialog(
     });
   }
   draw();
+  dlg.touchFace = trainTouchFace(dlg, univ, state, mode, labelText);
   return { dlg, state };
+}
+
+/**
+ * The training grid for a finger: the skills down the left, each with its
+ * level and the cost of the next, and down the right a −/+ pair for the one
+ * picked, then the dialog's own buttons. Unlike the grid, where each skill
+ * has a pair of its own, a skill is picked first and then raised or lowered.
+ * The pair presses the grid's own `-m`/`-p` buttons, so the rules, refusals
+ * and the Anama warning are all the dialog's.
+ */
+function trainTouchFace(
+  dlg: XmlDialog, univ: Universe, state: SpendXp, mode: XpMode, labelText: Map<string, string>,
+): NonNullable<XmlDialog['touchFace']> {
+  let picked: string = skillNames[0]!;
+  return {
+    view: () => {
+      const left: TouchChoice[] = [];
+      for (let i = 0; i <= 20; i++) {
+        const id = skillNames[i]!;
+        const skill = i as Skill;
+        const atMax = state.cur(skill) === xpSkillMax(skill);
+        const cost = mode >= XpMode.EDIT || atMax ? ''
+          : ` · next ${state.cost(skill)} pt${state.cost(skill) !== 1 ? 's' : ''}.${mode === XpMode.TRAIN ? `/${state.goldCost(skill)}gp` : ''}`;
+        left.push({
+          name: `skill:${id}`, label: labelText.get(id) ?? id,
+          detail: `Level ${state.cur(skill)}${atMax ? ' (MAX)' : cost}`, on: id === picked,
+        });
+      }
+      const name = labelText.get(picked) ?? picked;
+      const right: TouchChoice[] = [
+        { name: 'plus', label: `+ ${name}`, disabled: !dlg.isVisible(`${picked}-p`) },
+        { name: 'minus', label: `− ${name}`, disabled: !dlg.isVisible(`${picked}-m`) },
+      ];
+      if (dlg.isVisible('left')) {
+        right.push({ name: 'left', label: '◀ Previous PC' }, { name: 'right', label: 'Next PC ▶' });
+      }
+      right.push({ name: 'help', label: 'Help' }, { name: 'cancel', label: 'Cancel' }, { name: 'keep', label: 'Keep' });
+      const pc = univ.party.pcs[state.who]!;
+      const who = mode === XpMode.CREATE && pc.mainStatus !== MainStatus.ALIVE ? 'New PC' : pc.name;
+      const purse = `${state.skp} skill pts.${mode === XpMode.TRAIN ? `, ${state.gold} gold` : ''}`;
+      return { left, leftHeading: `Train ${who}`, right, rightHeading: purse };
+    },
+    press: (name) => {
+      const skill = /^skill:(.+)$/.exec(name);
+      if (skill) {
+        picked = skill[1]!;
+        return null;
+      }
+      if (name === 'plus' || name === 'minus') {
+        const control = `${picked}-${name === 'plus' ? 'p' : 'm'}`;
+        return dlg.isVisible(control) ? dlg.pressControl(control) : null;
+      }
+      return dlg.pressControl(name);
+    },
+  };
 }

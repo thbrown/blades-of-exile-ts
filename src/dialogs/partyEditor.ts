@@ -17,7 +17,7 @@ import { giveHelp } from '../universe/living';
 import { Player } from '../universe/player';
 import { MainStatus, Race, Trait } from '../universe/skills';
 import { Universe } from '../universe/universe';
-import { ModalScreen } from './dialog';
+import { ModalScreen, type TouchChoice } from './dialog';
 import { getDialogDef } from './dialogStore';
 import { pictChoiceDialog } from './pictChoiceDialog';
 import { XmlDialog } from './xmlDialog';
@@ -268,6 +268,7 @@ export async function editParty(host: PartyEditorHost): Promise<void> {
   }
   dlg.attachHandler('help', () => { giveHelp(22, 23, true); return 'stay'; });
   dlg.attachHandler('done', () => (busy ? 'stay' : 'close'));
+  dlg.touchFace = editPartyTouchFace(dlg, univ);
   putPartyStats();
   await host.nest(dlg);
 
@@ -276,6 +277,46 @@ export async function editParty(host: PartyEditorHost): Promise<void> {
     if (first >= 0) univ.curPc = first;
   }
 }
+
+/**
+ * The party editor for a finger: the six slots down the left, and down the
+ * right what can be done to the one picked — Name, Delete, Race/Traits,
+ * Train and Graphic, or Create for an empty slot — then Help and Done. Each
+ * presses that slot's own button on the dialog.
+ */
+function editPartyTouchFace(dlg: XmlDialog, univ: Universe): NonNullable<XmlDialog['touchFace']> {
+  let picked = 0;
+  const ACTIONS: [string, string][] = [
+    ['name', 'Name'], ['delete', 'Delete'], ['trait', 'Race/Traits'], ['train', 'Train'], ['pic', 'Graphic'],
+  ];
+  return {
+    view: () => {
+      const left: TouchChoice[] = univ.party.pcs.map((pc, i) => pc.mainStatus === MainStatus.ABSENT
+        ? { name: `slot:${i}`, label: `${i + 1}. Empty`, on: i === picked }
+        : { name: `slot:${i}`, label: `${i + 1}. ${pc.name}`, detail: `Level ${pc.level} ${RACE_NAMES[pc.race] ?? ''}`, on: i === picked });
+      const pc = univ.party.pcs[picked]!;
+      const right: TouchChoice[] = pc.mainStatus === MainStatus.ABSENT
+        ? [{ name: 'delete', label: 'Create' }]
+        : ACTIONS.map(([name, label]) => ({ name, label }));
+      right.push({ name: 'help', label: 'Help' }, { name: 'done', label: 'Done' });
+      const heading = pc.mainStatus === MainStatus.ABSENT ? `Slot ${picked + 1}` : pc.name;
+      return { left, leftHeading: 'Party', right, rightHeading: heading };
+    },
+    press: (name) => {
+      const slot = /^slot:(\d)$/.exec(name);
+      if (slot) {
+        picked = Number(slot[1]);
+        return null;
+      }
+      if (ACTIONS.some(([a]) => a === name)) return dlg.pressControl(`${name}${picked + 1}`);
+      return dlg.pressControl(name);
+    },
+  };
+}
+
+const RACE_NAMES: Partial<Record<Race, string>> = {
+  [Race.HUMAN]: 'Human', [Race.NEPHIL]: 'Nephilim', [Race.SLITH]: 'Slithzerikai', [Race.VAHNATAI]: 'Vahnatai',
+};
 
 /**
  * `start_new_game(false)` from the startup screen, up to the point where a
