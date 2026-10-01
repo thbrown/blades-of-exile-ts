@@ -339,6 +339,26 @@ quest steps.
 - **Question:** is it the same in the original: no way in without the key,
   and on the map as soon as it is bought?
 
+### 25. The Tower of Zkal: its drain, and Zkal's death (2026-10-01)
+
+- **Where:** the Tower of Zkal, at (295,271) of the world map, the south
+  end of the undead island below Gale.
+- **Do:** walk in, note a PC's spell points, and wait (Space) ten turns,
+  then start a fight in the tower and watch them over ten rounds. Later, on
+  level 2, kill Zkal (the Lich in the room past the lever room) and go back
+  through the tunnels.
+- **Why:** E3's per-turn code takes 5 spell points from every PC on each
+  turn whose age is a multiple of 5 (`10c0:7100`), in town or in a fight
+  there, and the port now does the same (DIVERGENCES.md #38). Walkthrough
+  B says killing Zkal "spawned a crapload of undead all over the tunnels";
+  E3's kill code for him shows a dialog, gives 20 experience and sets a
+  flag nothing reads (`10c0:564c`), and the port does only that.
+- **The port:** 5 points every fifth turn, down to 0; nothing new appears
+  when Zkal dies.
+- **Question:** is the drain 5 every fifth turn, and in a fight too? Do
+  undead appear after Zkal's death, or does B mean the tower's own
+  wanderers?
+
 ## Waiting on a ruling (already written up elsewhere)
 
 - **DIVERGENCES.md #30 and #31**, marked "open for the user".

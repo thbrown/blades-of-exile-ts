@@ -298,6 +298,13 @@ describe.skipIf(!dir)('saves for E3-CHECK-IN-ORIGINAL.md', () => {
         + 'then S twice. Is the crate now one square south of the party, at (10,4)? (The port needs a third S for that.)',
       make: async (q) => { await at(q, 57, 68); },
     },
+    {
+      file: 'Q25.SAV', question: "#25, the Tower of Zkal's drain on spell points, and Zkal's death",
+      todo: 'The Tower of Zkal is on the map, a step south-west. Walk in, note a PC\'s spell points, wait (Space) ten turns and look '
+        + 'again; then start a fight and watch them over ten rounds. Do they drop by 5 every fifth turn? Later, on level 2, '
+        + 'kill Zkal (the Lich) and walk back through the tunnels: do new undead appear?',
+      make: async (q) => { scen.towns[70]!.canFind = true; await besideTown(q, 70); },
+    },
   ];
 
   it('makes every save, and each loads back here to the same place', async () => {

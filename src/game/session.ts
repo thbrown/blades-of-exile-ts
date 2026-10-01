@@ -89,6 +89,7 @@ import { deliverE3Jobs } from './e3Jobs';
 import { alterSpace } from './specials/general';
 import { pushThings } from './pushThings';
 import { moveE3Walls, pushOffE3Walls } from './e3MovingWalls';
+import { e3SpDrainTick } from './e3SpDrain';
 import { ONCE_DONE } from './specials/oneshot';
 import { Spell } from '../data/spell';
 import { castSpell } from './spellTown';
@@ -834,6 +835,8 @@ export class GameSession {
     specialIncreaseAge(this, 1);
     // Exile III's moving walls go first, and carry the party (e3MovingWalls.ts).
     moveE3Walls(this);
+    // Then the Tower of Zkal's drain on spell points (e3SpDrain.ts).
+    e3SpDrainTick(this);
     await pushOffE3Walls(this);
     // Conveyor belts, between the timers and the fields (boe.actions.cpp:3597).
     await pushThings(this);

@@ -15479,10 +15479,92 @@ one quest at a time**, to keep each session's context small.
     directions on level 2 (a path is shown instead), the monastery's other
     chambers (B's list of rooms and the supply room), the plaques behind
     the false wall west of (10,8), and Storm Port's junk shop.
-- [ ] **Next: the Ring of Endless Magery**, the last artifact quest.
+- [x] **The Ring of Endless Magery** (2026-10-01), six tests in
+  `describe('the Ring of Endless Magery')`, walkthrough A's "The Ring of
+  Endless Magery" and B's "Ring of Endless Magery Ishinabe". **Every main
+  quest now has its test**: the five plagues and the five artifacts.
+  - The wizard with no name (personality 90, "Strange Wizard"): Krizsan's
+    (56,15), behind B's locked door at (54,18), on days where
+    `day % 3 == 1`; Delan's (9,30) on `day % 3 == 2`; nowhere on the third.
+    (Krizsan's state 2 has him `until-day 19`, so once the town declines
+    he is only ever in Delan: E3's data.) "magi", "dedi", then "loca" or
+    "ring": 2500 gold (refused at 2499) puts the Tower of Zkal (70) on the
+    map; before that the party walks over its square.
+  - Gale: Ernest's portal (B's way; "purc", 250 gold, spot 18) lands at
+    (32,4), *outside* the shut gates, so the party still needs Pasi's
+    tunnel. Mrrurr (338, (45,47)): "skif", "wort", "purc", 100 gold (flag
+    0x12c). The dock's end (36,56, spot 24) says to find the owner until
+    then, and rows to Execa (164) at (24,6) after; Execa's dock (spot 11)
+    rows back, 500 turns. Out of Execa at (314,162); no dry way to or from
+    the mainland, and a dry way of 111 steps to the tower.
+  - The island's side content, at the user's request: the cairns (zone 42
+    spot 1, (309,225), entered from the north-east): Leave does nothing,
+    Attack is the fight (Wights to a Vampire); won, 750 gold and a Scroll:
+    Firestorm once, and Force Barrier taught every visit. The spire (spot
+    2, (315,202)): a crowd of Ruby Skeletons, once. Vila (165): shamblers,
+    two basilisks, Ember Flowers and three more herbs. The vampires before
+    the tower (zone 51 spot 1), once.
+  - Level 1: in by the door at (39,23) (the message), the drain, A's lever
+    at (40,1) through the false wall (41,1) opening (35,1), and B's
+    coordinates as path legs that keep off every spot (`avoidSpots`): the
+    false walls at (35,3), (25,6), (3,2), the teleporter at (9,10) to
+    (1,45), the fire barrier at (9,45) dispelled from (9,44), the false
+    walls (10,46) and (14,39), the teleporter at (11,38) to (5,22), the
+    false wall (3,16), and the stairs (1,15) to level 2's (13,2), and back.
+  - Level 2: the portal (12,31) to the room of four teleporters; a wrong
+    turn, re-entry resetting the maze, and A's east, east, south, east out
+    to (34,45). Then **A's "big room"** behind (32,41): its walls never
+    stop (basalt at y 36, adobe at y 38, fire barriers along y 37 but for
+    x 37), and the lower walls span the room, so a search finds no way
+    past; one Fire Barrier cast at (32,40) from the doorway (A: "use the
+    spell Fire Barrier to block off the moving walls") opens one, replayed
+    through the engine turn by turn, onto the false wall at (31,36). The
+    closing passage (spot 5) done A's way: a barrier north, stood on, the
+    north wall followed back, a barrier at (30,28), out by (31,28). The
+    Hraithes' room, the lever room (spot 6): two barriers, then a search to
+    the lever (46,1), which opens (39,9) and (38,10). Zkal (the Lich):
+    E3's dialog, 20 experience, flag 0x353. His lever (30,1) opens (35,23);
+    the laboratory; the four trapped chests: Bronze Ring, Bronze Serpent
+    Ring, Gold Weight Ring and the **Ring of Magery** (E3's name: unknown
+    "Ring", 40 charges, level 2: 45 spell points a use, to a mage; a
+    fighter is "magically inept"). The way home: the portal at (32,32) to
+    (12,30), by the stairs.
+  - **Found and fixed: the Tower of Zkal drained nothing.** Its first
+    message warns of it, and E3's per-turn code (`10c0:7100`) takes 5
+    spell points from each PC (to 0 below 6) on every turn whose age is a
+    multiple of 5, in towns 70 and 71, in town or a fight there. New flag
+    **`sp-drain` = `exile3:70,71`**, `src/game/e3SpDrain.ts`, called after
+    the moving walls in the town turn and the combat round. DIVERGENCES.md
+    #38, check-in question 25 (with `Q25.SAV`).
+  - Runner: `pathLength`/`canReach` take `avoidSpots` (a path off every
+    special spot but its end); `WallSearch` takes `throughFire` (the party
+    may walk through and stand on fire barriers, which still stop walls).
+  - *Not covered*: the fights; A's own route on level 1 (B's is
+    coordinates, so it is the one checked); Force Barrier in place of Fire
+    Barrier (B), which stops walls the same (`STOPPERS`).
 
-All checks pass (2026-10-01, the Knowledge Brew): 1,584 tests, tsc, both
-sweeps, verify-screen, verify-party and verify-e3.
+**All ten main quests have tests (2026-10-01).** Next, at the user's
+plan: a pass through the check-in saves (`E3_CHECK_SAVES=e3data/check-saves`,
+`E3-CHECK-IN-ORIGINAL.md` #1–25) in the original, and answers to the open
+questions there.
+
+All checks pass (2026-10-01, the Ring of Endless Magery): 1,590 tests, tsc,
+both sweeps, verify-screen, verify-party and verify-e3.
+
+**Gotchas from the Ring of Endless Magery (2026-10-01):**
+- `pathLength`'s destination counts as open whatever it is, so a map of
+  "reachable squares" built by asking it square by square marks every wall
+  beside a reachable square too. Test the square's own terrain as well.
+- `outdoorsAt` puts the party on any square, walls included; a special met
+  by stepping off a wall can place its group on the far side of one, where
+  it never reaches the party. Approach a spot from a square a party could
+  stand on.
+- `q.spell` is free: no turn passes. Where turns matter (moving walls),
+  `pause()` after it, so the cast takes its turn.
+- `clearHostiles` kills bosses too, and runs their death scripts; kill by
+  place or name when a boss's death belongs later in the test.
+- A turn that lands on `age % 5 == 0` in the Tower of Zkal takes 5 spell
+  points: a spell point check there must pick its turn.
 
 **Gotchas from the Knowledge Brew (2026-10-01):**
 - `party.townNum` stays 200 after an outdoor fight ends; test

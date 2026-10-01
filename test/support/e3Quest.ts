@@ -384,15 +384,18 @@ export class QuestRunner {
    * doors (opened by a step or picked) and E3's ways through (spot 50: a
    * secret passage, a ford), but not walls, portcullises or water; `boat`
    * lets it cross water a boat can. Other special spots don't count, so a
-   * stair or a blocking message in the way doesn't stop the path.
+   * stair or a blocking message in the way doesn't stop the path, unless
+   * `avoidSpots` is set: then a path keeps off every spot but `to` (a
+   * tower of teleporters, where stepping on one would take the party away).
    */
-  canReach(from: Location, to: Location, opts: { boat?: boolean } = {}): boolean {
+  canReach(from: Location, to: Location, opts: { boat?: boolean; avoidSpots?: boolean } = {}): boolean {
     return this.pathLength(from, to, opts) >= 0;
   }
 
   /** Steps on the shortest such path from `from` to `to` (as `canReach` walks), or -1. */
-  pathLength(from: Location, to: Location, opts: { boat?: boolean } = {}): number {
+  pathLength(from: Location, to: Location, opts: { boat?: boolean; avoidSpots?: boolean } = {}): number {
     const town = this.town;
+    const spots = new Set(opts.avoidSpots ? town.record.specialLocs.map((l) => `${l.x},${l.y}`) : []);
     // The converter's spot 50: a CANT_ENTER that lets the party by (ex1a 0)
     // and forces the step (ex2a 1) onto a square that would block it.
     const waysThrough = new Set(town.record.specialLocs.filter((l) => {
@@ -403,6 +406,7 @@ export class QuestRunner {
       if (!town.isOnMap(x, y)) return false;
       if (x === to.x && y === to.y) return true;
       if (waysThrough.has(`${x},${y}`)) return true;
+      if (spots.has(`${x},${y}`)) return false;
       const ter = this.univ.terrainType(town.record.terrain[x]![y]!);
       if (opts.boat && ter.boatOver) return true;
       if (ter.special === TerSpec.CHANGE_WHEN_STEP_ON || ter.special === TerSpec.UNLOCKABLE) return true;

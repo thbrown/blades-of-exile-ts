@@ -3041,6 +3041,619 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
     });
   });
 
+  describe('the Ring of Endless Magery', () => {
+    /**
+     * A wizard with no name, in Krizsan or Delan, sells the ring's place:
+     * the Tower of Zkal, at the south end of the undead island below Gale,
+     * reached in the Nephil sailor's skiff. Walkthrough A's "The Ring of
+     * Endless Magery" and B's "Ring of Endless Magery Ishinabe".
+     */
+    const ZKAL = 70, ZKAL2 = 71, GALE = 16, EXECA = 164, DELAN = 120;
+    /** The Strange Wizard (personality 90), and Mrrurr the Nephil sailor (338). */
+    const WIZARD = 90, MRRURR = 338;
+    const P = (q: QuestRunner, x: number, y: number): number => q.town.record.terrain[x]![y]!;
+    const veterans = (q: QuestRunner): void => {
+      for (const pc of q.party.pcs) { pc.level = 30; pc.maxHealth = 600; pc.curHealth = 600; }
+    };
+    const { N, S, SW, W, NW } = Direction;
+
+    it('The wizard with no name: Krizsan or Delan on alternate days, and 2500 gold for the Tower of Zkal', async () => {
+      // (A second runner resets the shared scenario's towns, so side checks come first.)
+      // In Delan, walkthrough A's other place for him, the same sale.
+      {
+        const r = new QuestRunner(scen);
+        r.party.age = 3700;
+        r.party.gold = 2500;
+        await r.enter(DELAN);
+        expect(r.creatures(WIZARD).map((m) => m.curLoc)).toEqual([{ x: 9, y: 30 }]);
+        const [yes] = await r.talk(WIZARD, 'loca');
+        expect(yes).toMatch(/Tower of Zkal/);
+        expect([r.party.gold, scen.towns[ZKAL]!.canFind]).toEqual([0, true]);
+      }
+      const q = new QuestRunner(scen);
+      veterans(q);
+      expect(scen.towns[ZKAL]!.canFind).toBe(false);
+      // He sits in Krizsan's north-east corner (56,15) on days that leave 1
+      // over a multiple of three (time flag 4), in Delan (9,30) on the next
+      // (5), and nowhere on the third.
+      for (const [age, krizsan, delan] of [[0, 1, 0], [3700, 0, 1], [7400, 0, 0]] as const) {
+        q.party.age = age;
+        await q.enter(DELAN);
+        expect(q.creatures(WIZARD).length, `Delan, age ${age}`).toBe(delan);
+        await q.enter(0);
+        expect(q.creatures(WIZARD).length, `Krizsan, age ${age}`).toBe(krizsan);
+      }
+      q.party.age = 0;
+      await q.enter(0);
+      expect(q.creatures(WIZARD)[0]!.curLoc).toEqual({ x: 56, y: 15 });
+      // Walkthrough B: "unlock the door at 54,18" (Unlock, until it works).
+      expect(scen.terTypes[P(q, 54, 18)]!.special).toBe(TerSpec.UNLOCKABLE);
+      q.place({ x: 53, y: 18 });
+      for (let k = 0; k < 20 && scen.terTypes[P(q, 54, 18)]!.special === TerSpec.UNLOCKABLE; k++) await q.spell(Spell.UNLOCK, 54, 18);
+      expect(scen.terTypes[P(q, 54, 18)]!.special, q.univ.transcript.slice(-3).join(' / ')).not.toBe(TerSpec.UNLOCKABLE);
+      expect(q.canReach({ x: 53, y: 18 }, { x: 56, y: 16 })).toBe(true);
+
+      // Before he's paid, the tower is hidden, and the party walks over it.
+      await q.outdoorsAt(296, 271);
+      await q.go(W);
+      expect([q.session.isOutdoors, q.global]).toEqual([true, { x: 295, y: 271 }]);
+
+      await q.enter(0);
+      const [magi, dedi] = await q.talk(WIZARD, 'magi', 'dedi');
+      expect(magi).toMatch(/location of the long lost Ring of Endless Magery/);
+      expect(dedi).toMatch(/2500 gold is the going rate/);
+      q.party.gold = 2499;
+      const [no] = await q.talk(WIZARD, 'loca');
+      expect(no).toMatch(/insufficient dedication/);
+      expect([q.party.gold, scen.towns[ZKAL]!.canFind]).toEqual([2499, false]);
+      q.party.gold = 3000;
+      const [yes, where] = await q.talk(WIZARD, 'ring', 'zkal');
+      expect(yes).toMatch(/Tower of Zkal.*southern end of the island south of the city of Gale/);
+      expect(where).toMatch(/Gale is at the northeast end of Valorim/);
+      expect([q.party.gold, scen.towns[ZKAL]!.canFind, scen.towns[ZKAL2]!.canFind]).toEqual([500, true, false]);
+      // Now the tower can be entered, from the east (43,24).
+      await q.outdoorsAt(296, 271);
+      await q.go(W);
+      expect([q.townNum, q.at], q.tail()).toEqual([ZKAL, { x: 43, y: 24 }]);
+    });
+
+    it("Gale: Ernest's portal to the gates, Mrrurr's skiff for 100 gold, to the undead island and back", async () => {
+      const q = new QuestRunner(scen);
+      veterans(q);
+      // Walkthrough B's shortcut: Ernest's portal to Gale (250 gold, spot
+      // 18) comes out at (32,4), north of the shut gates, not inside.
+      q.party.gold = 1000;
+      await q.enter(85);
+      const [paid] = await q.talk(74, 'purc');
+      expect(paid).toMatch(/portals are around here somewhere/);
+      const [px, py] = spot(85, 18);
+      q.place({ x: px, y: py + 1 });
+      await q.go(N);
+      expect([q.townNum, q.at], q.tail()).toEqual([GALE, { x: 32, y: 4 }]);
+      const sailor = q.creatures(MRRURR)[0]!.curLoc;
+      expect(sailor).toEqual({ x: 45, y: 47 });
+      expect(q.canReach(q.at, sailor), 'the walls').toBe(false);
+      // In by Pasi's tunnel, once the slimes are beaten (as for Pachtar's Plate).
+      q.setFlag(0xc85, 1);
+      await q.talk(/Pasi/, 'assi');
+      await q.step(55, 8);
+      expect(q.at, q.tail()).toEqual({ x: 52, y: 14 });
+      expect(q.canReach(q.at, sailor)).toBe(true);
+
+      // The skiff at the central dock's end (spot 24) is his, and the sailors watch.
+      const dock = { x: 36, y: 55 };
+      expect(q.canReach(sailor, dock)).toBe(true);
+      q.place(dock);
+      await q.go(S);
+      expect(q.tail(1)).toMatch(/you'll have to find its owner/);
+      expect([q.townNum, q.at], 'onto the end, and no further').toEqual([GALE, { x: 36, y: 56 }]);
+      // Mrrurr's "skiff", "worthless", then "purchase": 100 gold.
+      q.party.gold = 99;
+      const [skif, wort, poor] = await q.talk(MRRURR, 'skif', 'wort', 'purc');
+      expect(skif).toMatch(/could only get to the island to the south/);
+      expect(wort).toMatch(/purchase the skiff for only 100 gold/);
+      expect(poor).toMatch(/haven't the gold/);
+      expect([q.party.gold, q.flag(0x12c)]).toEqual([99, 0]);
+      q.party.gold = 150;
+      const [sold] = await q.talk(MRRURR, 'purc');
+      expect(sold).toMatch(/end of the central dock/);
+      expect([q.party.gold, q.flag(0x12c)]).toEqual([50, 1]);
+      // Row across: Execa's crumbling dock, on the island.
+      q.place(dock);
+      await q.go(S);
+      expect(q.tail(1)).toMatch(/crumbling dock in a small, ruined town/);
+      expect([q.townNum, q.at]).toEqual([EXECA, { x: 24, y: 6 }]);
+      // And back from the dock's end (spot 11), half a day's rowing.
+      const age = q.party.age;
+      q.place({ x: 24, y: 6 });
+      await q.go(N);
+      expect(q.tail(1)).toMatch(/row away from the destroyed island/);
+      expect([q.townNum, q.at]).toEqual([GALE, dock]);
+      expect(q.party.age - age).toBe(500);
+      // Over again, and out of Execa's south side onto the island at (314,162).
+      q.place(dock);
+      await q.go(S);
+      for (let k = 0; k < 40 && !q.session.isOutdoors; k++) await q.go(S);
+      expect(q.global, q.tail()).toEqual({ x: 314, y: 162 });
+      expect(q.tail(1)).toMatch(/If you ever want to return to the mainland, go to the end of this dock/);
+      // The island's only way off is the skiff: no dry way from Gale's road,
+      // and a dry way south to the tower (295,271) at its far end.
+      const dry = (t: number) => scen.terTypes[t]!.blockage <= TerObstruct.BLOCK_SIGHT;
+      expect(outdoorPath([311, 152], [314, 163], dry), 'from the mainland').toBe(-1);
+      expect(outdoorPath([314, 162], [295, 271], dry)).toBeGreaterThan(100);
+    });
+
+    it("The undead island: the cairns' Force Barrier and Firestorm, the spire's skeletons, Vila's herbs, and the vampires at the tower", async () => {
+      const q = new QuestRunner(scen);
+      veterans(q);
+      const foes = () => q.town.monsters.filter((m) => m.isAlive && !m.isFriendly).map((m) => m.getName());
+      const fight = async (): Promise<void> => {
+        for (let k = 0; k < 20 && q.session.mode !== GameMode.COMBAT; k++) await q.pause();
+        expect(q.session.mode, q.log.slice(-3).map((l) => l.slice(-60)).join("\n") + q.univ.transcript.slice(-8).join(" / ")).toBe(GameMode.COMBAT);
+      };
+      // Zone 42's cairns (B's "309,225"), in a pocket of the woods entered
+      // from the north-east: the undead wait to be attacked; leave them and
+      // nothing happens.
+      await q.outdoorsAt(310, 224);
+      q.answer('Leave');
+      await q.go(SW);
+      expect(q.tail(1)).toMatch(/watch you cunningly, waiting for you to make the first move/);
+      expect(q.session.mode).toBe(GameMode.OUTDOORS);
+      await q.outdoorsAt(310, 224);
+      q.answer('Attack');
+      await q.go(SW);
+      await fight();
+      expect(foes()).toEqual(expect.arrayContaining(['Wight', 'Spirit', 'Spectre', 'Vampire']));
+      expect(await q.fightOutdoors(), q.tail()).toBe(true);
+      // Laid to rest, the cairns' loot (750 gold and a Scroll: Firestorm) and
+      // the inscription: Force Barrier, for every mage.
+      const gold = q.party.gold;
+      await q.outdoorsAt(310, 224);
+      await q.go(SW);
+      expect(q.log.slice(-2).join('\n'), q.tail()).toMatch(/scroll tube inside[\s\S]*You now know the spell Force Barrier/);
+      expect(q.party.gold - gold).toBe(750);
+      expect(q.hasItem('Scroll: Firestorm')).toBe(true);
+      expect(q.party.pcs.every((pc) => pc.mageSpells[Spell.BARRIER_FORCE])).toBe(true);
+      // The loot once; the inscription every visit.
+      await q.outdoorsAt(310, 224);
+      await q.go(SW);
+      expect(q.tail(1)).toMatch(/You now know the spell Force Barrier/);
+      expect(q.party.gold - gold).toBe(750);
+      expect(q.party.pcs.flatMap((pc) => pc.items).filter((it) => it.variety !== 0 && it.fullName === 'Scroll: Firestorm').length).toBe(1);
+
+      // The spire (spot 2, B's "316,201": bring Resurrection): a crowd of
+      // Ruby Skeletons (how many is rolled), at once, and once.
+      await q.outdoorsAt(315, 201);
+      await q.go(S);
+      expect(q.tail(1)).toMatch(/stone spire.*Their eye stones glow fiercely/);
+      await fight();
+      expect(foes().length).toBeGreaterThanOrEqual(10);
+      expect(new Set(foes())).toEqual(new Set(['Ruby Skeleton']));
+      expect(await q.fightOutdoors()).toBe(true);
+      await q.outdoorsAt(315, 201);
+      await q.go(S);
+      expect(q.session.mode).toBe(GameMode.OUTDOORS);
+
+      // Vila (165, B's "323,187"): shamblers and two basilisks, and Ember
+      // Flowers among its herbs.
+      await q.outdoorsAt(323, 186);
+      await q.go(S);
+      expect(q.townNum, q.tail()).toBe(165);
+      const herbs = q.town.items.filter((it) => /Ember Flowers|Mandrake Root|Comfrey Root|Skribbane/.test(it.fullName));
+      expect(herbs.map((it) => it.fullName).sort()).toEqual(['Comfrey Root', 'Ember Flowers', 'Mandrake Root', 'Skribbane Herb']);
+      expect(herbs.every((it) => q.canReach(q.at, it.itemLoc))).toBe(true);
+      expect(new Set(q.creatures(/./).map((m) => m.getName()))).toEqual(new Set(['Shambler', 'Basilisk']));
+
+      // The vampires before the tower's door (zone 51's spot 1, B's
+      // "296,271"): "the center of the evil affliction".
+      await q.outdoorsAt(300, 271);
+      await q.go(SW);
+      expect(q.tail(1)).toMatch(/center of the evil affliction/);
+      await fight();
+      expect(foes()).toEqual(expect.arrayContaining(['Quickghast', 'Wight', 'Spirit', 'Vampire']));
+      expect(await q.fightOutdoors()).toBe(true);
+      await q.outdoorsAt(300, 271);
+      await q.go(SW);
+      for (let k = 0; k < 5; k++) await q.pause();
+      expect(q.session.mode, 'once').toBe(GameMode.OUTDOORS);
+    });
+
+    it("Tower of Zkal 1: the drain on spell points, the lever, B's way through the false walls and teleporters, and the stairs down", async () => {
+      const q = new QuestRunner(scen);
+      veterans(q);
+      scen.towns[ZKAL]!.canFind = true;
+      await q.outdoorsAt(296, 271);
+      await q.go(W);
+      expect([q.townNum, q.at]).toEqual([ZKAL, { x: 43, y: 24 }]);
+      // Through a door (spot 1, either side of the sign): the mausoleum,
+      // and its warning.
+      expect(await q.go(W, W, W, NW, NW, W)).toEqual([true, true, true, false, true, true]);
+      expect(q.at).toEqual({ x: 38, y: 23 });
+      expect(q.log.slice(-1)[0], q.tail()).toMatch(/dank, shadowy mausoleum.*magical energy slowly leaking out of your minds/);
+      await q.clearHostiles();
+
+      // The drain (E3's per-turn code, `e3SpDrain.ts`): on every fifth turn
+      // each PC loses 5 spell points, or what's left of fewer.
+      for (const pc of q.party.pcs) { pc.maxSp = 100; pc.curSp = 50; }
+      q.party.pcs[1]!.curSp = 5;
+      while (q.party.age % 5 !== 0) q.party.age++;
+      await q.pause(4);
+      expect(q.party.pcs.map((pc) => pc.curSp), 'four turns').toEqual([50, 5, 50, 50, 50, 50]);
+      await q.pause(1);
+      expect(q.party.pcs.map((pc) => pc.curSp), 'the fifth').toEqual([45, 0, 45, 45, 45, 45]);
+      await q.pause(5);
+      expect(q.party.pcs.map((pc) => pc.curSp)).toEqual([40, 0, 40, 40, 40, 40]);
+      // Not outside, where they come back as usual.
+      await q.outdoorsAt(296, 271);
+      await q.pause(10);
+      expect(q.party.pcs[0]!.curSp).toBeGreaterThanOrEqual(40);
+      await q.go(W);
+      await q.go(W, W, W, NW, W);
+      expect(q.at).toEqual({ x: 38, y: 23 });
+
+      // The way runs north up the east wall to the false wall at (41,1) and
+      // the lever (spot 24), which opens the portcullis at (35,1).
+      // (Paths keep off the teleporters: `avoidSpots`.)
+      const way = (from: [number, number], to: [number, number]): number =>
+        q.pathLength({ x: from[0], y: from[1] }, { x: to[0], y: to[1] }, { avoidSpots: true });
+      expect(way([38, 23], [42, 1])).toBeGreaterThan(0);
+      q.place({ x: 42, y: 1 });
+      await q.walk(41, 1);
+      expect(q.at).toEqual({ x: 41, y: 1 });
+      expect(P(q, 35, 1)).toBe(108);
+      await q.walk(40, 1);
+      expect(q.tail(1)).toMatch(/portcullis opening/);
+      expect(P(q, 35, 1)).toBe(109);
+      expect(way([36, 1], [32, 1])).toBe(4);
+
+      // B: "go to 36,3 and west through the fake wall. Go to 25,7 and north
+      // through the fake wall. Go to 3,1 and south through the next fake
+      // wall. After that, take the portal" (spot 19 at (9,10), to (1,45)).
+      const legs: [number, number][] = [[42, 1], [36, 3], [34, 3], [25, 7], [25, 5], [3, 1], [3, 3], [9, 10]];
+      for (let k = 1; k < legs.length; k++) expect(way(legs[k - 1]!, legs[k]!), `${legs[k - 1]} to ${legs[k]}`).toBeGreaterThan(0);
+      for (const [x, y] of [[35, 3], [25, 6], [3, 2]] as const) {
+        expect(scen.terTypes[P(q, x, y)]!.special, `(${x},${y}) a false wall`).toBe(TerSpec.CHANGE_WHEN_STEP_ON);
+      }
+      // There's no way on without it: the stairs (spot 11 at (1,15)) are walled off.
+      expect(way([3, 1], [1, 15])).toBe(-1);
+      q.place({ x: 9, y: 9 });
+      await q.go(S);
+      expect(q.tail(1)).toMatch(/fiery red teleporter/);
+      expect(q.at).toEqual({ x: 1, y: 45 });
+      // B: "kill the enemies there, and dispel the barrier at 9,45."
+      // (From (9,44), where it can be seen.)
+      expect(q.town.hasField(9, 45, FieldType.BARRIER_FIRE)).toBe(true);
+      expect(way([1, 45], [9, 44])).toBeGreaterThan(0);
+      q.place({ x: 9, y: 44 });
+      for (let k = 0; k < 20 && q.town.hasField(9, 45, FieldType.BARRIER_FIRE); k++) await q.spell(Spell.DISPEL_BARRIER, 9, 45);
+      expect(q.town.hasField(9, 45, FieldType.BARRIER_FIRE), q.univ.transcript.slice(-3).join(' / ')).toBe(false);
+      // "Go south, then east through the fake wall, kill more monsters, and
+      // go north through the fake wall at 14,39. Take the portal there"
+      // (spot 22 at (11,38), to (5,22)).
+      const legs2: [number, number][] = [[1, 45], [9, 46], [11, 46], [14, 40], [14, 38], [11, 38]];
+      for (let k = 1; k < legs2.length; k++) expect(way(legs2[k - 1]!, legs2[k]!), `${legs2[k - 1]} to ${legs2[k]}`).toBeGreaterThan(0);
+      for (const [x, y] of [[10, 46], [14, 39]] as const) {
+        expect(scen.terTypes[P(q, x, y)]!.special, `(${x},${y}) a false wall`).toBe(TerSpec.CHANGE_WHEN_STEP_ON);
+      }
+      expect(way([1, 45], [1, 15])).toBe(-1);
+      q.place({ x: 12, y: 38 });
+      await q.go(W);
+      expect(q.at, q.tail()).toEqual({ x: 5, y: 22 });
+      // "Go northwest to 3,17 and north through the fake wall. After that,
+      // follow the path and take the stairs down": level 2, at (13,2).
+      expect(way([5, 22], [3, 17])).toBeGreaterThan(0);
+      expect(scen.terTypes[P(q, 3, 16)]!.special).toBe(TerSpec.CHANGE_WHEN_STEP_ON);
+      expect(way([3, 15], [1, 14])).toBeGreaterThan(0);
+      q.place({ x: 1, y: 14 });
+      await q.go(S);
+      expect(q.log.at(-1)).toMatch(/stairway down/);
+      expect([q.townNum, q.at], q.tail()).toEqual([ZKAL2, { x: 13, y: 2 }]);
+      // And the stairs back up (spot 14, (13,1)) to (1,14).
+      q.place({ x: 13, y: 2 });
+      await q.go(N);
+      expect([q.townNum, q.at], q.tail()).toEqual([ZKAL, { x: 1, y: 14 }]);
+    });
+
+    it('Tower of Zkal 2: the portal, the four teleporters (east, east, south, east), and the closing walls held off with fire barriers', async () => {
+      const q = new QuestRunner(scen);
+      veterans(q);
+      await q.enter(ZKAL2, { x: 13, y: 2 });
+      await q.clearHostiles();
+      const way = (from: [number, number], to: [number, number]): number =>
+        q.pathLength({ x: from[0], y: from[1] }, { x: to[0], y: to[1] }, { avoidSpots: true });
+      // B: "Go southeast to 16,32 and north through the fake cave wall. Take
+      // the portal there" (spot 11 at (12,31)), to the room of four.
+      expect(way([13, 2], [12, 31])).toBeGreaterThan(0);
+      q.place({ x: 12, y: 30 });
+      await q.go(S);
+      expect(q.tail(1)).toMatch(/fiery red teleporter/);
+      expect(q.at).toEqual({ x: 42, y: 43 });
+      // Four teleporters, north (40,38), east (46,40), south (44,46) and west
+      // (38,44), and no way out on foot; a portal back (spot 12, (42,42)).
+      const room: [number, number] = [42, 43];
+      for (const to of [[34, 45], [32, 42], [13, 2]] as [number, number][]) expect(way(room, to), `${to}`).toBe(-1);
+      const pad = { N: [40, 38], E: [46, 40], S: [44, 46], W: [38, 44] } as const;
+      for (const p of Object.values(pad)) expect(way(room, p as unknown as [number, number])).toBeGreaterThan(0);
+      /** Which of the four markers (40,40), (40,44), (44,40), (44,44) is lit. */
+      const lit = () => [[40, 40], [40, 44], [44, 40], [44, 44]].findIndex(([x, y]) => P(q, x!, y!) === 1);
+      const take = async (p: keyof typeof pad): Promise<void> => {
+        const [x, y] = pad[p];
+        q.place({ x: x === 46 ? 45 : x === 38 ? 39 : x, y: y === 38 ? 39 : y === 46 ? 45 : y });
+        await q.step(x, y);
+      };
+      expect(lit()).toBe(0);
+      // A wrong turn first: north from the start goes nowhere new.
+      await take('N');
+      expect(q.tail(1)).toMatch(/in the same place/);
+      expect(lit()).toBe(1);
+      // Re-entering the level puts the maze back (E3's loader, `zkal2Entry`).
+      await q.enter(ZKAL2, { x: 42, y: 43 });
+      expect(lit()).toBe(0);
+      // Walkthrough A: "the eastern one … the eastern one again … the portal
+      // at the south end … back through the portal at the east end. You are
+      // out of the room!" (B: northeast, northeast, southeast, northeast.)
+      await take('E');
+      expect(lit()).toBe(1);
+      await take('E');
+      expect(lit()).toBe(2);
+      await take('S');
+      expect(lit()).toBe(3);
+      await take('E');
+      expect(q.at, q.tail()).toEqual({ x: 34, y: 45 });
+
+      // B: "go northwest to 32,41 (fake wall) and run fast past the
+      // descending walls. Run through the Fire Barriers to 31,36 (fake wall)
+      // and run through to the west." Behind (32,41) is A's "big room",
+      // x 32-37 by y 34-40, whose walls never stop: a row of basalt and a
+      // row of adobe, either side of fire barriers along y 37.
+      expect(way([34, 45], [32, 42])).toBeGreaterThan(0);
+      for (const [x, y] of [[32, 41], [31, 36], [31, 28]] as const) {
+        expect(scen.terTypes[P(q, x, y)]!.special, `(${x},${y})`).toBe(TerSpec.CHANGE_WHEN_STEP_ON);
+      }
+      expect([32, 33, 34, 35, 36, 37].map((x) => [P(q, x, 36), P(q, x, 38)])).toEqual(Array(6).fill([WALL_SOUTH, WALL_NORTH]));
+      expect([32, 33, 34, 35, 36, 37].map((x) => q.town.hasField(x, 37, FieldType.BARRIER_FIRE))).toEqual([true, true, true, true, true, false]);
+      q.place({ x: 32, y: 42 });
+      await q.walk(32, 41);
+      expect(q.at).toEqual({ x: 32, y: 41 });
+      // The lower walls sweep the room's whole width, y 38 to 40, and a search
+      // of the party's moves (`e3Walls.ts`, walking through fire as both
+      // walkthroughs do) finds no way past them.
+      const c = WallSearch.cellOf;
+      const pastWalls = (st: WallState) => st.party === c(31, 36);
+      expect(new WallSearch(q, [], new Map(), { throughFire: true }).search(
+        new WallSearch(q, [], new Map(), { throughFire: true }).start, pastWalls, 60)).toBeNull();
+      // Walkthrough A: "You must use the spell Fire Barrier to cast barriers
+      // to block off the moving walls." One from the doorway, at (32,40)
+      // as soon as it's clear (the cast takes its turn), holds the walls
+      // there off it, and then there is a way.
+      while (P(q, 32, 40) !== WALL_FLOOR) await q.pause();
+      await q.spell(Spell.BARRIER_FIRE, 32, 40);
+      expect(q.town.hasField(32, 40, FieldType.BARRIER_FIRE)).toBe(true);
+      await q.pause();
+      const ws = new WallSearch(q, [], new Map(), { throughFire: true });
+      const run = ws.search(ws.start, pastWalls, 60);
+      expect(run, 'a way past the walls').not.toBeNull();
+      // The same moves through the engine, the walls checked every turn;
+      // the last one walks into the false wall, which opens, and then steps.
+      const wallsOf = (): number[] => {
+        const out: number[] = [];
+        for (let x = 0; x < 48; x++) {
+          for (let y = 0; y < 48; y++) {
+            const t = P(q, x, y);
+            if (t === WALL_NORTH) out.push(c(x, y) * 4 + 1);
+            if (t === WALL_SOUTH) out.push(c(x, y) * 4 + 2);
+          }
+        }
+        return out;
+      };
+      let st = ws.start;
+      for (const [i, [dx, dy]] of run!.moves.entries()) {
+        const from = { ...q.at };
+        if (i === run!.moves.length - 1) { await q.walk(from.x + dx, from.y + dy); break; }
+        st = ws.after(st, dx, dy)!;
+        if (dx === 0 && dy === 0) await q.pause(); else await q.walk(from.x + dx, from.y + dy);
+        expect(q.at, `move ${i} (${dx},${dy}) from ${JSON.stringify(from)}`).toEqual(WallSearch.at(st));
+        expect(wallsOf().join(), `walls after move ${i}`).toBe(st.walls.join());
+      }
+      expect(q.at).toEqual({ x: 31, y: 36 });
+      expect(q.party.pcs.every((pc) => pc.isAlive)).toBe(true);
+
+      /** The passage from (30,27) to (30,46): v and ^ the walls, f a fire barrier, @ the party. */
+      const passage = (): string => Array.from({ length: 20 }, (_, k) => {
+        const y = 27 + k, t = P(q, 30, y);
+        if (q.at.x === 30 && q.at.y === y) return '@';
+        return t === WALL_SOUTH ? 'v' : t === WALL_NORTH ? '^' : q.town.hasField(30, y, FieldType.BARRIER_FIRE) ? 'f' : t === WALL_FLOOR ? '.' : '#';
+      }).join('');
+      // West into the long passage at x 30 (spot 5): the trap A calls
+      // "extremely evil and hard".
+      await q.walk(30, 36);
+      expect(q.log.at(-1)).toMatch(/walls are closing in on you/);
+      expect(q.at).toEqual({ x: 30, y: 36 });
+      expect(P(q, 31, 36), 'the door behind is gone').toBe(100);
+      // Walkthrough A: "Cast a Fire Barrier north of you and step on it.
+      // When the northern wall collides with the barrier and bounces north,
+      // then you should start heading north." (Each cast takes its turn.)
+      const cast = async (x: number, y: number): Promise<void> => {
+        await q.spell(Spell.BARRIER_FIRE, x, y);
+        expect(q.town.hasField(x, y, FieldType.BARRIER_FIRE), q.univ.transcript.slice(-3).join(' / ')).toBe(true);
+        await q.pause();
+      };
+      const turns: string[] = [passage()];
+      await cast(30, 35);
+      turns.push(passage());
+      await q.go(N);
+      turns.push(passage());
+      const alive = () => q.party.pcs.every((pc) => pc.isAlive);
+      // Follow the north wall as it backs off, a square behind it, until it
+      // reaches the passage's end at (30,27).
+      for (let k = 0; k < 40 && P(q, 30, 27) !== WALL_NORTH; k++) {
+        const ahead = P(q, 30, q.at.y - 1);
+        if (q.at.y > 29 && ahead === WALL_FLOOR && P(q, 30, q.at.y - 2) !== WALL_SOUTH) await q.go(N); else await q.pause();
+        turns.push(passage());
+        expect(alive(), turns.join('\n')).toBe(true);
+      }
+      // "When the moving wall reaches the north end of the hallway, place a
+      // fire barrier right next to the door, blocking it from going any
+      // further. Then walk through the door."
+      expect(q.at, turns.join('\n')).toEqual({ x: 30, y: 29 });
+      await cast(30, 28);
+      turns.push(passage());
+      await q.walk(31, 28);
+      expect(q.at, turns.join('\n')).toEqual({ x: 31, y: 28 });
+      expect(alive()).toBe(true);
+      // The walls go on, held at either end.
+      for (let k = 0; k < 10; k++) { await q.pause(); turns.push(passage()); }
+      expect(turns.at(-1)!.slice(0, 2), turns.join('\n')).toMatch(/^[v^]f/);
+    });
+
+    it("Tower of Zkal 2: the lever room's walls, Zkal, his lever, the Ring of Endless Magery in the trapped chests, and the way home", async () => {
+      const q = new QuestRunner(scen);
+      veterans(q);
+      // From the far side of the closing walls' door (31,28).
+      await q.enter(ZKAL2, { x: 32, y: 28 });
+      const zkalsRoom = (m: { curLoc: Location }) => m.curLoc.x >= 30 && m.curLoc.x <= 38 && m.curLoc.y >= 1 && m.curLoc.y <= 9;
+      expect(q.creatures(/Lich/).map((m) => m.curLoc)).toEqual([{ x: 32, y: 3 }]);
+      for (const m of q.town.monsters) if (m.isAlive && !m.isFriendly && !zkalsRoom(m)) killMonst(q.univ, m, 0, undefined, q.session);
+      await q.settle();
+      const way = (from: [number, number], to: [number, number]): number =>
+        q.pathLength({ x: from[0], y: from[1] }, { x: to[0], y: to[1] }, { avoidSpots: true });
+      // A: "take the eastern fork and go through the open portcullis. In this
+      // room with four paths out of it, take the eastern one. Kill the
+      // Hraithes and go north through the door": (37,26), (39,23), and the
+      // doors at (42,11) and (44,11) into the lever room.
+      expect(way([32, 28], [38, 23])).toBeGreaterThan(0);
+      expect(way([38, 23], [42, 12])).toBeGreaterThan(0);
+      for (const x of [42, 44]) expect(scen.terTypes[P(q, x, 11)]!.special).toBe(TerSpec.CHANGE_WHEN_STEP_ON);
+      // Zkal's room is shut: the portcullises at (39,9) and (38,10).
+      expect([P(q, 39, 9), P(q, 38, 10)]).toEqual([108, 108]);
+      expect(way([42, 12], [33, 4])).toBe(-1);
+      q.place({ x: 42, y: 12 });
+      await q.walk(42, 11);
+      await q.walk(42, 10);
+      expect(q.at).toEqual({ x: 42, y: 10 });
+      // Halfway up (spot 6, y 6), walls drop in at both ends.
+      await q.go(N, N, N);
+      await q.go(N);
+      expect(q.log.at(-1)).toMatch(/walls appear to the north and south of you/);
+      expect(q.at).toEqual({ x: 42, y: 6 });
+      // "Start by creating two Fire Barriers--one north of you, one south of
+      // you, to give you some space to work." (Each takes its turn.)
+      for (const y of [5, 7]) {
+        await q.spell(Spell.BARRIER_FIRE, 42, y);
+        expect(q.town.hasField(42, y, FieldType.BARRIER_FIRE), q.univ.transcript.slice(-3).join(' / ')).toBe(true);
+        await q.pause();
+      }
+      expect(q.party.pcs.every((pc) => pc.isAlive)).toBe(true);
+      // "Now, create barriers that will allow you to access, reach, and
+      // return from the lever in the northeast corner. Pull that lever and go
+      // through the newly-opened portcullis in the southwest corner": a
+      // search of the party's moves (`e3Walls.ts`) finds the way to the lever
+      // (spot 17, (46,1)), which opens both portcullises.
+      const c = WallSearch.cellOf;
+      const wallsOf = (): number[] => {
+        const out: number[] = [];
+        for (let x = 0; x < 48; x++) {
+          for (let y = 0; y < 48; y++) {
+            if (P(q, x, y) === WALL_NORTH) out.push(c(x, y) * 4 + 1);
+            if (P(q, x, y) === WALL_SOUTH) out.push(c(x, y) * 4 + 2);
+          }
+        }
+        return out;
+      };
+      const replay = async (ws: WallSearch, moves: [number, number][]): Promise<void> => {
+        let st = ws.start;
+        for (const [i, [dx, dy]] of moves.entries()) {
+          const from = { ...q.at };
+          st = ws.after(st, dx, dy)!;
+          if (dx === 0 && dy === 0) await q.pause(); else await q.walk(from.x + dx, from.y + dy);
+          expect(q.at, `move ${i} (${dx},${dy}) from ${JSON.stringify(from)}\n${q.tail(2)}`).toEqual(WallSearch.at(st));
+          expect(wallsOf().join(), `walls after move ${i}`).toBe(st.walls.join());
+          expect(q.party.pcs.every((pc) => pc.isAlive)).toBe(true);
+        }
+      };
+      const lever = { at: [46, 1] as [number, number], opens: [[39, 9], [38, 10]] as [number, number][] };
+      const ws = new WallSearch(q, [lever], new Map(), { throughFire: true });
+      const toLever = ws.search(ws.start, (st) => (st.levers & 1) === 1, 100);
+      expect(toLever, 'a way to the lever').not.toBeNull();
+      await replay(ws, toLever!.moves);
+      expect(q.log.slice(-2).join('\n'), q.tail()).toMatch(/portcullis opening/);
+      expect([P(q, 39, 9), P(q, 38, 10)]).toEqual([109, 109]);
+
+      // Zkal, "archmage, lich, and lord of the undead", and his two demons.
+      // (The runner's fights are killMonst; his room is cleared here, so its
+      // creatures stay out of the walls' search, which leaves them out.)
+      expect(q.creatures(/./).filter(zkalsRoom).map((m) => m.getName()).sort())
+        .toEqual(['Demon', 'Demon', 'Lich', 'Shambler', 'Shambler', 'Shambler', 'Shambler']);
+      const xp = q.party.pcs.map((pc) => pc.experience);
+      await q.kill(/Lich/);
+      expect(q.tail(1)).toMatch(/deal the death blow to Zkal.*At least you can get Zkal's treasure now/);
+      expect(q.party.pcs.every((pc, i) => pc.experience > xp[i]!)).toBe(true);
+      expect(q.flag(0x353)).toBe(1);
+      await q.clearHostiles();
+      // Out of the lever room by the portcullis at (39,9), the walls still going.
+      const ws2 = new WallSearch(q, [], new Map(), { throughFire: true });
+      const out = ws2.search(ws2.start, (st) => WallSearch.at(st).x <= 38 && WallSearch.at(st).y <= 9, 100);
+      expect(out, 'a way into his room').not.toBeNull();
+      await replay(ws2, out!.moves);
+
+      // "Walk around the chasm to where Zkal's throne was. Pull the lever you
+      // see" (spot 15, (30,1)): the chamber's portcullis at (35,23).
+      expect(way([q.at.x, q.at.y], [31, 1])).toBeGreaterThan(0);
+      expect(P(q, 35, 23)).toBe(108);
+      q.place({ x: 31, y: 1 });
+      await q.walk(30, 1);
+      expect(q.tail(1)).toMatch(/portcullis opening/);
+      expect(P(q, 35, 23)).toBe(109);
+      // "Go through the southern portcullis and walk south through the
+      // laboratory. In the four portcullis room, go through the newly-opened
+      // western portcullis": (38,10), the laboratory, its doorway at (37,20)
+      // (a room description), and (35,23).
+      expect(way([30, 2], [38, 11])).toBeGreaterThan(0);
+      expect(way([38, 11], [37, 19])).toBeGreaterThan(0);
+      q.place({ x: 37, y: 19 });
+      await q.go(S);
+      expect(q.tail(1)).toMatch(/Zkal's laboratory/);
+      expect(way([37, 20], [33, 23])).toBeGreaterThan(0);
+      // "Search all of the treasure chests": four, each trapped. (The loot
+      // to a mage: E3's fighters are too magically inept to use the ring.)
+      const who = q.party.pcs.findIndex((p) => p.skills[Skill.MAGE_SPELLS]! > 0);
+      const taken: string[] = [];
+      for (const [x, y] of [[30, 21], [34, 21], [30, 25], [34, 25]] as const) {
+        q.place({ x: x === 30 ? 31 : 33, y: y === 21 ? 22 : 24 });
+        const found = (await q.session.adjTownLook({ x, y })) ?? [];
+        await q.settle();
+        for (const it of found) q.session.takeItem(it, who);
+        taken.push(...found.map((it) => it.fullName));
+      }
+      expect(q.log.filter((l) => /likely to have a trap of some sort/.test(l)).length, q.tail()).toBe(4);
+      // B's list: "Bronze Ring, Bronze Serpent Ring (3), Ring of Weight, Ring
+      // of Endless Magery (40)". E3 names it the Ring of Magery.
+      expect(taken.sort()).toEqual(['Bronze Ring', 'Bronze Serpent Ring', 'Gold Weight Ring', 'Ring of Magery']);
+      const pc = q.party.pcs[who]!;
+      const slot = pc.items.findIndex((it) => it.variety !== 0 && it.fullName === 'Ring of Magery');
+      const ring = pc.items[slot]!;
+      expect([ring.name, ring.ident, ring.charges, ring.itemLevel]).toEqual(['Ring', false, 40, 2]);
+      // "restores 45 MP each time", 40 times: E3's use code 20, 15 a level
+      // and 15 (on a turn the tower doesn't take 5 of them back).
+      pc.maxSp = 100;
+      pc.curSp = 0;
+      while ((q.party.age + 1) % 5 === 0) q.party.age++;
+      await useItem(q.session, who, slot, q.session.host ?? undefined);
+      await q.settle();
+      expect(pc.curSp, q.univ.transcript.slice(-2).join(' / ')).toBe(45);
+      expect(ring.charges).toBe(39);
+
+      // The way home (both walkthroughs reach for the editor): back past
+      // the laboratory to the room east of the closing walls, and the
+      // portal at (32,32) (spot 16) to (12,30), by the stairs' side.
+      expect(way([33, 23], [32, 31])).toBeGreaterThan(0);
+      q.place({ x: 32, y: 31 });
+      await q.go(S);
+      expect(q.at, q.tail()).toEqual({ x: 12, y: 30 });
+      expect(way([12, 30], [13, 2])).toBeGreaterThan(0);
+    });
+  });
+
   describe('the endgame', () => {
     const said = (q: QuestRunner, from: number): string[] => q.univ.transcript.slice(from);
     /** Look at a blocked square, step on an open one: how a spot is set off. */

@@ -133,6 +133,12 @@ const E3_ITEM_TOWNS: [number, number][] = [[partySpecItem(0x2c), 78]];
 const E3_BOOSTED_GUARDS = [91, 92];
 
 /**
+ * The towns that drain spell points, the `sp-drain` flag's list: the Tower
+ * of Zkal's two levels (`10c0:7128`, `e3SpDrain.ts`).
+ */
+const E3_SP_DRAIN = [70, 71];
+
+/**
  * The towns E3 enters with the dungeon sound (95) however they are lit:
  * `start_town_mode`'s list (`10d8:0526`–`05d1`). 200 is on it though no town
  * has that number.
@@ -794,6 +800,7 @@ function scenarioXml(
         <uranium>exile3:${uranium}</uranium>
         <item-towns>exile3:${E3_ITEM_TOWNS.map(([i, t]) => `${i}>${t}`).join(',')}</item-towns>
         <moving-walls>exile3:${crushed}:54,71</moving-walls>
+        <sp-drain>exile3:${E3_SP_DRAIN.join(',')}</sp-drain>
         <trap>exile3</trap>
         <alchemy>exile3</alchemy>
         <balm>exile3</balm>

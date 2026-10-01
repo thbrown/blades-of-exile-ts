@@ -870,6 +870,22 @@ same while nothing takes the key, but E3's is a rule of the turn, so it is
 one here. The converter writes the one pair E3 has, `16>78`. Like E3, it
 never hides the town again. OBoE ignores the flag.
 
+### 38. Towns that drain spell points (2026-10-01)
+
+**DECIDED: a scenario flag, `sp-drain` = `exile3:<towns>`, read by
+`e3SpDrainTick` (`src/game/e3SpDrain.ts`) after the moving walls, at the end
+of every turn and every combat round.** Exile III's per-turn code
+(`FUN_10c0_61c4`, `10c0:7100`) drains the Tower of Zkal, towns 70 and 71:
+in town or in a fight there, on a turn whose age is a multiple of 5, each of
+the six PCs loses 5 spell points, or all that are left if 5 or fewer. The
+tower's first message says so ("You feel the magical energy slowly leaking
+out of your minds"), and both walkthroughs pack energy potions for it; the
+port printed the warning and drained nothing. BoE has no node for "every
+fifth turn, while here" (a town timer could fire the AFFECT_SP, but the rule
+is E3's clock, `age % 5`, not the time since entry), so it is a rule of the
+turn, as #35 and #37 are. The converter writes `70,71`. OBoE ignores the
+flag.
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

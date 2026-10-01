@@ -55,8 +55,13 @@ export class WallSearch {
   /** Which crates the party may push; the rest are left where they are. */
   pushable: (x: number, y: number) => boolean = () => true;
 
+  /**
+   * `throughFire`: the party may walk through fire barriers (and stand on
+   * one, as Exile III's walkthroughs do in the Tower of Zkal), which still
+   * stop the walls; it takes the burns.
+   */
   constructor(q: QuestRunner, private readonly levers: Lever[] = [],
-    private readonly teleports: Map<number, number> = new Map()) {
+    private readonly teleports: Map<number, number> = new Map(), opts: { throughFire?: boolean } = {}) {
     const town = q.town;
     const crates: number[] = [];
     const walls: number[] = [];
@@ -79,7 +84,7 @@ export class WallSearch {
         if (t === 86 || info.boatOver) this.sink[c] = 1;
         if (town.hasField(x, y, FieldType.OBJECT_CRATE)) crates.push(c);
         for (const f of [FieldType.BARRIER_FIRE, FieldType.BARRIER_FORCE, FieldType.FIELD_QUICKFIRE, FieldType.FIELD_WEB, FieldType.OBJECT_BARREL]) {
-          if (town.hasField(x, y, f)) { this.stuck[c] = 1; this.solid[c] = 1; }
+          if (town.hasField(x, y, f)) { this.stuck[c] = 1; if (!(opts.throughFire && f === FieldType.BARRIER_FIRE)) this.solid[c] = 1; }
         }
       }
     }
