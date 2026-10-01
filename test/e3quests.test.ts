@@ -22,6 +22,7 @@ import { e3Event } from '../tools/e3convert/flags';
 import { SLIME_POOLS } from '../tools/e3convert/towns/slimePit';
 import { QuestRunner, loadExile3 } from './support/e3Quest';
 import { WallSearch, type WallState } from './support/e3Walls';
+import { searchBelts, walkBelts, type BeltGoal, type BeltMove } from './support/e3Belts';
 import { WALL_FLOOR, WALL_NORTH, WALL_SOUTH, moveE3Walls } from '../src/game/e3MovingWalls';
 import { E3Abil, e3SpecDam } from '../src/game/e3Items';
 import { TerSpec } from '../src/data/terrain';
@@ -1583,5 +1584,101 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       await q.talk(31, 'earn');
       expect(q.party.pcs.some((pc) => pc.mageSpells[0x36] && pc.mageSpells[0x39]), q.tail()).toBe(true);
     });
+
+    /**
+     * The tower's belt mazes, walked. Each route is a list of moves (0–7 the
+     * eight directions from north clockwise, 8 standing still) that
+     * `searchBelts` (`support/e3Belts.ts`) found with the engine as its model,
+     * leg by leg from where the last one ended; here a fresh party walks them.
+     * `E3_BELT_SEARCH=1` searches them again (a few minutes).
+     */
+    const ROUTES = {
+      L1: [5,5,5,5,7,7,6,5,7,6,6,5,7,6,7,7,7,0,0,0,0,0,0,7,7,7,0,0,0,0,0,0,0,0,0,0,0,1,7,0,0,0,7,7,6,6,6,6,6,6,6,5,5,5,5,6,7,7,6,7,0,0,7,7,6,6,6,7,6,5,4,5,7,0],
+      lever: [2,3,4,5,5,5,4,4,4,4,4,4,4,4,4,4,2,2,2,2,2,3,3,4,4,4,4,4,4,4,4,4,4,4,2,3,2,2,1,0,0,0,0,1,1,1,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,1,7,6,7,0,0,0,0,0,1,0],
+      circle: [4,4,4,5,3,4,5,3,2,1,0,0,0,0,7,6,6,7,7,7,0,6,6,6,0,7,6,6,6,6,6,6,6,7,0,0,0,0,0,2,2,2,3,4,3,3,3,5,5,5],
+      panel: [4,4,6,6,6,6,6,6,4,5,6,6,0,0,0,0,0,0,0,2,2,1,0,0,0,0,6,6,6,5,4,4,4,6,6,6,5,4,4,4,4,4,4,4,4,4,2,2,2,2,2,3,3,4,4,4,4,4,4,4,4,4,4,4,2,3,2,2,1,0,0,0,0,1,1,1,3,3,3,2,2,2,2,2,2,2,2,2,2,2,2,3,4,4,4,6,7,7,7],
+      library: [3,3,5,5,5,6,6,0,0,0,0,0,2,2,1,0,0,0,0,0,0,0,6,7,7,0,6,6,6,0,7,6,6,6,6,8,6,6,6,6,6,6,4,5,6,6,0,0,0,0,0,0,0,2,2,1,0,0,0,0,6,6,6,5,4,4,4,6,6,6,5,4,4,4,4,4,4,4,4,4,3,3,5,4,4,4,5,4,4,4,4,3,3],
+      stairs: [3,2,1,3,1,0,2,2,2,2,2,2,2,1,0,0,0,0,1,1,1,3,3,3,2,2,2,2,2,2,2,2,2,2,0,0,0,0,0,0,0,0,6,7,7,0,6,6,6,0,7,6,6,6,6,8,6,6,6,0,0,0,0,0,0,2,2,2,1,0,0,0,0,0,0],
+      L3: [5,5,5,6,6,6,5,4,4,4,5,5,5,5,5,5,4,4,4,4,4,4,4,4,4,4,4,4,4,3,2,2,2,2,2,1,0,6,6,7,0,1,1,1,1,1,1,1,2,1,1],
+    } as Record<string, BeltMove[]>;
+    const near = (x: number, y: number) => (l: { x: number; y: number }) => Math.max(Math.abs(l.x - x), Math.abs(l.y - y)) <= 1;
+    /** Level 1 as the route expects it: the generators broken and the golems gone. */
+    const level1 = async (q: QuestRunner): Promise<void> => {
+      for (const g of GENERATORS) q.party.setSdf(...g.flag, 1);
+      await q.enter(32, { x: 59, y: 31 });
+      await q.clearHostiles();
+    };
+    /** Level 3 with the four spires down, its golems dead, and a party hardy enough for the lava. */
+    const level3 = async (q: QuestRunner): Promise<void> => {
+      for (const pc of q.party.pcs) { pc.level = 30; pc.maxHealth = 600; pc.curHealth = 600; }
+      for (const o of [0x713, 0x71d, 0x727, 0x731]) q.setFlag(o, 1);
+      await q.enter(60, { x: 24, y: 5 });
+      await q.kill(/Golem/);
+    };
+    /** Level 2's legs, each with what the party does at its end. */
+    const level2Legs = (q: QuestRunner): [string, BeltGoal, () => Promise<void>][] => [
+      ['lever', { at: near(57, 35) }, async () => { const s = { ...q.at }; await q.step(57, 35); q.place(s); }],
+      ['circle', { at: (l) => l.x === 32 && l.y === 21 }, async () => {}],
+      ['panel', { at: near(52, 50) }, async () => { const s = { ...q.at }; q.number(5, 7, 0); await q.step(52, 50); q.place(s); }],
+      ['library', { at: near(6, 54) }, async () => { await touch(q, ...spot(33, 23)); await touch(q, ...spot(33, 24)); }],
+      ['stairs', { town: 60 }, async () => {}],
+    ];
+
+    it("The tower's belt mazes, walked: level 1 to the stairs, level 2's lever, control room, library and stairs, and level 3 to the Mind Crystal", async () => {
+      // Level 1: from the east door, through the belts to the stairs at (2,2).
+      const one = new QuestRunner(scen);
+      await level1(one);
+      await walkBelts(one, ROUTES['L1']!);
+      expect(one.townNum, one.tail()).toBe(33);
+
+      // Level 2, from where those stairs arrive.
+      const q = new QuestRunner(scen);
+      for (const pc of q.party.pcs) pc.level = 5;
+      await q.enter(33, { x: 5, y: 5 });
+      await q.clearHostiles();
+      const belt = q.town.record.terrain[59]![48];
+      for (const [name, , after] of level2Legs(q)) {
+        await walkBelts(q, ROUTES[name]!);
+        if (name !== 'stairs') await after();
+        if (name === 'lever') expect(q.town.record.terrain[59]![48], 'the lever').not.toBe(belt);
+        if (name === 'panel') expect([q.flag(0x4c3), q.flag(0x4c4)], 'Alpha and Beta').toEqual([1, 1]);
+        if (name === 'library') expect(q.party.pcs.some((pc) => pc.priestSpells[Spell.DIVINE_THUD - 100]), q.tail()).toBe(true);
+      }
+      expect(q.townNum, q.tail()).toBe(60);
+
+      // Level 3: the gate, the belts and the lava, to beside the crystal.
+      const three = new QuestRunner(scen);
+      await level3(three);
+      const crystal = three.creatures(/Crystal/)[0]!;
+      await walkBelts(three, ROUTES['L3']!);
+      expect(crystal.isAlive).toBe(true);
+      expect(near(crystal.curLoc.x, crystal.curLoc.y)(three.at), JSON.stringify(three.at)).toBe(true);
+    });
+
+    it.runIf(process.env['E3_BELT_SEARCH'])('The belt mazes searched again (E3_BELT_SEARCH=1)', async () => {
+      const found: Record<string, BeltMove[] | null> = {};
+      const one = new QuestRunner(scen);
+      await level1(one);
+      found['L1'] = await searchBelts(one, one.at, { town: 33 });
+      const q = new QuestRunner(scen);
+      for (const pc of q.party.pcs) pc.level = 5;
+      await q.enter(33, { x: 5, y: 5 });
+      await q.clearHostiles();
+      for (const [name, goal, after] of level2Legs(q)) {
+        const start = { ...q.at };
+        const route = await searchBelts(q, start, goal);
+        found[name] = route;
+        if (!route) break;
+        q.place(start);
+        await walkBelts(q, route);
+        await after();
+      }
+      const three = new QuestRunner(scen);
+      await level3(three);
+      const crystal = three.creatures(/Crystal/)[0]!;
+      found['L3'] = await searchBelts(three, three.at, { at: near(crystal.curLoc.x, crystal.curLoc.y) });
+      console.log(JSON.stringify(found));
+      for (const [name, route] of Object.entries(found)) expect(route, name).not.toBeNull();
+    }, 1800000);
   });
 });

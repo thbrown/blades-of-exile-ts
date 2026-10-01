@@ -15192,14 +15192,25 @@ one quest at a time**, to keep each session's context small.
     `useSpecItem(k)`. `spell` casts at the caster's own level now (Dispel
     Barrier rolls against it).
   - `verify-e3.mjs` flies the orb over the aerie's peaks by the arrow keys.
+  - **The belt mazes, walked** (added the same day): level 1 from the east
+    door to the stairs (74 moves); level 2 from the stairs to the lever,
+    round, to the control room (Alpha and Beta), the library and the
+    stairs up; level 3 from the stairs through the gate, the belts and the
+    lava to beside the Mind Crystal (51). `test/support/e3Belts.ts`
+    (`searchBelts`) finds each route with the engine as its model: from
+    every square reached it takes the eight steps and a pause through the
+    real game, putting the level's terrain and flags back after each
+    trial, so a route is one a fresh party can walk; a door gets its
+    second step, and golems that turn up are fought off. The test replays
+    the recorded routes (1.4 s); `E3_BELT_SEARCH=1` searches again (two to
+    six minutes) and prints them.
   - *Not covered*: Tevrono itself (General Baziron, whom walkthrough A
-    skips), the level 1 belt maze to the stairs and level 3's (their paths
-    are only `canReach`), the stone circles, and the province maps.
+    skips), the stone circles, and the province maps.
 - [ ] **Next: the endgame's alien beasts** (walkthrough A's "Endgame",
   B's "Time for the Cleaning Lady!" and on).
 - [ ] Then the five artifact quests.
 
-All checks pass (2026-09-30): 1,529 tests, tsc, both sweeps, verify-screen,
+All checks pass (2026-09-30): 1,530 tests, tsc, both sweeps, verify-screen,
 verify-party and verify-e3.
 
 **Gotchas from the golems (2026-09-30):**
@@ -15214,6 +15225,12 @@ verify-party and verify-e3.
   `nedis.py --all` dump finds writes to a town's flags.
 - `nedis.py --str SEG:OFF` prints a code segment's string; a message
   string in E3's Use code lives in the same segment as the code.
+- A belt search must not let its trials change the level: spot 18 on
+  level 2 turns a belt round for good, and a route found after a trial
+  had tripped it failed for a fresh party. `searchBelts` restores the
+  terrain and flags after every trial; a change a route needs is a leg.
+- The tower's level 3 lava does 80-odd a step: the routes assume a
+  late-game party (the test gives 600 health), as the walkthroughs do.
 
 **Gotchas from the giants and troglodytes (2026-09-30):**
 - A second `QuestRunner` built mid-test resets the shared scenario's towns
