@@ -909,6 +909,10 @@ showing of E3's (`src/game/e3Movie.ts`) differs from E3's own:
 - **Its dice are its own** (a separate `GameRng`), not the game stream E3's
   `get_ran` draws on. A player can't tell; the replay corpus would.
 - **Escape skips it as well as a click**, and on touch the overlay's Skip.
+- **The opening pictures lead into it**: E3 shows the Spiderweb logo and
+  the adventurers once, at launch, before the title screen, and can't skip
+  them. Here they come right before the movie, on a new game, and each
+  skip moves on one scene.
 - Two guesses where E3's code doesn't say: the window background is the
   game's pattern (E3's `FUN_1058_1695` reads its pattern from a stack slot
   its caller never set), and animated terrain steps once a frame (E3's

@@ -148,6 +148,13 @@ const E3_DUNGEON_SOUND = '22-23,25-33,35-38,44-47,50-79,86,200';
 /** The game's string tables E3 has lines for (`strings/NAME.txt`). */
 export const E3_STRING_OVERRIDES = ['help'];
 
+/**
+ * E3's opening pictures, which the engine has no sheet for: the Spiderweb
+ * logo and the adventurers on the mountain (`1050:0257` and `:04b9`), shown
+ * before the intro movie (`src/render/e3MovieScreen.ts`).
+ */
+export const E3_PICTURES: readonly [string, string][] = [['e3logo', 'SPIDLOGO.BMP'], ['e3start', 'START.BMP']];
+
 /** The game sheets E3 replaces with its own: engine name → E3 file. */
 export const E3_SHEET_OVERRIDES: readonly [string, string][] = [
   ['dlogpics', 'DLOGPICS.BMP'], ['talkportraits', 'TALKPORT.BMP'],
@@ -1214,6 +1221,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   // engine keeps BoE's beyond them (`installSheetOverrides`).
   for (const [name, bmp] of E3_SHEET_OVERRIDES) write(`graphics/${name}.png`, encodePng(decodeBmp(read(bmp))));
   write('graphics/pixpats.png', encodePng(buildE3Patterns(read)));
+  for (const [name, bmp] of E3_PICTURES) write(`graphics/${name}.png`, encodePng(decodeBmp(read(bmp))));
   for (const [name, img] of e3Panels(read)) write(`graphics/${name}.png`, encodePng(img));
   write('graphics/textbar.png', encodePng(decodeBmp(read('TEXTBAR.BMP'))));
   // E3's instant help, string block 10 (3000 + n), which its `give_help`

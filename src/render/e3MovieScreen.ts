@@ -12,6 +12,12 @@
  * over its window: the background, the picture in the middle (30 pixels above
  * centre, as there), and "Click mouse to continue." in the bottom right. A
  * click or Escape skips it, and the touch overlay has a Skip button.
+ *
+ * **The opening comes first**: the two pictures E3 shows as it starts
+ * (`1050:010b`), on black — the Spiderweb Software logo with sound 95 for 3
+ * seconds, then the adventurers on the mountain (START.BMP) with sound 22 for
+ * 5. E3 shows them once, when the program starts, and can't skip them; here
+ * they lead into the movie, and a skip moves on to the next scene.
  */
 
 import type { ModalScreen, TouchView } from '../dialogs/dialog';
@@ -62,6 +68,25 @@ function canvas(w: number, h: number): CanvasRenderingContext2D {
   return ctx;
 }
 
+/**
+ * The opening pictures (`1050:010b`): where on its sheet (`src`), and where on
+ * the black window, from its width and height. The logo sits 10 pixels above
+ * centre; the title picture is START.BMP less its black bands top and bottom
+ * (`DS:1496`), placed at `(W - 639) / 2, (H - 486) / 2 + 46`.
+ */
+const OPENING = {
+  logo: {
+    sheet: 'e3logo', sound: 95, ms: 3000, src: { left: 0, top: 0, right: 350, bottom: 350 },
+    at: (w: number, h: number) => ({ x: Math.floor((w - 350) / 2), y: Math.floor((h - 350) / 2) - 10 }),
+  },
+  start: {
+    sheet: 'e3start', sound: 22, ms: 5000, src: { left: 2, top: 48, right: 641, bottom: 434 },
+    at: (w: number, h: number) => ({ x: Math.floor((w - 639) / 2), y: Math.floor((h - 486) / 2) + 46 }),
+  },
+} as const;
+
+type Scene = keyof typeof OPENING | 'movie';
+
 export class E3MovieScreen implements ModalScreen, MovieGfx {
   /** For the scripts that drive the UI, to know the movie from a dialog. */
   readonly kind = 'e3-movie';
@@ -69,6 +94,10 @@ export class E3MovieScreen implements ModalScreen, MovieGfx {
   private readonly shown = canvas(TER_SCRN.w, TER_SCRN.h);
   private readonly movie: E3Movie;
   private skipped = false;
+  /** A skip asked for during an opening picture: the next wait ends it. */
+  private sceneSkipped = false;
+  /** Which is showing; public for the UI scripts. */
+  scene: Scene = 'logo';
   private readonly waiting = new Set<() => void>();
   private repaintQueued = false;
 
@@ -83,13 +112,41 @@ export class E3MovieScreen implements ModalScreen, MovieGfx {
     this.shown.fillRect(0, 0, TER_SCRN.w, TER_SCRN.h);
   }
 
-  /** Play the movie; resolves when it ends or is skipped. */
+  /** Play the opening and the movie; resolves when it ends or is skipped. */
   async play(): Promise<void> {
     try {
+      for (const scene of ['logo', 'start'] as const) await this.opening(scene);
+      this.scene = 'movie';
+      this.queueRepaint();
       await this.movie.play();
     } catch (e) {
       if (!(e instanceof MovieSkipped)) throw e;
     }
+  }
+
+  /** One opening picture, for its time or until skipped. Missing, it is left out. */
+  private async opening(scene: keyof typeof OPENING): Promise<void> {
+    const o = OPENING[scene];
+    if (!this.store.get(o.sheet)) return;
+    this.scene = scene;
+    this.sceneSkipped = false;
+    this.queueRepaint();
+    this.sound(o.sound);
+    try {
+      await this.wait(o.ms);
+    } catch (e) {
+      // A skip of this picture goes on to the next; a skip of everything doesn't.
+      if (!(e instanceof MovieSkipped) || this.skipped) throw e;
+    }
+  }
+
+  /** Escape, a click or Skip: past an opening picture, or out of the movie. */
+  private skipScene(): string | null {
+    if (this.scene === 'movie') return 'skip';
+    this.sceneSkipped = true;
+    for (const stop of this.waiting) stop();
+    this.waiting.clear();
+    return null;
   }
 
   /** Stop wherever it is: every wait, now and later, throws `MovieSkipped`. */
@@ -103,6 +160,10 @@ export class E3MovieScreen implements ModalScreen, MovieGfx {
 
   wait(ms: number): Promise<void> {
     if (this.skipped) return Promise.reject(new MovieSkipped());
+    if (this.sceneSkipped && this.scene !== 'movie') {
+      this.sceneSkipped = false;
+      return Promise.reject(new MovieSkipped());
+    }
     return new Promise<void>((resolve, reject) => {
       const stop = (): void => {
         clearTimeout(timer);
@@ -286,6 +347,18 @@ export class E3MovieScreen implements ModalScreen, MovieGfx {
     const { ctx } = this;
     ctx.save();
     ctx.imageSmoothingEnabled = false;
+    if (this.scene !== 'movie') {
+      const o = OPENING[this.scene];
+      ctx.fillStyle = Colours.BLACK;
+      ctx.fillRect(0, 0, desktop.w, desktop.h);
+      const img = this.store.get(o.sheet);
+      const at = o.at(desktop.w, desktop.h);
+      const w = o.src.right - o.src.left;
+      const h = o.src.bottom - o.src.top;
+      if (img) ctx.drawImage(img, o.src.left, o.src.top, w, h, at.x, at.y, w, h);
+      ctx.restore();
+      return;
+    }
     this.host.background(ctx, { left: 0, top: 0, right: desktop.w, bottom: desktop.h });
     const o = this.origin();
     ctx.drawImage(this.shown.canvas, o.x, o.y);
@@ -296,11 +369,11 @@ export class E3MovieScreen implements ModalScreen, MovieGfx {
   }
 
   onClick(): string | null {
-    return 'skip';
+    return this.skipScene();
   }
 
   onKey(key: string): string | null {
-    return key === 'Escape' ? 'skip' : null;
+    return key === 'Escape' ? this.skipScene() : null;
   }
 
   touchView(): TouchView {
@@ -308,6 +381,6 @@ export class E3MovieScreen implements ModalScreen, MovieGfx {
   }
 
   touchPress(name: string): string | null {
-    return name === 'skip' ? 'skip' : null;
+    return name === 'skip' ? this.skipScene() : null;
   }
 }

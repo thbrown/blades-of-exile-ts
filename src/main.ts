@@ -62,7 +62,7 @@ import { fitCanvasToPage } from './platform/pageLayout';
 import { startMapWindow } from './platform/mapWindow';
 import { installDebugPanel } from './platform/debugPanel';
 import {
-  EXILE3_CARD, EXILE3_ID, EXILE3_SHEET_OVERRIDES, EXILE3_STRING_OVERRIDES, exile3Served, prepareExile3,
+  EXILE3_CARD, EXILE3_ID, EXILE3_PICTURES, EXILE3_SHEET_OVERRIDES, EXILE3_STRING_OVERRIDES, exile3Served, prepareExile3,
 } from './platform/exile3';
 import { WorldMapFeed } from './render/worldMap';
 import { GAME_SPEED_PACE, PREFERENCES_DIALOG_DEFS, preferencesDialog } from './dialogs/preferencesDialog';
@@ -617,7 +617,7 @@ async function main(): Promise<void> {
   if (!isBundled) await installSheetOverrides(store, packageOverrides);
   else if (name === EXILE3_ID) {
     const src = new FetchSource(bundledUrl);
-    await installSheetOverrides(store, new Map(await Promise.all(EXILE3_SHEET_OVERRIDES.map(
+    await installSheetOverrides(store, new Map(await Promise.all([...EXILE3_SHEET_OVERRIDES, ...EXILE3_PICTURES].map(
       async (n) => [n, await src.getBinary(`graphics/${n}.png`)] as [string, Uint8Array]))));
   }
 

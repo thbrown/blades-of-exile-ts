@@ -45,6 +45,13 @@ export const EXILE3_SHEET_OVERRIDES = [
 ];
 
 /**
+ * Pictures of its own a converted Exile III ships that the game has no sheet
+ * for — its opening logo and title picture. Must match tools/e3convert's
+ * `E3_PICTURES`; `installSheetOverrides` adds them to the store as they are.
+ */
+export const EXILE3_PICTURES = ['e3logo', 'e3start'];
+
+/**
  * The game's string tables a converted Exile III has lines for
  * (`strings/NAME.txt`, `overrideStrings`): its instant help, E3's string
  * block 10. Must match tools/e3convert's `E3_STRING_OVERRIDES`.

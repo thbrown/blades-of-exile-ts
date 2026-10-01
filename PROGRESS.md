@@ -15831,6 +15831,18 @@ belong to `3148`, `0x1079`–`0x1db2` (the ending and credits) to `1dcb`,
 - **Movie 1 loops** at frame 518 (`08bd(1)` again) until a click. The port
   plays it once (DIVERGENCES.md #40).
 
+**The opening pictures before it** (2026-10-01): E3's launch
+(`1050:010b`) blacks the window and shows SPIDLOGO.BMP, the Spiderweb
+Software logo (350 × 350, 10 px above centre), with sound 95, holds it 3 s
+(`GetTickCount` against `0xbb8`), then START.BMP, the adventurers on the
+mountain, cropped to `DS:1496` (2,48)–(641,434) and placed at
+`((W − 639) / 2, (H − 486) / 2 + 46)`, with sound 22 for 5 s (`0x1388`), then
+black and the title screen. The converter writes them as
+`graphics/e3logo.png` and `graphics/e3start.png` (`E3_PICTURES`;
+`EXILE3_PICTURES` on the browser side), and `installSheetOverrides` now adds a
+picture the game has no sheet for as it is. `E3MovieScreen` plays them before
+the movie; Escape, a click or Skip moves on one scene at a time.
+
 **Left out**: movies 0 and 2, since the port has neither E3's title screen
 nor its ending yet (`TODO(E3-movies)` in `e3Movie.ts`). E3 plays the intro
 *before* party creation; here a party is made on the startup screen, so the

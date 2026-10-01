@@ -375,7 +375,8 @@ quest steps.
 - **The port:** about three and a half minutes from the first line to
   "Good luck.", on the background pattern, the picture centred 30 pixels up.
 - **Question:** how long does it take? What is behind the picture? Do the
-  captions look like the port's?
+  captions look like the port's? And at launch: are the logo (3 s) and the
+  adventurers (5 s) on black, the logo a little above centre?
 
 ## Waiting on a ruling (already written up elsewhere)
 

@@ -483,15 +483,26 @@ if ((await page.evaluate(() => document.querySelector('.startup-party')?.innerTe
 await page.click('.startup-card[data-id="exile3"]');
 const movieUp = await page.waitForFunction(() => window.__dialogs?.active?.kind === 'e3-movie', null, { timeout: 60000 })
   .then(() => true, () => false);
+// The opening first: the Spiderweb logo, then the adventurers, each skipped
+// on its own by Escape.
+const scenes = [];
+for (const name of ['09a-logo', '09b-start']) {
+  await page.waitForTimeout(1000);
+  scenes.push(await page.evaluate(() => window.__dialogs?.active?.scene ?? null));
+  await shot(name);
+  await page.keyboard.press('Escape');
+}
 await page.waitForTimeout(5000);
+scenes.push(await page.evaluate(() => window.__dialogs?.active?.scene ?? null));
 await shot('09-movie');
+if (scenes.join() !== 'logo,start,movie') errors.push(`the opening's scenes were ${scenes.join()}`);
 await page.keyboard.press('Escape');
 await page.waitForTimeout(800);
 const afterMovie = await page.evaluate(() => ({
   open: window.__dialogs?.active?.kind ?? (window.__dialogs?.active ? 'a dialog' : null),
   townNum: window.__session?.univ.party.townNum,
 }));
-console.log('MOVIE:', JSON.stringify({ movieUp, afterMovie }));
+console.log('MOVIE:', JSON.stringify({ movieUp, scenes, afterMovie }));
 await shot('10-after-movie');
 if (!movieUp || afterMovie.open !== null || afterMovie.townNum !== 21) {
   errors.push(`the intro movie did not play and skip into Fort Emergence: ${JSON.stringify({ movieUp, afterMovie })}`);
