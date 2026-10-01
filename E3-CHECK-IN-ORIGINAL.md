@@ -244,6 +244,23 @@ quest steps.
   keeps it open; noted in `towns/rentarKeep.ts`).
 - **Question:** does the panel stay up, and does anything else happen?
 
+### 20. The Lair of Drakos's shifting floor (2026-09-30)
+
+- **Where:** the Lair of Drakos, level 1 (the island east of Kneece): the
+  floor of pillars at x 19–25, y 26–28, with the squares that shift it
+  along y 29 and the two that reset it at (21,30) and (23,30).
+- **Do:** from (21,30), walkthrough A's moves: northwest, west, east, west,
+  east four times, west, east, then north.
+- **Why:** E3's code (`1088:3651` on) shifts row 28 left, row 27 right and
+  row 26 left. Read that way, A's moves leave the gaps at x 22, 20 and 22,
+  and the last north is blocked; turning every row the other way would make
+  them line up at x 23. The port follows the code.
+- **The port:** A's moves don't get through. Northwest, east, east, east,
+  west, east, west, east, east, west, then north, northwest, northeast and
+  north does, and comes out at (23,25), beside walkthrough B's (22,25).
+- **Question:** do A's moves open the way north? If they do, which way
+  does each row move as you step along y 29?
+
 ## Waiting on a ruling (already written up elsewhere)
 
 - **DIVERGENCES.md #30 and #31**, marked "open for the user".

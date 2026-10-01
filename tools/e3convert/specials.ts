@@ -133,6 +133,16 @@ export type TimerScript = (b: SpecBuilder) => { freq: number; steps: Step[] }[];
 /** Blocked terrains a town spot still runs on (water, and three walls). */
 const WALK_INTO = new Set([71, 101, 118, 133]);
 
+/**
+ * The three walls of `WALK_INTO` are doors: the town move code's terrain
+ * table (`10c0:186a`) turns 101 into 102 (`10c0:14df`), 118 into 119 and 133
+ * into 134 as the party walks into them. The table is reached only after
+ * the square's spots have run and said yes (`10c0:124d`), so a message on a
+ * secret door shows and the door still opens. Sixteen town spots sit on one,
+ * eleven of them messages, and none of the five scripts says no.
+ */
+const DOOR_OPENS = new Map([[101, 102], [118, 119], [133, 134]]);
+
 export function e3TownMessageBlock(t: number): number {
   if (t < 20) return Math.floor((t - (t % 4)) / 5) + 52;
   if (t < 40) return Math.floor(t / 5) + 52;
@@ -190,6 +200,18 @@ export function e3SpotScript(
     // The rest of 50–59 are markers, which do nothing when stepped on.
     if (s.id >= 50 && s.id < 60) return;
     let n: number;
+    const shut = terrainAt(s.loc.x, s.loc.y);
+    const opens = isTown ? DOOR_OPENS.get(shut) : undefined;
+    /**
+     * The door under the spot opens and the step is refused (the
+     * `WALK_INTO` node below); once it's open, the party walks on, as E3's
+     * would with the spot still there. Both come before the steps, which E3
+     * runs first: a one-shot message already shown ends the chain, and the
+     * door must still open behind it (E3 has erased the spot by then).
+     */
+    const thenOpen = (steps: Step[]): Step[] => (opens === undefined ? steps : [b.ifTer(s.loc.x, s.loc.y, shut,
+      [b.setTer(s.loc.x, s.loc.y, opens), ...steps],
+      [(next) => b.node('block-move', { ex1: [0], ex2: [0] }, next), ...steps])]);
     if (s.id < 100) {
       const steps = scripts.get(s.id);
       if (!steps) {
@@ -198,11 +220,16 @@ export function e3SpotScript(
       }
       // A spot below 10 whose flag is 20, the value E3's one-shot helpers
       // leave, is dead: the town dispatcher skips it (`FUN_10c0_0000`), and
-      // outdoors it is moved off the map (`exile3.c` near line 67048).
+      // outdoors it is moved off the map (`exile3.c` near line 67048). It
+      // answers yes, so a door under it still opens.
       const flag = isTown ? townSpotFlag(place.town, s.id) : zoneSpotFlag(place.zone, s.id);
       const guarded: Step[] = s.id < 10 ? [b.ifFlagEq(flag, 20, [], steps)] : steps;
-      n = compiled.get(s.id) ?? b.compile(guarded);
-      compiled.set(s.id, n);
+      // A door's node names its own square, so it isn't shared.
+      if (opens !== undefined) n = b.compile(thenOpen(guarded));
+      else {
+        n = compiled.get(s.id) ?? b.compile(guarded);
+        compiled.set(s.id, n);
+      }
     } else {
       const msg: [number, number] = s.id >= 200
         ? [b.e3(block, s.id - 200), b.e3(block, s.id - 199)]
@@ -211,13 +238,13 @@ export function e3SpotScript(
       // with their dialog picture 8.
       const pic = src.dialogPic?.(MSG_PIC);
       const once = e3SpotFlag(place, k);
-      n = terrainAt(s.loc.x, s.loc.y) >= repeatsFrom
-        ? b.node('disp-msg', { msg, pic }, -1)
+      n = b.compile(thenOpen(terrainAt(s.loc.x, s.loc.y) >= repeatsFrom
+        ? [(next) => b.node('disp-msg', { msg, pic }, next)]
         // Once, unless room descriptions repeat — and then only while the
         // spot is still there (a one-shot node leaves its flag at 250).
-        : b.compile([b.ifFlagEq(ROOM_DESCRIPTIONS, 0,
+        : [b.ifFlagEq(ROOM_DESCRIPTIONS, 0,
           [(next) => b.node('once-disp-msg', { sdf: once, msg, pic }, next)],
-          [b.ifFlagEq(once, 250, [], [(next) => b.node('disp-msg', { msg, pic }, next)])])]);
+          [b.ifFlagEq(once, 250, [], [(next) => b.node('disp-msg', { msg, pic }, next)])])]));
     }
     // E3 runs a town spot only on a square the party could stand on, or on
     // one of four blocked terrains — water and three walls — which it runs

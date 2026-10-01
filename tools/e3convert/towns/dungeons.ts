@@ -759,10 +759,12 @@ function drakosLair(b: SpecBuilder): Map<number, Step[]> {
 function drakosLair2(b: SpecBuilder): Map<number, Step[]> {
   const B = 63, spot = (id: number) => townSpotFlag(75, id);
   return new Map<number, Step[]>([
-    // Drakos's illusions fall away (creatures of kinds 58–69 go) and the
-    // real guards come.
+    // Drakos's illusions fall away (creatures of kinds 58–69 go), the real
+    // guards come, and "your location has suddenly changed": the party is
+    // put down at (14,11), in the lava pool between the two drake lords
+    // (`1088:39d6`, every PC's square in combat, the party's otherwise).
     [1, [b.dialog(0xea6), ...Array.from({ length: 12 }, (_, k) => b.removeCreatures(58 + k)),
-      b.bringIn(200, 1), b.setFlag(spot(1), 20), b.blockMove()]],
+      b.bringIn(200, 1), b.setFlag(spot(1), 20), b.moveParty(0xe, 0xb), b.blockMove()]],
     [2, []], [4, []],
     [3, [b.onceMsg(spot(3), B, 0x21)]],
     [11, [b.askDialog(0xd7f, [b.changeTown(0x4a, 0x1b, 0x1a)]), b.blockMove()]],

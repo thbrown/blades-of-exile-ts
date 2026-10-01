@@ -38,11 +38,11 @@ export interface BeltGoal {
  * it, and a route found is one a fresh party can walk. A change the route
  * needs is a leg of its own.
  */
-async function take(q: QuestRunner, town: number, from: Location, move: BeltMove): Promise<{ town: number; at: Location }> {
+async function take(q: QuestRunner, town: number, from: Location, move: BeltMove, foes: RegExp): Promise<{ town: number; at: Location }> {
   const terrain = q.town.record.terrain.map((col) => [...col]);
   const flags = q.party.stuffDone.map((row) => row.slice());
   try {
-    return await trial(q, town, from, move);
+    return await trial(q, town, from, move, foes);
   } finally {
     if (q.session.inTown && q.townNum === town) {
       terrain.forEach((col, x) => col.forEach((t, y) => { q.town.record.terrain[x]![y] = t; }));
@@ -51,10 +51,10 @@ async function take(q: QuestRunner, town: number, from: Location, move: BeltMove
   }
 }
 
-async function trial(q: QuestRunner, town: number, from: Location, move: BeltMove): Promise<{ town: number; at: Location }> {
+async function trial(q: QuestRunner, town: number, from: Location, move: BeltMove, foes: RegExp): Promise<{ town: number; at: Location }> {
   for (const pc of q.party.pcs) { pc.mainStatus = MainStatus.ALIVE; pc.curHealth = pc.maxHealth; }
   q.place(from);
-  await stepOnce(q, move);
+  await stepOnce(q, move, foes);
   const result = { town: q.session.inTown ? q.townNum : -1, at: { ...q.at } };
   if (result.town !== town) await q.enter(town, from);
   return result;
@@ -63,11 +63,12 @@ async function trial(q: QuestRunner, town: number, from: Location, move: BeltMov
 /**
  * One move as a player makes it: a door (or a false wall) opens as it's
  * walked into and the party stays put, so it gets a second step, as
- * `QuestRunner.walk` does; and anything hostile that turns up (spot 2 on
- * level 2 brings golems in; golems are all the tower has) is fought off before the next move, and the
+ * `QuestRunner.walk` does; and anything hostile that turns up and matches
+ * `foes` (spot 2 on level 2 brings golems in; golems are all the tower
+ * has) is fought off before the next move, and the
  * party is put back on its feet, as the search's trials are.
  */
-async function stepOnce(q: QuestRunner, move: BeltMove): Promise<void> {
+async function stepOnce(q: QuestRunner, move: BeltMove, foes: RegExp): Promise<void> {
   const town = q.townNum;
   const from = { ...q.at };
   if (move === Direction.Here) await q.pause();
@@ -78,8 +79,9 @@ async function stepOnce(q: QuestRunner, move: BeltMove): Promise<void> {
     await q.go(move);
     if (q.session.inTown && q.townNum === town && q.at.x === from.x && q.at.y === from.y && ter() !== before) await q.go(move);
   }
-  // The tower's attackers are all golems; the Mind Crystal is left for the test.
-  if (q.session.inTown && q.town.monsters.some((m) => m.isAlive && !m.isFriendly && /Golem/.test(m.getName()))) await q.kill(/Golem/);
+  // The tower's attackers are all golems (the default); the Mind Crystal is
+  // left for the test.
+  if (q.session.inTown && q.town.monsters.some((m) => m.isAlive && !m.isFriendly && foes.test(m.getName()))) await q.kill(foes);
   // What the fight left the party with, as a party that won it would have
   // shaken off: golems hit hard, and put it to sleep and paralyse it.
   for (const pc of q.party.pcs) {
@@ -94,7 +96,7 @@ async function stepOnce(q: QuestRunner, move: BeltMove): Promise<void> {
  * The shortest list of moves from `start` to `goal` in the runner's town, or
  * null. The runner is left in the town, wherever the last trial put it.
  */
-export async function searchBelts(q: QuestRunner, start: Location, goal: BeltGoal, limit = 6000): Promise<BeltMove[] | null> {
+export async function searchBelts(q: QuestRunner, start: Location, goal: BeltGoal, limit = 6000, foes = /Golem/): Promise<BeltMove[] | null> {
   const town = q.townNum;
   const key = (l: Location) => `${l.x},${l.y}`;
   const back = new Map<string, { from: string; move: BeltMove } | null>([[key(start), null]]);
@@ -108,7 +110,7 @@ export async function searchBelts(q: QuestRunner, start: Location, goal: BeltGoa
   while (queue.length && back.size < limit) {
     const from = queue.shift()!;
     for (const move of BELT_MOVES) {
-      const to = await take(q, town, from, move);
+      const to = await take(q, town, from, move, foes);
       if (goal.town !== undefined && to.town === goal.town) return path(key(from), move);
       if (to.town !== town) continue;
       const k = key(to.at);
@@ -121,7 +123,10 @@ export async function searchBelts(q: QuestRunner, start: Location, goal: BeltGoa
   return null;
 }
 
-/** Take `moves` from where the party stands, as a player would (`stepOnce`). */
-export async function walkBelts(q: QuestRunner, moves: BeltMove[]): Promise<void> {
-  for (const move of moves) await stepOnce(q, move);
+/**
+ * Take `moves` from where the party stands, as a player would (`stepOnce`),
+ * fighting off whatever matches `foes` as it turns up.
+ */
+export async function walkBelts(q: QuestRunner, moves: BeltMove[], foes = /Golem/): Promise<void> {
+  for (const move of moves) await stepOnce(q, move, foes);
 }

@@ -24,7 +24,9 @@ import { QuestRunner, loadExile3 } from './support/e3Quest';
 import { WallSearch, type WallState } from './support/e3Walls';
 import { searchBelts, walkBelts, type BeltGoal, type BeltMove } from './support/e3Belts';
 import { WALL_FLOOR, WALL_NORTH, WALL_SOUTH, moveE3Walls } from '../src/game/e3MovingWalls';
-import { E3Abil, e3SpecDam } from '../src/game/e3Items';
+import { E3Abil, e3DamageResist, e3SpecDam } from '../src/game/e3Items';
+import { DamageType } from '../src/data/monster';
+import { ELECTRUM_KEY } from '../tools/e3convert/towns/gale';
 import { TerObstruct, TerSpec } from '../src/data/terrain';
 import { SpecType } from '../src/data/special';
 import { Direction } from '../src/core/location';
@@ -87,6 +89,11 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       await q.spell(Spell.MOVE_MOUNTAINS, 36, 39);
       expect(q.univ.transcript.slice(said)).toEqual(['  Target spell.', '  You blast the area.']);
       expect(q.town.record.terrain[36]![39]).toBe(101);
+      // Walked into, it opens under its message (spot 113), as E3's move
+      // code opens a secret door after the square's spot (`10c0:14df`).
+      await q.step(36, 39);
+      expect(q.town.record.terrain[36]![39], q.tail()).toBe(102);
+      expect(q.log.at(-1), 'its message').toMatch(/^\[msg/);
 
       // Before the shade speaks, the pillar and the anvil hold nothing.
       const [px, py] = spot(125, 1), [ax, ay] = spot(125, 2);
@@ -1680,6 +1687,247 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       await level3(three);
       const crystal = three.creatures(/Crystal/)[0]!;
       found['L3'] = await searchBelts(three, three.at, { at: near(crystal.curLoc.x, crystal.curLoc.y) });
+      console.log(JSON.stringify(found));
+      for (const [name, route] of Object.entries(found)) expect(route, name).not.toBeNull();
+    }, 1800000);
+  });
+
+  describe("Pachtar's Plate", () => {
+    /**
+     * Gale's library tells where Pachtar died, and the Lair of Drakos (towns
+     * 74 and 75), on the island east of Kneece, holds his body. Walkthrough
+     * A's "Pachtar's Plate" and B's "Pachtar's Plate Armoire".
+     */
+    it("Gale: Pasi's way in, the herb seller's electrum key, the library door, and its four books", async () => {
+      const q = new QuestRunner(scen);
+      // In from the road to the north: outside the walls, the gates shut.
+      await q.outdoorsAt(311, 153);
+      await q.go(Direction.S);
+      expect(q.townNum).toBe(16);
+      const herb = q.creatures(/Herb Seller/)[0]!.curLoc;
+      expect(q.canReach(q.at, herb), 'the walls').toBe(false);
+      expect(q.canReach(q.at, q.creatures(/Pasi/)[0]!.curLoc)).toBe(true);
+
+      // Pasi lets nobody in who hasn't done something for the fort.
+      const [no] = await q.talk(/Pasi/, 'assi');
+      expect(q.flag(0x136), no).toBe(0);
+      await q.step(55, 8);
+      expect(q.at, q.tail()).not.toEqual({ x: 52, y: 14 });
+      // The slimes beaten (0xc85), he points to the trees, and his tunnel
+      // at (55,8) comes up inside the walls.
+      q.setFlag(0xc85, 1);
+      const [yes] = await q.talk(/Pasi/, 'assi');
+      expect(q.flag(0x136), yes).toBe(1);
+      await q.step(55, 8);
+      expect(q.at, q.tail()).toEqual({ x: 52, y: 14 });
+      expect(q.canReach(q.at, herb)).toBe(true);
+
+      // The herb seller's "ownership": the librarian's key, for 1000 gold.
+      q.party.gold = 500;
+      await q.talk(/Herb Seller/, 'libr', 'owne');
+      expect(q.hasSpecItem(ELECTRUM_KEY), q.tail()).toBe(false);
+      q.party.gold = 1500;
+      await q.talk(/Herb Seller/, 'owne');
+      expect(q.hasSpecItem(ELECTRUM_KEY), q.tail()).toBe(true);
+      expect(q.party.gold).toBe(500);
+
+      // The library: through the false wall at (28,54) from the ramparts,
+      // and its door at (27,51), which only the key opens (spot 11, beside it).
+      const inside = { x: 52, y: 14 };
+      expect(q.canReach(inside, { x: 28, y: 55 }), 'the ramparts').toBe(true);
+      expect(q.town.record.terrain[28]![54]).toBe(101);
+      expect(q.canReach({ x: 28, y: 55 }, { x: 28, y: 52 })).toBe(true);
+      expect(q.town.record.terrain[27]![51]).toBe(0x6a);
+      const key = q.party.specItems;
+      key.delete(ELECTRUM_KEY);
+      await q.step(28, 52);
+      expect(q.town.record.terrain[27]![51], 'no key').toBe(0x6a);
+      key.add(ELECTRUM_KEY);
+      await q.step(28, 52);
+      expect(q.town.record.terrain[27]![51], q.tail()).toBe(0x67);
+
+      // Its four books want a party of some experience: 17 levels between
+      // them for Pachtar's (spot 23), which puts the Lair of Drakos on the map.
+      const [bx, by] = spot(16, 23);
+      for (const pc of q.party.pcs) pc.level = 2;
+      await q.look(bx, by);
+      expect(scen.towns[74]!.canFind, 'twelve levels').toBe(false);
+      for (const pc of q.party.pcs) pc.level = 3;
+      await q.look(bx, by);
+      expect(scen.towns[74]!.canFind, q.tail()).toBe(true);
+      // The others: Killer Poison (spot 20), Antimagic Cloud (21) and Mass Paralysis (22).
+      for (const id of [20, 21, 22]) await q.look(...spot(16, id));
+      expect(q.party.alchemy[13], q.tail()).toBe(true);
+      expect(q.party.pcs.some((pc) => pc.mageSpells[0x33]), 'Antimagic Cloud').toBe(true);
+      expect(q.party.pcs.some((pc) => pc.mageSpells[0x38]), 'Mass Paralysis').toBe(true);
+    });
+
+    /** Walkthrough A's moves on the shifting floor, from (21,30). */
+    const A_PILLARS: BeltMove[] = [Direction.NW, Direction.W, Direction.E, Direction.W,
+      Direction.E, Direction.E, Direction.E, Direction.E, Direction.W, Direction.E];
+    /**
+     * Moves from (21,30) that open the floor, as E3's code turns it (spot 14
+     * row 28 left, 15 row 27 right, 16 row 26 left: `1088:3651` on); then
+     * north through the gaps to (23,25), by the false wall walkthrough B
+     * names at (22,25).
+     */
+    const PILLARS: BeltMove[] = [Direction.NW, Direction.E, Direction.E, Direction.E, Direction.W,
+      Direction.E, Direction.W, Direction.E, Direction.E, Direction.W];
+    const THROUGH: BeltMove[] = [Direction.N, Direction.NW, Direction.NE, Direction.N];
+    /** The rows of the shifting floor, y 26–28, x 19–25: '.' open, '#' a pillar. */
+    const floor = (q: QuestRunner): string[] => [26, 27, 28].map((y) =>
+      Array.from({ length: 7 }, (_, i) => (q.town.record.terrain[19 + i]![y] === 0x96 ? '.' : '#')).join(''));
+    /** A late-game party (the walkthroughs' advice), outside the Lair's west side, the lair on the map. */
+    const lair = async (q: QuestRunner): Promise<void> => {
+      for (const pc of q.party.pcs) { pc.level = 30; pc.maxHealth = 600; pc.curHealth = 600; }
+      scen.towns[74]!.canFind = true;
+      await q.outdoorsAt(122, 312);
+    };
+    const at = (x: number, y: number) => (l: { x: number; y: number }) => l.x === x && l.y === y;
+    const near = (x: number, y: number) => (l: { x: number; y: number }) =>
+      Math.max(Math.abs(l.x - x), Math.abs(l.y - y)) <= 1 && !(l.x === x && l.y === y);
+    /** Fights off nothing: the drake lords are the test's. */
+    const NOBODY = /(?!)/;
+    /**
+     * The Lair's legs, each found by `searchBelts` with the engine as its
+     * model (`E3_BELT_SEARCH=1` searches again): level 1 from the west
+     * door through the false wall at (10,42) to the lever at (37,29), and
+     * from it to the shifting floor's (21,30); from the secret door at
+     * (22,24) to the stairs; level 2 from the stairs to Drakos's ambush
+     * (spot 1), from the lava there to Pachtar's body at (7,1), and back to
+     * the stairs; and level 1 from them out.
+     */
+    const LAIR_LEGS: [string, BeltGoal][] = [
+      ['lever', { at: at(37, 29) }], ['pillars', { at: at(21, 30) }], ['stairs', { town: 75 }],
+      ['ambush', { at: at(14, 11) }], ['body', { at: near(7, 1) }], ['up', { town: 74 }], ['out', { town: -1 }],
+    ];
+    const LAIR_ROUTES = {
+      lever: [4,3,5,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,3,2,2,2,2,1,0,0,1,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,0,0,1,1,0,0,1,1,1,1,1,2,2,2,2,3,3,3,3,3,3,2,3,4,4,3,4,5,5,3,3,5,5,3,2,2,1,0],
+      pillars: [4,5,5,5,5,5,7,7,5,5,6,6,7,7,7,7,7],
+      stairs: [1,2,2,2,1,3,3,4,4,5,7,0],
+      ambush: [4,4,3,3,5,5,4,4,3,5,3,4,4,5,4,3,4,4,3,4,5,4,3,3,4,4,4,4,5,5,5,5,5,5,5,5,7,5,4,5,5,5,6,5,7,6,7,5,5,5,6,6,6,6,6,5,5,6,6,6,6,7,6,6,7,6,6,6,7,7,7,0,0,0,0,7,1,1,1,1,3,2,2,2,3,2,1,1,0,0,0,0,0,0,0,0,0],
+      body: [5,5,7,7,7,6,7,6,7,7,0,0,0,1,1],
+      up: [4,5,5,4,4,3,2,3,3,4,3,3,3,3,3,3,3,3,3,5,5,4,3,3,5,4,4,5,4,4,5,5,5,5,7,6,5,5,6,6,7,6,5,3,3,4,5,4,3,2,2,2,2,3,3,3,2,1,1,1,2,2,1,3,3,2,2,2,1,1,1,3,3,2,2,2,2,1,1,1,0,1,1,1,3,1,0,1,7,0,0,0,0,1,0,1,1,0,0,0,0,0,0,7,0,0,0,0,0,1,7,0,0,0,0,1,7,0,0,0],
+      out: [3,1,0,0,0,0,0,7,0],
+    } as Record<string, BeltMove[]>;
+
+    it('The Lair of Drakos, hidden until Pachtar\'s book is read, and walkthrough A\'s floor moves', async () => {
+      const q = new QuestRunner(scen);
+      await q.outdoorsAt(122, 312);
+      expect(scen.towns[74]!.canFind).toBe(false);
+      await q.go(Direction.E);
+      expect(q.session.isOutdoors, 'not on the map').toBe(true);
+      await lair(q);
+      await q.go(Direction.E);
+      expect([q.townNum, q.at]).toEqual([74, { x: 4, y: 24 }]);
+
+      // Walkthrough A's floor moves leave the gaps at x 22, 20 and 22, and
+      // north is shut (E3-CHECK-IN-ORIGINAL.md asks whether they work there).
+      await q.enter(74, { x: 21, y: 30 });
+      await q.clearHostiles();
+      expect(floor(q)).toEqual(['.######', '######.', '.######']);
+      await walkBelts(q, A_PILLARS, NOBODY);
+      expect(floor(q)).toEqual(['###.###', '#.#####', '###.###']);
+      expect(await q.go(Direction.N)).toEqual([false]);
+      // Stepping off onto (23,30) puts the floor back (spot 17).
+      await q.go(Direction.S);
+      expect(floor(q)).toEqual(['.######', '######.', '.######']);
+    });
+
+    it("The Lair of Drakos, walked: the lever, the shifting floor, Drakos's ambush, Pachtar's body and the plate, and out", async () => {
+      const q = new QuestRunner(scen);
+      await lair(q);
+      await q.go(Direction.E);
+      const walk = async (name: string, foes = /./): Promise<string[]> => {
+        const trail: string[] = [];
+        for (const m of LAIR_ROUTES[name]!) { await walkBelts(q, [m], foes); trail.push(`${q.at.x},${q.at.y}`); }
+        return trail;
+      };
+
+      // Level 1. The false wall at (10,42) is on the way to the lever.
+      expect(await walk('lever'), 'the false wall').toContain('10,42');
+      // The lever opens the pillars at (30,31) and (30,33), west of it.
+      expect([q.town.record.terrain[30]![31], q.town.record.terrain[30]![33]], q.tail()).toEqual([0x96, 0x96]);
+      await walk('pillars');
+      expect(q.at).toEqual({ x: 21, y: 30 });
+      await walkBelts(q, PILLARS);
+      expect(floor(q)).toEqual(['####.##', '###.###', '####.##']);
+      await walkBelts(q, THROUGH);
+      expect(q.at).toEqual({ x: 23, y: 25 });
+      // The secret door at (22,24) has a message spot on it: the message,
+      // and the door opens (102); the next step goes through.
+      expect(q.town.record.terrain[22]![24]).toBe(101);
+      const said = q.log.length;
+      await q.go(Direction.NW);
+      expect(q.at).toEqual({ x: 23, y: 25 });
+      expect(q.town.record.terrain[22]![24]).toBe(102);
+      expect(q.log.slice(said).join('\n')).toMatch(/narrow ledge/);
+      await q.go(Direction.NW);
+      expect(q.at).toEqual({ x: 22, y: 24 });
+      await walk('stairs');
+      expect([q.townNum, q.at], q.tail()).toEqual([75, { x: 42, y: 2 }]);
+
+      // Level 2: the cavern of the fumarole, and "your location has
+      // suddenly changed": the lava at (14,11), between the two drake lords.
+      const ambush = LAIR_ROUTES['ambush']!;
+      await walkBelts(q, ambush.slice(0, -1));
+      await walkBelts(q, ambush.slice(-1), NOBODY);
+      expect(q.at, q.tail()).toEqual({ x: 14, y: 11 });
+      expect(q.log.at(-1)).toMatch(/Drakos, queen of drakes/);
+      const lords = q.creatures(/Drake Lord/);
+      expect(lords.length).toBe(2);
+      expect(lords.some((m) => m.curLoc.x > 14 && m.curLoc.y < 11), 'northeast').toBe(true);
+      expect(lords.some((m) => m.curLoc.x < 14 && m.curLoc.y > 11), 'southwest').toBe(true);
+      await q.kill(/Drake Lord/);
+
+      // West, and north over the lava at (4,6) and (4,7) (the walkthroughs cast Firewalk).
+      const trail = await walk('body');
+      expect(trail.filter((p) => ['3,6', '4,6', '3,7', '4,7'].includes(p)).length, trail.join(' ')).toBeGreaterThan(0);
+      // The body is searched: "Nice Plate" until it's identified.
+      const found = await q.session.adjTownLook({ x: 7, y: 1 });
+      const plate = found?.find((it) => it.fullName === "Pachtar's Plate");
+      expect(plate, q.tail()).toBeDefined();
+      expect([plate!.name, plate!.ident]).toEqual(['Nice Plate', false]);
+      expect(found!.map((it) => it.name)).toEqual(expect.arrayContaining(['Broadsword', 'Gauntlets', 'Shield']));
+      q.session.takeItem(plate!, 0);
+      const pc = q.party.pcs[0]!;
+      const k = pc.items.findIndex((it) => it.fullName === "Pachtar's Plate");
+      expect(k).toBeGreaterThanOrEqual(0);
+      q.session.toggleEquip(0, k);
+      expect(pc.equip[k]).toBe(true);
+      // E3's Resistance (127): fire, poison, magic and cold halved.
+      expect(pc.items[k]!.e3Ability).toBe(E3Abil.RESISTANCE);
+      expect(e3DamageResist(pc, DamageType.FIRE, 30)).toBe(15);
+      expect(e3DamageResist(pc, DamageType.WEAPON, 30)).toBe(30);
+
+      // Back up the stairs, and out of the lair by the portal at (28,20)
+      // (spot 9), which comes out by the north door at (43,4).
+      await walk('up');
+      expect(q.townNum, q.tail()).toBe(74);
+      expect(await walk('out'), q.tail()).toContain('43,4');
+      expect(q.session.isOutdoors, q.tail()).toBe(true);
+    });
+
+    it.runIf(process.env['E3_BELT_SEARCH'])("The Lair of Drakos searched again (E3_BELT_SEARCH=1)", async () => {
+      const q = new QuestRunner(scen);
+      await lair(q);
+      await q.go(Direction.E);
+      const found: Record<string, BeltMove[] | null> = {};
+      for (const [name, goal] of LAIR_LEGS) {
+        const start = { ...q.at };
+        const route = await searchBelts(q, start, goal, 6000, /./);
+        found[name] = route;
+        console.log(name, JSON.stringify(route));
+        if (!route) break;
+        q.place(start);
+        await walkBelts(q, route);
+        if (name === 'pillars') {
+          await walkBelts(q, [...PILLARS, ...THROUGH]);
+          await q.go(Direction.NW);
+          await q.go(Direction.NW);
+        }
+        if (name === 'ambush') await q.kill(/Drake Lord/);
+      }
       console.log(JSON.stringify(found));
       for (const [name, route] of Object.entries(found)) expect(route, name).not.toBeNull();
     }, 1800000);

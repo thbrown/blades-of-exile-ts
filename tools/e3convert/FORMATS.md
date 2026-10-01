@@ -74,6 +74,9 @@ E3 keeps its terrain types in code and data, not in a file:
   - Picking (`FUN_10d8_3f67`, cases at `10d8:4182`) works only on `base+3`,
     succeeding when the roll is over 35, and adds 3.
   - Terrains 7, 10, 13 and 16 (blockage 1) are walk-through cave walls.
+  - The table is reached only after the square's spots have run and said
+    yes (`10c0:124d`), so a message spot on a secret door still lets it
+    open (`specials.ts`, `DOOR_OPENS`).
 - **New game**: `FUN_1010_6b20` calls `start_town_mode(21, 9)`, which puts the
   party in Fort Emergence at the location held in `DS:05f0`, i.e. (59, 6).
   `start_town_mode` is `FUN_10d8_0107`. A direction below 9 means

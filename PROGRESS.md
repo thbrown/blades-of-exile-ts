@@ -14999,12 +14999,10 @@ one quest at a time**, to keep each session's context small.
     (spell 108): a dozen town-and-square cases (the Agate Tower at (12,19),
     flag 0x253, among them), and "Nothing happens." otherwise. **Ported
     2026-09-30** with the giants and troglodytes (`towns/sanctify.ts`).
-  - **Open question:** the shade's room also has a secret door at (36,39)
-    (terrain 101, step-change), but the message spot on it (113) comes out
-    as a `block-move` chain by the converter's `WALK_INTO` rule, which
-    refuses the step, so the door never flips. Whether E3 opens a secret
-    door under a message spot hasn't been checked in its move code
-    (`1010:807c` on). Move Mountains gets in either way.
+  - **Answered 2026-09-30** (with Pachtar's Plate): the shade's room's
+    secret door at (36,39) has a message spot on it (113), and the
+    converter's `WALK_INTO` rule refused the step, so the door never
+    opened. E3 opens it: see Pachtar's Plate below.
 - [x] **The roaches** (2026-09-30), seven tests: the mission and the
   map (Bernathy's "mission"; the spiders' guard "spider" and chief
   "friendly"; zone 55's spot 1 at (9,9), Attack, the fight won, 0xa83 to
@@ -15283,12 +15281,72 @@ one quest at a time**, to keep each session's context small.
   - *Not covered*: the fights (the runner kills), Rentar-Ihrno's quarters'
     rings, the chests behind the Crystal Souls' hall, Petrie's and Howar's
     shops in Blackcrag, and the stone circles before the Great Circle.
-- [ ] **Next: the five artifact quests** (Pachtar's Plate, the Fury
-  Crossbow, the Black Halberd, the Knowledge Brew, the Ring of Endless
-  Magery), one per session.
+- [x] **Pachtar's Plate** (2026-09-30), three tests (and a search behind
+  `E3_BELT_SEARCH`) in `describe("Pachtar's Plate")`, walkthrough A's
+  "Pachtar's Plate" and B's "Pachtar's Plate Armoire":
+  - Gale (town 16): in from the road, outside the walls; Pasi's "assi"
+    refused until the fort has been helped (0xc85), then 0x136 and his
+    tunnel at (55,8) up to (52,14) inside; the herb seller's "libr" and
+    "owne" (the electrum key, special item 19, 1000 gold, refused at 500);
+    the false wall at (28,54) from the ramparts and the library door at
+    (27,51), which only the key opens (spot 11); the four books, each
+    wanting enough levels between the PCs (17 for Pachtar's, refused at
+    12), which put the Lair of Drakos (74) on the map and teach Killer
+    Poison, Antimagic Cloud and Mass Paralysis.
+  - The Lair of Drakos, hidden until then: the entrance at (123,312) does
+    nothing, then lets the party in at (4,24). Walked (`LAIR_ROUTES`,
+    found by `searchBelts`; `E3_BELT_SEARCH=1` searches again, about 12 s):
+    the false wall at (10,42), the fire barrier walked through, the lever
+    at (37,29) opening the pillars at (30,31) and (30,33), the shifting
+    floor from (21,30) (`PILLARS`), the secret door at (22,24), the stairs;
+    level 2's fumarole cavern, Drakos's ambush, the lava at (14,11) between
+    the two drake lords, west and north over the lava at (4,6–7), the body
+    at (7,1) searched (the Nice Plate, the broadsword, gauntlets and
+    shield), the plate taken, equipped and halving fire (E3's Resistance,
+    127); back up the stairs and out by the portal at (28,20).
+  - Walkthrough A's floor moves don't get through under E3's code as the
+    converter reads it (their gaps end at x 22, 20 and 22; reversing every
+    row would line them up at 23). The test shows they don't; check-in
+    question 20 asks whether they do in the original.
+  - **Found and fixed: a message spot on a secret door kept it shut.** E3's
+    town move code (`FUN_10c0_0c97`) runs the square's spots and then, if
+    they said yes (`10c0:124d`), its terrain table (`10c0:186a`), which
+    opens 101, 118 and 133 (`10c0:14df`). The converter's `WALK_INTO`
+    `block-move` refused the step and the door never opened. Now a spot on
+    one of the three opens the door and refuses the step, and once it's
+    open lets the party through (`specials.ts`, `DOOR_OPENS`). Sixteen town
+    spots sit on such a door, eleven of them messages (Krizsan, Gale, the
+    fort, the Tower of Magi, the Giant's Forge, Hawke's Manse, Colchis,
+    Marish, Dellston, Dorngas and the lair). The Colchis test now walks
+    through its door.
+  - **Found and fixed: Drakos's ambush didn't move the party.** Spot 1 on
+    level 2 says "your location has suddenly changed", and E3 puts the
+    party at (14,11) (`1088:39d6`); the converter left it where it was,
+    and the step's refusal sealed the cavern's only way north.
+  - `searchBelts` and `walkBelts` take the creatures to fight off (`foes`,
+    golems by default).
+  - *Not covered*: the Efreets, Gorgons and Ice Drakes (killed as they
+    turn up), the level 1 cache at (37,31), level 2's other treasure, and
+    the trip to the island (the ferry is the roaches' test).
+- [ ] **Next: the other four artifact quests** (the Fury Crossbow, the
+  Black Halberd, the Knowledge Brew, the Ring of Endless Magery), one per
+  session.
 
-All checks pass (2026-09-30): 1,551 tests, tsc, both sweeps, verify-screen,
+All checks pass (2026-09-30): 1,554 tests, tsc, both sweeps, verify-screen,
 verify-party and verify-e3.
+
+**Gotchas from Pachtar's Plate (2026-09-30):**
+- `searchBelts` puts back terrain and flags after each trial, not
+  creatures: a trial that sets off a spot bringing creatures in leaves them
+  loose, and they block a replay on the same runner. Replay recorded
+  routes on a fresh runner, as the tests do.
+- A one-shot message already shown ends its chain (BoE's once rule), so a
+  step meant to follow it never runs. Put such steps before the message.
+- The search can't solve a puzzle whose state the trials put back (the
+  shifting floor): give those moves as a fixed list between legs.
+- `QuestRunner.kill(re)` also tests a creature's talk title, which is ''
+  for creatures with no personality, so a pattern that matches '' kills
+  everything hostile.
 
 **Gotchas from the endgame (2026-09-30):**
 - Every throw back from Rentar-Ihrno's pedestal calls four wanderers; one
