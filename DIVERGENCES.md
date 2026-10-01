@@ -886,6 +886,16 @@ is E3's clock, `age % 5`, not the time since entry), so it is a rule of the
 turn, as #35 and #37 are. The converter writes `70,71`. OBoE ignores the
 flag.
 
+### 39. The race-and-traits screen's experience figure (2026-10-01)
+
+**DECIDED: 1997.** `pick_race_abil`'s "Experience needed to gain each
+level" is `get_tnl` of the PC. 1997 edits the PC in place and its
+`display_traits_graphics` (INFODLGS.CPP:718) recomputes the number on every
+click, so a player sees what a trait costs before keeping it. OBoE edits a
+copy and reads the PC's own number once, as the dialog opens, so the figure
+never moves. A player can tell, and no draw depends on it, so the port
+follows 1997 (`RaceAbilPick.tnl`, `src/dialogs/partyEditor.ts`).
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

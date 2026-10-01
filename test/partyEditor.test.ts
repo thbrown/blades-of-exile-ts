@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { GameRng } from '../src/core/rng';
 import { Scenario } from '../src/data/scenario';
-import { setStrings } from '../src/data/strings';
+import { STRING_TABLES, setStrings } from '../src/data/strings';
 import { addDialogDef } from '../src/dialogs/dialogStore';
 import { ModalScreen } from '../src/dialogs/dialog';
 import {
@@ -135,6 +135,49 @@ describe('pick_race_abil', () => {
     await pickRaceAbil(scriptedHost(univ, [clicks('race2', 'bad3', 'done')]), pc, 0);
     expect(pc.race).toBe(Race.NEPHIL);
     expect(pc.traits[Trait.FRAIL]).toBe(true);
+  });
+
+  it('shows the experience a level would cost as the LEDs change (1997)', async () => {
+    const univ = newUniverse();
+    const pc = univ.party.pcs[0]!;
+    pc.race = Race.HUMAN;
+    pc.traits.fill(false);
+    const seen: string[] = [];
+    await pickRaceAbil(scriptedHost(univ, [(dlg) => {
+      const x = dlg as XmlDialog;
+      seen.push(x.getText('xp'));
+      click(dlg, 'good2'); // Magically Apt, +20%
+      seen.push(x.getText('xp'));
+      click(dlg, 'race3'); // Slithzerikai, +20%
+      seen.push(x.getText('xp'));
+      return click(dlg, 'cancel')!;
+    }]), pc, 0);
+    expect(seen).toEqual(['100', '120', '144']);
+  });
+
+  it("in Exile III offers only that game's species and traits, but shows one a PC already has", async () => {
+    const univ = newUniverse();
+    const flags = univ.scenario.featureFlags;
+    flags['traits'] = 'exile3';
+    try {
+      const pc = univ.party.pcs[0]!;
+      pc.race = Race.HUMAN;
+      pc.traits.fill(false);
+      pc.traits[Trait.ANAMA] = true;
+      const seen: boolean[] = [];
+      await pickRaceAbil(scriptedHost(univ, [(dlg) => {
+        const x = dlg as XmlDialog;
+        seen.push(x.isVisible('race3'), x.isVisible('race4'), x.isVisible('bad5'), x.isVisible('bad6'), x.isVisible('bad7'));
+        return click(dlg, 'cancel')!;
+      }]), pc, 0);
+      expect(seen).toEqual([true, false, true, false, true]);
+    } finally {
+      delete flags['traits'];
+    }
+  });
+
+  it('loads its descriptions with the game', () => {
+    expect(STRING_TABLES).toContain('traits');
   });
 });
 

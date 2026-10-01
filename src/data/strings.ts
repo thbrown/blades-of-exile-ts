@@ -60,6 +60,8 @@ export const STRING_TABLES = [
   'help',
   'tips',
   'spell-times',
+  // pick_race_abil's descriptions of each race and trait.
+  'traits',
 ];
 
 export async function loadStringTables(

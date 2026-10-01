@@ -222,15 +222,7 @@ export class Player extends Living {
    * and the disadvantages pay you back.
    */
   getTnl(): number {
-    const racePenalty: Partial<Record<Race, number>> = {
-      [Race.NEPHIL]: 12, [Race.SLITH]: 20, [Race.VAHNATAI]: 18,
-    };
-    let storePercent = 100;
-    for (let i = 0; i < NUM_TRAITS; i++) {
-      if (this.traits[i]) storePercent += TRAIT_XP_COST[i] ?? 0;
-    }
-    const tnl = percent(100 + (racePenalty[this.race] ?? 0), storePercent);
-    return Math.max(tnl, 10);
+    return tnlFor(this.race, this.traits);
   }
 
   /**
@@ -662,4 +654,20 @@ export function makePresetPlayer(preset: PartyPreset, slot: number): Player {
   pc.race = DEFAULT_RACE[slot] ?? Race.HUMAN;
   pc.whichGraphic = DEFAULT_GRAPHICS[slot] ?? 0;
   return pc;
+}
+
+/**
+ * `cPlayer::get_tnl`'s sum for a race and traits, so the race-and-traits
+ * screen can show what its LEDs would cost before they are kept.
+ */
+export function tnlFor(race: Race, traits: readonly boolean[]): number {
+  const racePenalty: Partial<Record<Race, number>> = {
+    [Race.NEPHIL]: 12, [Race.SLITH]: 20, [Race.VAHNATAI]: 18,
+  };
+  let storePercent = 100;
+  for (let i = 0; i < NUM_TRAITS; i++) {
+    if (traits[i]) storePercent += TRAIT_XP_COST[i] ?? 0;
+  }
+  const tnl = percent(100 + (racePenalty[race] ?? 0), storePercent);
+  return Math.max(tnl, 10);
 }
