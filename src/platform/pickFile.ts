@@ -1,13 +1,13 @@
 /**
  * Ask for a file from the local disk. Resolves null if the picker is dismissed
  * — which, since browsers fire no event for that, is detected by the window
- * regaining focus with nothing chosen.
+ * regaining focus with nothing chosen. An empty `accept` lets any file through.
  */
 export function pickLocalFile(accept: string): Promise<{ fileName: string; data: Uint8Array } | null> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = accept;
+    if (accept !== '') input.accept = accept;
     let settled = false;
     const finish = (value: { fileName: string; data: Uint8Array } | null): void => {
       if (settled) return;

@@ -194,8 +194,13 @@ export function exportSave(name: string, data: Uint8Array): void {
 /**
  * Ask for an `.exg` from the local disk (or Exile III's own `.sav`, which
  * Open Game reads in Exile III); null if the picker is dismissed.
+ *
+ * No filter: the original's saves are `EXILE3.SAV` and the like, and macOS's
+ * picker greyed those out under `.sav` (it maps an extension to a file type,
+ * and the uppercase one didn't match). Open Game tells the formats apart by
+ * their bytes, so nothing is lost by letting every file through.
  */
 export async function importSave(): Promise<{ name: string; data: Uint8Array } | null> {
-  const picked = await pickLocalFile('.exg,.sav,application/octet-stream');
+  const picked = await pickLocalFile('');
   return picked === null ? null : { name: picked.fileName.replace(/\.exg$/i, ''), data: picked.data };
 }
