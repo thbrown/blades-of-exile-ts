@@ -15729,3 +15729,86 @@ FORMATS.md called it "total level", and `SpecBuilder.ifLevelTotal` tested
 levels; it is `ifMageLoreTotal` now. (The user asked what Major Blessing
 needs: Ghikra's crystal, spot 11, teaches it to a party with 15 Mage Lore
 between its living members, `1088:06ea`; tested in `e3quests.test.ts`.)
+
+### Play-test notes, fifth round (2026-10-01)
+
+The user's list, and what each turned out to be:
+
+- [x] **Open Game greyed out Exile III's `.SAV` files.** The picker's
+      `accept=".exg,.sav,…"`: macOS maps an extension to a file type, and the
+      original's saves are upper case (`EXILE3.SAV`). Open Game tells the
+      formats apart by their bytes (`isE3Save`), so `importSave` now passes no
+      filter at all.
+- [x] **The province maps.** Special items 0–5 and 9 open dialogs 950–957
+      (jump table `10c0:2385`; Footracer, 956, is item 9), each a 240×240
+      cell of BIGMAPS.BMP (`5_3600 + k`, four across). The converter cuts the
+      eight cells into sheets after DLOGMAPS' ten, the items are usable and
+      run `b.dialog(n)`, and a dialog that has a `5_36xx` shows it rather than
+      its first picture (each also has a 36×36 icon). `threeChoiceDialog`
+      narrows the text beside a whole-sheet picture so the dialog stays
+      inside 605 pixels.
+- [x] **Race and traits: no description on a click.** `traits.txt` was never
+      in `STRING_TABLES`, so `getStr('traits', n)` was always empty; the unit
+      test loaded the table itself and passed. Loaded now, with a test that
+      it is.
+- [x] **"Experience needed to gain each level" never changed.** OBoE reads
+      `get_tnl` once; 1997 recomputes it on every click. 1997 followed
+      (DIVERGENCES.md #39, `RaceAbilPick.tnl`, `tnlFor`).
+- [x] **Blades of Exile's extra options in Exile III** (Vahnatai, Pacifist,
+      Anama Member). Nothing is stripped on entering Exile III: the engine
+      is BoE's and applies their rules consistently, and no E3 script reads
+      a trait (E3's Anama is a party flag, unrelated). But:
+      - a new flag `traits` = `exile3` hides the three on the race-and-traits
+        screen, as E3's own dialog 1013 lacks them, unless the PC has one
+        already (so it can be seen and taken off);
+      - the E3 save export has only traits 0–14 and races 0–2: it now warns
+        that Pacifist/Anama are left out and writes a Vahnatai as a human,
+        where it wrote race 3, past E3's tables.
+- [x] **Touch: a Train screen.** `XmlDialog.touchFace` lets a dialog give the
+      overlay a face of its own. Training lists the 21 skills down the left
+      (level and next cost) and one −/+ pair for the picked skill on the
+      right, pressing the grid's own `-m`/`-p`.
+- [x] **Touch: the party editor** lists the six slots, and Name, Delete,
+      Race/Traits, Train and Graphic (or Create) for the picked one.
+- [x] **Touch: a toggle reset the strip's scroll.** `TouchDialogPanel.build`
+      rebuilt every button on any change; a strip whose buttons are the same
+      set now keeps its `scrollTop`.
+- [ ] **The intro movie** — found, not ported. See below.
+
+### Exile III's movies: found, not ported (2026-10-01)
+
+E3 has three scripted cutscenes, played on the game's own map renderer,
+frame by frame, from code in segment `1098`:
+
+- `FUN_1098_08bd(n)` starts movie `n`: sets `DAT_1178_3d5a = 1`,
+  `DAT_1178_53c0 = n`, the frame counter `DAT_1178_3dd6 = n*300 - 1`, and
+  builds the stage. Movies 0 and 1 (`n < 2`) get four PCs (graphics 0, 10,
+  20, 30), a 32×32 map copied from `seg 1160:0x7e22` into the town's
+  terrain, and thirty creatures from `seg 1168:-0x7d46` (14 bytes each);
+  town number `0x54`. Movie 2 loads town `0x42` (66) with the real party.
+- `FUN_1098_103c` advances one frame: 0 → `FUN_1098_47dd` (the intro),
+  1 → `FUN_1098_3148`, 2 → `FUN_1098_1dcb`. It is called from the screen
+  update (`23574`) and the timer `FUN_1050_0b03` (`46793`), which runs it
+  while the game is at the start (`DAT_1178_3d0e == 1`, movie 0) or in a
+  movie (`3d5a == 1`, movies 1 and 2).
+- **When the intro plays**: the title screen's buttons (`FUN_10c8_0000`,
+  rects at `DS:56aa`) — **New Game** (1) and **Intro** (4) both call
+  `FUN_1098_0e09; FUN_1098_08bd(0); FUN_1050_075c(0)`, and New Game then
+  `FUN_1010_6b20`, the party creation (dialog 1065 "CREATING A PARTY", the
+  editor). Since the start flag stays set until 6b20 finishes, **the intro
+  plays behind party creation**: that is the hook for "play the intro when
+  joining Exile III without a party". At frame `0xf0` it loops
+  (`3dd6 = -1; 08bd()`).
+- **The intro's script** (`47dd`, ~850 decompiled lines): a `switch` on the
+  frame. Helpers, unread yet: `6b63` (a location from a table), `627a`
+  (draw a caption from `seg 1098`'s strings), `691f`/`6e17`/`6e5b`
+  (missile, then boom: `6e17(from, to, missile, …)`), `6130`, `6bba`
+  (redraw), `6c69`/`6ee7`/`7a1b`/`6d04` (a spell pattern of booms),
+  `FUN_1050_59c2` (a creature's attack/animation), `FUN_1030_0404(snd)`
+  sound. Captions are in segment 1098 at file offset `0xd0dfc` on
+  ("Exile (verb) - / To banish or expel ... / from one's native land." …
+  "someone named Anaximander to get your"); the ending's from `0xcf6d5`
+  ("I have found out you are Anama." … "THE END", the credits).
+- **The decompiler drops the far calls' arguments** throughout, so every
+  case needs `nedis.py 1098:47dd` beside it. Movie 1 (`3148`) is the
+  victory ceremony; movie 2 (`1dcb`) is unidentified.
