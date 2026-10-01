@@ -839,6 +839,7 @@ function scenarioXml(
         <crumble>exile3:${crumbles.join(',')}</crumble>
         <unlock>exile3:${unlocks}</unlock>
         <special-items>exile3:${amuletNode}</special-items>
+        <traits>exile3</traits>
         <disease>exile3</disease>
         <summons>exile3</summons>
         <dungeon-sound>${E3_DUNGEON_SOUND}</dungeon-sound>

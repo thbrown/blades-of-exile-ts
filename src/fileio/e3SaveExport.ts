@@ -26,7 +26,7 @@ import type { E3Job } from '../game/e3Jobs';
 import { TOWN_NUM_OUTDOORS } from '../universe/party';
 import type { Player } from '../universe/player';
 import { NUM_INVEN_SLOTS, NUM_SPELLS } from '../universe/player';
-import { NUM_SKILLS } from '../universe/skills';
+import { NUM_SKILLS, Race, Trait } from '../universe/skills';
 import type { Universe } from '../universe/universe';
 
 export interface E3Export {
@@ -150,8 +150,16 @@ function writePc(defaults: E3SaveDefaults, pc: Player, warnings: string[]): Uint
   }
   b.setI16(E3PC.WHICH_GRAPHIC, pc.whichGraphic);
   b.setI16(E3PC.WEAP_POISONED, poisoned);
+  // E3's PC has fifteen traits and three races. Blades of Exile's Pacifist
+  // and Anama Member have no slot, and a Vahnatai would be race 3, past the
+  // end of E3's tables, so it goes as human.
   for (let i = 0; i < 15; i++) b.setU8(E3PC.TRAITS + i, pc.traits[i] ? 1 : 0);
-  b.setI16(E3PC.RACE, pc.race);
+  for (const [t, name] of [[Trait.PACIFIST, 'a Pacifist'], [Trait.ANAMA, 'an Anama Member']] as const) {
+    if (pc.traits[t]) warnings.push(`${pc.name} is ${name}, which Exile III doesn't have; it was left out.`);
+  }
+  const e3Race = pc.race >= Race.HUMAN && pc.race <= Race.SLITH ? pc.race : Race.HUMAN;
+  if (e3Race !== pc.race) warnings.push(`${pc.name} isn't a species Exile III has, and goes as a human.`);
+  b.setI16(E3PC.RACE, e3Race);
   b.setI16(E3PC.EXP_ADJ, pc.expAdj);
   b.setI16(E3PC.DIRECTION, pc.direction);
   return b.data;

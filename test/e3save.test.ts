@@ -22,6 +22,7 @@ import { findE3Dir, readE3Files } from '../tools/e3convert/install';
 import { readE3SaveDefaults } from '../tools/e3convert/saveDefaults';
 import { partyFlag } from '../tools/e3convert/script';
 import { QuestRunner, loadExile3 } from './support/e3Quest';
+import { Race, Trait } from '../src/universe/skills';
 
 describe('the exile3.sav container', () => {
   it('writes an outdoor save of the right size and reads it back', () => {
@@ -165,6 +166,26 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     });
     // And writing the import out again changes nothing.
     expect(exportE3Save(back.univ, defaults).bytes).toEqual(bytes);
+  });
+
+  it("says what of a Blades of Exile PC Exile III can't hold", async () => {
+    const q = new QuestRunner(scen);
+    await q.outdoorsAt(3 * 48 + 20, 6 * 48 + 30);
+    const [a, b] = q.party.pcs;
+    a!.race = Race.VAHNATAI;
+    b!.traits[Trait.PACIFIST] = true;
+    b!.traits[Trait.ANAMA] = true;
+    const { bytes, warnings } = exportE3Save(q.univ, defaults);
+    expect(warnings).toEqual([
+      `${a!.name} isn't a species Exile III has, and goes as a human.`,
+      `${b!.name} is a Pacifist, which Exile III doesn't have; it was left out.`,
+      `${b!.name} is an Anama Member, which Exile III doesn't have; it was left out.`,
+    ]);
+    const back = new QuestRunner(scen);
+    applyE3Save(bytes, back.univ, defaults);
+    expect(back.party.pcs[0]!.race).toBe(Race.HUMAN);
+    expect(back.party.pcs[1]!.traits[Trait.PACIFIST]).toBe(false);
+    expect(back.party.pcs[1]!.traits[Trait.ANAMA]).toBe(false);
   });
 
   it('puts the vehicles back in their own slots', async () => {
