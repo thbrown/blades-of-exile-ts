@@ -856,6 +856,20 @@ port had no way to Use any E3 special item, and every E3 terrain had
   blocks, and lava doesn't.
 OBoE ignores the flag: the items can't be Used and nothing flies.
 
+### 37. A special item that shows a town (2026-10-01)
+
+**DECIDED: a scenario flag, `item-towns` = `exile3:<item>><town>,…`, read
+by `e3ItemTownsTick` (`src/game/e3ItemUse.ts`) beside the uranium and herb
+ticks.** Exile III's per-turn code (`FUN_10c0_61c4`, `10c0:69ff`) sets
+`can_find_town[78]`, the Monastery of Madness, every turn the party holds
+special item 16, the silver key Foxfire sells. No script and no talk node
+does it, so the port had the key for sale and the monastery hidden for
+good, and the Knowledge Brew recipe out of reach. BoE has no opcode for "while
+this item is held"; a timer node would show the town once, which is the
+same while nothing takes the key, but E3's is a rule of the turn, so it is
+one here. The converter writes the one pair E3 has, `16>78`. Like E3, it
+never hides the town again. OBoE ignores the flag.
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

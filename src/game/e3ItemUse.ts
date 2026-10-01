@@ -149,6 +149,24 @@ export function e3UraniumTick(
 }
 
 /**
+ * Special items that show a town, from E3's per-turn code (`FUN_10c0_61c4`,
+ * `10c0:69ff`): while the party holds special item 16, Foxfire's silver
+ * key, `can_find_town[78]` (party+0x84d3), the Monastery of Madness, is set
+ * every turn. The `item-towns` flag lists the pairs, `exile3:16>78`. E3
+ * never clears it, and neither does this.
+ */
+export function e3ItemTownsTick(session: GameSession): void {
+  const flag = session.univ.scenario.featureFlags['item-towns'];
+  if (flag === undefined || !flag.startsWith('exile3:')) return;
+  const { party, scenario } = session.univ;
+  for (const pair of flag.slice('exile3:'.length).split(',')) {
+    const [item, town] = pair.split('>').map(Number);
+    const t = scenario.towns[town ?? -1];
+    if (t && party.specItems.has(item ?? -1)) t.canFind = true;
+  }
+}
+
+/**
  * Whether the inventory offers USE for this item: for E3's items, a use code
  * other than 4 (as 1997's `abil_chart` gates the button), else BoE's rule.
  * Without this, an E3 code with no BoE namesake (the wines, the Wand of

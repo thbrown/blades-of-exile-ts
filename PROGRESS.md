@@ -15423,12 +15423,76 @@ one quest at a time**, to keep each session's context small.
   - *Not covered*: the fights (the runner kills), the cave's nagas and
     basilisks, the lair's other rooms (the cursed halberd, the robes), and
     the drakes.
-- [ ] **Next: the other two artifact quests** (the Knowledge Brew, the Ring
-  of Endless Magery), one per session.
+- [x] **The Knowledge Brew** (2026-10-01), seven tests in `describe('the
+  Knowledge Brew')`, walkthrough A's "The Recipe for Knowledge Brew" and B's
+  "Knowledge Brew Sakai". It could not be finished before today: the
+  Monastery of Madness never came on the map (below).
+  - Lorelei (12): Winterhouse's "rumo" and "reci" (50 gold), Randall's
+    "reci", Lyle's "reci" naming Foxfire (personality 291). She is in
+    Bengaro (150) on days where `day % 3 == 1`, Poulsbo (152) on 2, Malloc
+    (154) on 0, and from day 200 in Dorngas (156) every day, unless the
+    Barrier Cavern fell first (E3's event 2). B's "coin", "reci", "gift",
+    then "paym": special item 16, the silver key, for 500 gold (refused at
+    499, once only); a turn later the monastery (78) is on the map.
+  - Storm Port (143): the dock's end (spot 4) wants Laika's ticket ("tick",
+    12 gold, flag 0x623), spent on the crossing to Gebra (145) at (24,8);
+    Gebra's spot 5 sails back free to (24,40). B's side trip: the false
+    hedge at (34,35), the monks' door at (38,42) (six Mad Monks), and their
+    chest's "Feisty Slap of Pain". Out of Gebra's south side at (303,438).
+  - The isles (zone 87): only the boat people (10 gold each, both ways:
+    spots 20/15 between (306,440) and (311,443), 21/14 between (312,451) and
+    (301,453)) and the stones east of (308,464) join them (`outdoorPath`
+    says no way round); the monks at (301,462); the monastery at (331,463),
+    shut without the key.
+  - Level 1: the alarm (spot 2) and every monk; A's way to the north-east
+    stairs (spot 15) to level 2's (29,5), and back; the west stairs (spot
+    14). B's rooms: the six pedestal books (three jokes, twice; B's "read 1,
+    5 and 6" does nothing more in E3's code), the dark altar's 20
+    experience a prayer, the martial arts bookshelf at (21,27) (+1
+    dexterity to 19 at 15 Mage Lore, once), the three surprise chests
+    (38,36–38). Side content of its own: three hidden switches, (7,42),
+    (29,4), (6,5), each opening the next, and the last the statues round
+    the pool at (24,21), which holds a Magic Breastplate.
+  - Level 2: the library's door at (5,15), every bookshelf searched and
+    only the south-east one, (10,20) (spot 11), teaching recipe 16. B's
+    Sacred Hall of Duels: one champion (split party), the way out refusing
+    until the duel is won, the left mat's three Mad Monks, the door it
+    makes at (17,10), the chests (2500 gold, Magic Hammer, Steel Greathelm,
+    Weak Invulnerability Potion; the second opened springs a surprise),
+    the Quicksilver Band at (10,5), and the party reunited.
+  - The way home: the survivors' ambush at (324,465) only for a party that
+    knows the recipe (zone 87's spot 3), once; the stones back west.
+    Brewing: Mandrake Root and Ember Flowers at Alchemy 19 or more (two
+    doses at nine over), and the brew's two skill points. Silverlocke's
+    Potions (zone 80's spot 11, (388,408)) sells it for B's 2600 gold.
+  - **Found and fixed: the Monastery of Madness could never be found.**
+    E3's per-turn code (`FUN_10c0_61c4`, `10c0:69ff`) sets
+    `can_find_town[78]` (party+0x84d3) every turn the silver key
+    (party+0x2c) is held; no script does it. New flag **`item-towns` =
+    `exile3:16>78`**, read by `e3ItemTownsTick` (`e3ItemUse.ts`) beside the
+    uranium and herb ticks. DIVERGENCES.md #37, check-in question 24.
+  - Runner: `talk` also tries a square two away, across a counter (talk
+    only needs sight); `global` reads `outLoc`, since BoE's
+    `out_move_party` (an outdoor ferry) leaves `loc_in_sec` stale until
+    the next step, as the C++ does.
+  - *Not covered*: the fights (the runner kills), A's turn-by-turn maze
+    directions on level 2 (a path is shown instead), the monastery's other
+    chambers (B's list of rooms and the supply room), the plaques behind
+    the false wall west of (10,8), and Storm Port's junk shop.
+- [ ] **Next: the Ring of Endless Magery**, the last artifact quest.
 
-All checks pass (2026-10-01, the Black Halberd): 1,577 tests, tsc, both
-sweeps. (Tests and docs only; the browser checks last passed with the Fury
-Crossbow.)
+All checks pass (2026-10-01, the Knowledge Brew): 1,584 tests, tsc, both
+sweeps, verify-screen, verify-party and verify-e3.
+
+**Gotchas from the Knowledge Brew (2026-10-01):**
+- `party.townNum` stays 200 after an outdoor fight ends; test
+  `session.mode === GameMode.COMBAT` for "a fight is on".
+- `onceEncounter`'s group is set down a step or two from the party and
+  walks in; `pause` until the mode is COMBAT before `fightOutdoors` (the
+  survivors took ten turns).
+- A town remembers its creatures: once a time-flagged creature has shown
+  up (APPEAR_ON_DAY turns into ALWAYS), a later visit at another date
+  still has it. Check a creature's date rule on a fresh runner.
 
 **Gotchas from the Black Halberd (2026-10-01):**
 - The second-runner reset bit again, silently: a side check's runner built

@@ -168,8 +168,10 @@ export class QuestRunner {
 
   /** Where the party is on the whole outdoor map. */
   get global(): Location {
-    const { sector, locInSec } = this.party;
-    return { x: sector.x * 48 + locInSec.x, y: sector.y * 48 + locInSec.y };
+    // By `outLoc`: BoE's `out_move_party` (a ferry) leaves `loc_in_sec` as it
+    // was until the next step.
+    const { outdoorCorner, outLoc } = this.party;
+    return { x: outdoorCorner.x * 48 + outLoc.x, y: outdoorCorner.y * 48 + outLoc.y };
   }
 
   /** Stand on a town square, with no step taken. */
@@ -331,8 +333,11 @@ export class QuestRunner {
   async talk(name: Who, ...keywords: string[]): Promise<string[]> {
     const who = this.creatures(name)[0];
     if (!who) throw new Error(`nobody called ${name} in town ${this.townNum}`);
-    const spot = STEPS.map(([dx, dy]) => ({ x: who.curLoc.x + dx, y: who.curLoc.y + dy }))
-      .find((p) => this.town.isOnMap(p.x, p.y) && !this.session.townIsBlocked(p));
+    // Beside them, or across a counter: talk only needs sight.
+    const across = STEPS.map(([dx, dy]) => ({ x: who.curLoc.x + 2 * dx, y: who.curLoc.y + 2 * dy }));
+    const spot = [...STEPS.map(([dx, dy]) => ({ x: who.curLoc.x + dx, y: who.curLoc.y + dy })), ...across]
+      .find((p) => this.town.isOnMap(p.x, p.y) && !this.session.townIsBlocked(p)
+        && this.session.canSeeLight(p, who.curLoc) < 4);
     if (!spot) throw new Error(`no square beside ${name}`);
     this.place(spot);
     if (!(await this.session.talkTo(who.curLoc)) || !this.session.talk) {

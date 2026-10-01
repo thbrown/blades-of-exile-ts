@@ -323,6 +323,22 @@ quest steps.
 - **Question:** in the original, does A's "south two" work as written (so
   the port pushes or swaps differently), or is A one S short?
 
+### 24. Foxfire's key and the Monastery of Madness (2026-10-01)
+
+- **Where:** Foxfire the bard, in Bengaro, Poulsbo or Malloc (a different
+  one each day), and the Monastery of Madness at (331,463) on the
+  southernmost Remote Isle.
+- **Do:** before buying her key, cross to that isle (Storm Port's ferry,
+  the boat people at (306,440) and (312,451), the stones east of (308,464))
+  and walk north into the monastery's square. Then buy the key ("payment",
+  500 gold) and try again.
+- **Why:** nothing in E3's scripts reveals the monastery; its turn code
+  shows it every turn the key is held (`10c0:69ff`).
+- **The port:** the monastery is hidden (the party walks onto the square
+  and stays outdoors) until a turn after the key is bought.
+- **Question:** is it the same in the original: no way in without the key,
+  and on the map as soon as it is bought?
+
 ## Waiting on a ruling (already written up elsewhere)
 
 - **DIVERGENCES.md #30 and #31**, marked "open for the user".

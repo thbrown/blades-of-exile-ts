@@ -65,7 +65,7 @@ import { e3NoteItems, e3NoteSteps, e3StampedItems, isE3NoteAbility } from './not
 import { DAILY_FLAGS, KILL_SCRIPTS } from './towns/talkScripts';
 import { dailyPlot } from './towns/plot';
 import { townStatesXml } from './towns/townStates';
-import { SpecBuilder, type ScriptSource, type Step } from './script';
+import { SpecBuilder, partySpecItem, type ScriptSource, type Step } from './script';
 import { BASIC_BUTTONS } from '../../src/game/specials/oneshot';
 import type { SpecItem } from '../../src/data/quest';
 import { e3SpecialItems } from './specItems';
@@ -122,6 +122,14 @@ function range(a: number, b: number): number[] {
  * turn hostile where they stand. Of these, 91 and 92 get the guard boost.
  */
 const E3_HOSTILE_MOVERS = '12-20,91-98,149-154';
+
+/**
+ * Special items that show a town while the party holds them, the
+ * `item-towns` flag's pairs: E3's per-turn code sets `can_find_town[78]`
+ * (the Monastery of Madness) whenever special item 16, Foxfire's silver key,
+ * is held (`10c0:69ff`, party+0x2c and party+0x84d3). The only such case.
+ */
+const E3_ITEM_TOWNS: [number, number][] = [[partySpecItem(0x2c), 78]];
 const E3_BOOSTED_GUARDS = [91, 92];
 
 /**
@@ -784,6 +792,7 @@ function scenarioXml(
         <job-boards>exile3:${jobBase}</job-boards>
         <skribbane>exile3:${skribbane.join(',')}</skribbane>
         <uranium>exile3:${uranium}</uranium>
+        <item-towns>exile3:${E3_ITEM_TOWNS.map(([i, t]) => `${i}>${t}`).join(',')}</item-towns>
         <moving-walls>exile3:${crushed}:54,71</moving-walls>
         <trap>exile3</trap>
         <alchemy>exile3</alchemy>

@@ -13,7 +13,7 @@
 
 import { QuestStatus } from '../data/quest';
 import { e3JobsTick } from './e3Jobs';
-import { e3UraniumTick, e3WithdrawalTick } from './e3ItemUse';
+import { e3ItemTownsTick, e3UraniumTick, e3WithdrawalTick } from './e3ItemUse';
 import { Universe } from '../universe/universe';
 import { isCombat } from './modes';
 import type { GameSession } from './session';
@@ -143,6 +143,8 @@ export function specialIncreaseAge(session: GameSession, length = 1, queue = fal
   party.age = currentAge;
   e3WithdrawalTick(session, ageBefore, (node, at) => fire(SpecCtx.SCEN_TIMER, SpecCtxType.SCEN, node, at));
   party.age = currentAge;
+  // And the special items that show a town while held (the silver key).
+  e3ItemTownsTick(session);
 
   // Exile III's job boards keep their own calendar (e3Jobs.ts).
   e3JobsTick(session, ageBefore);

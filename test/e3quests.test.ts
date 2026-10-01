@@ -36,6 +36,9 @@ import { PANEL_DOORS } from '../tools/e3convert/towns/tinraya';
 import { PANTS_CLASS } from '../tools/e3convert/towns/rentarKeep';
 import { useItem } from '../src/game/itemUse';
 import { killMonst } from '../src/game/damage';
+import { Alchemy, alchemyName } from '../src/data/alchemy';
+import { alchemyChoices, makePotion } from '../src/game/alchemy';
+import { giveItem } from '../src/universe/inventory';
 
 const dir = findE3Dir();
 
@@ -2586,6 +2589,455 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       expect(q.canReach(q.at, { x: 19, y: 37 })).toBe(true);
       await q.step(19, 37);
       expect([q.townNum, q.at], q.tail()).toEqual([CAVE, { x: 24, y: 23 }]);
+    });
+  });
+
+  describe('the Knowledge Brew', () => {
+    /**
+     * Foxfire, the bard who wanders Malloc, Bengaro and Poulsbo, sells a
+     * silver key to a cult on the southernmost Remote Isle; from Storm Port
+     * by ferry to Gebra, and over the isles to the Monastery of Madness,
+     * whose library holds the recipe. Walkthrough A's "The Recipe for
+     * Knowledge Brew" and B's "Knowledge Brew Sakai".
+     */
+    const MONASTERY = 78, MONASTERY2 = 79, STORM_PORT = 143, GEBRA = 145;
+    /** Special item 16, the silver key (party+0x2c). */
+    const SILVER_KEY = 16;
+    const veterans = (q: QuestRunner): void => {
+      for (const pc of q.party.pcs) { pc.level = 30; pc.maxHealth = 600; pc.curHealth = 600; }
+    };
+    const P = (q: QuestRunner, x: number, y: number): number => q.town.record.terrain[x]![y]!;
+    const { N, NE, E, SE, S, SW, W, NW } = Direction;
+
+    it("Lorelei's rumours lead to Foxfire, whose silver key for 500 gold puts the Monastery of Madness on the map", async () => {
+      // (A second runner resets the shared scenario's towns, so side checks come first.)
+      // Foxfire never comes to Dorngas if the Barrier Cavern fell before day 200.
+      {
+        const r = new QuestRunner(scen);
+        r.party.keyTimes.set(e3Event(2), 150);
+        r.party.age = 200 * 3700;
+        await r.enter(156);
+        expect(r.creatures(291).length, 'the war ended on day 150').toBe(0);
+      }
+      const q = new QuestRunner(scen);
+      q.party.gold = 2000;
+      // Walkthrough B: the innkeeper's rumour (50 gold), the junk dealer, and
+      // Internal Affairs, each naming the next.
+      await q.enter(12);
+      const [rumo, inn] = await q.talk(287, 'rumo', 'reci');
+      expect(rumo).toMatch(/slipped my mind/);
+      expect(inn).toMatch(/Randall, the item salesman/);
+      expect(q.party.gold).toBe(1950);
+      const [junk] = await q.talk(283, 'reci');
+      expect(junk).toMatch(/Lyle, at Internal Affairs/);
+      const [lyle] = await q.talk(279, 'reci');
+      expect(lyle).toMatch(/Foxfire mentioned it.*bard/);
+
+      // Foxfire is in Bengaro on days that leave 1 over a multiple of three
+      // (time flag 4), Poulsbo on the next (5), Malloc on the third (3).
+      const where: [number, number][] = [[150, 0], [152, 3700], [154, 7400]];
+      for (const [t, age] of where) {
+        q.party.age = age;
+        for (const [u] of where) {
+          await q.enter(u);
+          expect(q.creatures(291).length, `town ${u}, age ${age}`).toBe(u === t ? 1 : 0);
+        }
+      }
+      // From day 200 she is in Dorngas (156) as well, every day (walkthrough
+      // A: "when those towns are destroyed, I believe that she moves to
+      // Dorngas"), unless the Barrier Cavern's crystal (E3's event 2) was
+      // smashed first (checked first, on a runner of its own).
+      for (const day of [200, 201, 220]) {
+        q.party.age = (day - 1) * 3700;
+        await q.enter(156);
+        expect(q.creatures(291).length, `day ${day}`).toBe(1);
+      }
+      q.party.age = 7400;
+      await q.enter(154);
+      // B's order: "coin" (a gold each), "recipe", "gift", "payment".
+      const before = q.party.gold;
+      const [coin, reci, gift] = await q.talk(291, 'coin', 'reci', 'gift');
+      expect(coin).toMatch(/utters a prayer/);
+      expect(q.party.gold).toBe(before - 1);
+      expect(reci).toMatch(/Someone gave me a gift/);
+      expect(gift).toMatch(/key to a cult.*For 500 gold/);
+      expect(scen.towns[MONASTERY]!.canFind).toBe(false);
+      q.party.gold = 499;
+      const [no] = await q.talk(291, 'paym');
+      expect(no).toMatch(/don't have the 500 gold/);
+      expect(q.party.specItems.has(SILVER_KEY)).toBe(false);
+      q.party.gold = 600;
+      const [yes] = await q.talk(291, 'paym');
+      expect(yes).toMatch(/small silver key.*southernmost of the Remote Isles/);
+      expect(q.party.gold).toBe(100);
+      expect(q.party.specItems.has(SILVER_KEY)).toBe(true);
+      // Once.
+      q.party.gold = 600;
+      const [again] = await q.talk(291, 'paym');
+      expect(again).toMatch(/already have it/);
+      expect(q.party.gold).toBe(600);
+      // E3's turn code shows the monastery while the key is held
+      // (`10c0:69ff`); a turn later it's on the map.
+      await q.pause();
+      expect(scen.towns[MONASTERY]!.canFind).toBe(true);
+      expect(scen.towns[MONASTERY2]!.canFind).toBe(false);
+    });
+
+    it("Storm Port: Laika's tickets, the ferry to Gebra and back, and over the isles to the Monastery", async () => {
+      const q = new QuestRunner(scen);
+      veterans(q);
+      q.party.gold = 1000;
+      await q.enter(STORM_PORT);
+      // The south dock's end (spot 4) wants a ticket, from Laika (12 gold).
+      q.place({ x: 24, y: 42 });
+      expect(await q.go(S)).toEqual([false]);
+      expect(q.tail(1)).toMatch(/speak to Laika/);
+      expect([q.townNum, q.at]).toEqual([STORM_PORT, { x: 24, y: 42 }]);
+      const [tick] = await q.talk(225, 'tick');
+      expect(tick).toMatch(/hands you your tickets/);
+      expect(q.party.gold).toBe(988);
+      const age = q.party.age;
+      q.place({ x: 24, y: 42 });
+      await q.go(S);
+      expect(q.tail(1)).toMatch(/sail around Gorst Island/);
+      expect([q.townNum, q.at]).toEqual([GEBRA, { x: 24, y: 8 }]);
+      expect(q.party.age - age).toBeGreaterThanOrEqual(400);
+      // The ticket is spent; the way back (spot 5) is free.
+      expect(q.flag(0x623)).toBe(0);
+      q.place({ x: 24, y: 7 });
+      await q.go(N);
+      expect([q.townNum, q.at], q.tail()).toEqual([STORM_PORT, { x: 24, y: 40 }]);
+      q.place({ x: 24, y: 42 });
+      await q.go(S);
+      expect([q.townNum, q.at], 'no ticket').toEqual([STORM_PORT, { x: 24, y: 42 }]);
+      await q.talk(225, 'tick');
+      q.place({ x: 24, y: 42 });
+      await q.go(S);
+      expect(q.townNum).toBe(GEBRA);
+
+      // B's side trip: south through the false hedge at (34,35) (spot 50),
+      // the monks' door at (38,42), six Mad Monks, and their chest's ravings.
+      q.place({ x: 34, y: 34 });
+      expect(await q.go(S, S)).toEqual([true, true]);
+      expect(q.at).toEqual({ x: 34, y: 36 });
+      const monks = () => q.creatures(/Mad Monk/).filter((m) => m.isAlive);
+      expect(monks().length).toBe(0);
+      q.place({ x: 38, y: 43 });
+      await q.go(N);
+      expect(q.tail(1)).toMatch(/they emit high shrieks and charge/);
+      expect(monks().length).toBe(6);
+      await q.kill(/Mad Monk/);
+      q.place({ x: 37, y: 41 });
+      await q.look(36, 41);
+      expect(q.tail(1)).toMatch(/Feisty Slap of Pain/);
+
+      // Out of Gebra's south side, beside its entrance at (303,436).
+      q.place({ x: 24, y: 46 });
+      await q.go(S, S);
+      expect([q.session.isOutdoors, q.global]).toEqual([true, { x: 303, y: 438 }]);
+      // The isles are apart: Gebra's isle, the next, the third, and the
+      // monastery's (B's "306,440", "312,451", "308,464 … east across the
+      // stones", "331,464"). Each crossing is the boat people's, or the stones.
+      const dry = (t: number) => scen.terTypes[t]!.blockage <= TerObstruct.BLOCK_SIGHT;
+      const stones = new Set(['309,464', '311,463', '313,465', '315,463', '317,464']);
+      expect(outdoorPath([303, 438], [312, 451], dry), 'Gebra to the second ferry').toBe(-1);
+      expect(outdoorPath([311, 443], [301, 453], dry), 'past the second ferry').toBe(-1);
+      expect(outdoorPath([301, 453], [331, 464], dry, stones), 'without the stones').toBe(-1);
+      expect(outdoorPath([303, 438], [306, 439], dry)).toBeGreaterThan(0);
+      q.party.gold = 15;
+      await q.outdoorsAt(306, 439);
+      await q.go(S);
+      expect(q.global, q.tail()).toEqual({ x: 311, y: 443 });
+      expect(q.party.gold).toBe(5);
+      // Back the same way (spot 15) and over again; then the next isle's boat.
+      await q.outdoorsAt(310, 442);
+      await q.go(S);
+      expect(q.global, q.tail()).toEqual({ x: 305, y: 440 });
+      q.party.gold = 100;
+      await q.outdoorsAt(306, 439);
+      await q.go(S);
+      expect(outdoorPath([311, 443], [312, 450], dry)).toBeGreaterThan(0);
+      await q.outdoorsAt(312, 450);
+      await q.go(S);
+      expect(q.global, q.tail()).toEqual({ x: 301, y: 453 });
+      await q.outdoorsAt(301, 451);
+      await q.go(S);
+      expect(q.global, 'and back').toEqual({ x: 313, y: 451 });
+      await q.outdoorsAt(312, 450);
+      await q.go(S);
+      // The monks on the third isle (B's "304,458").
+      expect(outdoorPath([301, 453], [301, 461], dry)).toBeGreaterThan(0);
+      await q.outdoorsAt(301, 461);
+      await q.go(S);
+      expect(await q.fightOutdoors(), q.tail()).toBe(true);
+      expect(q.session.isOutdoors).toBe(true);
+      // The stones, walked.
+      expect(outdoorPath([301, 453], [308, 464], dry)).toBeGreaterThan(0);
+      await q.outdoorsAt(308, 464);
+      expect(await q.go(E, E, NE, SE, SE, NE, NE, SE, E, E), q.tail()).toEqual(Array(10).fill(true));
+      expect(q.global).toEqual({ x: 318, y: 464 });
+      expect(outdoorPath([318, 464], [331, 464], dry)).toBeGreaterThan(0);
+
+      // The monastery (331,463): hidden, and shut, without the key.
+      expect(scen.towns[MONASTERY]!.canFind).toBe(false);
+      await q.outdoorsAt(331, 464);
+      await q.go(N);
+      expect(q.session.isOutdoors, q.tail()).toBe(true);
+      q.party.specItems.add(SILVER_KEY);
+      await q.outdoorsAt(331, 464);
+      // A turn passes (and wanderers may find the party: fight them off).
+      await q.pause();
+      if (q.session.mode === GameMode.COMBAT) expect(await q.fightOutdoors()).toBe(true);
+      expect(scen.towns[MONASTERY]!.canFind).toBe(true);
+      await q.outdoorsAt(331, 464);
+      await q.go(N);
+      expect([q.townNum, q.at], q.tail()).toEqual([MONASTERY, { x: 24, y: 43 }]);
+    });
+    it('The Monastery, level 1: the alarm, the stairs in the north-east corner, and its side rooms', async () => {
+      const q = new QuestRunner(scen);
+      veterans(q);
+      await q.enter(MONASTERY, { x: 24, y: 43 });
+      // North into the cross-corridor: the alarm (spot 2), and every monk comes.
+      q.place({ x: 24, y: 36 });
+      await q.go(N);
+      expect(q.tail(1)).toMatch(/Someone shouts an alarm/);
+      expect(q.town.monsters.filter((m) => m.isAlive && !m.isFriendly).length).toBeGreaterThan(20);
+      await q.clearHostiles();
+      // Walkthrough A: north, east, and the little door in the north-east
+      // corner to the stairs (spot 15) up to level 2, at (29,5).
+      expect(q.canReach({ x: 24, y: 43 }, { x: 37, y: 6 })).toBe(true);
+      await q.step(37, 5);
+      expect([q.townNum, q.at], q.tail()).toEqual([MONASTERY2, { x: 29, y: 5 }]);
+      // And back (level 2's spot 15), beside them; the west stairs (spot 14)
+      // go up to the Hall of Duels' side.
+      await q.step(29, 4);
+      expect([q.townNum, q.at], q.tail()).toEqual([MONASTERY, { x: 37, y: 6 }]);
+      expect(q.canReach(q.at, { x: 12, y: 6 })).toBe(true);
+      await q.step(12, 5);
+      expect([q.townNum, q.at], q.tail()).toEqual([MONASTERY2, { x: 18, y: 5 }]);
+    });
+
+    it("The Monastery, level 1: B's rooms (the books, the dark altar) and the hidden switches to the breastplate", async () => {
+      const q = new QuestRunner(scen);
+      veterans(q);
+      await q.enter(MONASTERY, { x: 24, y: 43 });
+      await q.clearHostiles();
+      // The Room of Learning from Books on Pedestals: six books, three titles
+      // twice over, and only words (B's "read books 1, 5 and 6" do nothing more).
+      const titles: string[] = [];
+      for (let x = 16; x <= 21; x++) {
+        q.place({ x, y: 37 });
+        await q.go(S);
+        titles.push(q.tail(1).match(/titled "([^"]+)"/)?.[1] ?? '?');
+      }
+      const three = ['Being Master of the Kung-Fu of Holding of Breath.', 'Mighty Screw Kung Fu.',
+        "When the Strings Can't Show - A Flying Tutorial, by Leslie Cheung."];
+      expect(titles, q.tail(8)).toEqual([...three, ...three]);
+      // The dark altar (spot 16): each prayer costs 20 experience.
+      q.party.pcs.forEach((pc) => { pc.experience = 1000; });
+      q.place({ x: 24, y: 7 });
+      await q.go(N);
+      expect(q.party.pcs.map((pc) => pc.experience), q.tail()).toEqual(Array(6).fill(980));
+      q.answer(/Leave/);
+      q.place({ x: 24, y: 7 });
+      await q.go(N);
+      expect(q.party.pcs[0]!.experience).toBe(980);
+
+      // The martial arts books (spot 1, a bookshelf at (21,27)): untranslatable
+      // under 15 Mage Lore between the party; then a point of dexterity each
+      // (none past 19), once.
+      q.party.pcs.forEach((pc) => { pc.skills[Skill.MAGE_LORE] = 2; });
+      q.party.pcs[1]!.skills[Skill.DEXTERITY] = 19;
+      const dex = () => q.party.pcs.map((pc) => pc.skills[Skill.DEXTERITY]);
+      const before = dex();
+      await q.look(21, 27);
+      expect(q.tail(1)).toMatch(/unable to translate/);
+      expect(dex()).toEqual(before);
+      q.party.pcs[0]!.skills[Skill.MAGE_LORE] = 5;
+      await q.look(21, 27);
+      expect(dex(), q.tail(2)).toEqual(before.map((d) => Math.min(19, d! + 1)));
+      await q.look(21, 27);
+      expect(dex()).toEqual(before.map((d) => Math.min(19, d! + 1)));
+      // B's Room of Intriguing Surprises: each of the three chests at
+      // (38,36)–(38,38) springs a monster, once.
+      for (const y of [36, 37, 38]) {
+        q.place({ x: 37, y });
+        await q.look(38, y);
+        expect(q.tail(1), `chest ${y}`).toMatch(/.+/);
+        const sprung = q.town.monsters.filter((m) => m.isAlive && !m.isFriendly);
+        expect(sprung.length, `chest ${y}: ${q.tail(2)}`).toBeGreaterThan(0);
+        await q.clearHostiles();
+        await q.look(38, y);
+        expect(q.town.monsters.filter((m) => m.isAlive && !m.isFriendly).length, `chest ${y} again`).toBe(0);
+      }
+
+      // The pool at (24,21), ringed by statues, until three hidden switches
+      // click in turn: (7,42) opens (29,5), whose (29,4) opens (7,5), whose
+      // (6,5) opens (24,20).
+      expect(P(q, 24, 20)).not.toBe(2);
+      expect(q.canReach(q.at, { x: 24, y: 21 })).toBe(false);
+      expect(q.canReach(q.at, { x: 29, y: 4 })).toBe(false);
+      await q.step(7, 42);
+      expect(q.univ.transcript).toContain('Click.');
+      expect(q.canReach(q.at, { x: 29, y: 4 })).toBe(true);
+      expect(q.canReach(q.at, { x: 6, y: 5 })).toBe(false);
+      await q.step(29, 4);
+      expect(q.canReach(q.at, { x: 6, y: 5 })).toBe(true);
+      await q.step(6, 5);
+      expect(P(q, 24, 20)).toBe(2);
+      expect(q.canReach(q.at, { x: 24, y: 21 })).toBe(true);
+      q.place({ x: 24, y: 20 });
+      await q.look(24, 21);
+      expect(q.hasItem(/Magic Breastplate/), q.tail()).toBe(true);
+    });
+    it("The Monastery, level 2: east-wall corridors to the library, and the recipe in its south-east bookcase", async () => {
+      const q = new QuestRunner(scen);
+      veterans(q);
+      await q.enter(MONASTERY2, { x: 29, y: 5 });
+      await q.clearHostiles();
+      // B: "follow the path along the east wall" to the library (5,15), its
+      // door on the north side, by the Hall of Duels.
+      expect(q.canReach(q.at, { x: 5, y: 14 })).toBe(true);
+      q.place({ x: 5, y: 14 });
+      await q.walk(5, 15);
+      expect(q.at, q.tail()).toEqual({ x: 5, y: 15 });
+      // Every bookshelf searched; only the south-east one, at (10,20), has it.
+      expect(q.party.alchemy[16]).toBe(false);
+      const shelves: [number, number][] = [];
+      for (let x = 4; x <= 10; x++) for (const y of [16, 20]) if (P(q, x, y) === 164) shelves.push([x, y]);
+      expect(shelves.length).toBeGreaterThan(8);
+      for (const [x, y] of shelves.filter(([x, y]) => x !== 10 || y !== 20)) {
+        q.place({ x, y: y === 16 ? 17 : 19 });
+        await q.look(x, y);
+      }
+      expect(q.party.alchemy[16]).toBe(false);
+      q.place({ x: 10, y: 19 });
+      const said = q.log.length;
+      await q.look(10, 20);
+      expect(q.log.slice(said).join('\n')).toMatch(/.+/);
+      expect(q.party.alchemy[16], q.tail()).toBe(true);
+      expect(alchemyName(Alchemy.KNOWLEDGE)).toMatch(/Knowledge Brew/);
+    });
+    it("The Monastery, level 2: B's Sacred Hall of Duels, one champion, the mat, the chests, and the Quicksilver Band", async () => {
+      const q = new QuestRunner(scen);
+      veterans(q);
+      await q.enter(MONASTERY2, { x: 29, y: 5 });
+      await q.clearHostiles();
+      expect(q.canReach(q.at, { x: 5, y: 10 })).toBe(true);
+      // The way back out (spot 2) is shut until the duel is won.
+      q.place({ x: 5, y: 10 });
+      await q.go(E);
+      expect(q.tail(2)).toMatch(/Only one champion may enter/);
+      expect(q.at).toEqual({ x: 10, y: 10 });
+      expect(q.party.pcs.filter((pc) => pc.mainStatus === MainStatus.ALIVE).length).toBe(1);
+      q.place({ x: 8, y: 10 });
+      await q.go(W);
+      expect(q.tail(1)).toMatch(/You may not leave until you prove your martial art/);
+      expect(q.at).toEqual({ x: 8, y: 10 });
+      // The mat on the left (spot 3): three monks appear over the other pads,
+      // and the wall at (17,10) becomes a door.
+      const foes = () => q.town.monsters.filter((m) => m.isAlive && !m.isFriendly);
+      expect(P(q, 17, 10)).toBe(106);
+      q.place({ x: 11, y: 9 });
+      await q.go(N);
+      expect(q.tail(1)).toMatch(/three warriors, ready to battle you/);
+      expect(foes().map((m) => m.getName())).toEqual(['Mad Monk', 'Mad Monk', 'Mad Monk']);
+      expect(P(q, 17, 10)).toBe(103);
+      await q.kill(/Mad Monk/);
+      // Behind it, the chests (B's 2500 gold, Steel Greathelm, Magic Hammer
+      // and Weak Invulnerability Potion); the second chest opened springs a
+      // surprise (spot 4's flag is the three chests'), B's Ur-Basilisk.
+      expect(q.canReach(q.at, { x: 18, y: 9 })).toBe(true);
+      const gold = q.party.gold;
+      const taken: string[] = [];
+      let sprung = 0;
+      for (const x of [18, 19, 20]) {
+        q.place({ x, y: 9 });
+        const found = (await q.session.adjTownLook({ x, y: 8 })) ?? [];
+        for (const it of found) q.session.takeItem(it, 0);
+        taken.push(...found.map((it) => it.fullName));
+        sprung += foes().length;
+        await q.clearHostiles();
+      }
+      expect(taken).toEqual(['Gold', 'Magic Hammer', 'Steel Greathelm', 'Weak Invuln. P.']);
+      expect(q.party.gold - gold).toBe(2500);
+      expect(sprung).toBe(1);
+      expect(q.log.filter((l) => /in addition to treasure, a surprise/.test(l)).length).toBe(1);
+      // B's Quicksilver Band, where the monks stood, at (10,5).
+      expect(q.canReach(q.at, { x: 10, y: 6 })).toBe(true);
+      q.place({ x: 10, y: 6 });
+      const band = q.session.reachableItems({ x: 10, y: 6 }).items.filter((it) => it.itemLoc.x === 10 && it.itemLoc.y === 5);
+      expect(band.map((it) => it.fullName)).toEqual(['Quicksilver Band']);
+      // Won: the way out reunites the party where it split.
+      q.place({ x: 8, y: 10 });
+      await q.go(W);
+      expect(q.party.pcs.every((pc) => pc.mainStatus === MainStatus.ALIVE), q.tail()).toBe(true);
+      expect(q.at, q.tail()).toEqual({ x: 5, y: 10 });
+    });
+    it("The way home: the monastery's survivors wait for a party with the recipe; then the brew, and Silverlocke's", async () => {
+      // Without the recipe, the square by the shore (zone 87's spot 3) is quiet.
+      {
+        const r = new QuestRunner(scen);
+        await r.outdoorsAt(324, 464);
+        await r.go(S);
+        expect(r.session.mode, r.tail()).not.toBe(GameMode.COMBAT);
+        expect(r.global).toEqual({ x: 324, y: 465 });
+      }
+      const q = new QuestRunner(scen);
+      veterans(q);
+      q.party.alchemy[Alchemy.KNOWLEDGE] = true;
+      // B: "on your way back, … about thirty Mad Monks". Once.
+      await q.outdoorsAt(324, 464);
+      await q.go(S);
+      expect(q.tail(1)).toMatch(/monks that survived your assault on their monastery/);
+      // The group is set down a step or two off, and comes on.
+      for (let k = 0; k < 20 && q.session.mode !== GameMode.COMBAT; k++) await q.pause();
+      expect(q.session.mode, q.tail()).toBe(GameMode.COMBAT);
+      expect(q.town.monsters.filter((m) => m.isAlive && !m.isFriendly).every((m) => m.getName() === 'Mad Monk')).toBe(true);
+      expect(await q.fightOutdoors(), q.tail()).toBe(true);
+      await q.outdoorsAt(324, 464);
+      await q.go(S);
+      expect(q.session.mode).not.toBe(GameMode.COMBAT);
+      expect(await q.fightOutdoors()).toBe(false);
+      // The stones, west, back to the third isle.
+      await q.outdoorsAt(318, 464);
+      expect(await q.go(W, W, NW, SW, SW, NW, NW, SW, W, W)).toEqual(Array(10).fill(true));
+      expect(q.global).toEqual({ x: 308, y: 464 });
+
+      // Brewing: Mandrake Root and Ember Flowers, at Alchemy 19 (E3's
+      // difficulty for it, `DS:3148`'s 217, the Brew of Knowledge).
+      // (A spellcaster: the fighters are too magically inept to drink it.)
+      const who = q.party.pcs.findIndex((p) => p.skills[Skill.MAGE_SPELLS]! > 0);
+      const pc = q.party.pcs[who]!;
+      for (const it of pc.items) it.variety = 0;
+      const root = scen.scenItems.findIndex((it) => it.fullName === 'Mandrake Root');
+      const ember = scen.scenItems.findIndex((it) => it.fullName === 'Ember Flowers');
+      giveItem(pc, q.party, { ...scen.scenItems[root]!, ident: true });
+      giveItem(pc, q.party, { ...scen.scenItems[ember]!, ident: true });
+      pc.skills[Skill.ALCHEMY] = 18;
+      expect(alchemyChoices(q.univ, who).find((c) => c.which === Alchemy.KNOWLEDGE)?.canMake).toBe(false);
+      pc.skills[Skill.ALCHEMY] = 28;
+      expect(alchemyChoices(q.univ, who).find((c) => c.which === Alchemy.KNOWLEDGE)?.canMake).toBe(true);
+      makePotion(q.session, who, Alchemy.KNOWLEDGE);
+      expect(q.univ.transcript.at(-1)).toBe('Alchemy: Successful.');
+      const slot = pc.items.findIndex((it) => it.variety !== 0 && it.fullName === 'Brew of Knowledge');
+      expect(slot).toBeGreaterThanOrEqual(0);
+      expect(pc.items[slot]!.charges, 'nine over: one more dose').toBe(2);
+      // Drunk: two skill points.
+      const pts = pc.skillPts;
+      await useItem(q.session, who, slot, q.session.host ?? undefined);
+      await q.settle();
+      expect(pc.skillPts - pts, q.univ.transcript.slice(-2).join(' / ')).toBe(2);
+
+      // Silverlocke's Potions (zone 80's spot 11, walkthrough B) sells it ready made.
+      await q.outdoorsAt(388, 407);
+      await q.go(S);
+      const shop = q.session.shop;
+      expect(shop?.name, q.tail()).toBe("Silverlocke's Potions");
+      const brew = shop!.visible.map((i) => shop!.shop.getItem(i)).find((e) => e.item?.fullName === 'Brew of Knowledge');
+      expect(brew, 'on sale').toBeDefined();
+      expect(shop!.cost(brew!), "B's 2600 gold").toBe(2600);
+      q.session.endShopMode();
     });
   });
 
