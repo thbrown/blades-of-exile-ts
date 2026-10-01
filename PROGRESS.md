@@ -12,6 +12,8 @@
 > this port follows.
 
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
+  The dice are seeded off the clock at each load; `?seed=N` pins them (the
+  console prints the seed in use). See DIVERGENCES.md #37.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-13** that is
   **1,231,440 matching draws, 51 of 87 files agreeing all the way**, and
@@ -1610,6 +1612,7 @@ Notes for M2 implementer:
 
 ## Findings / gotchas log
 
+- (2026-10-01) **The live game's dice are seeded off the clock now, so a browser check that depends on a roll is flaky.** `verify-e3.mjs`'s orb flight pressed arrows a fixed 300ms after Use, and the orb's rolled damage sometimes outlasted that and swallowed the keys. Wait on `session.settled()`, or pin `?seed=`.
 - (2026-10-01) **A ported function's `run_a_missile` calls are easy to lose, and nothing notices.** They spend no draws while the monsters are going (`drawTextBar`'s `monstersGoing` gate), so the corpus never complains; only a play-tester sees that a slime's Spark never crossed the screen. `monst_cast_mage`/`monst_cast_priest` had lost all 24 of theirs. Grep the C++ function for `run_a_missile` when porting one.
 - (2026-10-01) **A play-test difference that depends on where you stand isn't a dice difference.** Colchis's "This is very odd..." was on time from the south and west gates and a step late from the north one. Drive every entrance (`positionParty` + a real key press) before deciding a report doesn't reproduce.
 - (2026-09-25) **A vehicle number in a `.map` file resizes the scenario's list to it — down as well as up** (`loadTownMapData`, OBoE's too), so a later town naming a lower number deletes every vehicle above it. Number them in load order (town, x, y). E3's converter does (`vehicleNumbers`).
@@ -15515,4 +15518,13 @@ party's next step; this build puts it up as the town appears. Test:
   includes things libstdc++ doesn't: forcing `-include algorithm`, `string`,
   `iterator` and similar into `DEFS` builds it. That was done in a scratch
   copy of `build.sh`; the script itself is unchanged.
+
+**The dice now start from the clock (2026-10-01).** Asked while checking the
+growl: does the same save give the same roll here and in Exile III? No, for
+three reasons: a save holds no seed, E3's generator is Borland's `rand()`
+seeded from the clock at launch, and the call orders differ. Finding that
+showed the port seeded nothing, so every page load replayed mt19937's default
+stream. It now seeds at load from `Date.now()`, or from `?seed=N`
+(DIVERGENCES.md #37). Tests: `rng.test.ts`, "the launch seed". The corpus
+doesn't pass through `main.ts`, so it's untouched.
 
