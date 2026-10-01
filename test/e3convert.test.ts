@@ -433,6 +433,33 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(said).toHaveLength(1);
   });
 
+  it('says so as the party walks into Colchis, not one step later', async () => {
+    // E3 puts a sighting up in the middle of drawing the creature
+    // (`FUN_1060_032d` -> `FUN_1060_0a1e`), so Colchis's slimes are remarked
+    // on as the town first appears. OBoE only queues the special, for the
+    // tail of the *next* action, which held the message back a step.
+    const townNum = scen.towns.findIndex((t) => t?.name === 'Colchis');
+    expect(townNum).toBeGreaterThanOrEqual(0);
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    const said: string[] = [];
+    session.attachSpecials(new Proxy({}, {
+      get: (_, k) => (k === 'message' ? (s: string) => { said.push(s); return Promise.resolve(); } : () => Promise.resolve(0)),
+    }) as never);
+    // The north gate, (10,29) of zone (3,9): no slime is in sight from the
+    // arrival square, and one walks into view in the monsters' turn that the
+    // entering move still gets. E3 draws it at the end of that turn; OBoE's
+    // check would not run until the next action.
+    scen.towns[townNum]!.canFind = true;
+    session.positionParty(3, 9, 10, 29);
+    await session.move(Direction.S);
+    await session.settled();
+    expect(session.inTown).toBe(true);
+    expect(session.univ.party.townNum).toBe(townNum);
+    // Behind the town's own entry chain (its fields), which runs loose — but
+    // with no second step taken.
+    await vi.waitFor(() => expect(said.some((m) => /^This is very odd/.test(m))).toBe(true));
+  });
+
   it("runs E3's boss kills: the Alien Slime's death is what Anaximander hears of", async () => {
     const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
     const dialogs: number[] = [];

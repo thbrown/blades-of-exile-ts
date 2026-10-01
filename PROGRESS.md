@@ -1610,6 +1610,8 @@ Notes for M2 implementer:
 
 ## Findings / gotchas log
 
+- (2026-10-01) **A ported function's `run_a_missile` calls are easy to lose, and nothing notices.** They spend no draws while the monsters are going (`drawTextBar`'s `monstersGoing` gate), so the corpus never complains; only a play-tester sees that a slime's Spark never crossed the screen. `monst_cast_mage`/`monst_cast_priest` had lost all 24 of theirs. Grep the C++ function for `run_a_missile` when porting one.
+- (2026-10-01) **A play-test difference that depends on where you stand isn't a dice difference.** Colchis's "This is very odd..." was on time from the south and west gates and a step late from the north one. Drive every entrance (`positionParty` + a real key press) before deciding a report doesn't reproduce.
 - (2026-09-25) **A vehicle number in a `.map` file resizes the scenario's list to it — down as well as up** (`loadTownMapData`, OBoE's too), so a later town naming a lower number deletes every vehicle above it. Number them in load order (town, x, y). E3's converter does (`vehicleNumbers`).
 - (2026-09-25) **Check an opcode name against `SpecType` before using it.** The names are `specials-opcodes.txt`'s lines by position (as in OBoE), and several read wrong: `relocate` is `TOWN_RELOCATE_CREATURE` (party relocation is `set-sector`), `stair-generic` is `TOWN_GENERIC_BUTTON` and `button-generic` is `TOWN_GENERIC_STAIR`, and `town-attitude` is `MAKE_TOWN_HOSTILE` (one creature is `set-attitude`). `buildOpcodeTable` plus `SpecType[...]` is a one-line check.
 - (2026-09-23) **E3 data is big-endian and `[x][y]`.** Read it with `LegacyReader(data, true)`. The terrain byte is `x*48 + y`. *(Corrected 2026-09-24: I first claimed `outdoor-to-json.js`'s output was transposed, but `display.js` draws `map[i*48+j]` at column `i`, so it was right all along.)* Everything that Ghidra shows as `DS:-0x500e + …` is a zone field. The town record is loaded at `DS:0004`, so subtract 4.
@@ -15466,3 +15468,48 @@ FORMATS.md called it "total level", and `SpecBuilder.ifLevelTotal` tested
 levels; it is `ifMageLoreTotal` now. (The user asked what Major Blessing
 needs: Ghikra's crystal, spot 11, teaches it to a party with 15 Mage Lore
 between its living members, `1088:06ea`; tested in `e3quests.test.ts`.)
+
+### Play-test fixes: monster spell missiles, and Colchis's first sighting (2026-10-01)
+
+Two notes from play-testing Exile III.
+
+**Monster spells drew no projectile.** The original (1997 COMBAT.CPP, read
+from OBoE's first svn import, `osx/combat.c`) and OBoE both open every aimed
+arm of `monst_cast_mage` and `monst_cast_priest` with `run_a_missile(l, …, 80)`:
+fifteen mage arms, nine priest. The port had none of them, so a slime's
+Spark or Flame simply landed. Now every arm throws its missile with the C++'s
+type, path and sound, from `l` (the second column of a wide caster facing
+north or east, as breath does), so each also gets its launch sound and 1997's
+sound hold. The frames cost no draws (`monstersGoing`), but the missile still
+moves `center`, which `party_can_see` reads, so the corpus was re-measured:
+(the before-and-after corpus run was still going when this landed; its result follows).
+Tests: `monsterSpells.test.ts`, "a monster's spell flies".
+
+**Colchis's slime sighting came a step late.** E3 puts a sighting up in the
+middle of `draw_monsters` (`FUN_1060_032d` → `FUN_1060_0a1e`). OBoE's
+`play_ambient_sound` only queues the `see_spec`, for the tail of the next
+action. Under `monster-sightings` = `exile3` the town now sweeps as E3 draws
+(`GameSession.seeMonstersE3`, which was `seeMonstersInCombat`): ahead of each
+town turn's monsters, and again after them for the redraw at the end of E3's
+`handle_action` (1010:3a08). `check_if_monst_seen` still rolls its ambient
+sound but leaves the sighting to the sweep. Driven in Chromium on all three
+of Colchis's gates. From the south and west a slime is in sight on arrival and
+both builds were on time. From the **north** none is, one walks into view
+during the monsters' turn, and the old build held the message until the
+party's next step; this build puts it up as the town appears. Test:
+`e3convert.test.ts`, "says so as the party walks into Colchis".
+
+- *Not changed: the growl.* "Monster saw you!" on the entering move rather
+  than a step later is the notice roll's d100. E3 also gives the monsters a
+  turn on that move. In its `handle_action`, `[bp-0xb]` is `did_something`
+  (set with `need_redraw`, `[bp-0xa]`, on a successful outdoor move at
+  1010:2108) and entering a town (1010:22ba) clears only `need_redraw`, as
+  BoE does. `E3-CHECK-IN-ORIGINAL.md` #21 asks the original, with a save
+  (`Q21.SAV`).
+- *Tooling:* `nedis.py` ran in a cloud container after `pip install
+  capstone`, with the EXE from the committed installer. Building
+  `tools/cppharness` on Linux needed `libboost-dev`, and Apple's libc++
+  includes things libstdc++ doesn't: forcing `-include algorithm`, `string`,
+  `iterator` and similar into `DEFS` builds it. That was done in a scratch
+  copy of `build.sh`; the script itself is unchanged.
+

@@ -276,6 +276,11 @@ describe.skipIf(!dir)('saves for E3-CHECK-IN-ORIGINAL.md', () => {
       todo: "The Lair of Drakos is on the map. Go east into it, to the floor of pillars (x 19-25, y 26-28). From (21,30) make walkthrough A's moves: NW, W, E, W, E, E, E, E, W, E, then N. Does north open?",
       make: async (q) => { scen.towns[74]!.canFind = true; await at(q, 122, 312); },
     },
+    {
+      file: 'Q21.SAV', question: '#21, when Colchis\'s slimes first notice you',
+      todo: 'The party has never seen a slime. Step south into Colchis by its north gate, read "This is very odd...", then take one step. Does "Monster saw you!" come before the step or after? Reload and try again a few times.',
+      make: async (q) => { await q.outdoors(3, 9, 10, 29); },
+    },
   ];
 
   it('makes every save, and each loads back here to the same place', async () => {

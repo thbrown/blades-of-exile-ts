@@ -13,6 +13,7 @@ import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { GameSession } from '../src/game/session';
+import { Missile, setMissileSink } from '../src/game/missileAnim';
 import {
   countLevels, findFireballLoc, monstCastMage, monstCastPriest, monstNear, pcNear,
 } from '../src/game/monsterSpells';
@@ -226,5 +227,62 @@ describe('SUMMON_HOST', () => {
     if (town.monsters.filter((c) => c.isAlive).length === before) return;
     expect(summoned.length).toBeGreaterThan(0);
     expect(new Set(summoned.map((c) => c.summonTime)).size).toBe(1);
+  });
+});
+
+describe("a monster's spell flies", () => {
+  // `monst_cast_mage`/`monst_cast_priest` open every aimed arm with
+  // `run_a_missile(l, ...)` — the 1997 COMBAT.CPP's as well as OBoE's — and this
+  // port had left every one of them out, so a slime's Spark simply landed.
+  // Level-1 mages roll Spark, Minor Haste, Strength and Flame Cloud: two of
+  // those fly and two don't, which is the whole check.
+  // Flame is the haste's stand-in for an already-hasted caster.
+  const FLYING = ['  Spark', '  Flame Cloud', '  Flame'];
+  it('a Spark or a Flame Cloud crosses to the target; a haste does not', async () => {
+    const { s, m } = withCaster(1);
+    const pc = s.univ.party.pcs[0]!;
+    const missiles: Missile[] = [];
+    setMissileSink((x) => missiles.push(x));
+    try {
+      let flying = 0;
+      for (let i = 0; i < 30; i++) {
+        m.mp = 500;
+        m.health = m.maxHealth;
+        m.status[Status.HASTE_SLOW] = 0;
+        const before = s.univ.transcript.length;
+        await monstCastMage(s, m, 0);
+        const said = s.univ.transcript.slice(before);
+        if (said.some((l) => FLYING.includes(l))) flying++;
+      }
+      expect(flying).toBeGreaterThan(0);
+      expect(missiles).toHaveLength(flying);
+      for (const x of missiles) {
+        expect(x.from).toEqual(m.curLoc);
+        expect(x.dest).toEqual(pc.combatPos);
+        expect([6, 2]).toContain(x.type);
+      }
+    } finally {
+      setMissileSink(null);
+    }
+  });
+
+  it("a priest's Wrack flies too", async () => {
+    const { s, m } = withCaster(0, 1);
+    const missiles: Missile[] = [];
+    setMissileSink((x) => missiles.push(x));
+    try {
+      let wracks = 0;
+      for (let i = 0; i < 30; i++) {
+        m.mp = 500;
+        m.health = m.maxHealth;
+        const before = s.univ.transcript.length;
+        await monstCastPriest(s, m, 0);
+        if (s.univ.transcript.slice(before).includes('  Wrack')) wracks++;
+      }
+      expect(wracks).toBeGreaterThan(0);
+      expect(missiles.filter((x) => x.type === 8).length).toBeGreaterThanOrEqual(wracks);
+    } finally {
+      setMissileSink(null);
+    }
   });
 });

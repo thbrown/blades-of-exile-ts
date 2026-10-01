@@ -33,6 +33,7 @@ import { placeSpellPattern } from './spellPatterns';
 import { runBoomAnim, startBoomAnim } from './booms';
 import { handleMarkedDamage } from './damage';
 import { animSettle } from './anim';
+import { runAMissile } from './missileAnim';
 import { doShockwave } from './spellCombat';
 import type { GameSession } from './session';
 import { drawTerrain } from './textBar';
@@ -220,6 +221,17 @@ function castNote(session: GameSession, caster: Creature, spell: Spell): void {
   session.univ.addStringToBuf(`  ${spellName(spell)}`);
 }
 
+/**
+ * `l` in both casters (boe.combat.cpp:3331, :3655): where the spell's missile
+ * leaves from — the caster's square, or the second column of a wide one
+ * facing north or east, as a breath weapon does.
+ */
+function castFrom(caster: Creature): Location {
+  const l = { ...caster.curLoc };
+  if (caster.direction < 4 && caster.xWidth > 1) l.x++;
+  return l;
+}
+
 /** Shared front half of both casters: is this even possible, and on what? */
 function castable(session: GameSession, caster: Creature, targ: number): boolean {
   const town = session.univ.town;
@@ -327,6 +339,15 @@ export async function monstCastMage(
     if (victim) await damageTarget(univ, victim, dam, type, 7, Race.UNKNOWN, true, session);
   };
   /**
+   * `run_a_missile(l, dest, type, path, sound, 0, 0, 80)` — the bolt from
+   * the caster, which every aimed arm throws before it does anything else, in
+   * the original (1997 COMBAT.CPP) as in OBoE. This port left them all out,
+   * so a monster's Flame landed with no flame crossing the screen.
+   */
+  const l = castFrom(caster);
+  const missile = (dest: Location, type: number, path: number, sound: number): void =>
+    runAMissile(l, dest, type, path, sound, 0, 0, 80);
+  /**
    * `monst_cast_mage`'s summon arms (boe.combat.cpp:3417). **The count is
    * rolled after the species and only if the species was found**: the C++'s
    * `if(r1 == 0) break;` sits between `get_summon_monster` and the
@@ -353,23 +374,36 @@ export async function monstCastMage(
 
   try {
   switch (spell) {
-    case Spell.SPARK: await hit(rng.getRan(2, 1, 4), DamageType.MAGIC); break;
+    case Spell.SPARK:
+      missile(victLoc, 6, 1, 11);
+      await hit(rng.getRan(2, 1, 4), DamageType.MAGIC);
+      break;
     case Spell.HASTE_MINOR: livingSound(25); caster.slow(-2); break;
     case Spell.STRENGTH: livingSound(25); caster.curse(-3); break;
     case Spell.CLOUD_FLAME:
+      missile(victLoc, 2, 1, 11);
       await placeSpellPattern(session, SpellPat.SINGLE, victLoc,
         { field: FieldType.WALL_FIRE, whoHit: 7 });
       break;
     case Spell.FLAME:
+      missile(victLoc, 2, 1, 11);
       startBoomAnim();
       await hit(rng.getRan(Math.min(15, caster.getLevel()), 1, 4), DamageType.FIRE);
       break;
     case Spell.POISON_MINOR:
+      missile(victLoc, 11, 0, 25);
       victim?.poison(2 + rng.getRan(1, 0, Math.trunc(caster.getLevel() / 2)), rng);
       break;
-    case Spell.SLOW: victim?.slow(2 + Math.trunc(caster.getLevel() / 2)); break;
-    case Spell.DUMBFOUND: victim?.dumbfound(2, rng); break;
+    case Spell.SLOW:
+      missile(victLoc, 15, 0, 25);
+      victim?.slow(2 + Math.trunc(caster.getLevel() / 2));
+      break;
+    case Spell.DUMBFOUND:
+      missile(victLoc, 14, 0, 25);
+      victim?.dumbfound(2, rng);
+      break;
     case Spell.CLOUD_STINK:
+      missile(target, 0, 0, 25);
       await placeSpellPattern(session, SpellPat.SQUARE, target,
         { field: FieldType.CLOUD_STINK, whoHit: 7 });
       break;
@@ -378,10 +412,12 @@ export async function monstCastMage(
       summonN(getSummonMonster(session, 1, { beast: true }), () => 1, 3);
       break;
     case Spell.CONFLAGRATION:
+      missile(target, 13, 1, 25);
       await placeSpellPattern(session, SpellPat.RADIUS_2, target,
         { field: FieldType.WALL_FIRE, whoHit: 7 });
       break;
     case Spell.FIREBALL:
+      missile(target, 2, 1, 11);
       startBoomAnim();
       await placeSpellPattern(session, SpellPat.SQUARE, target, {
         damage: {
@@ -409,9 +445,11 @@ export async function monstCastMage(
         { field: FieldType.FIELD_WEB, whoHit: 7 });
       break;
     case Spell.POISON:
+      missile(victLoc, 11, 0, 25);
       victim?.poison(4 + rng.getRan(1, 0, Math.trunc(caster.getLevel() / 2)), rng);
       break;
     case Spell.ICE_BOLT:
+      missile(victLoc, 6, 1, 11);
       startBoomAnim();
       await hit(rng.getRan(5 + Math.trunc(caster.getLevel() / 5), 1, 8), DamageType.COLD);
       break;
@@ -438,6 +476,7 @@ export async function monstCastMage(
       livingSound(4);
       break;
     case Spell.FIRESTORM:
+      missile(target, 2, 1, 11);
       startBoomAnim();
       await placeSpellPattern(session, SpellPat.RADIUS_2, target, {
         damage: {
@@ -448,13 +487,16 @@ export async function monstCastMage(
       });
       break;
     case Spell.SHOCKSTORM:
+      missile(target, 6, 1, 11);
       await placeSpellPattern(session, SpellPat.RADIUS_2, target,
         { field: FieldType.WALL_FORCE, whoHit: 7 });
       break;
     case Spell.POISON_MAJOR:
+      missile(victLoc, 11, 1, 11);
       victim?.poison(6 + rng.getRan(1, 1, 2), rng);
       break;
     case Spell.KILL:
+      missile(victLoc, 9, 1, 11);
       startBoomAnim();
       await hit(35 + rng.getRan(3, 1, 10), DamageType.MAGIC);
       break;
@@ -544,6 +586,10 @@ export async function monstCastPriest(
   const hit = async (dam: number, type: DamageType): Promise<void> => {
     if (victim) await damageTarget(univ, victim, dam, type, 7, Race.UNKNOWN, true, session);
   };
+  // `run_a_missile`, as `monst_cast_mage` has it.
+  const l = castFrom(caster);
+  const missile = (dest: Location, type: number, path: number, sound: number): void =>
+    runAMissile(l, dest, type, path, sound, 0, 0, 80);
   const summon1 = (which: number, dice: number): boolean =>
     summonMonster(session, which, caster.curLoc, rng.getRan(dice, 1, 4),
       caster.attitude, caster.isFriendly, true);
@@ -551,6 +597,7 @@ export async function monstCastPriest(
   try {
   switch (spell) {
     case Spell.WRACK:
+      missile(victLoc, 8, 0, 24);
       startBoomAnim();
       await hit(rng.getRan(2, 1, 4), DamageType.UNBLOCKABLE);
       break;
@@ -564,8 +611,12 @@ export async function monstCastPriest(
       caster.curse(-(spell === Spell.BLESS ? 5 : 3));
       livingSound(4);
       break;
-    case Spell.CURSE: victim?.curse(2 + rng.getRan(1, 0, 1)); break;
+    case Spell.CURSE:
+      missile(victLoc, 8, 0, 24);
+      victim?.curse(2 + rng.getRan(1, 0, 1));
+      break;
     case Spell.WOUND:
+      missile(victLoc, 8, 0, 24);
       startBoomAnim();
       await hit(rng.getRan(2, 1, 6) + 2, DamageType.UNBLOCKABLE);
       break;
@@ -573,8 +624,12 @@ export async function monstCastPriest(
       livingSound(24);
       summon1(spell === Spell.SUMMON_SPIRIT ? 125 : 122, 3);
       break;
-    case Spell.DISEASE: victim?.disease(2 + rng.getRan(1, 0, 2), rng); break;
+    case Spell.DISEASE:
+      missile(victLoc, 11, 0, 24);
+      victim?.disease(2 + rng.getRan(1, 0, 2), rng);
+      break;
     case Spell.HOLY_SCOURGE:
+      missile(victLoc, 15, 0, 24);
       // A PC gets the full dose; another monster gets a much smaller one. The
       // C++ has a TODO asking why, and keeps it.
       if (targ < 6) {
@@ -586,6 +641,7 @@ export async function monstCastPriest(
       }
       break;
     case Spell.SMITE:
+      missile(victLoc, 6, 0, 24);
       startBoomAnim();
       await hit(rng.getRan(4, 1, 6) + 2, DamageType.COLD);
       break;
@@ -669,6 +725,7 @@ export async function monstCastPriest(
       break;
     }
     case Spell.FLAMESTRIKE:
+      missile(target, 2, 0, 11);
       startBoomAnim();
       await placeSpellPattern(session, SpellPat.SQUARE, target, {
         damage: { type: DamageType.FIRE, dice: 2 + Math.trunc(caster.getLevel() / 2) + 2 },
@@ -676,6 +733,7 @@ export async function monstCastPriest(
       });
       break;
     case Spell.UNHOLY_RAVAGING: {
+      missile(victLoc, 14, 0, 53);
       // The damage die first, then the poison's (boe.combat.cpp:3841). Rolling
       // them the other way round leaves every number correct and the stream one
       // draw out of phase — the AP-argument-order trap again.
@@ -692,6 +750,7 @@ export async function monstCastPriest(
       caster.avatar();
       break;
     case Spell.DIVINE_THUD:
+      missile(target, 9, 0, 11);
       startBoomAnim();
       await placeSpellPattern(session, SpellPat.RADIUS_2, target, {
         damage: {
