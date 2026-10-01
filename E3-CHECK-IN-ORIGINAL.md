@@ -205,6 +205,45 @@ quest steps.
   first." Until today no special item could be Used and nothing could fly.
 - **Question:** do those match, and does the orb's flight last six moves?
 
+### 16. Leaving the fortress under Tinraya (2026-09-30)
+
+- **Where:** the Keep of Tinraya (Footracer Province, (78,63)), down its
+  stairs, through the cell and the Crystal Souls, and out by the west side
+  of the level below.
+- **The port:** the party comes out at (72,63), beside the lower level's own
+  entrance, west of the keep. Until today it came out on the keep's own
+  doorstep and walked straight back in: the converter dropped each town's
+  four exit squares (E3's town record `0x0be`, read by its end_town_mode).
+- **Question:** does the original put you west of the keep, by the lava?
+
+### 17. The rune doors under Tinraya (2026-09-30)
+
+- **Where:** the rune-covered doors at (28,7) and (12,32) of the level
+  under the keep.
+- **The port:** the converted terrain is a locked door, so a party without
+  the Murder Cave's key (or the Vahnatai key) can still pick it or cast
+  Unlock on it.
+- **Question:** can you get through without the key in the original?
+
+### 18. Fort Emergence's little cell (2026-09-30)
+
+- **Where:** Fort Emergence, the far southwest corner: the secret door at
+  (2,58) and the two squares behind it, (1,59) and (2,59).
+- **Do:** walk into the cell.
+- **Why:** E3's code tests a town's edge rectangle with x and y swapped
+  (E3-SUSPECTED-BUGS.md #21); read that way, the cell is outside the town.
+- **The port:** an ordinary dead end.
+- **Question:** does walking in put you outside the fort?
+
+### 19. Rentar-Ihrno's panel (2026-09-30)
+
+- **Where:** her pedestal in the Keep of Rentar-Ihrno, with every lever
+  below pulled.
+- **Do:** press Begin Process first, before Release Slime Compounds.
+- **The port:** the controls beep and the panel closes (E3's own code
+  keeps it open; noted in `towns/rentarKeep.ts`).
+- **Question:** does the panel stay up, and does anything else happen?
+
 ## Waiting on a ruling (already written up elsewhere)
 
 - **DIVERGENCES.md #30 and #31**, marked "open for the user".

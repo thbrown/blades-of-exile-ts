@@ -17,6 +17,7 @@ import type { Direction, Location } from '../../src/core/location';
 import type { Scenario } from '../../src/data/scenario';
 import { restoreScenarioState } from '../../src/data/scenarioState';
 import { SpellPat } from '../../src/data/pattern';
+import { SpecType } from '../../src/data/special';
 import { Spell } from '../../src/data/spell';
 import { TerSpec } from '../../src/data/terrain';
 import { loadScenario } from '../../src/fileio/loadScenario';
@@ -375,8 +376,9 @@ export class QuestRunner {
 
   /**
    * Whether the party could walk from `from` to `to` in this town, through
-   * doors (opened by a step or picked) but not walls, portcullises or water;
-   * `boat` lets it cross water a boat can. Special spots don't count, so a
+   * doors (opened by a step or picked) and E3's ways through (spot 50: a
+   * secret passage, a ford), but not walls, portcullises or water; `boat`
+   * lets it cross water a boat can. Other special spots don't count, so a
    * stair or a blocking message in the way doesn't stop the path.
    */
   canReach(from: Location, to: Location, opts: { boat?: boolean } = {}): boolean {
@@ -386,9 +388,16 @@ export class QuestRunner {
   /** Steps on the shortest such path from `from` to `to` (as `canReach` walks), or -1. */
   pathLength(from: Location, to: Location, opts: { boat?: boolean } = {}): number {
     const town = this.town;
+    // The converter's spot 50: a CANT_ENTER that lets the party by (ex1a 0)
+    // and forces the step (ex2a 1) onto a square that would block it.
+    const waysThrough = new Set(town.record.specialLocs.filter((l) => {
+      const n = town.record.specials.get(l.spec);
+      return n?.type === SpecType.CANT_ENTER && n.ex1a === 0 && n.ex2a === 1;
+    }).map((l) => `${l.x},${l.y}`));
     const passable = (x: number, y: number): boolean => {
       if (!town.isOnMap(x, y)) return false;
       if (x === to.x && y === to.y) return true;
+      if (waysThrough.has(`${x},${y}`)) return true;
       const ter = this.univ.terrainType(town.record.terrain[x]![y]!);
       if (opts.boat && ter.boatOver) return true;
       if (ter.special === TerSpec.CHANGE_WHEN_STEP_ON || ter.special === TerSpec.UNLOCKABLE) return true;

@@ -15206,12 +15206,103 @@ one quest at a time**, to keep each session's context small.
     six minutes) and prints them.
   - *Not covered*: Tevrono itself (General Baziron, whom walkthrough A
     skips), the stone circles, and the province maps.
-- [ ] **Next: the endgame's alien beasts** (walkthrough A's "Endgame",
-  B's "Time for the Cleaning Lady!" and on).
-- [ ] Then the five artifact quests.
+- [x] **The endgame** (2026-09-30), twenty-one tests (and a search behind `E3_BELT_SEARCH`) in `describe('the
+  endgame')`, walkthrough A's "Endgame" and B's "Time for the Cleaning
+  Lady!" on. The game can be won, start of the chain to `[end]`:
+  - **Grah-Hoth** (the demon plot, mandatory past day 160): the daily
+    plot starts it, Anaximander's warning, the Portal Fortress's portal to
+    the overrun Tower (25), Solberg and Linda, the ghost's Move Mountains,
+    the gate refusing steel and killing those who step in, the temple
+    altar's Blessed Athame (demons called; a kneel heals once), the moldy
+    storeroom wall, the guardians, the gate cut (0xc91 3, home), the
+    report and Levy's reward; and the 2,000-turn countdown's end.
+  - The evidence: Berra's four proofs (the rune, scales, shards, hot
+    shards naming the Vahnatai, town 87 on the map), Anaximander's four
+    reports.
+  - Erika: the bridge (zone 71) opening on the evidence, "amulet", the
+    amulets behind the locked door, "activate" (yes, or refused and gone).
+  - The dragons: Sulfras's audience after a plague, her two Alien Beasts,
+    Athron's barrier gap and middle chest (Arion's metal), Khoth's
+    portcullis and bookshelf at (22,11), and the Beastslayer Blade (30 a
+    blow against Alien Beasts and Pack Leaders, nothing else).
+  - The Bunker: Commander Johnson's "Sandra", New Cotra's door, Ostoth's
+    one guess (the Vahnatai), the chest empty until the fifth day, the
+    Thought Crystal.
+  - The New Formello murders (mandatory: the key opens Tinraya's rune
+    door): Anaximander's word, Flanagan, the Murder Cave's bodies, ways
+    through and nest, the key.
+  - Blackcrag: Kendra and Geoffrey's 3000-gold permission, the Guarded
+    Tunnel's alarm (without it the thieves turn), the office button pressed
+    once (twice, and the bridge drops you), the doomguard woken and one
+    copy killed for the portcullis, the stairs up; the fortress's ambush,
+    Vladimir's door after a plague, Prazac's missive, Anaximander's answer
+    two days on, her permission, and Footracer's gate opening onto beasts.
+  - The ways between, as outdoor paths: only through the gate; Tinraya to
+    the New Factory and the last stone circle only over lava (Firewalk or
+    the Orb); on foot to the Great Walls and, from their far end, the keep.
+  - Tinraya: the keep from the east door, its vats, the barrier and the
+    rune's ~80; below, by boat to the Murder Cave key's door, captured,
+    45 turns in the cell, one PC through the teleporter, walkthrough A's
+    G-K-I on the panel (or B's alarm, which opens every door and wakes the
+    guards), crystal 2, the Thought Crystal stilling the Crystal Souls (or
+    their fight without it), the Vahnatai key, up and down again, and out
+    by the west side.
+  - The New Factory, **walked** (`FACTORY_ROUTES`, found by `searchBelts`;
+    `E3_BELT_SEARCH=1` searches again, about 8 s): buttons 14, 15, 17, Move
+    Mountains on the cracked wall at (24,9), three barriers dispelled,
+    button 16, and out the east side to (85,29). Without the buttons the
+    far side can't be reached.
+  - The Great Walls: Erika's amulets blasting the first wall (once; not
+    without them), the runes past (50,9) lifting the far portcullises, out
+    to (349,3).
+  - The Keep of Rentar-Ihrno: the false barriers (the fire ones), the
+    reading crystals, three stairs open and the button at (34,24) for the
+    fourth; below, each stair's chain of levers in order (out of order they
+    refuse), all ten channels; Rentar-Ihrno with Erika (the duel, the panel
+    at once) and without her (five throws back, each calling four
+    wanderers); the panel's wrong order beeping, and Release, Power Up,
+    Begin ending the game.
+  - Side content: Ghikra (Rentar-Ihrno's leave, the glowing door, the
+    council of plagues, the shade's warning), the Great Circle (the altar
+    smashed, the haakai's bargain taken or refused), and the Pantless
+    Dungeon (pants on the pedestal, Jeff Vogel's inn, and back).
+  - **Found and fixed: leaving a town ignored E3's exit squares.** E3's
+    town record holds four `exit_locs` at `0x0be` (north, south, east,
+    west), read by its end_town_mode `FUN_10d8_252b`; FORMATS.md had them
+    as "open". Under Tinraya (36) has only a west one, beside its own
+    entrance; without it, walking out put the party on the keep's doorstep
+    and straight back in, and nothing west of Tinraya (the New Factory, the
+    Vahnatai lands, the end) could be reached. `emit.ts` writes them as
+    `<exit>`s now; 25 towns have some (the twenty villages, 35, 36, 50, 63 and 82).
+  - Runner: `canReach`/`pathLength` follow E3's ways through (spot 50,
+    the converter's forcing CANT_ENTER) as a player walks them; the Murder
+    Cave's secret passages and stalagmites are all ways through.
+  - New suspected E3 bug #21 (E3 compares x with the first field of
+    `in_town_rect`; the port keeps the Mac reading), not wired. New
+    check-in questions 16–19.
+  - *Not covered*: the fights (the runner kills), Rentar-Ihrno's quarters'
+    rings, the chests behind the Crystal Souls' hall, Petrie's and Howar's
+    shops in Blackcrag, and the stone circles before the Great Circle.
+- [ ] **Next: the five artifact quests** (Pachtar's Plate, the Fury
+  Crossbow, the Black Halberd, the Knowledge Brew, the Ring of Endless
+  Magery), one per session.
 
-All checks pass (2026-09-30): 1,530 tests, tsc, both sweeps, verify-screen,
+All checks pass (2026-09-30): 1,551 tests, tsc, both sweeps, verify-screen,
 verify-party and verify-e3.
+
+**Gotchas from the endgame (2026-09-30):**
+- Every throw back from Rentar-Ihrno's pedestal calls four wanderers; one
+  standing on the pedestal's square blocks the step *and* the script, with
+  no message. Clear the hostiles before each step there.
+- `ledPanel`'s `closing` buttons close the panel even when they only beep
+  (Begin Process): an answer queued after one is left for the next dialog.
+- A choice's lead pages are OK dialogs that consume queued answers: queue
+  `/^(OK|Yes)$/` and the like when a dialog has pages before its buttons.
+- `canReach` treats a locked door (UNLOCKABLE) as passable, so it can't
+  show that a key is needed; check the terrain the key changes instead.
+- `QuestRunner.enter` from inside a town leaves it through the debug path,
+  which leaves the party's outdoor square where it was; a test of where a
+  town lets the party out has to walk in from outdoors.
 
 **Gotchas from the golems (2026-09-30):**
 - Adding a scenario-level node (or changing what a builder step emits)

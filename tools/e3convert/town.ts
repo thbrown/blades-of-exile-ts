@@ -96,8 +96,15 @@ export interface E3Town {
   lighting: number;
   startLocs: LegacyLoc[];
   exitSpecs: number[];
-  /** Four locations after `exit_specs`; the order is not BoE's, and the meaning is open. */
-  unknownLocs: LegacyLoc[];
+  /**
+   * Where the party comes out on leaving by each edge, in the zone the party
+   * is in (`exit_locs`, in E3's order north, south, east, west; x below 1 is
+   * unused). E3's end_town_mode, `FUN_10d8_252b` (`10d8:2b..` on, the
+   * `es:[0xc2]`–`[0xc8]` reads), takes one where BoE nudges the party off its
+   * way in. Under Tinraya (36) has only a west one, out beside its own
+   * entrance in zone (1,1), not the keep's.
+   */
+  exitLocs: LegacyLoc[];
   inTownRect: LegacyRect;
   presetItems: E3PresetItem[];
   maxNumMonst: number;
@@ -156,7 +163,7 @@ export function readE3Town(data: Uint8Array, town: number): E3Town {
     lighting: r.i16(),
     startLocs: r.locs(4),
     exitSpecs: r.i16s(4),
-    unknownLocs: r.locs(4),
+    exitLocs: r.locs(4),
     inTownRect: r.rect(),
     presetItems: Array.from({ length: 64 }, () => readPresetItem(r)),
     maxNumMonst: r.i16(),

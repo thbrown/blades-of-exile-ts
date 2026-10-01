@@ -629,6 +629,18 @@ interface TownTables {
   mute(p: number): number | undefined;
 }
 
+/**
+ * The town's `exit_locs` as BoE's `<exit>`s: E3 keeps them north, south,
+ * east, west, and an x below 1 is unused (`FUN_10d8_252b`). Both engines
+ * read them in the zone the party is in.
+ */
+function exitsXml(t: E3Town): string {
+  const [n, s, e, w] = t.exitLocs;
+  return ([['n', n], ['w', w], ['s', s], ['e', e]] as const)
+    .filter(([, l]) => l && l.x >= 1)
+    .map(([dir, l]) => `    <exit dir="${dir}" x="${l!.x}" y="${l!.y}" />\n`).join('');
+}
+
 function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, strings: Map<number, string>, script: SpotScript, tables: TownTables): string {
   const size = townSize(t);
   const r = t.village ? { top: 0, left: 0, bottom: size - 1, right: size - 1 } : t.inTownRect;
@@ -655,7 +667,7 @@ function townXml(t: E3Town, name: string, personalityOf: Map<string, number>, st
     <size>${size}</size>
     <name>${esc(name)}</name>
     <bounds top="${r.top}" left="${r.left}" bottom="${r.bottom}" right="${r.right}" />
-    <difficulty>${townDifficulty(strings, t.number)}</difficulty>
+${exitsXml(t)}    <difficulty>${townDifficulty(strings, t.number)}</difficulty>
     <lighting>${LIGHTING[t.lighting] ?? 'lit'}</lighting>
 ${script.entry >= 0 ? `    <onenter condition="alive">${script.entry}</onenter>\n    <onenter condition="dead">${script.entryDead}</onenter>\n` : ''}${script.hostile >= 0 ? `    <onoffend>${script.hostile}</onoffend>\n` : ''}${script.timers.map((tm) => `    <timer freq="${tm.freq}">${tm.node}</timer>\n`).join('')}    <flags>
 ${chopXml(t)}${tables.hidden(t.number) ? '        <hidden>true</hidden>\n' : ''}    </flags>
