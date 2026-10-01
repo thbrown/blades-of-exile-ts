@@ -291,6 +291,13 @@ describe.skipIf(!dir)('saves for E3-CHECK-IN-ORIGINAL.md', () => {
         + '(260,127). Do they let you through?',
       make: async (q) => { scen.towns[76]!.canFind = true; await at(q, 235, 131); },
     },
+    {
+      file: 'Q23.SAV', question: "#23, the Remote Cave's crate",
+      todo: 'The Remote Cave is just west. Go in, west to the white mushrooms at (32,1), due south to (32,14), and on west to the '
+        + "door at (15,1). Stand at (3,17), north of the three crates, and make walkthrough A's moves: S, N x15, NW, E x7, NE, "
+        + 'then S twice. Is the crate now one square south of the party, at (10,4)? (The port needs a third S for that.)',
+      make: async (q) => { await at(q, 57, 68); },
+    },
   ];
 
   it('makes every save, and each loads back here to the same place', async () => {

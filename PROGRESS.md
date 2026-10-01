@@ -15388,11 +15388,55 @@ one quest at a time**, to keep each session's context small.
   - *Not covered*: the Dark Wyrms and the giants (the runner kills), the
     light that level 2 swallows, the ruin's other rooms, and the trip
     there from the Isle of Bigail.
-- [ ] **Next: the other three artifact quests** (the Black Halberd, the
-  Knowledge Brew, the Ring of Endless Magery), one per session.
+- [x] **The Black Halberd** (2026-10-01), five tests in `describe('the
+  Black Halberd')`, walkthrough A's "The Black Halberd" and B's "The Black
+  Halberd Kenichi". Nothing was missing for it.
+  - Sharimik's bartender (personality 243): "bour" (12 gold), "know" (100)
+    names Masok. Masok (260) is in Angel's Rest (147) and Softport (133) on
+    days where `day % 3 == 0`; "halb", "scro", and "purc" for 2000 gold
+    (refused at 1999, once only) gives the Map to Black Halberd (note
+    0xb3), which is only a map: **the Remote Cave (72) and the Rakshasa
+    Lair (73) are on the map from the start** (not in E3's hidden-town
+    table, `DS:29b2`). Its entrance at (56,68), in at (43,5).
+  - The Remote Cave: the white mushrooms at (32,1) clear the stalagmites
+    at (32,13), and a step onto (31|33, 9|11) shuts them again; the crate
+    pushed round the chasms onto the rune at (13,2) (walkthrough A's moves
+    with one more S, check-in #23); the paper in it, readable only once the
+    crate is there ("You may proceed.", 0x35d) unbars the door at (8,19);
+    the triangle tiles (spots 17, 16, 15 in order) throw the party to
+    (18,39); the rune second from the east (32,40) leaves one brazier as
+    floor and opens (38,44); the pushing floor at (42,20) until the
+    stalagmite at (43,27) is searched; and the three stairs. The way back:
+    (18,38) throws the party to (8,24), and out.
+  - The Rakshasa Lair: the first room's other doors wall up its east door;
+    A's doors (Unlock on 122), the library's rakshasas, its two bookshelves
+    (Word of Recall at 13 Mage Lore, Death Arrows at 17), the hall's door,
+    the false wall at (20,15), the pillared room's walls sinking on the
+    eight ambushers, the locked door, the three trapped chests (B's list:
+    the Black Halberd, the wands of Rats and Vorb, Mandrake Root, the Scale
+    Necklace, Firestone), and the stairs up. The cave's other two stairs
+    land by the drakes' lava at (23,6), cut off from the halberd; the
+    lair's east edge leaves by the cave's entrance.
+  - The 1997 code (`town.c:454`, `adj_town_look`) agrees with the port that
+    a contained item shows only on a crate, barrel or container square, so
+    the paper can't be had without the puzzle.
+  - *Not covered*: the fights (the runner kills), the cave's nagas and
+    basilisks, the lair's other rooms (the cursed halberd, the robes), and
+    the drakes.
+- [ ] **Next: the other two artifact quests** (the Knowledge Brew, the Ring
+  of Endless Magery), one per session.
 
-All checks pass (2026-10-01): 1,572 tests, tsc, both sweeps, verify-screen,
-verify-party and verify-e3.
+All checks pass (2026-10-01, the Black Halberd): 1,577 tests, tsc, both
+sweeps. (Tests and docs only; the browser checks last passed with the Fury
+Crossbow.)
+
+**Gotchas from the Black Halberd (2026-10-01):**
+- The second-runner reset bit again, silently: a side check's runner built
+  mid-test put the cave's stalagmites back under the main runner, and a
+  later `canReach` failed far from the cause. Build every side runner
+  first.
+- `useItem(q.session, pc, slot, q.session.host ?? undefined)` reads a note
+  or map; its dialog lands in `q.log` as a `[choice]` with its title.
 
 **Gotchas from the Fury Crossbow (2026-10-01):**
 - `QuestRunner.canReach` counts a locked door (UNLOCKABLE) as open, and

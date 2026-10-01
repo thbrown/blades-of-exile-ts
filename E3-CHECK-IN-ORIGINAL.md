@@ -305,6 +305,24 @@ quest steps.
   to.
 - **Question:** are they passes in the original too?
 
+### 23. The Remote Cave's crate (2026-10-01)
+
+- **Where:** the Remote Cave (town 72), west of (57,68), in the room of
+  chasms past the door at (15,1). Three crates stand at (1,18), (2,18)
+  and (3,18).
+- **Do:** walkthrough A's moves from (3,17): S, N ×15, NW, E ×7, NE, then
+  "south two". Then its step 8, SW.
+- **Why:** walking into a crate that can't move on swaps it with the party
+  (the first S does this, putting the crate at (3,17)). In the port A's
+  "south two" leaves the crate at (10,4) with the party at (10,3), and A's
+  SW then runs into the chasm. Walkthrough B starts its own list from
+  exactly there ("at 10,3 with a crate one square south") with an extra S
+  first; with that S, A's remaining moves put the crate on the rune at
+  (13,2), as the test (`the Black Halberd`) does.
+- **The port:** needs three Ss at A's step 7.
+- **Question:** in the original, does A's "south two" work as written (so
+  the port pushes or swaps differently), or is A one S short?
+
 ## Waiting on a ruling (already written up elsewhere)
 
 - **DIVERGENCES.md #30 and #31**, marked "open for the user".
