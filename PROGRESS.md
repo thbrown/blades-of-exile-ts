@@ -15482,7 +15482,10 @@ type, path and sound, from `l` (the second column of a wide caster facing
 north or east, as breath does), so each also gets its launch sound and 1997's
 sound hold. The frames cost no draws (`monstersGoing`), but the missile still
 moves `center`, which `party_can_see` reads, so the corpus was re-measured:
-(the before-and-after corpus run was still going when this landed; its result follows).
+**unchanged**: 50 of 87 agreeing all the way and 1,170,604 matching draws,
+before and after, file for file. (Measured against a Linux build of the
+oracle, which reads a little below the macOS figure at the top of this file:
+51 and 1,231,440. Compare like with like.)
 Tests: `monsterSpells.test.ts`, "a monster's spell flies".
 
 **Colchis's slime sighting came a step late.** E3 puts a sighting up in the
