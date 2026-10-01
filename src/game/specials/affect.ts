@@ -94,7 +94,7 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       let who = 0;
       if (spec.ex1a === 2) ctx.curTarget = null;
       else if (spec.ex1a >= 10 && spec.ex1a < 16) {
-        // An exile-js extension, not in OBoE: 10–15 pick PC 0–5 without
+        // An blades-of-exile-ts extension, not in OBoE: 10–15 pick PC 0–5 without
         // asking. The C++ has no arm for them (they ask nobody and change
         // nothing), so no BoE scenario can mean anything else by them. Exile 3
         // needs it for scripts that change each PC by its own skills, which

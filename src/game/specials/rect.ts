@@ -95,7 +95,7 @@ export async function rectSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
 
         case SpecType.RECT_PLACE_FIELD: {
           if (!town) return;
-          // An exile-js extension, not in OBoE: 100 + f takes field f away
+          // An blades-of-exile-ts extension, not in OBoE: 100 + f takes field f away
           // (always, and nothing else), as Exile 3's scripts clear
           // quickfire (tools/e3convert, `removeField`). The C++ has no
           // field numbered 100 or more, so no BoE scenario uses these.

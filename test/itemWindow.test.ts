@@ -130,6 +130,23 @@ describe('cScrollbar', () => {
     expect(s.getPosition()).toBe(0);
   });
 
+  it('the thumb drags, by the steps the pointer has moved since the press', () => {
+    const s = bar();
+    s.setMaximum(16);
+    // The track between the arrows is 164..223 for the thumb's top: 59 pixels for 16 steps.
+    expect(s.startThumbDrag(565, 150)).toBe(false); // the up arrow
+    expect(s.startThumbDrag(565, 170)).toBe(true);
+    s.dragTo(170 + 30);
+    expect(s.getPosition()).toBe(8); // 30 * 16 / 59, truncated
+    s.dragTo(400);
+    expect(s.getPosition()).toBe(16);
+    s.dragTo(170);
+    expect(s.getPosition()).toBe(0);
+    s.endDrag();
+    expect(s.dragTo(200)).toBe(false);
+    expect(s.getPosition()).toBe(0);
+  });
+
   it('lowering the maximum pulls the position down with it', () => {
     const s = bar();
     s.setMaximum(16);

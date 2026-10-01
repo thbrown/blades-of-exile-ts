@@ -254,7 +254,7 @@ ${pad}</special>\n`;
       if (e.type >= ShopItemType.HEAL_WOUNDS) return `${pad}<heal>${e.index}</heal>\n`;
       const t = SIMPLE_ENTRY_TAGS[e.type];
       if (t === undefined) throw new Error(`no shop entry tag for type ${e.type}`);
-      // `cost=` is the exile-js extension readShopEntries documents.
+      // `cost=` is the blades-of-exile-ts extension readShopEntries documents.
       const priced = e.type === ShopItemType.MAGE_SPELL || e.type === ShopItemType.PRIEST_SPELL
         || e.type === ShopItemType.ALCHEMY;
       const cost = priced && e.item.value !== defaultSpecialCost(e.type, e.index) ? ` cost="${e.item.value}"` : '';

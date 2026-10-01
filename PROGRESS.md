@@ -1,4 +1,4 @@
-# exile-js Progress
+# blades-of-exile-ts Progress
 
 > Live status of the project. See `PLAN.md` for the full approved plan.
 > **Convention:** whoever works on this (any model/session) reads this file first, updates it as work lands, and commits it with the work.
@@ -15812,3 +15812,44 @@ frame by frame, from code in segment `1098`:
 - **The decompiler drops the far calls' arguments** throughout, so every
   case needs `nedis.py 1098:47dd` beside it. Movie 1 (`3148`) is the
   victory ceremony; movie 2 (`1dcb`) is unidentified.
+
+### Play-test fixes: maps from E3 saves, the item scrollbar, party cards, the name (2026-10-01)
+
+- **An Exile III save now brings its maps.** It was a `TODO(e3save)`, not a
+  bug, but it looked like one: a loaded game had everything black. The
+  layout (`e3save.ts`, `e3TownMapAt`) is BoE 1997's `town_maps[t][x / 8][y]`,
+  bit `x % 8`, split as E3 sizes its towns: 0–39 `[8][64]`, 40–79
+  `[6][48]`, 80–119 `[4][32]` in one block, villages 120–199 `[6][48]` in
+  the last; the 90 zones `[6][48]` each at `y * 9 + x`. `out_e[96][96]` is
+  the window, `[x][y]`, and is all a save without maps has.
+  - **In town, the town's own squares are in `c_town`**, not its map: E3
+    folds them in only on leaving. `c_town.explored` is at **+0x426**
+    (town number, difficulty, then the 0x422-byte town record), `[x][y]`
+    in bit 0. Pinned on the user's four in-town saves: read at 0x421 a
+    block wrapped five columns, and at 0x426 the explored patch sits on the
+    party. Squares beyond a 48-town's edge are set in the original's bytes
+    too; the import ignores them.
+  - Two real bugs the round-trip test found: the import never cleared the
+    previous game's outdoor window, so its squares landed in the save's
+    zones; and the export read `univ.town` while outdoors, where it can
+    still hold the last town.
+  - The export writes the maps too, and `out_e` as the window plus its
+    four zones (as `add_outdoor_maps` leaves it), so import → export is
+    byte-stable. All seven of the user's saves still round-trip
+    (`E3_SAV=~/Desktop/Saves`).
+- **The item and shop scrollbars drag and take the wheel.** The thumb drag
+  is `cScrollbar::handle_thumb_drag`. The wheel over the inventory (and its
+  bar, `inventory_events_rect`) or the shop (`shop_frame`) scrolls them; it
+  used to reach dialogs only. `InputRouter` now turns wheel pixels into
+  notches (100 px each, lines × 40, pages × 800): a touchpad sends dozens
+  of tiny events, which counted as a notch each before. Dialog panes take
+  notches too. `verify-screen.mjs` checks all three by the mouse.
+- The startup screen's party cards are one size (176×86), and the race reads
+  "Slith".
+- **Renamed exile-js → blades-of-exile-ts** everywhere but history (this
+  file's log) and the browser storage names (`exile-js`,
+  `exile-js-scenarios`, `exile-js:prefs`, `exile-js:game-tab`,
+  `exile-js.pendingSave`), which keep the old name so players keep their
+  saves. `docs/assets` is build output and follows at the next build.
+- `Q24.SAV` (Foxfire's key) has its recipe, and the check-in saves carry
+  maps now.

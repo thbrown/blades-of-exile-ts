@@ -85,7 +85,8 @@ export interface StartupPc {
 }
 
 /** The player races (`eRace` 0-3); a PC of any other shows none. */
-const RACE_NAMES: Record<number, string> = { 0: 'Human', 1: 'Nephilim', 2: 'Slithzerikai', 3: 'Vahnatai' };
+/** Short, to fit a party card: "Slith" is what players call them anyway. */
+const RACE_NAMES: Record<number, string> = { 0: 'Human', 1: 'Nephilim', 2: 'Slith', 3: 'Vahnatai' };
 
 /**
  * The party in memory — the C++'s `party_in_memory` and `draw_startup`'s

@@ -19,7 +19,7 @@ the licence in its own `GAMEINFO.TXT`:
 
 So this file is kept complete and unaltered, and nobody may be charged for it.
 
-exile-js never ships a modified copy of the game. The published site serves
+blades-of-exile-ts never ships a modified copy of the game. The published site serves
 this installer as it is (at `exile3/EXL3INST.EXE`, with this README), and
 the player's browser converts it the first time Exile III is played, with
 the GPL converter in `tools/e3convert/` running in a worker, and keeps the

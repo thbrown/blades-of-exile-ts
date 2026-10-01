@@ -173,7 +173,7 @@ await shot('09-jobs-panel');
 if (!/Pay is \d+ gold/.test(boardBefore.job1 ?? '') && !took) errors.push(`the job board showed no jobs: ${JSON.stringify(boardBefore)}`);
 if (took && jobs.held !== 1) errors.push(`taking a job did not give the party one: ${JSON.stringify(jobs)}`);
 
-// The events journal (the exile-js opcode `journal`): Anaximander's first
+// The events journal (the blades-of-exile-ts opcode `journal`): Anaximander's first
 // briefing (the fort's spot 1, at (5,7)) adds entry 2, and Options > Journal
 // shows it with its day. The party goes back afterwards, for the walk out.
 const beforeJournal = await page.evaluate(() => ({ ...window.__univ.party.townLoc }));

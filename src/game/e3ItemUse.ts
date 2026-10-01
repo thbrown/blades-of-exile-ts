@@ -74,7 +74,7 @@ const HERBS_EATEN: [number, number] = [18, 9];
 /**
  * The herb's messages, E3's block 0x37 strings 0x14, 0x15 and 0x16, as the
  * scenario nodes the converter wrote for them: the feature flag `skribbane`
- * = `exile3:<a>,<b>,<c>`, an exile-js extension. Null without it, and then
+ * = `exile3:<a>,<b>,<c>`, an blades-of-exile-ts extension. Null without it, and then
  * the herb works but says nothing.
  */
 function skribbaneNodes(session: GameSession): number[] | null {

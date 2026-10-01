@@ -1,6 +1,6 @@
-exile-js is a port of Blades of Exile, whose game, editor and character
+blades-of-exile-ts is a port of Blades of Exile, whose game, editor and character
 editor Spiderweb Software released under the terms of the GNU General Public
-License, Version 2. exile-js is released under the same terms, below.
+License, Version 2. blades-of-exile-ts is released under the same terms, below.
 See README.md ("Licence") for what this covers and what it does not.
 
     GNU GENERAL PUBLIC LICENSE

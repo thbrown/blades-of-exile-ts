@@ -1,5 +1,5 @@
 /**
- * Exile III's moving walls. An exile-js extension, not in BoE or OBoE: a
+ * Exile III's moving walls. An blades-of-exile-ts extension, not in BoE or OBoE: a
  * scenario with the feature flag `moving-walls` set to `exile3:<node>:<towns>`
  * runs these at the end of every turn and every combat round (DIVERGENCES.md
  * #35). In Exile III they are the Concealed Tunnel's (town 54) and town 71's.

@@ -1,4 +1,4 @@
-# Working on exile-js
+# Working on blades-of-exile-ts
 
 **Read `PROGRESS.md` first, then `PLAN.md`.** Between them they hold everything
 needed to resume cold: what the project is, what's done, what's next, and the

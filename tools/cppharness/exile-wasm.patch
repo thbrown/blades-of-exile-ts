@@ -1150,7 +1150,7 @@ index 3946c875..73fab005 100644
 +// ---- the native harness's action trace -------------------------------------
 +//
 +// `BOE_TRACE=1` prints one line per replayed action in the same shape as
-+// exile-js's own `CORPUS=1 TRACE=1` output, so the two runs diff line for line
++// blades-of-exile-ts's own `CORPUS=1 TRACE=1` output, so the two runs diff line for line
 +// and the first differing line names the rule that diverged. Off by default:
 +// the recordings are thousands of actions long.
 +#include <execinfo.h>
@@ -1175,7 +1175,7 @@ index 3946c875..73fab005 100644
 +	static bool on = getenv("BOE_TRACE_RAN") != nullptr;
 +	static long limit = on ? atol(getenv("BOE_TRACE_RAN")) : 0;
 +	// BOE_TRACE_RAN_STACK=k prints the stack for draw k — the pair to `RANSTACK`
-+	// on the exile-js side. "The two streams part at draw k" is only half an
++	// on the blades-of-exile-ts side. "The two streams part at draw k" is only half an
 +	// answer; the other half is which rule made the call.
 +	static long stack_at = getenv("BOE_TRACE_RAN_STACK")
 +		? atol(getenv("BOE_TRACE_RAN_STACK")) : 0;

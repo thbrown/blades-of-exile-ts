@@ -1,4 +1,4 @@
-# exile-js: TypeScript rewrite of the Blades of Exile game player (+ Exile 3 as a scenario)
+# blades-of-exile-ts: TypeScript rewrite of the Blades of Exile game player (+ Exile 3 as a scenario)
 
 > Two parts: **Part 1** — the BoE player rewrite. **Part 2** — converting Exile 3 into a scenario the new engine can play. Part 2 depends on Part 1's milestones but its converter work can proceed in parallel.
 
@@ -6,7 +6,7 @@
 
 ## Context
 
-`../exile-wasm` is a working WASM port of Open Blades of Exile (CBoE): the full ~90k-line C++ game compiled with Emscripten, with SFML/Boost swapped for compat headers that issue Canvas 2D calls via `EM_ASM`. It works, but the architecture fights the browser (ASYNCIFY blocking dialogs, per-draw EM_ASM overhead, stubbed shaders/text metrics). The goal is a clean **from-scratch TypeScript rewrite of the game player** in this repo (`exile-js`), using exile-wasm as the reference implementation.
+`../exile-wasm` is a working WASM port of Open Blades of Exile (CBoE): the full ~90k-line C++ game compiled with Emscripten, with SFML/Boost swapped for compat headers that issue Canvas 2D calls via `EM_ASM`. It works, but the architecture fights the browser (ASYNCIFY blocking dialogs, per-draw EM_ASM overhead, stubbed shaders/text metrics). The goal is a clean **from-scratch TypeScript rewrite of the game player** in this repo (`blades-of-exile-ts`), using exile-wasm as the reference implementation.
 
 **Decisions made with user:**
 - **Scope:** game player only — scenario editor (~19k loc) and character editor (~3k loc) out of scope.
@@ -21,7 +21,7 @@
 **Vite + TypeScript (strict) + Vitest. No UI framework** — the game is one 800×600 canvas plus an HTML menu bar. `fflate`/`DecompressionStream` for gzip; hand-rolled ~60-line ustar reader; `DOMParser` in browser / `@xmldom/xmldom` in Vitest for one shared XML codepath.
 
 ```
-exile-js/
+blades-of-exile-ts/
   public/
     data/            ← copied from exile-wasm/data (PNG sheets, SND0-99.wav, TTFs, strings, dialogs, cursors)
     scenarios/       ← valleydy/stealth/zakhazi/busywork repacked as .boes (build script)
@@ -186,7 +186,7 @@ in `src/` and `tools/` is done. Not in either original.
 - **Open:** whether it replaces BoE's five-slot autosave (`doAutoSave`) or
   sits beside it — ask the user when this starts.
 
-# Part 2: Playing Exile 3 in exile-js
+# Part 2: Playing Exile 3 in blades-of-exile-ts
 
 ## Context
 
@@ -204,12 +204,12 @@ in `src/` and `tools/` is done. Not in either original.
 
 ## Approach
 
-New directory `exile-js/tools/e3convert/` — a Node/TS converter (runs in Vitest too) that reads the E3 install dir and emits an unpacked v2 scenario tree (`scenario.xml`, `terrain.xml`, `items.xml`, `monsters.xml`, `towns/*`, `out/outX~Y.*`, `graphics/sheetX.png`) which the Part 1 engine loads like any other scenario. E3's files come from Spiderweb's original freeware installer, committed unaltered in `vendor/exile3/` as its licence allows (decided 2026-09-25; README.md, "Licence"); the converter unpacks it and converts at build time, and only the converted, modified output stays uncommitted.
+New directory `blades-of-exile-ts/tools/e3convert/` — a Node/TS converter (runs in Vitest too) that reads the E3 install dir and emits an unpacked v2 scenario tree (`scenario.xml`, `terrain.xml`, `items.xml`, `monsters.xml`, `towns/*`, `out/outX~Y.*`, `graphics/sheetX.png`) which the Part 1 engine loads like any other scenario. E3's files come from Spiderweb's original freeware installer, committed unaltered in `vendor/exile3/` as its licence allows (decided 2026-09-25; README.md, "Licence"); the converter unpacks it and converts at build time, and only the converted, modified output stays uncommitted.
 
 ## Phases (keyed to Part 1 milestones)
 
 - **E3-0 — Format groundwork** (parallel with M0–M1). Port `outdoor-to-json.js` into `tools/e3convert`; pin down the remaining 916 B of the outdoor record and the TOWN.DAT record layout by field-order diffing against `oldstructs.hpp` (and, if needed, Ghidra on EXILE3.EXE / EXILE3ED.EXE — user owns the game; RE for interoperability). Build the strings extractor. Deliverable: documented format notes (`tools/e3convert/FORMATS.md`) + parsers with tests.
-- **E3-1 — Walkable overworld** (needs M1). Formalize the `display.js` terrain-ID mapping into a data table; BMP→PNG sheet converter with masking; emit `terrain.xml` + 9×10 outdoor sectors as `.map` files. *Demo: walk the Exile 3 overworld in exile-js.*
+- **E3-1 — Walkable overworld** (needs M1). Formalize the `display.js` terrain-ID mapping into a data table; BMP→PNG sheet converter with masking; emit `terrain.xml` + 9×10 outdoor sectors as `.map` files. *Demo: walk the Exile 3 overworld in blades-of-exile-ts.*
 - **E3-2 — Towns, NPCs, shops, dialogue** (needs M2–M3). Convert town records, monster/item definitions (names from strings extractor), preset creatures/items, talking nodes, shops. *Demo: enter Krizsan, talk to NPCs, buy gear.*
 - **E3-3 — Quest logic, incrementally** (needs M4+). Hand-author special nodes in `.spec` format, town by town, guided by Ghidra decompilation of the special-encounter functions in EXILE3.EXE, EXILE3.HLP, and published walkthroughs. Add engine extension hooks only if a mechanic provably can't be expressed in BoE nodes (candidate: the day-driven monster-plague progression — verify `town_chop_time` + timer specials cover it first). Long-tail effort; track per-town coverage in a checklist.
 

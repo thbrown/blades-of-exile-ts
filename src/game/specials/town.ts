@@ -397,7 +397,7 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
           `Tried to change the attitude of nonexistent monster ${spec.ex1a} of 0...${monsters.length}`);
         break;
       }
-      // An exile-js extension, not in OBoE: 10 + a also stops the creature
+      // An blades-of-exile-ts extension, not in OBoE: 10 + a also stops the creature
       // moving, and 20 + a starts it, as Exile III's Castle Troglo does on
       // entry (tools/e3convert, `setAttitude`). OBoE refuses anything past
       // 3, so no BoE scenario uses these.

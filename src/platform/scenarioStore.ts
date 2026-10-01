@@ -19,6 +19,7 @@ import { PackageKind, ScenarioPackage } from '../fileio/scenarioPackage';
 import { readScenarioFromXml } from '../fileio/scenarioXml';
 import { parseXmlDoc } from '../fileio/xml';
 
+// The project's old name, kept: renaming it would lose what players have stored.
 const DB_NAME = 'exile-js-scenarios';
 const DB_VERSION = 1;
 const STORE = 'scenarios';

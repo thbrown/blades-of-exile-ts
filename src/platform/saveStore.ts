@@ -13,6 +13,7 @@
 import { SavePreview, readSavePreview } from '../fileio/saveIo';
 import { pickLocalFile } from './pickFile';
 
+// The project's old name, kept: renaming it would lose what players have stored.
 const DB_NAME = 'exile-js';
 const DB_VERSION = 1;
 const STORE = 'saves';

@@ -1,5 +1,5 @@
 /**
- * The "Fix known bugs" preference — an exile-js extension, in neither 1997's
+ * The "Fix known bugs" preference — an blades-of-exile-ts extension, in neither 1997's
  * game nor OBoE. The port keeps the originals' bugs by default (`CLAUDE.md`,
  * "Faithful port"); with the preference on, each bug listed here that the
  * user hasn't ruled deliberate plays as it was probably meant to.

@@ -1,5 +1,5 @@
 /**
- * Exile III's flying, and the two special items that go with it. An exile-js
+ * Exile III's flying, and the two special items that go with it. An blades-of-exile-ts
  * extension, not in BoE or OBoE: a scenario with the feature flag
  * `special-items` = `exile3:<node>` gets these (DIVERGENCES.md #36).
  *

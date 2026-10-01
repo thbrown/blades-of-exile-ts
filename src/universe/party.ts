@@ -307,7 +307,7 @@ export class Party {
 
   /**
    * `cParty::journal` — the events journal, Options > Journal. Nothing in the
-   * 1997 original or OBoE adds to it; the exile-js opcode `journal` does, for
+   * 1997 original or OBoE adds to it; the blades-of-exile-ts opcode `journal` does, for
    * Exile III, whose journal this is (E3's `FUN_1008_3780`).
    */
   journal: JournalEntry[] = [];

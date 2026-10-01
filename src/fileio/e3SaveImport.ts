@@ -17,7 +17,7 @@
  * - the four remembered towns' creatures (`creature_save`), the wandering
  *   groups outdoors (`out_c`), the magic shops' stock, the journal and the
  *   encounter and talk notes (E3 keeps string numbers; the engine keeps
- *   text), the stored items and the explored maps;
+ *   text) and the stored items;
  * - the converter's own flags, in SDF columns 10–49 (`flags.ts`): a one-shot
  *   spot E3 erased, the daily stamps and the day counts. Only the town states
  *   (`e3TownState`) are worked out again, since they follow from the day.
@@ -29,7 +29,12 @@ import { defaultItem } from '../data/item';
 import { TOWN_STATES } from '../../tools/e3convert/towns/townStates';
 import { e3DayReached, e3TownState } from '../../tools/e3convert/flags';
 import { vehicleNumbers, type E3Vehicle } from '../../tools/e3convert/tables';
-import { E3Bytes, E3CTOWN, E3ITEM, E3P, E3PC, readE3Save, type E3Save } from './e3save';
+import {
+  E3Bytes, E3CTOWN, E3ITEM, E3P, E3PC, E3_ZONES_ACROSS, E3_ZONE_MAP_SIZE, e3MapBit, e3TownMapAt, readE3Save, type E3Save,
+} from './e3save';
+import { SECTOR_SIZE } from '../data/outdoors';
+import type { Scenario } from '../data/scenario';
+import { OUT_MAX_DIM } from '../universe/curOut';
 import {
   E3_TABLE_ITEM_SIZE, e3ItemGraphic, e3TableItemCount, unenchantedName, type E3SaveDefaults,
 } from './e3SaveDefaults';
@@ -205,7 +210,7 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
   for (const town of scenario.towns) town.canFind = !town.isHidden;
   univ.refreshStoreItems();
   // TODO(e3save): creature_save, out_c, the magic shops' stock, the journal,
-  // the notes, the stored items and the maps (`maps`, `outExplored`).
+  // the notes and the stored items.
 
   const p = new E3Bytes(save.party);
   party.age = p.i32(E3P.AGE);
@@ -263,11 +268,22 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
 
   save.pcs.forEach((rec, i) => readPc(univ, party.pcs[i]!, rec, defaults, warnings));
 
+  if (save.maps) readMaps(save.maps, scenario);
   let town: E3Import['town'] = null;
   if (save.town) {
     const c = new E3Bytes(save.town.cTown);
     let num = c.i16(E3CTOWN.TOWN_NUM);
     const loc = c.loc(E3CTOWN.P_LOC);
+    // The town's squares seen so far, which E3 folds into its map only on
+    // leaving: into the record's map here, which entering it reads back.
+    const record = scenario.towns[num];
+    if (record) {
+      for (let x = 0; x < Math.min(64, record.maxDim); x++) {
+        for (let y = 0; y < Math.min(64, record.maxDim); y++) {
+          if (c.u8(E3CTOWN.EXPLORED + x * 64 + y) & 1) record.maps[x]![y] = 1;
+        }
+      }
+    }
     // A declining town's later records are the first one's `<town-flag>`.
     TOWN_STATES.forEach((g, k) => {
       if (num >= g.town && num < g.town + 4) {
@@ -281,8 +297,46 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
   }
   party.townNum = TOWN_NUM_OUTDOORS;
   univ.town = null;
+  // The last game's window goes, or its squares would land in this one's zones.
+  for (const col of univ.out.explored) col.fill(0);
   univ.out.build();
+  // `out_e`, the window as it was: a save without maps has only this, and
+  // one with them may hold squares seen since the window last moved. Folded
+  // into the zones, so they stay when the window slides off and back.
+  for (let x = 0; x < OUT_MAX_DIM; x++) {
+    for (let y = 0; y < OUT_MAX_DIM; y++) if (save.outExplored[x * OUT_MAX_DIM + y]) univ.out.explored[x]![y] = 1;
+  }
+  univ.out.saveMaps();
   return { town, warnings };
+}
+
+/** Every town's and zone's explored squares, from the save's map blocks. */
+function readMaps(maps: NonNullable<E3Save['maps']>, scenario: Scenario): void {
+  scenario.towns.forEach((town, t) => {
+    const where = e3TownMapAt(t);
+    if (!where) return;
+    const block = maps[where.block];
+    const dim = Math.min(where.dim, town.maxDim);
+    for (let x = 0; x < dim; x++) {
+      for (let y = 0; y < dim; y++) {
+        const [at, bit] = e3MapBit(where.at, where.dim, x, y);
+        town.maps[x]![y] = (block[at]! & bit) !== 0 ? 1 : 0;
+      }
+    }
+  });
+  for (let zx = 0; zx < Math.min(E3_ZONES_ACROSS, scenario.outWidth); zx++) {
+    for (let zy = 0; zy < scenario.outHeight; zy++) {
+      const sector = scenario.outdoors[zx]![zy]!;
+      const base = (zy * E3_ZONES_ACROSS + zx) * E3_ZONE_MAP_SIZE;
+      if (base + E3_ZONE_MAP_SIZE > maps.zones.length) continue;
+      for (let x = 0; x < SECTOR_SIZE; x++) {
+        for (let y = 0; y < SECTOR_SIZE; y++) {
+          const [at, bit] = e3MapBit(base, SECTOR_SIZE, x, y);
+          sector.maps[x]![y] = (maps.zones[at]! & bit) !== 0 ? 1 : 0;
+        }
+      }
+    }
+  }
 }
 
 export function applyE3Save(data: Uint8Array, univ: Universe, defaults: E3SaveDefaults): E3Import {

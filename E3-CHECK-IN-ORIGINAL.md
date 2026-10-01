@@ -11,7 +11,7 @@ Coordinates are town squares (x, y), as the port's debug panel
 
 **Saved games for the original** (2026-09-30): `E3_CHECK_SAVES=e3data/check-saves
 npx vitest run test/e3checkSaves.test.ts` writes one `exile3.sav` per
-question, `Q01.SAV` to `Q22.SAV` (#3 has ten, `Q03A`–`Q03J`), and a
+question, `Q01.SAV` to `Q25.SAV` (#3 has ten, `Q03A`–`Q03J`; #2 shares `Q01`), and a
 `README.TXT` saying what each holds and where to walk. Each has a strong
 party outdoors near the place, with the question's flags and items set.
 Add a recipe there when adding a question. (`File > Export as Exile III

@@ -199,6 +199,32 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
       .toEqual(q.party.boats.map((v) => [v.whichTown, v.loc, v.property]));
   });
 
+  it('carries the explored maps: towns of every size, the villages, the zones and the window', async () => {
+    const q = new QuestRunner(scen);
+    const marks: [number, number, number][] = [[3, 63, 1], [45, 47, 40], [90, 31, 5], [150, 47, 47]];
+    for (const [t, x, y] of marks) scen.towns[t]!.maps[x]![y] = 1;
+    scen.outdoors[2]![7]!.maps[47]![0] = 1;
+    q.univ.out.explored[95]![95] = 1;
+    const { bytes } = exportE3Save(q.univ, defaults);
+    const save = readE3Save(bytes);
+    expect(save.maps).not.toBeNull();
+    const back = new QuestRunner(scen);
+    applyE3Save(bytes, back.univ, defaults);
+    for (const [t, x, y] of marks) {
+      expect(scen.towns[t]!.maps[x]![y], `town ${t}`).toBe(1);
+      expect(scen.towns[t]!.maps[x]![y === 0 ? 1 : y - 1], `town ${t}`).toBe(0);
+    }
+    expect(scen.outdoors[2]![7]!.maps[47]![0]).toBe(1);
+    expect(scen.outdoors[2]![7]!.maps[46]![0]).toBe(0);
+    expect(back.univ.out.explored[95]![95]).toBe(1);
+    // A save without maps still has the window's squares.
+    save.maps = null;
+    const bare = new QuestRunner(scen);
+    applyE3Save(writeE3Save(save), bare.univ, defaults);
+    expect(bare.univ.out.explored[95]![95]).toBe(1);
+    expect(scen.towns[3]!.maps[63]![1]).toBe(0);
+  });
+
   it('enters the town a save was made in, a declining one through its state', async () => {
     const q = new QuestRunner(scen);
     const save = readE3Save(exportE3Save(q.univ, defaults).bytes);
@@ -207,6 +233,7 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     new DataView(cTown.buffer).setInt16(0, 6, true);
     cTown[0x29bc] = 30;
     cTown[0x29bd] = 31;
+    cTown[0x426 + 30 * 64 + 31] = 1; // c_town.explored[30][31]
     save.town = { cTown, data: new Uint8Array(0x1710), items: new Uint8Array(0x1c4d) };
     const back = new QuestRunner(scen);
     const res = applyE3Save(writeE3Save(save), back.univ, defaults);
@@ -214,6 +241,9 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     expect(res.town).toEqual({ num: 4, loc: { x: 30, y: 31 } });
     expect(back.party.getSdf(294, 11)).toBe(2);
     expect(partyFlag(0xc00)).toEqual([294, 0]);
+    // The squares it had seen go on the record the party was in.
+    expect(scen.towns[6]!.maps[30]![31]).toBe(1);
+    expect(scen.towns[6]!.maps[31]![30]).toBe(0);
   });
 
   /**

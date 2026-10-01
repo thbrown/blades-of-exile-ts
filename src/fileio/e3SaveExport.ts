@@ -15,7 +15,12 @@
 
 import type { Item } from '../data/item';
 import { vehicleNumbers } from '../../tools/e3convert/tables';
-import { E3Bytes, E3ITEM, E3P, E3PC, emptyE3Save, writeE3Save, type E3Save } from './e3save';
+import {
+  E3Bytes, E3ITEM, E3P, E3PC, E3_OUT_MAPS_SIZE, E3_TOWN_MAPS_SIZE, E3_VILLAGE_MAPS_SIZE, E3_ZONES_ACROSS,
+  E3_ZONE_MAP_SIZE, e3MapBit, e3TownMapAt, emptyE3Save, writeE3Save, type E3Save,
+} from './e3save';
+import { SECTOR_SIZE } from '../data/outdoors';
+import { OUT_MAX_DIM } from '../universe/curOut';
 import {
   e3ItemFromTable, e3ItemGraphic, e3TableItemCount, e3TableItemName, E3_TABLE_ITEM_SIZE, unenchantedName,
   type E3SaveDefaults,
@@ -61,7 +66,7 @@ export function newE3PartyRecord(defaults: E3SaveDefaults): Uint8Array {
   // FUN_1070_41a4 rolls the magic shops' stock here, and FUN_1008_3c91 the
   // job boards; the jobs are the game's, below.
   // TODO(e3save): the shops' stock, creature_save, out_c, the journal, the
-  // notes, the stored items and the maps.
+  // notes and the stored items.
   p.setU8(E3P.M_SEEN + 0x26, 1);
   p.setU8(E3P.M_SEEN + 0x28, 1);
   p.setU8(E3P.M_SEEN + 0x4e, 1);
@@ -255,7 +260,66 @@ export function e3SaveRecordFromGame(univ: Universe, defaults: E3SaveDefaults): 
     rec.set(defaults.priestSpells.subarray(0, 30), E3PC.PRIEST_SPELLS);
     rec.set(defaults.mageSpells.subarray(0, 30), E3PC.MAGE_SPELLS);
   });
+  writeMaps(univ, save);
   return { save, warnings };
+}
+
+/**
+ * The explored squares: `out_e` from the outdoor window, and every town's and
+ * zone's map, which E3 saves when its "save maps" preference is on (its
+ * default, as BoE's). A town the party stands in has its squares only in
+ * `univ.town` until it leaves, so they're added here.
+ */
+function writeMaps(univ: Universe, save: E3Save): void {
+  const { scenario } = univ;
+  // `out_e` holds its four zones' maps as well, since E3 pulls them in
+  // whenever the window is built (`add_outdoor_maps`), so a load here and a
+  // save again write the same bytes.
+  const c = univ.party.outdoorCorner;
+  for (let x = 0; x < OUT_MAX_DIM; x++) {
+    for (let y = 0; y < OUT_MAX_DIM; y++) {
+      const zone = scenario.outdoors[c.x + Math.floor(x / SECTOR_SIZE)]?.[c.y + Math.floor(y / SECTOR_SIZE)];
+      if (univ.out.explored[x]![y] || zone?.maps[x % SECTOR_SIZE]![y % SECTOR_SIZE]) save.outExplored[x * OUT_MAX_DIM + y] = 1;
+    }
+  }
+  const maps = {
+    towns: new Uint8Array(E3_TOWN_MAPS_SIZE),
+    zones: new Uint8Array(E3_OUT_MAPS_SIZE),
+    villages: new Uint8Array(E3_VILLAGE_MAPS_SIZE),
+  };
+  const here = univ.party.townNum === TOWN_NUM_OUTDOORS ? null : univ.town;
+  scenario.towns.forEach((town, t) => {
+    const where = e3TownMapAt(t);
+    if (!where) return;
+    const live = here?.record === town ? here.explored : null;
+    const dim = Math.min(where.dim, town.maxDim);
+    for (let x = 0; x < dim; x++) {
+      for (let y = 0; y < dim; y++) {
+        if (!town.maps[x]![y] && !live?.[x]?.[y]) continue;
+        const [at, bit] = e3MapBit(where.at, where.dim, x, y);
+        maps[where.block][at]! |= bit;
+      }
+    }
+  });
+  // The window's squares count for its zones too, as `save_outdoor_maps`
+  // would fold them in when it next moves.
+  for (let zx = 0; zx < Math.min(E3_ZONES_ACROSS, scenario.outWidth); zx++) {
+    for (let zy = 0; zy < scenario.outHeight; zy++) {
+      const sector = scenario.outdoors[zx]![zy]!;
+      const base = (zy * E3_ZONES_ACROSS + zx) * E3_ZONE_MAP_SIZE;
+      if (base + E3_ZONE_MAP_SIZE > maps.zones.length) continue;
+      const ox = (zx - c.x) * SECTOR_SIZE, oy = (zy - c.y) * SECTOR_SIZE;
+      const inWindow = ox >= 0 && oy >= 0 && ox < OUT_MAX_DIM && oy < OUT_MAX_DIM;
+      for (let x = 0; x < SECTOR_SIZE; x++) {
+        for (let y = 0; y < SECTOR_SIZE; y++) {
+          if (!sector.maps[x]![y] && !(inWindow && univ.out.explored[ox + x]![oy + y])) continue;
+          const [at, bit] = e3MapBit(base, SECTOR_SIZE, x, y);
+          maps.zones[at]! |= bit;
+        }
+      }
+    }
+  }
+  save.maps = maps;
 }
 
 export function exportE3Save(univ: Universe, defaults: E3SaveDefaults): E3Export {

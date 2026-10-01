@@ -34,7 +34,7 @@ const STYLE = `
 `;
 
 export function startMapWindow(): void {
-  document.title = 'Map — exile-js';
+  document.title = 'Map — blades-of-exile-ts';
   const style = document.createElement('style');
   style.textContent = STYLE;
   document.head.append(style);

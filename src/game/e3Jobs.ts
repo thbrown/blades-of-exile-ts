@@ -11,7 +11,7 @@
  * - `FUN_1010_5889` (the per-tick clock) fails a job past its deadline;
  * - `FUN_10c0_5051` (kill_monst) takes the body a "magical supplies" job wants.
  *
- * An exile-js extension, not in BoE or OBoE: a scenario with the feature flag
+ * An blades-of-exile-ts extension, not in BoE or OBoE: a scenario with the feature flag
  * `job-boards` set to `exile3:<n>` has them, and `n` is the first of the
  * scenario strings the converter wrote for them (`JOB_STR` below). The text
  * comes from the scenario, since it is E3's; the numbers here are E3's too,

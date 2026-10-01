@@ -958,10 +958,10 @@ export class XmlDialog implements ModalScreen {
    * The mouse wheel over a pane scrolls it. True if it did anything — the
    * host then redraws and keeps the page from scrolling too.
    */
-  onWheel(x: number, y: number, deltaY: number): boolean {
+  onWheel(x: number, y: number, notches: number): boolean {
     const pane = this.paneAt(x, y);
     if (pane === null) return false;
-    this.scrollPane(pane, Math.sign(deltaY) * PANE_STEP);
+    if (notches !== 0) this.scrollPane(pane, notches * PANE_STEP);
     return true;
   }
 

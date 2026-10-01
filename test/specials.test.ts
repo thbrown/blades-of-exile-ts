@@ -634,7 +634,7 @@ describe('affect nodes', () => {
     expect(univ.party.pcs[0]!.mageSpells[30]).toBe(false);
   });
 
-  it('picks PC k without asking for ex1a 10 + k (an exile-js extension)', async () => {
+  it('picks PC k without asking for ex1a 10 + k (an blades-of-exile-ts extension)', async () => {
     const { univ, host, run } = withNodes({
       0: { type: SpecType.SELECT_TARGET, ex1a: 13, jumpto: 1 },
       1: { type: SpecType.AFFECT_MAGE_SPELL, ex1a: 30, ex1b: 0 },
@@ -2189,7 +2189,7 @@ describe("Exile 3's per-PC scripts", () => {
 });
 
 /**
- * `use-special-spots` (an exile-js feature flag for Exile 3): Use on a square
+ * `use-special-spots` (an blades-of-exile-ts feature flag for Exile 3): Use on a square
  * runs its special spot. Without the flag, as in BoE, it does nothing.
  */
 describe('Use on a special spot', () => {
@@ -2215,7 +2215,7 @@ describe('Use on a special spot', () => {
 });
 
 /**
- * `IF_CREATURE` and `TOWN_SET_CREATURE` (DIVERGENCES.md #21): exile-js
+ * `IF_CREATURE` and `TOWN_SET_CREATURE` (DIVERGENCES.md #21): blades-of-exile-ts
  * opcodes for Exile III, which reads and writes its creatures' records.
  */
 describe('a node that names a creature by its slot', () => {

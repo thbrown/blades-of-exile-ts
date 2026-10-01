@@ -1,5 +1,5 @@
 /**
- * Exile III's draining towns. An exile-js extension, not in BoE or OBoE: a
+ * Exile III's draining towns. An blades-of-exile-ts extension, not in BoE or OBoE: a
  * scenario with the feature flag `sp-drain` set to `exile3:<towns>` runs
  * this at the end of every turn and every combat round (DIVERGENCES.md #38).
  * In Exile III the towns are the Tower of Zkal's two levels, 70 and 71,

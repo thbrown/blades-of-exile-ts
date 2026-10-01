@@ -127,7 +127,7 @@ import { BG_DARK, BG_LIGHT, setDefaultDialogBackground, setExile3Dialogs } from 
 import { changeCursor, cursorCss, setScenarioCursors } from './platform/cursors';
 import { giveHelp, setGiveHelp, setLivingSound } from './universe/living';
 import { killPc } from './game/damage';
-import { BOE_HEIGHT, BOE_WIDTH, COMPACT_HEIGHT, ToolbarButton, WIN_RECTS, gameScreen } from './render/layout';
+import { BOE_HEIGHT, BOE_WIDTH, COMPACT_HEIGHT, ITEM_SBAR_RECT, ToolbarButton, WIN_RECTS, gameScreen } from './render/layout';
 
 import { CHROME_SHEETS, Screen, toolbarButtons, toolbarMode } from './render/screen';
 import { TouchSheet } from './platform/touchSheet';
@@ -198,6 +198,7 @@ const BUNDLED_SCENARIOS = ['valleydy', 'stealth', 'zakhazi', 'busywork', 'exile3
  * the whole world would have to be re-fetched. Instead the slot is parked here
  * and the page reopened on the right scenario, which `main` then notices.
  */
+// The project's old name, kept: renaming it would lose what players have stored.
 const PENDING_SAVE_KEY = 'exile-js.pendingSave';
 
 /**
@@ -2729,6 +2730,33 @@ async function main(): Promise<void> {
     },
   });
 
+  /**
+   * A press on the item or shop scrollbar's thumb starts dragging it
+   * (`cScrollbar::handle_mouse_pressed`); game-screen coordinates.
+   */
+  const startScrollThumb = (x: number, y: number): boolean => {
+    const started = session.shop
+      ? screen.shopScreen.startThumbDrag(session.shop, x, y)
+      : !session.itemShop && screen.itemSbar.startThumbDrag(x, y);
+    if (started) redraw();
+    return started;
+  };
+  /** The held thumb follows the pointer; true if one is held. */
+  const dragScrollThumb = (y: number): boolean => {
+    if (session.shop) {
+      const delta = screen.shopScreen.thumbDragDelta(session.shop, y);
+      if (delta === null) return false;
+      if (delta !== 0) { session.shop.scrollBy(delta); redraw(); }
+      return true;
+    }
+    if (!screen.itemSbar.dragTo(y)) return false;
+    if (screen.itemWindow.scroll !== screen.itemSbar.getPosition()) {
+      screen.itemWindow.scroll = screen.itemSbar.getPosition();
+      redraw();
+    }
+    return true;
+  };
+
   const router = new InputRouter(canvas, {
     onMove: (dir, key) => {
       // A dialog gets first refusal on the arrows: pc-info.xml's left/right
@@ -2755,6 +2783,7 @@ async function main(): Promise<void> {
     },
     onDrag: (x, y) => {
       if (dialogs.handleDrag(x, y)) return;
+      if (dragScrollThumb(y - desktop.gameY)) return;
       if (!screen.mapScreen.dragging) return;
       screen.mapScreen.dragTo(x, y, desktop.w, desktop.h);
       redraw();
@@ -2762,6 +2791,11 @@ async function main(): Promise<void> {
     onRelease: () => {
       dialogs.handleRelease();
       screen.mapScreen.endDrag();
+      if (screen.itemSbar.dragging || screen.shopScreen.sbar.dragging) {
+        screen.itemSbar.endDrag();
+        screen.shopScreen.sbar.endDrag();
+        redraw();
+      }
     },
     // A finger sliding: what a press there would have started dragging, in
     // the click's own order — a dialog's caption first, and the map only
@@ -2769,6 +2803,7 @@ async function main(): Promise<void> {
     onDragStart: (dx, dy) => {
       if (dialogs.startCaptionDrag(dx, dy)) return true;
       if (dialogs.active) return false;
+      if (startScrollThumb(dx - desktop.gameX, dy - desktop.gameY)) return true;
       if (!screen.mapVisible || !screen.mapScreen.contains(dx, dy)) return false;
       screen.mapScreen.startDrag(dx, dy);
       mapFocused = true;
@@ -2777,7 +2812,28 @@ async function main(): Promise<void> {
     },
     // The router speaks desktop coordinates. Dialogs and the map live there;
     // everything else is on the game screen and is offset from it.
-    onWheel: (dx, dy, deltaY) => dialogs.handleWheel(dx, dy, deltaY),
+    onWheel: (dx, dy, notches) => {
+      if (dialogs.handleWheel(dx, dy, notches)) return true;
+      if (document.body.classList.contains('starting')) return false;
+      const x = dx - desktop.gameX;
+      const y = dy - desktop.gameY;
+      // `item_sbar`'s wheel area is the inventory and its bar
+      // (`inventory_events_rect`, boe.main.cpp:378), and `shop_sbar`'s the shop.
+      if (session.shop) {
+        if (!screen.shopScreen.wheelScrolls(session.shop, x, y)) return false;
+        if (notches !== 0) { handleShopHit({ part: 'scroll', delta: notches }); redraw(); }
+        return true;
+      }
+      const inven = WIN_RECTS.inven;
+      const overInven = x >= inven.left && y >= inven.top && x < ITEM_SBAR_RECT.right && y < ITEM_SBAR_RECT.bottom;
+      if (session.itemShop || !overInven || screen.itemSbar.getMaximum() === 0) return false;
+      if (notches !== 0) {
+        screen.itemSbar.handleWheel(-notches);
+        screen.itemWindow.scroll = screen.itemSbar.getPosition();
+        redraw();
+      }
+      return true;
+    },
     onClick: (dx, dy, right = false, held) => {
       if (dialogs.handleClick(dx, dy, { right, ...held })) return;
       // The map is a separate window in the original, so a click that lands on
@@ -2826,6 +2882,7 @@ async function main(): Promise<void> {
       }
       // The item scrollbar is its own control on the main window, so it is
       // asked before the panel underneath it.
+      if (startScrollThumb(x, y)) return;
       if (!session.itemShop && screen.itemSbar.handleClick(x, y)) {
         sound.play(Snd.BUTTON);
         screen.itemWindow.scroll = screen.itemSbar.getPosition();
@@ -3506,7 +3563,7 @@ async function main(): Promise<void> {
         { label: 'Talk Notes', action: () => { void notesFlow('talk'); } },
         { label: 'Encounter Notes', action: () => { void notesFlow('encounter'); } },
         // `journal` (boe.infodlg.cpp:653). Nothing in OBoE adds an entry; the
-        // exile-js opcode `journal` does.
+        // blades-of-exile-ts opcode `journal` does.
         { label: 'Journal', action: () => { void notesFlow('events'); } },
         { label: 'Party Statistics', action: printPartyStats },
       ],

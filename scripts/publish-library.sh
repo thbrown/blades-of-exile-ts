@@ -3,7 +3,7 @@
 # to a Google Cloud Storage bucket, public to read and to nothing else.
 #
 #   ./scripts/publish-library.sh <bucket> [site-origin]
-#   ./scripts/publish-library.sh exile-js-library https://thomasaustenbrown.github.io
+#   ./scripts/publish-library.sh blades-of-exile-ts-library https://thomasaustenbrown.github.io
 #
 # Then build the game with the catalog's URL:
 #   VITE_LIBRARY_URL=https://storage.googleapis.com/<bucket>/catalog.json npm run build

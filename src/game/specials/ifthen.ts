@@ -129,7 +129,7 @@ export async function ifThenSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
 
     case SpecType.IF_TER_TYPE: {
       const town = univ.town;
-      // Two exile-js extensions, not in OBoE. The C++ reads the terrain at a
+      // Two blades-of-exile-ts extensions, not in OBoE. The C++ reads the terrain at a
       // negative square, which is off every map and never matches, so no BoE
       // scenario can mean anything by them. Exile 3 needs both for its
       // flooding trench (tools/e3convert, `ifPartyOnTer`, `ifTargetOnTer`),

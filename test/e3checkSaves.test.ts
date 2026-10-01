@@ -299,6 +299,13 @@ describe.skipIf(!dir)('saves for E3-CHECK-IN-ORIGINAL.md', () => {
       make: async (q) => { await at(q, 57, 68); },
     },
     {
+      file: 'Q24.SAV', question: "#24, Foxfire's key and the Monastery of Madness",
+      todo: "No key, and the monastery isn't on the map. Walk north into its square at (331,463): does anything happen? Then go "
+        + 'back (the stones west of here, the boat people, Storm Port\'s ferry), find Foxfire in Bengaro, Poulsbo or Malloc, buy her '
+        + 'key ("payment", 500 gold), and come back. Is the monastery on the map now, and does it let you in?',
+      make: async (q) => { await at(q, 331, 464); },
+    },
+    {
       file: 'Q25.SAV', question: "#25, the Tower of Zkal's drain on spell points, and Zkal's death",
       todo: 'The Tower of Zkal is on the map, a step south-west. Walk in, note a PC\'s spell points, wait (Space) ten turns and look '
         + 'again; then start a fight and watch them over ten rounds. Do they drop by 5 every fifth turn? Later, on level 2, '
@@ -309,7 +316,7 @@ describe.skipIf(!dir)('saves for E3-CHECK-IN-ORIGINAL.md', () => {
 
   it('makes every save, and each loads back here to the same place', async () => {
     const readme: string[] = [
-      'Saved games for E3-CHECK-IN-ORIGINAL.md, made by exile-js (test/e3checkSaves.test.ts).',
+      'Saved games for E3-CHECK-IN-ORIGINAL.md, made by blades-of-exile-ts (test/e3checkSaves.test.ts).',
       'Load each in Exile III with File > Open. Every party is level 25 with 200 health, knows every',
       "spell Exile III sells, and has 5,000 gold. Each save is outdoors; what to do is under each name.",
       '',

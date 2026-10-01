@@ -60,13 +60,25 @@ export interface InputHandlers {
    * when it lifts, which is too late.
    */
   onDragStart?(x: number, y: number): boolean;
-  /** The mouse wheel over the canvas; true if it was used, so the page doesn't scroll. */
-  onWheel?(x: number, y: number, deltaY: number): boolean;
+  /**
+   * The mouse wheel or a touchpad over the canvas, in notches (positive
+   * down, and 0 while a touchpad's small moves add up to one). True if
+   * something there scrolls, so the page doesn't.
+   */
+  onWheel?(x: number, y: number, notches: number): boolean;
 }
 
 /** How long a finger rests before it counts as the right button, and how far it may drift. */
 const LONG_PRESS_MS = 500;
 const LONG_PRESS_SLOP = 10;
+/**
+ * Pixels of wheel per notch: a mouse's notch is 100 in Chrome and Safari, and
+ * a touchpad sends a stream of a few pixels each, which add up to notches.
+ */
+const WHEEL_NOTCH = 100;
+/** `WheelEvent.deltaMode`'s line and page, in pixels. */
+const WHEEL_LINE = 40;
+const WHEEL_PAGE = 800;
 
 export class InputRouter {
   /** Non-empty while a modal dialog is up; game input is ignored then. */
@@ -84,6 +96,8 @@ export class InputRouter {
    * slid past the slop, then `dragging` if `onDragStart` took it or `no`.
    */
   private slide: { id: number; x: number; y: number; state: 'maybe' | 'dragging' | 'no' } | null = null;
+  /** Wheel pixels not yet a whole notch. */
+  private wheel = 0;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -113,7 +127,13 @@ export class InputRouter {
     this.canvas.addEventListener('mouseleave', () => this.handlers.onHoverEnd?.());
     this.canvas.addEventListener('wheel', (ev) => {
       const at = this.toCanvas(ev);
-      if (this.handlers.onWheel?.(at.x, at.y, ev.deltaY)) ev.preventDefault();
+      const px = ev.deltaY * (ev.deltaMode === 1 ? WHEEL_LINE : ev.deltaMode === 2 ? WHEEL_PAGE : 1);
+      // A turn the other way starts afresh.
+      if (Math.sign(px) !== Math.sign(this.wheel)) this.wheel = 0;
+      this.wheel += px;
+      const notches = Math.trunc(this.wheel / WHEEL_NOTCH);
+      this.wheel -= notches * WHEEL_NOTCH;
+      if (this.handlers.onWheel?.(at.x, at.y, notches)) ev.preventDefault();
     }, { passive: false });
     window.addEventListener('mousemove', (ev) => {
       const at = this.toCanvas(ev);

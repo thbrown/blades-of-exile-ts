@@ -1696,7 +1696,7 @@ export class GameSession {
     const town = this.univ.town;
     this.univ.addStringToBuf('Use...');
 
-    // An exile-js extension, not in BoE or OBoE: a scenario with the feature
+    // An blades-of-exile-ts extension, not in BoE or OBoE: a scenario with the feature
     // flag `use-special-spots` runs a town's special spot when the party uses
     // its square. Exile 3 does (`FUN_10c0_425c`), and puts spots on furniture
     // that cannot be walked onto — dressers, shelves, altars — which only Use
@@ -5208,7 +5208,7 @@ export class GameSession {
   /**
    * Exile III counts a creature as seen whenever it is drawn, in combat as in
    * town (`FUN_1060_032d`); OBoE's sweep is the town one below. With the
-   * scenario flag `monster-sightings` = `exile3` (an exile-js extension) a
+   * scenario flag `monster-sightings` = `exile3` (an blades-of-exile-ts extension) a
    * fight sweeps too, after each action and as an outdoor fight begins. It
    * fires `see_spec` as `check_if_monst_seen` does, but rolls no ambient
    * sound, so it makes no draws.
