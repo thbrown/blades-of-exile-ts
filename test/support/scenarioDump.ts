@@ -60,7 +60,7 @@ function shop(s: Shop): Json {
 }
 
 /**
- * `Item.ineptOk` and `Item.e3Ability` are this port's own, for Exile III;
+ * `Item.ineptOk`, `Item.e3Ability` and `Item.e3Item` are this port's own, for Exile III;
  * OBoE's cItem has no such fields, so they leave the dump wherever an item
  * appears (the item table, and each shop's stock).
  */
@@ -68,7 +68,7 @@ function dropPortOnly(j: Json): Json {
   if (Array.isArray(j)) return j.map(dropPortOnly);
   if (j === null || typeof j !== 'object' || j instanceof Map) return j;
   const out: Record<string, Json> = {};
-  for (const [k, v] of Object.entries(j)) if (k !== 'ineptOk' && k !== 'e3Ability') out[k] = dropPortOnly(v);
+  for (const [k, v] of Object.entries(j)) if (k !== 'ineptOk' && k !== 'e3Ability' && k !== 'e3Item') out[k] = dropPortOnly(v);
   return out;
 }
 

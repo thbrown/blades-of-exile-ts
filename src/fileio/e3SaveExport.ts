@@ -17,7 +17,8 @@ import type { Item } from '../data/item';
 import { vehicleNumbers } from '../../tools/e3convert/tables';
 import { E3Bytes, E3ITEM, E3P, E3PC, emptyE3Save, writeE3Save, type E3Save } from './e3save';
 import {
-  e3ItemFromTable, e3TableItemCount, e3TableItemName, E3_TABLE_ITEM_SIZE, type E3SaveDefaults,
+  e3ItemFromTable, e3ItemGraphic, e3TableItemCount, e3TableItemName, E3_TABLE_ITEM_SIZE, unenchantedName,
+  type E3SaveDefaults,
 } from './e3SaveDefaults';
 import { e3VehicleTable } from './e3SaveImport';
 import type { Vehicle } from '../data/vehicle';
@@ -73,18 +74,24 @@ export function newE3PartyRecord(defaults: E3SaveDefaults): Uint8Array {
 }
 
 /**
- * The E3 table record an item came from: same full name and kind, and the
- * same E3 ability where several share a name. -1 if none.
+ * The E3 table record an item came from: same full name (or, enchanted, its
+ * plain name) and kind, then the best of those by E3 ability and picture.
+ * -1 if none.
  */
 function e3ItemIndex(defaults: E3SaveDefaults, item: Item): number {
-  let fallback = -1;
-  for (let k = 0; k < e3TableItemCount(defaults); k++) {
-    const t = new E3Bytes(defaults.itemTable.subarray(k * E3_TABLE_ITEM_SIZE, (k + 1) * E3_TABLE_ITEM_SIZE));
-    if (t.i16(0) !== item.variety || e3TableItemName(defaults, k) !== item.fullName) continue;
-    if (item.e3Ability < 0 || t.u8(10) === item.e3Ability) return k;
-    if (fallback < 0) fallback = k;
+  if (item.e3Item >= 0 && item.e3Item < e3TableItemCount(defaults)) return item.e3Item;
+  const graphic = e3ItemGraphic(item.graphicNum);
+  for (const name of [item.fullName, unenchantedName(item.fullName)]) {
+    let best = -1, bestScore = -1;
+    for (let k = 0; k < e3TableItemCount(defaults); k++) {
+      const t = new E3Bytes(defaults.itemTable.subarray(k * E3_TABLE_ITEM_SIZE, (k + 1) * E3_TABLE_ITEM_SIZE));
+      if (t.i16(0) !== item.variety || e3TableItemName(defaults, k) !== name) continue;
+      const score = (item.e3Ability < 0 || t.u8(10) === item.e3Ability ? 2 : 0) + (t.u8(9) === graphic ? 1 : 0);
+      if (score > bestScore) { best = k; bestScore = score; }
+    }
+    if (best >= 0) return best;
   }
-  return fallback;
+  return -1;
 }
 
 /** An item as E3 holds it, or null if E3 has no such item. */
@@ -95,6 +102,7 @@ export function itemToE3(defaults: E3SaveDefaults, item: Item): Uint8Array | nul
   const b = new E3Bytes(rec);
   // A scripted variant keeps its own ability (a stamped item: notes.ts).
   if (item.e3Ability >= 0) b.setU8(E3ITEM.ABILITY, item.e3Ability);
+  if (e3ItemGraphic(item.graphicNum) >= 0) b.setU8(E3ITEM.GRAPHIC, e3ItemGraphic(item.graphicNum));
   b.setI16(E3ITEM.LEVEL, item.itemLevel);
   b.setU8(E3ITEM.AWKWARD, item.awkward);
   b.setU8(E3ITEM.BONUS, item.bonus);
@@ -122,7 +130,8 @@ function writePc(defaults: E3SaveDefaults, pc: Player, warnings: string[]): Uint
   b.setI16(E3PC.SKILL_PTS, pc.skillPts);
   b.setI16(E3PC.LEVEL, pc.level);
   for (let i = 0; i < 15; i++) b.setI16(E3PC.STATUS + 2 * i, pc.status[i] ?? 0);
-  let poisoned = NUM_INVEN_SLOTS;
+  // E3 leaves the last poisoned slot here, and a new PC has 0.
+  let poisoned = 0;
   for (let i = 0; i < NUM_INVEN_SLOTS; i++) {
     const item = pc.items[i]!;
     if (item.variety === 0) continue;
@@ -237,7 +246,6 @@ export function e3SaveRecordFromGame(univ: Universe, defaults: E3SaveDefaults): 
     if (party.pcs[i]!.mainStatus !== 0) return;
     rec.set(defaults.priestSpells.subarray(0, 30), E3PC.PRIEST_SPELLS);
     rec.set(defaults.mageSpells.subarray(0, 30), E3PC.MAGE_SPELLS);
-    new E3Bytes(rec).setI16(E3PC.WEAP_POISONED, NUM_INVEN_SLOTS);
   });
   return { save, warnings };
 }

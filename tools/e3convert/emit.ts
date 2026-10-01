@@ -988,9 +988,14 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   const stamped = stampedItems.map(([k, a]) => ({
     ...e3Items[k]!, ability: E3_ABILITY_TO_LEGACY[a] ?? 0, abilityStrength: e3Items[k]!.itemLevel,
   }));
+  // Each item's E3 table record, for saves for the original (`Item.e3Item`);
+  // the shops' food is not in the table.
+  const tableRecords = [...e3Items.map((_, k) => k), ...shopTables.food.map(() => -1),
+    ...noteItems.map(([k]) => k), ...stampedItems.map(([k]) => k)];
   const items = [...e3Items, ...shopTables.food, ...noteItems.map(([k]) => e3Items[k]!), ...stamped].map((old, k) => {
     const it = convertItem(old);
     it.graphicNum = 1000 + itemSheetNum * 100 + old.graphicNum;
+    it.e3Item = tableRecords[k] ?? -1;
     // E3's scripts name kinds of item by `type_flag` (unicorn horns are 111);
     // the engine's item-class nodes read the special class.
     if (old.typeFlag > 0) it.specialClass = old.typeFlag;

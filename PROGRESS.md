@@ -15444,3 +15444,25 @@ set up and tried there.
 - Some towns have no door outdoors (the Agate Tower's level with Jordan is
   town 46; its door is town 90's; the Troglo Temple's level 2, 101, is
   under 53).
+
+### Exile III's saves, checked against the original's (2026-10-01)
+
+The user had seven saves from the original in `~/Desktop/Saves` (not
+committed; `E3_SAV=$HOME/Desktop/Saves npx vitest run test/e3save.test.ts`).
+All seven now write back byte for byte, import with every item matched, and
+export again with the same party, PCs, flags, special items, key times,
+alchemy and jobs; a new game's record matches `newE3PartyRecord` but for
+what play and dice change (the age, flags, facing, help shown, the rolled
+shop stock and job boards). What they corrected is in FORMATS.md,
+"exile3.sav": an untruncated file's tail, vehicles absent from a new game,
+the priest and mage spell defaults swapped, the poisoned slot, enchanted
+names. `Item.e3Item` (`<e3-item>`, `E3ITEM` in `.exg`) is new: the E3 table
+record a converted item came from.
+
+**Found and fixed: E3's spell books tested the party's levels instead of its
+Mage Lore.** `FUN_10b0_302f`, which every book and crystal that teaches a
+spell calls, adds up `[pc+0x2c]` of the living PCs: skill 11, Mage Lore.
+FORMATS.md called it "total level", and `SpecBuilder.ifLevelTotal` tested
+levels; it is `ifMageLoreTotal` now. (The user asked what Major Blessing
+needs: Ghikra's crystal, spot 11, teaches it to a party with 15 Mage Lore
+between its living members, `1088:06ea`; tested in `e3quests.test.ts`.)

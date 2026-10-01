@@ -177,6 +177,14 @@ export interface Item {
    * E3 converter sets it (`<e3-ability>` in items.xml).
    */
   e3Ability: number;
+  /**
+   * Not in OBoE's cItem: the Exile III item-table record (0–414) the item
+   * was made from, or -1. A save for the original names its items by record
+   * (`fileio/e3SaveExport.ts`), and some records differ only in bytes the
+   * engine doesn't keep (two Brews of Lethe, by class). Only the E3
+   * converter sets it (`<e3-item>` in items.xml).
+   */
+  e3Item: number;
   desc: string;
 }
 
@@ -217,6 +225,7 @@ export function defaultItem(): Item {
     rechargeable: false,
     ineptOk: false,
     e3Ability: -1,
+    e3Item: -1,
     desc: '',
   };
 }

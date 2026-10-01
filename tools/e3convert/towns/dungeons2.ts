@@ -58,7 +58,7 @@ function anamaTemple(b: SpecBuilder): Map<number, Step[]> {
    * `dumbfound` allows a saving roll.
    */
   const book = (k: number): Step[] => [b.askDialog(0xf47, [b.ifFlagEq(ANAMA, 3, [
-    b.ifLevelTotal(7 * k, [b.msg(B, 0xe), ...[0, 1, 2, 3, 4].map((i) => b.teachSpell(0x82 + 8 * k + i))], [b.msg(B, 0xd)]),
+    b.ifMageLoreTotal(7 * k, [b.msg(B, 0xe), ...[0, 1, 2, 3, 4].map((i) => b.teachSpell(0x82 + 8 * k + i))], [b.msg(B, 0xd)]),
   ], [b.msg(B, 0xc), b.dumbfound(7)])])];
   return new Map<number, Step[]>([
     [1, [b.askDialog(0xf46, bed(b, B, 0xb, 500))]],
@@ -297,7 +297,7 @@ function athronsLair(b: SpecBuilder): Map<number, Step[]> {
 function khothsLair(b: SpecBuilder): Map<number, Step[]> {
   const B = 66, spot = (id: number) => townSpotFlag(105, id);
   /** A book that teaches spell `s` to a party with total level `lvl`; 0x28 says it's beyond them. */
-  const book = (lvl: number, msg: number, then: Step[]): Step[] => [b.ifLevelTotal(lvl, [b.msg(B, msg), ...then], [b.msg(B, 0x28)])];
+  const book = (lvl: number, msg: number, then: Step[]): Step[] => [b.ifMageLoreTotal(lvl, [b.msg(B, msg), ...then], [b.msg(B, 0x28)])];
   return new Map<number, Step[]>([
     [1, [b.msg(B, 0x1e), b.blockMove()]],
     [2, [b.ifFlagEq(SULFRAS_WORD, 0, [b.msg(B, 0x26)], [b.ifTer(0x15, 0x16, 0x7e, [], [
@@ -370,7 +370,7 @@ function vahnataiCrypt(b: SpecBuilder): Map<number, Step[]> {
 function houseOnHill(b: SpecBuilder): Map<number, Step[]> {
   const B = 67, spot = (id: number) => townSpotFlag(111, id);
   return new Map<number, Step[]>([
-    [1, [b.ifLevelTotal(20, [b.msg(B, 6), b.teachSpell(0x21)], [b.msg(B, 7)])]],
+    [1, [b.ifMageLoreTotal(20, [b.msg(B, 6), b.teachSpell(0x21)], [b.msg(B, 7)])]],
     [2, [b.onceMsg(spot(2), B, 5)]],
     [3, [b.askDialog(0x100e, bed(b, B, 8, 900))]],
   ]);

@@ -176,7 +176,7 @@ ${weap}        <missile-type>${it.missile}</missile-type>
             <rechargeable>${it.rechargeable}</rechargeable>
             <unsellable>${it.unsellable}</unsellable>
 ${it.ineptOk ? '            <inept-ok>true</inept-ok>\n' : ''}        </properties>
-${it.desc ? `        <description>${esc(it.desc)}</description>\n` : ''}${it.e3Ability >= 0 ? `        <e3-ability>${it.e3Ability}</e3-ability>\n` : ''}    </item>
+${it.desc ? `        <description>${esc(it.desc)}</description>\n` : ''}${it.e3Ability >= 0 ? `        <e3-ability>${it.e3Ability}</e3-ability>\n` : ''}${it.e3Item >= 0 ? `        <e3-item>${it.e3Item}</e3-item>\n` : ''}    </item>
 `;
 }
 

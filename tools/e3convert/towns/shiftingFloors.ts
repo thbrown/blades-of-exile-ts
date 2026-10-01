@@ -140,8 +140,8 @@ function level2(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]>
     [20, [b.dialog(0xd05)]],
     [21, [b.ledPanel(0xd06, buttons.map(press), PANEL, buttons.map((k) => b.dialogText(0xd06, k + 1))), ...setBelts(b)]],
     [22, [b.lever([b.msg(BLOCK, 0x1f), b.swapTer(0x3b, 0x30, 0xf7, 0xf9)])]],
-    [23, [b.ifLevelTotal(12, [b.msg(BLOCK, 0x17), b.teachSpell(0x9d)], [b.msg(BLOCK, 0x19)])]],
-    [24, [b.ifLevelTotal(20, [b.msg(BLOCK, 0x18), b.teachSpell(0x34)], [b.msg(BLOCK, 0x19)])]],
+    [23, [b.ifMageLoreTotal(12, [b.msg(BLOCK, 0x17), b.teachSpell(0x9d)], [b.msg(BLOCK, 0x19)])]],
+    [24, [b.ifMageLoreTotal(20, [b.msg(BLOCK, 0x18), b.teachSpell(0x34)], [b.msg(BLOCK, 0x19)])]],
   ]);
 }
 

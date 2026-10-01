@@ -30,7 +30,9 @@ import { TOWN_STATES } from '../../tools/e3convert/towns/townStates';
 import { e3DayReached, e3TownState } from '../../tools/e3convert/flags';
 import { vehicleNumbers, type E3Vehicle } from '../../tools/e3convert/tables';
 import { E3Bytes, E3CTOWN, E3ITEM, E3P, E3PC, readE3Save, type E3Save } from './e3save';
-import type { E3SaveDefaults } from './e3SaveDefaults';
+import {
+  E3_TABLE_ITEM_SIZE, e3ItemGraphic, e3TableItemCount, unenchantedName, type E3SaveDefaults,
+} from './e3SaveDefaults';
 import { freshenForLoad } from './saveIo';
 import type { Vehicle } from '../data/vehicle';
 import type { E3Job } from '../game/e3Jobs';
@@ -66,16 +68,30 @@ export function e3VehicleTable(table: Uint8Array): E3Vehicle[] {
  * enchanting and use change them. Null for an empty slot or one the scenario
  * has no item for.
  */
-export function e3ItemToItem(univ: Universe, rec: Uint8Array): Item | null {
+export function e3ItemToItem(univ: Universe, rec: Uint8Array, defaults: E3SaveDefaults): Item | null {
   const b = new E3Bytes(rec);
   const variety = b.i16(E3ITEM.VARIETY);
   if (variety === 0) return null;
   const fullName = b.str(E3ITEM.FULL_NAME, E3ITEM.FULL_NAME_LEN);
   const ability = b.u8(E3ITEM.ABILITY);
-  const same = univ.scenario.scenItems.filter((it) => it.fullName === fullName && it.variety === variety);
-  const base = same.find((it) => it.e3Ability === ability) ?? same[0];
+  const graphic = b.u8(E3ITEM.GRAPHIC);
+  const record = e3TableRecordOf(defaults, rec);
+  const named = (name: string) => univ.scenario.scenItems.filter((it) => it.fullName === name && it.variety === variety);
+  const same = named(fullName).length > 0 ? named(fullName) : named(unenchantedName(fullName));
+  const base = same.find((it) => it.e3Item === record && it.e3Ability === ability)
+    ?? same.find((it) => it.e3Item === record)
+    ?? same.find((it) => it.e3Ability === ability && e3ItemGraphic(it.graphicNum) === graphic)
+    ?? same.find((it) => it.e3Ability === ability) ?? same[0];
   if (!base) return null;
   const item: Item = { ...defaultItem(), ...base, itemLoc: { x: 0, y: 0 } };
+  if (record >= 0) item.e3Item = record;
+  item.fullName = fullName;
+  // The save's own picture: E3 gives a potion one the table doesn't
+  // (an unidentified Weak Strength P., 30 in the table, was 32).
+  if (e3ItemGraphic(item.graphicNum) >= 0) item.graphicNum += graphic - e3ItemGraphic(item.graphicNum);
+  // An enchantment's ability (a blessed blade's 3) is E3's own code; the
+  // engine's ability stays the base item's. TODO(e3save): enchantments.
+  item.e3Ability = ability;
   item.itemLevel = b.i16(E3ITEM.LEVEL);
   item.awkward = b.i8(E3ITEM.AWKWARD);
   item.bonus = b.i8(E3ITEM.BONUS);
@@ -89,7 +105,32 @@ export function e3ItemToItem(univ: Universe, rec: Uint8Array): Item | null {
   return item;
 }
 
-function readPc(univ: Universe, pc: Player, rec: Uint8Array, warnings: string[]): void {
+/**
+ * The table record an item in a save was made from: of the records with its
+ * kind and plain name, the one agreeing with it on the most of the bytes the
+ * table holds (class included, which tells the two Brews of Lethe apart).
+ * -1 if none has its kind and name.
+ */
+export function e3TableRecordOf(defaults: E3SaveDefaults, rec: Uint8Array): number {
+  const b = new E3Bytes(rec);
+  const name = unenchantedName(b.str(E3ITEM.FULL_NAME, E3ITEM.FULL_NAME_LEN));
+  // The in-memory record's bytes that the table has, by table offset.
+  const pairs: [number, number][] = [
+    [0, 0], [1, 1], [2, 2], [3, 3], [4, 4], [5, 5], [6, 6], [7, 7], [8, 8], [9, 9], [10, 10], [11, 11],
+    [13, 13], [14, 14], [16, E3ITEM.MAGIC], [17, E3ITEM.WEIGHT], [18, E3ITEM.CLASS],
+  ];
+  let best = -1, bestScore = -1;
+  for (let k = 0; k < e3TableItemCount(defaults); k++) {
+    const t = defaults.itemTable.subarray(k * E3_TABLE_ITEM_SIZE, (k + 1) * E3_TABLE_ITEM_SIZE);
+    const tb = new E3Bytes(t);
+    if (tb.i16(0) !== b.i16(E3ITEM.VARIETY) || tb.str(19, 25) !== name) continue;
+    const score = pairs.filter(([ti, ri]) => t[ti] === rec[ri]).length;
+    if (score > bestScore) { best = k; bestScore = score; }
+  }
+  return best;
+}
+
+function readPc(univ: Universe, pc: Player, rec: Uint8Array, defaults: E3SaveDefaults, warnings: string[]): void {
   const b = new E3Bytes(rec);
   pc.mainStatus = b.i16(E3PC.MAIN_STATUS);
   pc.name = b.str(E3PC.NAME, E3PC.NAME_LEN);
@@ -104,7 +145,7 @@ function readPc(univ: Universe, pc: Player, rec: Uint8Array, warnings: string[])
   for (let i = 0; i < 15; i++) pc.status[i] = b.i16(E3PC.STATUS + 2 * i);
   for (let i = 0; i < NUM_INVEN_SLOTS; i++) {
     const rec = b.sub(E3PC.ITEMS + i * E3ITEM.SIZE, E3ITEM.SIZE);
-    const item = e3ItemToItem(univ, rec);
+    const item = e3ItemToItem(univ, rec, defaults);
     if (item === null && new E3Bytes(rec).i16(E3ITEM.VARIETY) !== 0) {
       warnings.push(`${pc.name}'s "${new E3Bytes(rec).str(E3ITEM.FULL_NAME, E3ITEM.FULL_NAME_LEN)}" has no match in the scenario.`);
     }
@@ -116,9 +157,11 @@ function readPc(univ: Universe, pc: Player, rec: Uint8Array, warnings: string[])
     pc.mageSpells[i] = b.u8(E3PC.MAGE_SPELLS + i) !== 0;
   }
   pc.whichGraphic = b.i16(E3PC.WHICH_GRAPHIC);
+  // The slot last poisoned, which E3 never clears: it counts only while the
+  // poison (status 0) lasts.
   const poisoned = b.i16(E3PC.WEAP_POISONED);
-  pc.weapPoisoned = poisoned >= 0 && poisoned < NUM_INVEN_SLOTS && pc.items[poisoned]!.variety !== 0
-    ? pc.items[poisoned]! : null;
+  pc.weapPoisoned = (pc.status[0] ?? 0) > 0 && poisoned >= 0 && poisoned < NUM_INVEN_SLOTS
+    && pc.items[poisoned]!.variety !== 0 ? pc.items[poisoned]! : null;
   for (let i = 0; i < NUM_TRAITS; i++) pc.traits[i] = i < 15 && b.u8(E3PC.TRAITS + i) !== 0;
   pc.race = b.i16(E3PC.RACE);
   pc.expAdj = b.i16(E3PC.EXP_ADJ);
@@ -129,8 +172,10 @@ function readVehicles(list: Vehicle[], p: E3Bytes, at: number, table: Uint8Array
   const numbers = vehicleNumbers(e3VehicleTable(table));
   numbers.forEach((n, k) => {
     const v = list[n];
-    if (n < 0 || v === undefined) return;
     const r = at + 10 * k;
+    // A slot not in use is E3's table's vehicle still: a new game's record
+    // has none, and they appear once the party has played (2026-10-01).
+    if (n < 0 || v === undefined || p.u8(r + 8) === 0) return;
     v.whichTown = p.i16(r + 6);
     v.loc = v.whichTown === TOWN_NUM_OUTDOORS ? p.loc(r + 2) : p.loc(r);
     v.sector = p.loc(r + 4);
@@ -216,7 +261,7 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
     party.setSdf(...e3TownState(k), state);
   });
 
-  save.pcs.forEach((rec, i) => readPc(univ, party.pcs[i]!, rec, warnings));
+  save.pcs.forEach((rec, i) => readPc(univ, party.pcs[i]!, rec, defaults, warnings));
 
   let town: E3Import['town'] = null;
   if (save.town) {

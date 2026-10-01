@@ -695,8 +695,9 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       expect(q.canReach({ x: gx, y: gy }, elhioc.curLoc), `open\n${q.tail()}`).toBe(true);
       await q.kill(/Elhioc/);
       expect(q.flag(TROGLO_STAGE), q.tail()).toBe(6);
-      // His spellbook (spot 11): Wall of Blades and Major Cleansing, for a seasoned party.
-      for (const pc of q.party.pcs) pc.level = 5;
+      // His spellbook (spot 11): Wall of Blades and Major Cleansing, for a
+      // party with enough Mage Lore between them.
+      for (const pc of q.party.pcs) pc.skills[Skill.MAGE_LORE] = 5;
       // Through the false wall at (6,7).
       q.place({ x: 6, y: 8 });
       await q.walk(6, 7);
@@ -1519,7 +1520,7 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       };
       expect(await toLibrary(0)).toBe(false);
       expect(await toLibrary(1)).toBe(true);
-      for (const pc of q.party.pcs) pc.level = 5;
+      for (const pc of q.party.pcs) pc.skills[Skill.MAGE_LORE] = 5;
       await touch(q, ...spot(33, 23));
       await touch(q, ...spot(33, 24));
       expect(q.party.pcs.some((pc) => pc.priestSpells[Spell.DIVINE_THUD - 100]), q.tail()).toBe(true);
@@ -1643,7 +1644,7 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
 
       // Level 2, from where those stairs arrive.
       const q = new QuestRunner(scen);
-      for (const pc of q.party.pcs) pc.level = 5;
+      for (const pc of q.party.pcs) pc.skills[Skill.MAGE_LORE] = 5;
       await q.enter(33, { x: 5, y: 5 });
       await q.clearHostiles();
       const belt = q.town.record.terrain[59]![48];
@@ -1671,7 +1672,7 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       await level1(one);
       found['L1'] = await searchBelts(one, one.at, { town: 33 });
       const q = new QuestRunner(scen);
-      for (const pc of q.party.pcs) pc.level = 5;
+      for (const pc of q.party.pcs) pc.skills[Skill.MAGE_LORE] = 5;
       await q.enter(33, { x: 5, y: 5 });
       await q.clearHostiles();
       for (const [name, goal, after] of level2Legs(q)) {
@@ -1746,13 +1747,13 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       await q.step(28, 52);
       expect(q.town.record.terrain[27]![51], q.tail()).toBe(0x67);
 
-      // Its four books want a party of some experience: 17 levels between
+      // Its four books want a party of some learning: 17 Mage Lore between
       // them for Pachtar's (spot 23), which puts the Lair of Drakos on the map.
       const [bx, by] = spot(16, 23);
-      for (const pc of q.party.pcs) pc.level = 2;
+      for (const pc of q.party.pcs) pc.skills[Skill.MAGE_LORE] = 2;
       await q.look(bx, by);
-      expect(scen.towns[74]!.canFind, 'twelve levels').toBe(false);
-      for (const pc of q.party.pcs) pc.level = 3;
+      expect(scen.towns[74]!.canFind, 'twelve Mage Lore').toBe(false);
+      for (const pc of q.party.pcs) pc.skills[Skill.MAGE_LORE] = 3;
       await q.look(bx, by);
       expect(scen.towns[74]!.canFind, q.tail()).toBe(true);
       // The others: Killer Poison (spot 20), Antimagic Cloud (21) and Mass Paralysis (22).
@@ -2947,6 +2948,19 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       expect(q.creatures(/Shade/).length).toBe(0);
       await q.step(...spot(41, 16));
       expect(q.party.isSplit(), q.tail()).toBe(false);
+    });
+
+    it("Ghikra's crystal teaches Major Blessing to a party with 15 Mage Lore between its living members", async () => {
+      // `1088:06ea`: FUN_10b0_302f adds up the living PCs' skill 11, and over 14 learns mage spell 55.
+      const q = new QuestRunner(scen);
+      await q.enter(41);
+      const lore = [3, 3, 3, 3, 2, 0];
+      q.party.pcs.forEach((pc, i) => { pc.skills[Skill.MAGE_LORE] = lore[i]!; pc.mageSpells[Spell.BLESS_MAJOR] = false; });
+      await touch(q, ...spot(41, 11));
+      expect(q.party.pcs.some((pc) => pc.mageSpells[Spell.BLESS_MAJOR]), `14\n${q.tail()}`).toBe(false);
+      q.party.pcs[5]!.skills[Skill.MAGE_LORE] = 1;
+      await touch(q, ...spot(41, 11));
+      expect(q.party.pcs.every((pc) => pc.mageSpells[Spell.BLESS_MAJOR]), `15\n${q.tail()}`).toBe(true);
     });
 
     it("The Great Circle: the black altar smashed, and the haakai's bargain taken or refused", async () => {

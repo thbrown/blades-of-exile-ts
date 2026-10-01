@@ -16,7 +16,10 @@ export function readE3SaveDefaults(exe: Uint8Array): E3SaveDefaults {
     boats: slice(0x2be0, 300),
     horses: slice(0x2d0c, 300),
     canFind: slice(0x29b2, 120),
-    mageSpells: slice(0x296c, 30),
-    priestSpells: slice(0x294e, 30),
+    // A new PC's priest spells then its mage spells: `FUN_10b0_0c2d` copies
+    // 0x296c into the lower of its two stack arrays, and a PC's priest
+    // spells come first. A new game's save (2026-10-01) confirms it.
+    priestSpells: slice(0x296c, 30),
+    mageSpells: slice(0x294e, 30),
   };
 }

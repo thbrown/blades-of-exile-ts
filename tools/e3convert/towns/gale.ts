@@ -14,7 +14,7 @@ export function gale(town: number) {
     const spot = (id: number) => townSpotFlag(town, id);
     /** A book in the library that needs `levels` between the PCs to read. */
     const book = (levels: number, read: Step[]): Step[] =>
-      [b.ifLevelTotal(levels, read, [b.msg(BLOCK, 0x1c)])];
+      [b.ifMageLoreTotal(levels, read, [b.msg(BLOCK, 0x1c)])];
     return new Map<number, Step[]>([
       // The closed gates. The spot's own flag goes to 20, so it says this
       // once a state.

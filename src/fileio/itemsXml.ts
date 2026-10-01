@@ -108,6 +108,9 @@ export function readItemsFromXml(root: Element, fname = 'items.xml'): Item[] {
         case 'e3-ability':
           item.e3Ability = Number(text(child));
           break;
+        case 'e3-item':
+          item.e3Item = Number(text(child));
+          break;
         default:
           throw new Error(`${fname}: bad node <${type}> in item ${which}`);
       }

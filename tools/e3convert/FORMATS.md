@@ -156,9 +156,28 @@ jumptable". The table is `n` case values followed by `n` target offsets, and
 
 ## exile3.sav: the saved game — pinned 2026-09-30 (`src/fileio/e3save.ts`)
 
-Not checked against a save from the original yet (none is on disk): every
-offset below is read from the code. `E3_SAV=<file> npx vitest run
-test/e3save.test.ts` checks a real one round-trips.
+Read from the code, then **checked against seven saves from the original**
+(2026-10-01, the user's `~/Desktop/Saves`, not committed): each writes back
+byte for byte, and imports and exports again with its party, PCs and flags
+unchanged. `E3_SAV=<file or directory> npx vitest run test/e3save.test.ts`
+reruns that. What the saves showed:
+
+- **A file can run on past its save.** `save_file` `_lopen`s an existing
+  file and never truncates it, so an outdoor save over an in-town one keeps
+  its last 24,091 bytes. All seven are 210,745 bytes, the in-town size with
+  maps; the reader keeps the tail as `trailing`.
+- **A new game's record has no vehicles**: every slot is town 200, not in
+  use. E3's table appears in the record once the party has played. An unused
+  slot is E3's own vehicle, not a missing one.
+- `DS:296c` is a new PC's **priest** spells and `DS:294e` its mage spells.
+- The poisoned-weapon word holds the slot last poisoned, which E3 never
+  clears (0 at first); it counts only while status 0 lasts.
+- An item's word at +21 is where it last lay, and the bytes after a name's
+  NUL are whatever was on the stack: neither is game state.
+- Enchanting adds " (+1)", " (B)" … to the name, and the table has only the
+  plain name. Some records differ only in picture (two Pants) or class (two
+  Brews of Lethe), so a converted item keeps its record (`Item.e3Item`).
+- An unidentified potion's picture can differ from its record's.
 
 `save_file` is `FUN_1040_0db6` and `load_file` `FUN_1040_018e`: BoE 1997's
 pair (FILEIO.CPP:440/138) with E3's sizes. **Little-endian** (it is the
@@ -352,7 +371,7 @@ arguments of far calls, so read them from the disassembly (`Disasm.java`).
 | `FUN_1080_1b1f(x, y, a, b)` | swap terrain `a` and `b` at a spot |
 | `FUN_10c0_4a61(town, x, y)` | move the party into `town` at `(x, y)` |
 | `FUN_1040_2c2d(zx, zy, x, y)` | leave for outdoor zone `(zx, zy)` at `(x, y)` (in the 2×2 window) |
-| `FUN_10b0_302f()` | total level of the living PCs |
+| `FUN_10b0_302f()` | total Mage Lore (skill 11, `pc+0x2c`) of the living PCs; read as levels until 2026-10-01 |
 | `FUN_10b0_366a(s)` | teach every PC mage spell `s` (priest `s - 100` from 100) |
 | `FUN_10b0_1509(n)` / `FUN_10b0_1fb3(n)` | heal the party / restore spell points |
 | `FUN_1090_4053(code, att)` | bring in the creatures whose `spec1` is `code` |

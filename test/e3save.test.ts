@@ -6,13 +6,13 @@
  * that writing it back gives the same bytes.
  */
 
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Scenario } from '../src/data/scenario';
 import {
-  E3P, E3PC, E3_PARTY_SIZE, E3_PC_SIZE, E3_SAVE_OUTDOORS, E3Bytes, emptyE3Save, isE3Save, readE3Save, writeE3Save,
+  E3ITEM, E3P, E3PC, E3_PARTY_SIZE, E3_PC_SIZE, E3_SAVE_OUTDOORS, E3Bytes, emptyE3Save, isE3Save, readE3Save, writeE3Save,
 } from '../src/fileio/e3save';
 import { e3SaveDefaultsFromJson, e3SaveDefaultsToJson, type E3SaveDefaults } from '../src/fileio/e3SaveDefaults';
 import { applyE3Save } from '../src/fileio/e3SaveImport';
@@ -52,6 +52,15 @@ describe('the exile3.sav container', () => {
     expect(back.town!.data[0]).toBe(2);
     expect(back.maps!.villages[0]).toBe(6);
     expect(writeE3Save(back)).toEqual(bytes);
+  });
+
+  it("keeps what follows a save, as E3's untruncated overwrite leaves it", () => {
+    const bytes = writeE3Save(emptyE3Save());
+    const longer = new Uint8Array(bytes.length + 24091).fill(0xaa);
+    longer.set(bytes);
+    const back = readE3Save(longer);
+    expect(back.trailing.length).toBe(24091);
+    expect(writeE3Save(back)).toEqual(longer);
   });
 
   it('refuses what is not one', () => {
@@ -186,13 +195,87 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     expect(partyFlag(0xc00)).toEqual([294, 0]);
   });
 
+  /**
+   * Saves from the original: `E3_SAV` is a file or a directory of them. Each
+   * must write back byte for byte, come in with every item matched, and go
+   * back out with the same party, PCs and flags.
+   */
   const real = process.env['E3_SAV'];
-  it.skipIf(!real || !existsSync(real))('reads a save from the original and writes the same bytes', () => {
-    const bytes = new Uint8Array(readFileSync(real as string));
-    expect(writeE3Save(readE3Save(bytes))).toEqual(bytes);
-    const back = new QuestRunner(scen);
-    const res = applyE3Save(bytes, back.univ, defaults);
-    console.log(`E3_SAV: ${back.party.pcs.map((pc) => pc.name).join(', ')}; gold ${back.party.gold}; ` +
-      `town ${JSON.stringify(res.town)}; ${res.warnings.join(' ')}`);
+  const realFiles = (): string[] => {
+    if (!real || !existsSync(real)) return [];
+    return statSync(real).isDirectory()
+      ? readdirSync(real).filter((f) => /\.sav$/i.test(f)).map((f) => join(real, f)) : [real];
+  };
+  it.skipIf(!real || !existsSync(real))('reads saves from the original, writes the same bytes, and carries them across', () => {
+    for (const file of realFiles()) {
+      const bytes = new Uint8Array(readFileSync(file));
+      const save = readE3Save(bytes);
+      expect(writeE3Save(save), file).toEqual(bytes);
+      const p = new E3Bytes(save.party);
+      // The window square is the zone square plus which of the 2x2 it is in.
+      const iwc = p.loc(E3P.IWC), inSec = p.loc(E3P.LOC_IN_SEC), win = p.loc(E3P.P_LOC);
+      expect([win.x, win.y], file).toEqual([iwc.x * 48 + inSec.x, iwc.y * 48 + inSec.y]);
+
+      const back = new QuestRunner(scen);
+      const res = applyE3Save(bytes, back.univ, defaults);
+      expect(res.warnings.filter((w) => /no match/.test(w)), file).toEqual([]);
+      const out = readE3Save(exportE3Save(back.univ, defaults).bytes);
+      const o = new E3Bytes(out.party);
+      for (const at of [E3P.AGE, E3P.GOLD, E3P.FOOD]) expect(o.i32(at), `${file} +${at}`).toBe(p.i32(at));
+      expect(out.party.subarray(E3P.FLAGS, E3P.FLAGS + 3000), file).toEqual(save.party.subarray(E3P.FLAGS, E3P.FLAGS + 3000));
+      expect(out.party.subarray(E3P.SPEC_ITEMS, E3P.FLAGS), file).toEqual(save.party.subarray(E3P.SPEC_ITEMS, E3P.FLAGS));
+      expect(out.party.subarray(E3P.KEY_TIMES, E3P.KEY_TIMES + 40), file).toEqual(save.party.subarray(E3P.KEY_TIMES, E3P.KEY_TIMES + 40));
+      expect(out.party.subarray(E3P.ALCHEMY, E3P.ALCHEMY + 17), file).toEqual(save.party.subarray(E3P.ALCHEMY, E3P.ALCHEMY + 17));
+      expect(out.party.subarray(E3P.JOBS_HELD, E3P.CAN_FIND_TOWN), file).toEqual(save.party.subarray(E3P.JOBS_HELD, E3P.CAN_FIND_TOWN));
+      if (!save.inTown) {
+        expect(out.party.subarray(E3P.OUTDOOR_CORNER, E3P.BOATS), file).toEqual(save.party.subarray(E3P.OUTDOOR_CORNER, E3P.BOATS));
+      }
+      save.pcs.forEach((pc, i) => {
+        // Everything but the poisoned slot, which E3 leaves stale, and the
+        // bytes after a name's NUL, which E3 copies from a stack buffer.
+        const mask = (r: Uint8Array) => {
+          const c = r.slice();
+          c[E3PC.WEAP_POISONED] = c[E3PC.WEAP_POISONED + 1] = 0;
+          const clearAfterNul = (at: number, len: number) => { const end = c.indexOf(0, at); if (end >= 0 && end < at + len) c.fill(0, end, at + len); };
+          clearAfterNul(E3PC.NAME, E3PC.NAME_LEN);
+          for (let k = 0; k < 24; k++) {
+            // The word at +21 is where the item last lay, which E3 leaves.
+            c.fill(0, E3PC.ITEMS + k * E3ITEM.SIZE + E3ITEM.LOC, E3PC.ITEMS + k * E3ITEM.SIZE + E3ITEM.LOC + 2);
+            clearAfterNul(E3PC.ITEMS + k * E3ITEM.SIZE + E3ITEM.FULL_NAME, E3ITEM.FULL_NAME_LEN);
+            clearAfterNul(E3PC.ITEMS + k * E3ITEM.SIZE + E3ITEM.NAME, E3ITEM.NAME_LEN);
+          }
+          return c;
+        };
+        const a = mask(out.pcs[i]!), b = mask(pc);
+        const at = a.findIndex((v, k) => v !== b[k]);
+        expect(at < 0 ? '' : `+${at}: ${[...a.slice(at, at + 8)]} vs ${[...b.slice(at, at + 8)]}`, `${file} PC ${i}`).toBe('');
+      });
+    }
   });
+
+  it.skipIf(!realFiles().some((f) => (readE3Save(new Uint8Array(readFileSync(f))).party[0] ?? 0) < 100))(
+    "builds a new game's record as the original's, but for what the first turns change", () => {
+      const file = realFiles().find((f) => new E3Bytes(readE3Save(new Uint8Array(readFileSync(f))).party).i32(E3P.AGE) < 100) ?? '';
+      const save = readE3Save(new Uint8Array(readFileSync(file)));
+      const mine = newE3PartyRecord(defaults);
+      const differ: number[] = [];
+      for (let i = 0; i < mine.length; i++) if (mine[i] !== save.party[i]) differ.push(i);
+      const inBlock = (at: number, from: number, len: number) => at >= from && at < from + len;
+      // The age, the flags the first turns set, and the vehicles, which a new
+      // game's record has none of yet (E3 copies its table in later; the
+      // exporter writes them, as every later save has them).
+      const unexplained = differ.filter((i) => i >= 4 && !inBlock(i, E3P.FLAGS, 3100)
+        && !inBlock(i, E3P.BOATS, 300) && !inBlock(i, E3P.HORSES, 300)
+        // the magic shops' stock, which E3 rolls and this leaves empty, and
+        // the help messages the first turns showed.
+        && !inBlock(i, E3P.MAGIC_STORE_ITEMS, 5 * 10 * 63) && !inBlock(i, E3P.HELP_RECEIVED, 120)
+        // and the party's facing, and the job boards, which E3 rolls too.
+        && !inBlock(i, E3P.DIRECTION, 2) && !inBlock(i, E3P.JOB_BOARDS, 6 * 0x30));
+      expect(unexplained.map((i) => `0x${i.toString(16)}`)).toEqual([]);
+      // And a new PC's spells are the defaults, priest then mage.
+      for (const pc of save.pcs) {
+        expect(pc.subarray(E3PC.PRIEST_SPELLS, E3PC.PRIEST_SPELLS + 30)).toEqual(defaults.priestSpells);
+        expect(pc.subarray(E3PC.MAGE_SPELLS, E3PC.MAGE_SPELLS + 30)).toEqual(defaults.mageSpells);
+      }
+    });
 });

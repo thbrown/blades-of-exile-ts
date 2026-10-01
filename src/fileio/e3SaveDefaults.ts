@@ -10,7 +10,8 @@
  * - **The boats and horses** a new game starts with (`DS:2be0`, `DS:2d0c`):
  *   the scenario renumbers them (`vehicleNumbers`), and only these say how.
  * - **New-game defaults** `init_party` (`FUN_10b0_053c`) copies in: the towns
- *   that can be found (`DS:29b2`) and a new PC's spells (`DS:296c`, `294e`).
+ *   that can be found (`DS:29b2`) and a new PC's spells (priest `DS:296c`,
+ *   mage `DS:294e`).
  */
 
 import { E3ITEM } from './e3save';
@@ -60,6 +61,24 @@ export function e3SaveDefaultsFromJson(text: string): E3SaveDefaults {
 
 export function e3TableItemCount(d: E3SaveDefaults): number {
   return Math.floor(d.itemTable.length / E3_TABLE_ITEM_SIZE);
+}
+
+/**
+ * An item's name without an enchantment's suffix: E3's shops, like OBoE's,
+ * add " (+1)", " (B)" and so on (seen in a save from the original,
+ * 2026-10-01), and the table has only the plain name.
+ */
+export function unenchantedName(name: string): string {
+  return name.replace(/ \([^()]*\)$/, '');
+}
+
+/**
+ * E3's own picture for a converted item: the converter puts the item sheet
+ * at `1000 + sheet*100` (`emit.ts`). Several items differ by nothing else
+ * (two Pants, two Shirts, three Foods). -1 for any other picture.
+ */
+export function e3ItemGraphic(graphicNum: number): number {
+  return graphicNum >= 1000 ? (graphicNum - 1000) % 100 : -1;
 }
 
 /** Table record `k`'s full name (table +19, 25 bytes). */

@@ -233,7 +233,7 @@ function tevrono(t: number): PlaceScript {
     const { B, spot } = on(t);
     /** A book: living PCs whose levels add up to `level` learn `lesson`; others hear string 2. */
     const book = (level: number, msg: number, lesson: Step[]): Step[] =>
-      [b.ifLevelTotal(level, [b.msg(B, msg), ...lesson], [b.msg(B, 2)])];
+      [b.ifMageLoreTotal(level, [b.msg(B, msg), ...lesson], [b.msg(B, 2)])];
     return new Map<number, Step[]>([
       [1, [b.trap(0x107d, spot(1), 0xb)]],
       [2, [b.trap(0x107c, spot(2), 0x14)]],
@@ -259,7 +259,7 @@ function execa(t: number): PlaceScript {
     const { B } = on(t);
     return new Map<number, Step[]>([
       [1, [b.msg(B, 0xc), b.bringIn(RAIDERS, 1), b.setFlag(f(0x701), 20)]],
-      [2, [b.msg(B, 0xd), b.ifLevelTotal(0xf, [b.msg(B, 0xe), b.teachSpell(0x9c)], [b.msg(B, 0xf)])]],
+      [2, [b.msg(B, 0xd), b.ifMageLoreTotal(0xf, [b.msg(B, 0xe), b.teachSpell(0x9c)], [b.msg(B, 0xf)])]],
       ...[3, 4, 5, 6, 7, 8, 9, 10].map((id): [number, Step[]] => [id, []]),
       // Rowing away from the island, to Gale (16).
       [11, [b.askDialog(0x1220, [
@@ -307,7 +307,7 @@ function manara(t: number): PlaceScript {
       [3, walls(0x767, [[0x14, 0x28], [0x14, 7], [0x28, 0x14]])],
       [4, walls(0x772, [[0x1c, 0x28], [7, 0x1b], [0x28, 0x14]])],
       ...[5, 6, 7, 8, 9, 10].map((id): [number, Step[]] => [id, []]),
-      [11, [b.ifLevelTotal(0x14, [b.msg(B, 0xd), b.teachSpell(0x88), b.teachSpell(0x89)], [b.msg(B, 0xe)])]],
+      [11, [b.ifMageLoreTotal(0x14, [b.msg(B, 0xd), b.teachSpell(0x88), b.teachSpell(0x89)], [b.msg(B, 0xe)])]],
     ]);
   };
 }

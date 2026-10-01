@@ -103,7 +103,7 @@ function ghikra(b: SpecBuilder): Map<number, Step[]> {
     [3, [b.ifFlagEq(metRentar, 0, [b.msg(B, 0x2e), b.blockMove()])]],
     [4, [b.ifFlagEq(spot(4), 0, [b.setFlag(spot(4), 20), b.msg(B, 0x2f), b.bringIn(200, 1)])]],
     [9, [b.ifFlagEq(spot(9), 0, [b.msg(B, 0x27), b.blockMove()])]],
-    [11, [b.askDialog(0xd52, [b.ifLevelTotal(15, [b.msg(B, 0x24), b.teachSpell(0x37)], [b.msg(B, 0x23)])])]],
+    [11, [b.askDialog(0xd52, [b.ifMageLoreTotal(15, [b.msg(B, 0x24), b.teachSpell(0x37)], [b.msg(B, 0x23)])])]],
     [12, [b.msg(B, 0x28), b.damageDice(20, 10, DamageType.MAGIC), b.blockMove()]],
     // The glowing door takes one.
     [14, [b.askDialog(0xd53, [b.splitParty(0x28, 0x25)]), b.blockMove()]],
@@ -186,7 +186,7 @@ function agateTower(b: SpecBuilder): Map<number, Step[]> {
       b.dialog(0xd88), b.setFlag(AGATE_GONE, 1), ...[138, 139, 140, 141].map((k) => b.removeCreatures(k)),
       b.setTer(24, 41, 0),
     ])])]],
-    [20, [b.askDialog(0xd87, [b.ifLevelTotal(8, [b.msg(B, 0x6b), b.teachSpell(0x1a)], [b.msg(B, 0x6a)])])]],
+    [20, [b.askDialog(0xd87, [b.ifMageLoreTotal(8, [b.msg(B, 0x6b), b.teachSpell(0x1a)], [b.msg(B, 0x6a)])])]],
   ]);
 }
 
@@ -319,7 +319,7 @@ function vahkohsTomb(b: SpecBuilder): Map<number, Step[]> {
   const B = 61, spot = (id: number) => townSpotFlag(52, id);
   const lever = (x: number, y: number): Step[] => [b.lever([b.msg(B, 0x11), b.swapTer(x, y, 0x7d, 0x7e)])];
   const spellbook = (reads: number, spell: number): Step[] => [b.askDialog(0xdc2,
-    [b.ifLevelTotal(10, [b.msg(B, reads), b.teachSpell(spell)], [b.msg(B, 0x13)])])];
+    [b.ifMageLoreTotal(10, [b.msg(B, reads), b.teachSpell(spell)], [b.msg(B, 0x13)])])];
   return new Map<number, Step[]>([
     // The vampire's end: the tomb counts as cleared (0x295 is `towns/entry.ts`'s).
     [1, [b.askDialog(0xdc0, [b.msg(B, 0xe, 0xf), b.setFlag(f(0x295), 2), b.setFlag(spot(1), 20), b.xp(10)])]],
@@ -702,8 +702,8 @@ function rakshasaLair(b: SpecBuilder): Map<number, Step[]> {
     [11, [b.askDialog(0xd7f, [b.changeTown(0x48, 0x18, 0x17)]), b.blockMove()]],
     [14, [b.moveParty(0x17, 6), b.blockMove()]],
     [15, [b.setTer(0x16, 0x24, 0x75)]],
-    [16, [b.ifLevelTotal(13, [b.msg(B, 0x3d), b.teachSpell(0xa0)], [b.msg(B, 0x3e)])]],
-    [17, [b.ifLevelTotal(17, [b.msg(B, 0x3f), b.teachSpell(0x3d)], [b.msg(B, 0x3e)])]],
+    [16, [b.ifMageLoreTotal(13, [b.msg(B, 0x3d), b.teachSpell(0xa0)], [b.msg(B, 0x3e)])]],
+    [17, [b.ifMageLoreTotal(17, [b.msg(B, 0x3f), b.teachSpell(0x3d)], [b.msg(B, 0x3e)])]],
   ]);
 }
 
@@ -829,7 +829,7 @@ function madMonastery(b: SpecBuilder): Map<number, Step[]> {
   const click = (literal: number, x: number, y: number, t: number): Step[] => [b.log(0x1088, literal), b.setTer(x, y, t)];
   return new Map<number, Step[]>([
     // Martial arts books: +1 dexterity (to 19) for a party of 15 levels.
-    [1, [b.ifLevelTotal(15, [b.eachPc(() => [b.ifStat(1, 19, [], [b.addStat(1, 1)])]), b.msg(B, 9), b.setFlag(spot(1), 20)],
+    [1, [b.ifMageLoreTotal(15, [b.eachPc(() => [b.ifStat(1, 19, [], [b.addStat(1, 1)])]), b.msg(B, 9), b.setFlag(spot(1), 20)],
       [b.msg(B, 0xa)])]],
     // Everyone here hunts the party.
     [2, [b.setCreature(-1, 'wake'), b.msg(B, 0xb, 0xc), b.setFlag(spot(2), 20)]],

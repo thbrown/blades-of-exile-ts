@@ -39,7 +39,7 @@ function toPortalFortress(b: SpecBuilder): Step {
  * them, and takes 20 experience from each PC who has more than 20.
  */
 function orvidsBook(b: SpecBuilder): Step[] {
-  return [b.askDialog(0xcad, [b.ifLevelTotal(14, [
+  return [b.askDialog(0xcad, [b.ifMageLoreTotal(14, [
     b.msg(56, 0x51), b.teachSpell(0x3a),
     b.eachPc(() => [b.ifStat(Skill.CUR_XP, 21, [b.drainXp(20)])]),
   ], [b.msg(56, 0x52)])])];

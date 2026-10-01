@@ -84,7 +84,7 @@ export function slimePit(town: number) {
           b.askNumber('Which button do you press? (1 to 5, or 0 for none)', 0, 5, PRESSED),
           b.ifFlagAtLeast(PRESSED, 1, [b.copyFlag(PEDESTAL, PRESSED), b.decFlag(PEDESTAL)]),
           b.blockMove()]],
-        [14, [b.askDialog(0xc9c, [b.ifLevelTotal(8,
+        [14, [b.askDialog(0xc9c, [b.ifMageLoreTotal(8,
           [b.msg(BLOCK, 0x32), b.teachSpell(0x19), b.teachSpell(0x1b)], [b.msg(BLOCK, 0x33)])])]],
         [21, stair(0xc94, 23, 2, 0x3e)], [22, stair(0xc94, 23, 9, 0x3a)], [23, stair(0xc94, 23, 0x21, 0x2d)],
         [24, stair(0xc94, 23, 0x23, 0x39)], [25, stair(0xc94, 23, 0x2d, 0x1c)], [26, stair(0xc94, 23, 0x3a, 1)],

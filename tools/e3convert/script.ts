@@ -14,6 +14,7 @@
 import type { E3Dialog } from './ne';
 import { DamageType } from '../../src/data/monster';
 import { FieldType } from '../../src/data/fields';
+import { Skill } from '../../src/universe/skills';
 import { e3Event, e3Flag } from './flags';
 import { E3ShopType } from './shops';
 
@@ -1201,9 +1202,13 @@ export class SpecBuilder {
     return (next) => this.node('food', { ex1: [25000, 1] }, next);
   }
 
-  /** `if (FUN_10b0_302f() >= value)`: the living PCs' levels, added up. */
-  ifLevelTotal(value: number, then: Step[], otherwise: Step[] = []): Step {
-    return this.ifSkillTotal(104, value, then, otherwise);
+  /**
+   * `if (FUN_10b0_302f() >= value)`: the living PCs' **Mage Lore**, added up
+   * (`[pc + 0x2c]`, skill 11). It was taken for their levels until
+   * 2026-10-01, which every spell book and crystal here tested wrongly.
+   */
+  ifMageLoreTotal(value: number, then: Step[], otherwise: Step[] = []): Step {
+    return this.ifSkillTotal(Skill.MAGE_LORE, value, then, otherwise);
   }
 
   /**

@@ -111,7 +111,7 @@ function caves(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]> 
     [4, [b.trap(0xd7a, spot(4), 0x14)]],
     [5, [b.dialog(0xcde)]],
     [6, [b.msg(BLOCK, 0x52), b.bringIn(200, 3), b.setFlag(spot(6), 20)]],
-    [11, [b.askDialog(0xcda, [b.ifLevelTotal(10,
+    [11, [b.askDialog(0xcda, [b.ifMageLoreTotal(10,
       [b.msg(BLOCK, 0x4d), b.teachSpell(0x9f), b.teachSpell(0xa1)], [b.msg(BLOCK, 0x4c)])])]],
     // The gate's panel (dialog 0xcdf, `FUN_1008_461a`): each button turns a
     // dial, and the walls follow. Its labels only mark the ends of the scale.

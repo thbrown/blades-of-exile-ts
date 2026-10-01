@@ -19,6 +19,13 @@
  * | 0x1000, 0x1000 | `sfx[64][64]`, `misc_i[64][64]` | `DS:5cb1`, `1160:e61c` |
  * | 0x5a00 | with maps only: villages 120–199's maps | `1168:2000` |
  *
+ * **A save can run on past its end.** `save_file` opens an existing file
+ * with `_lopen` and only `_lcreat`s a missing one, so nothing truncates: an
+ * outdoor save written over an in-town one keeps the old file's last
+ * 24,091 bytes (the three town blocks' size). Every save from the original
+ * looked at so far is 210,745 bytes, the in-town size with maps. The reader
+ * keeps such a tail as `trailing`, so a file writes back the same.
+ *
  * The header words are BoE's flags with one changed (`DS:12fc` holds the
  * pairs the reader accepts): **5790 outdoors / 1342 in town**; **5434**
  * (BoE's "in a scenario" was 100/200; E3 writes 5434 always, and also reads
@@ -73,6 +80,8 @@ export interface E3Save {
   maps: { towns: Uint8Array; zones: Uint8Array; villages: Uint8Array } | null;
   sfx: Uint8Array;
   miscI: Uint8Array;
+  /** Whatever followed the save in the file: an older, longer save's tail. */
+  trailing: Uint8Array;
 }
 
 /** A save with every block present and zeroed, outdoors and without maps. */
@@ -89,6 +98,7 @@ export function emptyE3Save(): E3Save {
     maps: null,
     sfx: new Uint8Array(E3_SFX_SIZE),
     miscI: new Uint8Array(E3_MISC_I_SIZE),
+    trailing: new Uint8Array(0),
   };
 }
 
@@ -129,6 +139,7 @@ export function readE3Save(data: Uint8Array): E3Save {
     maps: null,
     sfx: new Uint8Array(0),
     miscI: new Uint8Array(0),
+    trailing: new Uint8Array(0),
   };
   if (inTown) save.town = { cTown: take(E3_CTOWN_SIZE), data: take(E3_TOWN_DATA_SIZE), items: take(E3_ITEM_LIST_SIZE) };
   save.storedItems = Array.from({ length: 3 }, () => take(E3_ITEM_LIST_SIZE));
@@ -137,16 +148,16 @@ export function readE3Save(data: Uint8Array): E3Save {
   save.sfx = take(E3_SFX_SIZE);
   save.miscI = take(E3_MISC_I_SIZE);
   if (towns && zones) save.maps = { towns, zones, villages: take(E3_VILLAGE_MAPS_SIZE) };
-  if (at !== data.length) throw new Error(`Exile III save has ${data.length - at} bytes past its end`);
+  save.trailing = data.slice(at);
   return save;
 }
 
-export function e3SaveSize(save: Pick<E3Save, 'inTown' | 'maps'>): number {
+export function e3SaveSize(save: Pick<E3Save, 'inTown' | 'maps'> & { trailing?: Uint8Array }): number {
   return 6 + E3_PARTY_SIZE + E3_SETUP_SIZE + 6 * E3_PC_SIZE + E3_OUT_EXPLORED_SIZE
     + (save.inTown ? E3_CTOWN_SIZE + E3_TOWN_DATA_SIZE + E3_ITEM_LIST_SIZE : 0)
     + 3 * E3_ITEM_LIST_SIZE
     + (save.maps ? E3_TOWN_MAPS_SIZE + E3_OUT_MAPS_SIZE + E3_VILLAGE_MAPS_SIZE : 0)
-    + E3_SFX_SIZE + E3_MISC_I_SIZE;
+    + E3_SFX_SIZE + E3_MISC_I_SIZE + (save.trailing?.length ?? 0);
 }
 
 export function writeE3Save(save: E3Save): Uint8Array {
@@ -180,6 +191,7 @@ export function writeE3Save(save: E3Save): Uint8Array {
   put(save.sfx, E3_SFX_SIZE);
   put(save.miscI, E3_MISC_I_SIZE);
   if (save.maps) put(save.maps.villages, E3_VILLAGE_MAPS_SIZE);
+  out.set(save.trailing, at);
   return out;
 }
 
@@ -295,7 +307,7 @@ export const E3PC = {
   PRIEST_SPELLS: 1662,
   MAGE_SPELLS: 1724,
   WHICH_GRAPHIC: 1786,
-  /** i16: the slot with poison on it, 24 for none. */
+  /** i16: the slot last poisoned (0 at first; E3 never clears it). */
   WEAP_POISONED: 1788,
   /** u8[15], never used. */
   ADVAN: 1790,
