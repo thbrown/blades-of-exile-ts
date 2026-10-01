@@ -850,6 +850,9 @@ function scenarioXml(
         <disease>exile3</disease>
         <summons>exile3</summons>
         <dungeon-sound>${E3_DUNGEON_SOUND}</dungeon-sound>
+        <start-sound>none</start-sound>
+        <secret-doors>101,118,133</secret-doors>
+        <search>exile3</search>
         <cursors>${cursors.map((c) => `${c.name}:${c.hotspot.x}:${c.hotspot.y}`).join(',')}</cursors>
     </feature-flags>
     <text>
@@ -973,6 +976,16 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   e3Src.dialogPic = (tag) => e3DialogPic(tag, spritePic, mapBase);
   const monsters = legacyMonsters.map((m, n) => {
     const mon = convertMonster(m);
+    // E3's attack word is 1997's, `(dice − 1) × 100 + sides`: its
+    // `monster_attack` swings whenever it is positive and rolls
+    // `a / 100 + 1` dice (`1018` around `:10241` of the decompile), as
+    // 1997's COMBAT.CPP:2295 and INFODLGS.CPP:489 do. OBoE's legacy import
+    // takes `a / 100`, a die short, and none at all under 100 — so E3's
+    // slimes (7, 8) never attacked.
+    mon.attacks = mon.attacks.map((att, i) => {
+      const a = m.a[i] ?? 0;
+      return a > 0 ? { ...att, dice: Math.trunc(a / 100) + 1, sides: a % 100 } : att;
+    });
     mon.pictureNum = monsterArt.pics[n]!;
     // E3's `make_town_hostile` gives BoE's guard boost (health ×3, two
     // statuses 8) to monsters 91 and 92 alone (1070:24e6).
@@ -1224,6 +1237,9 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   for (const [name, bmp] of E3_PICTURES) write(`graphics/${name}.png`, encodePng(decodeBmp(read(bmp))));
   for (const [name, img] of e3Panels(read)) write(`graphics/${name}.png`, encodePng(img));
   write('graphics/textbar.png', encodePng(decodeBmp(read('TEXTBAR.BMP'))));
+  // The frame round the terrain view: E3's wooden bevel, 279×351 as 1997's
+  // `win_from_rects[0]` (GRAPHICS.CPP:101), where OBoE's is a stone rope.
+  write('graphics/terscreen.png', encodePng(decodeBmp(read('TERSCRN.BMP'))));
   // E3's instant help, string block 10 (3000 + n), which its `give_help`
   // (`FUN_1008_38d6`) shows by 1997's numbers — the engine's too — in place
   // of BoE's wording. A number E3 has no string for keeps BoE's.

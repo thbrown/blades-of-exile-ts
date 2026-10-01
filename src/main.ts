@@ -134,7 +134,7 @@ import { TouchSheet } from './platform/touchSheet';
 import { TouchControls, setTouchControls, touchControlsOn } from './platform/touchControls';
 import { openTouchLayoutPanel } from './platform/touchLayout';
 import { type Aiming, aimSpaceAction, autoAim, currentAim, moveAim, talkAim } from './game/aimCursor';
-import { tilePattern } from './render/tiling';
+import { E3_PATTERN_SLOTS, tilePattern } from './render/tiling';
 import { E3MovieScreen } from './render/e3MovieScreen';
 import {
   DEFAULT_UI_SCALE, DisplayMode, UI_SCALES, UI_SCALE_FIT, desktop, placeBesideGame,
@@ -1237,7 +1237,9 @@ async function main(): Promise<void> {
       repaint: () => redraw(),
       background: (c, rect) => {
         const pats = store.get('pixpats');
-        if (pats) tilePattern(c, pats, screen.backgroundIndex(session), rect);
+        // E3's pattern 0, the grey stone: the movie loop's
+        // `paint_pattern(0, 1, rect, 0)` (`1098:0ea0`–`0eb3`).
+        if (pats) tilePattern(c, pats, E3_PATTERN_SLOTS[0]!, rect);
         else {
           c.fillStyle = '#000';
           c.fillRect(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);

@@ -1892,14 +1892,13 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       await walkBelts(q, THROUGH);
       expect(q.at).toEqual({ x: 23, y: 25 });
       // The secret door at (22,24) has a message spot on it: the message,
-      // and the door opens (102); the next step goes through.
+      // and the door opens (102) with the party through it, on one step.
       expect(q.town.record.terrain[22]![24]).toBe(101);
       const said = q.log.length;
       await q.go(Direction.NW);
-      expect(q.at).toEqual({ x: 23, y: 25 });
+      expect(q.at).toEqual({ x: 22, y: 24 });
       expect(q.town.record.terrain[22]![24]).toBe(102);
       expect(q.log.slice(said).join('\n')).toMatch(/narrow ledge/);
-      await q.go(Direction.NW);
       expect(q.at).toEqual({ x: 22, y: 24 });
       await walk('stairs');
       expect([q.townNum, q.at], q.tail()).toEqual([75, { x: 42, y: 2 }]);
@@ -4143,6 +4142,9 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       expect(q.log.some((l) => /the gates swing open silently/.test(l)), q.tail()).toBe(true);
       // And the beasts that wait on the other side.
       expect(q.tail(2)).toMatch(/six legs/);
+      // The group is dropped at a random square near the party, and the
+      // fight starts when it reaches them: a turn or two, by the dice.
+      for (let turn = 0; turn < 6 && q.session.mode !== GameMode.COMBAT; turn++) await q.pause();
       expect(q.session.mode, q.tail()).toBe(GameMode.COMBAT);
       expect(await q.fightOutdoors(), q.tail()).toBe(true);
     });
@@ -4729,6 +4731,62 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       expect(q.creatures(372).length).toBe(1);
       await q.step(...spot(65, 6));
       expect([q.townNum, q.at], q.tail()).toEqual([38, { x: 20, y: 58 }]);
+    });
+  });
+
+  describe('secret doors', () => {
+    it('opens a secret door as the party walks into it, and lets it through on that step', async () => {
+      // Fort Emergence's basalt one at (26,6): 118, "Basalt Wall", becomes
+      // 119, the wall with its door showing, under the party (`10c0:14df`).
+      const q = new QuestRunner(scen);
+      expect(q.town.record.terrain[26]![6]).toBe(118);
+      await q.step(26, 6);
+      expect(q.town.record.terrain[26]![6]).toBe(119);
+      expect(q.at).toEqual({ x: 26, y: 6 });
+    });
+
+    it("walks through Colchis's into the shade's room on the first try, message and all", async () => {
+      // Its message spot sits on the door (E3-CHECK-IN-ORIGINAL.md #1): the
+      // spot says yes, and the door opens under the party.
+      const q = new QuestRunner(scen);
+      await q.enter(125, { x: 37, y: 39 });
+      await q.clearHostiles();
+      expect(q.town.record.terrain[36]![39]).toBe(101);
+      await q.session.moveTo({ x: 36, y: 39 });
+      await q.settle();
+      expect(q.town.record.terrain[36]![39]).toBe(102);
+      expect(q.at).toEqual({ x: 36, y: 39 });
+      expect(q.log.some((l) => /just plain odd/.test(l)), q.tail()).toBe(true);
+    });
+
+    it('finds a secret door by searching it (`10c0:43d4`)', async () => {
+      const q = new QuestRunner(scen);
+      await q.look(26, 6);
+      expect(q.town.record.terrain[26]![6]).toBe(119);
+      expect(q.univ.transcript).toContain('  You find a secret door!');
+    });
+  });
+
+  describe('the villages', () => {
+    it('maps the ruins Colchis is entered among, so no creature stands on black', async () => {
+      // From the north gate, a Mauve Slime is in sight through rubble the
+      // entry node lays (DIVERGENCES.md #24); E3's map has the rubble before
+      // the party arrives, so it is mapped on arrival.
+      const q = new QuestRunner(scen);
+      await q.enter(125, undefined, 0);
+      const seen = q.town.monsters.filter((m) => m.isAlive && q.session.partyCanSeeMonst(m));
+      expect(seen.length).toBeGreaterThan(0);
+      for (const m of seen) expect(q.town.isExplored(m.curLoc.x, m.curLoc.y), m.mon.name).toBe(true);
+    });
+
+    it("never says \"You find something!\" on searching Colchis's anvil and pillar", async () => {
+      // E3's search (`10c0:425c`) has 1997's announcement compiled out.
+      const q = new QuestRunner(scen);
+      await q.enter(125, { x: 37, y: 39 });
+      await q.clearHostiles();
+      await q.look(20, 20);
+      await q.look(39, 27);
+      expect(q.univ.transcript.join('\n')).not.toMatch(/You find something/);
     });
   });
 });

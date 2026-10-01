@@ -205,6 +205,22 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(scen.featureFlags['dungeon-sound']).toBe('22-23,25-33,35-38,44-47,50-79,86,200');
   });
 
+  it("starts a new game without the town's sound, as E3 does", () => {
+    expect(scen.featureFlags['start-sound']).toBe('none');
+  });
+
+  it("rolls 1997's attack dice: a / 100 + 1, and any attack above zero", () => {
+    // The slimes' words are 7 and 8: one die, where OBoE's `a / 100` gave
+    // none and the creature never swung at all.
+    const attack = (name: string) => {
+      const m = scen.scenMonsters.find((mon) => mon.name === name)!;
+      return `${m.attacks[0]!.dice}d${m.attacks[0]!.sides}`;
+    };
+    expect(attack('Mauve Slime')).toBe('1d7');
+    expect(attack('Emerald Slime')).toBe('1d8');
+    expect(attack('Amber Slime')).toBe('2d6');
+  });
+
   it("gives each dialog E3's own picture", async () => {
     const { e3DialogPic, E3_PANELS, E3_PICTURES, E3_SHEET_OVERRIDES } = await import('../tools/e3convert/emit');
     const { e3TerrainPic } = await import('../tools/e3convert/graphics');
@@ -219,7 +235,7 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(e3DialogPic(905, sprites, 12)).toEqual([17, 111]);
     expect(e3DialogPic(910, sprites, 12)).toBeUndefined();
     expect(EXILE3_SHEET_OVERRIDES).toEqual([
-      ...E3_SHEET_OVERRIDES.map(([n]) => n), 'pixpats', ...E3_PANELS.map(([n]) => n), 'textbar']);
+      ...E3_SHEET_OVERRIDES.map(([n]) => n), 'pixpats', ...E3_PANELS.map(([n]) => n), 'textbar', 'terscreen']);
     expect(EXILE3_PICTURES).toEqual(E3_PICTURES.map(([n]) => n));
     // The nodes carry them: dialog pictures, E3 terrain and E3 sprites. (No
     // dialog with a face has been transcribed yet.)
@@ -900,8 +916,9 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     const guard = scen.scenMonsters[12]!;
     expect(guard.name).toBe('Guard');
     expect([guard.level, guard.health, guard.armor]).toEqual([30, 140, 30]);
-    // E3's guard swings 2d10, where BoE's bladbase rebalanced it to 3d10.
-    expect(guard.attacks[0]).toMatchObject({ dice: 2, sides: 10 });
+    // E3's word is 210: 3d10 by its own `a / 100 + 1` (OBoE's `a / 100`
+    // read it as 2d10).
+    expect(guard.attacks[0]).toMatchObject({ dice: 3, sides: 10 });
     expect(guard.pictureNum).toBeGreaterThanOrEqual(1400); // a custom sheet after the terrain's
     const giant = scen.scenMonsters[54]!;
     expect(giant.name).toBe('Cave Giant');
@@ -1198,7 +1215,7 @@ describe("Exile III converted in memory, as the browser does", () => {
     // Its dialog pictures, talking faces, patterns and panels, over the game's,
     // and its two opening pictures, which the game has no sheet for.
     expect([...loaded.overrides.keys()].sort()).toEqual(
-      ['dlogpics', 'e3logo', 'e3start', 'inventory', 'pixpats', 'statarea', 'talkportraits', 'textbar', 'transcript']);
+      ['dlogpics', 'e3logo', 'e3start', 'inventory', 'pixpats', 'statarea', 'talkportraits', 'terscreen', 'textbar', 'transcript']);
     // And its fourteen cursors, each one the flag names.
     const named = loaded.scenario.featureFlags['cursors']!.split(',').map((e) => e.split(':')[0]);
     expect([...loaded.cursors.keys()].sort()).toEqual([...named].sort());

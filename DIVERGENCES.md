@@ -913,10 +913,53 @@ showing of E3's (`src/game/e3Movie.ts`) differs from E3's own:
   the adventurers once, at launch, before the title screen, and can't skip
   them. Here they come right before the movie, on a new game, and each
   skip moves on one scene.
-- Two guesses where E3's code doesn't say: the window background is the
-  game's pattern (E3's `FUN_1058_1695` reads its pattern from a stack slot
-  its caller never set), and animated terrain steps once a frame (E3's
-  `anim_ticks` runs off a timer).
+- One guess where E3's code doesn't say: animated terrain steps once a
+  frame (E3's `anim_ticks` runs off a timer). The window background is not
+  a guess any more: `0e09` calls `paint_pattern(0, 1, rect, 0)`, pattern 0,
+  the grey stone (an earlier reading had the arguments the wrong way round
+  and took it for an unset slot).
+
+### 41. A monster's attack dice, read from a legacy word (2026-10-01)
+
+**DECIDED for Exile III: 1997's; open for legacy `.exs`.** The old monster
+record's attack is one word. 1997 (COMBAT.CPP:2283/2295, and the monster
+dialog at INFODLGS.CPP:489) swings whenever it is positive and rolls
+`a / 100 + 1` dice of `a % 100`; Exile III's `monster_attack` is the same
+(`1018`, the decompile's `/ 100 + 1`). OBoE's `import_legacy`
+(monster.cpp:39) takes `a / 100` dice, a die short, and **none at all
+below 100** — and a creature with no dice never swings. 97 of E3's 183
+attacking monsters had such an attack (its slimes' are 7 and 8), so they
+never attacked, back-shots included. The E3 converter now writes 1997's
+dice (`emit.ts`). The legacy `.exs` importer (`fileio/legacy/convert.ts`)
+still follows OBoE: the library's old scenarios have the same short dice,
+and changing that is a decision for them, not for Exile III.
+
+### 42. Exile III's secret doors (2026-10-01)
+
+**DECIDED: Exile III's**, by scenario flags. E3's three hidden doors (101,
+118, 133) draw as plain wall. Its move code (`10c0:14df`) turns one into
+the wall with its door showing (`+ 1`) and **lets the party through on the
+same step**, where its closed doors (`:1517`) and OBoE's step-change refuse
+the step the door opens on. So in E3 the door is never seen from outside.
+`secret-doors` = `101,118,133` lets the party through, and a message spot on
+the door now only says yes, ahead of the door, where it used to open it and
+refuse (`specials.ts`). E3's search finds one too ("You find a secret
+door!", `10c0:43d4`), under `search` = `exile3`.
+
+### 43. "Search: You find something!" (2026-10-01)
+
+**DECIDED for Exile III: the originals'**, under `search` = `exile3`. OBoE's
+`adj_town_look` says it whenever a scripted square can't be stood on. 1997's
+Windows ADJ_TOWN_LOOK has the line commented out (SPECIALS.CPP:985), and
+Exile III's calls `get_blockage` and ignores the answer; its EXE has no such
+string. So a pillar with nothing left to give said "You find something!"
+in the port and nothing in E3. BoE scenarios keep OBoE's line.
+
+### 44. The town's sound at the start of a new game (2026-10-01)
+
+**DECIDED: Exile III's**, under `start-sound` = `none`: a new game of E3 starts
+in Fort Emergence silently (the user checked), where `put_party_in_scen`
+reaches `start_town_mode` and its entry sound in both 1997 and OBoE.
 
 ## Agreements worth recording
 

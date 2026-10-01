@@ -436,8 +436,12 @@ describe('starting and ending combat', () => {
     session.startCombat(univ.party.direction); // the Combat command, not a bump
     expect(session.mode).toBe(GameMode.COMBAT);
 
+    const played: number[] = [];
+    session.sound = { play: (n: number) => { played.push(n); } } as unknown as GameSession['sound'];
     expect(session.endCombat()).toBe(true);
     expect(session.mode).toBe(GameMode.TOWN);
+    // The pack-up sound (boe.actions.cpp:1360).
+    expect(played).toContain(93);
     // The party stands where one of them was.
     const positions = univ.party.pcs.map((pc) => pc.combatPos);
     for (const p of positions) expect(p).toEqual(loc(-1, -1));

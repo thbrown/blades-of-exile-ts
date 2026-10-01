@@ -42,6 +42,7 @@ export const EXILE3_CARD = {
  */
 export const EXILE3_SHEET_OVERRIDES = [
   'dlogpics', 'talkportraits', 'pixpats', 'statarea', 'inventory', 'transcript', 'textbar',
+  'terscreen',
 ];
 
 /**

@@ -511,7 +511,12 @@ export class GameSession {
     // it in `handle_town_specials` and then empties the queue (boe.party.cpp:216,
     // "preserve legacy behaviour of not calling the enter town node at scenario
     // start"). See `startTownMode`'s `skipEntrySpecial`.
-    this.startTownMode(this.univ.scenario.startTown, FORCED_ENTRY, true);
+    // Exile III starts a new game in Fort Emergence without the town's
+    // sound (the user checked in the original); BoE plays it, as
+    // `put_party_in_scen` goes through `start_town_mode` like any arrival.
+    // Scenario flag `start-sound` = `none`.
+    const silent = this.univ.scenario.featureFlags['start-sound'] === 'none';
+    this.startTownMode(this.univ.scenario.startTown, FORCED_ENTRY, true, silent);
     // put_party_in_scen runs the scenario's on-init node last (boe.party.cpp:238)
     // — **and only when it was not forced** (:230). A `debug_launch_scen` or a
     // load straight from the startup screen passes `force`, and skips the intro
@@ -1948,6 +1953,7 @@ export class GameSession {
     let canOpen = true;
     let gotSpecial = false;
     const ter = town.isOnMap(where.x, where.y) ? town.record.terrain[where.x]![where.y]! : 0;
+    const e3Search = univ.scenario.featureFlags['search'] === 'exile3';
 
     if (this.specialAt(where) >= 0) {
       // Adjacency is measured from the party's square even in combat, which is
@@ -1961,8 +1967,13 @@ export class GameSession {
         for (const spot of town.record.specialLocs) {
           if (spot.x !== where.x || spot.y !== where.y) continue;
           // A square you can't step into announces the find, since there is no
-          // walking onto it to discover the same thing.
-          if (this.getBlockage(ter) > 0)
+          // walking onto it to discover the same thing. **OBoE's, not the
+          // originals'**: 1997's Windows ADJ_TOWN_LOOK has the line commented
+          // out (SPECIALS.CPP:985), and Exile III's (`10c0:425c`) calls
+          // `get_blockage` and ignores the answer — its EXE has no such
+          // string. Under `search` = `exile3` it is left out, so a pillar
+          // whose script has nothing left to give says nothing.
+          if (this.getBlockage(ter) > 0 && !e3Search)
             univ.addStringToBuf('  Search: You find something!');
           const { blocked } = await this.runSpecial(
             SpecCtx.TOWN_LOOK, SpecCtxType.TOWN, spot.spec, where);
@@ -1977,7 +1988,17 @@ export class GameSession {
       return town.items.filter((item) => item.variety !== ItemType.NO_ITEM
         && item.contained && item.itemLoc.x === where.x && item.itemLoc.y === where.y);
     }
-    const spec = univ.terrainType(ter).special;
+    // Exile III's search finds a secret door (`10c0:43d4`): the terrain it
+    // read before the spots ran is 101, 118 or 133, and it becomes the wall
+    // with its door showing (`inc` on the square, no sound).
+    const terType = univ.terrainType(ter);
+    if (e3Search && this.secretDoorTerrains().has(ter)
+      && terType.special === TerSpec.CHANGE_WHEN_STEP_ON) {
+      univ.addStringToBuf('  You find a secret door!');
+      alterSpace(univ, where.x, where.y, terType.flag1);
+      return null;
+    }
+    const spec = terType.special;
     if (spec === TerSpec.CHANGE_WHEN_USED || spec === TerSpec.CALL_SPECIAL_WHEN_USED)
       univ.addStringToBuf('  (Use this space to do something with it.)');
     else if (!gotSpecial)
@@ -2701,6 +2722,12 @@ export class GameSession {
         // the second one. Writing the array directly skipped both.
         alterSpace(this.univ, where.x, where.y, spec.flag1);
         if (spec.flag2 >= 0) this.sound?.play(spec.flag2);
+        // Exile III's secret doors (scenario flag `secret-doors`) let the
+        // party through on the step that finds them: the move code's arm for
+        // 101/118/133 (`10c0:14df`) leaves its can-enter flag set, where the
+        // closed door's (`:1517`) clears it. So the door is only ever seen
+        // from inside it, and never as an outline in the wall.
+        if (this.secretDoorTerrains().has(ter)) return { canEnter: true, forced };
         return { canEnter: !blocksMove(spec), forced };
       }
       case TerSpec.UNLOCKABLE:
@@ -4026,6 +4053,9 @@ export class GameSession {
     // and `handle_equip_item` is given `stat_window`, so the equips that
     // followed went into the wrong pack.
     this.onStatWindowForPc?.(this.univ.curPc);
+    // The pack-up sound (boe.actions.cpp:1360; 1997's ACTIONS.CPP:669), which
+    // only the outdoor branch played here.
+    this.sound?.play(93);
     return true;
   }
 
@@ -4879,7 +4909,16 @@ export class GameSession {
     return towns;
   }
 
-  startTownMode(townNum: number, entryDir: number, skipEntrySpecial = false): void {
+  /**
+   * Terrains that open as the party walks into them and let it through on
+   * the same step: the scenario flag `secret-doors`, a comma-separated list.
+   */
+  secretDoorTerrains(): Set<number> {
+    const flag = this.univ.scenario.featureFlags['secret-doors'] ?? '';
+    return new Set(flag.split(',').filter((p) => p.trim() !== '').map(Number));
+  }
+
+  startTownMode(townNum: number, entryDir: number, skipEntrySpecial = false, silent = false): void {
     if (this.univ.scenario.towns[townNum] === undefined) {
       this.univ.addStringToBuf('The scenario tried to put you into a town that does not exist.');
       return;
@@ -4928,10 +4967,12 @@ export class GameSession {
 
     this.mode = GameMode.TOWN;
     this.univ.party.townNum = townNum;
-    this.sound?.play(
-      record.lightingType === Lighting.LIGHT_NORMAL && !this.dungeonSoundTowns().has(townNum)
-        ? Snd.ENTER_TOWN : Snd.ENTER_DUNGEON,
-    );
+    if (!silent) {
+      this.sound?.play(
+        record.lightingType === Lighting.LIGHT_NORMAL && !this.dungeonSoundTowns().has(townNum)
+          ? Snd.ENTER_TOWN : Snd.ENTER_DUNGEON,
+      );
+    }
     const town = new CurTown(record, this.univ);
     town.entryDir = entryDir;
     this.univ.town = town;

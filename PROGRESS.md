@@ -15888,3 +15888,65 @@ movie comes after, on entering the scenario.
   saves. `docs/assets` is build output and follows at the next build.
 - `Q24.SAV` (Foxfire's key) has its recipe, and the check-in saves carry
   maps now.
+
+### Play-test notes, sixth round (2026-10-01)
+
+The user played `Q01.SAV` (Colchis). Their list, and what each was:
+
+- [x] **The town's sound on a new game.** E3 starts silently in Fort
+      Emergence. Scenario flag **`start-sound`** = `none` (DIVERGENCES.md #44).
+- [x] **The frame round the terrain view.** It was BoE's stone rope; E3's
+      TERSCRN.BMP, a wooden bevel, is 279×351 like 1997's
+      `win_from_rects[0]`. The converter writes it as `graphics/terscreen.png`
+      (and `EXILE3_SHEET_OVERRIDES` lists it).
+- [x] **The movie's background.** Not a guess any more: the movie loop calls
+      `paint_pattern(0, 1, rect, 0)` (`1098:0ea0`), E3's pattern 0, the grey
+      stone. The note that it read an unset stack slot had the arguments the
+      wrong way round.
+- [x] **Touch overlay opacity.** The pads follow View → Touch Controls
+      Layout's opacity; the spell picker's and dialogs' strips (`.ts-btn`)
+      had fixed alphas of their own (50% fill, 35% border, 92% text), so the
+      talk presets that stand in for the arrows jumped. The strips now take
+      the opacity of the pad on their side, with the pads' formulas.
+- [x] **No attack on walking away in combat.** The back-shot was ported; the
+      monsters couldn't swing. **E3's attack words are 1997's,
+      `(dice − 1) × 100 + sides`**, and OBoE's legacy import reads `a / 100`
+      dice: a die short everywhere, and none under 100 — 97 of E3's 183
+      attacking monsters had an attack that never landed, the Mauve and
+      Emerald slimes' only one. The converter writes 1997's dice
+      (DIVERGENCES.md #41). Fights in E3 are harder now; the Blackcrag test's
+      ambush kills a PC and its gate encounter takes a turn or two to arrive.
+      The legacy `.exs` importer still reads OBoE's way — **a decision for
+      the library's scenarios, not taken**.
+- [x] **No pack-up sound ending a fight.** `endCombat`'s town branch lacked
+      `play_sound(93)` (boe.actions.cpp:1360); only the outdoor one had it.
+- [x] **A Mauve Slime in the dark in Colchis.** It stood on unexplored black:
+      the village's ruins are laid by its entry node (`copy-ter`, #24) after
+      `start_town_mode` has mapped the walls that stood there, and rubble
+      lets the eye through. E3 builds the map before arrival, so `copy-ter`
+      now maps the party's view again.
+- [x] **Secret doors visible before they're open.** E3 opens one and walks
+      the party onto it in one step (`10c0:14df` keeps can-enter set); the
+      port refused the step, and a message spot on the door (Colchis's) opened
+      it itself and refused too. Scenario flag **`secret-doors`** =
+      `101,118,133`, and the spot only says yes now (DIVERGENCES.md #42).
+      `E3-CHECK-IN-ORIGINAL.md` #1 is answered.
+- [x] **"You find something!" on the pillar and anvil.** OBoE's line; 1997
+      comments it out and E3's search ignores the blockage it asks for.
+      Scenario flag **`search`** = `exile3` leaves it out and adds E3's own
+      arm: searching a secret door finds it ("You find a secret door!",
+      `10c0:43d4`) (DIVERGENCES.md #43).
+
+**Gotchas (2026-10-01):**
+- `paint_pattern(dest, mode, rect, pattern)`: E3 pushes right to left, so
+  the *first* push before the rect is the pattern.
+- A converter change that makes monsters stronger moves the dice stream of
+  every quest test after the first fight; a test that relies on a random
+  placement (an outdoor encounter's group) should wait for it, not assume
+  it lands adjacent.
+- E3's search code's strings sit after the function in its code segment
+  (`10c0:41f7`…), and the function is `10c0:425c`; `nedis.py --all` and a
+  grep for `push 0x41f7` found it where the decompile has no strings.
+
+All checks pass: 1,611 tests, both sweeps, verify-screen, verify-party and
+verify-e3.

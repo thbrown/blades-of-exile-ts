@@ -105,7 +105,7 @@ E3 keeps its terrain types in code and data, not in a file:
   | 200 | hp (i16) | 3200 | priest level |
   | 600 | armor | 3400 | breath: kind × 10 + dice row |
   | 800 | skill | 3600 | poison |
-  | 1000/1400/1800 | attacks (i16, `dice*100 + sides`) | 3800 | treasure |
+  | 1000/1400/1800 | attacks (i16, `(dice-1)*100 + sides`, 1997's) | 3800 | treasure |
   | 2200 / 2400 | a1 / a2–3 attack type | 4000 | special skill |
   | 2600 | race (`m_type`) | 4200 | picture: sprite index, 0 blank |
   | 2800 | speed | 4400 / 4600 | width / height |
@@ -114,7 +114,8 @@ E3 keeps its terrain types in code and data, not in a file:
   These were checked against BoE's `bladbase` (the 1997 Mac `.exs`), whose
   monsters 1–176 **are** E3's: the same names, levels and HP, with two
   renamed. Every field above agrees on all 176, except that BoE rebalanced the
-  attack dice (E3's guard hits 2d10, BoE's 3d10), changed 5 breaths and 3
+  attack dice (an earlier note read E3's guard as 2d10 by OBoE's
+  `a / 100`; E3 rolls `a / 100 + 1`, so 3d10), changed 5 breaths and 3
   special skills, and renumbered pictures for its own sheets.
   **The breath byte** is two numbers (`monst_breathe`, `1018:78ca`): the
   tens are the kind (0 fire, 1 cold, 2 magic — "acid" in the monster

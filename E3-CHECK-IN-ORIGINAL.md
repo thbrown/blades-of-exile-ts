@@ -19,21 +19,6 @@ Save…` in the port writes one from any game, outdoors.)
 
 ## Open
 
-### 1. Colchis: does the secret door into the shade's room open? (2026-09-30)
-
-- **Where:** Colchis (town 125), the southeast corner. The shade's room
-  is walled in; its east wall at **(36,39)** looks like a plain wall but is
-  terrain 101, a secret door that opens when walked into.
-- **Do:** walk into (36,39) from the east, (37,39), a few times.
-- **The port:** shows the message about the "just plain odd" secret room
-  and refuses the step, every time; the door never opens. That's because
-  E3's message spot 113 sits on the same square, and the converter makes a
-  message spot on a wall refuse the step (`WALK_INTO`,
-  `tools/e3convert/specials.ts`).
-- **Question:** does the original open the door (after or instead of the
-  message)? If it does, the converter's rule is wrong for secret doors.
-- (Casting Move Mountains on the moldy wall at (36,40) gets in either way.)
-
 ### 2. Move Mountains: which rubble? (2026-09-30)
 
 - **Where:** anywhere a stone, basalt or adobe wall (plain, cracked or
@@ -390,4 +375,12 @@ quest steps.
 
 ## Answered
 
-(none yet)
+### 1. Colchis: does the secret door into the shade's room open? (2026-09-30)
+
+**Answered 2026-10-01 (sixth play-test, with `Q01.SAV`): yes.** In the
+original the door at (36,39) stays plain wall until the party is through
+it; the port showed the door's outline from outside. E3's move code
+(`10c0:14df`) opens a secret door and lets the party through on the same
+step, after the spot's message (DIVERGENCES.md #42). The port now does
+the same, and its search finds one too.
+

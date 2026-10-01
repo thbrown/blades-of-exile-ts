@@ -463,6 +463,11 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
           if (town.record.terrain[x]![y] !== ter) alterSpace(univ, x, y, ter);
         }
       }
+      // E3 builds a village's map before the party arrives (`FUN_1040_1600`),
+      // so its arrival maps what it can see of the ruins. Here the entry node
+      // lays them after `start_town_mode` has mapped the old walls, and a
+      // creature seen through the new rubble stood on unexplored black.
+      if (ctx.session.inTown) ctx.session.updateExplored(univ.party.townLoc);
       ctx.redraw = true;
       break;
     }

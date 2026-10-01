@@ -203,15 +203,16 @@ export function e3SpotScript(
     const shut = terrainAt(s.loc.x, s.loc.y);
     const opens = isTown ? DOOR_OPENS.get(shut) : undefined;
     /**
-     * The door under the spot opens and the step is refused (the
-     * `WALK_INTO` node below); once it's open, the party walks on, as E3's
-     * would with the spot still there. Both come before the steps, which E3
-     * runs first: a one-shot message already shown ends the chain, and the
-     * door must still open behind it (E3 has erased the spot by then).
+     * A spot on a secret door says yes, ahead of its steps (a one-shot
+     * message already shown ends the chain, and the door must still open
+     * behind it: E3 has erased the spot by then). The terrain's own
+     * step-change then opens it and, under `secret-doors`, takes the party
+     * through on the same step, as E3's terrain table does after the spots
+     * (`10c0:124d`, `:14df`). Until 2026-10-01 the chain opened the door
+     * itself and refused the step, so the door showed from outside.
      */
-    const thenOpen = (steps: Step[]): Step[] => (opens === undefined ? steps : [b.ifTer(s.loc.x, s.loc.y, shut,
-      [b.setTer(s.loc.x, s.loc.y, opens), ...steps],
-      [(next) => b.node('block-move', { ex1: [0], ex2: [0] }, next), ...steps])]);
+    const thenOpen = (steps: Step[]): Step[] => (opens === undefined ? steps
+      : [(next) => b.node('block-move', { ex1: [0], ex2: [0] }, next), ...steps]);
     if (s.id < 100) {
       const steps = scripts.get(s.id);
       if (!steps) {
