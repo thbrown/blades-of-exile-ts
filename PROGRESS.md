@@ -15392,3 +15392,55 @@ verify-party and verify-e3.
 - A step onto a portal or message spot in the engine may take no turn;
   anything timing turns (the wall search) has to agree, which the replay
   against the engine catches.
+
+### Exile III's own saves, read and written (2026-09-30)
+
+At the user's request: load the original's `exile3.sav` files, and make
+saves for the original so each question in `E3-CHECK-IN-ORIGINAL.md` can be
+set up and tried there.
+
+- **The format** is pinned from the code (`FUN_1040_0db6` writes,
+  `FUN_1040_018e` reads; `init_party` names the party record's fields) and
+  written up in `tools/e3convert/FORMATS.md`, "exile3.sav". It is BoE
+  1997's `save_file` with E3's sizes: little-endian, the party XOR 0x5c, the
+  PCs XOR 0x6b, and a PC is exactly BoE's `pc_record_type`.
+  **No save from the original has been read yet**: ask the user for one and
+  run `E3_SAV=<file> npx vitest run test/e3save.test.ts`, which checks it
+  round-trips byte for byte.
+- `src/fileio/e3save.ts`: the container and the field offsets.
+  `e3SaveImport.ts`: a save onto the converted scenario (flags, special
+  items, alchemy, monsters and towns keep E3's numbers; vehicles go through
+  `vehicleNumbers`; items are matched by name, kind and `e3Ability`).
+  `e3SaveExport.ts`: the reverse, over a party record built as `init_party`
+  builds it. Both need EXE tables the scenario lacks, which the converter
+  now writes as `e3save.json` (`tools/e3convert/saveDefaults.ts`).
+- **In the browser**: File > Open Game takes a `.sav` in Exile III, and
+  File > Export as Exile III Save… writes `EXILE3.SAV` (Exile III only).
+  Driven end to end in Chromium: `Q01.SAV` loads beside Colchis, and
+  exporting it again gives the same bytes.
+- **Test saves for the check-in list**: `E3_CHECK_SAVES=e3data/check-saves
+  npx vitest run test/e3checkSaves.test.ts` writes `Q01.SAV`… (8.3 names,
+  for Windows 3.1) and `README.TXT`, a recipe a question: a level-25 party
+  with every spell E3 sells, the question's flags and items, outdoors near
+  the place. Without the variable the test only checks the recipes run.
+- What isn't carried either way yet is marked `TODO(e3save)`: an in-town save
+  (`c_town`, `t_d`, `t_i`); import enters the town afresh, and export saves
+  outdoors on the square the party entered the town from. Also left out:
+  the remembered towns' creatures, outdoor groups, magic shops' stock,
+  journal and notes, stored items, maps, and the converter's own flags (SDF
+  columns 10–49) other than the town states, which are worked out again
+  from the day.
+
+**Gotchas (2026-09-30):**
+- `tables.ts` said E3 copies its boats to party+0x693a. They go to
+  +0x12ea (`FUN_10b0_0b7c`); fixed.
+- `in_boat`/`in_horse` are 0 for none in E3 (boat 0 is never used), where
+  the engine uses -1.
+- `can_find_town` has 120 entries, but an outdoor exit to a village
+  (120–199) indexes past it into `key_times`; villages are simply always
+  found. The importer and exporter only touch 0–119.
+- Rows 300–309 of E3's flags hold what `init_party` sets. No script here
+  writes them, so the exporter keeps E3's value where the port's is 0.
+- Some towns have no door outdoors (the Agate Tower's level with Jordan is
+  town 46; its door is town 90's; the Troglo Temple's level 2, 101, is
+  under 53).

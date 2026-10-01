@@ -88,9 +88,8 @@ E3 keeps its terrain types in code and data, not in a file:
   in-memory item records (63 bytes: the file record with its names at +23 and
   +48) at `1100:1652`; mage/priest/alchemy lists are in the data segment at
   `0x2049`/`0x2070` (spell, cost), `0x21e2`/`0x2194`, and `0x22e6`.
-- **Party record** (segment `1158:`): age `+0` (long), gold `+4`, food `+8`,
-  special items `+0xc` (int16[60]), flags `+0x84` (`[x][10]`), job-bank
-  failure flags `+0x847f` (6 bytes), `can_find_town` `+0x8485`.
+- **Party record** (segment `1158:`, 0x8525 bytes): every field is in
+  "exile3.sav" below.
 - **Live creature** (`0x5c` bytes a creature, from `0x1427`): active `+0`,
   attitude `+2`, number `+4`, time flag `+0x53`, `extra1` `+0x54`,
   `extra2` `+0x55`, `spec1` `+0x56`, `spec2` `+0x57`.
@@ -154,6 +153,67 @@ E3 keeps its terrain types in code and data, not in a file:
 Ghidra can't recover these `switch` statements: it reports "Could not recover
 jumptable". The table is `n` case values followed by `n` target offsets, and
 `Disasm.java <addr> <out> <count>` lists the arms.
+
+## exile3.sav: the saved game — pinned 2026-09-30 (`src/fileio/e3save.ts`)
+
+Not checked against a save from the original yet (none is on disk): every
+offset below is read from the code. `E3_SAV=<file> npx vitest run
+test/e3save.test.ts` checks a real one round-trips.
+
+`save_file` is `FUN_1040_0db6` and `load_file` `FUN_1040_018e`: BoE 1997's
+pair (FILEIO.CPP:440/138) with E3's sizes. **Little-endian** (it is the
+Windows build's memory), unlike the .DAT files.
+
+| bytes | block | memory |
+|---|---|---|
+| 6 | three words: 5790 outdoors / 1342 town; 5434 (98 also read); 3422 no maps / 5567 maps. The pairs `load_file` accepts are at `DS:12fc` | |
+| 0x8525 | party record, XOR 0x5c | `1158:0000` |
+| 0x4000 | `setup[4][64][64]` | `1160:a61c` |
+| 0x722 × 6 | PCs, XOR 0x6b | `1158:8526` |
+| 0x2400 | `out_e[96][96]` | `1160:821b` |
+| 0x2abe, 0x1710, 0x1c4d | town only: `c_town`, `t_d`, `t_i` | `1160:0000`, `:2abe`, `:41ce` |
+| 0x1c4d × 3 | stored items (115 × 63 B) | `1168:84de` |
+| 0x9100, 0x6540 | maps only: towns 0–119 (`[40][8][64]`, `[40][6][48]`, `[40][4][32]`), the 90 zones (`[6][48]`) | `1170:0000`, `:9100` |
+| 0x1000, 0x1000 | `sfx`, `misc_i` | `DS:5cb1`, `1160:e61c` |
+| 0x5a00 | maps only: villages 120–199 (`[80][6][48]`) | `1168:2000` |
+
+**The party record**, from `init_party` (`FUN_10b0_053c`), which clears
+every field in order, and each field's readers:
+
+| offset | field | offset | field |
+|---|---|---|---|
+| 0x0000 | age (long) | 0x6b96 | `out_c[10]`, 31 B |
+| 0x0004 | gold (long) | 0x6ccc | magic shops' stock `[5][10]`, 63 B items |
+| 0x0008 | food (long) | 0x791a | `imprisoned_monst[4]` |
+| 0x000c | special items, i16[60] | 0x7922 | `m_killed[200]`, per town |
+| 0x0084 | flags `[310][10]` | 0x7ab2 | `m_seen[256]` |
+| 0x0ca0 | `item_taken[200][8]` (bits) | 0x7bb2 | journal: string u8[120], then day i16[120] at 0x7c2a |
+| 0x12e0 | light level | 0x7d1a | `help_received[120]` |
+| 0x12e2 | outdoor corner | 0x7d92 | encounter notes i16[140][2] |
+| 0x12e4 | `i_w_c` | 0x7fc2 | `talk_save[120]`, 7 B, -1 when empty |
+| 0x12e6 | `p_loc` (the 96×96 window) | 0x830a | totals: kills, damage done, xp, damage taken (longs) |
+| 0x12e8 | `loc_in_sec` | 0x831a | direction; 0x831c save slot |
+| 0x12ea | boats[30], 10 B: loc, loc in sector, sector, i16 town, exists, property | 0x831e | alchemy[17] |
+| 0x1416 | `creature_save[4]`, 0x1594 B (60 × 0x5c, which_town, friendly) | 0x832f | the party's jobs, 4 × 12 B |
+| 0x6a66 | `in_boat`, **0 for none** | 0x835f | job boards, 6 × 4 × 12 B |
+| 0x6a68 | horses[30] | 0x847f | boards failed, u8[6] |
+| 0x6b94 | `in_horse` | 0x8485 | `can_find_town[120]`, then `key_times[20]` at 0x84fd (30000 = never) |
+
+`init_party` also sets flags (303, 0–9) and (306, 6) to 1, special items 0
+and 1, monsters 0x26, 0x28 and 0x4e seen, and journal entry 0; copies
+`DS:29b2` into `can_find_town`; and each boat and horse slot not in use
+gets E3's table (`DS:2be0`/`2d0c`, `FUN_10b0_0b7c`).
+
+**A PC** (0x722 B) is BoE 1997's `pc_record_type` exactly, with E3's 63-byte
+items: status `+0`, name `+2` (20), skills `+22` (i16[30]), health, sp, xp,
+skill points, level `+82…+94`, status `+96` (i16[15]), items `+126` (24 ×
+63), equip `+1638`, priest spells `+1662`, mage `+1724` (62 each), graphic
+`+1786`, poisoned slot `+1788` (24 none), advan `+1790`, traits `+1805`
+(15 each), race, exp_adj, direction `+1820…+1824`. A new PC (`FUN_10b0_0c2d`)
+knows `DS:296c`'s mage spells and `DS:294e`'s priest spells (30 each).
+
+**`c_town`**: the town record number at `+0`, live creatures from `+0x1427`
+(as above), the party's square at `+0x29bc`.
 
 ## Byte order: big-endian — confirmed
 

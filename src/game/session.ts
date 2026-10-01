@@ -3420,6 +3420,18 @@ export class GameSession {
    */
   forcedTownLoc: Location | null = null;
 
+  /**
+   * Back into the town an Exile III save was made in (`e3SaveImport.ts`):
+   * the party on its square and the town entered afresh, without its entry
+   * special, as a loaded game is not a new arrival.
+   */
+  resumeInSavedTown(townNum: number, where: Location): void {
+    this.forceTownEntry(townNum, where);
+    this.startTownMode(townNum, FORCED_ENTRY, true);
+    this.center = { ...this.univ.party.townLoc };
+    this.updateExplored(this.univ.party.townLoc);
+  }
+
   forceTownEntry(townNum: number, where: Location): void {
     this.forcedTownLoc = { ...where };
   }

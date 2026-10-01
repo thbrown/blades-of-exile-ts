@@ -204,7 +204,7 @@ export interface E3Vehicle {
 /**
  * E3's boats and horses as a new game has them: 30 of each, in DGROUP at
  * 0x2be0 and 0x2d0c, which `FUN_10b0_0b7c` copies into the party record
- * (party+0x693a and +0x6a68, with `in_boat` and `in_horse` after each).
+ * (party+0x12ea and +0x6a68; `in_boat` is at +0x6a66 and `in_horse` at +0x6b94).
  * Outdoor ones (town 200) would need their sector, which the tables leave 0;
  * the only one is boat 0, which is never used.
  */

@@ -1506,7 +1506,7 @@ export function readSavePreview(data: Uint8Array): SavePreview {
  * two references that must survive are the PC array (the Universe built it and
  * `CurOut` closes over the Party) and each PC's back-pointer to the Party.
  */
-function freshenForLoad(univ: Universe): void {
+export function freshenForLoad(univ: Universe): void {
   // **The scenario record is game state too.** The C++ reloads the whole
   // scenario from disk here (`load_scenario(path, univ.scenario, FULL)`,
   // fileio_party.cpp:448), so a load starts from the file's own terrain, maps,

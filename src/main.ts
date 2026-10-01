@@ -109,6 +109,11 @@ import {
   scenarioStoreAvailable, setScenarioPreview,
 } from './platform/scenarioStore';
 import { LoadedPackage, ScenarioPackage, identifyScenarioFiles, loadScenarioPackage } from './fileio/scenarioPackage';
+import { PackedSource } from './fileio/packedSource';
+import { isE3Save } from './fileio/e3save';
+import { e3SaveDefaultsFromJson, type E3SaveDefaults } from './fileio/e3SaveDefaults';
+import { applyE3Save } from './fileio/e3SaveImport';
+import { exportE3Save } from './fileio/e3SaveExport';
 import { Scenario } from './data/scenario';
 import { noScenario, readScenarioFromXml } from './fileio/scenarioXml';
 import { parseXmlDoc } from './fileio/xml';
@@ -579,6 +584,7 @@ async function main(): Promise<void> {
   let packageOverrides: LoadedPackage['overrides'] = new Map();
   let packageStrings: LoadedPackage['strings'] = new Map();
   let installedPreview = true;
+  let installedPackage: ScenarioPackage | null = null;
   if (makingParty) {
     scen = noScenario();
   } else if (isBundled) {
@@ -586,6 +592,7 @@ async function main(): Promise<void> {
   } else {
     const installed = exile3Package ?? (scenarioStoreAvailable() ? await getInstalledScenario(name) : null);
     if (installed === null) throw new Error(`the scenario "${name}" isn't installed`);
+    installedPackage = installed;
     const loaded = await loadScenarioPackage(installed, opcodes, addTotal);
     scen = loaded.scenario;
     packageSheets = loaded.sheets;
@@ -1634,6 +1641,64 @@ async function main(): Promise<void> {
    * `force` skips the "not in combat" refusal, for the one caller that has to
    * ignore it: a party that died in a fight.
    */
+  /**
+   * What Exile III's own saves need from the EXE (`e3save.json`, which the
+   * converter writes beside the scenario), or null for any other scenario
+   * or a copy converted before it was written.
+   */
+  const e3SaveDefaults = async (): Promise<E3SaveDefaults | null> => {
+    if (scen.id !== EXILE3_ID) return null;
+    try {
+      const text = installedPackage !== null
+        ? await new PackedSource(installedPackage.id, installedPackage.data).getText('e3save.json')
+        : await new FetchSource(bundledUrl).getText('e3save.json');
+      return e3SaveDefaultsFromJson(text);
+    } catch {
+      return null;
+    }
+  };
+
+  /** Open Game with an `exile3.sav` (`fileio/e3SaveImport.ts`). */
+  const loadE3Save = async (data: Uint8Array): Promise<boolean> => {
+    const defaults = await e3SaveDefaults();
+    if (defaults === null) {
+      univ.addStringToBuf(scen.id === EXILE3_ID
+        ? 'Load: this copy of Exile III was converted before its saves could be read. Convert it again.'
+        : 'Load: that is an Exile III save. Play Exile III, then open it.');
+      redraw();
+      return false;
+    }
+    const res = applyE3Save(data, univ, defaults);
+    univ.saveSlot = null;
+    resumeAfterLoad();
+    if (res.town) session.resumeInSavedTown(res.town.num, res.town.loc);
+    for (const w of res.warnings) univ.addStringToBuf(w);
+    univ.addStringToBuf('Exile III game loaded.');
+    redraw();
+    return true;
+  };
+
+  /** File > Export as Exile III Save… (`fileio/e3SaveExport.ts`). */
+  const exportE3SaveFlow = async (): Promise<void> => {
+    const refusal = canSaveNow();
+    if (refusal !== null) {
+      univ.addStringToBuf(refusal);
+      redraw();
+      return;
+    }
+    const defaults = await e3SaveDefaults();
+    if (defaults === null) {
+      univ.addStringToBuf('Export: this copy of Exile III was converted before its saves could be written. Convert it again.');
+      redraw();
+      return;
+    }
+    const { bytes, warnings } = exportE3Save(univ, defaults);
+    exportSave('EXILE3.SAV', bytes);
+    for (const w of warnings) univ.addStringToBuf(w);
+    univ.addStringToBuf('Exported as an Exile III save.');
+    redraw();
+  };
+
   const loadGameFlow = async (force = false): Promise<boolean> => {
     if (dialogs.active) return false;
     if (!force && isCombat(session.mode)) {
@@ -1670,6 +1735,7 @@ async function main(): Promise<void> {
     // A save belongs to one scenario, and swapping scenarios means reloading
     // the whole world — which this port does by restarting on the new one.
     try {
+      if (isE3Save(data)) return await loadE3Save(data);
       const preview = readSavePreview(data);
       if (preview.scenarioId === '' && saveStoreAvailable()) {
         // A party between scenarios: `finish_load_party` puts it in memory and
@@ -3379,6 +3445,11 @@ async function main(): Promise<void> {
           },
           enabled: () => canSaveNow() === null,
         },
+        ...(scen.id === EXILE3_ID ? [{
+          label: 'Export as Exile III Save…',
+          action: () => { void exportE3SaveFlow(); },
+          enabled: () => canSaveNow() === null,
+        }] : []),
         MENU_SEPARATOR,
         { label: 'Preferences…', action: () => { void preferencesFlow(); } },
       ],

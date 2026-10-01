@@ -180,7 +180,7 @@ export async function deleteSave(name: string): Promise<void> {
 
 /** Hand the raw `.exg` to the browser as a download. */
 export function exportSave(name: string, data: Uint8Array): void {
-  const file = name.endsWith('.exg') ? name : `${name}.exg`;
+  const file = /\.(exg|sav)$/i.test(name) ? name : `${name}.exg`;
   const url = URL.createObjectURL(new Blob([data as BlobPart], { type: 'application/octet-stream' }));
   const link = document.createElement('a');
   link.href = url;
@@ -191,8 +191,11 @@ export function exportSave(name: string, data: Uint8Array): void {
   setTimeout(() => { URL.revokeObjectURL(url); }, 1000);
 }
 
-/** Ask for an `.exg` from the local disk; null if the picker is dismissed. */
+/**
+ * Ask for an `.exg` from the local disk (or Exile III's own `.sav`, which
+ * Open Game reads in Exile III); null if the picker is dismissed.
+ */
 export async function importSave(): Promise<{ name: string; data: Uint8Array } | null> {
-  const picked = await pickLocalFile('.exg,application/octet-stream');
+  const picked = await pickLocalFile('.exg,.sav,application/octet-stream');
   return picked === null ? null : { name: picked.fileName.replace(/\.exg$/i, ''), data: picked.data };
 }
