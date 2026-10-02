@@ -8,7 +8,10 @@ import { E3_TABLE_ITEM_SIZE } from '../../src/fileio/e3SaveDefaults';
 import { neAutoDataSegment, readNeSegment } from './ne';
 import { E3_ITEM_COUNT } from './tables';
 
-export function readE3SaveDefaults(exe: Uint8Array): E3SaveDefaults {
+/** The monsters' parallel arrays (`FUN_1090_0000` reads up to +0x1518 + 200). */
+const MONSTER_TABLE_SIZE = 0x15e0;
+
+export function readE3SaveDefaults(exe: Uint8Array, townDat?: Uint8Array): E3SaveDefaults {
   const ds = readNeSegment(exe, neAutoDataSegment(exe));
   const slice = (at: number, n: number) => ds.slice(at, at + n);
   return {
@@ -21,5 +24,7 @@ export function readE3SaveDefaults(exe: Uint8Array): E3SaveDefaults {
     // spells come first. A new game's save (2026-10-01) confirms it.
     priestSpells: slice(0x296c, 30),
     mageSpells: slice(0x294e, 30),
+    ...(townDat ? { townDat } : {}),
+    monsterTable: readNeSegment(exe, 39).slice(0, MONSTER_TABLE_SIZE),
   };
 }

@@ -12,6 +12,11 @@
  * - **New-game defaults** `init_party` (`FUN_10b0_053c`) copies in: the towns
  *   that can be found (`DS:29b2`) and a new PC's spells (priest `DS:296c`,
  *   mage `DS:294e`).
+ * - **For a save made in town** (`e3SaveTown.ts`): TOWN.DAT as it is, whose
+ *   records E3 copies into `c_town` and `t_d` on entry, and the monsters'
+ *   stats (segment 39's parallel arrays), from which `FUN_1090_0000` builds
+ *   each creature's record. A copy converted before these were written has
+ *   neither, and saves outdoors.
  */
 
 import { E3ITEM } from './e3save';
@@ -25,9 +30,12 @@ export interface E3SaveDefaults {
   canFind: Uint8Array;
   mageSpells: Uint8Array;
   priestSpells: Uint8Array;
+  townDat?: Uint8Array;
+  monsterTable?: Uint8Array;
 }
 
 const KEYS = ['itemTable', 'boats', 'horses', 'canFind', 'mageSpells', 'priestSpells'] as const;
+const OPTIONAL_KEYS = ['townDat', 'monsterTable'] as const;
 
 function toBase64(b: Uint8Array): string {
   let s = '';
@@ -43,7 +51,8 @@ function fromBase64(s: string): Uint8Array {
 }
 
 export function e3SaveDefaultsToJson(d: E3SaveDefaults): string {
-  return JSON.stringify(Object.fromEntries(KEYS.map((k) => [k, toBase64(d[k])])));
+  const optional = OPTIONAL_KEYS.flatMap((k) => { const v = d[k]; return v ? [[k, toBase64(v)]] : []; });
+  return JSON.stringify(Object.fromEntries([...KEYS.map((k) => [k, toBase64(d[k])]), ...optional]));
 }
 
 export function e3SaveDefaultsFromJson(text: string): E3SaveDefaults {
@@ -53,10 +62,15 @@ export function e3SaveDefaultsFromJson(text: string): E3SaveDefaults {
     if (typeof v !== 'string') throw new Error(`e3save.json has no ${k}`);
     return fromBase64(v);
   };
-  return {
+  const out: E3SaveDefaults = {
     itemTable: get('itemTable'), boats: get('boats'), horses: get('horses'),
     canFind: get('canFind'), mageSpells: get('mageSpells'), priestSpells: get('priestSpells'),
   };
+  for (const k of OPTIONAL_KEYS) {
+    const v = raw[k];
+    if (typeof v === 'string') out[k] = fromBase64(v);
+  }
+  return out;
 }
 
 export function e3TableItemCount(d: E3SaveDefaults): number {

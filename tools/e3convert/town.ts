@@ -22,16 +22,21 @@ export const E3_TOWN_RECORD_SIZE = 0x422;
 
 export type E3TownKind = 'large' | 'medium' | 'small' | 'village';
 
-interface Geometry { kind: E3TownKind; size: number; rooms: number; creatures: number; bytes: number }
+export interface E3TownGeometry { kind: E3TownKind; size: number; rooms: number; creatures: number; bytes: number }
 
-const GEOMETRY: Geometry[] = [
+const GEOMETRY: E3TownGeometry[] = [
   { kind: 'large', size: 64, rooms: 12, creatures: 60, bytes: 0x1710 },
   { kind: 'medium', size: 48, rooms: 10, creatures: 40, bytes: 0xdcc },
   { kind: 'small', size: 32, rooms: 4, creatures: 30, bytes: 0x6bc },
   { kind: 'village', size: 0, rooms: 0, creatures: 30, bytes: 0x280 },
 ];
 
-function geometry(town: number): Geometry {
+/** Record `town`'s block: its kind, map size, rooms, creatures and bytes. */
+export function e3TownGeometry(town: number): Readonly<E3TownGeometry> {
+  return geometry(town);
+}
+
+function geometry(town: number): E3TownGeometry {
   const g = GEOMETRY[Math.min(3, Math.floor(town / 40))];
   if (!g) throw new Error(`no geometry for town ${town}`);
   return g;

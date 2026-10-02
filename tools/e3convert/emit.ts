@@ -1191,7 +1191,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   });
   write('debug.json', JSON.stringify(debug));
   // What reading and writing E3's own saves needs from the EXE (src/fileio/e3SaveImport.ts).
-  write('e3save.json', e3SaveDefaultsToJson(readE3SaveDefaults(files.exe)));
+  write('e3save.json', e3SaveDefaultsToJson(readE3SaveDefaults(files.exe, files.town)));
   // E3's job boards (src/game/e3Jobs.ts): their text, as scenario strings.
   // Deliveries match the target's engine personality, E3's less one, so no
   // target may have been cloned for a shop.

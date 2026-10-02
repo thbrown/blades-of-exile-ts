@@ -366,7 +366,11 @@ export const E3ITEM = {
   IS_SPECIAL: 12,
   VALUE: 13,
   IDENTIFIED: 15,
+  /** In a town's list: someone else's (a preset's `property`). Zero in a PC's pack. */
+  PROPERTY: 16,
   MAGIC: 17,
+  /** In a town's list: in a container (a preset's `contained`). */
+  CONTAINED: 18,
   WEIGHT: 19,
   CLASS: 20,
   LOC: 21,
@@ -412,12 +416,77 @@ export class E3Bytes {
 export const E3CTOWN = {
   /** i16: the town record the party is in. */
   TOWN_NUM: 0x0000,
+  /** i16: the town's difficulty, its second string read as a number, 0–150 (`10d8:2089`). */
+  DIFFICULTY: 0x0002,
+  /** The town's 0x422-byte common record from TOWN.DAT, words swapped (`e3SaveTown.ts`). */
+  TOWN: 0x0004,
   /**
    * u8[64][64], `[x][y]`: the town's explored squares, bit 0 (BoE's
    * `c_town.explored`, after the town number, difficulty and the 0x422-byte
    * town record). Only the squares inside the town mean anything.
    */
   EXPLORED: 0x0426,
+  /** u8: the whole town has turned on the party. */
+  HOSTILE: 0x1426,
+  /** `creature_data_type[60]`, `E3CREATURE.SIZE` each. */
+  CREATURES: 0x1427,
+  /** i16: the town the creatures belong to; then `friendly` (i16) and `in_boat` (u8). */
+  WHICH_TOWN: 0x29b7,
   /** loc: the party's square in town. */
   P_LOC: 0x29bc,
+  /** The town's name, a string in a 256-byte field (what follows the NUL is left over). */
+  NAME: 0x29be,
+  NAME_LEN: 0x100,
+} as const;
+
+/**
+ * A live creature (BoE 1997's `creature_data_type`, E3's sizes), as the
+ * town loader builds one: pinned against four saves from the original made
+ * in town (2026-10-01).
+ */
+export const E3CREATURE = {
+  SIZE: 0x5c,
+  /** i16: 0 absent or dead, 1 present, 2 alerted. */
+  ACTIVE: 0,
+  /** i16: 0 docile, 1 hostile A, 2 friendly, 3 hostile B. */
+  ATTITUDE: 2,
+  NUMBER: 4,
+  LOC: 5,
+  /** The monster's 68-byte record, `FUN_1090_0000` (`e3MonsterRecord`). */
+  MONST: 7,
+  MOBILE: 75,
+  /** i16. */
+  SUMMONED: 76,
+  /** The 14-byte start record, as in `t_d`. */
+  START: 78,
+} as const;
+
+/** Offsets in the 68-byte monster record. */
+export const E3MONST = {
+  SIZE: 0x44,
+  HEALTH: 2,
+  M_HEALTH: 4,
+  MP: 6,
+  MAX_MP: 8,
+  /** i16[15]. */
+  STATUS: 34,
+  DIRECTION: 64,
+} as const;
+
+/**
+ * `t_d`, the town's block from TOWN.DAT in the large town's layout whatever
+ * the town's size (`FUN_1040_1e1c`): a smaller town fills the start of each
+ * part and leaves the rest as the last town had it.
+ */
+export const E3TD = {
+  /** u8[64][64], `[x][y]`. */
+  TERRAIN: 0,
+  /** 12 rects, Windows order (left, top, right, bottom). */
+  ROOM_RECTS: 0x1000,
+  /** 12 names of 30 bytes. */
+  ROOM_NAMES: 0x1060,
+  /** 60 creature starts of 14 bytes (`E3CreatureStart`, words swapped). */
+  CREATURES: 0x11c8,
+  /** u8[8][64]: row `y / 8`, a bit for each `y % 8`. */
+  LIGHTING: 0x1510,
 } as const;

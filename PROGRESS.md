@@ -16100,3 +16100,47 @@ Ritual is cast out of combat only, so its Shayder case is safe. The
 other callers (`villages.ts`, `dungeons.ts`, `dungeons2.ts`,
 `filthFactory.ts`, `plot.ts`, `towerOfMagi.ts`, `kills.ts`) haven't
 been checked.
+
+### Exile III saves made in town (2026-10-01)
+
+The user asked for the check-in saves to start in the town, at the place,
+with Major Blessing for every PC. Both done:
+
+- **The exporter writes a town save** (`src/fileio/e3SaveTown.ts`):
+  `c_town`, `t_d`, `t_i`, `misc_i` and `sfx` from the town the party
+  stands in. The layout was pinned against the four in-town saves among
+  the user's seven (Fort Emergence, Krizsan, the New Factory, Ghikra) and
+  is in FORMATS.md, "The town blocks". Each part's result:
+  - the common record goes in with its words swapped: byte for byte;
+  - `t_d`'s rects, creature starts and lighting: byte for byte;
+  - every creature's monster record, built from segment 39
+    (`e3MonsterRecord`, after `FUN_1090_0000`): byte for byte, but for
+    health, mp, status and facing.
+  `e3save.json` now carries TOWN.DAT and segment 39's arrays. A copy
+  converted earlier is converted again when it next loads, since the
+  stamp hashes the converter. Without them, or in a place that isn't one
+  of E3's 200 records, the save is made outdoors as before, with a
+  warning. Tests: `e3save.test.ts`, "saves in town…" (always runs) and
+  "builds a town's blocks as the original's saves made in town hold
+  them" (with `E3_SAV`).
+- **The check saves** (`test/e3checkSaves.test.ts`): a recipe's `inside`
+  stands the party in the town, by a square, a spot or a person, after
+  it has stood outdoors beside the way in, so leaving puts it where E3
+  would. Every question that happens in a town starts there. #12, #15,
+  #16, #22, #24 and #27 are about getting there, so they stay outdoors.
+  Every PC also knows Major Blessing (mage 55).
+- Not done: *reading* a town save still enters the town afresh
+  (`TODO(e3save)` in `e3SaveImport.ts`). The town blocks are written, but
+  nothing reads them back yet.
+
+**Gotchas (2026-10-01):**
+- A one-shot spot's erasure in E3 is `misc_i` bit 2 cleared
+  (`FUN_1038_0282`), not anything in the town record. A town save with
+  `misc_i` left at zero would leave every spot in the town dead, so
+  the bit is set for each spot whose converter flag `(t, 10 + k)` is 0.
+- `c_town+2` is the difficulty, parsed from the string after the town's
+  name. It is not the record's word at `+0x350`, which is 0 in every town
+  looked at.
+- The old saves' unused parts of `t_d`, past a smaller town's size, hold
+  the previous town's bytes. That is leftover memory, so compare only the
+  parts the town fills.

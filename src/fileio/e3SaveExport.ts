@@ -4,10 +4,12 @@
  * the inverse of `e3SaveImport.ts`, over a party record built as E3's
  * `init_party` (`FUN_10b0_053c`) builds a new game's.
  *
- * **Outdoors only.** In town E3 also saves `c_town`, `t_d` and `t_i`, the
- * whole town as loaded and played; this writes none of them, and a game in
- * town is saved on the outdoor square the party entered it from (the party
- * record keeps it, as BoE's does), with a warning.
+ * **In town** E3 also saves `c_town`, `t_d` and `t_i`, the whole town as
+ * loaded and played, and its fields; `e3SaveTown.ts` writes them from the
+ * town the party stands in. A copy converted before TOWN.DAT went into
+ * `e3save.json`, or a place that isn't one of E3's towns, is saved on the
+ * outdoor square the party entered from (the party record keeps it, as
+ * BoE's does), with a warning.
  *
  * The rest of what this leaves at E3's new-game values is the import's list
  * (`e3SaveImport.ts`), marked the same way here.
@@ -29,6 +31,7 @@ import { e3VehicleTable } from './e3SaveImport';
 import type { Vehicle } from '../data/vehicle';
 import type { E3Job } from '../game/e3Jobs';
 import { TOWN_NUM_OUTDOORS } from '../universe/party';
+import { e3TownBlocks } from './e3SaveTown';
 import type { Player } from '../universe/player';
 import { NUM_INVEN_SLOTS, NUM_SPELLS } from '../universe/player';
 import { NUM_SKILLS, Race, Trait } from '../universe/skills';
@@ -206,7 +209,15 @@ export function e3SaveRecordFromGame(univ: Universe, defaults: E3SaveDefaults): 
   save.party = newE3PartyRecord(defaults);
   const p = new E3Bytes(save.party);
   if (party.townNum !== TOWN_NUM_OUTDOORS) {
-    warnings.push('Exile III saves made here are outdoors: the party is put on the square it entered the town from.');
+    const town = e3TownBlocks(univ, defaults, (item) => itemToE3(defaults, item), warnings);
+    if (typeof town === 'string') {
+      warnings.push(`Saved outdoors, on the square the party entered the town from: ${town}.`);
+    } else {
+      save.inTown = true;
+      save.town = { cTown: town.cTown, data: town.data, items: town.items };
+      save.miscI = town.miscI;
+      save.sfx = town.sfx;
+    }
   }
   p.setI32(E3P.AGE, party.age);
   p.setI32(E3P.GOLD, party.gold);

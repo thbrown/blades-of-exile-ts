@@ -232,8 +232,49 @@ skill points, level `+82…+94`, status `+96` (i16[15]), items `+126` (24 ×
 (15 each), race, exp_adj, direction `+1820…+1824`. A new PC (`FUN_10b0_0c2d`)
 knows `DS:296c`'s mage spells and `DS:294e`'s priest spells (30 each).
 
-**`c_town`**: the town record number at `+0`, live creatures from `+0x1427`
-(as above), the party's square at `+0x29bc`.
+**The town blocks** (an in-town save), pinned 2026-10-01 against four saves
+from the original made in Fort Emergence, Krizsan, the New Factory and
+Ghikra (`src/fileio/e3SaveTown.ts`, `E3CTOWN`/`E3CREATURE`/`E3MONST`/`E3TD`
+in `e3save.ts`). `load_file` reads them back with no reload, so they hold
+the town whole:
+
+- **`c_town`**: town number `+0`; difficulty `+2` (the string after the
+  town's name, `atoi`'d and clamped 0–150, `10d8:2089`); TOWN.DAT's
+  common record `+4`, words little-endian and `in_town_rect` in Windows
+  order (byte for byte in all four); `explored[64][64]` `+0x426`;
+  `hostile` (u8) `+0x1426`; 60 creatures of 0x5c from `+0x1427`;
+  `which_town` (i16) `+0x29b7`, `friendly` (i16) `+0x29b9`, `in_boat` (u8)
+  `+0x29bb`; the party's square `+0x29bc`; the town's name in a 256-byte
+  field `+0x29be`.
+- **A creature**: `active` i16 (0 absent or dead, 1, 2 alerted),
+  `attitude` i16, `number` u8, `m_loc`, the monster record (68 B) `+7`,
+  `mobile` u8 `+75`, `summoned` i16 `+76`, the start record (14 B, as in
+  `t_d`) `+78`. Creatures with `spec1` 200–204 or a time flag not yet met
+  are there, inactive.
+- **The monster record**, `FUN_1090_0000(n)` from segment 39's arrays (200
+  a field): number, level, health and max (i16, halved when party+0xc7f is
+  set), mp and max (8 a level for a caster, 16 from monster 177), armor,
+  skill, three attacks (i16), their types, `m_type`, speed, 0, `mu`, `cl`,
+  breath, treasure, special skill, morale twice (10 a level, 20 past 20),
+  poison, picture, `status[15]` (i16), direction, immunities (the four
+  resistance arrays as 2-bit fields), width, height. Every creature in the
+  four saves matches but for health, mp, status and facing.
+- **`t_d`**: TOWN.DAT's block in the large town's layout whatever the size
+  (`FUN_1040_1e1c`): terrain at a stride of 64, rects in Windows order at
+  `+0x1000`, names `+0x1060`, creature starts (words swapped) `+0x11c8`,
+  lighting rows at a stride of 64 from `+0x1510`. A smaller town fills the
+  start of each part and leaves the rest as the last town had it; a
+  medium town clears creature slots 40–59, a village 30–59 and its rects'
+  second words.
+- **`t_i`**: 115 items, a PC's item record with the square at `+21`, the
+  preset's slot plus one at `+12`, and its `property` and `contained` at
+  `+16` and `+18`.
+- **Fields**, as BoE 1997's FIELDS.CPP: `misc_i` 1 block, 2 special, 4
+  web, 8 crate, 16 barrel, 32 fire barrier, 64 force barrier, 128
+  quickfire; `explored`'s bits above 1 are force, fire, antimagic, stink,
+  ice, blades and sleep; `sfx` the eight stains. Bit 2 is set for each of
+  the record's spots on entry, and erasing a one-shot spot
+  (`FUN_1038_0282`) is clearing it.
 
 ## Byte order: big-endian — confirmed
 

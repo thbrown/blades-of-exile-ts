@@ -12,8 +12,12 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Scenario } from '../src/data/scenario';
 import {
-  E3ITEM, E3P, E3PC, E3_PARTY_SIZE, E3_PC_SIZE, E3_SAVE_OUTDOORS, E3Bytes, emptyE3Save, isE3Save, readE3Save, writeE3Save,
+  E3CREATURE, E3CTOWN, E3ITEM, E3MONST, E3P, E3PC, E3TD, E3_PARTY_SIZE, E3_PC_SIZE, E3_SAVE_OUTDOORS, E3_SAVE_TOWN, E3Bytes,
+  emptyE3Save, isE3Save, readE3Save, writeE3Save,
 } from '../src/fileio/e3save';
+import { e3MonsterRecord, e3TownData, e3TownHeader } from '../src/fileio/e3SaveTown';
+import { e3TownGeometry } from '../tools/e3convert/town';
+import { FieldType } from '../src/data/fields';
 import { e3SaveDefaultsFromJson, e3SaveDefaultsToJson, type E3SaveDefaults } from '../src/fileio/e3SaveDefaults';
 import { applyE3Save } from '../src/fileio/e3SaveImport';
 import { exportE3Save, newE3PartyRecord } from '../src/fileio/e3SaveExport';
@@ -91,7 +95,8 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
   afterAll(() => rmSync(out, { recursive: true, force: true }));
 
   it("ships the EXE's tables the converter read", () => {
-    const fromExe = readE3SaveDefaults(readE3Files(dir as string).exe);
+    const files = readE3Files(dir as string);
+    const fromExe = readE3SaveDefaults(files.exe, files.town);
     expect(e3SaveDefaultsToJson(defaults)).toBe(e3SaveDefaultsToJson(fromExe));
     expect(defaults.itemTable.length).toBe(415 * 59);
   });
@@ -246,6 +251,51 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     expect(scen.towns[6]!.maps[31]![30]).toBe(0);
   });
 
+  it('saves in town: the record, the creatures where they stand, the items, the fields and the spots still to run', async () => {
+    const q = new QuestRunner(scen);
+    await q.enter(4, { x: 30, y: 30 });
+    const live = q.town.monsters.filter((m) => m.isAlive);
+    const mover = live[0]!;
+    mover.curLoc = { x: 31, y: 32 };
+    q.town.items.push({ ...q.town.items[0]!, itemLoc: { x: 12, y: 13 }, isSpecial: 0 });
+    q.town.setField(29, 29, FieldType.OBJECT_CRATE, true);
+    q.town.setField(28, 29, FieldType.WALL_FIRE, true);
+    // A one-shot spot that has run is erased; the others are still there.
+    const spots = e3TownHeader(defaults.townDat!, 4);
+    const k = [...Array(40).keys()].find((i) => spots[0x1c + 2 * i]! < 64 && spots[0x1c + 2 * i]! > 0)!;
+    const j = [...Array(40).keys()].find((i) => i !== k && spots[0x1c + 2 * i]! < 64 && spots[0x1c + 2 * i]! > 0)!;
+    q.party.setSdf(4, 10 + k, 250);
+    const { bytes, warnings } = exportE3Save(q.univ, defaults);
+    expect(warnings.filter((w) => /outdoors/.test(w))).toEqual([]);
+    expect(new DataView(bytes.buffer).getInt16(0, true)).toBe(E3_SAVE_TOWN);
+    const save = readE3Save(bytes);
+    const c = new E3Bytes(save.town!.cTown);
+    expect(c.i16(E3CTOWN.TOWN_NUM)).toBe(4);
+    expect(c.loc(E3CTOWN.P_LOC)).toEqual({ x: 30, y: 30 });
+    expect(c.str(E3CTOWN.NAME, 30)).toBe('Shayder');
+    expect(c.i16(E3CTOWN.WHICH_TOWN)).toBe(4);
+    const active = [...Array(60).keys()].filter((i) => c.i16(E3CTOWN.CREATURES + E3CREATURE.SIZE * i) > 0);
+    expect(active.length).toBe(live.length);
+    const at = E3CTOWN.CREATURES + E3CREATURE.SIZE * mover.slot;
+    expect(c.loc(at + E3CREATURE.LOC)).toEqual({ x: 31, y: 32 });
+    expect(c.u8(at + E3CREATURE.NUMBER)).toBe(mover.number);
+    expect(c.i16(at + E3CREATURE.MONST + E3MONST.HEALTH)).toBe(mover.health);
+    const items = [...Array(115).keys()].filter((i) => save.town!.items[63 * i] || save.town!.items[63 * i + 1]);
+    expect(items.length).toBe(q.town.items.filter((it) => it.variety !== 0).length);
+    const last = new E3Bytes(save.town!.items.subarray(63 * items.at(-1)!, 63 * items.at(-1)! + 63));
+    expect(last.loc(E3ITEM.LOC)).toEqual({ x: 12, y: 13 });
+    expect(save.miscI[64 * 29 + 29]! & 8).toBe(8);
+    expect(c.u8(E3CTOWN.EXPLORED + 64 * 28 + 29) & 4).toBe(4);
+    const bit = (i: number) => save.miscI[64 * spots[0x1c + 2 * i]! + spots[0x1d + 2 * i]!]! & 2;
+    expect(bit(k)).toBe(0);
+    expect(bit(j)).toBe(2);
+    // The terrain as it stands.
+    expect(save.town!.data[E3TD.TERRAIN + 64 * 30 + 30]).toBe(q.town.record.terrain[30]![30]);
+    // And it loads back here, in Shayder.
+    const back = new QuestRunner(scen);
+    expect(applyE3Save(bytes, back.univ, defaults).town).toEqual({ num: 4, loc: { x: 30, y: 30 } });
+  });
+
   /**
    * Saves from the original: `E3_SAV` is a file or a directory of them. Each
    * must write back byte for byte, come in with every item matched, and go
@@ -303,6 +353,41 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
       });
     }
   });
+
+  it.skipIf(!realFiles().some((f) => readE3Save(new Uint8Array(readFileSync(f))).inTown))(
+    "builds a town's blocks as the original's saves made in town hold them", () => {
+      const townDat = defaults.townDat!, table = defaults.monsterTable!;
+      for (const file of realFiles()) {
+        const save = readE3Save(new Uint8Array(readFileSync(file)));
+        if (!save.town) continue;
+        const c = new E3Bytes(save.town.cTown);
+        const num = c.i16(E3CTOWN.TOWN_NUM);
+        expect(save.town.cTown.subarray(E3CTOWN.TOWN, E3CTOWN.TOWN + 0x422), file).toEqual(e3TownHeader(townDat, num));
+        expect(c.i16(E3CTOWN.DIFFICULTY), file).toBe(scen.towns[num]!.difficulty);
+        // t_d, with the save's own terrain, over the parts the town fills.
+        const g = e3TownGeometry(num);
+        const d = e3TownData(townDat, num, (x, y) => save.town!.data[64 * x + y]!);
+        const parts: [number, number][] = [[E3TD.ROOM_RECTS, 8 * g.rooms], [E3TD.CREATURES, 14 * g.creatures]];
+        for (let row = 0; row < g.size / 8; row++) if (num < 40) parts.push([E3TD.LIGHTING + 64 * row, g.size]);
+        for (const [at, len] of parts) expect(d.subarray(at, at + len), `${file} +${at}`).toEqual(save.town.data.subarray(at, at + len));
+        // Each creature's monster record, but for what play changes.
+        const halved = save.party[0xc7f] !== 0;
+        for (let k = 0; k < 60; k++) {
+          const at = E3CTOWN.CREATURES + E3CREATURE.SIZE * k;
+          const n = c.u8(at + E3CREATURE.NUMBER);
+          if (n === 0) continue;
+          const mine = e3MonsterRecord(table, n, halved);
+          const theirs = save.town.cTown.slice(at + E3CREATURE.MONST, at + E3CREATURE.MONST + E3MONST.SIZE);
+          for (const r of [mine, theirs]) {
+            r.fill(0, E3MONST.HEALTH, E3MONST.HEALTH + 2);
+            r.fill(0, E3MONST.MP, E3MONST.MP + 2);
+            r.fill(0, E3MONST.STATUS, E3MONST.DIRECTION + 1);
+          }
+          expect([...mine], `${file} creature ${k} (monster ${n})`).toEqual([...theirs]);
+          expect(c.u8(at + E3CREATURE.MOBILE), `${file} creature ${k}`).toBe(c.u8(at + E3CREATURE.START + 4));
+        }
+      }
+    });
 
   it.skipIf(!realFiles().some((f) => (readE3Save(new Uint8Array(readFileSync(f))).party[0] ?? 0) < 100))(
     "builds a new game's record as the original's, but for what the first turns change", () => {
