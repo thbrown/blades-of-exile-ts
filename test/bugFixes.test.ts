@@ -62,8 +62,8 @@ describe('bugFixed', () => {
     expect(bugFixed(7)).toBe(false);
     setBugFixes(true);
     expect(bugFixed(7)).toBe(true);
-    expect(KNOWN_BUGS[5]!.unwired).toBeDefined();
-    expect(bugFixed(5)).toBe(false);
+    expect(KNOWN_BUGS[4]!.unwired).toBeDefined();
+    expect(bugFixed(4)).toBe(false);
     expect(bugFixed(999)).toBe(false);
   });
 });

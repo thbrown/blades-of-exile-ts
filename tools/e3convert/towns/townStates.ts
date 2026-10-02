@@ -42,6 +42,9 @@ export const TOWN_STATES: TownStates[] = [
   { town: 16, event: 3, days: [140, 200, 250] },
 ];
 
+/** Gale's four records (`e3GaleTick`'s towns): E3 tests `c_town`'s number, 16 to 19. */
+export const GALE_TOWNS: readonly number[] = [16, 17, 18, 19];
+
 /** The daily plot's part: each group's state, from its three tests in E3's order. */
 export function townStatesPlot(b: SpecBuilder): Step[] {
   return TOWN_STATES.flatMap((g, k) => g.days.map((day, i) =>

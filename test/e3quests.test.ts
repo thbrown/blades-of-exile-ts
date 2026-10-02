@@ -17,7 +17,8 @@ import { GameMode } from '../src/game/modes';
 import { Skill, Status } from '../src/universe/skills';
 import { emitScenario } from '../tools/e3convert/emitNode';
 import { findE3Dir } from '../tools/e3convert/install';
-import { partySpecItem } from '../tools/e3convert/script';
+import { partySpecItem, zoneSpotFlag } from '../tools/e3convert/script';
+import { setBugFixes } from '../src/game/bugFixes';
 import { e3Event } from '../tools/e3convert/flags';
 import { SLIME_POOLS } from '../tools/e3convert/towns/slimePit';
 import { QuestRunner, loadExile3 } from './support/e3Quest';
@@ -42,6 +43,8 @@ import { alchemyChoices, makePotion } from '../src/game/alchemy';
 import { giveItem } from '../src/universe/inventory';
 
 const dir = findE3Dir();
+/** Gale's townsperson after hush money: E3's personality 337, the engine's 336. */
+const EXTORTIONER = 336;
 
 describe.skipIf(!dir)('Exile 3 main quests', () => {
   const out = mkdtempSync(join(tmpdir(), 'e3quests-'));
@@ -4829,6 +4832,118 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       await q.look(20, 20);
       await q.look(39, 27);
       expect(q.univ.transcript.join('\n')).not.toMatch(/You find something/);
+    });
+  });
+
+  describe('as a conversation starts (`FUN_1020_1484`, towns/talkStart.ts)', () => {
+    const CELL = { x: 0x12, y: 0x2f };
+    const guards = (q: QuestRunner) => q.log.some((l) => /Gale guards surround you/.test(l));
+
+    it("Gale's townsperson: paid off, 100 gold or all there is; refused, the guards in 25 turns", async () => {
+      {
+        const q = new QuestRunner(scen);
+        await q.enter(16);
+        q.party.gold = 500;
+        q.answer('Yes');
+        await expect(q.talk(EXTORTIONER)).rejects.toThrow(/won't talk/);
+        expect(q.log.some((l) => /pay the parasite/.test(l)), q.tail()).toBe(true);
+        expect(q.party.gold).toBe(400);
+        expect(q.flag(0x14b)).toBe(0);
+      }
+      {
+        const q = new QuestRunner(scen);
+        await q.enter(16);
+        q.party.gold = 30;
+        q.answer('Yes');
+        await expect(q.talk(EXTORTIONER)).rejects.toThrow(/won't talk/);
+        expect(q.party.gold).toBe(0);
+      }
+      const q = new QuestRunner(scen);
+      await q.enter(16);
+      q.answer('Leave');
+      await expect(q.talk(EXTORTIONER)).rejects.toThrow(/won't talk/);
+      expect(q.log.some((l) => /refuse to pay the extortion/.test(l)), q.tail()).toBe(true);
+      expect(q.flag(0x14b)).toBe(24);
+      await q.pause(23);
+      expect(guards(q), q.tail()).toBe(false);
+      await q.pause(1);
+      expect(guards(q), q.tail()).toBe(true);
+      expect(q.at).toEqual(CELL);
+      expect(q.flag(0x14b)).toBe(0);
+    });
+
+    it('Mayor Rali and Leona: brushed off, then, once the party is known, the guards', async () => {
+      for (const who of [/Rali/, /Leona/]) {
+        const q = new QuestRunner(scen);
+        await q.enter(16);
+        await expect(q.talk(who)).rejects.toThrow(/won't talk/);
+        expect(q.flag(0x14b), q.tail()).toBe(0);
+        q.setFlag(0xc94, 1);
+        await expect(q.talk(who)).rejects.toThrow(/won't talk/);
+        // 25, less the turn the refused talk took.
+        expect(q.flag(0x14b), q.tail()).toBe(24);
+      }
+    });
+
+    it("the guards' countdown waits outdoors and is forgotten in another town", async () => {
+      const q = new QuestRunner(scen);
+      await q.enter(17);
+      q.setFlag(0x14b, 10);
+      await q.pause(3);
+      expect(q.flag(0x14b)).toBe(7);
+      await q.outdoors(4, 4, 10, 10);
+      await q.pause(3);
+      expect(q.flag(0x14b), q.tail()).toBe(7);
+      await q.enter(4);
+      await q.pause(1);
+      expect(q.flag(0x14b), q.tail()).toBe(0);
+    });
+
+    it("General Baziron takes the Dervish's scroll: 200 gold, 5 experience each, and the camp's welcome back under the fix", async () => {
+      for (const fixed of [false, true]) {
+        setBugFixes(fixed);
+        try {
+          const q = new QuestRunner(scen);
+          q.party.specItems.add(partySpecItem(0x6e));
+          q.party.gold = 0;
+          const xp = q.party.pcs.map((pc) => pc.experience);
+          await q.enter(163);
+          await q.talk(/Baziron/);
+          expect(q.log.some((l) => /offer him the message/.test(l)), q.tail()).toBe(true);
+          expect(q.party.specItems.has(partySpecItem(0x6e))).toBe(false);
+          expect(q.party.gold).toBe(200);
+          q.party.pcs.forEach((pc, i) => { if (pc.mainStatus === MainStatus.ALIVE) expect(pc.experience).toBeGreaterThan(xp[i]!); });
+          expect(q.party.getSdf(...zoneSpotFlag(23, 5))).toBe(fixed ? 2 : 0);
+          // Once: the scroll is gone.
+          q.log.length = 0;
+          await q.talk(/Baziron/);
+          expect(q.log.some((l) => /offer him the message/.test(l))).toBe(false);
+        } finally {
+          setBugFixes(false);
+        }
+      }
+    });
+
+    it('Rentar-Ihrno on the crystal and Bon-Ihrno, once each, and then the conversation', async () => {
+      const q = new QuestRunner(scen);
+      await q.enter(41);
+      await q.talk(/Rentar-Ihrno/);
+      expect(q.log.some((l) => /ask her of the crystal/.test(l))).toBe(false);
+      q.setFlag(0xc9e, 1);
+      await q.talk(/Rentar-Ihrno/);
+      expect(q.log.some((l) => /ask her of the crystal/.test(l)), q.tail()).toBe(true);
+      q.log.length = 0;
+      await q.talk(/Rentar-Ihrno/);
+      expect(q.log.some((l) => /ask her of the crystal/.test(l))).toBe(false);
+
+      // His talk record's title is E3's own misspelling, "Bon-Ihnro".
+      const r = new QuestRunner(scen);
+      await r.enter(109);
+      await r.talk(/Bon-Ih/);
+      expect(r.log.some((l) => /legendary Bon-Ihrno/.test(l)), r.tail()).toBe(true);
+      r.log.length = 0;
+      await r.talk(/Bon-Ih/);
+      expect(r.log.some((l) => /legendary Bon-Ihrno/.test(l))).toBe(false);
     });
   });
 });

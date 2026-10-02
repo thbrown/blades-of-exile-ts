@@ -35,6 +35,7 @@ import { e3DayReached, e3Event, e3Flag } from './flags';
 import { VILLAGE_SIZE, buildE3Village, ruinableBuildings, villageTemplate, type RuinableBuilding } from './village';
 import { ENTRANCE_MARK_SPOT, e3SpotScript, type GroupNodes, type GroupScript, type KillScript, type PlaceScript, type SpotScript, type TalkScript } from './specials';
 import { e3TalkStart } from './towns/talkStart';
+import { GALE_TOWNS } from './towns/townStates';
 import { e3MuteHail, e3MutePersonalities } from './towns/muteTalk';
 import { e3GroupForced, e3GroupSteps } from './towns/encounters';
 import { e3KillAfter, e3KillCase } from './towns/kills';
@@ -805,7 +806,7 @@ function scenarioXml(
   start: { town: number; loc: { x: number; y: number } },
   outStart: { sector: { x: number; y: number }; loc: { x: number; y: number } },
   shops: Shop[], specialItems: SpecItem[], specStrings: string[], newDay: number, roadJoins: number[],
-  jobBase: number, skribbane: number[], journal: string[], cursors: E3Cursor[], townCount: number, uranium: number, crushed: number,
+  jobBase: number, skribbane: number[], journal: string[], cursors: E3Cursor[], townCount: number, uranium: number, crushed: number, escort: number,
   crumbles: number[], amuletNode: number, unlocks: string,
 ): string {
   return `${XML_HEAD}<scenario boes="2.0.0">
@@ -827,6 +828,7 @@ function scenarioXml(
         <uranium>exile3:${uranium}</uranium>
         <item-towns>exile3:${E3_ITEM_TOWNS.map(([i, t]) => `${i}>${t}`).join(',')}</item-towns>
         <moving-walls>exile3:${crushed}:54,71</moving-walls>
+        <escort>exile3:${escort}:${GALE_TOWNS.join(',')}</escort>
         <sp-drain>exile3:${E3_SP_DRAIN.join(',')}</sp-drain>
         <trap>exile3</trap>
         <alchemy>exile3</alchemy>
@@ -1213,12 +1215,15 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   // The moving walls' crush (src/game/e3MovingWalls.ts): `FUN_1008_37de(0x3d,
   // 0x29, 55)` at `10c0:5c2a`, in towns 54 and 71 (`10c0:6aa2`).
   const crushed = scen.compile([scen.msg(0x3d, 0x29, 0, undefined, 0x37)]);
+  // Gale's guards (src/game/e3Gale.ts): `FUN_1008_3812(0x37, 0x19, 0x37,
+  // 0x1a, 57)` and the cell, `FUN_10c0_46a4(0x12, 0x2f, 1)`, at `10c0:6e92`.
+  const escort = scen.compile([scen.msg(0x37, 0x19, 0x1a), scen.moveParty(0x12, 0x2f)]);
   // Last, since the places' scripts may add scenario strings and nodes.
   write('scenario.spec', scen.spec);
   // Last, since the places' scripts can add shops of their own.
   shops.push(...talk.shops);
   const cursors = readE3Cursors(resources);
-  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, skribbane, e3JournalStrings((id) => strings.get(id) ?? ''), cursors, townCount, uranium, crushed, readE3Crumbles(files.exe), amuletNode, readE3Unlocks(files.exe)));
+  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, skribbane, e3JournalStrings((id) => strings.get(id) ?? ''), cursors, townCount, uranium, crushed, escort, readE3Crumbles(files.exe), amuletNode, readE3Unlocks(files.exe)));
   const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(read), ...e3MapSheets(read)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
   // E3's own sounds, which a scenario's `sounds/SNDn.wav` puts in place of

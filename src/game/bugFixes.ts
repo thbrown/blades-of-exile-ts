@@ -33,10 +33,7 @@ export const KNOWN_BUGS: Readonly<Record<number, KnownBug>> = {
     title: "Zone 10, spot 2 uses zone 2's block for its line", ruling: 'undecided',
     unwired: "zone 10's own block has no such string, so there's nothing to fix it to",
   },
-  5: {
-    title: "The Dervish Merchant's welcome back is never reached", ruling: 'undecided',
-    unwired: "the fix goes in Baziron's reward at the start of a conversation (1020:163a), which isn't ported",
-  },
+  5: { title: "The Dervish Merchant's welcome back is never reached", ruling: 'undecided' },
   6: { title: 'The Nephilim village never remembers the party helped', ruling: 'undecided' },
   7: { title: 'The river ferry back is free, though it says 10 gold', ruling: 'undecided' },
   // 8 is withdrawn: Gointz's sale does free his boat (party+0x1307 is boat
