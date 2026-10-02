@@ -999,7 +999,7 @@ OBoE. Under the flag it asks with slots 25 and 26, Flee and Onward: the
 same two positions, so the same `btn1`/`btn2` and the same answers. BoE
 scenarios keep No/Yes. A player could tell, and it costs no draws.
 
-### 47. The autosave: a branching series, not a ring of five (2026-10-02)
+### 47. The autosave: a branching tree, not a ring of five (2026-10-02)
 
 **DECIDED: redesigned**, not ported. Autosave is not in the 1997 original at
 all; it is OBoE's (`try_auto_save`, `boe.fileio.cpp:520`), so no player of the
@@ -1009,14 +1009,18 @@ files named `<save>.auto/1..5` (so five moments, however long the game), and
 every one of them was its own entry in the file picker.
 
 What this port does instead (`platform/saveStore.ts`, `saveRetention.ts`,
-`saveScheduler.ts`; PROGRESS.md "Save series"):
+`saveScheduler.ts`; PROGRESS.md "Save trees"). It was first called a save
+*series*; it was renamed *tree* the same day, at the user's word:
 
-- **One series per game, a tree of snapshots.** The named moments are the same
+- **One tree of snapshots per game.** The named moments are the same
   six (`EnterTown`, `ExitTown`, `RestComplete`, `TownWaitComplete`,
   `EndOutdoorCombat`, `Eat`, with the same `Autosave_<reason>` preferences and
   the same defaults, Eat off), now called *milestones*; on top of them a
-  **tick** saves every `Autosave_Every` moves (10). A first save creates the
-  series, so "Make a manual save first" is gone.
+  **tick** saves every `Autosave_Every` moves (1: every move, so leaving loses
+  nothing; a move that changed nothing writes nothing). A game started from
+  the main menu is saved as soon as it starts, which makes its tree, so "Make
+  a manual save first" is gone; and going to the main menu saves the game
+  rather than asking whether to throw away what is unsaved.
 - **Thinning, not rotation.** Old snapshots thin on a fixed grid in game time
   (every one of the newest dozen, then eight a day, a day, a week), milestones
   survive longer, and a 10 MB per-game budget (`Autosave_BudgetMb`) is the

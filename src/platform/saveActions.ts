@@ -8,10 +8,10 @@ import { TOWN_NUM_OUTDOORS } from '../universe/party';
 import { isE3Save } from '../fileio/e3save';
 import { readSavePreview } from '../fileio/saveIo';
 import {
-  SnapInfo, createSeries, deleteBranch, downloadFile, getAllSnapshots, getSeries, getSnapshot, importSeries,
+  SnapInfo, createTree, deleteBranch, downloadFile, getAllSnapshots, getTree, getSnapshot, importTree,
   listSnaps,
 } from './saveStore';
-import { isZip, seriesFromZip, seriesToZip } from './saveZip';
+import { isZip, treeFromZip, treeToZip } from './saveZip';
 import { showSaveTree } from './saveTree';
 
 /** A file-name-safe version of a game's name. */
@@ -23,19 +23,19 @@ export function placeOf(snap: Pick<SnapInfo, 'place' | 'townNum'>): string {
   return snap.townNum >= TOWN_NUM_OUTDOORS ? 'Outdoors' : `Town ${snap.townNum}`;
 }
 
-export type ImportOutcome = { seriesId: string; scenarioId: string } | { error: string };
+export type ImportOutcome = { treeId: string; scenarioId: string } | { error: string };
 
 /**
- * Turn a file the player picked into a series: a zip becomes the series it
+ * Turn a file the player picked into a tree: a zip becomes the tree it
  * holds (or a line of saves, if it is just a folder of `.exg`s), and a single
- * save becomes a new series of one — never merged into an existing game.
+ * save becomes a new tree of one — never merged into an existing game.
  */
-export async function importAsSeries(file: { name: string; data: Uint8Array }): Promise<ImportOutcome> {
+export async function importAsTree(file: { name: string; data: Uint8Array }): Promise<ImportOutcome> {
   if (isZip(file.data)) {
-    const parsed = seriesFromZip(file.data, file.name);
+    const parsed = treeFromZip(file.data, file.name);
     if (parsed === null) return { error: 'No saved games were found in that zip.' };
-    const series = await importSeries(parsed.name, parsed.scenarioId, parsed.nodes, parsed.head);
-    return { seriesId: series.id, scenarioId: series.scenarioId };
+    const tree = await importTree(parsed.name, parsed.scenarioId, parsed.nodes, parsed.head);
+    return { treeId: tree.id, scenarioId: tree.scenarioId };
   }
   if (isE3Save(file.data)) {
     return { error: 'That is an Exile III save. Start Exile III, then use File ▸ Open Game to open it.' };
@@ -47,47 +47,47 @@ export async function importAsSeries(file: { name: string; data: Uint8Array }): 
     return { error: 'That file is not a Blades of Exile saved game.' };
   }
   const name = file.name.trim() || preview.pcs.find((pc) => pc.name !== '')?.name || 'Imported game';
-  const { series } = await createSeries(name, {
+  const { tree } = await createTree(name, {
     data: file.data, preview, kind: 'manual', reason: 'Imported',
   });
-  return { seriesId: series.id, scenarioId: series.scenarioId };
+  return { treeId: tree.id, scenarioId: tree.scenarioId };
 }
 
-export async function exportSeriesZip(seriesId: string): Promise<void> {
-  const series = await getSeries(seriesId);
-  if (series === null) return;
-  const zip = seriesToZip(series, await listSnaps(seriesId), await getAllSnapshots(seriesId));
-  downloadFile(`${fileSafe(series.name)}.zip`, zip, 'application/zip');
+export async function exportTreeZip(treeId: string): Promise<void> {
+  const tree = await getTree(treeId);
+  if (tree === null) return;
+  const zip = treeToZip(tree, await listSnaps(treeId), await getAllSnapshots(treeId));
+  downloadFile(`${fileSafe(tree.name)}.zip`, zip, 'application/zip');
 }
 
-export async function downloadSnapshot(seriesId: string, seq: number): Promise<void> {
-  const [series, snaps, data] = await Promise.all([getSeries(seriesId), listSnaps(seriesId), getSnapshot(seriesId, seq)]);
-  if (series === null || data === null) return;
+export async function downloadSnapshot(treeId: string, seq: number): Promise<void> {
+  const [tree, snaps, data] = await Promise.all([getTree(treeId), listSnaps(treeId), getSnapshot(treeId, seq)]);
+  if (tree === null || data === null) return;
   const day = Math.floor((snaps.find((s) => s.seq === seq)?.gameAge ?? 0) / 3700) + 1;
-  downloadFile(`${fileSafe(series.name)} day ${day}.exg`, data);
+  downloadFile(`${fileSafe(tree.name)} day ${day}.exg`, data);
 }
 
 /**
- * Show the restore tree for a series. Resolves with the snapshot the player
+ * Show a game's tree, to restore from. Resolves with the snapshot the player
  * chose to restore, or null if they closed it. `scenarioTitle` is whatever
  * the caller knows the scenario as.
  */
-export async function browseSeries(seriesId: string, scenarioTitle: string): Promise<number | null> {
-  const [series, snaps] = await Promise.all([getSeries(seriesId), listSnaps(seriesId)]);
-  if (series === null) return null;
+export async function browseTree(treeId: string, scenarioTitle: string): Promise<number | null> {
+  const [tree, snaps] = await Promise.all([getTree(treeId), listSnaps(treeId)]);
+  if (tree === null) return null;
   return new Promise((resolve) => {
     const view = showSaveTree(document.body, {
-      seriesName: series.name,
+      treeName: tree.name,
       scenarioTitle,
       snaps,
-      head: series.head,
+      head: tree.head,
       placeName: placeOf,
       restore: (seq) => { view.close(); resolve(seq); },
-      download: (seq) => { void downloadSnapshot(seriesId, seq); },
-      exportSeries: () => { void exportSeriesZip(seriesId); },
+      download: (seq) => { void downloadSnapshot(treeId, seq); },
+      exportTree: () => { void exportTreeZip(treeId); },
       deleteBranch: async (seq) => {
-        await deleteBranch(seriesId, seq);
-        return listSnaps(seriesId);
+        await deleteBranch(treeId, seq);
+        return listSnaps(treeId);
       },
       close: () => { view.close(); resolve(null); },
     });

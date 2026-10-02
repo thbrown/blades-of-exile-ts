@@ -1,5 +1,5 @@
 /**
- * Where each snapshot of a series goes when the tree is drawn: across by
+ * Where each snapshot of a tree goes when the tree is drawn: across by
  * in-game time, down by branch. Pure, so it is tested without a DOM.
  *
  * **x is game time**, `gameAge`, but relaxed: saves cluster (ten moves in a

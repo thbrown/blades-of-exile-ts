@@ -16159,18 +16159,73 @@ with Major Blessing for every PC. Both done:
   the previous town's bytes. That is leftover memory, so compare only the
   parts the town fills.
 
-## Save series (2026-10-02)
+**Gotchas (2026-10-02), from play-testing Exile III:**
+- **Custom monster pictures must stay below 2000.** The engine reads a custom
+  monster as `pic % 1000` (OBoE's rule: the thousands digit is the size
+  class), so only cells 0–999 can be a monster's. The converter cut E3's
+  sprites into sheets from 4 on, ~700 cells, and the last fifteen monsters
+  (Unicorn, Gorgon, Dryad, Drake Lord, Ursag, the crystals…) ran past 1999
+  and drew from terrain sheet 0 — swamp and rocks. `buildMonsterSheets` now
+  also fills the rows the terrain sheets leave empty (`freeMonsterCells`:
+  TER5 fills four rows of sheet 2, the animations six of sheet 3), which
+  fits them all, and `test/e3convert.test.ts` checks every monster. One
+  sheet fewer (29).
+- **E3 starts an outdoor fight with `COMBAT!` and who is there**, not BoE's
+  "You have been attacked!": `FUN_10d0_3fd8`, called from `1010:435a`, prints
+  each of the group's six many-monster slots in the plural — twelve spelled
+  out (`10d0:4114`: Wolves, Ursagi, Nephilim, Empire Dervishes…), the rest
+  `"%ss"` — and the seventh as it is (`game/e3Encounter.ts`). The
+  "Encounter!" string in the EXE is a different thing: the title of the
+  dialog a special encounter shows with its monster's picture.
+
+## Save trees (2026-10-02)
 
 Autosave and saved games were redesigned together (DIVERGENCES #47; PLAN.md's
-"Rewind" item is settled by this). Corpus-neutral: saving rolls no dice.
+"Rewind" item is settled by this). Corpus-neutral: saving rolls no dice. **A
+game's saves were first called a *series*; the same day they were renamed a
+*tree*** — the code, the IndexedDB stores and the zip with them (below).
 
-- **A game is a series; a series is a tree.** IndexedDB `exile-js` v2
+**Play-test round (2026-10-02, later):**
+- **A game is saved as it starts.** A new game from the main menu (or a party
+  taken into a scenario) asks for a `Start` milestone once the scenario's
+  opening dialogs are done, so it is on the main menu at once; before, the
+  first save waited ten moves.
+- **Autosave ticks every move** (`AUTOSAVE_EVERY_DEFAULT` = 1; the scheduler
+  already skips a byte-identical game, so standing still writes nothing).
+- **File › Main Menu saves instead of asking** (`scheduler.saveIfChanged`,
+  which waits for the write). The restart-game question is still asked when
+  the game can't be saved there (a fight, mid-animation).
+- **The startup card**: as wide as a scenario's, where ("Day 3 · Fort Talrus")
+  and when ("date · 41 saves") on a line each; **Resume** is a button in the
+  card; Rename and Delete are icons on the picture; a click anywhere else
+  opens the tree. "Older saves…" and "Export" are gone from the card (Export
+  is still in the tree's footer). Importing is a card too, always last in
+  the grid and the size of a game's: dashed, with a + where the picture is.
+- **Exile III saves import on the main menu.** An `exile3.sav` can only be read
+  with Exile III loaded, so it is parked in sessionStorage
+  (`PENDING_E3_SAVE_KEY`, base64) and the page opens `?play=exile3`, which
+  reads it (`loadE3Save`) and saves it at once into a new tree named for the
+  file. File › Open Game's Exile III import also starts a tree now.
+- The tree's "This is where your game is now." callout on the newest save is
+  gone; Continue says it.
+- **The rename, persistently:** IndexedDB `exile-js` is version 3 — stores
+  `trees`, `tree-snaps` and `tree-blobs`, keyed on `treeId`. Version 2's
+  `series`/`snaps`/`blobs` (keyed on `seriesId`) are copied across in the
+  upgrade transaction and dropped (`test/saveStoreMigrate.test.ts`). A zip
+  holds `tree.json`; one with `series.json` still imports. sessionStorage's
+  `exile-js.series` became `exile-js.tree` (per tab, so nothing to migrate).
+- verify-screen's two "slot" checks compared a boolean to a name since the
+  series commit and always failed; fixed. Its booms check also fails on
+  some runs — the dice are seeded off the clock, and a 2-damage hit plays
+  sound 71 rather than 70 — which is the check's fragility, not a bug.
+
+- **A game is a tree of snapshots.** IndexedDB `exile-js` v2 (v3 since the rename)
   (`platform/saveStore.ts`; v1's flat `saves` store is dropped, nothing had
   shipped): `series` (name, scenario, head, count, bytes, and a `cover` — the
   head's preview and thumbnail, so the startup screen never reads the tree),
   `snaps` (parent, game age, kind, reason, place, preview, thumbnail) and
   `blobs` (the gzipped `.exg`, read only on restore/export). The party in memory
-  has its own `party` store. `univ.seriesId` replaces `univ.saveSlot`; a tab's
+  has its own `party` store. `univ.treeId` (was `seriesId`) replaces `univ.saveSlot`; a tab's
   series is also in `sessionStorage` (`exile-js.series`) so a reload of `?play=`
   reopens its head. The old `\0resume` row and `keepResume`'s 2-second
   serialise are gone: a page hide/unload flushes a snapshot (`scheduler.flush`,
@@ -16200,7 +16255,7 @@ Autosave and saved games were redesigned together (DIVERGENCES #47; PLAN.md's
   with the "starts a new branch" callout, Download `.exg`, Delete this branch).
   In game, Open lists series with an "Older saves…" row under each; Ctrl+S adds a
   `manual` snapshot to the game's series (naming it the first time).
-- **Zip** (`platform/saveZip.ts`): `series.json` + `NNNN.exg` + `NNNN.thumb`; a
+- **Zip** (`platform/saveZip.ts`): `tree.json` (was `series.json`) + `NNNN.exg` + `NNNN.thumb`; a
   zip without `series.json` imports as a line of saves ordered by game age. A
   single `.exg` imports as a new one-save series, never merged.
 - **Preferences:** `Autosave_Every` (moves; 0 = never) and `Autosave_BudgetMb`

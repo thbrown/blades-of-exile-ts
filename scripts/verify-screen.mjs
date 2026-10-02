@@ -2458,7 +2458,7 @@ const menuItems = await page.evaluate(async () => {
   const io = await import('/src/fileio/saveIo.ts');
   window.__univ.party.gold = 8888;
   const bytes = window.__saveGame();
-  await store.createSeries('VerifySlot', { data: bytes, preview: io.readSavePreview(bytes), kind: 'manual', reason: 'Test' });
+  await store.createTree('VerifySlot', { data: bytes, preview: io.readSavePreview(bytes), kind: 'manual', reason: 'Test' });
   window.__univ.party.gold = 3;
   return null;
 });
@@ -2469,7 +2469,7 @@ const fileMenu = await page.evaluate(() =>
 await page.locator('#game-menu-bar .dropdown li', { hasText: 'Open Game' }).first().click();
 await page.waitForTimeout(300);
 const pickerRow = await page.evaluate(() =>
-  window.__dialogs.active?.placedRows?.find((r) => r.name.startsWith('series:') && r.label?.startsWith('VerifySlot'))?.rect ?? null);
+  window.__dialogs.active?.placedRows?.find((r) => r.name.startsWith('tree:') && r.label?.startsWith('VerifySlot'))?.rect ?? null);
 let menuLoad = { picker: fileMenu, row: pickerRow, gold: null };
 if (pickerRow !== null) {
   const box = await page.locator('#canvas').boundingBox();
@@ -2481,7 +2481,7 @@ if (pickerRow !== null) {
     picker: null,
     row: 'clicked',
     gold: window.__univ.party.gold,
-    slot: window.__univ.seriesId !== null,
+    slot: window.__univ.treeId !== null,
     dialogGone: window.__dialogs.active === null,
   }));
 }
@@ -2497,7 +2497,7 @@ await page.evaluate(async () => {
   const io = await import('/src/fileio/saveIo.ts');
   window.__univ.party.gold = 7171;
   const bytes = window.__saveGame();
-  await store.createSeries('ResumeSlot', { data: bytes, preview: io.readSavePreview(bytes), kind: 'manual', reason: 'Test' });
+  await store.createTree('ResumeSlot', { data: bytes, preview: io.readSavePreview(bytes), kind: 'manual', reason: 'Test' });
 });
 //
 // Instant help starts off, as for a player who has turned it off: its boxes
@@ -2513,13 +2513,13 @@ await page.waitForSelector('.startup .startup-choice', { timeout: 20000 });
 const resumeOffered = await page.evaluate(() =>
   [...document.querySelectorAll('.startup .startup-choice strong')].map((e) => e.textContent));
 await page.screenshot({ path: `${SHOTS}/00b-startup-resume.png` });
-await page.locator('.startup .startup-choice', { hasText: 'ResumeSlot' }).first().click();
+await page.locator('.startup .startup-save', { hasText: 'ResumeSlot' }).first().locator('[data-action="resume"]').click();
 await page.waitForFunction(() => window.__session !== undefined, { timeout: 30000 });
 await page.waitForTimeout(800);
 const resumed = await page.evaluate(() => ({
   offered: null,
   gold: window.__univ.party.gold,
-  slot: window.__univ.seriesId !== null,
+  slot: window.__univ.treeId !== null,
   inTown: window.__session.inTown,
   tail: window.__univ.transcript.slice(-2),
 }));
@@ -3620,10 +3620,10 @@ const ok =
   startupGone === true &&
   // …and comes back offering the saved game, which resumes into its own world.
   resumeOffered.includes('ResumeSlot') &&
-  resumed.gold === 7171 && resumed.slot === 'ResumeSlot' && resumed.inTown === true &&
+  resumed.gold === 7171 && resumed.slot === true && resumed.inTown === true &&
   fileMenu.some((label) => label.startsWith('Open Game')) &&
   menuLoad.row === 'clicked' && menuLoad.gold === 8888 &&
-  menuLoad.slot === 'VerifySlot' && menuLoad.dialogGone === true &&
+  menuLoad.slot === true && menuLoad.dialogGone === true &&
   // handle_death on party-death.xml: the real definition, its three buttons,
   // no way out of it, and the C++'s loop — cancelling Restore re-asks.
   death !== null && death.hasLoad && death.hasNew && death.hasQuit &&

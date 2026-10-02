@@ -1,20 +1,20 @@
 /**
- * A series as a zip — what a player downloads to move a whole game's history,
- * and what uploading one turns back into a series. Inside: `series.json` (the
+ * A tree as a zip — what a player downloads to move a whole game's history,
+ * and what uploading one turns back into a tree. Inside: `tree.json` (the
  * tree), one `NNNN.exg` per snapshot, and `NNNN.png` for each thumbnail. Every
  * `.exg` is a real save the desktop build opens, so the zip is also just a
- * folder of saves; one without a `series.json` imports as a straight line of
+ * folder of saves; one without a `tree.json` imports as a straight line of
  * snapshots in the order they were played.
  */
 
 import { unzipSync, zipSync } from 'fflate';
 import { SavePreview, readSavePreview } from '../fileio/saveIo';
-import { ImportedNode, SeriesInfo, SnapInfo } from './saveStore';
+import { ImportedNode, TreeInfo, SnapInfo } from './saveStore';
 import { SnapKind } from './saveRetention';
 
 const KINDS: readonly SnapKind[] = ['auto', 'milestone', 'manual'];
 
-interface SeriesJson {
+interface TreeJson {
   version: 1;
   name: string;
   scenarioId: string;
@@ -31,14 +31,14 @@ export function isZip(data: Uint8Array): boolean {
   return data.length > 4 && data[0] === 0x50 && data[1] === 0x4b && data[2] === 0x03 && data[3] === 0x04;
 }
 
-export function seriesToZip(
-  series: Pick<SeriesInfo, 'name' | 'scenarioId' | 'head'>,
+export function treeToZip(
+  tree: Pick<TreeInfo, 'name' | 'scenarioId' | 'head'>,
   snaps: readonly SnapInfo[],
   blobs: ReadonlyMap<number, Uint8Array>,
 ): Uint8Array {
   const files: Record<string, Uint8Array | [Uint8Array, { level: 0 }]> = {};
-  const json: SeriesJson = {
-    version: 1, name: series.name, scenarioId: series.scenarioId, head: series.head, nodes: [],
+  const json: TreeJson = {
+    version: 1, name: tree.name, scenarioId: tree.scenarioId, head: tree.head, nodes: [],
   };
   for (const s of snaps) {
     const data = blobs.get(s.seq);
@@ -46,7 +46,7 @@ export function seriesToZip(
     const file = `${pad(s.seq)}.exg`;
     // Already gzipped, and a PNG/WebP already compressed: store, don't deflate again.
     files[file] = [data, { level: 0 }];
-    const node: SeriesJson['nodes'][number] = {
+    const node: TreeJson['nodes'][number] = {
       seq: s.seq, parent: s.parent, kind: s.kind, reason: s.reason, place: s.place, savedAt: s.savedAt, file,
     };
     if (s.thumb) {
@@ -55,11 +55,11 @@ export function seriesToZip(
     }
     json.nodes.push(node);
   }
-  files['series.json'] = new TextEncoder().encode(JSON.stringify(json, null, 1));
+  files['tree.json'] = new TextEncoder().encode(JSON.stringify(json, null, 1));
   return zipSync(files);
 }
 
-export interface ParsedSeries {
+export interface ParsedTree {
   name: string;
   scenarioId: string;
   head: number;
@@ -69,7 +69,7 @@ export interface ParsedSeries {
 }
 
 /** Null if the bytes are not a zip or hold no saves at all. */
-export function seriesFromZip(data: Uint8Array, fallbackName: string): ParsedSeries | null {
+export function treeFromZip(data: Uint8Array, fallbackName: string): ParsedTree | null {
   let entries: Record<string, Uint8Array>;
   try {
     entries = unzipSync(data);
@@ -81,10 +81,11 @@ export function seriesFromZip(data: Uint8Array, fallbackName: string): ParsedSer
     try { return readSavePreview(bytes); } catch { skipped++; return null; }
   };
 
-  const jsonBytes = entries['series.json'];
+  // `series.json` is what a tree's zip held when trees were called series.
+  const jsonBytes = entries['tree.json'] ?? entries['series.json'];
   if (jsonBytes !== undefined) {
-    let json: SeriesJson | null = null;
-    try { json = JSON.parse(new TextDecoder().decode(jsonBytes)) as SeriesJson; } catch { json = null; }
+    let json: TreeJson | null = null;
+    try { json = JSON.parse(new TextDecoder().decode(jsonBytes)) as TreeJson; } catch { json = null; }
     if (json !== null && Array.isArray(json.nodes)) {
       const nodes: ImportedNode[] = [];
       for (const n of json.nodes) {
@@ -116,7 +117,7 @@ export function seriesFromZip(data: Uint8Array, fallbackName: string): ParsedSer
     }
   }
 
-  // No (usable) series.json: every `.exg` inside, in the order it was played.
+  // No (usable) tree.json: every `.exg` inside, in the order it was played.
   const found: { bytes: Uint8Array; preview: SavePreview }[] = [];
   for (const [name, bytes] of Object.entries(entries)) {
     if (!/\.(exg|sav)$/i.test(name) || /(^|\/)__MACOSX\//.test(name)) continue;

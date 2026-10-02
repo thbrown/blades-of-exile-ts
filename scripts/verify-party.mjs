@@ -69,6 +69,8 @@ await page.screenshot({ path: `${SHOTS}/p3b-intro.png` });
 await page.keyboard.press('Enter');
 await page.waitForTimeout(800);
 check('the game has a URL of its own', new URL(page.url()).searchParams.get('play') === 'valleydy', page.url());
+await page.evaluate(() => window.__scheduler.settled());
+check('a new game is saved as it starts', await page.evaluate(() => window.__univ.treeId !== null));
 
 // Reload goes back into the game where it was, not to the main menu.
 for (const key of ['ArrowDown', 'ArrowDown', 'ArrowRight']) {
@@ -98,7 +100,7 @@ await page.evaluate(async () => {
   const io = await import('/src/fileio/saveIo.ts');
   const { captureSaveThumb } = await import('/src/render/preview.ts');
   const bytes = window.__saveGame();
-  await store.createSeries('Party test', {
+  await store.createTree('Party test', {
     data: bytes, preview: io.readSavePreview(bytes), kind: 'manual', reason: 'Test',
     thumb: await captureSaveThumb(document.querySelector('canvas')),
   });
@@ -115,16 +117,19 @@ await inGame();
 await page.waitForTimeout(800);
 check('Continue picks up the save', await page.evaluate(async () => {
   const store = await import('/src/platform/saveStore.ts');
-  return (await store.getSeries(window.__univ.seriesId))?.name === 'Party test';
+  return (await store.getTree(window.__univ.treeId))?.name === 'Party test';
 }));
 
-// File › Main Menu, confirmed, goes there too.
+// File › Main Menu goes there too, with no question: the game is saved first.
+await page.evaluate(() => { window.__univ.party.gold = 999; });
 await page.locator('#game-menu-bar .menu-item', { hasText: 'File' }).first().click();
 await page.locator('#game-menu-bar .dropdown li', { hasText: 'Main Menu' }).first().click();
-await dialogUp('okay');
-await page.keyboard.press('Enter');
 await page.waitForSelector('.startup-party li', { timeout: 30000 });
 check('File › Main Menu returns to the main menu', true);
+check('having saved the game on the way', await page.evaluate(async () => {
+  const store = await import('/src/platform/saveStore.ts');
+  return (await store.listTrees()).find((t) => t.name === 'Party test')?.cover.preview.gold === 999;
+}));
 await page.click('.startup-card[data-id="valleydy"]');
 await inGame();
 await introUp();

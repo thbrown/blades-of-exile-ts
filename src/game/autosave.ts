@@ -1,17 +1,18 @@
 /**
  * `try_auto_save` (boe.fileio.cpp:520) and `check_autosave_trigger` (:513) —
- * redesigned as a save *series* (`platform/saveStore.ts`), not the C++'s ring of
+ * redesigned as a save *tree* (`platform/saveStore.ts`), not the C++'s ring of
  * five files. Recorded in `DIVERGENCES.md`.
  *
- * The game saves itself at six named moments, which are the series'
+ * The game saves itself at six named moments, which are the tree's
  * **milestones**. Each is a separate preference, `Autosave_<reason>`, on top of
  * the master `Autosave` switch — so a player can keep the town-entry autosave
  * and turn off the one that fires every time the party eats. Five default on;
  * **Eat defaults off**, because it happens far more often than the rest.
  *
- * On top of those, a **tick** saves every `Autosave_Every`
- * (default 10) moves, so a long stretch with no milestone still leaves a trail.
- * Older saves thin out (`saveRetention.ts`), so the cost is bounded.
+ * On top of those, a **tick** saves every `Autosave_Every` moves — by default
+ * every one, so closing the tab, or going to the main menu, never loses a
+ * move. Older saves thin out (`saveRetention.ts`), so the cost is bounded,
+ * and a move that changed nothing isn't written at all (`saveScheduler.ts`).
  *
  * Like `setPrintResult` and `setLivingSound` this is a module-level hook: the
  * call sites are deep inside `increase_age`, `start_town_mode` and
@@ -39,8 +40,8 @@ export const AUTOSAVE_TRIGGER_DEFAULTS: Record<AutosaveReason, boolean> = {
   Eat: false,
 };
 
-/** A save every this many turns of game time, by default. */
-export const AUTOSAVE_EVERY_DEFAULT = 10;
+/** A save every this many moves, by default. */
+export const AUTOSAVE_EVERY_DEFAULT = 1;
 
 /** The most one game's saves may take up, in megabytes, by default. */
 export const AUTOSAVE_BUDGET_MB_DEFAULT = 10;
@@ -55,7 +56,7 @@ export interface AutosavePrefs {
   triggers: Partial<Record<AutosaveReason, boolean>>;
   /** The tick: save every this many turns of game time; 0 turns it off. */
   every: number;
-  /** The most one series may take up, in MB. */
+  /** The most one tree may take up, in MB. */
   budgetMb: number;
 }
 

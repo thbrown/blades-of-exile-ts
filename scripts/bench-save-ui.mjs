@@ -59,8 +59,8 @@ async function run(every) {
     const store = await import('/src/platform/saveStore.ts');
     const f = [...window.__frames].sort((a, b) => a - b);
     return {
-      snaps: (await store.listSnaps(window.__univ.seriesId)).length,
-      bytes: (await store.getSeries(window.__univ.seriesId)).bytes,
+      snaps: (await store.listSnaps(window.__univ.treeId)).length,
+      bytes: (await store.getTree(window.__univ.treeId)).bytes,
       longTasks: window.__long.length, longest: Math.max(0, ...window.__long),
       frames: f.length, p95Frame: f[Math.floor(f.length * 0.95)], worstFrame: f[f.length - 1],
     };

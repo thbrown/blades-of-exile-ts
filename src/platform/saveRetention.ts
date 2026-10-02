@@ -1,7 +1,7 @@
 /**
- * Which snapshots of a save series to keep — pure, so it is tested headless.
+ * Which snapshots of a save tree to keep — pure, so it is tested headless.
  *
- * A series is a *tree*: every snapshot has a parent (the root has none), and
+ * A game's saves are a *tree*: every snapshot has a parent (the root has none), and
  * restoring an old one then playing on grows a second child under it. Saving
  * happens every few moves, so the history has to thin out with age or it would
  * eat the browser's storage; but it must stay possible to get back to the
@@ -14,7 +14,7 @@
  * **game time** (`party.age`, 3700 to a day), because wall-clock gaps mean
  * nothing — a week away from the game is not a week of the game.
  *
- * Never deleted: the root (the series' identity), the head (where the live game
+ * Never deleted: the root (the tree's identity), the head (where the live game
  * is), every leaf (a branch's tip — deleting one would lose a branch outright),
  * every fork point, and manual saves, which are the player's own.
  */
@@ -48,7 +48,7 @@ export const RETENTION = {
   farGrid: 7 * DAY,
   /** Milestones are all kept this close to the head. */
   milestoneKeepAll: 2 * DAY,
-  /** Default per-series budget. */
+  /** Default per-tree budget. */
   budgetBytes: 10 * 1024 * 1024,
 };
 

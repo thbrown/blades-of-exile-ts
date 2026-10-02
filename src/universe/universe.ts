@@ -57,13 +57,13 @@ export class Universe {
   /** Scrolling text pane contents, oldest first. */
   transcript: string[] = [];
   /**
-   * `cUniverse::file`, redesigned: the save *series* this game is written into
+   * `cUniverse::file`, redesigned: the save *tree* this game is written into
    * (`platform/saveStore.ts`), null until its first save. Where the C++ names a
-   * file and rotates five autosaves beside it, a series holds every autosave
+   * file and rotates five autosaves beside it, a tree holds every autosave
    * of the game as a tree, and a load picks the snapshot the live game
    * continues from.
    */
-  seriesId: string | null = null;
+  treeId: string | null = null;
   /**
    * `cUniverse::debug_mode` — the shift-D toggle that unlocks the debug keys.
    * Not saved.
