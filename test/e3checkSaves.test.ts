@@ -312,6 +312,11 @@ describe.skipIf(!dir)('saves for E3-CHECK-IN-ORIGINAL.md', () => {
         + 'kill Zkal (the Lich) and walk back through the tunnels: do new undead appear?',
       make: async (q) => { scen.towns[70]!.canFind = true; await besideTown(q, 70); },
     },
+    {
+      file: 'Q27.SAV', question: '#27, when Colchis\'s slimes first notice you',
+      todo: 'The party has never seen a slime. Step south into Colchis by its north gate, read "This is very odd...", then take one step. Does "Monster saw you!" come before the step or after? Reload and try again a few times.',
+      make: async (q) => { await q.outdoors(3, 9, 10, 29); },
+    },
   ];
 
   it('makes every save, and each loads back here to the same place', async () => {

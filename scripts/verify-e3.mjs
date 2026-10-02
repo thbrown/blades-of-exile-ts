@@ -433,9 +433,14 @@ const orb = await page.evaluate(async () => {
   s.univ.party.specItems.add(6);
   s.debugLeaveTown();
   s.positionParty(6, 2, 27, 10);
+  const from = s.univ.transcript.length;
   await s.useSpecItem(6);
+  // The orb hurts everyone it lifts, and the arrow keys are dropped while the
+  // damage is still playing. How long that takes is the dice's, and the dice
+  // are seeded off the clock now, so wait for it rather than for a fixed time.
+  await s.settled();
   window.__redraw?.();
-  return { flight: s.univ.party.partyStatus[1], said: s.univ.transcript.slice(-1)[0] };
+  return { flight: s.univ.party.partyStatus[1], said: s.univ.transcript[from] };
 });
 for (let i = 0; i < 3; i++) {
   await page.keyboard.press('ArrowRight');

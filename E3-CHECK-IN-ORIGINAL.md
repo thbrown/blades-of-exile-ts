@@ -11,7 +11,7 @@ Coordinates are town squares (x, y), as the port's debug panel
 
 **Saved games for the original** (2026-09-30): `E3_CHECK_SAVES=e3data/check-saves
 npx vitest run test/e3checkSaves.test.ts` writes one `exile3.sav` per
-question, `Q01.SAV` to `Q25.SAV` (#3 has ten, `Q03A`–`Q03J`; #2 shares `Q01`), and a
+question, `Q01.SAV` to `Q27.SAV` (#3 has ten, `Q03A`–`Q03J`; #2 shares `Q01`; #26 needs none), and a
 `README.TXT` saying what each holds and where to walk. Each has a strong
 party outdoors near the place, with the question's flags and items set.
 Add a recipe there when adding a question. (`File > Export as Exile III
@@ -362,6 +362,24 @@ quest steps.
 - **Question:** how long does it take? What is behind the picture? Do the
   captions look like the port's? And at launch: are the logo (3 s) and the
   adventurers (5 s) on black, the logo a little above centre?
+
+### 27. Colchis: when do the slimes first notice you? (2026-10-01)
+
+- **Where:** Colchis (town 125), walked into from the world by its
+  **north** gate: outdoors (10,29) of zone (3,9), stepping south. Use a
+  party that has never seen a slime, so "This is very odd..." comes up.
+- **Do:** walk in, read the message, then take one step. Note whether
+  "Monster saw you!" (and the growl) comes on the move that entered the
+  town or only after the step. Try it four or five times from the same
+  save.
+- **The port:** the message comes up on arrival, as it does in E3, and the
+  monsters then get a turn on that same move. The disassembly says E3 does
+  the same (`1010:2108` sets `did_something` for the outdoor move, and
+  entering the town at `1010:22ba` clears only `need_redraw`), and whether
+  one of them notices you is a d100 roll (`r1 < 50`), so "Monster saw you!"
+  should come on arrival in some tries and only after the step in others.
+- **Question:** does it ever come on the entering move? If it never does,
+  E3's monsters don't act on that move, and the port needs to know why.
 
 ## Waiting on a ruling (already written up elsewhere)
 

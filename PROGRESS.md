@@ -12,6 +12,8 @@
 > this port follows.
 
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
+  The dice are seeded off the clock at each load; `?seed=N` pins them (the
+  console prints the seed in use). See DIVERGENCES.md #45.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-13** that is
   **1,231,440 matching draws, 51 of 87 files agreeing all the way**, and
@@ -1610,6 +1612,9 @@ Notes for M2 implementer:
 
 ## Findings / gotchas log
 
+- (2026-10-01) **The live game's dice are seeded off the clock now, so a browser check that depends on a roll is flaky.** `verify-e3.mjs`'s orb flight pressed arrows a fixed 300ms after Use, and the orb's rolled damage sometimes outlasted that and swallowed the keys. Wait on `session.settled()`, or pin `?seed=`.
+- (2026-10-01) **A ported function's `run_a_missile` calls are easy to lose, and nothing notices.** They spend no draws while the monsters are going (`drawTextBar`'s `monstersGoing` gate), so the corpus never complains; only a play-tester sees that a slime's Spark never crossed the screen. `monst_cast_mage`/`monst_cast_priest` had lost all 24 of theirs. Grep the C++ function for `run_a_missile` when porting one.
+- (2026-10-01) **A play-test difference that depends on where you stand isn't a dice difference.** Colchis's "This is very odd..." was on time from the south and west gates and a step late from the north one. Drive every entrance (`positionParty` + a real key press) before deciding a report doesn't reproduce.
 - (2026-10-01) **Ghidra's decompile of E3's movie script `3148` is fiction in places**: it shows a skip-the-walking flag (`local_b`) set to `'\x10'`, `'3'`, `'5'`, but `[bp - 9]` is written once, to 0, in the whole function; it also mislabels the jump table's cases. Read the movies from `nedis.py 1098:3148` and its printed jump table only. Also: a `?scenario=` link starts the game before `main.ts` installs `onScenarioIntro`, so it never shows intros or the E3 movie; a UI check of them has to come in through the startup screen (`verify-e3.mjs`'s last section).
 - (2026-10-01) **Editing `src/` while a `verify-*.mjs` run is going makes vite reload the page under it**, and the run then times out somewhere unrelated (a touch-dialog tap, "Loading valleydy…" in the shot). Finish the edits, then run the checks.
 - (2026-09-25) **A vehicle number in a `.map` file resizes the scenario's list to it — down as well as up** (`loadTownMapData`, OBoE's too), so a later town naming a lower number deletes every vehicle above it. Number them in load order (town, x, y). E3's converter does (`vehicleNumbers`).
@@ -15950,3 +15955,60 @@ The user played `Q01.SAV` (Colchis). Their list, and what each was:
 
 All checks pass: 1,611 tests, both sweeps, verify-screen, verify-party and
 verify-e3.
+
+### Play-test fixes: monster spell missiles, and Colchis's first sighting (2026-10-01)
+
+Two notes from play-testing Exile III.
+
+**Monster spells drew no projectile.** The original (1997 COMBAT.CPP, read
+from OBoE's first svn import, `osx/combat.c`) and OBoE both open every aimed
+arm of `monst_cast_mage` and `monst_cast_priest` with `run_a_missile(l, …, 80)`:
+fifteen mage arms, nine priest. The port had none of them, so a slime's
+Spark or Flame simply landed. Now every arm throws its missile with the C++'s
+type, path and sound, from `l` (the second column of a wide caster facing
+north or east, as breath does), so each also gets its launch sound and 1997's
+sound hold. The frames cost no draws (`monstersGoing`), but the missile still
+moves `center`, which `party_can_see` reads, so the corpus was re-measured:
+**unchanged**: 50 of 87 agreeing all the way and 1,170,604 matching draws,
+before and after, file for file. (Measured against a Linux build of the
+oracle, which reads a little below the macOS figure at the top of this file:
+51 and 1,231,440. Compare like with like.)
+Tests: `monsterSpells.test.ts`, "a monster's spell flies".
+
+**Colchis's slime sighting came a step late.** E3 puts a sighting up in the
+middle of `draw_monsters` (`FUN_1060_032d` → `FUN_1060_0a1e`). OBoE's
+`play_ambient_sound` only queues the `see_spec`, for the tail of the next
+action. Under `monster-sightings` = `exile3` the town now sweeps as E3 draws
+(`GameSession.seeMonstersE3`, which was `seeMonstersInCombat`): ahead of each
+town turn's monsters, and again after them for the redraw at the end of E3's
+`handle_action` (1010:3a08). `check_if_monst_seen` still rolls its ambient
+sound but leaves the sighting to the sweep. Driven in Chromium on all three
+of Colchis's gates. From the south and west a slime is in sight on arrival and
+both builds were on time. From the **north** none is, one walks into view
+during the monsters' turn, and the old build held the message until the
+party's next step; this build puts it up as the town appears. Test:
+`e3convert.test.ts`, "says so as the party walks into Colchis".
+
+- *Not changed: the growl.* "Monster saw you!" on the entering move rather
+  than a step later is the notice roll's d100. E3 also gives the monsters a
+  turn on that move. In its `handle_action`, `[bp-0xb]` is `did_something`
+  (set with `need_redraw`, `[bp-0xa]`, on a successful outdoor move at
+  1010:2108) and entering a town (1010:22ba) clears only `need_redraw`, as
+  BoE does. `E3-CHECK-IN-ORIGINAL.md` #27 asks the original, with a save
+  (`Q27.SAV`).
+- *Tooling:* `nedis.py` ran in a cloud container after `pip install
+  capstone`, with the EXE from the committed installer. Building
+  `tools/cppharness` on Linux needed `libboost-dev`, and Apple's libc++
+  includes things libstdc++ doesn't: forcing `-include algorithm`, `string`,
+  `iterator` and similar into `DEFS` builds it. That was done in a scratch
+  copy of `build.sh`; the script itself is unchanged.
+
+**The dice now start from the clock (2026-10-01).** Asked while checking the
+growl: does the same save give the same roll here and in Exile III? No, for
+three reasons: a save holds no seed, E3's generator is Borland's `rand()`
+seeded from the clock at launch, and the call orders differ. Finding that
+showed the port seeded nothing, so every page load replayed mt19937's default
+stream. It now seeds at load from `Date.now()`, or from `?seed=N`
+(DIVERGENCES.md #45). Tests: `rng.test.ts`, "the launch seed". The corpus
+doesn't pass through `main.ts`, so it's untouched.
+

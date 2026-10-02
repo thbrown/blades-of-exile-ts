@@ -818,13 +818,16 @@ export class GameSession {
     // on to the PC behind her.
     if (isCombat(this.mode) && this.mode !== GameMode.LOOK_COMBAT) {
       this.playAmbientSound();
-      await this.seeMonstersInCombat();
+      await this.seeMonstersE3();
       // The C++'s own guard (:1946): a wiped party ends the fight instead of
       // stepping it. `checkGameOver` in the caller's `finally` is this port's
       // end of that path.
       if (this.univ.party.isAlive()) this.monsterActionsCombat();
       return;
     }
+    // Exile III's sightings, at the draw that comes before this turn — which,
+    // on the move that enters a town, is the town's first (see `seeMonstersE3`).
+    if (this.mode === GameMode.TOWN) await this.seeMonstersE3();
     // handle_monster_actions opens with draw_map and play_ambient_sound
     // (boe.actions.cpp:1937), *before* increase_age. The sound is not the point
     // — the draws it makes are, and they come first in the turn.
@@ -878,6 +881,9 @@ export class GameSession {
         if (this.univ.rng.getRan(1, 1, Math.max(2, 160 - difficulty + lessWm)) === 2) {
           createWandMonst(this);
         }
+        // The redraw at the end of E3's `handle_action` (1010:3a08): whoever
+        // the monsters' turn brought into view is seen now, not next action.
+        if (this.mode === GameMode.TOWN) await this.seeMonstersE3();
         this.checkGameOver();
       });
       return;
@@ -932,7 +938,7 @@ export class GameSession {
     // last line, and the same call `debug_fight_encounter` makes.
     setUpCombat(this);
     this.onRedraw?.();
-    await this.seeMonstersInCombat();
+    await this.seeMonstersE3();
     return true;
   }
 
@@ -5232,7 +5238,10 @@ export class GameSession {
    */
   private checkIfMonstSeen(monstNum: number, at: Location): void {
     const { party } = this.univ;
-    if (monstNum < 10000 && !party.mSeen.has(monstNum)) {
+    // Under Exile III's sightings `seeMonstersE3` does this half, at once,
+    // rather than queueing it for the end of the next action.
+    const e3 = this.univ.scenario.featureFlags['monster-sightings'] === 'exile3';
+    if (!e3 && monstNum < 10000 && !party.mSeen.has(monstNum)) {
       party.mSeen.add(monstNum);
       // play_see_monster_str (boe.graphutil.cpp:213) — no draw, just the queue.
       const seeSpec = this.univ.scenario.scenMonsters[monstNum]?.seeSpec ?? -1;
@@ -5248,16 +5257,24 @@ export class GameSession {
 
   /**
    * Exile III counts a creature as seen whenever it is drawn, in combat as in
-   * town (`FUN_1060_032d`); OBoE's sweep is the town one below. With the
-   * scenario flag `monster-sightings` = `exile3` (an blades-of-exile-ts extension) a
-   * fight sweeps too, after each action and as an outdoor fight begins. It
-   * fires `see_spec` as `check_if_monst_seen` does, but rolls no ambient
+   * town (`FUN_1060_032d`), and its `FUN_1060_0a1e` puts the message up there
+   * and then, in the middle of the draw. OBoE's sweep is the town one below,
+   * and it only *queues* the special, which the tail of the **next** action
+   * runs. With the scenario flag `monster-sightings` = `exile3` (a
+   * blades-of-exile-ts extension) this replaces that half of it, and runs:
+   * - in town, ahead of each turn's monsters and again after them — the draw
+   *   on arrival and the redraw at the end of `handle_action`. So walking into
+   *   Colchis says "This is very odd..." as the town appears, where the
+   *   queue held it back until the party's next step;
+   * - in a fight, after each action and as an outdoor fight begins.
+   *
+   * It fires `see_spec` as `check_if_monst_seen` does, but rolls no ambient
    * sound, so it makes no draws.
    */
-  async seeMonstersInCombat(): Promise<void> {
+  async seeMonstersE3(): Promise<void> {
     if (this.univ.scenario.featureFlags['monster-sightings'] !== 'exile3') return;
     const town = this.univ.town;
-    if (!town) return;
+    if (!town || !(this.mode === GameMode.TOWN || isCombat(this.mode))) return;
     for (const m of town.monsters) {
       if (!m.isAlive || m.number >= 10000 || this.univ.party.mSeen.has(m.number)) continue;
       if (!this.partyCanSeeMonst(m)) continue;

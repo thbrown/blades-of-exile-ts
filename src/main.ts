@@ -81,7 +81,7 @@ import { Boom, setBoomSink } from './game/booms';
 import { FocusEvent, animPending, setAnimWaiter, setFocusSink } from './game/anim';
 import { Missile, setMissileSink } from './game/missileAnim';
 import { pickNextPc } from './game/combat';
-import { GameRng } from './core/rng';
+import { GameRng, launchSeed, seedForLaunch } from './core/rng';
 import { DialogHost, type TouchChoice, type TouchView } from './dialogs/dialog';
 import { STRING_TABLES, getStr, loadStringTables, overrideStrings, stringCount } from './data/strings';
 import { Colours } from './render/colours';
@@ -629,7 +629,13 @@ async function main(): Promise<void> {
     for (const n of EXILE3_STRING_OVERRIDES) overrideStrings(n, await src.getText(`strings/${n}.txt`));
   }
 
-  const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
+  // A fresh roll every launch, as Exile III's `srand` at startup gives it, or
+  // the one `?seed=` pins. Said in the console so a play-test can be rerun.
+  const rng = new GameRng();
+  const seed = launchSeed(window.location.search);
+  seedForLaunch(rng, seed);
+  console.info(`blades-of-exile-ts: dice seed ${seed} (add ?seed=${seed} to the URL to replay it)`);
+  const univ = new Universe(scen, rng, PartyPreset.DEFAULT);
   const session = new GameSession(univ);
   const sound = new SoundPlayer();
   // The scenario's own sounds. A package lists its files; a bundled scenario

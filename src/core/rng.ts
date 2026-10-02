@@ -108,6 +108,12 @@ export class GameRng {
     this.seeded = true;
   }
 
+  /** Reseed the unique stream, which nothing replays. */
+  seedUnique(seed: number): void {
+    this.unique.seed(seed);
+    this.uniqueDraws = 0;
+  }
+
   /** Verbatim port of get_ran(times, min, max, use_unique_ran). */
   getRan(times: number, min: number, max: number, useUnique = false): number {
     if (max < min) max = min;
@@ -126,7 +132,7 @@ export class GameRng {
       }
       toRet = toInt16(toRet + min + (store % (max - min + 1)));
     }
-    // **The game stream only** — `unique` is seeded off the clock and is
+    // **The game stream only** — `unique` is never seeded by a replay and is
     // deliberately outside the replay's determinism, so tracing it interleaves
     // numbers with no counterpart on the other side, which reads as "the
     // streams diverge on the first draw" when they in fact agree.
@@ -153,3 +159,36 @@ export class GameRng {
    */
   private seeded = false;
 }
+
+/**
+ * The seed a live game starts from: `?seed=N` if the page was given one, else
+ * the clock.
+ *
+ * Exile III seeds its one generator **once, at launch**, from the time:
+ * `srand(GetCurrentTime())` (10e8:0190), milliseconds since Windows started,
+ * of which `srand` keeps the low 16 bits. Loading a saved game doesn't reseed,
+ * and a save holds no seed, so the same save rolls differently each time the
+ * game is run. OBoE seeds `game_rand` from `time(nullptr)` at startup and
+ * never seeds `unique_rand` at all. Until 2026-10-01 this port seeded neither,
+ * so every page load replayed the same dice from mt19937's default seed.
+ *
+ * Not the original's numbers either way: Exile III's generator is Borland's
+ * `rand()` and its call order is its own (DIVERGENCES.md). What matches is
+ * that a fresh run is a fresh roll. `?seed=` is a blades-of-exile-ts addition, for
+ * play-testing: the same seed and the same moves give the same game.
+ */
+export function launchSeed(search: string, now: number = Date.now()): number {
+  const pinned = new URLSearchParams(search).get('seed');
+  if (pinned !== null && /^\d+$/.test(pinned)) return Number(pinned) >>> 0;
+  return now >>> 0;
+}
+
+/**
+ * Seed both streams for a live game. The unique stream gets its own value off
+ * the same seed, so a pinned seed pins it too.
+ */
+export function seedForLaunch(rng: GameRng, seed: number): void {
+  rng.seedGame(seed);
+  rng.seedUnique((seed ^ 0x9e3779b9) >>> 0);
+}
+

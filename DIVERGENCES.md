@@ -961,6 +961,33 @@ in the port and nothing in E3. BoE scenarios keep OBoE's line.
 in Fort Emergence silently (the user checked), where `put_party_in_scen`
 reaches `start_town_mode` and its entry sound in both 1997 and OBoE.
 
+### 45. Where the dice start: the clock at launch (2026-10-01)
+
+**DECIDED: the original's, with an addition.** A live game seeds once, as
+the page loads, from the clock (`launchSeed`/`seedForLaunch`,
+`src/core/rng.ts`), and `?seed=N` pins it. Loading a saved game doesn't
+reseed.
+- **Exile III** seeds its one generator once, at launch:
+  `srand(GetCurrentTime())` (10e8:0190), milliseconds since Windows started,
+  of which `srand` keeps 16 bits. A save holds no seed, so the same save
+  rolls differently on every run. Its generator is Borland's `rand()`
+  (`1000:0fad`: `seed = seed * 0x015a4e35 + 1`, the top 15 bits), which
+  `get_ran` (`FUN_1048_004f`) calls once per die.
+- **OBoE** seeds `game_rand` from `time(nullptr)` at startup and never seeds
+  `unique_rand`.
+- **This port** seeded neither until now, so every page load started both
+  streams at mt19937's default seed (5489), and a play-tester who reloaded
+  to retry a fight got the same fight. A player could tell, so this follows
+  the original (the rule above). Both streams are seeded, the unique one from
+  a value derived from the same seed, so `?seed=` pins everything.
+- **Not matched, and not matchable**: the numbers themselves. The generator
+  is mt19937 and the call order is OBoE's (#1 and the rule above), so a save
+  loaded here and in Exile III rolls differently even at the same seed.
+  Replays carry their own `<srand>` and are untouched: the corpus doesn't
+  pass through `main.ts`.
+- `?seed=` is a blades-of-exile-ts addition. The seed is printed to the console
+  ("dice seed N") on every load, so a run worth repeating can be.
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**
