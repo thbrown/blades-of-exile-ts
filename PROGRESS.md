@@ -16047,7 +16047,8 @@ The user's list, and what each turned out to be:
       active, or changing the acting PC in combat, as the UI path used to).
 - Touch overlay (none of it in the original):
   - [x] Talk's presets are one column, not pairs, Done last after a rule;
-        they shrink to fit the pad's height rather than scroll.
+        like every strip, they keep their height and scroll when they don't
+        fit (shrinking them to fit was tried and dropped, 2026-10-01).
   - [x] Every dialog strip's list is centred in the height
         (`justify-content: safe center`).
   - [x] Get: Done ends the pile on the right, after a rule.
