@@ -1,5 +1,5 @@
 /**
- * When and how the game writes itself into its save series, without the player
+ * When and how the game writes itself into its save tree, without the player
  * ever feeling it.
  *
  * `autosave.ts` only *notes* that a save is wanted — from inside `increase_age`,
@@ -24,7 +24,7 @@
 
 import { gzip, gzipSync } from 'fflate';
 import { SavePreview } from '../fileio/saveIo';
-import { AppendResult, SnapInput, appendSnapshot, createSeries } from './saveStore';
+import { AppendResult, SnapInput, appendSnapshot, createTree } from './saveStore';
 import { SnapKind } from './saveRetention';
 
 /** What the host hands over for one save: the cheap, must-be-synchronous half. */
@@ -43,13 +43,13 @@ export interface SchedulerDeps {
   ready(): boolean;
   /** Serialise the game now (synchronously) — null if there is nothing to save. */
   capture(): Capture | null;
-  seriesId(): string | null;
-  setSeriesId(id: string): void;
-  /** The name a new series is given. */
-  seriesName(): string;
+  treeId(): string | null;
+  setTreeId(id: string): void;
+  /** The name a new tree is given. */
+  treeName(): string;
   budgetBytes(): number;
   /** A save landed. */
-  saved?(result: { seriesId: string; seq: number; kind: SnapKind; reason: string; overBudget: boolean }): void;
+  saved?(result: { treeId: string; seq: number; kind: SnapKind; reason: string; overBudget: boolean }): void;
   failed?(err: unknown): void;
   /** The saves are costing too much main-thread time; the host should space them out. */
   slow?(p95Ms: number): void;
@@ -83,7 +83,7 @@ export class SaveScheduler {
   private pending: { kind: SnapKind; reason: string } | null = null;
   private armed = false;
   private writing: Promise<void> | null = null;
-  private last: { seriesId: string; raw: Uint8Array } | null = null;
+  private last: { treeId: string; raw: Uint8Array } | null = null;
   private costs: number[] = [];
 
   constructor(private readonly deps: SchedulerDeps) {}
@@ -137,6 +137,21 @@ export class SaveScheduler {
   }
 
   /**
+   * Save now, and wait for it, unless the game is unchanged since the last
+   * save — for leaving the game for the main menu, which has time to wait.
+   * Whatever was pending is folded in. Resolves with the new snapshot's seq,
+   * or null if nothing needed writing.
+   */
+  async saveIfChanged(reason: string): Promise<number | null> {
+    while (this.writing !== null) await this.writing;
+    const kind = this.pending?.kind ?? 'auto';
+    this.pending = null;
+    const job = this.write(kind, reason, false);
+    this.writing = job.then(() => undefined, () => undefined).finally(() => { this.writing = null; });
+    return job;
+  }
+
+  /**
    * Save now if the game is at a savable moment and has changed — for when the
    * page is being hidden or closed, which will not wait for a worker. gzips on
    * the main thread this once, and does not wait for the picture.
@@ -164,8 +179,8 @@ export class SaveScheduler {
     this.recordCost(now() - t0);
     if (cap === null) return null;
 
-    const existing = this.deps.seriesId();
-    if (!force && existing !== null && this.last?.seriesId === existing && sameBytes(this.last.raw, cap.raw)) {
+    const existing = this.deps.treeId();
+    if (!force && existing !== null && this.last?.treeId === existing && sameBytes(this.last.raw, cap.raw)) {
       return null;
     }
     const [data, thumb] = sync
@@ -174,19 +189,19 @@ export class SaveScheduler {
     const input: SnapInput = { data, preview: cap.preview, place: cap.place, thumb, kind, reason };
 
     let result: AppendResult | null = null;
-    let seriesId = this.deps.seriesId();
+    let treeId = this.deps.treeId();
     let seq: number;
-    if (seriesId === null) {
-      const made = await createSeries(this.deps.seriesName(), input);
-      seriesId = made.series.id;
+    if (treeId === null) {
+      const made = await createTree(this.deps.treeName(), input);
+      treeId = made.tree.id;
       seq = made.snap.seq;
-      this.deps.setSeriesId(seriesId);
+      this.deps.setTreeId(treeId);
     } else {
-      result = await appendSnapshot(seriesId, input, this.deps.budgetBytes());
+      result = await appendSnapshot(treeId, input, this.deps.budgetBytes());
       seq = result.snap.seq;
     }
-    this.last = { seriesId, raw: cap.raw };
-    this.deps.saved?.({ seriesId, seq, kind, reason, overBudget: result?.overBudget ?? false });
+    this.last = { treeId, raw: cap.raw };
+    this.deps.saved?.({ treeId, seq, kind, reason, overBudget: result?.overBudget ?? false });
     return seq;
   }
 

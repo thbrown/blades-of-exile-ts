@@ -1,5 +1,5 @@
 /**
- * The restore view: a series drawn as a tree, so a player can see where each
+ * The restore view: a tree drawn as a tree, so a player can see where each
  * save was taken and pick one to go back to.
  *
  * Nodes run left to right by in-game time and top to bottom by branch
@@ -19,7 +19,7 @@ import { SnapInfo } from './saveStore';
 import { layoutTree } from './saveTreeLayout';
 
 export interface SaveTreeOptions {
-  seriesName: string;
+  treeName: string;
   scenarioTitle: string;
   snaps: readonly SnapInfo[];
   head: number;
@@ -28,7 +28,7 @@ export interface SaveTreeOptions {
   /** Restore this save; the view closes first. */
   restore: (seq: number) => void;
   download: (seq: number) => void;
-  exportSeries?: () => void;
+  exportTree?: () => void;
   /** Delete a whole abandoned branch below `seq`; resolves with the fresh tree. */
   deleteBranch?: (seq: number) => Promise<readonly SnapInfo[]>;
   close: () => void;
@@ -129,11 +129,11 @@ export function showSaveTree(parent: HTMLElement, opts: SaveTreeOptions): { clos
   const back = h('div', 'stree-back');
   const box = h('div', 'stree');
   box.setAttribute('role', 'dialog');
-  box.setAttribute('aria-label', `Saved games: ${opts.seriesName}`);
+  box.setAttribute('aria-label', `Saved games: ${opts.treeName}`);
   back.append(box);
 
   const head = h('header');
-  head.append(h('h2', undefined, opts.seriesName), h('small', undefined, opts.scenarioTitle));
+  head.append(h('h2', undefined, opts.treeName), h('small', undefined, opts.scenarioTitle));
   const body = h('div', 'stree-body');
   const scroll = h('div', 'stree-scroll');
   const detail = h('div', 'stree-detail');
@@ -149,9 +149,9 @@ export function showSaveTree(parent: HTMLElement, opts: SaveTreeOptions): { clos
   };
   foot.append(key(KIND_COLOUR.auto, 'Autosave'), key(KIND_COLOUR.milestone, 'Milestone'),
     key(KIND_COLOUR.manual, 'Saved by you', true), h('span', 'grow'));
-  if (opts.exportSeries) {
+  if (opts.exportTree) {
     const exp = h('button', undefined, 'Export all (zip)…');
-    exp.addEventListener('click', () => { opts.exportSeries!(); });
+    exp.addEventListener('click', () => { opts.exportTree!(); });
     foot.append(exp);
   }
   const closeBtn = h('button', undefined, 'Close');
@@ -190,13 +190,14 @@ export function showSaveTree(parent: HTMLElement, opts: SaveTreeOptions): { clos
 
     const isHead = seq === opts.head;
     const hasChildren = snaps.some((n) => n.parent === seq);
-    const note = h('div', isHead || !hasChildren ? 'stree-callout plain' : 'stree-callout');
-    note.textContent = isHead
-      ? 'This is where your game is now.'
-      : hasChildren
+    // The newest save needs no note: Continue says what it does.
+    if (!isHead) {
+      const note = h('div', hasChildren ? 'stree-callout' : 'stree-callout plain');
+      note.textContent = hasChildren
         ? 'Restoring an older save starts a new branch — your current game and its later saves are kept.'
         : 'Restoring this save continues from its end of the tree.';
-    detail.append(note);
+      detail.append(note);
+    }
     const actions = h('div', 'stree-actions');
     const restore = h('button', 'primary', isHead ? 'Continue' : hasChildren ? 'Restore (new branch)' : 'Restore');
     restore.addEventListener('click', () => { opts.restore(seq); });

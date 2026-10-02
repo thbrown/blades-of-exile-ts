@@ -40,19 +40,21 @@ export interface StartupScenario {
 }
 
 /**
- * One game, as a card: a save *series*, however many snapshots it holds
- * (`platform/saveStore.ts`). Clicking it continues from the newest; the
- * buttons under it browse the older ones, export them, rename or delete.
+ * One game, as a card: a save *tree*, however many snapshots it holds
+ * (`platform/saveStore.ts`). Resume continues from the newest; a click on the
+ * card opens the tree; two icons rename and delete it.
  */
-export interface StartupSeries {
+export interface StartupTree {
   id: string;
   scenarioId: string;
   /** What the player calls the game. */
   name: string;
   /** The scenario's title, or who is in a party-only save. */
   label: string;
-  /** When, and where in the game — "Day 3 · 12 May, 14:02 · 41 saves". */
+  /** Where in the game — "Day 3 · Fort Talrus". */
   detail: string;
+  /** When, and how much — "2 Oct 2026, 14:02 · 41 saves". */
+  when: string;
   /** A picture of the terrain view at the newest save, when it has one. */
   thumb?: string;
   /** The scenario's icon, for a save with no picture. */
@@ -62,14 +64,13 @@ export interface StartupSeries {
 /** What the saved-game cards can do beyond continuing. */
 export interface StartupSaveActions {
   /**
-   * Open the restore tree for a series. Resolves with the snapshot the player
+   * Open the restore tree for a game. Resolves with the snapshot the player
    * chose to restore, or null if they closed it.
    */
-  browse: (seriesId: string) => Promise<number | null>;
-  exportZip: (seriesId: string) => Promise<void>;
-  rename: (seriesId: string, name: string) => Promise<void>;
-  remove: (seriesId: string) => Promise<void>;
-  /** Import an `.exg` or a series zip, giving the new series' id (null: cancelled or refused). */
+  browse: (treeId: string) => Promise<number | null>;
+  rename: (treeId: string, name: string) => Promise<void>;
+  remove: (treeId: string) => Promise<void>;
+  /** Import an `.exg` or a tree zip, giving the new tree's id (null: cancelled or refused). */
   importFile: () => Promise<string | null>;
 }
 
@@ -82,7 +83,7 @@ export interface StartupChoice {
    * a party-only save, which becomes the party in memory (`finish_load_party`
    * returning to the startup screen).
    */
-  series?: { id: string; seq?: number };
+  tree?: { id: string; seq?: number };
   /**
    * `make`: Make New Party, with no scenario — the party becomes the one in
    * memory. `enter`: take the party in memory into `scenarioId`
@@ -105,6 +106,14 @@ export interface StartupPc {
   picture?: HTMLCanvasElement;
 }
 
+/** The saved-game cards' two tools, drawn in the text colour. */
+const PENCIL_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">'
+  + '<path d="M11.5 1.5l3 3L5 14H2v-3z M10 3l3 3" fill="none" stroke="currentColor" stroke-width="1.5" '
+  + 'stroke-linejoin="round"/></svg>';
+const TRASH_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">'
+  + '<path d="M2 4h12 M6 4V2h4v2 M3.5 4l1 10h7l1-10 M6.5 7v4.5 M9.5 7v4.5" fill="none" stroke="currentColor" '
+  + 'stroke-width="1.5" stroke-linejoin="round"/></svg>';
+
 /** The player races (`eRace` 0-3); a PC of any other shows none. */
 /** Short, to fit a party card: "Slith" is what players call them anyway. */
 const RACE_NAMES: Record<number, string> = { 0: 'Human', 1: 'Nephilim', 2: 'Slith', 3: 'Vahnatai' };
@@ -122,7 +131,7 @@ export interface StartupParty {
   active?: {
     title: string;
     /** The newest save in that scenario, to pick up from. */
-    resume?: { scenarioId: string; seriesId: string; label: string };
+    resume?: { scenarioId: string; treeId: string; label: string };
   };
 }
 
@@ -147,7 +156,7 @@ export interface StartupOptions {
   official: readonly StartupScenario[];
   /** Scenarios the player installed; any that are library entries show as those instead. */
   added: readonly StartupScenario[];
-  series: readonly StartupSeries[];
+  tree: readonly StartupTree[];
   /** Absent when there's nowhere to keep saves (no IndexedDB). */
   saveActions?: StartupSaveActions;
   /** Absent when there's nowhere to keep a scenario (no IndexedDB). */
@@ -308,7 +317,7 @@ interface Card {
  * itself first, so the caller can get on with loading against a clean page.
  */
 export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Promise<StartupChoice> {
-  const { official, added, series, saveActions, importScenarios, library, party } = opts;
+  const { official, added, tree, saveActions, importScenarios, library, party } = opts;
   return new Promise((resolve) => {
     // The masthead sits above the card, not in it.
     installBackdrop();
@@ -371,10 +380,10 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
         }
         panel.append(list);
         if (active?.resume !== undefined) {
-          const { scenarioId, seriesId, label } = active.resume;
+          const { scenarioId, treeId, label } = active.resume;
           const resume = el('button', 'startup-party-button primary', `Continue ${active.title}`);
           resume.title = label;
-          resume.addEventListener('click', () => { choose({ scenarioId, series: { id: seriesId } }); });
+          resume.addEventListener('click', () => { choose({ scenarioId, tree: { id: treeId } }); });
           panel.append(resume);
         }
         const forget = el('button', 'startup-party-button', 'Forget Party');
@@ -391,57 +400,71 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
 
     // Saved games have a card of their own too, so continuing and starting
     // fresh read as two different choices. One card a game, however long its
-    // history: the card continues from the newest, and "Older saves…" opens
-    // the restore tree.
-    if (series.length > 0 || saveActions !== undefined) {
+    // history: Resume continues from the newest, and a click anywhere else on
+    // the card opens its tree, to pick an earlier point.
+    if (tree.length > 0 || saveActions !== undefined) {
       const savesCard = el('div', 'startup startup-saves-card');
       savesCard.append(el('h2', undefined, 'Continue a saved game'));
       const list = el('div', 'startup-list startup-cards startup-saves');
-      for (const game of series) {
-        const wrap = el('div', 'startup-save');
-        wrap.dataset['series'] = game.id;
-        const card = el('button', 'startup-choice startup-card');
-        card.dataset['series'] = game.id;
-        card.append(pictureElement(game.icon, game.thumb));
+      for (const game of tree) {
+        // Not a <button>: it holds buttons of its own.
+        const card = el('div', 'startup-choice startup-card startup-save');
+        card.dataset['tree'] = game.id;
+        card.tabIndex = 0;
+        card.setAttribute('role', 'button');
+        const picture = pictureElement(game.icon, game.thumb);
+        card.append(picture);
         const words = el('span', 'startup-words');
         const title = el('strong', undefined, game.name);
         words.append(title);
         words.append(el('span', 'startup-facts', game.label));
-        words.append(el('small', undefined, game.detail));
+        words.append(el('small', 'startup-save-line', game.detail));
+        words.append(el('small', 'startup-save-line', game.when));
         card.append(words);
+        const resume = (): void => { choose({ scenarioId: game.scenarioId, tree: { id: game.id } }); };
+        const browse = (): void => {
+          if (saveActions === undefined) { resume(); return; }
+          void saveActions.browse(game.id).then((seq) => {
+            if (seq !== null) choose({ scenarioId: game.scenarioId, tree: { id: game.id, seq } });
+          });
+        };
         // A save names its own scenario, so picking one here is also how a
         // party in a scenario other than the default gets opened at all.
-        card.addEventListener('click', () => {
-          choose({ scenarioId: game.scenarioId, series: { id: game.id } });
+        card.title = saveActions === undefined ? 'Resume this game' : 'Pick a point in this game to go back to';
+        card.addEventListener('click', browse);
+        card.addEventListener('keydown', (e) => {
+          if (e.target !== card || (e.key !== 'Enter' && e.key !== ' ')) return;
+          e.preventDefault();
+          browse();
         });
-        wrap.append(card);
+        const resumeButton = el('button', 'startup-party-button primary startup-resume', 'Resume') as HTMLButtonElement;
+        resumeButton.title = 'Carry on from the newest save';
+        resumeButton.dataset['action'] = 'resume';
+        resumeButton.addEventListener('click', (e) => { e.stopPropagation(); resume(); });
+        words.append(resumeButton);
         if (saveActions !== undefined) {
-          const row = el('div', 'startup-save-actions');
-          const button = (text: string, tip: string, run: () => void): HTMLButtonElement => {
-            const b = el('button', 'startup-party-button', text) as HTMLButtonElement;
+          const tools = el('span', 'startup-save-tools');
+          const iconButton = (icon: string, tip: string, action: string, run: () => void): void => {
+            const b = el('button', 'startup-icon-button') as HTMLButtonElement;
+            b.innerHTML = icon;
             b.title = tip;
-            b.addEventListener('click', run);
-            row.append(b);
-            return b;
+            b.setAttribute('aria-label', tip);
+            b.dataset['action'] = action;
+            b.addEventListener('click', (e) => { e.stopPropagation(); run(); });
+            tools.append(b);
           };
-          button('Older saves…', 'Pick an earlier point in this game', () => {
-            void saveActions.browse(game.id).then((seq) => {
-              if (seq !== null) choose({ scenarioId: game.scenarioId, series: { id: game.id, seq } });
-            });
-          }).dataset['action'] = 'browse';
-          button('Export', 'Download every save of this game as a zip', () => { void saveActions.exportZip(game.id); });
-          button('Rename', 'Rename this game', () => {
-            const next = window.prompt('Name this game:', game.name)?.trim();
-            if (next === undefined || next === '' || next === game.name) return;
+          iconButton(PENCIL_ICON, 'Rename this game', 'rename', () => {
+            const next = window.prompt('Name this game:', title.textContent ?? game.name)?.trim();
+            if (next === undefined || next === '' || next === title.textContent) return;
             void saveActions.rename(game.id, next).then(() => { title.textContent = next; });
           });
-          button('Delete', 'Delete this game and all its saves', () => {
-            if (!window.confirm(`Delete "${game.name}" and all its saves? This cannot be undone.`)) return;
-            void saveActions.remove(game.id).then(() => { wrap.remove(); });
+          iconButton(TRASH_ICON, 'Delete this game and all its saves', 'delete', () => {
+            if (!window.confirm(`Delete "${title.textContent ?? game.name}" and all its saves? This cannot be undone.`)) return;
+            void saveActions.remove(game.id).then(() => { card.remove(); });
           });
-          wrap.append(row);
+          picture.append(tools);
         }
-        list.append(wrap);
+        list.append(card);
       }
       if (saveActions !== undefined) {
         const add = el('button', 'startup-party-button', 'Import a saved game…');

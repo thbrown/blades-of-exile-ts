@@ -605,26 +605,57 @@
         margin: 0 0 2px;
         font-size: 13px;
       }
-      .startup-saves {
-        grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
-      }
+      /* A saved game is a card as wide as a scenario's: the picture, then
+         where and when, then Resume. A click anywhere else opens its tree. */
       .startup-save {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
+        cursor: pointer;
       }
-      .startup-save .startup-card {
+      .startup-save .startup-words {
         flex: 1 1 auto;
-        width: 100%;
+        align-self: stretch;
+        min-width: 0;
       }
-      .startup-save-actions {
+      .startup-save-line {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .startup-save .startup-resume {
+        align-self: flex-start;
+        margin-top: auto;
+        padding: 3px 14px;
+      }
+      .startup-save .startup-facts + .startup-save-line {
+        margin-top: 2px;
+      }
+      /* Rename and Delete ride on the picture's top corner. */
+      .startup-save-tools {
+        position: absolute;
+        top: 6px;
+        right: 6px;
         display: flex;
-        flex-wrap: wrap;
         gap: 4px;
       }
-      .startup-save-actions .startup-party-button {
-        padding: 3px 8px;
-        font-size: 11px;
+      .startup-icon-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        background: rgba(244, 244, 244, 0.88);
+        border: 1px solid #000;
+        border-radius: 3px;
+        color: #000;
+        cursor: pointer;
+      }
+      .startup-icon-button:hover,
+      .startup-icon-button:focus {
+        background: #fff;
+        outline: 1px solid #000;
+      }
+      .startup-icon-button[data-action='delete']:hover {
+        color: #a00;
       }
       .startup-party-button {
         font-size: 12px;

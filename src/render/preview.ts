@@ -25,7 +25,7 @@ const THUMB_W = 234;
 
 /**
  * A save's picture. Small and lossy (WebP, quality 0.6 — a browser without
- * WebP encoding quietly gives a PNG), because a series keeps a lot of these
+ * WebP encoding quietly gives a PNG), because a tree keeps a lot of these
  * inside a few megabytes. The copy off the canvas is synchronous, so the picture
  * is of *this* moment even though the encoding finishes later.
  */

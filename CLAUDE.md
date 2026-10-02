@@ -55,7 +55,7 @@ node scripts/opcode-sweep.mjs        # special-node opcodes with no case arm
 npx vite --port 5199    # then, in another shell:
 node scripts/verify-screen.mjs   # drives the real UI in Chromium, screenshots it
 node scripts/verify-party.mjs    # the party in memory, carried between scenarios
-node scripts/verify-saves.mjs    # save series: autosave ticks, the restore tree, branches, zip
+node scripts/verify-saves.mjs    # save trees: autosave ticks, the restore tree, branches, zip, E3 import
 node scripts/bench-save-ui.mjs   # what saving costs the frame rate (CHROMIUM_PATH=… for another Chromium)
 ```
 

@@ -325,7 +325,7 @@ const RACE_NAMES: Partial<Record<Race, string>> = {
  * every living PC. Returns false if the player cancels or leaves nobody.
  *
  * The C++ then asks where to save (`do_save(true)`); this port does not ask:
- * the game's first save, manual or the autosave's, starts its series.
+ * the game's first save, manual or the autosave's, starts its tree.
  */
 export async function startNewParty(host: PartyEditorHost): Promise<boolean> {
   const confirm = new XmlDialog(host.ctx, host.store, getDialogDef('new-party'));
