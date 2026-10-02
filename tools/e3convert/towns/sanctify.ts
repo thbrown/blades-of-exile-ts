@@ -52,8 +52,10 @@ const CASES: Sanctified[] = [
   // (main status 0, 1070's slot word).
   { towns: [4, 5, 6, 7], at: [[20, 14]], steps: (b) => done(b, [b.msg(0x34, 0x15), b.slayParty(0)]) },
   // The spiders' altar. E3 writes 0 to the flag it tested for 0 (10b0:6990),
-  // so it answers every time and the demon comes every time
-  // (E3-SUSPECTED-BUGS.md #18); fixed, it spends the flag as its neighbours do.
+  // so it answers every time: the message and the experience again, but the
+  // demon only once, since `bringIn` finds nobody left to bring
+  // (E3-SUSPECTED-BUGS.md #18, and seen in the original, check-in #3);
+  // fixed, it spends the flag as its neighbours do.
   {
     towns: [48], at: [[11, 15]],
     steps: (b) => [b.ifFlagEq(f(0x26c), 0, done(b, [

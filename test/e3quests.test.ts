@@ -666,6 +666,48 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       expect(q.hasSpecItem(PASS), q.tail()).toBe(true);
     });
 
+    it('The Ritual elsewhere, as the original answered (check-in #3): the spiders, Shayder, the Great Circle', async () => {
+      // The spiders' altar: the message every time (E3-SUSPECTED-BUGS.md
+      // #18), the demon only the first, as `FUN_1090_4053` finds nobody left
+      // to bring in.
+      {
+        const q = new QuestRunner(scen);
+        await q.enter(48);
+        const first = await sanctify(q, 11, 15);
+        expect(first, q.tail()).not.toContain('  Nothing happens.');
+        expect(q.creatures(/Demon/).length, q.tail()).toBe(1);
+        const xp = q.party.pcs[0]!.experience;
+        const second = await sanctify(q, 11, 15);
+        expect(second, q.tail()).not.toContain('  Nothing happens.');
+        expect(q.log.filter((l) => /easily disrupt the altar's dark energy/.test(l)).length, q.tail()).toBe(2);
+        expect(q.party.pcs[0]!.experience, q.tail()).toBeGreaterThan(xp);
+        expect(q.creatures(/Demon/).length, q.tail()).toBe(1);
+        await q.kill(/Demon/);
+        await sanctify(q, 11, 15);
+        expect(q.creatures(/Demon/).length, q.tail()).toBe(0);
+      }
+      // Shayder's Anama altar: "This was a horrible, horrible mistake", and
+      // the game is over.
+      {
+        const q = new QuestRunner(scen);
+        await q.enter(4);
+        await sanctify(q, 20, 14);
+        expect(q.log.some((l) => /horrible, horrible mistake/.test(l)), q.tail()).toBe(true);
+        expect(q.party.pcs.some((pc) => pc.isAlive), q.tail()).toBe(false);
+      }
+      // The Great Circle's altar: once. (Taking the haakai's bargain; refused,
+      // "Nothing happens." follows the fight, as in E3.)
+      {
+        const q = new QuestRunner(scen);
+        await q.enter(62);
+        q.answer(/^(OK|Yes)$/, /^(OK|Yes)$/, /^(OK|Yes)$/);
+        const first = await sanctify(q, 23, 24);
+        expect(first, q.tail()).not.toContain('  Nothing happens.');
+        expect(q.log.some((l) => /Dazed, you raise your blade/.test(l)), q.tail()).toBe(true);
+        expect(await sanctify(q, 23, 24), q.tail()).toContain('  Nothing happens.');
+      }
+    });
+
     it("Castle Troglo: the pass through the hills, the cell, Vothkaro's question, and Elhioc behind the dials", async () => {
       // Asked whether the party read his scroll, Leave, and Vothkaro won't talk.
       {

@@ -37,10 +37,10 @@ Save…` in the port writes one from any game, outdoors.)
 ### 3. Ritual of Sanctification's special squares (2026-09-30)
 
 E3's cast handler for the ritual (`FUN_10b0_682f`) has a case for each
-square below and says "Nothing happens." everywhere else. **None of these
-is ported**: in the port the ritual does nothing anywhere. For each one,
-cast the ritual on the square and note what's shown and what changes
-(a door, a creature, an item, a message):
+square below and says "Nothing happens." everywhere else. All are ported
+now (`tools/e3convert/towns/sanctify.ts`). For each one, cast the ritual
+on the square and note what's shown and what changes (a door, a creature,
+an item, a message):
 
 | Town | Square | What the code seems to do |
 |---|---|---|
@@ -57,8 +57,21 @@ cast the ritual on the square and note what's shown and what changes
 | Monastery of Madness (78) | (24,5) | a message |
 | The Great Circle (62) | (23,24) | a long script, once: it counts something across the party and ends one of two ways |
 
-Most useful: the Great Circle and the Troglo Temple, which look like
-quest steps.
+Most useful: the Troglo Temple, which looks like a quest step.
+
+**Partly answered 2026-10-01 (with `Q03D`, `Q03E` and `Q03J`), and the port
+already matched all three:**
+- **Shayder:** "This was a horrible, horrible mistake..." and the game
+  ends.
+- **The spiders:** "You cast the spell, and easily disrupt..." and a demon
+  appears. Cast again: the same message, but no demon. So the flag bug
+  repeats the message and the experience, not the demon, because
+  `FUN_1090_4053` only brings in creatures that are still absent.
+  E3-SUSPECTED-BUGS.md #18 is corrected. Test: `e3quests.test.ts`, "The
+  Ritual elsewhere, as the original answered".
+- **The Great Circle:** "Dazed, you raise your blade..." It doesn't repeat.
+
+Still open: the other nine squares.
 
 ### 4. The Slime Pit's pedestal before any button is pressed (2026-09-30)
 
@@ -69,18 +82,6 @@ quest steps.
 - **The port:** it's open. The pedestal's "last pressed" starts at 0,
   which is the top-right button's portcullis.
 - **Question:** is the first way down open from the start in the original?
-
-### 5. Shayder's mayor: gold as well as the ring? (2026-09-30)
-
-- **Where:** Shayder's City Hall, Mayor Bernathy, at about (51,37).
-- **Do:** after burning the Filth Factory, ask her about "mission" and
-  note what the party gains.
-- **The port:** the Gold Skill Ring, and no gold. That's what E3's talk
-  script does (`talkScripts.ts`, script 131): one item,
-  flag 0xca to 2. Tuxedo Jack's walkthrough says "500 gold and a Gold
-  Skill Ring".
-- **Question:** does she pay 500 gold too? If so, the gold is somewhere
-  the port hasn't read.
 
 ### 6. The Anama: does learning Mage Spells again throw a member out? (2026-09-30)
 
@@ -392,6 +393,22 @@ quest steps.
   says "Not your boat."
 
 ## Answered
+
+### 5. Shayder's mayor: gold as well as the ring? (2026-09-30)
+
+- **Where:** Shayder's City Hall, Mayor Bernathy, at about (51,37).
+- **Do:** after burning the Filth Factory, ask her about "mission" and
+  note what the party gains.
+- **The port:** the Gold Skill Ring, and no gold. That's what E3's talk
+  script does (`talkScripts.ts`, script 131): one item,
+  flag 0xca to 2. Tuxedo Jack's walkthrough says "500 gold and a Gold
+  Skill Ring".
+- **Question:** does she pay 500 gold too? If so, the gold is somewhere
+  the port hasn't read.
+
+**Answered 2026-10-01 (with `Q05.SAV`): no gold, only the ring.** The port
+already does the same: E3's talk script 131 is the whole reward, and Tuxedo
+Jack's "500 gold" is wrong.
 
 ### 1. Colchis: does the secret door into the shade's room open? (2026-09-30)
 

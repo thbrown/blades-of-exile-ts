@@ -16071,3 +16071,32 @@ The user's list, and what each turned out to be:
 
 All checks pass: 1,618 tests, both sweeps, verify-screen, verify-party,
 verify-e3, and the corpus unchanged.
+
+### Check-in answers: the Ritual and Bernathy (2026-10-01)
+
+The user tried four of the check-in saves in the original Exile III. The
+port already did the same as the original in every case, so no code changed:
+
+- [x] **Shayder's altar (`Q03D`):** "This was a horrible, horrible
+      mistake..." and the game ends.
+- [x] **The spiders' altar (`Q03E`):** the message and a demon; cast
+      again, the message but no demon. E3-SUSPECTED-BUGS.md #18 said the
+      demon came every time. It doesn't, in E3 or the port: the flag bug
+      repeats only the message and the 6 experience, because
+      `FUN_1090_4053` (`bringIn`) brings in only creatures still absent.
+      #18 is corrected.
+- [x] **The Great Circle (`Q03J`):** "Dazed, you raise your blade..."
+      once, and not again.
+- [x] **Bernathy's reward (`Q05`):** the ring, no gold. #5 is answered;
+      Tuxedo Jack's "500 gold" is wrong.
+
+Test: `e3quests.test.ts`, "The Ritual elsewhere, as the original
+answered". Check-in #3 is still open for its other nine squares.
+
+**Gotcha:** `SpecBuilder.slayParty` doesn't pick the party as target
+first, as `killParty` now does. In combat the default target is the
+acting PC, so a spot stepped on mid-fight would slay only that PC. The
+Ritual is cast out of combat only, so its Shayder case is safe. The
+other callers (`villages.ts`, `dungeons.ts`, `dungeons2.ts`,
+`filthFactory.ts`, `plot.ts`, `towerOfMagi.ts`, `kills.ts`) haven't
+been checked.
