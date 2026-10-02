@@ -14,6 +14,7 @@ import { EffectPattern, SpellPat, WALL_ROTATIONS, getBuiltinPattern } from '../d
 import { groundFromTer, terFromGround } from '../data/scenario';
 import { TerSpec, TrimType, blocksMove } from '../data/terrain';
 import { Lighting } from '../data/town';
+import { LIGHT_MASK_VIEW, lightArea, lightMaskShapes } from './lightMask';
 import { GameSession } from '../game/session';
 import { GameMode, isCombat, isScrollable } from '../game/modes';
 import { Boom } from '../game/booms';
@@ -414,8 +415,9 @@ export class Screen {
     // Posted labels sit between the party and the masks (boe.graphics.cpp:1068),
     // clipped to the terrain view, and the list is emptied by drawing it.
     this.drawPostedLabels(session);
-    // `apply_unseen_mask` comes after everything drawn into the terrain gworld
-    // (boe.graphics.cpp:1067), so it shades the monsters and the party too.
+    // The two masks come after everything drawn into the terrain gworld
+    // (GRAPHICS.CPP:1950), so they shade the monsters and the party too.
+    this.applyLightMask(session);
     this.applyUnseenMask(session, maxDim, maxDimY);
     this.drawBooms(session);
     this.drawMissiles(session);
@@ -424,6 +426,45 @@ export class Screen {
     this.drawPointingArrows(session);
     this.drawTargets(session);
     this.drawTargetingLine(session);
+  }
+
+  /** The last light mask drawn, and the shapes it was drawn from (`last_light_mask`). */
+  private lightMask: { key: string; canvas: HTMLCanvasElement } | null = null;
+
+  /**
+   * `apply_light_mask` (`render/lightMask.ts`): the region painted black
+   * over the view. It is a rectangle less a union of overlapping shapes,
+   * which a canvas path can't fill directly, so it is drawn once on its own
+   * canvas — black, with the shapes cut out — and kept until the shapes
+   * change, as the C++ keeps its region until `light_area` does.
+   */
+  private applyLightMask(session: GameSession): void {
+    const area = lightArea(session);
+    const shapes = area && lightMaskShapes(area);
+    if (!shapes) return;
+    const key = JSON.stringify(shapes);
+    if (this.lightMask?.key !== key) {
+      const v = LIGHT_MASK_VIEW;
+      const canvas = this.lightMask?.canvas ?? document.createElement('canvas');
+      canvas.width = v.right - v.left;
+      canvas.height = v.bottom - v.top;
+      const g = canvas.getContext('2d');
+      if (!g) return;
+      g.globalCompositeOperation = 'source-over';
+      g.fillStyle = '#000';
+      g.fillRect(0, 0, canvas.width, canvas.height);
+      g.globalCompositeOperation = 'destination-out';
+      for (const e of shapes.ellipses) {
+        g.beginPath();
+        g.ellipse((e.left + e.right) / 2 - v.left, (e.top + e.bottom) / 2 - v.top,
+          (e.right - e.left) / 2, (e.bottom - e.top) / 2, 0, 0, 2 * Math.PI);
+        g.fill();
+      }
+      for (const r of shapes.blocks) g.fillRect(r.left - v.left, r.top - v.top, r.right - r.left, r.bottom - r.top);
+      this.lightMask = { key, canvas };
+    }
+    const at = terrainSpotPos(0, 0);
+    this.ctx.drawImage(this.lightMask.canvas, at.x, at.y);
   }
 
   /**
@@ -447,7 +488,7 @@ export class Screen {
     const { univ } = session;
     const town = univ.town;
     // An outdoor arena has no unexplored ground to speak of, and a dark town
-    // uses the light mask instead (TODO: apply_light_mask, :168).
+    // uses the light mask instead (`applyLightMask`).
     if (isCombat(session.mode) && session.whichCombatType === 0) return;
     if (town && town.record.lightingType > 0) return;
     const pats = this.store.get('bwpats');

@@ -14,11 +14,10 @@
  * does rather than because the format was changed:
  *
  *   - Fields cParty has and this port doesn't are simply absent from the file:
- *     the journal, stored PCs and their items, campaign
- *     flags, the split party, `hostiles_present`, `less_wm`, the save-slot
- *     number and the per-town creature save slots. A save written here loads in
- *     the C++ build with those at their defaults, and one written there loses
- *     them coming here. Each is marked TODO where it would go.
+ *     stored PCs (which the C++'s own load drops anyway, below) and the
+ *     campaign bookkeeping (`scen_won`, `scen_played`, campaign flags). A save
+ *     written here loads in the C++ build with those at their defaults, and
+ *     one written there loses them coming here. `TODO(campaign)`.
  *   - `cParty::setup` is not modelled at all, so `save/setup.dat` is written as
  *     the empty page the C++ writes when the array is empty, and ignored on
  *     read.

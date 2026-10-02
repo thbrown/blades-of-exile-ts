@@ -13,6 +13,7 @@
 
 import { QuestStatus } from '../data/quest';
 import { e3JobsTick } from './e3Jobs';
+import { e3GaleTick } from './e3Gale';
 import { e3ItemTownsTick, e3UraniumTick, e3WithdrawalTick } from './e3ItemUse';
 import { Universe } from '../universe/universe';
 import { isCombat } from './modes';
@@ -142,6 +143,10 @@ export function specialIncreaseAge(session: GameSession, length = 1, queue = fal
   e3UraniumTick(session, ageBefore, (node, at) => fire(SpecCtx.SCEN_TIMER, SpecCtxType.SCEN, node, at));
   party.age = currentAge;
   e3WithdrawalTick(session, ageBefore, (node, at) => fire(SpecCtx.SCEN_TIMER, SpecCtxType.SCEN, node, at));
+  party.age = currentAge;
+  // Gale's guards (e3Gale.ts), which E3 ticks just before the withdrawal.
+  // It spends no dice, so its place among these is free.
+  e3GaleTick(session, ageBefore, (node, at) => fire(SpecCtx.SCEN_TIMER, SpecCtxType.SCEN, node, at));
   party.age = currentAge;
   // And the special items that show a town while held (the silver key).
   e3ItemTownsTick(session);

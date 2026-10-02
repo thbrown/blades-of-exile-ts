@@ -11,7 +11,7 @@ the "probably meant" column instead. Each number here is its number in
 `bug` or `undecided` are fixed under the preference, `legit` never is.
 Converted scripts branch on the `if-fixed` opcode; engine code calls
 `bugFixed(n)`. Replays always play the bugs. The user has ruled #11 and #12 bugs (2026-09-29). #15–17 are new the same day, undecided; #18–19 are new 2026-09-30, undecided, and #20 and #21 the same day; #22 is new 2026-10-01, undecided. Not wired: #4 (nothing to fix
-it to), #20 (a fix would be new data), #21 (the port already reads it the Mac way, so it plays the fix; playing the bug would need the converter to transpose it) and #5 (its fix belongs in Baziron's reward, which isn't ported yet).
+it to), #20 (a fix would be new data), #21 (the port already reads it the Mac way, so it plays the fix; playing the bug would need the converter to transpose it). #5 is wired since 2026-10-02, when Baziron's reward was ported.
 
 Add an entry whenever a transcription keeps something odd, leave a comment at
 the site pointing here, and add it to `KNOWN_BUGS`. Bugs in the Blades of Exile *engine* (the

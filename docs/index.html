@@ -1053,9 +1053,21 @@
         justify-content: safe center;
       }
       /* The talk screen's presets sit level with the movement pad they
-         replace, following it up or down (--tr-y). */
-      .td-follows-pad {
-        translate: 0 var(--tr-y, 0px);
+         replace, following it up or down (--tr-y). The strip itself stays
+         the full height and a spacer at one end pushes the words off centre,
+         so they can never be carried off the screen: the spacer gives way
+         first when they don't fit, and then the list scrolls. (Moving the
+         whole strip put the first words, Look, above the top for good.) */
+      #touch-dialog .td-follows-pad .ts-list::before,
+      #touch-dialog .td-follows-pad .ts-list::after {
+        content: '';
+        flex: 0 1 0px;
+      }
+      #touch-dialog .td-follows-pad .ts-list::before {
+        flex-basis: max(0px, 2 * var(--tr-y, 0px));
+      }
+      #touch-dialog .td-follows-pad .ts-list::after {
+        flex-basis: max(0px, -2 * var(--tr-y, 0px));
       }
       .td-btn {
         display: flex;
@@ -1223,10 +1235,10 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="/blades-of-exile-ts/assets/main-BR1NwPfY.js"></script>
-    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/tiling-Becmor_b.js">
-    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/e3ItemUse-CgvnV4WV.js">
-    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/terrainPics-CKUOGPna.js">
+    <script type="module" crossorigin src="/blades-of-exile-ts/assets/main-GyXR6KC8.js"></script>
+    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/tiling-BmOjkOo-.js">
+    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/e3ItemUse--ZE8VqJ5.js">
+    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/terrainPics-B9QEYqKw.js">
   </head>
   <body>
     <nav id="game-menu-bar"></nav>

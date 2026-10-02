@@ -517,6 +517,15 @@ export class SpecBuilder {
     return (next) => this.node('damage', { ex1: [0, 1], ex2: [n, type] }, next);
   }
 
+  /**
+   * SELECT_TARGET's whole-party arm. A node's default target follows its
+   * trigger, and a creature's HAIL special targets the creature, so a PC
+   * opcode there (AFFECT_XP) would do nothing without it.
+   */
+  wholeParty(): Step {
+    return (next) => this.node('select-pc', { ex1: [2] }, next);
+  }
+
   xp(n: number): Step {
     return (next) => this.node('xp', { ex1: [n, 0] }, next);
   }

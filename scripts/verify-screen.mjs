@@ -3262,6 +3262,26 @@ await tp.tap('.touch-dpad .touch-button.centre');
 await tp.waitForTimeout(500);
 touch.talkWords = await tp.evaluate(() => [...document.querySelectorAll('#touch-dialog .td-btn')].map((b) => b.textContent));
 await tp.screenshot({ path: `${SHOTS}/65-touch-talk.png` });
+// The presets follow the right pad up or down; moved a long way either way,
+// the first and last of them must still be on the screen (scrolled to), not
+// carried off it with the strip.
+touch.talkOffsetReach = [];
+const trY = await tp.evaluate(() => document.documentElement.style.getPropertyValue('--tr-y'));
+for (const y of [-160, 160]) {
+  touch.talkOffsetReach.push(await tp.evaluate((dy) => {
+    document.documentElement.style.setProperty('--tr-y', `${dy}px`);
+    const list = document.querySelector('#touch-dialog .td-follows-pad .ts-list');
+    const btns = list ? [...list.querySelectorAll('.td-btn')] : [];
+    if (btns.length === 0) return false;
+    const onScreen = (b) => {
+      b.scrollIntoView({ block: 'nearest' });
+      const r = b.getBoundingClientRect();
+      return r.top >= 0 && r.bottom <= window.innerHeight;
+    };
+    return onScreen(btns[0]) && onScreen(btns[btns.length - 1]);
+  }, y));
+}
+await tp.evaluate((v) => document.documentElement.style.setProperty('--tr-y', v), trY);
 await tp.locator('#touch-dialog .td-btn', { hasText: 'Done' }).first().tap();
 await tp.waitForTimeout(300);
 touch.talkDone = await tp.evaluate(() => !window.__session.talk && document.querySelector('#touch-dialog').hidden);
@@ -3458,6 +3478,7 @@ const touchOk = touch.desktopHidden && touch.townSet === 'MAGE PRIEST LOOK TALK 
   touch.fired.mode === 9 && touch.fired.aim === null && touch.fired.spent === 1 &&
   touch.talkPlaced !== null && touch.talkAim?.x === touch.talkPlaced.x && touch.talkAim?.y === touch.talkPlaced.y &&
   touch.talkWords.includes('Ask About...') && touch.talkDone &&
+  touch.talkOffsetReach.every(Boolean) &&
   touch.invSheet.shown && touch.invSheet.size.join('x') === '271x144' && touch.invSheet.wide > 271 * 2 &&
   touch.infoStrip.dialog && touch.infoStrip.sheetHidden &&
   touch.infoStrip.buttons.length > 0 && touch.sheetBack && touch.partyPick.now === 1 && touch.sheetClosed &&
