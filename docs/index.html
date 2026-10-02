@@ -546,10 +546,14 @@
         list-style: none;
       }
       .startup-party-pcs li {
+        /* One size for every PC, so a long name doesn't make a ragged row */
+        box-sizing: border-box;
+        width: 176px;
+        height: 86px;
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 6px 12px 6px 6px;
+        padding: 6px 8px 6px 6px;
         border: 1px solid #000;
         border-radius: 3px;
       }
@@ -574,6 +578,13 @@
         display: flex;
         flex-direction: column;
         gap: 2px;
+        min-width: 0;
+      }
+      .startup-pc-words strong,
+      .startup-pc-words small {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
       }
       .startup-pc-words strong {
         font-size: 13px;
@@ -879,11 +890,18 @@
         flex-direction: column;
         gap: 4px;
       }
-      .ts-left {
+      /* The strips take the opacity of the pad on their side (View → Touch
+         Controls Layout), as the pads' own buttons do, so a strip that
+         stands in for a pad (the talk presets for the arrows) looks like it. */
+      .ts-left,
+      .ts-foot {
         left: 6px;
+        --alpha: var(--tl-opacity, 0.6);
       }
-      .ts-right {
+      .ts-right,
+      .ts-steps {
         right: 6px;
+        --alpha: var(--tr-opacity, 0.6);
       }
       .ts-heading {
         color: #fff;
@@ -908,9 +926,10 @@
         min-height: 32px;
         padding: 2px 8px;
         text-align: left;
-        color: rgba(255, 255, 255, 0.92);
-        background: rgba(20, 20, 20, 0.5);
-        border: 1px solid rgba(255, 255, 255, 0.35);
+        --ink: calc(0.3 + 0.7 * var(--alpha, 0.6));
+        color: rgb(255 255 255 / var(--ink));
+        background: rgb(20 20 20 / var(--alpha, 0.6));
+        border: 1px solid rgb(255 255 255 / calc(0.2 + 0.5 * var(--alpha, 0.6)));
         border-radius: 6px;
         text-shadow: 0 1px 1px #000;
         touch-action: manipulation;
@@ -927,12 +946,12 @@
         opacity: 0.35;
       }
       .ts-btn.on {
-        background: rgba(120, 90, 10, 0.75);
-        border-color: rgba(255, 220, 0, 0.85);
-        color: #ffe680;
+        background: rgb(120 90 10 / calc(0.25 + 0.75 * var(--alpha, 0.6)));
+        border-color: rgb(255 220 0 / var(--ink));
+        color: rgb(255 230 128 / var(--ink));
       }
       .ts-btn.dim:not(.on) {
-        color: rgba(255, 255, 255, 0.45);
+        color: rgb(255 255 255 / calc(0.5 * var(--ink)));
       }
       .ts-none {
         color: rgba(255, 255, 255, 0.7);
@@ -1002,9 +1021,9 @@
         text-overflow: ellipsis;
         white-space: nowrap;
         font-weight: bold;
-        background: rgba(107, 84, 24, 0.9);
-        border-color: rgba(255, 220, 0, 0.85);
-        color: #f3dc98;
+        background: rgb(120 90 10 / calc(0.25 + 0.75 * var(--alpha, 0.6)));
+        border-color: rgb(255 220 0 / var(--ink));
+        color: rgb(255 230 128 / var(--ink));
       }
       /* Any other dialog, for a finger (platform/touchDialog.ts): its
          buttons down the right, a list to pick from down the left. The same
@@ -1184,10 +1203,10 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="/blades-of-exile-ts/assets/main-Bc7Ji3Dj.js"></script>
-    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/tiling-DExyyk1w.js">
-    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/e3ItemUse-DNQYF1Sy.js">
-    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/terrainPics-CbW1HRJM.js">
+    <script type="module" crossorigin src="/blades-of-exile-ts/assets/main-BR92ZrnJ.js"></script>
+    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/tiling-DODB6uDg.js">
+    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/e3ItemUse-sYlV1MnK.js">
+    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/terrainPics-DA2hvht7.js">
   </head>
   <body>
     <nav id="game-menu-bar"></nav>
