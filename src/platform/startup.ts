@@ -466,17 +466,25 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
         }
         list.append(card);
       }
+      // Importing is a card of its own, always the last in the grid: the same
+      // size as a game's, with an empty picture where a game has its own.
       if (saveActions !== undefined) {
-        const add = el('button', 'startup-party-button', 'Import a saved game…');
+        const add = el('button', 'startup-choice startup-card startup-save-import');
         add.dataset['action'] = 'import';
         add.title = 'An .exg file, a zip of saves, or an Exile III save — it becomes a new game here';
+        const frame = el('span', 'startup-picture startup-import-picture');
+        frame.append(el('span', 'startup-import-plus', '+'));
+        add.append(frame);
+        const words = el('span', 'startup-words');
+        words.append(el('strong', undefined, 'Import a saved game…'));
+        words.append(el('small', undefined, 'An .exg file, a zip of saves, or an Exile III save.'));
+        add.append(words);
         add.addEventListener('click', () => {
           void saveActions.importFile().then((id) => { if (id !== null) window.location.reload(); });
         });
-        savesCard.append(list, add);
-      } else {
-        savesCard.append(list);
+        list.append(add);
       }
+      savesCard.append(list);
       root.before(savesCard);
     }
 

@@ -16199,7 +16199,8 @@ game's saves were first called a *series*; the same day they were renamed a
   and when ("date · 41 saves") on a line each; **Resume** is a button in the
   card; Rename and Delete are icons on the picture; a click anywhere else
   opens the tree. "Older saves…" and "Export" are gone from the card (Export
-  is still in the tree's footer).
+  is still in the tree's footer). Importing is a card too, always last in
+  the grid and the size of a game's: dashed, with a + where the picture is.
 - **Exile III saves import on the main menu.** An `exile3.sav` can only be read
   with Exile III loaded, so it is parked in sessionStorage
   (`PENDING_E3_SAVE_KEY`, base64) and the page opens `?play=exile3`, which

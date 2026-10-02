@@ -628,6 +628,27 @@
       .startup-save .startup-facts + .startup-save-line {
         margin-top: 2px;
       }
+      /* The import card: a game card's size, dashed, with a + where the
+         picture would be. */
+      .startup-save-import {
+        border-style: dashed;
+        background: transparent;
+      }
+      .startup-save-import .startup-words {
+        align-self: stretch;
+      }
+      .startup-import-picture {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.08);
+        border-bottom: 1px dashed #000;
+      }
+      .startup-import-plus {
+        font-size: 56px;
+        line-height: 1;
+        color: #333;
+      }
       /* Rename and Delete ride on the picture's top corner. */
       .startup-save-tools {
         position: absolute;

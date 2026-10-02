@@ -190,6 +190,15 @@ check('a zip imports back as the same tree', zipped.same, zipped);
 await page.goto(BASE);
 await page.waitForSelector('.startup-save');
 check('the imported copy is a second card', (await page.$$('.startup-save')).length === 2);
+const importCard = await page.evaluate(() => {
+  const list = document.querySelector('.startup-saves');
+  const last = list.lastElementChild;
+  const game = list.querySelector('.startup-save').getBoundingClientRect();
+  const imp = last.getBoundingClientRect();
+  return { last: last.dataset.action, w: [game.width, imp.width], h: [game.height, imp.height] };
+});
+check('Import is a card, last, the size of a game card', importCard.last === 'import'
+  && Math.abs(importCard.w[0] - importCard.w[1]) < 1 && Math.abs(importCard.h[0] - importCard.h[1]) < 1, importCard);
 await page.screenshot({ path: `${SHOTS}/s4-two-cards.png` });
 const before = (await page.$$('.startup-save')).length;
 await page.locator('.startup-save').first().locator('[data-action="delete"]').click(); // the newest: the import
