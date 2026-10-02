@@ -185,6 +185,24 @@ describe('the ONCE_TRAP node', () => {
     expect(host.strs[0]![1]).toContain('leave the scenario');
   });
 
+  it("asks Flee/Onward under Exile III's flag, as its trap dialogs do", async () => {
+    trapNode();
+    session.univ.scenario.featureFlags['trap'] = 'exile3';
+    const host = new TrapHost(0);
+    session.attachSpecials(host);
+    try {
+      await session.runSpecial(SpecCtx.TOWN_LOOK, SpecCtxType.TOWN, 90, { x: 5, y: 5 });
+    } finally {
+      delete session.univ.scenario.featureFlags['trap'];
+    }
+    // The same slots, so the same names: only the words change.
+    expect(host.buttons[0]).toEqual([
+      { name: 'btn1', label: 'Flee', key: undefined },
+      { name: 'btn2', label: 'Onward', key: undefined },
+    ]);
+    expect(session.univ.party.getSdf(0, 7)).not.toBe(ONCE_DONE);
+  });
+
   it('a node with no message of its own asks the stock question', async () => {
     trapNode();
     session.univ.town!.record.specials.get(90)!.m1 = -1;

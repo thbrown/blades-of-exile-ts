@@ -203,6 +203,13 @@ const BUNDLED_SCENARIOS = ['valleydy', 'stealth', 'zakhazi', 'busywork', 'exile3
 const PENDING_SAVE_KEY = 'exile-js.pendingSave';
 
 /**
+ * Restart on the party-death dialog: `start_new_game`, the party editor and
+ * then the startup screen. The page reloads to get a clean Universe, and this
+ * tells the reloaded page to go straight to the editor.
+ */
+const PENDING_NEW_PARTY_KEY = 'exile-js.pendingNewParty';
+
+/**
  * The startup screen's "Add a scenario…" and drag-and-drop: install every
  * scenario among the files — a `.boes`, an `.exs` with or without its `.bmp`,
  * or a zip of those. A bundled id is refused rather than shadowed, since the
@@ -321,6 +328,8 @@ async function main(): Promise<void> {
   let name = scenarioFromQuery();
   let openSlot = window.sessionStorage.getItem(PENDING_SAVE_KEY);
   window.sessionStorage.removeItem(PENDING_SAVE_KEY);
+  const newPartyPending = window.sessionStorage.getItem(PENDING_NEW_PARTY_KEY) !== null;
+  window.sessionStorage.removeItem(PENDING_NEW_PARTY_KEY);
   /**
    * Make New Party from the startup screen: the party editor with no scenario
    * loaded at all, as the C++'s `start_new_game` runs it, then back to the
@@ -344,6 +353,11 @@ async function main(): Promise<void> {
       name = playing;
       window.addEventListener('popstate', () => { window.location.reload(); });
     }
+  }
+  if (name === null && openSlot === null && newPartyPending) {
+    window.history.replaceState(null, '', urlWith('party', 'new'));
+    makingParty = true;
+    name = '';
   }
   if (name === null) {
     if (GAME_PARAMS.some((p) => new URLSearchParams(window.location.search).has(p))) {
@@ -1191,7 +1205,10 @@ async function main(): Promise<void> {
    * way to go on playing a dead party.
    *
    * The two reloads are how this port gets a genuinely clean Universe, the
-   * same reasoning as File > New Game. Quit has nowhere to go in a browser, so
+   * same reasoning as File > New Game. Restart is `start_new_game` in both
+   * originals — the party editor, then the startup screen — so it reloads
+   * into the editor; it used to reload the game page, which picked the game
+   * back up from the resume record kept just before the party died. Quit has nowhere to go in a browser, so
    * it lands on the startup screen — which is where `handle_victory` puts you
    * too, and the closest thing here to leaving the game.
    */
@@ -1202,12 +1219,19 @@ async function main(): Promise<void> {
           new XmlDialog(ctx, store, getDialogDef('party-death')));
         // Both leave no party in memory, as `do_abort` does (boe.actions.cpp:3307).
         if (choice === 'new') {
-          if (saveStoreAvailable()) await setPartyInMemory(null);
-          window.location.reload();
+          if (saveStoreAvailable()) {
+            await setPartyInMemory(null);
+            await clearResume().catch(() => undefined);
+          }
+          window.sessionStorage.setItem(PENDING_NEW_PARTY_KEY, '1');
+          window.location.href = urlWith(null);
           return;
         }
         if (choice === 'quit') {
-          if (saveStoreAvailable()) await setPartyInMemory(null);
+          if (saveStoreAvailable()) {
+            await setPartyInMemory(null);
+            await clearResume().catch(() => undefined);
+          }
           window.location.href = import.meta.env.BASE_URL;
           return;
         }
@@ -2085,8 +2109,7 @@ async function main(): Promise<void> {
     else if (bottom === 7) screen.itemWindow.setStatWindow(univ, ItemWinMode.QUESTS);
     else if (bottom === 8) {
       void showDialogAction('help-inventory');
-    } else {
-      univ.curPc = bottom;
+    } else if (session.switchPcItems(bottom)) {
       screen.itemWindow.setStatWindowForPc(univ, bottom);
     }
     setStatus();
@@ -2145,12 +2168,11 @@ async function main(): Promise<void> {
       redraw();
       return;
     }
-    if (!session.itemShop) {
-      const bottom = screen.itemBottomHit(x, y);
-      if (bottom !== null) {
-        pressItemBottom(bottom);
-        return;
-      }
+    // As on the canvas: during a service, the six PCs only.
+    const bottom = screen.itemBottomHit(x, y);
+    if (bottom !== null && (!session.itemShop || bottom < 6)) {
+      pressItemBottom(bottom);
+      return;
     }
     const invenHit = screen.inventoryHit(x, y, session.itemShop !== null);
     if (!invenHit) return;
@@ -2310,7 +2332,11 @@ async function main(): Promise<void> {
       seen.add(key);
       left.push({ name: `talk:${word.node}`, label: word.word });
     }
-    return { left, leftHeading: left.length ? 'Topics' : 'No new topics', right, rightPairs: true };
+    // Done last, after a rule, as every strip ends on its way out.
+    const done = right.findIndex((c) => c.label === 'Done');
+    if (done >= 0 && done < right.length - 1) right.push(...right.splice(done, 1));
+    if (done >= 0) right[right.length - 1]!.section = '';
+    return { left, leftHeading: left.length ? 'Topics' : 'No new topics', right, rightFollowsPad: true };
   };
 
   /** Buy, inspect, scroll or leave — the shop screen's four actions. */
@@ -2938,13 +2964,14 @@ async function main(): Promise<void> {
         return;
       }
       // The page buttons along the bottom of the item panel: six PCs, Special
-      // Items, Quests and Help (handle_action, boe.actions.cpp:1784).
-      if (!session.itemShop) {
-        const bottom = screen.itemBottomHit(x, y);
-        if (bottom !== null) {
-          pressItemBottom(bottom);
-          return;
-        }
+      // Items, Quests and Help (handle_action, boe.actions.cpp:1784). While a
+      // service (sell, identify…) has the panel, only the six PCs: they are
+      // how the player picks whose things to show, as the C++ lets them
+      // (`handle_switch_pc_items` allows MODE_TALKING).
+      const bottom = screen.itemBottomHit(x, y);
+      if (bottom !== null && (!session.itemShop || bottom < 6)) {
+        pressItemBottom(bottom);
+        return;
       }
       // The inventory panel stays live during a conversation — that's how the
       // sell and identify services work, so it gets first refusal.

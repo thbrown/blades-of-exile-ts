@@ -1158,6 +1158,23 @@ describe('the AFFECT nodes that act on the party', () => {
   });
 
   /**
+   * `SELECT_TARGET` with `ex1a` 2 sets `ctx.cur_target = &univ.party`
+   * (boe.specials.cpp:2794): the party outright, not "the default", which in
+   * combat would be the acting PC alone.
+   */
+  it('SELECT_TARGET 2 picks the whole party, in combat too', async () => {
+    const { univ, session, run } = withNodes({
+      0: { type: SpecType.SELECT_TARGET, ex1a: 2, jumpto: 1 },
+      1: { type: SpecType.AFFECT_AP, ex1a: 3, ex1b: 1 },
+    });
+    session.startCombat(univ.party.direction);
+    univ.curPc = 0;
+    univ.party.pcs.forEach((pc) => { pc.ap = 4; });
+    await run(0);
+    expect(univ.party.pcs.every((pc) => !pc.isAlive || pc.ap === 7)).toBe(true);
+  });
+
+  /**
    * **The C++ reads `status[ex2a]` and always writes `status[STEALTH]`**
    * (boe.specials.cpp:3248-3252), so a node meaning to grant Flight reads
    * Flight's counter and stores it as Stealth. Kept.

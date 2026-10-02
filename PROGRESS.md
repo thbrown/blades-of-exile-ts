@@ -16012,3 +16012,61 @@ stream. It now seeds at load from `Date.now()`, or from `?seed=N`
 (DIVERGENCES.md #45). Tests: `rng.test.ts`, "the launch seed". The corpus
 doesn't pass through `main.ts`, so it's untouched.
 
+
+### Play-test notes, seventh round (2026-10-01)
+
+The user's list, and what each turned out to be:
+
+- [x] **Restart after the party died reloaded the same game.** It reloaded
+      `?play=<id>`, and a reload there resumes from the resume record kept
+      two seconds before the death. Restart is `start_new_game` in 1997 and
+      OBoE alike (the party editor, behind "Creating a party", then the
+      startup screen), so it now clears the resume record and the party in
+      memory and reloads into the editor (`PENDING_NEW_PARTY_KEY`). Quit
+      clears the resume record too.
+- [x] **Causing trouble in Fort Emergence didn't end the game.** It did out
+      of combat; in a fight the hostile node took one PC. Two bugs:
+      - **The engine's SELECT_TARGET 2 set the target to null**, "the
+        default", which in combat is the acting PC. OBoE sets
+        `ctx.cur_target = &univ.party` (boe.specials.cpp:2794); it sets
+        `TARGET_PARTY` now. The corpus didn't move (51 of 87, 1,231,440).
+      - The converter's `killParty` (E3's `fry_party`) relied on the default
+        target; it now picks the party first, as E3 takes everyone wherever
+        it runs. Fort Emergence, Portal Fortress, Ghikra, Blackcrag and
+        Erika's Tower all use it.
+- [x] **Krizsan's warehouse trap asked Yes/No.** All E3 trap dialogs say
+      Flee/Onward; under `trap` = `exile3` the ONCE_TRAP question does too
+      (DIVERGENCES.md #46).
+- [x] **Identify: the 1–6 tabs under the inventory did nothing.** The click
+      handlers skipped them whenever a shop service had the panel, and the
+      draw skipped them too, so they were invisible. C++ draws them always
+      (`place_item_bottom_buttons` closes `put_item_screen`) and
+      `handle_switch_pc_items` allows MODE_TALKING. Both now go through, on
+      the canvas and on the blown-up touch panel, by way of
+      `session.switchPcItems` (which also stops a tab making a dead PC
+      active, or changing the acting PC in combat, as the UI path used to).
+- Touch overlay (none of it in the original):
+  - [x] Talk's presets are one column, not pairs, Done last after a rule;
+        they shrink to fit the pad's height rather than scroll.
+  - [x] Every dialog strip's list is centred in the height
+        (`justify-content: safe center`).
+  - [x] Get: Done ends the pile on the right, after a rule.
+  - [x] Train: Health and Spell Points first, then sections (Main Stats,
+        Combat, Magic, Other), and only skills the grid shows a − or + for.
+  - [x] Any dialog: Cancel / Done / OK go last, after a rule
+        (`EXIT_BUTTONS` in `controlsTouchView`), which fixes Race/Traits.
+  - [x] View → Touch Controls Layout has a "Dialog buttons" section: width
+        and height of every strip's buttons (`--tb-w`, `--tb-h`), defaulting
+        to 85% wide and 110% tall. 125% tall overflowed an 844×390 phone's
+        Train strip, so 110% it is.
+  - [x] The panel's pad legends are "Left" and "Right", without "(actions)"
+        and "(movement)".
+- `TouchChoice.section` is the new grouping: a heading, or `''` for a rule.
+
+**Gotchas (2026-10-01):**
+- `ctx.curTarget === null` is "the default target", never "everyone"; the
+  affect group's header comment said otherwise and has been corrected.
+- `AFFECT_AP`'s `ex1b` 1 *raises* AP, the opposite of the group's usual sign.
+
+All checks pass: 1,618 tests, both sweeps, verify-screen, verify-party,
+verify-e3, and the corpus unchanged.

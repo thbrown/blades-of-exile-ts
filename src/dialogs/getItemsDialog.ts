@@ -194,7 +194,7 @@ export class GetItemsDialog implements ModalScreen {
 
   /**
    * For a finger: the whole pile down the right, not just the eight rows on
-   * show, and the party down the left. Tapping an item further down pages
+   * show, then Done, and the party down the left. Tapping an item further down pages
    * the screen to it first, with the dialog's own arrows, then takes it — so
    * the pick sees the same clicks a mouse would have made.
    */
@@ -210,12 +210,14 @@ export class GetItemsDialog implements ModalScreen {
         detail: `${curWeight(pc)} / ${maxWeight(pc)}`, on: this.pick.who === i,
       });
     }
-    right.push({ name: 'done', label: 'Done' });
     const left = this.pick.items.map((item, i): TouchChoice => ({
       name: `take:${i}`,
       label: item.ident ? item.fullName : item.name,
       detail: [interestingString(item), `Weight: ${itemWeight(item)}`].filter(Boolean).join('  '),
     }));
+    // Done ends the pile, set off from it, so it's the last thing down the
+    // strip a thumb is working through rather than a stray among the party.
+    left.push({ name: 'done', label: 'Done', section: '' });
     return { left, leftHeading: 'Take', right, rightHeading: 'Who picks up', mirrored: true };
   }
 

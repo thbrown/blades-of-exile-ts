@@ -1,8 +1,11 @@
 /**
  * Where the two touch pads sit, how big they are and how see-through: one
  * scale, x/y offset and opacity for each side, kept as preferences and
- * handed to the stylesheet as custom properties on the root element. Not in
- * the original — the pads themselves aren't (`touchControls.ts`).
+ * handed to the stylesheet as custom properties on the root element. Also
+ * the size of the buttons in the strips that dialogs, conversations and the
+ * spell picker put down the sides (`touchDialog.ts`, `touchSpells.ts`),
+ * which are all the same size. Not in the original — none of this is
+ * (`touchControls.ts`).
  *
  * The settings panel is plain DOM, like the menu bar it opens from, and
  * changes the pads live, so a player can see where they're putting them.
@@ -43,6 +46,22 @@ const SETTINGS: readonly Setting[] = [
   { field: 'opacity', label: 'Opacity', min: 0.15, max: 1, step: 0.05, show: (v) => `${Math.round(v * 100)}%` },
 ];
 
+/** The strips' buttons: width and height, each a multiple of their own size. */
+interface ButtonSetting {
+  pref: string;
+  css: string;
+  label: string;
+  /** Narrower and taller than the strips were first made, which play-testing preferred. */
+  fallback: number;
+}
+
+const BUTTON_SETTINGS: readonly ButtonSetting[] = [
+  { pref: 'TouchButtonWidth', css: '--tb-w', label: 'Width', fallback: 0.85 },
+  { pref: 'TouchButtonHeight', css: '--tb-h', label: 'Height', fallback: 1.1 },
+];
+
+const BUTTON_RANGE = { min: 0.5, max: 2, step: 0.05, show: (v: number) => `${Math.round(v * 100)}%` };
+
 const prefName = (side: PadSide, field: keyof PadLayout): string =>
   `Touch${side === 'left' ? 'Left' : 'Right'}${field[0]!.toUpperCase()}${field.slice(1)}`;
 
@@ -63,6 +82,7 @@ export function applyPadLayout(): void {
     root.setProperty(`--${p}-y`, `${l.y}px`);
     root.setProperty(`--${p}-opacity`, String(l.opacity));
   }
+  for (const b of BUTTON_SETTINGS) root.setProperty(b.css, String(getFloatPref(b.pref, b.fallback)));
 }
 
 let open: HTMLElement | null = null;
@@ -101,7 +121,7 @@ export function openTouchLayoutPanel(): void {
   for (const side of ['left', 'right'] as const) {
     const col = document.createElement('fieldset');
     const legend = document.createElement('legend');
-    legend.textContent = side === 'left' ? 'Left (actions)' : 'Right (movement)';
+    legend.textContent = side === 'left' ? 'Left' : 'Right';
     col.append(legend);
     const layout = readPadLayout(side);
     for (const setting of SETTINGS) {
@@ -131,6 +151,39 @@ export function openTouchLayoutPanel(): void {
   }
   panel.append(columns);
 
+  // The strips' buttons, under the two pads.
+  const buttons = document.createElement('fieldset');
+  buttons.className = 'tl-buttons';
+  const buttonsLegend = document.createElement('legend');
+  buttonsLegend.textContent = 'Dialog buttons';
+  buttons.append(buttonsLegend);
+  const buttonInputs: { setting: ButtonSetting; input: HTMLInputElement; value: HTMLElement }[] = [];
+  for (const setting of BUTTON_SETTINGS) {
+    const row = document.createElement('label');
+    row.className = 'tl-row';
+    const name = document.createElement('span');
+    name.textContent = setting.label;
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = String(BUTTON_RANGE.min);
+    input.max = String(BUTTON_RANGE.max);
+    input.step = String(BUTTON_RANGE.step);
+    const now = getFloatPref(setting.pref, setting.fallback);
+    input.value = String(now);
+    const value = document.createElement('output');
+    value.textContent = BUTTON_RANGE.show(now);
+    input.addEventListener('input', () => {
+      const v = Number(input.value);
+      setPref(setting.pref, v);
+      value.textContent = BUTTON_RANGE.show(v);
+      applyPadLayout();
+    });
+    row.append(name, input, value);
+    buttons.append(row);
+    buttonInputs.push({ setting, input, value });
+  }
+  panel.append(buttons);
+
   const foot = document.createElement('div');
   foot.className = 'tl-foot';
   const reset = document.createElement('button');
@@ -141,6 +194,11 @@ export function openTouchLayoutPanel(): void {
       setPref(prefName(side, setting.field), DEFAULT[setting.field]);
       input.value = String(DEFAULT[setting.field]);
       value.textContent = setting.show(DEFAULT[setting.field]);
+    }
+    for (const { setting, input, value } of buttonInputs) {
+      setPref(setting.pref, setting.fallback);
+      input.value = String(setting.fallback);
+      value.textContent = BUTTON_RANGE.show(setting.fallback);
     }
     applyPadLayout();
   });

@@ -988,6 +988,17 @@ reseed.
 - `?seed=` is a blades-of-exile-ts addition. The seed is printed to the console
   ("dice seed N") on every load, so a run worth repeating can be.
 
+### 46. Exile III's trap question: Flee or Onward (2026-10-01)
+
+**DECIDED for Exile III: its own words**, under `trap` = `exile3`. Every
+one of E3's trap dialogs (0xbba, Krizsan's warehouse floor; 0xd7a, 0xdde,
+0x107e and the rest) carries buttons 70 and 71, Flee and Onward, with Flee
+first. The converter writes them as ONCE_TRAP nodes, and the engine's custom-
+message arm asks with `basic_buttons` 3 and 2, No and Yes, in both 1997 and
+OBoE. Under the flag it asks with slots 25 and 26, Flee and Onward: the
+same two positions, so the same `btn1`/`btn2` and the same answers. BoE
+scenarios keep No/Yes. A player could tell, and it costs no draws.
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

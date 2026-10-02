@@ -671,6 +671,15 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     for (const m of still) expect(m.mobile).toBe(movers.has(m.number));
     expect(scen.scenMonsters.flatMap((m, i) => (m?.guard ? [i] : []))).toEqual([91, 92]);
 
+    // In a fight too: a node's default target in combat is the acting PC, so
+    // `fry_party` has to pick the party itself, or one PC goes and the game
+    // carries on.
+    const fight = setUp(21);
+    fight.session.startCombat(fight.party.direction);
+    makeTownHostile(fight.session);
+    await vi.waitFor(() => expect(fight.party.isAlive()).toBe(false));
+    expect(fight.party.pcs.every((pc) => pc.mainStatus === MainStatus.ABSENT)).toBe(true);
+
     // Erika's Tower: the amulets (special item 32) save the party.
     const erika = setUp(47);
     erika.party.specItems.add(32);

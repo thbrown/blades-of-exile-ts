@@ -903,7 +903,9 @@ export class SpecBuilder {
    * with `ex1a` 5 is ABSENT.
    */
   killParty(): Step {
-    return (next) => this.node('death', { ex1: [5, 1] }, next);
+    // The party, picked outright: a node's default target in combat is the
+    // active PC alone, and E3's `fry_party` takes everyone wherever it runs.
+    return (next) => this.node('select-pc', { ex1: [2] }, this.node('death', { ex1: [5, 1] }, next));
   }
 
   /**

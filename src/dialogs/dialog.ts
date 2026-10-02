@@ -466,6 +466,11 @@ export interface TouchChoice {
   on?: boolean;
   /** Shown but not pressable. */
   disabled?: boolean;
+  /**
+   * Starts a group: a heading over it (the Train screen's "Combat Skills"),
+   * or, when empty, just a gap and a rule (the way out, after the choices).
+   */
+  section?: string;
 }
 
 /** A dialog laid out for a finger: its choices, and its text field if it has one. */
@@ -473,8 +478,11 @@ export interface TouchView {
   /** Down the right: the dialog's buttons, in the order it defines them. */
   right: TouchChoice[];
   rightHeading?: string;
-  /** Short words, many of them: two to a row (the talk screen's presets). */
-  rightPairs?: boolean;
+  /**
+   * The right strip stands in for the movement pad (the talk screen's
+   * presets), so it follows that pad up or down.
+   */
+  rightFollowsPad?: boolean;
   /** Down the left, when a dialog has a list to pick from (get-items' pile). */
   left?: TouchChoice[];
   leftHeading?: string;

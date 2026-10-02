@@ -771,6 +771,9 @@
         margin: 0 0 6px;
         font-size: 14px;
       }
+      #touch-layout fieldset.tl-buttons {
+        margin-top: 10px;
+      }
       .tl-columns {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -871,7 +874,9 @@
          the sides and a bar along the bottom, round the cast dialog, which
          stays visible and live between them. See-through as the pads are. */
       #touch-spells {
-        --strip: clamp(118px, 19vw, 170px);
+        /* The strips' width and their buttons' height are the player's
+           (View → Touch Controls Layout, "Dialog buttons": --tb-w, --tb-h). */
+        --strip: calc(clamp(118px, 19vw, 170px) * var(--tb-w, 0.85));
         position: fixed;
         inset: var(--menu-h, 28px) 0 0 0;
         z-index: 6;
@@ -923,7 +928,7 @@
       .ts-btn {
         pointer-events: auto;
         font: inherit;
-        min-height: 32px;
+        min-height: calc(32px * var(--tb-h, 1.1));
         padding: 2px 8px;
         text-align: left;
         --ink: calc(0.3 + 0.7 * var(--alpha, 0.6));
@@ -980,7 +985,7 @@
         justify-content: space-between;
         align-items: center;
         gap: 6px;
-        min-height: 36px;
+        min-height: calc(36px * var(--tb-h, 1.1));
         white-space: nowrap;
       }
       .ts-pc .ts-name {
@@ -1029,7 +1034,7 @@
          buttons down the right, a list to pick from down the left. The same
          strips as the spell picker's, running the full height. */
       #touch-dialog {
-        --strip: clamp(118px, 21vw, 190px);
+        --strip: calc(clamp(118px, 21vw, 190px) * var(--tb-w, 0.85));
         position: fixed;
         inset: var(--menu-h, 28px) 0 0 0;
         z-index: 6;
@@ -1042,25 +1047,46 @@
       #touch-dialog .td-strip {
         bottom: 6px;
       }
+      /* Every dialog strip's list sits in the middle of the height, as the
+         pads do; one too long for the screen scrolls from its top. */
+      #touch-dialog .ts-list {
+        justify-content: safe center;
+      }
       /* The talk screen's presets sit level with the movement pad they
-         replace, following it up or down (--tr-y), rather than at the top. */
-      .td-pairs {
+         replace, following it up or down (--tr-y). */
+      .td-follows-pad {
         translate: 0 var(--tr-y, 0px);
       }
-      .td-pairs .ts-list {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        align-content: safe center;
-      }
-      .td-pairs .td-btn {
-        padding: 2px 4px;
-        text-align: center;
+      /* Eight words or so, and all of them wanted at once: they take the
+         chosen height where there's room and give it up where there isn't. */
+      .td-follows-pad .td-btn {
+        flex: 0 1 calc(38px * var(--tb-h, 1.1));
+        min-height: 28px;
       }
       .td-btn {
         display: flex;
         flex-direction: column;
         justify-content: center;
-        min-height: 38px;
+        min-height: calc(38px * var(--tb-h, 1.1));
+      }
+      /* A group's heading (the Train screen's "Combat Skills"), or, empty,
+         a rule before the way out. */
+      .td-section {
+        flex: none;
+        color: #fff;
+        font-weight: bold;
+        font-size: 11px;
+        text-shadow: 0 1px 2px #000, 0 0 4px #000;
+        padding: 6px 2px 0;
+      }
+      .td-section:first-child {
+        padding-top: 0;
+      }
+      .td-rule {
+        height: 0;
+        margin: 4px 6px;
+        padding: 0;
+        border-top: 1px solid rgb(255 255 255 / calc(0.2 + 0.5 * var(--alpha, 0.6)));
       }
       .td-btn .td-label {
         overflow: hidden;

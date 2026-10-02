@@ -157,44 +157,81 @@ export function spendXpDialog(
 }
 
 /**
- * The training grid for a finger: the skills down the left, each with its
- * level and the cost of the next, and down the right a −/+ pair for the one
- * picked, then the dialog's own buttons. Unlike the grid, where each skill
- * has a pair of its own, a skill is picked first and then raised or lowered.
- * The pair presses the grid's own `-m`/`-p` buttons, so the rules, refusals
- * and the Anama warning are all the dialog's.
+ * The training grid's skills, grouped for the touch face: health and spell
+ * points first, as the ones most often raised, then the grid's own runs.
+ */
+const TRAIN_SECTIONS: readonly { title: string; skills: readonly Skill[] }[] = [
+  { title: 'Health & Spell Points', skills: [Skill.MAX_HP, Skill.MAX_SP] },
+  { title: 'Main Stats', skills: [Skill.STRENGTH, Skill.DEXTERITY, Skill.INTELLIGENCE] },
+  { title: 'Combat Skills', skills: [
+    Skill.EDGED_WEAPONS, Skill.BASHING_WEAPONS, Skill.POLE_WEAPONS,
+    Skill.THROWN_MISSILES, Skill.ARCHERY, Skill.DEFENSE] },
+  { title: 'Magic Skills', skills: [Skill.MAGE_SPELLS, Skill.PRIEST_SPELLS, Skill.MAGE_LORE, Skill.ALCHEMY] },
+  { title: 'Other Skills', skills: [
+    Skill.ITEM_LORE, Skill.DISARM_TRAPS, Skill.LOCKPICKING, Skill.ASSASSINATION, Skill.POISON, Skill.LUCK] },
+];
+
+/**
+ * The training grid for a finger: the skills down the left in sections, each
+ * with its level and the cost of the next, and down the right a −/+ pair for
+ * the one picked, then the dialog's own buttons. Unlike the grid, where each
+ * skill has a pair of its own, a skill is picked first and then raised or
+ * lowered. Only skills the grid shows a − or + for are listed: the rest can't
+ * be changed. The pair presses the grid's own `-m`/`-p` buttons, so the rules,
+ * refusals and the Anama warning are all the dialog's.
  */
 function trainTouchFace(
   dlg: XmlDialog, univ: Universe, state: SpendXp, mode: XpMode, labelText: Map<string, string>,
 ): NonNullable<XmlDialog['touchFace']> {
-  let picked: string = skillNames[0]!;
+  let picked: string = 'hp';
+  const changeable = (id: string): boolean => dlg.isVisible(`${id}-p`) || dlg.isVisible(`${id}-m`);
   return {
     view: () => {
       const left: TouchChoice[] = [];
-      for (let i = 0; i <= 20; i++) {
-        const id = skillNames[i]!;
-        const skill = i as Skill;
-        const atMax = state.cur(skill) === xpSkillMax(skill);
-        const cost = mode >= XpMode.EDIT || atMax ? ''
-          : ` · next ${state.cost(skill)} pt${state.cost(skill) !== 1 ? 's' : ''}.${mode === XpMode.TRAIN ? `/${state.goldCost(skill)}gp` : ''}`;
-        left.push({
-          name: `skill:${id}`, label: labelText.get(id) ?? id,
-          detail: `Level ${state.cur(skill)}${atMax ? ' (MAX)' : cost}`, on: id === picked,
-        });
+      for (const { title, skills } of TRAIN_SECTIONS) {
+        let first = true;
+        for (const skill of skills) {
+          const id: string = (skillNames as readonly string[])[skill]!;
+          if (!changeable(id)) continue;
+          const atMax = state.cur(skill) === xpSkillMax(skill);
+          const cost = mode >= XpMode.EDIT || atMax ? ''
+            : ` · next ${state.cost(skill)} pt${state.cost(skill) !== 1 ? 's' : ''}.${mode === XpMode.TRAIN ? `/${state.goldCost(skill)}gp` : ''}`;
+          left.push({
+            name: `skill:${id}`, label: labelText.get(id) ?? id,
+            detail: `Level ${state.cur(skill)}${atMax ? ' (MAX)' : cost}`, on: id === picked,
+            ...(first ? { section: title } : {}),
+          });
+          first = false;
+        }
       }
-      const name = labelText.get(picked) ?? picked;
-      const right: TouchChoice[] = [
-        { name: 'plus', label: `+ ${name}`, disabled: !dlg.isVisible(`${picked}-p`) },
-        { name: 'minus', label: `− ${name}`, disabled: !dlg.isVisible(`${picked}-m`) },
-      ];
+      // The pick follows the list: a skill that can no longer move (its last
+      // point spent) gives way to the first that still can.
+      if (!left.some((c) => c.name === `skill:${picked}`) && left[0]) {
+        picked = left[0].name.slice('skill:'.length);
+        left[0].on = true;
+      }
+      const right: TouchChoice[] = [];
+      if (left.length > 0) {
+        const name = labelText.get(picked) ?? picked;
+        right.push(
+          { name: 'plus', label: `+ ${name}`, disabled: !dlg.isVisible(`${picked}-p`) },
+          { name: 'minus', label: `− ${name}`, disabled: !dlg.isVisible(`${picked}-m`) },
+        );
+      }
       if (dlg.isVisible('left')) {
         right.push({ name: 'left', label: '◀ Previous PC' }, { name: 'right', label: 'Next PC ▶' });
       }
-      right.push({ name: 'help', label: 'Help' }, { name: 'cancel', label: 'Cancel' }, { name: 'keep', label: 'Keep' });
+      right.push(
+        { name: 'help', label: 'Help' },
+        { name: 'cancel', label: 'Cancel', section: '' },
+        { name: 'keep', label: 'Keep' },
+      );
       const pc = univ.party.pcs[state.who]!;
       const who = mode === XpMode.CREATE && pc.mainStatus !== MainStatus.ALIVE ? 'New PC' : pc.name;
       const purse = `${state.skp} skill pts.${mode === XpMode.TRAIN ? `, ${state.gold} gold` : ''}`;
-      return { left, leftHeading: `Train ${who}`, right, rightHeading: purse };
+      return {
+        left, leftHeading: left.length > 0 ? `Train ${who}` : `${who}: nothing to train`, right, rightHeading: purse,
+      };
     },
     press: (name) => {
       const skill = /^skill:(.+)$/.exec(name);

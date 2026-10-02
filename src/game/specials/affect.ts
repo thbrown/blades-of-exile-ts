@@ -5,8 +5,9 @@
  * Two conventions run through the whole group:
  *  - **ex1b is the sign.** 0 means give/heal/add, anything else means
  *    take/harm/subtract.
- *  - **The target is the whole party unless SELECT_TARGET picked someone.**
- *    `ctx.curTarget` holds that choice; null means everyone.
+ *  - **The target is SELECT_TARGET's choice, if it made one.** `ctx.curTarget`
+ *    holds it; null means the default (`defaultTarget`), which is the active
+ *    PC in combat and the party outside it.
  */
 
 import { SpecType } from '../../data/special';
@@ -92,7 +93,11 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       // party arm asks nothing, and **`i` stays 0 there** — which is why it
       // doesn't take the cancel branch below.
       let who = 0;
-      if (spec.ex1a === 2) ctx.curTarget = null;
+      // `ctx.cur_target = &univ.party` (boe.specials.cpp:2794): the party,
+      // explicitly. It was null here, which is "the default target" — and in
+      // combat that is the active PC, so a script that picked the party to
+      // remove it in a fight (Exile III's Fort Emergence) took one PC.
+      if (spec.ex1a === 2) ctx.curTarget = TARGET_PARTY;
       else if (spec.ex1a >= 10 && spec.ex1a < 16) {
         // An blades-of-exile-ts extension, not in OBoE: 10–15 pick PC 0–5 without
         // asking. The C++ has no arm for them (they ask nobody and change

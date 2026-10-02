@@ -766,6 +766,14 @@ export class XmlDialog implements ModalScreen {
       if (!label) label = humanise(c.name);
       right.push({ name: c.name, label });
     }
+    // The ways out go last, set off from the choices: an XML that draws
+    // Cancel and Done first (pick-race-abil) would otherwise put them at the
+    // top of the strip, above everything they close on.
+    const exits = right.filter((c) => EXIT_BUTTONS.has(c.name));
+    if (exits.length > 0 && exits.length < right.length) {
+      right.splice(0, right.length, ...right.filter((c) => !EXIT_BUTTONS.has(c.name)), ...exits);
+      exits[0]!.section = '';
+    }
     const view: TouchView = { right };
     const focus = this.focus;
     if (focus !== null && !this.hidden.has(focus)) view.field = { name: focus, text: this.getText(focus) };
@@ -1268,6 +1276,9 @@ const KEY_NAMES: Record<string, string> = {
 };
 
 /** What a button with no words on its face shows on the touch overlay. */
+/** The buttons that close a dialog, for `controlsTouchView`'s order. */
+const EXIT_BUTTONS = new Set(['okay', 'done', 'cancel']);
+
 const ARROW_FACES: Partial<Record<string, string>> = {
   left: '◀', right: '▶', up: '▲', down: '▼', help: '?',
 };

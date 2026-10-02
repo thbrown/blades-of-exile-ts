@@ -1690,10 +1690,12 @@ export class Screen {
         }
       }
     }
-    if (!service) {
-      this.drawItemBottomButtons(session, at);
-      this.itemSbar.draw(this.ctx, this.store);
-    }
+    // `place_item_bottom_buttons` closes put_item_screen whatever the mode
+    // (boe.text.cpp:387): during a service the six PCs are how the player
+    // shows someone else's things. Skipping them here left them live but
+    // unseen.
+    this.drawItemBottomButtons(session, at);
+    if (!service) this.itemSbar.draw(this.ctx, this.store);
   }
 
   /**

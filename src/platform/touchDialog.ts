@@ -114,7 +114,7 @@ export class TouchDialogPanel {
     const [leftSide, rightSide] = view.mirrored ? ['ts-right', 'ts-left'] : ['ts-left', 'ts-right'];
     if (view.left) children.push(this.strip(leftSide, view.leftHeading, view.left, null));
     const right = this.strip(rightSide, view.rightHeading, view.right, view.field ? this.input : null);
-    if (view.rightPairs) right.classList.add('td-pairs');
+    if (view.rightFollowsPad) right.classList.add('td-follows-pad');
     children.push(right);
     this.root.replaceChildren(...children);
     for (const list of this.root.querySelectorAll<HTMLElement>('.ts-list')) {
@@ -137,7 +137,15 @@ export class TouchDialogPanel {
     list.className = 'ts-list';
     list.dataset['side'] = side;
     list.dataset['names'] = choices.map((c) => c.name).join('\n');
-    for (const choice of choices) list.append(this.button(choice));
+    for (const choice of choices) {
+      if (choice.section !== undefined) {
+        const section = document.createElement('div');
+        section.className = choice.section ? 'td-section' : 'td-section td-rule';
+        section.textContent = choice.section;
+        list.append(section);
+      }
+      list.append(this.button(choice));
+    }
     strip.append(list);
     return strip;
   }

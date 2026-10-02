@@ -49,6 +49,10 @@ export const BASIC_BUTTON_KEYS: Record<string, string> = {
   '1': '1', '2': '2', '3': '3', '4': '4', '5': '5', '6': '6',
 };
 
+/** `basic_buttons` slots of Exile III's trap question (ONCE_TRAP). */
+const FLEE = 25;
+const ONWARD = 26;
+
 function buttonLabel(index: number): string {
   return BASIC_BUTTONS[index] ?? 'OK';
 }
@@ -300,8 +304,12 @@ export async function oneshotSpec(
         // so the commander's chest asked about leaving the scenario.
         const strs = univ.getStrs(ctx.curSpecType, spec.m1, spec.m2)
           .filter((s) => s !== '');
+        // Exile III's traps ask Flee or Onward (its dialogs' buttons 70 and
+        // 71), not No or Yes; the scenario flag `trap` = `exile3` says so.
+        // Same slots, so the same `btn1`/`btn2` names a recording clicks.
+        const e3 = univ.scenario.featureFlags['trap'] === 'exile3';
         refused = await ctx.host.choice(
-          strs, threeChoiceButtons([3, 2, -1]), '', spec.pic, spec.pictype) === 0;
+          strs, threeChoiceButtons(e3 ? [FLEE, ONWARD, -1] : [3, 2, -1]), '', spec.pic, spec.pictype) === 0;
       } else {
         // basic-trap.xml: the stock question, with its own picture (dlog 27)
         // and Yes/No the other way round from the custom-message branch.
