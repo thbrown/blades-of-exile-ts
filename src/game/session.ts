@@ -3990,13 +3990,6 @@ export class GameSession {
   // ------------------------------------------------------------ transitions
 
   /**
-   * start_town_mode (boe.town.cpp:77). Populates the town from its presets;
-   * saved populations, field placement, and entry specials come later.
-   *
-   * `entryDir` indexes start_locs; 9 means "use the forced location", which
-   * for now resolves to the first usable start location.
-   */
-  /**
    * Enter town combat, facing `direction` — the C++'s `start_town_combat` plus
    * the mode change `handle_action` does around it. `whichCombatType` is 1 for a
    * fight inside a town, which is all this port supports so far.
@@ -4887,18 +4880,6 @@ export class GameSession {
   }
 
   /**
-   * `skipEntrySpecial` covers the two places the town's `spec_on_entry` must
-   * not fire. The debug Enter Town key is one — `if(!debug_enter)
-   * handle_town_specials(...)` (boe.town.cpp:356), which drops the party in
-   * without waking the place up. **Scenario start is the other**, and the C++
-   * spells it differently: `handle_town_specials` only *queues* the node
-   * (boe.town.cpp:689), and `put_party_in_scen` then empties the queue behind
-   * `start_town_mode` with its own comment — "preserve legacy behaviour of not
-   * calling the enter town node at scenario start" (boe.party.cpp:216). Same
-   * effect, and this port runs the chain rather than queueing it, so the only
-   * place to say it is here.
-   */
-  /**
    * Towns that sound like a dungeon however they are lit: the scenario flag
    * `dungeon-sound`, a comma-separated list of numbers and `a-b` ranges.
    * Exile III's `start_town_mode` (`10d8:0526`) plays 95 for a dark town *or*
@@ -4924,6 +4905,22 @@ export class GameSession {
     return new Set(flag.split(',').filter((p) => p.trim() !== '').map(Number));
   }
 
+  /**
+   * `start_town_mode` (boe.town.cpp:77). `entryDir` indexes the town's
+   * start locations; 9 (`FORCED_ENTRY`) is a square set beforehand by
+   * `forceTownEntry`.
+   *
+   * `skipEntrySpecial` covers the two places the town's `spec_on_entry` must
+   * not fire. The debug Enter Town key is one — `if(!debug_enter)
+   * handle_town_specials(...)` (boe.town.cpp:356), which drops the party in
+   * without waking the place up. **Scenario start is the other**, and the C++
+   * spells it differently: `handle_town_specials` only *queues* the node
+   * (boe.town.cpp:689), and `put_party_in_scen` then empties the queue behind
+   * `start_town_mode` with its own comment — "preserve legacy behaviour of not
+   * calling the enter town node at scenario start" (boe.party.cpp:216). Same
+   * effect, and this port runs the chain rather than queueing it, so the only
+   * place to say it is here.
+   */
   startTownMode(townNum: number, entryDir: number, skipEntrySpecial = false, silent = false): void {
     if (this.univ.scenario.towns[townNum] === undefined) {
       this.univ.addStringToBuf('The scenario tried to put you into a town that does not exist.');

@@ -36,9 +36,12 @@ and **read `DIVERGENCES.md` before assuming which C++ is right.**
   decided case so far is `get_ran`, where matching the original would cost the
   entire replay corpus and change nothing a player can see.
 - **`TODO(...)` marks every place the port stops short**, naming what fills
-  it in: a milestone (`TODO(M9)`), or `TODO(campaign)` for cross-scenario
-  state that is out of scope. `grep -rn "TODO(" src/` is the honest inventory
-  of what's missing — keep prose from matching it.
+  it in: a milestone (`TODO(M9)`), an Exile III area (`TODO(e3save)`), or
+  `TODO(campaign)` for cross-scenario state that is out of scope.
+  `git grep -n "TODO(" -- src tools` is the honest inventory of what's
+  missing — Exile III's gaps are mostly in the converter, under `tools/` —
+  so a gap described only in prose ("isn't ported", a bare `TODO:`) is a
+  gap nobody will find. Keep prose that isn't a gap from matching it.
 - **Update `PROGRESS.md` and commit it with the work.** New findings go in its
   gotchas log with a date.
 

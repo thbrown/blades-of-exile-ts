@@ -1612,6 +1612,8 @@ Notes for M2 implementer:
 
 ## Findings / gotchas log
 
+- (2026-10-02) **The TODO inventory had gaps of its own.** An audit found two real gaps nobody could grep for: `apply_light_mask` (a bare `TODO:` in `screen.ts`, now `TODO(M8)`) and six of E3's talk-start cases, Baziron's 200 gold among them (only in this file's prose; now `TODO(E3-talkstart)` in `tools/e3convert/towns/talkStart.ts`, with what each does). Two file headers listed gaps closed long ago (`saveIo.ts`: the journal, split party, creature saves; `increaseAge.ts`: `dump_gold`, the eating autosave), and `startTownMode` had a stale orphaned doc comment. The inventory is now `git grep -n "TODO(" -- src tools` (CLAUDE.md), since Exile III's gaps live in the converter. It reads: M9 5 (replay harness), e3save 5, campaign 5, M8 2, E3-movies 1, E3-talkstart 1. Note there is no M9 in `PLAN.md`; it is this file's name for replay-harness work.
+
 - (2026-10-02) **Don't `translate` a scrolling strip to follow a pad.** The talk presets used to move by the right pad's `--tr-y`, and a large offset put the scroll box's own top above the screen, where no scrolling reaches. Offset the content inside the box instead (`.td-follows-pad .ts-list::before/::after` spacers, which give way before the list has to scroll).
 
 - (2026-10-01) **The live game's dice are seeded off the clock now, so a browser check that depends on a roll is flaky.** `verify-e3.mjs`'s orb flight pressed arrows a fixed 300ms after Use, and the orb's rolled damage sometimes outlasted that and swallowed the keys. Wait on `session.settled()`, or pin `?seed=`.

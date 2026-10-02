@@ -447,7 +447,9 @@ export class Screen {
     const { univ } = session;
     const town = univ.town;
     // An outdoor arena has no unexplored ground to speak of, and a dark town
-    // uses the light mask instead (TODO: apply_light_mask, :168).
+    // uses the light mask instead. TODO(M8): `apply_light_mask`
+    // (boe.newgraph.cpp:168), the black ellipses that round off the dark
+    // around each light; a dark town's edges are square here.
     if (isCombat(session.mode) && session.whichCombatType === 0) return;
     if (town && town.record.lightingType > 0) return;
     const pats = this.store.get('bwpats');

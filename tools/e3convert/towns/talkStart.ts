@@ -20,6 +20,19 @@
  *   block 57 and no conversation (`1020:14bf`). E3 asks after its hostile
  *   test, so a hostile king (odd attitude) isn't asked.
  *
+ * TODO(E3-talkstart): the rest of `FUN_1020_1484`'s cases (`1020:1512`–
+ * `16a8`), none of them ported:
+ * - 0x151 asks dialog 0xc60. Its first button: message (0x37, 0x18) and
+ *   party+0x14b = 0x19 (not identified). Otherwise: message (0x37, 0x17)
+ *   and a charge of 100 gold, or all the party's gold if it has less.
+ * - 0x142 and 0x143 show dialog 0xc5c / 0xc5e while flag 0xc94 is clear,
+ *   and 0xc5d / 0xc5f, with party+0x14b = 0x19, once it is set.
+ * - 0x2f, once (flag 0xc09), if 0xc9e or party+0x44 is set: dialog 0xd55.
+ * - 0x162, General Baziron, holding the Dervish's scroll (special item at
+ *   party+0x6e): dialog 0x1217, takes the scroll, `FUN_10b0_1ff2(5)` (not
+ *   identified) and 200 gold. E3-SUSPECTED-BUGS #5's fix goes here.
+ * - 0x174, once (party+0x4cd): dialog 0xffc.
+ *
  * Numbers here are E3's, 1-based; the engine's are one less (neither is a
  * shopkeeper, so neither is cloned, `talk.ts`).
  */
