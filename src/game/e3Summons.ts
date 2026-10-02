@@ -1,5 +1,5 @@
 /**
- * Exile III's summoning lists. An exile-js extension, not in BoE or OBoE: a
+ * Exile III's summoning lists. An blades-of-exile-ts extension, not in BoE or OBoE: a
  * scenario with the feature flag `summons` set to `exile3` summons from these
  * instead of by monster summon class.
  *

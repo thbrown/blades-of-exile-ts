@@ -55,13 +55,13 @@ export enum SpecType {
   SWAP_STR_BUF = 46,
   STR_BUF_TO_SIGN = 47,
   /**
-   * An exile-js opcode, not in BoE or OBoE: add journal string `ex1a` to the
+   * An blades-of-exile-ts opcode, not in BoE or OBoE: add journal string `ex1a` to the
    * events journal, dated today. OBoE has the journal and `add_to_journal`
    * but no node that calls it; Exile III adds entries from its scripts.
    */
   ADD_JOURNAL = 48,
   /**
-   * An exile-js opcode, not in BoE or OBoE: the party forgets the four towns
+   * An blades-of-exile-ts opcode, not in BoE or OBoE: the party forgets the four towns
    * whose creatures it remembers (`creature_save`), so each fills again from
    * its record on the next visit — the debug key's `debug_towns_forget`.
    * Exile III does it twice, as the plot turns (DIVERGENCES.md #25).
@@ -112,13 +112,13 @@ export enum SpecType {
   STORE_PC = 106,
   UNSTORE_PC = 107,
   /**
-   * An exile-js opcode, not in BoE or OBoE: each target's health becomes
+   * An blades-of-exile-ts opcode, not in BoE or OBoE: each target's health becomes
    * `ex1a` percent of what it is, rounded down. Exile III halves the party's
    * in the Pit of the Wyrm (DIVERGENCES.md #22).
    */
   AFFECT_HP_PERCENT = 108,
   /**
-   * An exile-js opcode, not in BoE or OBoE: every magic item leaves each
+   * An blades-of-exile-ts opcode, not in BoE or OBoE: every magic item leaves each
    * living target's pack, and with `ex1a` 1 every magic item lying in the
    * town is destroyed. Exile III's Great Circle does both (DIVERGENCES.md #22).
    */
@@ -156,20 +156,20 @@ export enum SpecType {
   IF_ON_HORSE = 159,
   IF_QUEST = 160,
   /**
-   * An exile-js opcode, not in BoE or OBoE: jump to `ex1b` if town `ex1a`
+   * An blades-of-exile-ts opcode, not in BoE or OBoE: jump to `ex1b` if town `ex1a`
    * shows on the map (`can_find`). SET_TOWN_VISIBILITY sets it, but no node
    * reads it; Exile III's scripts test it (`can_find_town[t]`).
    */
   IF_TOWN_VISIBLE = 161,
   /**
-   * An exile-js opcode, not in BoE or OBoE: jump to `ex1c` if the party came
+   * An blades-of-exile-ts opcode, not in BoE or OBoE: jump to `ex1c` if the party came
    * into the current town with an entry direction from `ex1a` to `ex1b`
    * (`start_town_mode`'s `entry_dir`: 0–3 an entrance, 9 put there by a
    * script). Exile III's town loader tests it.
    */
   IF_ENTRY_DIR = 162,
   /**
-   * An exile-js opcode, not in BoE or OBoE: jump to `ex1b` if the town's
+   * An blades-of-exile-ts opcode, not in BoE or OBoE: jump to `ex1b` if the town's
    * creature in slot `ex1a` passes test `ex2a` — 0 it is here (alive), 1 it
    * is here with attitude `ex2b`, 2 its group has not been brought in yet
    * (its live encounter code is still set), or 3 — whatever the slot — the
@@ -178,7 +178,7 @@ export enum SpecType {
    */
   IF_CREATURE = 163,
   /**
-   * An exile-js opcode, not in BoE or OBoE: jump to `ex2a` if the party — in
+   * An blades-of-exile-ts opcode, not in BoE or OBoE: jump to `ex2a` if the party — in
    * combat, the acting PC — is less than `ex1c` from (`ex1a`, `ex1b`), by
    * Exile III's measure (`FUN_1080_0000`: the whole part of the straight
    * line). Its slime pools and the Agate Tower breathe sleep on a party near
@@ -186,14 +186,14 @@ export enum SpecType {
    */
   IF_NEAR = 164,
   /**
-   * An exile-js opcode, not in BoE or OBoE: jump to `ex1b` if known bug
+   * An blades-of-exile-ts opcode, not in BoE or OBoE: jump to `ex1b` if known bug
    * `ex1a` plays fixed (`game/bugFixes.ts`, the "Fix known bugs"
    * preference). The converter writes both versions of a suspected bug in
    * Exile III's scripts behind one.
    */
   IF_FIXED = 165,
   /**
-   * An exile-js opcode, not in BoE or OBoE: jump to `ex1b` if at least
+   * An blades-of-exile-ts opcode, not in BoE or OBoE: jump to `ex1b` if at least
    * `ex2a` squares of the town carry field `ex1a`. Exile III's Concealed
    * Tunnel holds its barrier while a barrel is left anywhere in it, and BoE's
    * IF_FIELDS, which could have counted them, tests the wrong column
@@ -237,7 +237,7 @@ export enum SpecType {
   TOWN_RELOCATE_CREATURE = 203,
   TOWN_PLACE_LABEL = 204,
   /**
-   * An exile-js opcode, not in BoE or OBoE: change the town's creature in
+   * An blades-of-exile-ts opcode, not in BoE or OBoE: change the town's creature in
    * slot `ex1a` (-1 every creature, -2 the one being talked to), only where
    * it is here. `ex1b` names what: 0 wakes it to hunt the party (`active`
    * 2), 1 sets its health to `ex1c`, 2 takes it away, 3 takes it away
@@ -251,7 +251,7 @@ export enum SpecType {
    */
   TOWN_SET_CREATURE = 205,
   /**
-   * An exile-js opcode, not in BoE or OBoE: the `ex2a` × `ex2b` rectangle at
+   * An blades-of-exile-ts opcode, not in BoE or OBoE: the `ex2a` × `ex2b` rectangle at
    * (`ex1b`, `ex1c`) takes the terrain town record `ex1a` has there, square
    * by square as CHANGE_TER would. Exile III rebuilds a village on every
    * visit, with each building ruined once its day has come; the converter

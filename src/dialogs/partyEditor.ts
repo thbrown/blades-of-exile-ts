@@ -15,9 +15,9 @@ import { PcGraphicPick, RaceAbilPick, XpMode, newPc, pcNameOk } from '../game/cr
 import { SheetStore } from '../render/sheets';
 import { giveHelp } from '../universe/living';
 import { Player } from '../universe/player';
-import { MainStatus } from '../universe/skills';
+import { MainStatus, Race, Trait } from '../universe/skills';
 import { Universe } from '../universe/universe';
-import { ModalScreen } from './dialog';
+import { ModalScreen, type TouchChoice } from './dialog';
 import { getDialogDef } from './dialogStore';
 import { pictChoiceDialog } from './pictChoiceDialog';
 import { XmlDialog } from './xmlDialog';
@@ -45,10 +45,12 @@ export type RaceAbilMode = 0 | 1 | 2;
  * `pick_race_abil` on pick-race-abil.xml. The LEDs are the working copy
  * (`RaceAbilPick`), and only Done in an editing mode writes them back.
  *
- * Two C++ details kept: the "Experience needed" number is the PC's own
- * `get_tnl`, read once when the dialog opens, so it does not follow the LEDs;
- * and a click on anything, editable or not, puts that thing's description in
- * the box at the bottom.
+ * The "Experience needed" number follows the LEDs, as 1997's
+ * `display_traits_graphics` (INFODLGS.CPP:718) recomputes `get_tnl` on every
+ * click. OBoE reads the PC's own once, when the dialog opens, so the number
+ * never moved (DIVERGENCES.md #39).
+ * A click on anything, editable or not, puts that thing's description in the
+ * box at the bottom.
  */
 export async function pickRaceAbil(
   host: PartyEditorHost, pc: Player, mode: RaceAbilMode,
@@ -60,6 +62,7 @@ export async function pickRaceAbil(
     for (let r = 0; r < 4; r++) dlg.setLed(`race${r + 1}`, pick.race === r ? 'red' : 'off');
     for (let i = 0; i < 10; i++) dlg.setLed(`good${i + 1}`, pick.traits[i] ? 'red' : 'off');
     for (let i = 0; i < 7; i++) dlg.setLed(`bad${i + 1}`, pick.traits[i + 10] ? 'red' : 'off');
+    dlg.setNum('xp', pick.tnl());
   };
   const select = (id: string) => (): 'stay' => {
     let abilStr = 0;
@@ -84,6 +87,15 @@ export async function pickRaceAbil(
   for (let r = 1; r <= 4; r++) dlg.attachHandler(`race${r}`, select(`race${r}`));
   for (let i = 1; i <= 10; i++) dlg.attachHandler(`good${i}`, select(`good${i}`));
   for (let i = 1; i <= 7; i++) dlg.attachHandler(`bad${i}`, select(`bad${i}`));
+  // Exile III's own screen (dialog 1013) has three species, ten advantages
+  // and five disadvantages: no Vahnatai, Pacifist or Anama Member. A PC
+  // that already has one (a party made in Blades of Exile) still shows it,
+  // so it can be seen and taken off.
+  if (host.univ.scenario.featureFlags['traits'] === 'exile3') {
+    if (pick.race !== Race.VAHNATAI) dlg.hide('race4');
+    if (!pick.traits[Trait.PACIFIST]) dlg.hide('bad6');
+    if (!pick.traits[Trait.ANAMA]) dlg.hide('bad7');
+  }
   dlg.attachHandler('done', () => 'close');
   if (mode !== 1) {
     dlg.attachHandler('cancel', () => 'close');
@@ -91,7 +103,6 @@ export async function pickRaceAbil(
     dlg.hide('cancel');
     dlg.setEscapeButton('done');
   }
-  dlg.setNum('xp', pc.getTnl());
   dlg.setText('info', mode === 1
     ? 'Click on button by name for description.'
     : 'Click on advantage button to add/remove.');
@@ -257,6 +268,7 @@ export async function editParty(host: PartyEditorHost): Promise<void> {
   }
   dlg.attachHandler('help', () => { giveHelp(22, 23, true); return 'stay'; });
   dlg.attachHandler('done', () => (busy ? 'stay' : 'close'));
+  dlg.touchFace = editPartyTouchFace(dlg, univ);
   putPartyStats();
   await host.nest(dlg);
 
@@ -265,6 +277,46 @@ export async function editParty(host: PartyEditorHost): Promise<void> {
     if (first >= 0) univ.curPc = first;
   }
 }
+
+/**
+ * The party editor for a finger: the six slots down the left, and down the
+ * right what can be done to the one picked — Name, Delete, Race/Traits,
+ * Train and Graphic, or Create for an empty slot — then Help and Done. Each
+ * presses that slot's own button on the dialog.
+ */
+function editPartyTouchFace(dlg: XmlDialog, univ: Universe): NonNullable<XmlDialog['touchFace']> {
+  let picked = 0;
+  const ACTIONS: [string, string][] = [
+    ['name', 'Name'], ['delete', 'Delete'], ['trait', 'Race/Traits'], ['train', 'Train'], ['pic', 'Graphic'],
+  ];
+  return {
+    view: () => {
+      const left: TouchChoice[] = univ.party.pcs.map((pc, i) => pc.mainStatus === MainStatus.ABSENT
+        ? { name: `slot:${i}`, label: `${i + 1}. Empty`, on: i === picked }
+        : { name: `slot:${i}`, label: `${i + 1}. ${pc.name}`, detail: `Level ${pc.level} ${RACE_NAMES[pc.race] ?? ''}`, on: i === picked });
+      const pc = univ.party.pcs[picked]!;
+      const right: TouchChoice[] = pc.mainStatus === MainStatus.ABSENT
+        ? [{ name: 'delete', label: 'Create' }]
+        : ACTIONS.map(([name, label]) => ({ name, label }));
+      right.push({ name: 'help', label: 'Help' }, { name: 'done', label: 'Done' });
+      const heading = pc.mainStatus === MainStatus.ABSENT ? `Slot ${picked + 1}` : pc.name;
+      return { left, leftHeading: 'Party', right, rightHeading: heading };
+    },
+    press: (name) => {
+      const slot = /^slot:(\d)$/.exec(name);
+      if (slot) {
+        picked = Number(slot[1]);
+        return null;
+      }
+      if (ACTIONS.some(([a]) => a === name)) return dlg.pressControl(`${name}${picked + 1}`);
+      return dlg.pressControl(name);
+    },
+  };
+}
+
+const RACE_NAMES: Partial<Record<Race, string>> = {
+  [Race.HUMAN]: 'Human', [Race.NEPHIL]: 'Nephilim', [Race.SLITH]: 'Slithzerikai', [Race.VAHNATAI]: 'Vahnatai',
+};
 
 /**
  * `start_new_game(false)` from the startup screen, up to the point where a

@@ -11,28 +11,13 @@ Coordinates are town squares (x, y), as the port's debug panel
 
 **Saved games for the original** (2026-09-30): `E3_CHECK_SAVES=e3data/check-saves
 npx vitest run test/e3checkSaves.test.ts` writes one `exile3.sav` per
-question, `Q01.SAV` to `Q21.SAV` (#3 has ten, `Q03A`–`Q03J`), and a
+question, `Q01.SAV` to `Q27.SAV` (#3 has ten, `Q03A`–`Q03J`; #2 shares `Q01`; #26 needs none), and a
 `README.TXT` saying what each holds and where to walk. Each has a strong
 party outdoors near the place, with the question's flags and items set.
 Add a recipe there when adding a question. (`File > Export as Exile III
 Save…` in the port writes one from any game, outdoors.)
 
 ## Open
-
-### 1. Colchis: does the secret door into the shade's room open? (2026-09-30)
-
-- **Where:** Colchis (town 125), the southeast corner. The shade's room
-  is walled in; its east wall at **(36,39)** looks like a plain wall but is
-  terrain 101, a secret door that opens when walked into.
-- **Do:** walk into (36,39) from the east, (37,39), a few times.
-- **The port:** shows the message about the "just plain odd" secret room
-  and refuses the step, every time; the door never opens. That's because
-  E3's message spot 113 sits on the same square, and the converter makes a
-  message spot on a wall refuse the step (`WALK_INTO`,
-  `tools/e3convert/specials.ts`).
-- **Question:** does the original open the door (after or instead of the
-  message)? If it does, the converter's rule is wrong for secret doors.
-- (Casting Move Mountains on the moldy wall at (36,40) gets in either way.)
 
 ### 2. Move Mountains: which rubble? (2026-09-30)
 
@@ -269,7 +254,116 @@ quest steps.
 - **Question:** do A's moves open the way north? If they do, which way
   does each row move as you step along y 29?
 
-### 21. Colchis: when do the slimes first notice you? (2026-10-01)
+### 21. The way back across the Pit of the Wyrm's floor (2026-10-01)
+
+- **Where:** the Pit of the Wyrm, level 2: the floor room past the door at
+  (15,42) (the lever behind the southernmost crypt door makes it), a grid
+  at x 16–21, y 40–42, with the bier's door at (21,39).
+- **Do:** cross by walkthrough A's moves (east, north, north, east, south,
+  east, south, east, east, north, north, east, north). Then come back by
+  A's "start at (21,39)": south, west, south, west, west, north, west,
+  south, west, south.
+- **Why:** each square stepped on charges the whole grid and makes only its
+  own few neighbours safe (`1088:454c` on), so the square the party last
+  stood on is charged. After the crossing that is (21,40), right below the
+  bier's door.
+- **The port:** A's way across works, as does B's ("right, up, up, …").
+  A's first step back, south onto (21,40), zaps ("bolts of lightning") and
+  the party stays put. A's second, west, is a wall. Southwest onto (20,40)
+  is safe, and from there A's moves after its first two take the party
+  back to the door.
+- **Question:** does south from the bier's door zap in the original too?
+  (A throw, which the port gives for stepping on (19,40), (21,41) or
+  (17,42) when they're safe, makes (21,40) safe again.)
+
+### 22. Walking to the Pit of the Wyrm (2026-10-01)
+
+- **Where:** east of Bremerton. The Pit's entrance is at (261,130) of the
+  world map, the walkthroughs' coordinates.
+- **Do:** without flying, go north round the lake by the bridge at
+  (227,129), east through the hills, then west through the mountains at
+  (273,129) and (272,129), and again at (261,127) and (260,127).
+- **Why:** those four mountain squares carry E3's spot 50, the "way
+  through" that lets the party step onto Delan's ford. Both walkthroughs fly
+  the rivers instead.
+- **The port:** lets the party through all four, so the Pit can be walked
+  to.
+- **Question:** are they passes in the original too?
+
+### 23. The Remote Cave's crate (2026-10-01)
+
+- **Where:** the Remote Cave (town 72), west of (57,68), in the room of
+  chasms past the door at (15,1). Three crates stand at (1,18), (2,18)
+  and (3,18).
+- **Do:** walkthrough A's moves from (3,17): S, N ×15, NW, E ×7, NE, then
+  "south two". Then its step 8, SW.
+- **Why:** walking into a crate that can't move on swaps it with the party
+  (the first S does this, putting the crate at (3,17)). In the port A's
+  "south two" leaves the crate at (10,4) with the party at (10,3), and A's
+  SW then runs into the chasm. Walkthrough B starts its own list from
+  exactly there ("at 10,3 with a crate one square south") with an extra S
+  first; with that S, A's remaining moves put the crate on the rune at
+  (13,2), as the test (`the Black Halberd`) does.
+- **The port:** needs three Ss at A's step 7.
+- **Question:** in the original, does A's "south two" work as written (so
+  the port pushes or swaps differently), or is A one S short?
+
+### 24. Foxfire's key and the Monastery of Madness (2026-10-01)
+
+- **Where:** Foxfire the bard, in Bengaro, Poulsbo or Malloc (a different
+  one each day), and the Monastery of Madness at (331,463) on the
+  southernmost Remote Isle.
+- **Do:** before buying her key, cross to that isle (Storm Port's ferry,
+  the boat people at (306,440) and (312,451), the stones east of (308,464))
+  and walk north into the monastery's square. Then buy the key ("payment",
+  500 gold) and try again.
+- **Why:** nothing in E3's scripts reveals the monastery; its turn code
+  shows it every turn the key is held (`10c0:69ff`).
+- **The port:** the monastery is hidden (the party walks onto the square
+  and stays outdoors) until a turn after the key is bought.
+- **Question:** is it the same in the original: no way in without the key,
+  and on the map as soon as it is bought?
+
+### 25. The Tower of Zkal: its drain, and Zkal's death (2026-10-01)
+
+- **Where:** the Tower of Zkal, at (295,271) of the world map, the south
+  end of the undead island below Gale.
+- **Do:** walk in, note a PC's spell points, and wait (Space) ten turns,
+  then start a fight in the tower and watch them over ten rounds. Later, on
+  level 2, kill Zkal (the Lich in the room past the lever room) and go back
+  through the tunnels.
+- **Why:** E3's per-turn code takes 5 spell points from every PC on each
+  turn whose age is a multiple of 5 (`10c0:7100`), in town or in a fight
+  there, and the port now does the same (DIVERGENCES.md #38). Walkthrough
+  B says killing Zkal "spawned a crapload of undead all over the tunnels";
+  E3's kill code for him shows a dialog, gives 20 experience and sets a
+  flag nothing reads (`10c0:564c`), and the port does only that.
+- **The port:** 5 points every fifth turn, down to 0; nothing new appears
+  when Zkal dies.
+- **Question:** is the drain 5 every fifth turn, and in a fight too? Do
+  undead appear after Zkal's death, or does B mean the tower's own
+  wanderers?
+
+### 26. The intro movie's look and pace (2026-10-01)
+
+- **Where:** the title screen, **Intro** (or New Game); no save needed.
+- **Do:** watch the whole of "Exile (verb) - ..." through to "Good luck.",
+  timing it, and take a screenshot or two: one during the history, one
+  during the battle.
+- **Why:** the script was read from the EXE (`1098:3148`) and plays the
+  same frames, but three things depend on the running game: the pace (the
+  port waits 48 × 16 ms between frames, as `0e09`'s `Delay`s add up, and
+  missiles and explosions take their 1997 times), what fills the window
+  around the picture (the port tiles the game's background pattern; E3's
+  `FUN_1058_1695` takes its pattern from a stack slot nobody set), and the
+  caption font (the port uses its bold face at 10 pixels).
+- **The port:** about three and a half minutes from the first line to
+  "Good luck.", on the background pattern, the picture centred 30 pixels up.
+- **Question:** how long does it take? What is behind the picture? Do the
+  captions look like the port's? And at launch: are the logo (3 s) and the
+  adventurers (5 s) on black, the logo a little above centre?
+
+### 27. Colchis: when do the slimes first notice you? (2026-10-01)
 
 - **Where:** Colchis (town 125), walked into from the world by its
   **north** gate: outdoors (10,29) of zone (3,9), stepping south. Use a
@@ -299,4 +393,12 @@ quest steps.
 
 ## Answered
 
-(none yet)
+### 1. Colchis: does the secret door into the shade's room open? (2026-09-30)
+
+**Answered 2026-10-01 (sixth play-test, with `Q01.SAV`): yes.** In the
+original the door at (36,39) stays plain wall until the party is through
+it; the port showed the door's outline from outside. E3's move code
+(`10c0:14df`) opens a secret door and lets the party through on the same
+step, after the spot's message (DIVERGENCES.md #42). The port now does
+the same, and its search finds one too.
+

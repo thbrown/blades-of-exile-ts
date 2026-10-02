@@ -53,16 +53,16 @@ export const SUPPORTED_FEATURES: Readonly<Record<string, readonly string[]>> = {
   'store-spell-caster': ['fixed'],
   // Game balance: Resist Magic used to not help against magic damage.
   'magic-resistance': ['fixed'],
-  // exile-js's own, not OBoE's: a town is cleaned out and abandoned by 1997's
+  // blades-of-exile-ts's own, not OBoE's: a town is cleaned out and abandoned by 1997's
   // rule (DIVERGENCES.md §14). No recording lists it, so a replay has OBoE's.
   'town-thrash': ['1997'],
-  // exile-js's own too: a PC's saving roll against sleep and paralysis is
+  // blades-of-exile-ts's own too: a PC's saving roll against sleep and paralysis is
   // 1997's, against their level (DIVERGENCES.md §17).
   'sleep-save': ['1997'],
-  // exile-js's own too: a failed bash hurts as 1997's does, unblockable, and
+  // blades-of-exile-ts's own too: a failed bash hurts as 1997's does, unblockable, and
   // its roll runs 0–100 (DIVERGENCES.md §18).
   'bash-door': ['1997'],
-  // exile-js's own too: `day_reached` passes an event that never happened, as
+  // blades-of-exile-ts's own too: `day_reached` passes an event that never happened, as
   // both 1997 builds do (`key_times` start at 30000), where OBoE's missing key
   // fails (DIVERGENCES.md §9).
   'day-reached': ['1997'],

@@ -1,4 +1,4 @@
-# exile-js Progress
+# blades-of-exile-ts Progress
 
 > Live status of the project. See `PLAN.md` for the full approved plan.
 > **Convention:** whoever works on this (any model/session) reads this file first, updates it as work lands, and commits it with the work.
@@ -13,7 +13,7 @@
 
 - `npm run dev` → the game at http://localhost:5199. `?scenario=stealth` loads another.
   The dice are seeded off the clock at each load; `?seed=N` pins them (the
-  console prints the seed in use). See DIVERGENCES.md #37.
+  console prints the seed in use). See DIVERGENCES.md #45.
 - **The corpus is the meter.** `node scripts/diverge.mjs --all --stacks` ranks
   it by the rule each recording first parts on — as of **2026-09-13** that is
   **1,231,440 matching draws, 51 of 87 files agreeing all the way**, and
@@ -1615,6 +1615,8 @@ Notes for M2 implementer:
 - (2026-10-01) **The live game's dice are seeded off the clock now, so a browser check that depends on a roll is flaky.** `verify-e3.mjs`'s orb flight pressed arrows a fixed 300ms after Use, and the orb's rolled damage sometimes outlasted that and swallowed the keys. Wait on `session.settled()`, or pin `?seed=`.
 - (2026-10-01) **A ported function's `run_a_missile` calls are easy to lose, and nothing notices.** They spend no draws while the monsters are going (`drawTextBar`'s `monstersGoing` gate), so the corpus never complains; only a play-tester sees that a slime's Spark never crossed the screen. `monst_cast_mage`/`monst_cast_priest` had lost all 24 of theirs. Grep the C++ function for `run_a_missile` when porting one.
 - (2026-10-01) **A play-test difference that depends on where you stand isn't a dice difference.** Colchis's "This is very odd..." was on time from the south and west gates and a step late from the north one. Drive every entrance (`positionParty` + a real key press) before deciding a report doesn't reproduce.
+- (2026-10-01) **Ghidra's decompile of E3's movie script `3148` is fiction in places**: it shows a skip-the-walking flag (`local_b`) set to `'\x10'`, `'3'`, `'5'`, but `[bp - 9]` is written once, to 0, in the whole function; it also mislabels the jump table's cases. Read the movies from `nedis.py 1098:3148` and its printed jump table only. Also: a `?scenario=` link starts the game before `main.ts` installs `onScenarioIntro`, so it never shows intros or the E3 movie; a UI check of them has to come in through the startup screen (`verify-e3.mjs`'s last section).
+- (2026-10-01) **Editing `src/` while a `verify-*.mjs` run is going makes vite reload the page under it**, and the run then times out somewhere unrelated (a touch-dialog tap, "Loading valleydy…" in the shot). Finish the edits, then run the checks.
 - (2026-09-25) **A vehicle number in a `.map` file resizes the scenario's list to it — down as well as up** (`loadTownMapData`, OBoE's too), so a later town naming a lower number deletes every vehicle above it. Number them in load order (town, x, y). E3's converter does (`vehicleNumbers`).
 - (2026-09-25) **Check an opcode name against `SpecType` before using it.** The names are `specials-opcodes.txt`'s lines by position (as in OBoE), and several read wrong: `relocate` is `TOWN_RELOCATE_CREATURE` (party relocation is `set-sector`), `stair-generic` is `TOWN_GENERIC_BUTTON` and `button-generic` is `TOWN_GENERIC_STAIR`, and `town-attitude` is `MAKE_TOWN_HOSTILE` (one creature is `set-attitude`). `buildOpcodeTable` plus `SpecType[...]` is a one-line check.
 - (2026-09-23) **E3 data is big-endian and `[x][y]`.** Read it with `LegacyReader(data, true)`. The terrain byte is `x*48 + y`. *(Corrected 2026-09-24: I first claimed `outdoor-to-json.js`'s output was transposed, but `display.js` draws `map[i*48+j]` at column `i`, so it was right all along.)* Everything that Ghidra shows as `DS:-0x500e + …` is a zone field. The town record is loaded at `DS:0004`, so subtract 4.
@@ -14737,7 +14739,9 @@ Mindduel's crystal check (`1018:2dde`) was one of those.
   per turn `== 2`, both BoE's already) and traps. `townDifficulty` in
   `emit.ts` now emits it. The flag `town-difficulty` = `exile3` keeps the
   Unlock and Dispel Barrier spells off it (E3's never read it;
-  `spellDifficulty` in `spellTarget.ts`).
+  `spellDifficulty` in `spellTarget.ts`). **Wrong, corrected 2026-10-01**:
+  both arms add `difficulty / 10 * 5` (`10b0:643d`, `10b0:6591`), and the
+  flag is gone (see the Fury Crossbow).
 - **Traps by E3's rule**: `src/game/e3Trap.ts`, flag `trap` = `exile3`
   (`10e0:03ae`). Covers the disarm formula (Thieving item +2, raw skills,
   + 3 − difficulty / 10, roll 0–100, bug #12's Nimble inversion) and the
@@ -15333,12 +15337,273 @@ one quest at a time**, to keep each session's context small.
   - *Not covered*: the Efreets, Gorgons and Ice Drakes (killed as they
     turn up), the level 1 cache at (37,31), level 2's other treasure, and
     the trip to the island (the ferry is the roaches' test).
-- [ ] **Next: the other four artifact quests** (the Fury Crossbow, the
-  Black Halberd, the Knowledge Brew, the Ring of Endless Magery), one per
-  session.
+- [x] **The Fury Crossbow** (2026-10-01), six tests in `describe('the Fury
+  Crossbow')`, walkthrough A's "Fury Crossbow" and B's "The Fury Crossbow".
+  It could not be finished before today: the mausoleum's door was shut for
+  good (below).
+  - Judith (personality 163): in Shayder on days where `day % 3 == 2` (time
+    flag 5), Hectar's when it's 0 (3), and also in Bavner; "arti", then
+    "loca", BUY_TOWN_LOC for 1000 gold (refused at 999, once only), puts
+    the Pit of the Wyrm (76) on the map. From Bremerton (234,131) it is
+    over the rivers, as both walkthroughs fly, *or* on foot through two of
+    E3's mountain passes (spot 50) at (272–273,129) and (260–261,127):
+    check-in #22. The entrance at (261,130) lets the party in at (4,24)
+    only once it's on the map.
+  - Level 1: "being watched" (spot 1), B's ruin (the locked door at (6,6),
+    Unlock, the chest at (4,5)'s two scrolls), the giants' dig (spot 3),
+    the stairs at (18,43). **B's ruined garrison** (side content): the
+    secret passage south of (21,41), the odd wall (spot 4), Move Mountains
+    on the moldy adobe at (33,43), the sacrificial pit's slimes (spot 5),
+    Move Mountains again north of (46,38), and the box's Wand of Nullity
+    and Bronze Serpent Ring.
+  - Level 2: B's false wall south of (30,21) as the only way to the
+    mausoleum door (14,15) (locked; Unlock), the crypt doors past magic
+    (138) until the rune at (14,26) makes them 135, B's three crypts (Dart
+    of Returning, Potion of Bliss, Ambrosia), the lever at (16,26) that
+    makes the floor room's door at (15,42).
+  - The floor puzzle, walked: A's (and B's) moves across, the bier's
+    message and second step through its door, the crossbow off the bier
+    (Get; "Crossbow", unidentified, +7) and the bolts beside it; a zap, a
+    throw to the door at half health, and after the bier a throw to its
+    door instead; the way back, and the stairs at (5,46) up to (18,44).
+  - A's way back from (21,39) starts south onto (21,40), which is charged
+    after the crossing and zaps; southwest works, and A's moves after its
+    first two then reach the door. Check-in #21.
+  - **Found and fixed: Exile III's Unlock spell wasn't ported.** BoE's
+    gives up on flag2 10, and the converter writes 10 for both of E3's
+    "past picking" doors (`base + 4`, `base + 5`). E3's arm (`10b0:6402`)
+    goes by a table of 38 terrains at `10b0:679c`: it rolls for `base + 3`
+    *and* `base + 4`, refuses `base + 5`, and leaves a success *closed*
+    (`base + 2`), not open. New flag **`unlock` = `exile3:roll=104>103,…;
+    proof=…;already=…;open=…;portcullis=…`** (`readE3Unlocks` reads the
+    table from the EXE; `e3UnlockSpell` in `doors.ts`). The Pit's two
+    locked doors are 137 (adobe `base + 4`), so nothing could get to the
+    lever, and the crossbow couldn't be reached. Its roll:
+    `get_ran(1,0,100) − 5·adj + 5·(difficulty / 10)` under
+    `135 − combat_percent[min(level, 19)]`, the caster's own level.
+  - **Found and fixed: E3's spells do read the town difficulty.** The
+    `town-difficulty` = `exile3` flag (2026-09-29) kept Unlock and Dispel
+    Barrier off it, on the reading that E3's never look. Both arms add
+    `difficulty / 10 * 5` from `1160:0002` (`10b0:643d`, `10b0:6591`), the
+    word E3's pick adds whole. The flag is gone; `spellDifficulty` reads the
+    real one.
+  - *Not ported, noted*: E3's Dispel Barrier rolls `get_ran(1,0,100)` where
+    the port (OBoE's) rolls 1–100, and has no strong-barriers term. Only
+    the dice differ, so it stays.
+  - The `outdoorPath` search (the endgame's) is shared at the top of the
+    file now.
+  - *Not covered*: the Dark Wyrms and the giants (the runner kills), the
+    light that level 2 swallows, the ruin's other rooms, and the trip
+    there from the Isle of Bigail.
+- [x] **The Black Halberd** (2026-10-01), five tests in `describe('the
+  Black Halberd')`, walkthrough A's "The Black Halberd" and B's "The Black
+  Halberd Kenichi". Nothing was missing for it.
+  - Sharimik's bartender (personality 243): "bour" (12 gold), "know" (100)
+    names Masok. Masok (260) is in Angel's Rest (147) and Softport (133) on
+    days where `day % 3 == 0`; "halb", "scro", and "purc" for 2000 gold
+    (refused at 1999, once only) gives the Map to Black Halberd (note
+    0xb3), which is only a map: **the Remote Cave (72) and the Rakshasa
+    Lair (73) are on the map from the start** (not in E3's hidden-town
+    table, `DS:29b2`). Its entrance at (56,68), in at (43,5).
+  - The Remote Cave: the white mushrooms at (32,1) clear the stalagmites
+    at (32,13), and a step onto (31|33, 9|11) shuts them again; the crate
+    pushed round the chasms onto the rune at (13,2) (walkthrough A's moves
+    with one more S, check-in #23); the paper in it, readable only once the
+    crate is there ("You may proceed.", 0x35d) unbars the door at (8,19);
+    the triangle tiles (spots 17, 16, 15 in order) throw the party to
+    (18,39); the rune second from the east (32,40) leaves one brazier as
+    floor and opens (38,44); the pushing floor at (42,20) until the
+    stalagmite at (43,27) is searched; and the three stairs. The way back:
+    (18,38) throws the party to (8,24), and out.
+  - The Rakshasa Lair: the first room's other doors wall up its east door;
+    A's doors (Unlock on 122), the library's rakshasas, its two bookshelves
+    (Word of Recall at 13 Mage Lore, Death Arrows at 17), the hall's door,
+    the false wall at (20,15), the pillared room's walls sinking on the
+    eight ambushers, the locked door, the three trapped chests (B's list:
+    the Black Halberd, the wands of Rats and Vorb, Mandrake Root, the Scale
+    Necklace, Firestone), and the stairs up. The cave's other two stairs
+    land by the drakes' lava at (23,6), cut off from the halberd; the
+    lair's east edge leaves by the cave's entrance.
+  - The 1997 code (`town.c:454`, `adj_town_look`) agrees with the port that
+    a contained item shows only on a crate, barrel or container square, so
+    the paper can't be had without the puzzle.
+  - *Not covered*: the fights (the runner kills), the cave's nagas and
+    basilisks, the lair's other rooms (the cursed halberd, the robes), and
+    the drakes.
+- [x] **The Knowledge Brew** (2026-10-01), seven tests in `describe('the
+  Knowledge Brew')`, walkthrough A's "The Recipe for Knowledge Brew" and B's
+  "Knowledge Brew Sakai". It could not be finished before today: the
+  Monastery of Madness never came on the map (below).
+  - Lorelei (12): Winterhouse's "rumo" and "reci" (50 gold), Randall's
+    "reci", Lyle's "reci" naming Foxfire (personality 291). She is in
+    Bengaro (150) on days where `day % 3 == 1`, Poulsbo (152) on 2, Malloc
+    (154) on 0, and from day 200 in Dorngas (156) every day, unless the
+    Barrier Cavern fell first (E3's event 2). B's "coin", "reci", "gift",
+    then "paym": special item 16, the silver key, for 500 gold (refused at
+    499, once only); a turn later the monastery (78) is on the map.
+  - Storm Port (143): the dock's end (spot 4) wants Laika's ticket ("tick",
+    12 gold, flag 0x623), spent on the crossing to Gebra (145) at (24,8);
+    Gebra's spot 5 sails back free to (24,40). B's side trip: the false
+    hedge at (34,35), the monks' door at (38,42) (six Mad Monks), and their
+    chest's "Feisty Slap of Pain". Out of Gebra's south side at (303,438).
+  - The isles (zone 87): only the boat people (10 gold each, both ways:
+    spots 20/15 between (306,440) and (311,443), 21/14 between (312,451) and
+    (301,453)) and the stones east of (308,464) join them (`outdoorPath`
+    says no way round); the monks at (301,462); the monastery at (331,463),
+    shut without the key.
+  - Level 1: the alarm (spot 2) and every monk; A's way to the north-east
+    stairs (spot 15) to level 2's (29,5), and back; the west stairs (spot
+    14). B's rooms: the six pedestal books (three jokes, twice; B's "read 1,
+    5 and 6" does nothing more in E3's code), the dark altar's 20
+    experience a prayer, the martial arts bookshelf at (21,27) (+1
+    dexterity to 19 at 15 Mage Lore, once), the three surprise chests
+    (38,36–38). Side content of its own: three hidden switches, (7,42),
+    (29,4), (6,5), each opening the next, and the last the statues round
+    the pool at (24,21), which holds a Magic Breastplate.
+  - Level 2: the library's door at (5,15), every bookshelf searched and
+    only the south-east one, (10,20) (spot 11), teaching recipe 16. B's
+    Sacred Hall of Duels: one champion (split party), the way out refusing
+    until the duel is won, the left mat's three Mad Monks, the door it
+    makes at (17,10), the chests (2500 gold, Magic Hammer, Steel Greathelm,
+    Weak Invulnerability Potion; the second opened springs a surprise),
+    the Quicksilver Band at (10,5), and the party reunited.
+  - The way home: the survivors' ambush at (324,465) only for a party that
+    knows the recipe (zone 87's spot 3), once; the stones back west.
+    Brewing: Mandrake Root and Ember Flowers at Alchemy 19 or more (two
+    doses at nine over), and the brew's two skill points. Silverlocke's
+    Potions (zone 80's spot 11, (388,408)) sells it for B's 2600 gold.
+  - **Found and fixed: the Monastery of Madness could never be found.**
+    E3's per-turn code (`FUN_10c0_61c4`, `10c0:69ff`) sets
+    `can_find_town[78]` (party+0x84d3) every turn the silver key
+    (party+0x2c) is held; no script does it. New flag **`item-towns` =
+    `exile3:16>78`**, read by `e3ItemTownsTick` (`e3ItemUse.ts`) beside the
+    uranium and herb ticks. DIVERGENCES.md #37, check-in question 24.
+  - Runner: `talk` also tries a square two away, across a counter (talk
+    only needs sight); `global` reads `outLoc`, since BoE's
+    `out_move_party` (an outdoor ferry) leaves `loc_in_sec` stale until
+    the next step, as the C++ does.
+  - *Not covered*: the fights (the runner kills), A's turn-by-turn maze
+    directions on level 2 (a path is shown instead), the monastery's other
+    chambers (B's list of rooms and the supply room), the plaques behind
+    the false wall west of (10,8), and Storm Port's junk shop.
+- [x] **The Ring of Endless Magery** (2026-10-01), six tests in
+  `describe('the Ring of Endless Magery')`, walkthrough A's "The Ring of
+  Endless Magery" and B's "Ring of Endless Magery Ishinabe". **Every main
+  quest now has its test**: the five plagues and the five artifacts.
+  - The wizard with no name (personality 90, "Strange Wizard"): Krizsan's
+    (56,15), behind B's locked door at (54,18), on days where
+    `day % 3 == 1`; Delan's (9,30) on `day % 3 == 2`; nowhere on the third.
+    (Krizsan's state 2 has him `until-day 19`, so once the town declines
+    he is only ever in Delan: E3's data.) "magi", "dedi", then "loca" or
+    "ring": 2500 gold (refused at 2499) puts the Tower of Zkal (70) on the
+    map; before that the party walks over its square.
+  - Gale: Ernest's portal (B's way; "purc", 250 gold, spot 18) lands at
+    (32,4), *outside* the shut gates, so the party still needs Pasi's
+    tunnel. Mrrurr (338, (45,47)): "skif", "wort", "purc", 100 gold (flag
+    0x12c). The dock's end (36,56, spot 24) says to find the owner until
+    then, and rows to Execa (164) at (24,6) after; Execa's dock (spot 11)
+    rows back, 500 turns. Out of Execa at (314,162); no dry way to or from
+    the mainland, and a dry way of 111 steps to the tower.
+  - The island's side content, at the user's request: the cairns (zone 42
+    spot 1, (309,225), entered from the north-east): Leave does nothing,
+    Attack is the fight (Wights to a Vampire); won, 750 gold and a Scroll:
+    Firestorm once, and Force Barrier taught every visit. The spire (spot
+    2, (315,202)): a crowd of Ruby Skeletons, once. Vila (165): shamblers,
+    two basilisks, Ember Flowers and three more herbs. The vampires before
+    the tower (zone 51 spot 1), once.
+  - Level 1: in by the door at (39,23) (the message), the drain, A's lever
+    at (40,1) through the false wall (41,1) opening (35,1), and B's
+    coordinates as path legs that keep off every spot (`avoidSpots`): the
+    false walls at (35,3), (25,6), (3,2), the teleporter at (9,10) to
+    (1,45), the fire barrier at (9,45) dispelled from (9,44), the false
+    walls (10,46) and (14,39), the teleporter at (11,38) to (5,22), the
+    false wall (3,16), and the stairs (1,15) to level 2's (13,2), and back.
+  - Level 2: the portal (12,31) to the room of four teleporters; a wrong
+    turn, re-entry resetting the maze, and A's east, east, south, east out
+    to (34,45). Then **A's "big room"** behind (32,41): its walls never
+    stop (basalt at y 36, adobe at y 38, fire barriers along y 37 but for
+    x 37), and the lower walls span the room, so a search finds no way
+    past; one Fire Barrier cast at (32,40) from the doorway (A: "use the
+    spell Fire Barrier to block off the moving walls") opens one, replayed
+    through the engine turn by turn, onto the false wall at (31,36). The
+    closing passage (spot 5) done A's way: a barrier north, stood on, the
+    north wall followed back, a barrier at (30,28), out by (31,28). The
+    Hraithes' room, the lever room (spot 6): two barriers, then a search to
+    the lever (46,1), which opens (39,9) and (38,10). Zkal (the Lich):
+    E3's dialog, 20 experience, flag 0x353. His lever (30,1) opens (35,23);
+    the laboratory; the four trapped chests: Bronze Ring, Bronze Serpent
+    Ring, Gold Weight Ring and the **Ring of Magery** (E3's name: unknown
+    "Ring", 40 charges, level 2: 45 spell points a use, to a mage; a
+    fighter is "magically inept"). The way home: the portal at (32,32) to
+    (12,30), by the stairs.
+  - **Found and fixed: the Tower of Zkal drained nothing.** Its first
+    message warns of it, and E3's per-turn code (`10c0:7100`) takes 5
+    spell points from each PC (to 0 below 6) on every turn whose age is a
+    multiple of 5, in towns 70 and 71, in town or a fight there. New flag
+    **`sp-drain` = `exile3:70,71`**, `src/game/e3SpDrain.ts`, called after
+    the moving walls in the town turn and the combat round. DIVERGENCES.md
+    #38, check-in question 25 (with `Q25.SAV`).
+  - Runner: `pathLength`/`canReach` take `avoidSpots` (a path off every
+    special spot but its end); `WallSearch` takes `throughFire` (the party
+    may walk through and stand on fire barriers, which still stop walls).
+  - *Not covered*: the fights; A's own route on level 1 (B's is
+    coordinates, so it is the one checked); Force Barrier in place of Fire
+    Barrier (B), which stops walls the same (`STOPPERS`).
 
-All checks pass (2026-09-30): 1,554 tests, tsc, both sweeps, verify-screen,
-verify-party and verify-e3.
+**All ten main quests have tests (2026-10-01).** Next, at the user's
+plan: a pass through the check-in saves (`E3_CHECK_SAVES=e3data/check-saves`,
+`E3-CHECK-IN-ORIGINAL.md` #1–25) in the original, and answers to the open
+questions there.
+
+All checks pass (2026-10-01, the Ring of Endless Magery): 1,590 tests, tsc,
+both sweeps, verify-screen, verify-party and verify-e3.
+
+**Gotchas from the Ring of Endless Magery (2026-10-01):**
+- `pathLength`'s destination counts as open whatever it is, so a map of
+  "reachable squares" built by asking it square by square marks every wall
+  beside a reachable square too. Test the square's own terrain as well.
+- `outdoorsAt` puts the party on any square, walls included; a special met
+  by stepping off a wall can place its group on the far side of one, where
+  it never reaches the party. Approach a spot from a square a party could
+  stand on.
+- `q.spell` is free: no turn passes. Where turns matter (moving walls),
+  `pause()` after it, so the cast takes its turn.
+- `clearHostiles` kills bosses too, and runs their death scripts; kill by
+  place or name when a boss's death belongs later in the test.
+- A turn that lands on `age % 5 == 0` in the Tower of Zkal takes 5 spell
+  points: a spell point check there must pick its turn.
+
+**Gotchas from the Knowledge Brew (2026-10-01):**
+- `party.townNum` stays 200 after an outdoor fight ends; test
+  `session.mode === GameMode.COMBAT` for "a fight is on".
+- `onceEncounter`'s group is set down a step or two from the party and
+  walks in; `pause` until the mode is COMBAT before `fightOutdoors` (the
+  survivors took ten turns).
+- A town remembers its creatures: once a time-flagged creature has shown
+  up (APPEAR_ON_DAY turns into ALWAYS), a later visit at another date
+  still has it. Check a creature's date rule on a fresh runner.
+
+**Gotchas from the Black Halberd (2026-10-01):**
+- The second-runner reset bit again, silently: a side check's runner built
+  mid-test put the cave's stalagmites back under the main runner, and a
+  later `canReach` failed far from the cause. Build every side runner
+  first.
+- `useItem(q.session, pc, slot, q.session.host ?? undefined)` reads a note
+  or map; its dialog lands in `q.log` as a `[choice]` with its title.
+
+**Gotchas from the Fury Crossbow (2026-10-01):**
+- `QuestRunner.canReach` counts a locked door (UNLOCKABLE) as open, and
+  the destination square as open whatever it is. Test a sealed door by its
+  terrain, and a wall by a square past it.
+- `adjTownLook` finds only *contained* items (a chest's). Items lying on a
+  table come from `session.reachableItems` (Get); the Fury Crossbow test's
+  `loot` takes both.
+- A step that a spot refuses (a throw, a zap) reports `false` from `go`,
+  even when the spot moved the party.
+- A refused step outdoors still spends the turn, and can start a wandering
+  fight (town 200 is the arena). Stand the party again before the next try.
+- Judith and other time-flag 3–5 creatures are only in town on their day:
+  set `party.age` before `enter`.
 
 **Gotchas from Pachtar's Plate (2026-09-30):**
 - `searchBelts` puts back terrain and flags after each trial, not
@@ -15472,6 +15737,225 @@ levels; it is `ifMageLoreTotal` now. (The user asked what Major Blessing
 needs: Ghikra's crystal, spot 11, teaches it to a party with 15 Mage Lore
 between its living members, `1088:06ea`; tested in `e3quests.test.ts`.)
 
+### Play-test notes, fifth round (2026-10-01)
+
+The user's list, and what each turned out to be:
+
+- [x] **Open Game greyed out Exile III's `.SAV` files.** The picker's
+      `accept=".exg,.sav,…"`: macOS maps an extension to a file type, and the
+      original's saves are upper case (`EXILE3.SAV`). Open Game tells the
+      formats apart by their bytes (`isE3Save`), so `importSave` now passes no
+      filter at all.
+- [x] **The province maps.** Special items 0–5 and 9 open dialogs 950–957
+      (jump table `10c0:2385`; Footracer, 956, is item 9), each a 240×240
+      cell of BIGMAPS.BMP (`5_3600 + k`, four across). The converter cuts the
+      eight cells into sheets after DLOGMAPS' ten, the items are usable and
+      run `b.dialog(n)`, and a dialog that has a `5_36xx` shows it rather than
+      its first picture (each also has a 36×36 icon). `threeChoiceDialog`
+      narrows the text beside a whole-sheet picture so the dialog stays
+      inside 605 pixels.
+- [x] **Race and traits: no description on a click.** `traits.txt` was never
+      in `STRING_TABLES`, so `getStr('traits', n)` was always empty; the unit
+      test loaded the table itself and passed. Loaded now, with a test that
+      it is.
+- [x] **"Experience needed to gain each level" never changed.** OBoE reads
+      `get_tnl` once; 1997 recomputes it on every click. 1997 followed
+      (DIVERGENCES.md #39, `RaceAbilPick.tnl`, `tnlFor`).
+- [x] **Blades of Exile's extra options in Exile III** (Vahnatai, Pacifist,
+      Anama Member). Nothing is stripped on entering Exile III: the engine
+      is BoE's and applies their rules consistently, and no E3 script reads
+      a trait (E3's Anama is a party flag, unrelated). But:
+      - a new flag `traits` = `exile3` hides the three on the race-and-traits
+        screen, as E3's own dialog 1013 lacks them, unless the PC has one
+        already (so it can be seen and taken off);
+      - the E3 save export has only traits 0–14 and races 0–2: it now warns
+        that Pacifist/Anama are left out and writes a Vahnatai as a human,
+        where it wrote race 3, past E3's tables.
+- [x] **Touch: a Train screen.** `XmlDialog.touchFace` lets a dialog give the
+      overlay a face of its own. Training lists the 21 skills down the left
+      (level and next cost) and one −/+ pair for the picked skill on the
+      right, pressing the grid's own `-m`/`-p`.
+- [x] **Touch: the party editor** lists the six slots, and Name, Delete,
+      Race/Traits, Train and Graphic (or Create) for the picked one.
+- [x] **Touch: a toggle reset the strip's scroll.** `TouchDialogPanel.build`
+      rebuilt every button on any change; a strip whose buttons are the same
+      set now keeps its `scrollTop`.
+- [x] **The intro movie** (2026-10-01) — ported. See below.
+
+### Exile III's intro movie, ported (2026-10-01)
+
+Starting Exile III from the beginning — the startup screen, with a new party
+or the one in memory — now plays E3's intro, "Exile (verb) - To banish or
+expel ..." (`src/game/e3Movie.ts`, on screen by `src/render/e3MovieScreen.ts`,
+from `session.onScenarioIntro` in `main.ts`). A saved game never plays it.
+**Escape or a click skips it** (E3's own "Click mouse to continue." is in the
+corner); on touch the overlay has one **Skip** button and the corner line is
+left off. `test/e3Movie.test.ts` plays it headless through all 218 frames;
+`verify-e3.mjs` plays it in Chromium from the startup screen and skips it into
+Fort Emergence.
+
+**Which movie is which — the notes before this had them wrong.** E3 has
+three, all in segment `1098`, started by `FUN_1098_08bd(n)` (frame counter
+`DS:3dd6 = n*300 - 1`) and stepped by `FUN_1098_103c`:
+
+| n | script | what | played from |
+|---|---|---|---|
+| 0 | `47dd`, frames 0–239 | the party raiding Varik's temple ("Let's go!" … "Oh, shut up.") | the title screen's background loop: `08bd(0)` at startup (`1050:048f`) and after the intro |
+| 1 | `3148`, frames 300–517 | **the intro**: Exile's history, then "You." and the briefing | `FUN_1098_0e09(1)` from New Game and Intro (`10c8:00b7`, `:010a`) |
+| 2 | `1dcb` | the ending: the fortress falls, the ceremony, the credits | `0e09(2)` at `1078:5ad8` |
+
+The title buttons call `0e09(1)` *then* `08bd(0)` — the earlier note read
+the `08bd(0)` and missed the argument. Literal strings sit in front of the
+function that uses them: `0x29f9`–`0x313d` ("Exile (verb) -" … "Good luck.")
+belong to `3148`, `0x1079`–`0x1db2` (the ending and credits) to `1dcb`,
+`0x4579`–`0x47d0` to `47dd`.
+
+**How E3 plays a movie** (all read from the disassembly; the decompile of
+`3148` is unusable — see the gotchas log):
+
+- **The stage is TOWN.DAT town 84, "Anim Data"** (`FUN_1040_4075`: `0x54`
+  for movies 0 and 1, `0x42` for 2), already in the converted scenario. Its
+  30 creature slots go down on their start squares; four PCs get graphics 0,
+  10, 20, 30 and x = 50 (off the map); `overall_mode` is 10, combat, so
+  `draw_terrain` draws them one by one.
+- **The frame script** writes squares directly and posts captions
+  (`627a(text, at)` into `DS:508f`/`5190`, drawn once by the next
+  `draw_terrain`, `1050:48bd`: a 90 × 10 box at `28·q − 17, 36·r + 3`,
+  centred, black ringed with white). A per-creature state (`DS:53ce`, PCs at
+  `53c2`) of 6 walks it to a target (`545e`/`5452`); 100 + n fights creature n,
+  swinging (`boom_space`, blood) when adjacent on alternate frames
+  (`62b0`/`6597`, eight directions in a fixed order; a PC walking into a door
+  opens it: 120→124, 103→107, 108→109).
+- **The drawing is Blades of Exile 1997's**, `cartoon_happening` and all:
+  `6e17`/`6e5b` are `run_a_missile`/`run_a_boom`, `6c69`/`6ee7`/`7a1b`/`6d04`
+  `start_missile_anim`/`add_explosion`/`do_explosion_anim`/`end_missile_anim`,
+  `59c2` is `boom_space` (same sound table), `6130` is `kill_monst`'s death
+  cry. The constants match NEWGRAPH.CPP (explosion sounds 5/10/53, waits
+  1500/1410/1100 ms). E3's `Delay(n)` is `n × 16` ms; `0e09` waits 48 ticks
+  between frames.
+- **Movie 1 loops** at frame 518 (`08bd(1)` again) until a click. The port
+  plays it once (DIVERGENCES.md #40).
+
+**The opening pictures before it** (2026-10-01): E3's launch
+(`1050:010b`) blacks the window and shows SPIDLOGO.BMP, the Spiderweb
+Software logo (350 × 350, 10 px above centre), with sound 95, holds it 3 s
+(`GetTickCount` against `0xbb8`), then START.BMP, the adventurers on the
+mountain, cropped to `DS:1496` (2,48)–(641,434) and placed at
+`((W − 639) / 2, (H − 486) / 2 + 46)`, with sound 22 for 5 s (`0x1388`), then
+black and the title screen. The converter writes them as
+`graphics/e3logo.png` and `graphics/e3start.png` (`E3_PICTURES`;
+`EXILE3_PICTURES` on the browser side), and `installSheetOverrides` now adds a
+picture the game has no sheet for as it is. `E3MovieScreen` plays them before
+the movie; Escape, a click or Skip moves on one scene at a time.
+
+**Left out**: movies 0 and 2, since the port has neither E3's title screen
+nor its ending yet (`TODO(E3-movies)` in `e3Movie.ts`). E3 plays the intro
+*before* party creation; here a party is made on the startup screen, so the
+movie comes after, on entering the scenario.
+
+### Play-test fixes: maps from E3 saves, the item scrollbar, party cards, the name (2026-10-01)
+
+- **An Exile III save now brings its maps.** It was a `TODO(e3save)`, not a
+  bug, but it looked like one: a loaded game had everything black. The
+  layout (`e3save.ts`, `e3TownMapAt`) is BoE 1997's `town_maps[t][x / 8][y]`,
+  bit `x % 8`, split as E3 sizes its towns: 0–39 `[8][64]`, 40–79
+  `[6][48]`, 80–119 `[4][32]` in one block, villages 120–199 `[6][48]` in
+  the last; the 90 zones `[6][48]` each at `y * 9 + x`. `out_e[96][96]` is
+  the window, `[x][y]`, and is all a save without maps has.
+  - **In town, the town's own squares are in `c_town`**, not its map: E3
+    folds them in only on leaving. `c_town.explored` is at **+0x426**
+    (town number, difficulty, then the 0x422-byte town record), `[x][y]`
+    in bit 0. Pinned on the user's four in-town saves: read at 0x421 a
+    block wrapped five columns, and at 0x426 the explored patch sits on the
+    party. Squares beyond a 48-town's edge are set in the original's bytes
+    too; the import ignores them.
+  - Two real bugs the round-trip test found: the import never cleared the
+    previous game's outdoor window, so its squares landed in the save's
+    zones; and the export read `univ.town` while outdoors, where it can
+    still hold the last town.
+  - The export writes the maps too, and `out_e` as the window plus its
+    four zones (as `add_outdoor_maps` leaves it), so import → export is
+    byte-stable. All seven of the user's saves still round-trip
+    (`E3_SAV=~/Desktop/Saves`).
+- **The item and shop scrollbars drag and take the wheel.** The thumb drag
+  is `cScrollbar::handle_thumb_drag`. The wheel over the inventory (and its
+  bar, `inventory_events_rect`) or the shop (`shop_frame`) scrolls them; it
+  used to reach dialogs only. `InputRouter` now turns wheel pixels into
+  notches (100 px each, lines × 40, pages × 800): a touchpad sends dozens
+  of tiny events, which counted as a notch each before. Dialog panes take
+  notches too. `verify-screen.mjs` checks all three by the mouse.
+- The startup screen's party cards are one size (176×86), and the race reads
+  "Slith".
+- **Renamed exile-js → blades-of-exile-ts** everywhere but history (this
+  file's log) and the browser storage names (`exile-js`,
+  `exile-js-scenarios`, `exile-js:prefs`, `exile-js:game-tab`,
+  `exile-js.pendingSave`), which keep the old name so players keep their
+  saves. `docs/assets` is build output and follows at the next build.
+- `Q24.SAV` (Foxfire's key) has its recipe, and the check-in saves carry
+  maps now.
+
+### Play-test notes, sixth round (2026-10-01)
+
+The user played `Q01.SAV` (Colchis). Their list, and what each was:
+
+- [x] **The town's sound on a new game.** E3 starts silently in Fort
+      Emergence. Scenario flag **`start-sound`** = `none` (DIVERGENCES.md #44).
+- [x] **The frame round the terrain view.** It was BoE's stone rope; E3's
+      TERSCRN.BMP, a wooden bevel, is 279×351 like 1997's
+      `win_from_rects[0]`. The converter writes it as `graphics/terscreen.png`
+      (and `EXILE3_SHEET_OVERRIDES` lists it).
+- [x] **The movie's background.** Not a guess any more: the movie loop calls
+      `paint_pattern(0, 1, rect, 0)` (`1098:0ea0`), E3's pattern 0, the grey
+      stone. The note that it read an unset stack slot had the arguments the
+      wrong way round.
+- [x] **Touch overlay opacity.** The pads follow View → Touch Controls
+      Layout's opacity; the spell picker's and dialogs' strips (`.ts-btn`)
+      had fixed alphas of their own (50% fill, 35% border, 92% text), so the
+      talk presets that stand in for the arrows jumped. The strips now take
+      the opacity of the pad on their side, with the pads' formulas.
+- [x] **No attack on walking away in combat.** The back-shot was ported; the
+      monsters couldn't swing. **E3's attack words are 1997's,
+      `(dice − 1) × 100 + sides`**, and OBoE's legacy import reads `a / 100`
+      dice: a die short everywhere, and none under 100 — 97 of E3's 183
+      attacking monsters had an attack that never landed, the Mauve and
+      Emerald slimes' only one. The converter writes 1997's dice
+      (DIVERGENCES.md #41). Fights in E3 are harder now; the Blackcrag test's
+      ambush kills a PC and its gate encounter takes a turn or two to arrive.
+      The legacy `.exs` importer still reads OBoE's way — **a decision for
+      the library's scenarios, not taken**.
+- [x] **No pack-up sound ending a fight.** `endCombat`'s town branch lacked
+      `play_sound(93)` (boe.actions.cpp:1360); only the outdoor one had it.
+- [x] **A Mauve Slime in the dark in Colchis.** It stood on unexplored black:
+      the village's ruins are laid by its entry node (`copy-ter`, #24) after
+      `start_town_mode` has mapped the walls that stood there, and rubble
+      lets the eye through. E3 builds the map before arrival, so `copy-ter`
+      now maps the party's view again.
+- [x] **Secret doors visible before they're open.** E3 opens one and walks
+      the party onto it in one step (`10c0:14df` keeps can-enter set); the
+      port refused the step, and a message spot on the door (Colchis's) opened
+      it itself and refused too. Scenario flag **`secret-doors`** =
+      `101,118,133`, and the spot only says yes now (DIVERGENCES.md #42).
+      `E3-CHECK-IN-ORIGINAL.md` #1 is answered.
+- [x] **"You find something!" on the pillar and anvil.** OBoE's line; 1997
+      comments it out and E3's search ignores the blockage it asks for.
+      Scenario flag **`search`** = `exile3` leaves it out and adds E3's own
+      arm: searching a secret door finds it ("You find a secret door!",
+      `10c0:43d4`) (DIVERGENCES.md #43).
+
+**Gotchas (2026-10-01):**
+- `paint_pattern(dest, mode, rect, pattern)`: E3 pushes right to left, so
+  the *first* push before the rect is the pattern.
+- A converter change that makes monsters stronger moves the dice stream of
+  every quest test after the first fight; a test that relies on a random
+  placement (an outdoor encounter's group) should wait for it, not assume
+  it lands adjacent.
+- E3's search code's strings sit after the function in its code segment
+  (`10c0:41f7`…), and the function is `10c0:425c`; `nedis.py --all` and a
+  grep for `push 0x41f7` found it where the decompile has no strings.
+
+All checks pass: 1,611 tests, both sweeps, verify-screen, verify-party and
+verify-e3.
+
 ### Play-test fixes: monster spell missiles, and Colchis's first sighting (2026-10-01)
 
 Two notes from play-testing Exile III.
@@ -15510,8 +15994,8 @@ party's next step; this build puts it up as the town appears. Test:
   turn on that move. In its `handle_action`, `[bp-0xb]` is `did_something`
   (set with `need_redraw`, `[bp-0xa]`, on a successful outdoor move at
   1010:2108) and entering a town (1010:22ba) clears only `need_redraw`, as
-  BoE does. `E3-CHECK-IN-ORIGINAL.md` #21 asks the original, with a save
-  (`Q21.SAV`).
+  BoE does. `E3-CHECK-IN-ORIGINAL.md` #27 asks the original, with a save
+  (`Q27.SAV`).
 - *Tooling:* `nedis.py` ran in a cloud container after `pip install
   capstone`, with the EXE from the committed installer. Building
   `tools/cppharness` on Linux needed `libboost-dev`, and Apple's libc++
@@ -15525,6 +16009,6 @@ three reasons: a save holds no seed, E3's generator is Borland's `rand()`
 seeded from the clock at launch, and the call orders differ. Finding that
 showed the port seeded nothing, so every page load replayed mt19937's default
 stream. It now seeds at load from `Date.now()`, or from `?seed=N`
-(DIVERGENCES.md #37). Tests: `rng.test.ts`, "the launch seed". The corpus
+(DIVERGENCES.md #45). Tests: `rng.test.ts`, "the launch seed". The corpus
 doesn't pass through `main.ts`, so it's untouched.
 

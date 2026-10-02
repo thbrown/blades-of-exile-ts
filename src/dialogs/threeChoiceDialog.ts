@@ -79,7 +79,11 @@ export async function threeChoiceDialog(
   const left = full ? 8 + full.w + 10 : large ? 86 : 50;
   const lengths = strings.map((s) => Math.round(measureString(ctx, s, STYLE)));
   const total = lengths.reduce((a, b) => a + b, 0) * 12;
-  const strWidth = Math.max(340, Math.trunc(Math.sqrt(total)) + 20);
+  // Beside a whole sheet, the text gets what is left of the 605-wide screen:
+  // Exile III's province maps are 240 wide, and 340 more would push the
+  // dialog and its OK off the right edge.
+  const room = full ? 605 - 16 - left - 30 : Infinity;
+  const strWidth = Math.min(Math.max(340, Math.trunc(Math.sqrt(total)) + 20), Math.max(160, room));
   let top = 2;
   strings.forEach((s, j) => {
     // The C++'s estimate of the height, which assumes its own font. This

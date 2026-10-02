@@ -74,7 +74,7 @@ const HERBS_EATEN: [number, number] = [18, 9];
 /**
  * The herb's messages, E3's block 0x37 strings 0x14, 0x15 and 0x16, as the
  * scenario nodes the converter wrote for them: the feature flag `skribbane`
- * = `exile3:<a>,<b>,<c>`, an exile-js extension. Null without it, and then
+ * = `exile3:<a>,<b>,<c>`, an blades-of-exile-ts extension. Null without it, and then
  * the herb works but says nothing.
  */
 function skribbaneNodes(session: GameSession): number[] | null {
@@ -145,6 +145,24 @@ export function e3UraniumTick(
     if (rng.getRan(1, 0, 5) !== 3 || !e3PartyHasAbil(party, E3Abil.URANIUM)) continue;
     fire(node, j);
     for (const p of party.pcs) p.disease(2, rng);
+  }
+}
+
+/**
+ * Special items that show a town, from E3's per-turn code (`FUN_10c0_61c4`,
+ * `10c0:69ff`): while the party holds special item 16, Foxfire's silver
+ * key, `can_find_town[78]` (party+0x84d3), the Monastery of Madness, is set
+ * every turn. The `item-towns` flag lists the pairs, `exile3:16>78`. E3
+ * never clears it, and neither does this.
+ */
+export function e3ItemTownsTick(session: GameSession): void {
+  const flag = session.univ.scenario.featureFlags['item-towns'];
+  if (flag === undefined || !flag.startsWith('exile3:')) return;
+  const { party, scenario } = session.univ;
+  for (const pair of flag.slice('exile3:'.length).split(',')) {
+    const [item, town] = pair.split('>').map(Number);
+    const t = scenario.towns[town ?? -1];
+    if (t && party.specItems.has(item ?? -1)) t.canFind = true;
   }
 }
 

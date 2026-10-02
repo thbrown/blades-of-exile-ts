@@ -13,7 +13,7 @@
 
 import { QuestStatus } from '../data/quest';
 import { e3JobsTick } from './e3Jobs';
-import { e3UraniumTick, e3WithdrawalTick } from './e3ItemUse';
+import { e3ItemTownsTick, e3UraniumTick, e3WithdrawalTick } from './e3ItemUse';
 import { Universe } from '../universe/universe';
 import { isCombat } from './modes';
 import type { GameSession } from './session';
@@ -89,7 +89,7 @@ export function specialIncreaseAge(session: GameSession, length = 1, queue = fal
 
   // Town timers only tick while the party is in that town — and in an arena
   // fight only if the fight started from inside one (which_combat_type 1).
-  // A scenario with the exile-js flag `town-timers` = `repeat` keeps its town
+  // A scenario with the blades-of-exile-ts flag `town-timers` = `repeat` keeps its town
   // timers firing every `time` ticks: Exile III's golem generators, which
   // make a golem on every eighth tick in their tower (`10c0:71cb`).
   const repeat = univ.scenario.featureFlags['town-timers'] === 'repeat';
@@ -143,6 +143,8 @@ export function specialIncreaseAge(session: GameSession, length = 1, queue = fal
   party.age = currentAge;
   e3WithdrawalTick(session, ageBefore, (node, at) => fire(SpecCtx.SCEN_TIMER, SpecCtxType.SCEN, node, at));
   party.age = currentAge;
+  // And the special items that show a town while held (the silver key).
+  e3ItemTownsTick(session);
 
   // Exile III's job boards keep their own calendar (e3Jobs.ts).
   e3JobsTick(session, ageBefore);

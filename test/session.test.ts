@@ -1176,6 +1176,27 @@ describe('the town-entry sound', () => {
     expect(heard(`0-${scen.startTown + 1}`)).toContain(95);
     expect(heard(`${scen.startTown + 1}-99`)).toContain(16);
   });
+
+  it('is left out of a new game under start-sound = none, as Exile III does', () => {
+    const heard = (flag: string | undefined): number[] => {
+      const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
+      const session = new GameSession(univ);
+      const played: number[] = [];
+      session.sound = { play: (n: number) => { played.push(n); } } as unknown as GameSession['sound'];
+      const saved = scen.featureFlags['start-sound'];
+      if (flag === undefined) delete scen.featureFlags['start-sound'];
+      else scen.featureFlags['start-sound'] = flag;
+      try {
+        session.startNewGame();
+      } finally {
+        if (saved === undefined) delete scen.featureFlags['start-sound'];
+        else scen.featureFlags['start-sound'] = saved;
+      }
+      return played;
+    };
+    expect(heard(undefined)).toContain(16);
+    expect(heard('none')).not.toContain(16);
+  });
 });
 
 /**

@@ -26,7 +26,7 @@ import { PartyStatus } from '../universe/skills';
 import { drawMapTile, drawRoadStub } from './mapScreen';
 import { SheetStore } from './sheets';
 
-export const MAP_CHANNEL = 'exile-js:map';
+export const MAP_CHANNEL = 'blades-of-exile-ts:map';
 /** The size of one square in the palette: the map sheets' own size. */
 export const WORLD_TILE = 12;
 /** Palette squares per row. */
@@ -339,7 +339,7 @@ export class WorldMapFeed {
   /** Open this game's map tab, or bring it back if it's already open. */
   open(): void {
     const id = encodeURIComponent(this.gameId);
-    window.open(`${import.meta.env.BASE_URL}?popout=map&game=${id}`, `exile-js-map-${this.gameId}`);
+    window.open(`${import.meta.env.BASE_URL}?popout=map&game=${id}`, `blades-of-exile-ts-map-${this.gameId}`);
   }
 
   /** Something may have changed: post a snapshot soon. */
@@ -438,6 +438,7 @@ export function paletteCell(index: number): [number, number] {
 
 /** This game tab's id: made once, and kept across reloads of the same tab. */
 function gameTabId(fresh = false): string {
+  // The project's old name, kept: renaming it would lose what players have stored.
   const KEY = 'exile-js:game-tab';
   try {
     const kept = fresh ? null : sessionStorage.getItem(KEY);

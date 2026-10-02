@@ -168,8 +168,10 @@ export class QuestRunner {
 
   /** Where the party is on the whole outdoor map. */
   get global(): Location {
-    const { sector, locInSec } = this.party;
-    return { x: sector.x * 48 + locInSec.x, y: sector.y * 48 + locInSec.y };
+    // By `outLoc`: BoE's `out_move_party` (a ferry) leaves `loc_in_sec` as it
+    // was until the next step.
+    const { outdoorCorner, outLoc } = this.party;
+    return { x: outdoorCorner.x * 48 + outLoc.x, y: outdoorCorner.y * 48 + outLoc.y };
   }
 
   /** Stand on a town square, with no step taken. */
@@ -331,8 +333,11 @@ export class QuestRunner {
   async talk(name: Who, ...keywords: string[]): Promise<string[]> {
     const who = this.creatures(name)[0];
     if (!who) throw new Error(`nobody called ${name} in town ${this.townNum}`);
-    const spot = STEPS.map(([dx, dy]) => ({ x: who.curLoc.x + dx, y: who.curLoc.y + dy }))
-      .find((p) => this.town.isOnMap(p.x, p.y) && !this.session.townIsBlocked(p));
+    // Beside them, or across a counter: talk only needs sight.
+    const across = STEPS.map(([dx, dy]) => ({ x: who.curLoc.x + 2 * dx, y: who.curLoc.y + 2 * dy }));
+    const spot = [...STEPS.map(([dx, dy]) => ({ x: who.curLoc.x + dx, y: who.curLoc.y + dy })), ...across]
+      .find((p) => this.town.isOnMap(p.x, p.y) && !this.session.townIsBlocked(p)
+        && this.session.canSeeLight(p, who.curLoc) < 4);
     if (!spot) throw new Error(`no square beside ${name}`);
     this.place(spot);
     if (!(await this.session.talkTo(who.curLoc)) || !this.session.talk) {
@@ -379,15 +384,18 @@ export class QuestRunner {
    * doors (opened by a step or picked) and E3's ways through (spot 50: a
    * secret passage, a ford), but not walls, portcullises or water; `boat`
    * lets it cross water a boat can. Other special spots don't count, so a
-   * stair or a blocking message in the way doesn't stop the path.
+   * stair or a blocking message in the way doesn't stop the path, unless
+   * `avoidSpots` is set: then a path keeps off every spot but `to` (a
+   * tower of teleporters, where stepping on one would take the party away).
    */
-  canReach(from: Location, to: Location, opts: { boat?: boolean } = {}): boolean {
+  canReach(from: Location, to: Location, opts: { boat?: boolean; avoidSpots?: boolean } = {}): boolean {
     return this.pathLength(from, to, opts) >= 0;
   }
 
   /** Steps on the shortest such path from `from` to `to` (as `canReach` walks), or -1. */
-  pathLength(from: Location, to: Location, opts: { boat?: boolean } = {}): number {
+  pathLength(from: Location, to: Location, opts: { boat?: boolean; avoidSpots?: boolean } = {}): number {
     const town = this.town;
+    const spots = new Set(opts.avoidSpots ? town.record.specialLocs.map((l) => `${l.x},${l.y}`) : []);
     // The converter's spot 50: a CANT_ENTER that lets the party by (ex1a 0)
     // and forces the step (ex2a 1) onto a square that would block it.
     const waysThrough = new Set(town.record.specialLocs.filter((l) => {
@@ -398,6 +406,7 @@ export class QuestRunner {
       if (!town.isOnMap(x, y)) return false;
       if (x === to.x && y === to.y) return true;
       if (waysThrough.has(`${x},${y}`)) return true;
+      if (spots.has(`${x},${y}`)) return false;
       const ter = this.univ.terrainType(town.record.terrain[x]![y]!);
       if (opts.boat && ter.boatOver) return true;
       if (ter.special === TerSpec.CHANGE_WHEN_STEP_ON || ter.special === TerSpec.UNLOCKABLE) return true;

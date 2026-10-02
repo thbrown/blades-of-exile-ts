@@ -108,7 +108,7 @@ export interface Scenario {
   specStrs: string[];
   /**
    * `cScenario::journal_strs` — the events journal's entries. OBoE reads them
-   * and never adds one; the exile-js opcode `journal` (48) does.
+   * and never adds one; the blades-of-exile-ts opcode `journal` (48) does.
    */
   journalStrs: string[];
   /**

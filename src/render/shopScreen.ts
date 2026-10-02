@@ -106,6 +106,8 @@ const DONE_RECT: UiRect = { top: 386, left: 210, bottom: 406, right: 270 };
  * part of the talk area it sits over.
  */
 const SHOP_SBAR_RECT: UiRect = { top: 69, left: 272, bottom: 359, right: 288 };
+/** `shop_frame` (boe.dlgutil.cpp:119), window coordinates: the wheel scrolls the shop over it (`init_sbar`). */
+const SHOP_FRAME: UiRect = { top: 62, left: 10, bottom: 352, right: 269 };
 
 export class ShopScreen {
   /** `shop_sbar` — page size 8, one row per step (boe.main.cpp:390). */
@@ -244,6 +246,29 @@ export class ShopScreen {
     if (state.maxScroll > 0) this.sbar.draw(ctx, this.store);
   }
 
+  /** True if the wheel at (x, y) scrolls the shop: over its rows or its bar. */
+  wheelScrolls(state: ShopState, x: number, y: number): boolean {
+    const f = SHOP_FRAME;
+    return state.maxScroll > 0
+      && ((x >= f.left && x < f.right && y >= f.top && y < f.bottom) || this.sbar.contains(x, y));
+  }
+
+  /** A press on the thumb starts dragging it; true if it did. */
+  startThumbDrag(state: ShopState, x: number, y: number): boolean {
+    if (state.maxScroll <= 0) return false;
+    this.sbar.setMaximum(state.maxScroll);
+    this.sbar.setPosition(state.scroll);
+    return this.sbar.startThumbDrag(x, y);
+  }
+
+  /** While the thumb is held: how many rows the pointer at `y` moves the list. */
+  thumbDragDelta(state: ShopState, y: number): number | null {
+    if (!this.sbar.dragging) return null;
+    this.sbar.setMaximum(state.maxScroll);
+    this.sbar.dragTo(y);
+    return this.sbar.getPosition() - state.scroll;
+  }
+
   /** Which part of the shop screen a click landed on. */
   hit(state: ShopState, x: number, y: number): ShopHit | null {
     const inside = (rect: UiRect): boolean => {
@@ -253,7 +278,7 @@ export class ShopScreen {
     if (inside(DONE_RECT)) return { part: 'done' };
     if (state.maxScroll > 0 && this.sbar.contains(x, y)) {
       // An arrow steps one row and the track pages eight; the thumb is a
-      // drag, which a click on it doesn't start.
+      // drag (`startThumbDrag`), which the caller asks about first.
       this.sbar.setMaximum(state.maxScroll);
       this.sbar.setPosition(state.scroll);
       const before = this.sbar.getPosition();

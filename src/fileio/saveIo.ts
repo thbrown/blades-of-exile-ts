@@ -720,7 +720,7 @@ export function writeParty(file: TagFile, party: Party, scenarioId: string): voi
     if (!bank.inited) continue;
     for (let j = 0; j < 6; j++) jobPage.add('JOB', j, bank.jobs[j]!);
   }
-  // Exile III's job boards (exile-js; game/e3Jobs.ts): one page, a line a job.
+  // Exile III's job boards (blades-of-exile-ts; game/e3Jobs.ts): one page, a line a job.
   if (party.e3Jobs) {
     const e3Page = file.add();
     e3Page.add('E3JOBS');

@@ -1385,7 +1385,7 @@ export async function runReplay(
           // `journal()` (boe.infodlg.cpp:653). **It is always empty in the
           // recordings**: nothing in OBoE calls `add_to_journal`, so the C++
           // takes its early return every time, prints one line and opens no
-          // dialog. Only the exile-js opcode `journal` fills it.
+          // dialog. Only the blades-of-exile-ts opcode `journal` fills it.
           const refusal = notesRefusal(session.univ, session.mode, 'events');
           if (refusal !== null) {
             session.univ.addStringToBuf(refusal);

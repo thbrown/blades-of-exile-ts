@@ -41,7 +41,7 @@ export interface Preferences {
   displayMode: number;
   /** `UIScale`: 1, 1.5, 2, 3, 4, or `UI_SCALE_FIT`. */
   uiScale: number;
-  /** `FixBugs`, an exile-js preference: play the known bugs fixed (`game/bugFixes.ts`). */
+  /** `FixBugs`, an blades-of-exile-ts preference: play the known bugs fixed (`game/bugFixes.ts`). */
   fixBugs: boolean;
   /**
    * Exile III's "Show room descriptions more than once" (its dialog 1099,

@@ -225,7 +225,7 @@ export class SpecBuilder {
 
   /**
    * `FUN_1008_3780(e)`: events-journal entry `e`, dated today, with "Something
-   * was added to your journal." The engine's `journal` opcode is an exile-js
+   * was added to your journal." The engine's `journal` opcode is an blades-of-exile-ts
    * one (`SpecType.ADD_JOURNAL`); the text is the scenario's `<journal>`.
    */
   journal(e: number): Step {
@@ -264,8 +264,11 @@ export class SpecBuilder {
     const d = this.src.dialogs.get(id);
     if (!d) throw new Error(`E3 dialog ${id} not found`);
     // The dialog's picture: its first `5_n` control. A node shows one, and
-    // twenty of E3's dialogs have two.
-    const tag = d.controls.filter((c) => /^5_\d+$/.test(c.text)).sort((a, b) => a.id - b.id)[0];
+    // twenty of E3's dialogs have two. The province maps (950–957) put a
+    // 36×36 icon first and the 240×240 map (`5_36xx`) second; the map is the
+    // point of them, so it wins.
+    const tags = d.controls.filter((c) => /^5_\d+$/.test(c.text)).sort((a, b) => a.id - b.id);
+    const tag = tags.find((c) => /^5_36\d\d$/.test(c.text)) ?? tags[0];
     const pic = tag ? this.src.dialogPic?.(Number(tag.text.slice(2))) : undefined;
     const texts = d.controls.filter((c) => !/^\d+_\d+$/.test(c.text)).sort((a, b) => a.y - b.y || a.x - b.x);
     const buttons = d.controls.filter((c) => /^[01]_\d+$/.test(c.text)).sort((a, b) => a.id - b.id)
@@ -665,7 +668,7 @@ export class SpecBuilder {
 
   /**
    * `if (can_find_town[t])`, a byte test at party+0x8485+t: town `t` shows on
-   * the map. The engine's `if-town-visible` is an exile-js opcode
+   * the map. The engine's `if-town-visible` is an blades-of-exile-ts opcode
    * (`SpecType.IF_TOWN_VISIBLE`), the reading half of `town-visible`.
    */
   ifTownVisible(t: number, then: Step[], otherwise: Step[] = []): Step {
@@ -679,7 +682,7 @@ export class SpecBuilder {
   /**
    * The town loader's `entry_dir` (its second argument) is from `lo` to `hi`:
    * 0–3 an entrance, 9 a script's move (`FUN_10c0_4a61`). The engine's
-   * `if-entry-dir` is an exile-js opcode (`SpecType.IF_ENTRY_DIR`).
+   * `if-entry-dir` is an blades-of-exile-ts opcode (`SpecType.IF_ENTRY_DIR`).
    */
   ifEntryDir(lo: number, hi: number, then: Step[], otherwise: Step[] = []): Step {
     return (next) => {
@@ -694,7 +697,7 @@ export class SpecBuilder {
    * 0x5c from 1160:1427): `here` it is present (`active > 0`), `attitude`
    * present with `attitude`, `waiting` its group not yet brought in, and
    * `fewerThan` — any slot — the town has fewer than that many present. The
-   * engine's `if-creature` is an exile-js opcode (`SpecType.IF_CREATURE`).
+   * engine's `if-creature` is an blades-of-exile-ts opcode (`SpecType.IF_CREATURE`).
    */
   ifCreature(
     slot: number, test: 'here' | 'waiting' | { attitude: number } | { fewerThan: number },
@@ -714,7 +717,7 @@ export class SpecBuilder {
    * `active` 2 (hunting), `health` sets +9, `remove` clears `active`, and
    * `die` clears it and sets its death flag (`spec1`/`spec2`). Slot -1 is
    * every creature, -2 the one being talked to; `attitude` keeps to those
-   * with it. The engine's `town-creature` is an exile-js opcode
+   * with it. The engine's `town-creature` is an blades-of-exile-ts opcode
    * (`SpecType.TOWN_SET_CREATURE`).
    */
   setCreature(slot: number, what: 'wake' | 'health' | 'remove' | 'die', value = 0, attitude?: number): Step {
@@ -734,7 +737,7 @@ export class SpecBuilder {
   /**
    * Known bug `n` (`E3-SUSPECTED-BUGS.md`): `fixed` under the "Fix known
    * bugs" preference, else `original`, as E3 shipped. The engine's
-   * `if-fixed` is an exile-js opcode (`SpecType.IF_FIXED`).
+   * `if-fixed` is an blades-of-exile-ts opcode (`SpecType.IF_FIXED`).
    */
   ifFixed(n: number, fixed: Step[], original: Step[]): Step {
     return (next) => {
@@ -747,7 +750,7 @@ export class SpecBuilder {
   /**
    * `if (FUN_1080_0000(party, (x, y)) < limit)`: the party — in combat, the
    * acting PC — is nearer than `limit`. The engine's `if-near` is an
-   * exile-js opcode (`SpecType.IF_NEAR`).
+   * blades-of-exile-ts opcode (`SpecType.IF_NEAR`).
    */
   ifNear(x: number, y: number, limit: number, then: Step[], otherwise: Step[] = []): Step {
     return (next) => {
@@ -779,7 +782,7 @@ export class SpecBuilder {
   /**
    * At least `min` squares of the town carry field `field`: E3 scans the
    * whole town (as `FUN_1038_0469` in a 64×64 loop). The engine's
-   * `if-field-count` is an exile-js opcode (`SpecType.IF_FIELD_COUNT`).
+   * `if-field-count` is an blades-of-exile-ts opcode (`SpecType.IF_FIELD_COUNT`).
    */
   ifFieldCount(field: number, min: number, then: Step[], otherwise: Step[] = []): Step {
     return (next) => {
@@ -979,7 +982,7 @@ export class SpecBuilder {
 
   /**
    * `for (i = 0; i < 6; i++) { body(i) }`, each round aimed at PC `i` alone:
-   * `SELECT_TARGET` with `ex1a` 10 + i, an exile-js extension, picks the PC
+   * `SELECT_TARGET` with `ex1a` 10 + i, an blades-of-exile-ts extension, picks the PC
    * without asking. The party is the target again afterwards. The engine
    * runs the body on empty slots too, where E3 tests `main_status > 0`; an
    * empty slot's numbers are never seen.
@@ -1033,7 +1036,7 @@ export class SpecBuilder {
   /**
    * Every creature of the town gets `attitude` (E3's active ones: the town
    * loader's loops write `active` slots). With `mobile` given it also stops
-   * or starts moving: TOWN_SET_ATTITUDE's `10 + a` and `20 + a`, an exile-js
+   * or starts moving: TOWN_SET_ATTITUDE's `10 + a` and `20 + a`, an blades-of-exile-ts
    * extension (`src/game/specials/town.ts`). `'record'` moves as the town
    * record says, as E3 has it on a fresh load.
    */
@@ -1072,7 +1075,7 @@ export class SpecBuilder {
 
   /**
    * The `w` × `h` rectangle at `(x, y)` takes town record `town`'s terrain
-   * there. The engine's `copy-ter` is an exile-js opcode
+   * there. The engine's `copy-ter` is an blades-of-exile-ts opcode
    * (`SpecType.TOWN_COPY_TERRAIN`), for a village's ruins (`village.ts`).
    */
   copyTerrain(town: number, x: number, y: number, w: number, h: number): Step {
@@ -1384,7 +1387,7 @@ export class SpecBuilder {
 
   /**
    * Field `field` is gone from every square of the rect: RECT_PLACE_FIELD
-   * with `100 + field`, an exile-js extension (`src/game/specials/rect.ts`).
+   * with `100 + field`, an blades-of-exile-ts extension (`src/game/specials/rect.ts`).
    */
   removeField(x1: number, y1: number, x2: number, y2: number, field: number): Step {
     return (next) => this.node('rect-place-field', { sdf: [100, 100 + field], ex1: [y1, x1], ex2: [y2, x2] }, next);
@@ -1423,7 +1426,7 @@ export class SpecBuilder {
 
   /**
    * `if (is_town() && the terrain under the party is t)`: IF_TER_TYPE at
-   * (-1, -1), an exile-js extension (`src/game/specials/ifthen.ts`), which
+   * (-1, -1), an blades-of-exile-ts extension (`src/game/specials/ifthen.ts`), which
    * never matches in combat.
    */
   ifPartyOnTer(t: number, then: Step[], otherwise: Step[] = []): Step {
@@ -1436,7 +1439,7 @@ export class SpecBuilder {
 
   /**
    * `if (is_combat() && pc is alive && the terrain under pc is t)`, for the
-   * target `eachPc` picked: IF_TER_TYPE at (-2, -2), an exile-js extension.
+   * target `eachPc` picked: IF_TER_TYPE at (-2, -2), an blades-of-exile-ts extension.
    */
   ifTargetOnTer(t: number, then: Step[], otherwise: Step[] = []): Step {
     return (next) => {
@@ -1563,7 +1566,7 @@ export class SpecBuilder {
 
   /**
    * Every PC's `cur_health` (+0x54) scaled to `pct` percent, rounded down,
-   * whatever their state. The engine's `hp-percent` is an exile-js opcode
+   * whatever their state. The engine's `hp-percent` is an blades-of-exile-ts opcode
    * (`SpecType.AFFECT_HP_PERCENT`).
    */
   scaleHealth(pct: number): Step {
@@ -1572,7 +1575,7 @@ export class SpecBuilder {
 
   /**
    * Every magic item (+0x11) out of the living PCs' packs, and, with `floor`,
-   * off the town's floor. The engine's `take-magic` is an exile-js opcode
+   * off the town's floor. The engine's `take-magic` is an blades-of-exile-ts opcode
    * (`SpecType.AFFECT_TAKE_MAGIC_ITEMS`).
    */
   takeMagicItems(floor: boolean): Step {
@@ -1725,7 +1728,7 @@ export class SpecBuilder {
     }, next);
   }
 
-  /** E3 forgets its four saved towns (`+0x29a6 + 0x1594k = 200`): `forget-towns`, an exile-js opcode. */
+  /** E3 forgets its four saved towns (`+0x29a6 + 0x1594k = 200`): `forget-towns`, an blades-of-exile-ts opcode. */
   forgetTowns(): Step {
     return (next) => this.node('forget-towns', {}, next);
   }

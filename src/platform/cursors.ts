@@ -31,7 +31,7 @@ const ARROWS: CursorName[][] = [['NW', 'N', 'NE'], ['W', 'wait', 'E'], ['SW', 'S
 
 /**
  * A scenario's own cursor images, by name, each with its hotspot: the
- * exile-js scenario flag `cursors`, `name:x:y` comma-separated, naming the
+ * blades-of-exile-ts scenario flag `cursors`, `name:x:y` comma-separated, naming the
  * `cursors/NAME.png` the scenario ships. Exile III's are its Win16 cursors
  * (tools/e3convert/cursors.ts). Only the pictures change; which cursor shows
  * when is still `change_cursor`'s.

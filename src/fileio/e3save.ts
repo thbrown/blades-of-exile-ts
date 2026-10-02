@@ -195,6 +195,32 @@ export function writeE3Save(save: E3Save): Uint8Array {
   return out;
 }
 
+// --- the maps -----------------------------------------------------------------
+
+/**
+ * Where town `t`'s explored bits are: which map block, the byte offset into
+ * it, and the town's side. BoE 1997's `town_maps[t][x / 8][y]`, bit `x % 8`
+ * (town.c's `make_town_explored`), split by size as E3 sizes its towns:
+ * records 0–39 are 64 square, 40–79 48, 80–119 32, and the villages 120–199
+ * 48, in the last block.
+ */
+export function e3TownMapAt(t: number): { block: 'towns' | 'villages'; at: number; dim: number } | null {
+  if (t < 0 || t >= 200) return null;
+  if (t < 40) return { block: 'towns', at: t * 8 * 64, dim: 64 };
+  if (t < 80) return { block: 'towns', at: 40 * 8 * 64 + (t - 40) * 6 * 48, dim: 48 };
+  if (t < 120) return { block: 'towns', at: 40 * 8 * 64 + 40 * 6 * 48 + (t - 80) * 4 * 32, dim: 32 };
+  return { block: 'villages', at: (t - 120) * 6 * 48, dim: 48 };
+}
+
+/** The bit for (x, y) in a `[dim / 8][dim]` map at `at`: byte and mask. */
+export function e3MapBit(at: number, dim: number, x: number, y: number): [number, number] {
+  return [at + (x >> 3) * dim + y, 1 << (x & 7)];
+}
+
+/** Zones are 9 across (`onm`, `y * 9 + x`), each `[6][48]`. */
+export const E3_ZONES_ACROSS = 9;
+export const E3_ZONE_MAP_SIZE = 6 * 48;
+
 // --- the party record ---------------------------------------------------------
 
 /**
@@ -386,6 +412,12 @@ export class E3Bytes {
 export const E3CTOWN = {
   /** i16: the town record the party is in. */
   TOWN_NUM: 0x0000,
+  /**
+   * u8[64][64], `[x][y]`: the town's explored squares, bit 0 (BoE's
+   * `c_town.explored`, after the town number, difficulty and the 0x422-byte
+   * town record). Only the squares inside the town mean anything.
+   */
+  EXPLORED: 0x0426,
   /** loc: the party's square in town. */
   P_LOC: 0x29bc,
 } as const;

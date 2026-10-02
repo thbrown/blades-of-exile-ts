@@ -87,7 +87,7 @@ of the project and its plan.
 
 ## Licence
 
-exile-js is released under the **GNU General Public License, version 2**
+blades-of-exile-ts is released under the **GNU General Public License, version 2**
 (`LICENSE`), the licence Spiderweb Software released the Blades of Exile source
 under. The 1997 release's own `Blades of Exile License.txt` says so, as does
 Open Blades of Exile. It is version 2 only: the release names no "or any later

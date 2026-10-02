@@ -16,7 +16,7 @@ import { SpecCtx, SpecCtxType } from './specials/context';
 const HOSTILE = new Set<Attitude>([Attitude.HOSTILE_A, Attitude.HOSTILE_B]);
 
 /**
- * The `hostile-movers` feature flag, an exile-js extension: a list of monster
+ * The `hostile-movers` feature flag, an blades-of-exile-ts extension: a list of monster
  * numbers and ranges (`12-20,91-98`). When a scenario has it, a creature
  * turned hostile gets moving, and is alerted, only if its monster is listed;
  * the rest turn where they stand. That is Exile III's `make_town_hostile`

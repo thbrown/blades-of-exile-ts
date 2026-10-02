@@ -939,7 +939,7 @@ export class Screen {
       : session.univ.out.isOnMap(x, y);
     if (!inBounds) return false;
     const terNum = town ? town.record.terrain[x]![y]! : session.univ.out.at(x, y);
-    // An exile-js extension: a scenario can list the terrains a road reaches
+    // An blades-of-exile-ts extension: a scenario can list the terrains a road reaches
     // into, as the feature flag `road-joins` (comma-separated numbers).
     // Exile III's converter does, with E3's own list; it replaces the trim test.
     const joins = this.roadJoins(session);

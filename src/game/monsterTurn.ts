@@ -44,6 +44,7 @@ import { specialIncreaseAge } from './specialIncreaseAge';
 import { isPoisonableWeap } from './poisonWeapon';
 import { pushThings } from './pushThings';
 import { moveE3Walls, pushOffE3Walls } from './e3MovingWalls';
+import { e3SpDrainTick } from './e3SpDrain';
 import { monstCastMage, monstCastPriest } from './monsterSpells';
 import { placeSpellPattern } from './spellPatterns';
 import { pointOnScreen } from './session';
@@ -1882,6 +1883,7 @@ export async function combatRunMonst(session: GameSession): Promise<void> {
   // stone block, which is what made its absence so hard to see. Exile III's
   // moving walls first (e3MovingWalls.ts).
   moveE3Walls(session);
+  e3SpDrainTick(session);
   await pushOffE3Walls(session);
   await pushThings(session);
   // Poison, disease and acid bite far more often in combat than they do on the

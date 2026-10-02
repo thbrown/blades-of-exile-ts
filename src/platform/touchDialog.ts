@@ -102,6 +102,14 @@ export class TouchDialogPanel {
   }
 
   private build(view: TouchView): void {
+    // A toggle (an LED, the chosen PC) rebuilds the strips, but a strip whose
+    // buttons are the same ones is the same page: it keeps its scroll, so the
+    // button just tapped doesn't jump away from under the finger.
+    const kept = new Map<string, { names: string; top: number }>();
+    for (const list of this.root.querySelectorAll<HTMLElement>('.ts-list')) {
+      const side = list.dataset['side'];
+      if (side) kept.set(side, { names: list.dataset['names'] ?? '', top: list.scrollTop });
+    }
     const children: HTMLElement[] = [];
     const [leftSide, rightSide] = view.mirrored ? ['ts-right', 'ts-left'] : ['ts-left', 'ts-right'];
     if (view.left) children.push(this.strip(leftSide, view.leftHeading, view.left, null));
@@ -109,6 +117,10 @@ export class TouchDialogPanel {
     if (view.rightPairs) right.classList.add('td-pairs');
     children.push(right);
     this.root.replaceChildren(...children);
+    for (const list of this.root.querySelectorAll<HTMLElement>('.ts-list')) {
+      const before = kept.get(list.dataset['side'] ?? '');
+      if (before && before.names === list.dataset['names']) list.scrollTop = before.top;
+    }
   }
 
   private strip(side: string, heading: string | undefined, choices: TouchChoice[], field: HTMLElement | null): HTMLElement {
@@ -123,6 +135,8 @@ export class TouchDialogPanel {
     if (field) strip.append(field);
     const list = document.createElement('div');
     list.className = 'ts-list';
+    list.dataset['side'] = side;
+    list.dataset['names'] = choices.map((c) => c.name).join('\n');
     for (const choice of choices) list.append(this.button(choice));
     strip.append(list);
     return strip;

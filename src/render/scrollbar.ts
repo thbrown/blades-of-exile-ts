@@ -138,8 +138,8 @@ export class Scrollbar {
 
   /**
    * `handlePressedPart` (scrollbar.cpp:275) — an arrow steps one line, the
-   * track pages. The thumb moves by dragging, which this port doesn't do yet;
-   * a click on it is a no-op there too.
+   * track pages. The thumb moves by dragging (`startThumbDrag`); a click on
+   * it is a no-op there too.
    */
   pressPart(part: ScrollPart): void {
     switch (part) {
@@ -159,6 +159,41 @@ export class Scrollbar {
     if (this.max === 0 || !this.contains(x, y)) return false;
     this.pressPart(this.locationToPart(y));
     return true;
+  }
+
+  /** Where a thumb drag began: `mouse_pressed_at` and `drag_start_position`. */
+  private drag: { y: number; pos: number } | null = null;
+
+  get dragging(): boolean {
+    return this.drag !== null;
+  }
+
+  /**
+   * A press on the thumb starts dragging it, as `handle_mouse_pressed`
+   * (scrollbar.cpp:208) records it. True if it did.
+   */
+  startThumbDrag(x: number, y: number): boolean {
+    if (this.max === 0 || !this.contains(x, y) || this.locationToPart(y) !== ScrollPart.THUMB) return false;
+    this.drag = { y, pos: this.pos };
+    this.depressed = true;
+    this.pressedPart = ScrollPart.THUMB;
+    return true;
+  }
+
+  /** `handle_thumb_drag` (scrollbar.cpp:250): the steps the pointer has moved since the press. */
+  dragTo(y: number): boolean {
+    if (!this.drag) return false;
+    const btn = this.btnSize;
+    const thumbMin = this.frame.top + btn;
+    const thumbMax = this.frame.bottom - 2 * btn;
+    // C++ int division, which truncates toward zero.
+    this.setPosition(this.drag.pos + Math.trunc((y - this.drag.y) * this.max / (thumbMax - thumbMin)));
+    return true;
+  }
+
+  endDrag(): void {
+    this.drag = null;
+    this.depressed = false;
   }
 
   /** `handle_mouse_wheel_scrolled` (:147) — one line per notch. */

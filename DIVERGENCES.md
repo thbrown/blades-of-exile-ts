@@ -284,7 +284,7 @@ condensing. The page's own masthead links to this port's source.
 ### 9. `day_reached`: three versions, and the engine has OBoE's (2026-09-24)
 
 **DECIDED (2026-09-28): the original's last row in the live game, OBoE's
-in a replay**, through an exile-js feature flag, `day-reached` = `1997`, as
+in a replay**, through an blades-of-exile-ts feature flag, `day-reached` = `1997`, as
 §14, §17 and §18 do: an event that never happened passes. The extra days are
 unchanged (OBoE's +10 in easy mode); Exile III puts its own +20 into its
 data. The first half of what follows is the finding as it stood.
@@ -321,7 +321,7 @@ original reads an unset event as "no".
 
 ### 10. The events journal (2026-09-27)
 
-**DECIDED: OBoE's journal, E3's paging, and an exile-js opcode to fill it.**
+**DECIDED: OBoE's journal, E3's paging, and an blades-of-exile-ts opcode to fill it.**
 The 1997 original keeps `journal_str` in the party record and clears it, but
 has no dialog that shows it and nothing that adds to it. OBoE ports the rest
 (`journal()`, `add_to_journal`, `event-journal.xml`, `<journal>` strings,
@@ -330,10 +330,10 @@ journal is always empty. Exile III's journal is the one that works
 (`FUN_1008_3780` adds, `FUN_1008_3507` shows), and E3 adds entries from 33
 places in its scripts.
 
-- **The opcode is an exile-js one**: `journal` (48, `SpecType.ADD_JOURNAL`),
+- **The opcode is an blades-of-exile-ts one**: `journal` (48, `SpecType.ADD_JOURNAL`),
   in the gap after `STR_BUF_TO_SIGN` and inside GENERAL's range. `ex1a` is
   the `<journal>` string. OBoE would read a scenario using it as having an
-  unknown opcode, which is the same as for every other exile-js extension.
+  unknown opcode, which is the same as for every other blades-of-exile-ts extension.
 - **Paging follows E3.** OBoE's `fill_journal` indexes `journal[i]` without
   the page, so every page shows the first three entries. Nobody could see
   that in OBoE; a player would see it in E3.
@@ -348,7 +348,7 @@ places in its scripts.
 
 ### 11. Testing a town's visibility (2026-09-27)
 
-**DECIDED: an exile-js opcode, `if-town-visible` (161,
+**DECIDED: an blades-of-exile-ts opcode, `if-town-visible` (161,
 `SpecType.IF_TOWN_VISIBLE`).** BoE, in 1997 and in OBoE, can hide and show a
 town (`town-visible`, SET_TOWN_VISIBILITY) but has no node that reads the
 flag back. Exile III's scripts read `can_find_town[t]` in five places: zones
@@ -378,7 +378,7 @@ change: they are OBoE's `spec_on_hostile` (`<onoffend>`), whose comment,
 
 ### 13. How the party came into a town, and a creature's mobility (2026-09-27)
 
-**DECIDED: an exile-js opcode, `if-entry-dir` (162, `SpecType.IF_ENTRY_DIR`),
+**DECIDED: an blades-of-exile-ts opcode, `if-entry-dir` (162, `SpecType.IF_ENTRY_DIR`),
 and TOWN_SET_ATTITUDE values 10–13 and 20–23.** Exile III's town loader reads
 its `entry_dir` argument twice: the town's greeting shows only to a party that
 walked in (`entry_dir < 9`, not a script's move), and Wolfrider Warren opens a
@@ -398,7 +398,7 @@ to both, so no BoE scenario uses them, as with RECT_PLACE_FIELD's `100 + f`.
 ### 14. A town cleaned out or abandoned (2026-09-27)
 
 **DECIDED: the original's rule in the live game, OBoE's in a replay**, through
-an exile-js feature flag, `town-thrash` = `1997` (`featureFlags.ts`). The live
+an blades-of-exile-ts feature flag, `town-thrash` = `1997` (`featureFlags.ts`). The live
 game has it; a recording's flag set replaces the build's and never lists it,
 so a replay runs OBoE's rule, as with OBoE's own flags. Both 1997 builds
 (Windows TOWN.CPP:348 and :375, Mac town.c:329 and :359) and Exile III's town
@@ -456,7 +456,7 @@ to keep the replay corpus. Nothing has been measured yet.
 ### 17. A PC's saving roll against sleep and paralysis (2026-09-27)
 
 **DECIDED: the original's roll in the live game, OBoE's in a replay**, through
-an exile-js feature flag, `sleep-save` = `1997`, as in §14. The roll in
+an blades-of-exile-ts feature flag, `sleep-save` = `1997`, as in §14. The roll in
 `sleep_pc` (1997 PARTY.CPP:904) is `get_ran(1,0,100) + adjust` against
 `30 + 2 × the PC's level`. OBoE's `cPlayer::sleep` (pc.cpp:231) rolls
 `get_ran(1,1,100) + adjust` against `30 + 2 × level`, where `level` is a local
@@ -478,7 +478,7 @@ monsters' saving rolls, which have not been compared.
 ### 18. A failed bash, and its roll (2026-09-27)
 
 **DECIDED: the original's in the live game, OBoE's in a replay**, through an
-exile-js feature flag, `bash-door` = `1997`, as in §14 and §17. 1997's
+blades-of-exile-ts feature flag, `bash-door` = `1997`, as in §14 and §17. 1997's
 `bash_door` (TOWN.CPP) rolls `get_ran(1,0,100)` and hurts a failed basher
 with `damage_pc(pc, get_ran(1,1,4), 4, -1)`: type 4, unblockable. OBoE's
 (boe.town.cpp:1204) rolls from 1 and hurts with `eDamageType::SPECIAL`.
@@ -523,7 +523,7 @@ shopkeeper across a counter needed a precise tap on a phone's small view.
 
 ### 21. Naming a town creature by its slot (2026-09-28)
 
-**DECIDED: two exile-js opcodes, `if-creature` (163, IF_THEN) and
+**DECIDED: two blades-of-exile-ts opcodes, `if-creature` (163, IF_THEN) and
 `town-creature` (205, TOWN).** Exile III's scripts read and write its
 creatures' records directly — `active` (+0), attitude (+2), health (+9) —
 where BoE can only act on creatures by kind, by square, or through a
@@ -546,7 +546,7 @@ a scenario using either opcode as having an unknown one.
 
 ### 22. Halving the party's health, and taking its magic (2026-09-28)
 
-**DECIDED: two exile-js opcodes in AFFECT's range, `hp-percent` (108) and
+**DECIDED: two blades-of-exile-ts opcodes in AFFECT's range, `hp-percent` (108) and
 `take-magic` (109).** Exile III's Pit of the Wyrm halves every PC's current
 health (`cur_health / 2`, dead or alive), and its Great Circle takes every
 magic item from the living PCs' packs, curses and all, and destroys the magic
@@ -600,7 +600,10 @@ unusable pending its strings (`TODO(E3-3)` in that file).
 
 The rest of E3's rules are the scenario's own, by flag, as `bash` is: Exile
 III's lock picking is `pick-lock` = `exile3` (`10d8:3f67`, in `doors.ts`),
-and its traps are mapped kind by kind in the converter (`SpecBuilder.trap`).
+its Unlock spell `unlock` = `exile3:…` (`10b0:6402`, `e3UnlockSpell`; added
+2026-10-01: a table of terrains rather than flag2, so a door past picking can
+still be unlocked, and a success leaves the door closed, not open), and its
+traps are mapped kind by kind in the converter (`SpecBuilder.trap`).
 
 And, 2026-09-29, **every item-ability test in EXILE3.EXE has been read** (all
 52 calls to its four item tests). Nine codes do what BoE's rule does and run
@@ -617,7 +620,7 @@ cases found.
 
 ### 24. A village falling to ruin (2026-09-28)
 
-**DECIDED: an exile-js opcode, `copy-ter` (206, TOWN), and a hidden town
+**DECIDED: an blades-of-exile-ts opcode, `copy-ter` (206, TOWN), and a hidden town
 record per village.** Exile III's villages store no map; `FUN_1040_1600`
 builds one on every visit from placed buildings, and a building shows its
 ruin once its own `(day, event)` has come, or once the village is overrun
@@ -633,7 +636,7 @@ other's ruin early.
 
 ### 25. Forgetting the towns the party remembers (2026-09-28)
 
-**DECIDED: an exile-js opcode, `forget-towns` (49, GENERAL).** Exile III
+**DECIDED: an blades-of-exile-ts opcode, `forget-towns` (49, GENERAL).** Exile III
 empties its four saved towns (`party+0x29a6 + 0x1594k = 200`) twice as its
 plot turns — when the roaches' plague ends and when Grah-Hoth's gate is cut —
 so their creatures fill again from the records. BoE has the same four slots
@@ -653,7 +656,7 @@ OBoE's; OBoE itself ignores attributes it doesn't know.
 
 ### 27. A blast that lands on a square, and a party near one (2026-09-28)
 
-**DECIDED: a scenario flag, `explode-spots` = `exile3`, and an exile-js
+**DECIDED: a scenario flag, `explode-spots` = `exile3`, and an blades-of-exile-ts
 opcode, `if-near` (164).** Exile III's slime pools (town 23) and the Agate
 Tower's slime maker (town 46) are destroyed by an exploding missile landing on
 them (`1018:9a2b`), and each turn they stand they breathe sleep over the
@@ -787,7 +790,7 @@ the hostile line still comes first. 342 also tests the town number (below
 
 ### 34. Counting a field across a town (2026-09-30)
 
-**DECIDED: an exile-js opcode, `if-field-count` (166).** Exile III's
+**DECIDED: an blades-of-exile-ts opcode, `if-field-count` (166).** Exile III's
 Concealed Tunnel (town 54) keeps an invisible barrier across its door while a
 barrel is left anywhere in the town (`1088:22b8` tests all 64×64 squares), so
 the party has to push all five into pits or water. BoE's IF_FIELDS counts a
@@ -853,7 +856,112 @@ port had no way to Use any E3 special item, and every E3 terrain had
   blocks, and lava doesn't.
 OBoE ignores the flag: the items can't be Used and nothing flies.
 
-### 37. Where the dice start: the clock at launch (2026-10-01)
+### 37. A special item that shows a town (2026-10-01)
+
+**DECIDED: a scenario flag, `item-towns` = `exile3:<item>><town>,…`, read
+by `e3ItemTownsTick` (`src/game/e3ItemUse.ts`) beside the uranium and herb
+ticks.** Exile III's per-turn code (`FUN_10c0_61c4`, `10c0:69ff`) sets
+`can_find_town[78]`, the Monastery of Madness, every turn the party holds
+special item 16, the silver key Foxfire sells. No script and no talk node
+does it, so the port had the key for sale and the monastery hidden for
+good, and the Knowledge Brew recipe out of reach. BoE has no opcode for "while
+this item is held"; a timer node would show the town once, which is the
+same while nothing takes the key, but E3's is a rule of the turn, so it is
+one here. The converter writes the one pair E3 has, `16>78`. Like E3, it
+never hides the town again. OBoE ignores the flag.
+
+### 38. Towns that drain spell points (2026-10-01)
+
+**DECIDED: a scenario flag, `sp-drain` = `exile3:<towns>`, read by
+`e3SpDrainTick` (`src/game/e3SpDrain.ts`) after the moving walls, at the end
+of every turn and every combat round.** Exile III's per-turn code
+(`FUN_10c0_61c4`, `10c0:7100`) drains the Tower of Zkal, towns 70 and 71:
+in town or in a fight there, on a turn whose age is a multiple of 5, each of
+the six PCs loses 5 spell points, or all that are left if 5 or fewer. The
+tower's first message says so ("You feel the magical energy slowly leaking
+out of your minds"), and both walkthroughs pack energy potions for it; the
+port printed the warning and drained nothing. BoE has no node for "every
+fifth turn, while here" (a town timer could fire the AFFECT_SP, but the rule
+is E3's clock, `age % 5`, not the time since entry), so it is a rule of the
+turn, as #35 and #37 are. The converter writes `70,71`. OBoE ignores the
+flag.
+
+### 39. The race-and-traits screen's experience figure (2026-10-01)
+
+**DECIDED: 1997.** `pick_race_abil`'s "Experience needed to gain each
+level" is `get_tnl` of the PC. 1997 edits the PC in place and its
+`display_traits_graphics` (INFODLGS.CPP:718) recomputes the number on every
+click, so a player sees what a trait costs before keeping it. OBoE edits a
+copy and reads the PC's own number once, as the dialog opens, so the figure
+never moves. A player can tell, and no draw depends on it, so the port
+follows 1997 (`RaceAbilPick.tnl`, `src/dialogs/partyEditor.ts`).
+
+### 40. Exile III's intro movie (2026-10-01)
+
+Not a 1997/OBoE question — neither has the movie — but where the port's
+showing of E3's (`src/game/e3Movie.ts`) differs from E3's own:
+
+- **It plays once.** E3's `3148` restarts at frame 518 and `0e09` loops it
+  until a click. Here it plays before a new game and then gets out of the way.
+- **It comes after the party is made**, on entering the scenario: E3's New
+  Game plays it first and builds the party after, but this port makes parties
+  on the startup screen, before any scenario.
+- **Its dice are its own** (a separate `GameRng`), not the game stream E3's
+  `get_ran` draws on. A player can't tell; the replay corpus would.
+- **Escape skips it as well as a click**, and on touch the overlay's Skip.
+- **The opening pictures lead into it**: E3 shows the Spiderweb logo and
+  the adventurers once, at launch, before the title screen, and can't skip
+  them. Here they come right before the movie, on a new game, and each
+  skip moves on one scene.
+- One guess where E3's code doesn't say: animated terrain steps once a
+  frame (E3's `anim_ticks` runs off a timer). The window background is not
+  a guess any more: `0e09` calls `paint_pattern(0, 1, rect, 0)`, pattern 0,
+  the grey stone (an earlier reading had the arguments the wrong way round
+  and took it for an unset slot).
+
+### 41. A monster's attack dice, read from a legacy word (2026-10-01)
+
+**DECIDED for Exile III: 1997's; open for legacy `.exs`.** The old monster
+record's attack is one word. 1997 (COMBAT.CPP:2283/2295, and the monster
+dialog at INFODLGS.CPP:489) swings whenever it is positive and rolls
+`a / 100 + 1` dice of `a % 100`; Exile III's `monster_attack` is the same
+(`1018`, the decompile's `/ 100 + 1`). OBoE's `import_legacy`
+(monster.cpp:39) takes `a / 100` dice, a die short, and **none at all
+below 100** — and a creature with no dice never swings. 97 of E3's 183
+attacking monsters had such an attack (its slimes' are 7 and 8), so they
+never attacked, back-shots included. The E3 converter now writes 1997's
+dice (`emit.ts`). The legacy `.exs` importer (`fileio/legacy/convert.ts`)
+still follows OBoE: the library's old scenarios have the same short dice,
+and changing that is a decision for them, not for Exile III.
+
+### 42. Exile III's secret doors (2026-10-01)
+
+**DECIDED: Exile III's**, by scenario flags. E3's three hidden doors (101,
+118, 133) draw as plain wall. Its move code (`10c0:14df`) turns one into
+the wall with its door showing (`+ 1`) and **lets the party through on the
+same step**, where its closed doors (`:1517`) and OBoE's step-change refuse
+the step the door opens on. So in E3 the door is never seen from outside.
+`secret-doors` = `101,118,133` lets the party through, and a message spot on
+the door now only says yes, ahead of the door, where it used to open it and
+refuse (`specials.ts`). E3's search finds one too ("You find a secret
+door!", `10c0:43d4`), under `search` = `exile3`.
+
+### 43. "Search: You find something!" (2026-10-01)
+
+**DECIDED for Exile III: the originals'**, under `search` = `exile3`. OBoE's
+`adj_town_look` says it whenever a scripted square can't be stood on. 1997's
+Windows ADJ_TOWN_LOOK has the line commented out (SPECIALS.CPP:985), and
+Exile III's calls `get_blockage` and ignores the answer; its EXE has no such
+string. So a pillar with nothing left to give said "You find something!"
+in the port and nothing in E3. BoE scenarios keep OBoE's line.
+
+### 44. The town's sound at the start of a new game (2026-10-01)
+
+**DECIDED: Exile III's**, under `start-sound` = `none`: a new game of E3 starts
+in Fort Emergence silently (the user checked), where `put_party_in_scen`
+reaches `start_town_mode` and its entry sound in both 1997 and OBoE.
+
+### 45. Where the dice start: the clock at launch (2026-10-01)
 
 **DECIDED: the original's, with an addition.** A live game seeds once, as
 the page loads, from the clock (`launchSeed`/`seedForLaunch`,
@@ -877,7 +985,7 @@ reseed.
   loaded here and in Exile III rolls differently even at the same seed.
   Replays carry their own `<srand>` and are untouched: the corpus doesn't
   pass through `main.ts`.
-- `?seed=` is an exile-js addition. The seed is printed to the console
+- `?seed=` is a blades-of-exile-ts addition. The seed is printed to the console
   ("dice seed N") on every load, so a run worth repeating can be.
 
 ## Agreements worth recording

@@ -461,7 +461,7 @@ zlib. Boost headers are wanted for a couple of includes and come from
 The build needs `../exile-wasm` patched:
 
 ```
-cd ../exile-wasm && git apply ../exile-js/tools/cppharness/exile-wasm.patch
+cd ../exile-wasm && git apply ../blades-of-exile-ts/tools/cppharness/exile-wasm.patch
 ```
 
 Those changes are deliberately **not** committed to that repo — it is the

@@ -268,7 +268,7 @@ export function startOutdoorCombat(
   arenaTown.name = 'Combat';
   arenaTown.inTownRect = { top: 0, left: 0, bottom: 47, right: 47 };
   const terType = univ.out.at(where.x, where.y);
-  // An exile-js extension: Exile III builds its arenas its own way
+  // An blades-of-exile-ts extension: Exile III builds its arenas its own way
   // (`e3Arena.ts`), and leaves a few items lying in them.
   const e3 = univ.scenario.featureFlags['outdoor-arena'] === 'exile3';
   const loot = e3 ? createE3OutCombatTerrain(univ, arenaTown, terType, numWalls) : [];

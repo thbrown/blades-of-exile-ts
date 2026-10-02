@@ -3,7 +3,7 @@
  * BoE's `create_out_combat_terrain` (`outCombat.ts`) as it stood before
  * Blades of Exile, with E3's own terrain numbers and tables.
  *
- * An exile-js extension, not in BoE or OBoE: a scenario with the feature flag
+ * An blades-of-exile-ts extension, not in BoE or OBoE: a scenario with the feature flag
  * `outdoor-arena` set to `exile3` builds its arenas here. Each terrain's
  * `<arena>` is E3's arena kind for it (the table at `DS:3850`, which the
  * converter writes); everything else is below. The tables are E3's, copied

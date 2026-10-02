@@ -174,7 +174,7 @@ export class GameRng {
  *
  * Not the original's numbers either way: Exile III's generator is Borland's
  * `rand()` and its call order is its own (DIVERGENCES.md). What matches is
- * that a fresh run is a fresh roll. `?seed=` is an exile-js addition, for
+ * that a fresh run is a fresh roll. `?seed=` is a blades-of-exile-ts addition, for
  * play-testing: the same seed and the same moves give the same game.
  */
 export function launchSeed(search: string, now: number = Date.now()): number {

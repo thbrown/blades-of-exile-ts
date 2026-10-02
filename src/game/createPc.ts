@@ -27,7 +27,7 @@ import { skillNames } from '../data/enumTags';
 import { SKILL_GOLD_COST, SKILL_MAX, SKILL_POINT_COST } from '../data/shop';
 import { giveHelp, livingSound } from '../universe/living';
 import { PictChoiceState } from './pictChoice';
-import { Player } from '../universe/player';
+import { Player, tnlFor } from '../universe/player';
 import { MainStatus, Race, Skill, Trait } from '../universe/skills';
 import { Universe } from '../universe/universe';
 
@@ -102,6 +102,11 @@ export class RaceAbilPick {
       this.traits[i] = !this.traits[i];
     }
     return 'stay';
+  }
+
+  /** Experience per level for the LEDs as they stand (`get_tnl`). */
+  tnl(): number {
+    return tnlFor(this.race, this.traits);
   }
 
   /** `keep_race_traits` (pc.editors.cpp:196). */

@@ -9,6 +9,7 @@
  * worse than being asked again. Nothing here touches the dice.
  */
 
+// The project's old name, kept: renaming it would lose what players have stored.
 const KEY = 'exile-js:prefs';
 
 type PrefValue = boolean | number | string | number[];

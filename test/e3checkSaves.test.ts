@@ -277,7 +277,43 @@ describe.skipIf(!dir)('saves for E3-CHECK-IN-ORIGINAL.md', () => {
       make: async (q) => { scen.towns[74]!.canFind = true; await at(q, 122, 312); },
     },
     {
-      file: 'Q21.SAV', question: '#21, when Colchis\'s slimes first notice you',
+      file: 'Q21.SAV', question: "#21, the way back across the Pit of the Wyrm's charged floor",
+      todo: 'The Pit of the Wyrm is on the map, just east. Go down to level 2, pull the lever behind the southernmost crypt door '
+        + '(the rune at the end of the mausoleum hall unseals them), and cross the floor room from its door at (15,42): '
+        + 'E, N, N, E, S, E, S, E, E, N, N, E, then N twice to the bier. Then make walkthrough A\'s way back from (21,39): S first. '
+        + 'Does it zap?',
+      make: async (q) => { scen.towns[76]!.canFind = true; await at(q, 260, 130); },
+    },
+    {
+      file: 'Q22.SAV', question: '#22, walking to the Pit of the Wyrm through the mountain passes',
+      todo: 'The Pit of the Wyrm is on the map. From here, east of Bremerton, walk (no flying) north round the lake by the bridge at '
+        + '(227,129), east through the hills, and try the mountains at (273,129) and (272,129) heading west, then (261,127) and '
+        + '(260,127). Do they let you through?',
+      make: async (q) => { scen.towns[76]!.canFind = true; await at(q, 235, 131); },
+    },
+    {
+      file: 'Q23.SAV', question: "#23, the Remote Cave's crate",
+      todo: 'The Remote Cave is just west. Go in, west to the white mushrooms at (32,1), due south to (32,14), and on west to the '
+        + "door at (15,1). Stand at (3,17), north of the three crates, and make walkthrough A's moves: S, N x15, NW, E x7, NE, "
+        + 'then S twice. Is the crate now one square south of the party, at (10,4)? (The port needs a third S for that.)',
+      make: async (q) => { await at(q, 57, 68); },
+    },
+    {
+      file: 'Q24.SAV', question: "#24, Foxfire's key and the Monastery of Madness",
+      todo: "No key, and the monastery isn't on the map. Walk north into its square at (331,463): does anything happen? Then go "
+        + 'back (the stones west of here, the boat people, Storm Port\'s ferry), find Foxfire in Bengaro, Poulsbo or Malloc, buy her '
+        + 'key ("payment", 500 gold), and come back. Is the monastery on the map now, and does it let you in?',
+      make: async (q) => { await at(q, 331, 464); },
+    },
+    {
+      file: 'Q25.SAV', question: "#25, the Tower of Zkal's drain on spell points, and Zkal's death",
+      todo: 'The Tower of Zkal is on the map, a step south-west. Walk in, note a PC\'s spell points, wait (Space) ten turns and look '
+        + 'again; then start a fight and watch them over ten rounds. Do they drop by 5 every fifth turn? Later, on level 2, '
+        + 'kill Zkal (the Lich) and walk back through the tunnels: do new undead appear?',
+      make: async (q) => { scen.towns[70]!.canFind = true; await besideTown(q, 70); },
+    },
+    {
+      file: 'Q27.SAV', question: '#27, when Colchis\'s slimes first notice you',
       todo: 'The party has never seen a slime. Step south into Colchis by its north gate, read "This is very odd...", then take one step. Does "Monster saw you!" come before the step or after? Reload and try again a few times.',
       make: async (q) => { await q.outdoors(3, 9, 10, 29); },
     },
@@ -285,7 +321,7 @@ describe.skipIf(!dir)('saves for E3-CHECK-IN-ORIGINAL.md', () => {
 
   it('makes every save, and each loads back here to the same place', async () => {
     const readme: string[] = [
-      'Saved games for E3-CHECK-IN-ORIGINAL.md, made by exile-js (test/e3checkSaves.test.ts).',
+      'Saved games for E3-CHECK-IN-ORIGINAL.md, made by blades-of-exile-ts (test/e3checkSaves.test.ts).',
       'Load each in Exile III with File > Open. Every party is level 25 with 200 health, knows every',
       "spell Exile III sells, and has 5,000 gold. Each save is outdoors; what to do is under each name.",
       '',

@@ -107,7 +107,7 @@ function readShopEntries(elem: Element, shop: Shop, fname: string): void {
       const itype = SIMPLE_ENTRIES[type];
       if (itype === undefined) throw new Error(`${fname}: bad node <${type}> in <entries>`);
       shop.addSpecial(itype, intText(entry));
-      // An exile-js extension, not in OBoE's schema: `cost="N"` replaces the
+      // An blades-of-exile-ts extension, not in OBoE's schema: `cost="N"` replaces the
       // built-in price of a spell or recipe. Exile 3 sells low-level spells
       // that BoE never did, and BoE's table prices those at a placeholder 5
       // gold (tools/e3convert/shops.ts).

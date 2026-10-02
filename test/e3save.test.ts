@@ -22,6 +22,7 @@ import { findE3Dir, readE3Files } from '../tools/e3convert/install';
 import { readE3SaveDefaults } from '../tools/e3convert/saveDefaults';
 import { partyFlag } from '../tools/e3convert/script';
 import { QuestRunner, loadExile3 } from './support/e3Quest';
+import { Race, Trait } from '../src/universe/skills';
 
 describe('the exile3.sav container', () => {
   it('writes an outdoor save of the right size and reads it back', () => {
@@ -167,6 +168,26 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     expect(exportE3Save(back.univ, defaults).bytes).toEqual(bytes);
   });
 
+  it("says what of a Blades of Exile PC Exile III can't hold", async () => {
+    const q = new QuestRunner(scen);
+    await q.outdoorsAt(3 * 48 + 20, 6 * 48 + 30);
+    const [a, b] = q.party.pcs;
+    a!.race = Race.VAHNATAI;
+    b!.traits[Trait.PACIFIST] = true;
+    b!.traits[Trait.ANAMA] = true;
+    const { bytes, warnings } = exportE3Save(q.univ, defaults);
+    expect(warnings).toEqual([
+      `${a!.name} isn't a species Exile III has, and goes as a human.`,
+      `${b!.name} is a Pacifist, which Exile III doesn't have; it was left out.`,
+      `${b!.name} is an Anama Member, which Exile III doesn't have; it was left out.`,
+    ]);
+    const back = new QuestRunner(scen);
+    applyE3Save(bytes, back.univ, defaults);
+    expect(back.party.pcs[0]!.race).toBe(Race.HUMAN);
+    expect(back.party.pcs[1]!.traits[Trait.PACIFIST]).toBe(false);
+    expect(back.party.pcs[1]!.traits[Trait.ANAMA]).toBe(false);
+  });
+
   it('puts the vehicles back in their own slots', async () => {
     const q = new QuestRunner(scen);
     expect(q.party.boats.length).toBeGreaterThan(0);
@@ -178,6 +199,32 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
       .toEqual(q.party.boats.map((v) => [v.whichTown, v.loc, v.property]));
   });
 
+  it('carries the explored maps: towns of every size, the villages, the zones and the window', async () => {
+    const q = new QuestRunner(scen);
+    const marks: [number, number, number][] = [[3, 63, 1], [45, 47, 40], [90, 31, 5], [150, 47, 47]];
+    for (const [t, x, y] of marks) scen.towns[t]!.maps[x]![y] = 1;
+    scen.outdoors[2]![7]!.maps[47]![0] = 1;
+    q.univ.out.explored[95]![95] = 1;
+    const { bytes } = exportE3Save(q.univ, defaults);
+    const save = readE3Save(bytes);
+    expect(save.maps).not.toBeNull();
+    const back = new QuestRunner(scen);
+    applyE3Save(bytes, back.univ, defaults);
+    for (const [t, x, y] of marks) {
+      expect(scen.towns[t]!.maps[x]![y], `town ${t}`).toBe(1);
+      expect(scen.towns[t]!.maps[x]![y === 0 ? 1 : y - 1], `town ${t}`).toBe(0);
+    }
+    expect(scen.outdoors[2]![7]!.maps[47]![0]).toBe(1);
+    expect(scen.outdoors[2]![7]!.maps[46]![0]).toBe(0);
+    expect(back.univ.out.explored[95]![95]).toBe(1);
+    // A save without maps still has the window's squares.
+    save.maps = null;
+    const bare = new QuestRunner(scen);
+    applyE3Save(writeE3Save(save), bare.univ, defaults);
+    expect(bare.univ.out.explored[95]![95]).toBe(1);
+    expect(scen.towns[3]!.maps[63]![1]).toBe(0);
+  });
+
   it('enters the town a save was made in, a declining one through its state', async () => {
     const q = new QuestRunner(scen);
     const save = readE3Save(exportE3Save(q.univ, defaults).bytes);
@@ -186,6 +233,7 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     new DataView(cTown.buffer).setInt16(0, 6, true);
     cTown[0x29bc] = 30;
     cTown[0x29bd] = 31;
+    cTown[0x426 + 30 * 64 + 31] = 1; // c_town.explored[30][31]
     save.town = { cTown, data: new Uint8Array(0x1710), items: new Uint8Array(0x1c4d) };
     const back = new QuestRunner(scen);
     const res = applyE3Save(writeE3Save(save), back.univ, defaults);
@@ -193,6 +241,9 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     expect(res.town).toEqual({ num: 4, loc: { x: 30, y: 31 } });
     expect(back.party.getSdf(294, 11)).toBe(2);
     expect(partyFlag(0xc00)).toEqual([294, 0]);
+    // The squares it had seen go on the record the party was in.
+    expect(scen.towns[6]!.maps[30]![31]).toBe(1);
+    expect(scen.towns[6]!.maps[31]![30]).toBe(0);
   });
 
   /**

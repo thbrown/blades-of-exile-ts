@@ -1188,6 +1188,58 @@ const afterScroll = await page.evaluate(() => {
     }
   return { scroll: sc.itemWindow.scroll, topRow };
 });
+// The wheel over the panel scrolls it a line a notch, a touchpad's small
+// moves add up to notches, and the thumb drags; then back to where it was.
+const sbarPage = await page.evaluate(() => {
+  const sc = window.__screen;
+  const bar = sc.itemSbar;
+  const canvas = document.querySelector('canvas');
+  const r = canvas.getBoundingClientRect();
+  const toPage = (x, y) => ({
+    x: r.left + (x + 0.5) * (r.width / canvas.width),
+    y: r.top + (y + 0.5) * (r.height / canvas.height),
+  });
+  return {
+    rows: toPage(bar.frame.left - 100, bar.frame.top + 30),
+    bottom: toPage(bar.frame.left + 8, bar.frame.bottom + 40),
+  };
+});
+const itemScroll = () => page.evaluate(() => window.__screen.itemWindow.scroll);
+await page.mouse.move(sbarPage.rows.x, sbarPage.rows.y);
+await page.mouse.wheel(0, 100);
+await page.waitForTimeout(100);
+const wheelOne = await itemScroll();
+for (let i = 0; i < 10; i++) await page.mouse.wheel(0, 10);
+await page.waitForTimeout(100);
+const touchpadOne = await itemScroll();
+// Back to the top with the wheel, so the drag has the whole track to cross.
+await page.mouse.wheel(0, -1000);
+await page.waitForTimeout(100);
+const thumbAt = await page.evaluate(() => {
+  const bar = window.__screen.itemSbar;
+  const canvas = document.querySelector('canvas');
+  const r = canvas.getBoundingClientRect();
+  // The thumb's top at position 0 is just under the up arrow.
+  const y = bar.frame.top + 16 + 8;
+  return { pos: bar.getPosition(), x: r.left + (bar.frame.left + 8.5) * (r.width / canvas.width), y: r.top + (y + 0.5) * (r.height / canvas.height) };
+});
+if (thumbAt.pos !== 0) throw new Error('the wheel did not scroll the item panel back to the top');
+await page.mouse.move(thumbAt.x, thumbAt.y);
+await page.mouse.down();
+await page.mouse.move(sbarPage.bottom.x, sbarPage.bottom.y, { steps: 5 });
+await page.mouse.up();
+await page.waitForTimeout(100);
+const thumbDragged = await page.evaluate(() => ({ scroll: window.__screen.itemWindow.scroll, max: window.__screen.itemWindow.scrollMax }));
+console.log('ITEM SCROLL:', JSON.stringify({ wheelOne, touchpadOne, thumbDragged }));
+if (wheelOne !== afterScroll.scroll + 1) throw new Error('a wheel notch over the item panel did not scroll it a line');
+if (touchpadOne !== wheelOne + 1) throw new Error("a touchpad's small moves did not add up to a line");
+if (thumbDragged.scroll !== thumbDragged.max) throw new Error('dragging the item scrollbar thumb to the bottom did not scroll to the end');
+await page.evaluate((pos) => {
+  window.__screen.itemWindow.scroll = pos;
+  window.__redraw();
+}, afterScroll.scroll);
+await page.waitForTimeout(100);
+
 // Info on the top row opens put_spec_item_info's description.
 const infoRowAt = await page.evaluate(() => {
   const sc = window.__screen;

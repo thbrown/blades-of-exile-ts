@@ -26,7 +26,7 @@ import { MonstAbil, MonstGen } from '../../src/data/monsterAbility';
 import { decodeBmp, type Rgba } from '../../src/fileio/legacy/bmp';
 import { PIC_CUSTOM_FULL } from '../../src/data/special';
 import { BG_RECTS, E3_PATTERN_SLOTS } from '../../src/render/tiling';
-import { E3_ABILITY_TO_LEGACY, E3_BREATH_RANGE, E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3Crumbles, readE3ItemAbilities, readE3Items, readE3Monsters, readE3PersonalityFaces, readE3RoadJoins, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
+import { E3_ABILITY_TO_LEGACY, E3_BREATH_RANGE, E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3Crumbles, readE3ItemAbilities, readE3Unlocks, readE3Items, readE3Monsters, readE3PersonalityFaces, readE3RoadJoins, readE3Start, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3TerrainType, type E3Vehicle } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3PresetItem, type E3Town } from './town';
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
 import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
@@ -65,7 +65,7 @@ import { e3NoteItems, e3NoteSteps, e3StampedItems, isE3NoteAbility } from './not
 import { DAILY_FLAGS, KILL_SCRIPTS } from './towns/talkScripts';
 import { dailyPlot } from './towns/plot';
 import { townStatesXml } from './towns/townStates';
-import { SpecBuilder, type ScriptSource, type Step } from './script';
+import { SpecBuilder, partySpecItem, type ScriptSource, type Step } from './script';
 import { BASIC_BUTTONS } from '../../src/game/specials/oneshot';
 import type { SpecItem } from '../../src/data/quest';
 import { e3SpecialItems } from './specItems';
@@ -122,7 +122,21 @@ function range(a: number, b: number): number[] {
  * turn hostile where they stand. Of these, 91 and 92 get the guard boost.
  */
 const E3_HOSTILE_MOVERS = '12-20,91-98,149-154';
+
+/**
+ * Special items that show a town while the party holds them, the
+ * `item-towns` flag's pairs: E3's per-turn code sets `can_find_town[78]`
+ * (the Monastery of Madness) whenever special item 16, Foxfire's silver key,
+ * is held (`10c0:69ff`, party+0x2c and party+0x84d3). The only such case.
+ */
+const E3_ITEM_TOWNS: [number, number][] = [[partySpecItem(0x2c), 78]];
 const E3_BOOSTED_GUARDS = [91, 92];
+
+/**
+ * The towns that drain spell points, the `sp-drain` flag's list: the Tower
+ * of Zkal's two levels (`10c0:7128`, `e3SpDrain.ts`).
+ */
+const E3_SP_DRAIN = [70, 71];
 
 /**
  * The towns E3 enters with the dungeon sound (95) however they are lit:
@@ -133,6 +147,13 @@ const E3_DUNGEON_SOUND = '22-23,25-33,35-38,44-47,50-79,86,200';
 
 /** The game's string tables E3 has lines for (`strings/NAME.txt`). */
 export const E3_STRING_OVERRIDES = ['help'];
+
+/**
+ * E3's opening pictures, which the engine has no sheet for: the Spiderweb
+ * logo and the adventurers on the mountain (`1050:0257` and `:04b9`), shown
+ * before the intro movie (`src/render/e3MovieScreen.ts`).
+ */
+export const E3_PICTURES: readonly [string, string][] = [['e3logo', 'SPIDLOGO.BMP'], ['e3start', 'START.BMP']];
 
 /** The game sheets E3 replaces with its own: engine name → E3 file. */
 export const E3_SHEET_OVERRIDES: readonly [string, string][] = [
@@ -187,9 +208,9 @@ function e3Panels(read: E3Read): [string, Rgba][] {
  * 1997's `draw_dialog_graphic` (DLOGTOOL.CPP), which E3's (`1028:3856`)
  * shares: under 300 a terrain picture, 400–579 a monster sprite (E3 takes
  * a raw sprite index, under 180), 700 up a dialog picture, 1000 up a talking
- * face, and 900 up one of the ten black-and-white maps and carvings: each is
- * a scenario sheet of its own from `mapBase` (`e3MapSheets`), shown whole
- * (PIC_CUSTOM_FULL, 111).
+ * face, 900 up one of the ten black-and-white maps and carvings, and 3600
+ * up one of the eight province maps: each is a scenario sheet of its own
+ * from `mapBase` (`e3MapSheets`), shown whole (PIC_CUSTOM_FULL, 111).
  */
 export function e3DialogPic(tag: number, spritePic: Map<number, number>, mapBase = -1): [number, number] | undefined {
   if (tag < 240) return [e3TerrainPic(tag), 1];
@@ -200,6 +221,7 @@ export function e3DialogPic(tag: number, spritePic: Map<number, number>, mapBase
   if (tag >= 700 && tag < 800) return [tag - 700, 4];
   if (tag >= 1000 && tag < 1100) return [tag - 1000, 5];
   if (tag >= 900 && tag < 900 + E3_MAP_COUNT && mapBase >= 0) return [mapBase + tag - 900, PIC_CUSTOM_FULL];
+  if (tag >= 3600 && tag < 3600 + E3_BIG_MAP_COUNT && mapBase >= 0) return [mapBase + E3_MAP_COUNT + tag - 3600, PIC_CUSTOM_FULL];
   return undefined;
 }
 
@@ -207,12 +229,20 @@ export function e3DialogPic(tag: number, spritePic: Map<number, number>, mapBase
 const E3_MAP_COUNT = 10;
 
 /**
+ * BIGMAPS.BMP's 240×240 province maps, four across (`5_3600`–`5_3607`):
+ * dialogs 950–957, which the special items 0–5 and 9 show (`specItems.ts`)
+ * and the map to Black Halberd (954) is read from.
+ */
+const E3_BIG_MAP_COUNT = 8;
+
+/**
  * DLOGMAPS.BMP, 1997's B&W graphic sheet (`draw_dialog_graphic`'s case 9:
- * 120×120 cells, three across), cut into one sheet a picture.
+ * 120×120 cells, three across), cut into one sheet a picture, then
+ * BIGMAPS.BMP's province maps the same way.
  */
 function e3MapSheets(read: E3Read): Rgba[] {
   const all = decodeBmp(read('DLOGMAPS.BMP'));
-  return Array.from({ length: E3_MAP_COUNT }, (_, k) => {
+  const carvings = Array.from({ length: E3_MAP_COUNT }, (_, k) => {
     const x0 = 120 * (k % 3), y0 = 120 * Math.floor(k / 3);
     const data = new Uint8ClampedArray(120 * 120 * 4);
     for (let y = 0; y < 120; y++) {
@@ -221,6 +251,17 @@ function e3MapSheets(read: E3Read): Rgba[] {
     }
     return { width: 120, height: 120, data };
   });
+  const big = decodeBmp(read('BIGMAPS.BMP'));
+  const provinces = Array.from({ length: E3_BIG_MAP_COUNT }, (_, k) => {
+    const x0 = 240 * (k % 4), y0 = 240 * Math.floor(k / 4);
+    const data = new Uint8ClampedArray(240 * 240 * 4);
+    for (let y = 0; y < 240; y++) {
+      const from = ((y0 + y) * big.width + x0) * 4;
+      data.set(big.data.subarray(from, from + 240 * 4), y * 240 * 4);
+    }
+    return { width: 240, height: 240, data };
+  });
+  return [...carvings, ...provinces];
 }
 
 const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="no" ?>\n';
@@ -317,7 +358,8 @@ function specialXml(t: E3TerrainType, id: number, hiddenAs: Map<number, number>)
     // (`10d8:4224`) breaks the lock at or under 25, or 10 for the basalt door
     // (121), and never for the doors past picking. E3's pick
     // (`FUN_10d8_3f67`) is the `pick-lock` = `exile3` flag's: flag2 only
-    // says whether the door can be picked at all.
+    // says whether the door can be picked at all. E3's Unlock spell goes by
+    // its own table, the `unlock` flag (`readE3Unlocks`), not by flag2.
     : ['unlock', sp.to, sp.pickable ? 1 : 10, !sp.pickable ? 0 : id === 121 ? 10 : 25];
   return `        <special>
             <type>${type}</type>
@@ -764,7 +806,7 @@ function scenarioXml(
   outStart: { sector: { x: number; y: number }; loc: { x: number; y: number } },
   shops: Shop[], specialItems: SpecItem[], specStrings: string[], newDay: number, roadJoins: number[],
   jobBase: number, skribbane: number[], journal: string[], cursors: E3Cursor[], townCount: number, uranium: number, crushed: number,
-  crumbles: number[], amuletNode: number,
+  crumbles: number[], amuletNode: number, unlocks: string,
 ): string {
   return `${XML_HEAD}<scenario boes="2.0.0">
     <title>Exile III: Ruined World</title>
@@ -783,11 +825,12 @@ function scenarioXml(
         <job-boards>exile3:${jobBase}</job-boards>
         <skribbane>exile3:${skribbane.join(',')}</skribbane>
         <uranium>exile3:${uranium}</uranium>
+        <item-towns>exile3:${E3_ITEM_TOWNS.map(([i, t]) => `${i}>${t}`).join(',')}</item-towns>
         <moving-walls>exile3:${crushed}:54,71</moving-walls>
+        <sp-drain>exile3:${E3_SP_DRAIN.join(',')}</sp-drain>
         <trap>exile3</trap>
         <alchemy>exile3</alchemy>
         <balm>exile3</balm>
-        <town-difficulty>exile3</town-difficulty>
         <monster-sightings>exile3</monster-sightings>
         <hostile-movers>${E3_HOSTILE_MOVERS}</hostile-movers>
         <town-timers>repeat</town-timers>
@@ -801,10 +844,15 @@ function scenarioXml(
         <explode-spots>exile3</explode-spots>
         <pick-lock>exile3</pick-lock>
         <crumble>exile3:${crumbles.join(',')}</crumble>
+        <unlock>exile3:${unlocks}</unlock>
         <special-items>exile3:${amuletNode}</special-items>
+        <traits>exile3</traits>
         <disease>exile3</disease>
         <summons>exile3</summons>
         <dungeon-sound>${E3_DUNGEON_SOUND}</dungeon-sound>
+        <start-sound>none</start-sound>
+        <secret-doors>101,118,133</secret-doors>
+        <search>exile3</search>
         <cursors>${cursors.map((c) => `${c.name}:${c.hotspot.x}:${c.hotspot.y}`).join(',')}</cursors>
     </feature-flags>
     <text>
@@ -928,6 +976,16 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   e3Src.dialogPic = (tag) => e3DialogPic(tag, spritePic, mapBase);
   const monsters = legacyMonsters.map((m, n) => {
     const mon = convertMonster(m);
+    // E3's attack word is 1997's, `(dice − 1) × 100 + sides`: its
+    // `monster_attack` swings whenever it is positive and rolls
+    // `a / 100 + 1` dice (`1018` around `:10241` of the decompile), as
+    // 1997's COMBAT.CPP:2295 and INFODLGS.CPP:489 do. OBoE's legacy import
+    // takes `a / 100`, a die short, and none at all under 100 — so E3's
+    // slimes (7, 8) never attacked.
+    mon.attacks = mon.attacks.map((att, i) => {
+      const a = m.a[i] ?? 0;
+      return a > 0 ? { ...att, dice: Math.trunc(a / 100) + 1, sides: a % 100 } : att;
+    });
     mon.pictureNum = monsterArt.pics[n]!;
     // E3's `make_town_hostile` gives BoE's guard boost (health ×3, two
     // statuses 8) to monsters 91 and 92 alone (1070:24e6).
@@ -1160,7 +1218,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   // Last, since the places' scripts can add shops of their own.
   shops.push(...talk.shops);
   const cursors = readE3Cursors(resources);
-  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, skribbane, e3JournalStrings((id) => strings.get(id) ?? ''), cursors, townCount, uranium, crushed, readE3Crumbles(files.exe), amuletNode));
+  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, skribbane, e3JournalStrings((id) => strings.get(id) ?? ''), cursors, townCount, uranium, crushed, readE3Crumbles(files.exe), amuletNode, readE3Unlocks(files.exe)));
   const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(read), ...e3MapSheets(read)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
   // E3's own sounds, which a scenario's `sounds/SNDn.wav` puts in place of
@@ -1176,8 +1234,12 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   // engine keeps BoE's beyond them (`installSheetOverrides`).
   for (const [name, bmp] of E3_SHEET_OVERRIDES) write(`graphics/${name}.png`, encodePng(decodeBmp(read(bmp))));
   write('graphics/pixpats.png', encodePng(buildE3Patterns(read)));
+  for (const [name, bmp] of E3_PICTURES) write(`graphics/${name}.png`, encodePng(decodeBmp(read(bmp))));
   for (const [name, img] of e3Panels(read)) write(`graphics/${name}.png`, encodePng(img));
   write('graphics/textbar.png', encodePng(decodeBmp(read('TEXTBAR.BMP'))));
+  // The frame round the terrain view: E3's wooden bevel, 279×351 as 1997's
+  // `win_from_rects[0]` (GRAPHICS.CPP:101), where OBoE's is a stone rope.
+  write('graphics/terscreen.png', encodePng(decodeBmp(read('TERSCRN.BMP'))));
   // E3's instant help, string block 10 (3000 + n), which its `give_help`
   // (`FUN_1008_38d6`) shows by 1997's numbers — the engine's too — in place
   // of BoE's wording. A number E3 has no string for keeps BoE's.

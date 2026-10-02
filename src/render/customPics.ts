@@ -147,15 +147,21 @@ export async function installCustomSheets(
  * game's sheet rather than put in its place, so a smaller one (Exile III's
  * dialog pictures run to 28, BoE's to 40), or one transparent where it has
  * nothing to say (its `pixpats`), leaves the rest of the game's pictures
- * where they were. The game's sheet must already be loaded.
+ * where they were. The game's sheet must already be loaded; a picture the
+ * game has none for is added as it is.
  */
 export async function installSheetOverrides(
   store: SheetStore, overrides: Map<string, Uint8Array>,
 ): Promise<void> {
   for (const [name, png] of overrides) {
     const base = store.get(name);
-    if (!base) continue;
     const own = await createImageBitmap(new Blob([png as BlobPart], { type: 'image/png' }));
+    // A picture the game has no sheet for (Exile III's opening pictures) is
+    // kept as it is.
+    if (!base) {
+      store.put(name, own);
+      continue;
+    }
     const canvas = new OffscreenCanvas(Math.max(base.width, own.width), Math.max(base.height, own.height));
     const ctx = canvas.getContext('2d')!;
     // Where the scenario's is transparent, the game's shows through.
