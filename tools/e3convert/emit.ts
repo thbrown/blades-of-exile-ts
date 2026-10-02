@@ -961,7 +961,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   write('terrain.xml', terrainXml(withTer255(terrain), readE3HiddenEntrances(files.exe)));
   const hiddenTowns = new Set(readE3HiddenTowns(files.exe));
   // Monsters: E3's table through the legacy importer, drawn from E3's own
-  // sprites cut into custom sheets after the terrain's.
+  // sprites cut into the custom cells the terrain leaves (`freeMonsterCells`).
   const terrainSheets = buildTerrainSheets(read);
   const legacyMonsters = readE3Monsters(files.exe, strings);
   // The sprites E3's dialogs show (`5_4xx`, a raw sprite index, one cell)
@@ -971,7 +971,7 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   const monsterArt = buildMonsterSheets(read, [
     ...legacyMonsters.map((m) => ({ pic: m.pictureNum, w: m.xWidth, h: m.yWidth })),
     ...dialogSprites.map((pic) => ({ pic, w: 1, h: 1 })),
-  ], terrainSheets.length);
+  ], terrainSheets);
   const spritePic = new Map(dialogSprites.map((x, i) => [x, monsterArt.pics[legacyMonsters.length + i]!]));
   // The maps and carvings go after the items' sheet.
   const mapBase = terrainSheets.length + monsterArt.sheets.length + 1;

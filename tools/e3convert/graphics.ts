@@ -70,10 +70,46 @@ function fillCell(sheet: Rgba, cell: number, rgba: [number, number, number, numb
 }
 
 /**
- * Cuts every monster's frames out of MONST1–9 into custom sheets, from sheet
- * `firstSheet` on, in the order the engine reads a custom monster (the parts
- * facing left, then facing right, then the attack pose each way:
- * `monsterGraphic`). Returns the sheets and each monster's new picture number.
+ * The custom cells a monster may use: `monsterGraphic` reads a custom monster
+ * as `pic % 1000` (OBoE's rule — the thousands digit is the picture's size
+ * class), so cell 1000 and up can never be a monster's. That is 1000 cells
+ * in all, the terrain takes most of the first four sheets, and E3's monsters
+ * need about 700 — so they also go into the rows the terrain sheets leave
+ * empty (TER5 fills four rows of sheet 2, the animations six of sheet 3).
+ * Placing them from sheet 4 on, as this once did, ran the last fifteen
+ * (the Unicorn, the Gorgon, the Drake Lord…) past 1999, and `% 1000` drew
+ * them from sheet 0: swamp and rocks.
+ */
+export const MONSTER_CELL_LIMIT = 1000;
+
+/** The free runs `[start, end)` of cells below the limit, after the terrain sheets' rows. */
+export function freeMonsterCells(terrain: readonly Rgba[]): [number, number][] {
+  const runs: [number, number][] = [];
+  terrain.forEach((sheet, s) => {
+    const used = s * 100 + Math.ceil(sheet.height / H) * 10;
+    if (used < (s + 1) * 100) runs.push([used, (s + 1) * 100]);
+  });
+  runs.push([terrain.length * 100, MONSTER_CELL_LIMIT]);
+  // Adjacent runs (the end of one sheet, the next sheet) are one run: a
+  // monster's cells only have to be consecutive numbers.
+  const merged: [number, number][] = [];
+  for (const run of runs) {
+    const last = merged[merged.length - 1];
+    if (last !== undefined && last[1] === run[0]) last[1] = run[1];
+    else merged.push([...run]);
+  }
+  return merged;
+}
+
+/**
+ * Cuts every monster's frames out of MONST1–9 into custom cells, in the order
+ * the engine reads a custom monster (the parts facing left, then facing
+ * right, then the attack pose each way: `monsterGraphic`). Each monster's
+ * cells are consecutive and go in the first free run (`freeMonsterCells`)
+ * with room; `terrain` is the terrain's sheets, which are replaced by copies
+ * grown to hold any cells set into their spare rows. Returns the sheets after
+ * the terrain's, and each monster's new picture number. Throws if they will
+ * not fit under `MONSTER_CELL_LIMIT`.
  *
  * MONST sheets use BoE's layout (`get_monster_template_rect`): 20 sprites a
  * sheet, sprite `r` at row `r % 10`, columns `2*floor((r%20)/10)` (facing
@@ -81,45 +117,62 @@ function fillCell(sheet: Rgba, cell: number, rgba: [number, number, number, numb
  * background and becomes transparent.
  */
 export function buildMonsterSheets(
-  read: (name: string) => Uint8Array, monsters: { pic: number; w: number; h: number }[], firstSheet: number,
+  read: (name: string) => Uint8Array, monsters: { pic: number; w: number; h: number }[], terrain: Rgba[],
 ): { sheets: Rgba[]; pics: number[] } {
   const src = Array.from({ length: 9 }, (_, i) => decodeBmp(read(`MONST${i + 1}.BMP`)));
-  const cells: { sheet: Rgba; x: number; y: number }[] = [];
+  const free = freeMonsterCells(terrain);
+  const cells = new Map<number, { sheet: Rgba; x: number; y: number }>();
   const pics: number[] = [];
   const byPic = new Map<string, number>();
   for (const m of monsters) {
     const key = `${m.pic}:${m.w}x${m.h}`;
     const seen = byPic.get(key);
     if (seen !== undefined) { pics.push(seen); continue; }
-    const base = cells.length;
     const size = m.w * m.h;
+    const run = free.find(([a, b]) => b - a >= 4 * size);
+    if (run === undefined) {
+      throw new Error(`Exile III's monster pictures don't fit in the ${MONSTER_CELL_LIMIT} custom cells a monster can use`);
+    }
+    const base = run[0];
+    run[0] += 4 * size;
+    let at = base;
     // left, right, attack-left, attack-right (monsterGraphic: +size, +2*size).
     for (const [adj] of [[1], [0], [5], [4]] as const) {
       for (let part = 0; part < size; part++) {
         const r = m.pic + part;
         const sheet = src[Math.floor(r / 20)];
         const idx = r % 20;
-        if (!sheet) { cells.push({ sheet: blank(W, H), x: 0, y: 0 }); continue; }
-        cells.push({ sheet, x: (2 * Math.floor(idx / 10) + adj) * W, y: (idx % 10) * H });
+        cells.set(at++, sheet ? { sheet, x: (2 * Math.floor(idx / 10) + adj) * W, y: (idx % 10) * H }
+          : { sheet: blank(W, H), x: 0, y: 0 });
       }
     }
-    const pic = 1000 + firstSheet * 100 + base;
+    const pic = 1000 + base;
     byPic.set(key, pic);
     pics.push(pic);
   }
+  const top = Math.max(terrain.length * 100, ...cells.keys()) + 1;
   const sheets: Rgba[] = [];
-  for (let s = 0; s * 100 < cells.length; s++) {
-    const n = Math.min(100, cells.length - s * 100);
-    const out = blank(10 * W, Math.ceil(n / 10) * H);
-    for (let c = 0; c < n; c++) {
-      const cell = cells[s * 100 + c]!;
-      blit(cell.sheet, cell.x, cell.y, out, (c % 10) * W, Math.floor(c / 10) * H, W, H);
+  for (let s = 0; s * 100 < top; s++) {
+    const mine = [...cells.keys()].filter((c) => Math.floor(c / 100) === s);
+    if (s < terrain.length && mine.length === 0) continue;
+    const rows = Math.ceil((Math.max(...mine.map((c) => c % 100)) + 1) / 10);
+    const old = terrain[s];
+    const out = blank(10 * W, Math.max(old?.height ?? 0, rows * H));
+    if (old) blit(old, 0, 0, out, 0, 0, old.width, old.height);
+    for (const c of mine) {
+      const cell = cells.get(c)!;
+      const dx = (c % 10) * W, dy = Math.floor((c % 100) / 10) * H;
+      blit(cell.sheet, cell.x, cell.y, out, dx, dy, W, H);
+      // White background → transparent, in the monster's cells alone.
+      for (let y = dy; y < dy + H; y++) {
+        for (let x = dx; x < dx + W; x++) {
+          const p = (y * out.width + x) * 4;
+          if (out.data[p] === 255 && out.data[p + 1] === 255 && out.data[p + 2] === 255) out.data[p + 3] = 0;
+        }
+      }
     }
-    // White background → transparent.
-    for (let p = 0; p < out.data.length; p += 4) {
-      if (out.data[p] === 255 && out.data[p + 1] === 255 && out.data[p + 2] === 255) out.data[p + 3] = 0;
-    }
-    sheets.push(out);
+    if (old) terrain[s] = out;
+    else sheets.push(out);
   }
   return { sheets, pics };
 }

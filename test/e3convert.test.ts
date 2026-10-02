@@ -955,7 +955,14 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     // E3's word is 210: 3d10 by its own `a / 100 + 1` (OBoE's `a / 100`
     // read it as 2d10).
     expect(guard.attacks[0]).toMatchObject({ dice: 3, sides: 10 });
-    expect(guard.pictureNum).toBeGreaterThanOrEqual(1400); // a custom sheet after the terrain's
+    expect(guard.pictureNum).toBeGreaterThanOrEqual(1000); // a custom picture
+    // Every monster's cells sit below custom picture 2000: the engine reads a
+    // custom monster as `pic % 1000`, so one past it drew from the terrain's
+    // sheet 0 (the Unicorn was a swamp and a rock).
+    for (const m of scen.scenMonsters.slice(1)) {
+      expect(m.pictureNum % 1000 + 4 * m.xWidth * m.yWidth, m.name).toBeLessThanOrEqual(1000);
+      expect(m.pictureNum, m.name).toBeLessThan(2000);
+    }
     const giant = scen.scenMonsters[54]!;
     expect(giant.name).toBe('Cave Giant');
     expect([giant.xWidth, giant.yWidth]).toEqual([1, 2]);
@@ -1239,7 +1246,7 @@ describe("Exile III converted in memory, as the browser does", () => {
     expect(loaded.scenario.towns.length).toBe(222);
     // Terrain, monsters and items, then the ten maps and carvings and the
     // eight province maps.
-    expect(loaded.sheets.length).toBe(30);
+    expect(loaded.sheets.length).toBe(29);
     // Its instant help, in its own words, over the game's.
     expect(loaded.strings.get('help')?.split('\n')[0]).toMatch(/^Welcome to Exile III/);
     // E3's own hundred sounds, in place of the engine's; 16, entering a town,

@@ -24,6 +24,7 @@ import { Universe } from '../universe/universe';
 import { GameMode } from './modes';
 import { NO_ONE, pickNextPc, setPcMoves, HOR_VERT_PLACE } from './combat';
 import type { GameSession } from './session';
+import { e3EncounterLines } from './e3Encounter';
 
 /** The 48×48 arena's dimension (AREA_MEDIUM). */
 export const ARENA_DIM = 48;
@@ -256,7 +257,14 @@ export function startOutdoorCombat(
   for (let i = 0; i < 7; i++) nums[i] = univ.rng.getRan(1, low[i]!, high[i]!);
   for (let i = 0; i < 3; i++) nums[i + 7] = univ.rng.getRan(1, low[i + 7]!, high[i + 7]!);
 
-  univ.addStringToBuf('You have been attacked!');
+  // An blades-of-exile-ts extension: Exile III names who has turned up
+  // (`e3Encounter.ts`).
+  const e3 = univ.scenario.featureFlags['outdoor-arena'] === 'exile3';
+  if (e3) {
+    for (const line of e3EncounterLines(encounter.monst, (m) => univ.scenario.scenMonsters[m]?.name ?? '')) {
+      univ.addStringToBuf(line);
+    }
+  } else univ.addStringToBuf('You have been attacked!');
   session.sound?.play(23);
 
   session.whichCombatType = 0;
@@ -268,9 +276,8 @@ export function startOutdoorCombat(
   arenaTown.name = 'Combat';
   arenaTown.inTownRect = { top: 0, left: 0, bottom: 47, right: 47 };
   const terType = univ.out.at(where.x, where.y);
-  // An blades-of-exile-ts extension: Exile III builds its arenas its own way
-  // (`e3Arena.ts`), and leaves a few items lying in them.
-  const e3 = univ.scenario.featureFlags['outdoor-arena'] === 'exile3';
+  // Exile III builds its arenas its own way (`e3Arena.ts`), and leaves a few
+  // items lying in them.
   const loot = e3 ? createE3OutCombatTerrain(univ, arenaTown, terType, numWalls) : [];
   if (!e3) createOutCombatTerrain(univ, arenaTown, terType, numWalls, univ.out.isRoad(where.x, where.y));
   const town = new CurTown(arenaTown, univ);
