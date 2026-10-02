@@ -75,15 +75,19 @@ export function clearPref(name: string): void {
 }
 
 /**
- * The autosave preferences as the C++ stores them: `Autosave`,
- * `Autosave_<reason>` and `Autosave_Max`.
+ * The autosave preferences: `Autosave`, `Autosave_<reason>` as the C++ stores
+ * them, and this port's `Autosave_Every` (moves between ticks) and
+ * `Autosave_BudgetMb` (storage per game).
  */
 export function readAutosavePrefs(
-  reasons: readonly string[], defaults: Record<string, boolean>, maxDefault: number,
-): { enabled: boolean; triggers: Record<string, boolean>; max: number } {
+  reasons: readonly string[], defaults: Record<string, boolean>, everyDefault: number, budgetDefault: number,
+): { enabled: boolean; triggers: Record<string, boolean>; every: number; budgetMb: number } {
   const triggers: Record<string, boolean> = {};
   for (const r of reasons) triggers[r] = getBoolPref(`Autosave_${r}`, defaults[r] ?? true);
-  return { enabled: getBoolPref('Autosave', true), triggers, max: getIntPref('Autosave_Max', maxDefault) };
+  return {
+    enabled: getBoolPref('Autosave', true), triggers,
+    every: getIntPref('Autosave_Every', everyDefault), budgetMb: getIntPref('Autosave_BudgetMb', budgetDefault),
+  };
 }
 
 /** Tests only: drop the in-memory copy so the next read goes back to storage. */

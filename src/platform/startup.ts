@@ -39,29 +39,50 @@ export interface StartupScenario {
   preview?: string;
 }
 
-export interface StartupSave {
-  /** The slot name in the save store. */
-  slot: string;
+/**
+ * One game, as a card: a save *series*, however many snapshots it holds
+ * (`platform/saveStore.ts`). Clicking it continues from the newest; the
+ * buttons under it browse the older ones, export them, rename or delete.
+ */
+export interface StartupSeries {
+  id: string;
   scenarioId: string;
+  /** What the player calls the game. */
+  name: string;
   /** The scenario's title, or who is in a party-only save. */
   label: string;
-  /** When, and where in the game — "Day 3 · 12 May, 14:02". */
+  /** When, and where in the game — "Day 3 · 12 May, 14:02 · 41 saves". */
   detail: string;
-  /** A picture of the terrain view at the time, when the save has one. */
+  /** A picture of the terrain view at the newest save, when it has one. */
   thumb?: string;
   /** The scenario's icon, for a save with no picture. */
   icon?: number | string;
+}
+
+/** What the saved-game cards can do beyond continuing. */
+export interface StartupSaveActions {
+  /**
+   * Open the restore tree for a series. Resolves with the snapshot the player
+   * chose to restore, or null if they closed it.
+   */
+  browse: (seriesId: string) => Promise<number | null>;
+  exportZip: (seriesId: string) => Promise<void>;
+  rename: (seriesId: string, name: string) => Promise<void>;
+  remove: (seriesId: string) => Promise<void>;
+  /** Import an `.exg` or a series zip, giving the new series' id (null: cancelled or refused). */
+  importFile: () => Promise<string | null>;
 }
 
 export interface StartupChoice {
   /** '' for a choice about the party alone. */
   scenarioId: string;
   /**
-   * Set when the player picked a saved game rather than a fresh start. With
-   * an empty `scenarioId` it is a party-only save, which becomes the party in
-   * memory (`finish_load_party` returning to the startup screen).
+   * Set when the player picked a saved game rather than a fresh start; `seq`
+   * is the snapshot, absent for "the newest". With an empty `scenarioId` it is
+   * a party-only save, which becomes the party in memory (`finish_load_party`
+   * returning to the startup screen).
    */
-  slot?: string;
+  series?: { id: string; seq?: number };
   /**
    * `make`: Make New Party, with no scenario — the party becomes the one in
    * memory. `enter`: take the party in memory into `scenarioId`
@@ -101,7 +122,7 @@ export interface StartupParty {
   active?: {
     title: string;
     /** The newest save in that scenario, to pick up from. */
-    resume?: { scenarioId: string; slot: string; label: string };
+    resume?: { scenarioId: string; seriesId: string; label: string };
   };
 }
 
@@ -126,7 +147,9 @@ export interface StartupOptions {
   official: readonly StartupScenario[];
   /** Scenarios the player installed; any that are library entries show as those instead. */
   added: readonly StartupScenario[];
-  saves: readonly StartupSave[];
+  series: readonly StartupSeries[];
+  /** Absent when there's nowhere to keep saves (no IndexedDB). */
+  saveActions?: StartupSaveActions;
   /** Absent when there's nowhere to keep a scenario (no IndexedDB). */
   importScenarios?: ImportScenarios;
   library?: StartupLibrary;
@@ -285,7 +308,7 @@ interface Card {
  * itself first, so the caller can get on with loading against a clean page.
  */
 export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Promise<StartupChoice> {
-  const { official, added, saves, importScenarios, library, party } = opts;
+  const { official, added, series, saveActions, importScenarios, library, party } = opts;
   return new Promise((resolve) => {
     // The masthead sits above the card, not in it.
     installBackdrop();
@@ -348,10 +371,10 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
         }
         panel.append(list);
         if (active?.resume !== undefined) {
-          const { scenarioId, slot, label } = active.resume;
+          const { scenarioId, seriesId, label } = active.resume;
           const resume = el('button', 'startup-party-button primary', `Continue ${active.title}`);
           resume.title = label;
-          resume.addEventListener('click', () => { choose({ scenarioId, slot }); });
+          resume.addEventListener('click', () => { choose({ scenarioId, series: { id: seriesId } }); });
           panel.append(resume);
         }
         const forget = el('button', 'startup-party-button', 'Forget Party');
@@ -367,28 +390,70 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
     }
 
     // Saved games have a card of their own too, so continuing and starting
-    // fresh read as two different choices.
-    if (saves.length > 0) {
+    // fresh read as two different choices. One card a game, however long its
+    // history: the card continues from the newest, and "Older saves…" opens
+    // the restore tree.
+    if (series.length > 0 || saveActions !== undefined) {
       const savesCard = el('div', 'startup startup-saves-card');
       savesCard.append(el('h2', undefined, 'Continue a saved game'));
       const list = el('div', 'startup-list startup-cards startup-saves');
-      for (const save of saves) {
+      for (const game of series) {
+        const wrap = el('div', 'startup-save');
+        wrap.dataset['series'] = game.id;
         const card = el('button', 'startup-choice startup-card');
-        card.dataset['slot'] = save.slot;
-        card.append(pictureElement(save.icon, save.thumb));
+        card.dataset['series'] = game.id;
+        card.append(pictureElement(game.icon, game.thumb));
         const words = el('span', 'startup-words');
-        words.append(el('strong', undefined, save.slot));
-        words.append(el('span', 'startup-facts', save.label));
-        words.append(el('small', undefined, save.detail));
+        const title = el('strong', undefined, game.name);
+        words.append(title);
+        words.append(el('span', 'startup-facts', game.label));
+        words.append(el('small', undefined, game.detail));
         card.append(words);
         // A save names its own scenario, so picking one here is also how a
         // party in a scenario other than the default gets opened at all.
         card.addEventListener('click', () => {
-          choose({ scenarioId: save.scenarioId, slot: save.slot });
+          choose({ scenarioId: game.scenarioId, series: { id: game.id } });
         });
-        list.append(card);
+        wrap.append(card);
+        if (saveActions !== undefined) {
+          const row = el('div', 'startup-save-actions');
+          const button = (text: string, tip: string, run: () => void): HTMLButtonElement => {
+            const b = el('button', 'startup-party-button', text) as HTMLButtonElement;
+            b.title = tip;
+            b.addEventListener('click', run);
+            row.append(b);
+            return b;
+          };
+          button('Older saves…', 'Pick an earlier point in this game', () => {
+            void saveActions.browse(game.id).then((seq) => {
+              if (seq !== null) choose({ scenarioId: game.scenarioId, series: { id: game.id, seq } });
+            });
+          }).dataset['action'] = 'browse';
+          button('Export', 'Download every save of this game as a zip', () => { void saveActions.exportZip(game.id); });
+          button('Rename', 'Rename this game', () => {
+            const next = window.prompt('Name this game:', game.name)?.trim();
+            if (next === undefined || next === '' || next === game.name) return;
+            void saveActions.rename(game.id, next).then(() => { title.textContent = next; });
+          });
+          button('Delete', 'Delete this game and all its saves', () => {
+            if (!window.confirm(`Delete "${game.name}" and all its saves? This cannot be undone.`)) return;
+            void saveActions.remove(game.id).then(() => { wrap.remove(); });
+          });
+          wrap.append(row);
+        }
+        list.append(wrap);
       }
-      savesCard.append(list);
+      if (saveActions !== undefined) {
+        const add = el('button', 'startup-party-button', 'Import a saved game…');
+        add.dataset['action'] = 'import';
+        add.title = 'An .exg file, a zip of saves, or an Exile III save — it becomes a new game here';
+        add.addEventListener('click', () => {
+          void saveActions.importFile().then((id) => { if (id !== null) window.location.reload(); });
+        });
+        savesCard.append(list, add);
+      } else {
+        savesCard.append(list);
+      }
       root.before(savesCard);
     }
 

@@ -89,20 +89,20 @@ import { TerSpec } from './data/terrain';
 import { GameSession } from './game/session';
 import { TalkAction } from './game/talk';
 import { loadOpcodes, loadScenario } from './fileio/loadScenario';
-import { applyPartySave, applySave, readSavePreview, saveGame, serialiseSave } from './fileio/saveIo';
-import { gzipSync } from 'fflate';
+import { applyPartySave, applySave, previewOfUniverse, readSavePreview, saveGame, serialiseSave } from './fileio/saveIo';
 import { aroundWaitFade } from './platform/waitFade';
 import {
-  SaveSlot, clearResume, exportSave, getPartyInMemory, getResume, getSave, importSave, listSaves, putResume, putSave,
-  saveStoreAvailable,
-  setPartyActiveScenario, setPartyInMemory,
+  SeriesInfo, createSeries, exportSave, getPartyInMemory, getSeries, getSnapshot, importSave, listSeries,
+  listSnaps, saveStoreAvailable, setHead, setPartyActiveScenario, setPartyInMemory, renameSeries, deleteSeries,
 } from './platform/saveStore';
+import { SaveScheduler } from './platform/saveScheduler';
+import { browseSeries, exportSeriesZip, importAsSeries, placeOf } from './platform/saveActions';
 import {
-  AUTOSAVE_TRIGGER_DEFAULTS, AutosaveReason, MAX_AUTOSAVE_DEFAULT, getAutosavePrefs, setAutosavePrefs,
+  AUTOSAVE_BUDGET_MB_DEFAULT, AUTOSAVE_EVERY_DEFAULT, AUTOSAVE_TRIGGER_DEFAULTS, AutosaveReason, getAutosavePrefs, setAutosavePrefs,
   setAutosaveSink,
 } from './game/autosave';
 import { MENU_SEPARATOR, MenuItem, installFullScreenButton, installMenuBar, installMenuToggle } from './platform/menu';
-import { StartupLibrary, StartupScenario, showStartupScreen } from './platform/startup';
+import { StartupLibrary, StartupScenario, StartupSaveActions, showStartupScreen } from './platform/startup';
 import { LibraryCatalog, libraryUrl } from './fileio/libraryCatalog';
 import {
   InstalledScenario, getInstalledScenario, installScenario, listInstalledScenarios,
@@ -122,7 +122,7 @@ import { FetchSource } from './fileio/source';
 import { InputRouter } from './platform/input';
 import { Snd, SoundPlayer } from './platform/sound';
 import { installCustomSheets, installSheetOverrides, loadCustomSheets } from './render/customPics';
-import { captureTerrainView } from './render/preview';
+import { captureSaveThumb, captureTerrainView } from './render/preview';
 import { BG_DARK, BG_LIGHT, setDefaultDialogBackground, setExile3Dialogs } from './render/tiling';
 import { changeCursor, cursorCss, setScenarioCursors } from './platform/cursors';
 import { giveHelp, setGiveHelp, setLivingSound } from './universe/living';
@@ -162,8 +162,8 @@ const DEFAULT_SCENARIO = 'valleydy';
 /**
  * The URL a game gets once the startup screen hands it over, so the browser's
  * Back button leaves the game for the main menu. Reloading `?play=<id>` goes
- * back into the game (the resume record, `keepResume`); with nothing kept for
- * that scenario, or on `?party=`, it shows the main menu and drops the
+ * back into the game (the series it was last saved into, `SERIES_KEY`); with
+ * nothing kept for that scenario, or on `?party=`, it shows the main menu and drops the
  * parameter.
  */
 const GAME_PARAMS = ['play', 'party'] as const;
@@ -201,6 +201,11 @@ const BUNDLED_SCENARIOS = ['valleydy', 'stealth', 'zakhazi', 'busywork', 'exile3
  */
 // The project's old name, kept: renaming it would lose what players have stored.
 const PENDING_SAVE_KEY = 'exile-js.pendingSave';
+/**
+ * The series this tab's game is saved into, so a reload of `?play=` picks it
+ * back up at its newest snapshot. Per tab (sessionStorage), as the URL is.
+ */
+const SERIES_KEY = 'exile-js.series';
 
 /**
  * Restart on the party-death dialog: `start_new_game`, the party editor and
@@ -326,7 +331,13 @@ async function main(): Promise<void> {
   // save list and each scenario's title, both cheap: four small XML headers and
   // one IndexedDB read, against the megabytes the scenario itself will cost.
   let name = scenarioFromQuery();
-  let openSlot = window.sessionStorage.getItem(PENDING_SAVE_KEY);
+  /** The snapshot to open once the world is loaded: a series, and one of its saves (absent: the newest). */
+  type OpenTarget = { seriesId: string; seq?: number };
+  let openTarget = null as OpenTarget | null;
+  try {
+    const parked = JSON.parse(window.sessionStorage.getItem(PENDING_SAVE_KEY) ?? 'null') as OpenTarget | null;
+    if (parked !== null && typeof parked.seriesId === 'string') openTarget = parked;
+  } catch { /* nothing parked */ }
   window.sessionStorage.removeItem(PENDING_SAVE_KEY);
   const newPartyPending = window.sessionStorage.getItem(PENDING_NEW_PARTY_KEY) !== null;
   window.sessionStorage.removeItem(PENDING_NEW_PARTY_KEY);
@@ -339,22 +350,25 @@ async function main(): Promise<void> {
   /** The party in memory, when the startup screen is taking it into a scenario. */
   let enteringParty: Uint8Array | null = null;
   /**
-   * A reload of a game's page (`?play=<id>`) goes back into that game as it
-   * was last kept (`keepResume`, below), rather than to the main menu.
+   * A reload of a game's page (`?play=<id>`) goes back into that game, at the
+   * newest snapshot of the series it was being saved into, rather than to the
+   * main menu.
    */
-  let resume: { data: Uint8Array; slot: string | null } | null = null;
+  let resuming = false;
   const playing = new URLSearchParams(window.location.search).get('play');
   // A save parked by a cross-scenario load names its scenario the same way.
-  if (name === null && openSlot !== null && playing !== null) name = playing;
-  if (name === null && openSlot === null && playing !== null && saveStoreAvailable()) {
-    const kept = await getResume().catch(() => null);
-    if (kept !== null && kept.scenarioId !== '' && kept.scenarioId === playing) {
-      resume = kept;
+  if (name === null && openTarget !== null && playing !== null) name = playing;
+  if (name === null && openTarget === null && playing !== null && saveStoreAvailable()) {
+    const kept = window.sessionStorage.getItem(SERIES_KEY);
+    const series = kept === null ? null : await getSeries(kept).catch(() => null);
+    if (series !== null && series.scenarioId !== '' && series.scenarioId === playing) {
+      openTarget = { seriesId: series.id };
+      resuming = true;
       name = playing;
       window.addEventListener('popstate', () => { window.location.reload(); });
     }
   }
-  if (name === null && openSlot === null && newPartyPending) {
+  if (name === null && openTarget === null && newPartyPending) {
     window.history.replaceState(null, '', urlWith('party', 'new'));
     makingParty = true;
     name = '';
@@ -400,7 +414,7 @@ async function main(): Promise<void> {
       }
     }
     const library = scenarioStoreAvailable() ? await loadLibrary(installedIds, withoutGraphics) : null;
-    const saves = saveStoreAvailable() ? await listSaves() : [];
+    const games = saveStoreAvailable() ? await listSeries() : [];
     const inMemory = saveStoreAvailable() ? await getPartyInMemory() : null;
     // Each PC's picture, cut from the game's own sheets as the party editor
     // draws it. A custom one (1000+) belongs to a scenario and isn't to hand.
@@ -417,7 +431,7 @@ async function main(): Promise<void> {
         sheet, g.rect.left, g.rect.top, art.width, art.height, 0, 0, art.width, art.height);
       return art;
     };
-    const partyPcs = inMemory === null ? null : await Promise.all(inMemory.preview.pcs
+    const partyPcs = inMemory === null ? null : await Promise.all(readSavePreview(inMemory.data).pcs
       .filter((pc) => pc.mainStatus !== MainStatus.ABSENT)
       .map(async (pc) => ({
         name: pc.name,
@@ -438,31 +452,51 @@ async function main(): Promise<void> {
       new Date(at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
     // The newest save in the scenario the party in memory is off in, to resume.
     const activeId = inMemory?.activeScenario;
-    const resumeSlot = activeId === undefined ? undefined
-      : saves.find((slot) => slot.preview.scenarioId === activeId);
+    const resumeGame = activeId === undefined ? undefined
+      : games.find((game) => game.scenarioId === activeId);
+    const saveActions: StartupSaveActions = {
+      browse: (id) => browseSeries(id, titleOf(games.find((g) => g.id === id)?.scenarioId ?? '') ?? ''),
+      exportZip: exportSeriesZip,
+      rename: renameSeries,
+      remove: deleteSeries,
+      importFile: async () => {
+        const picked = await importSave();
+        if (picked === null) return null;
+        const outcome = await importAsSeries(picked);
+        if ('error' in outcome) {
+          window.alert(outcome.error);
+          return null;
+        }
+        return outcome.seriesId;
+      },
+    };
     const choice = await showStartupScreen(document.getElementById('startup-host')!, {
       official: headers,
       added,
-      saves: saves.map((slot) => {
-        const id = slot.preview.scenarioId;
+      series: games.map((game) => {
+        const id = game.scenarioId;
         const icon = known(id)?.icon;
+        const { cover } = game;
+        const saves = `${game.count} save${game.count === 1 ? '' : 's'}`;
         return {
-          slot: slot.name,
+          id: game.id,
           scenarioId: id,
+          name: game.name,
           // The scenario's title if it is installed, else its id — a save can
           // name a scenario that isn't, which is the case the C++ shows "could
           // not be found" for. A party between scenarios lists who is in it:
           // loading one makes it the party in memory.
           label: id === ''
-            ? `Party: ${slot.preview.pcs.filter((pc) => pc.name !== '').map((pc) => pc.name).join(', ')}`
+            ? `Party: ${cover.preview.pcs.filter((pc) => pc.name !== '').map((pc) => pc.name).join(', ')}`
             : titleOf(id) ?? id,
           detail: id === ''
-            ? `Between scenarios · ${when(slot.savedAt)}`
-            : `Day ${Math.floor(slot.preview.age / 3700) + 1} · ${when(slot.savedAt)}`,
-          ...(slot.thumb ? { thumb: URL.createObjectURL(new Blob([slot.thumb as BlobPart], { type: 'image/png' })) } : {}),
+            ? `Between scenarios · ${when(cover.savedAt)}`
+            : `Day ${Math.floor(cover.preview.age / 3700) + 1} · ${cover.place === '' ? '' : `${cover.place} · `}${when(cover.savedAt)} · ${saves}`,
+          ...(cover.thumb ? { thumb: URL.createObjectURL(new Blob([cover.thumb as BlobPart], { type: 'image/webp' })) } : {}),
           ...(icon !== undefined ? { icon } : {}),
         };
       }),
+      ...(saveStoreAvailable() ? { saveActions } : {}),
       ...(scenarioStoreAvailable() ? { importScenarios: importScenarioFiles } : {}),
       ...(library ? { library } : {}),
       ...(saveStoreAvailable() ? {
@@ -472,24 +506,25 @@ async function main(): Promise<void> {
           ...(activeId !== undefined ? {
             active: {
               title: titleOf(activeId) ?? activeId,
-              ...(resumeSlot !== undefined ? {
-                resume: { scenarioId: activeId, slot: resumeSlot.name, label: `${resumeSlot.name}, ${when(resumeSlot.savedAt)}` },
+              ...(resumeGame !== undefined ? {
+                resume: { scenarioId: activeId, seriesId: resumeGame.id, label: `${resumeGame.name}, ${when(resumeGame.cover.savedAt)}` },
               } : {}),
             },
           } : {}),
         },
       } : {}),
     });
-    if (choice.slot !== undefined && choice.scenarioId === '') {
+    if (choice.series !== undefined && choice.scenarioId === '') {
       // A party-only save: `finish_load_party` makes it the party in memory and
       // stays on the startup screen (boe.fileio.cpp:66).
-      const data = await getSave(choice.slot);
+      const game = await getSeries(choice.series.id);
+      const data = await getSnapshot(choice.series.id, choice.series.seq ?? game?.head ?? 1);
       if (data !== null) await setPartyInMemory(data);
       window.location.reload();
       return;
     }
-    // Whatever was kept for a reload belongs to the game being left.
-    if (saveStoreAvailable()) await clearResume().catch(() => undefined);
+    // Whatever game this tab was keeping belongs to the game being left.
+    window.sessionStorage.removeItem(SERIES_KEY);
     // A history entry for the game, so Back returns to this menu. The page
     // reloads to get there, which is how this port gets a clean Universe.
     window.history.pushState(null, '', choice.party === 'make'
@@ -499,7 +534,8 @@ async function main(): Promise<void> {
     makingParty = choice.party === 'make';
     if (choice.party === 'enter') enteringParty = inMemory?.data ?? null;
     name = choice.scenarioId;
-    openSlot = choice.slot ?? null;
+    openTarget = choice.series === undefined ? null
+      : { seriesId: choice.series.id, ...(choice.series.seq !== undefined ? { seq: choice.series.seq } : {}) };
     document.body.classList.remove('starting');
   }
   showLoadingUi();
@@ -697,8 +733,7 @@ async function main(): Promise<void> {
   // C++'s `start_new_game`, which runs before a scenario is entered — so
   // `startNewGame` (put_party_in_scen) waits for the editor, further down.
   // A direct `?scenario=` link and a saved game skip the editor.
-  const buildParty = scenarioFromQuery() === null && openSlot === null && enteringParty === null
-    && resume === null;
+  const buildParty = scenarioFromQuery() === null && openTarget === null && enteringParty === null;
   if (!buildParty && enteringParty === null) session.startNewGame();
   const screen = new Screen(ctx, store);
   // The windows' title bars: each game's own, by the scenario's look.
@@ -846,7 +881,8 @@ async function main(): Promise<void> {
     setTargetLockPref(getBoolPref('TargetLock', true));
     setBugFixes(getBoolPref('FixBugs', false));
     const reasons = Object.keys(AUTOSAVE_TRIGGER_DEFAULTS);
-    setAutosavePrefs(readAutosavePrefs(reasons, AUTOSAVE_TRIGGER_DEFAULTS, MAX_AUTOSAVE_DEFAULT));
+    setAutosavePrefs(readAutosavePrefs(
+      reasons, AUTOSAVE_TRIGGER_DEFAULTS, AUTOSAVE_EVERY_DEFAULT, AUTOSAVE_BUDGET_MB_DEFAULT));
   };
   applyPrefs();
 
@@ -878,7 +914,8 @@ async function main(): Promise<void> {
       setPref('ShowInstantHelp', next.showInstantHelp);
       setPref('FixBugs', next.fixBugs);
       setPref('Autosave', next.autosave.enabled);
-      setPref('Autosave_Max', next.autosave.max);
+      setPref('Autosave_Every', next.autosave.every);
+      setPref('Autosave_BudgetMb', next.autosave.budgetMb);
       for (const [reason, on] of Object.entries(next.autosave.triggers)) {
         setPref(`Autosave_${reason}`, on);
       }
@@ -1208,7 +1245,7 @@ async function main(): Promise<void> {
    * same reasoning as File > New Game. Restart is `start_new_game` in both
    * originals — the party editor, then the startup screen — so it reloads
    * into the editor; it used to reload the game page, which picked the game
-   * back up from the resume record kept just before the party died. Quit has nowhere to go in a browser, so
+   * back up from the series it was being saved into. Quit has nowhere to go in a browser, so
    * it lands on the startup screen — which is where `handle_victory` puts you
    * too, and the closest thing here to leaving the game.
    */
@@ -1219,19 +1256,15 @@ async function main(): Promise<void> {
           new XmlDialog(ctx, store, getDialogDef('party-death')));
         // Both leave no party in memory, as `do_abort` does (boe.actions.cpp:3307).
         if (choice === 'new') {
-          if (saveStoreAvailable()) {
-            await setPartyInMemory(null);
-            await clearResume().catch(() => undefined);
-          }
+          if (saveStoreAvailable()) await setPartyInMemory(null);
+          window.sessionStorage.removeItem(SERIES_KEY);
           window.sessionStorage.setItem(PENDING_NEW_PARTY_KEY, '1');
           window.location.href = urlWith(null);
           return;
         }
         if (choice === 'quit') {
-          if (saveStoreAvailable()) {
-            await setPartyInMemory(null);
-            await clearResume().catch(() => undefined);
-          }
+          if (saveStoreAvailable()) await setPartyInMemory(null);
+          window.sessionStorage.removeItem(SERIES_KEY);
           window.location.href = import.meta.env.BASE_URL;
           return;
         }
@@ -1317,11 +1350,17 @@ async function main(): Promise<void> {
       // `handle_victory` empties `scen_name` first, so what "Save First" writes
       // is the party alone — the same bytes that become the party in memory.
       const party = saveGame(univ, true);
-      const thumb = await captureTerrainView(canvas);
+      const thumb = await captureSaveThumb(canvas);
       const choice = await dialogs.runScreen(new XmlDialog(ctx, store, getDialogDef('congrats-save')));
       if (choice === 'save' && saveStoreAvailable()) {
         const slot = (await askForText('Name this saved party:', false)).trim();
-        if (slot !== '') await putSave(slot, party, thumb);
+        // A party between scenarios is a series of one.
+        if (slot !== '') {
+          await createSeries(slot, {
+            data: party, preview: { ...previewOfUniverse(univ), scenarioId: '', townNum: TOWN_NUM_OUTDOORS },
+            thumb, kind: 'manual', reason: 'Victory', place: '',
+          });
+        }
       }
       if (saveStoreAvailable()) await setPartyInMemory(party);
       window.location.href = import.meta.env.BASE_URL;
@@ -1560,13 +1599,10 @@ async function main(): Promise<void> {
    * `save_party` refuses in combat (boe.actions.cpp's File menu gate), and so
    * does this: half a fight is not a resumable state.
    */
-  const slotLabel = (slot: SaveSlot): string => {
-    const when = new Date(slot.savedAt);
-    const where = slot.preview.townNum >= TOWN_NUM_OUTDOORS
-      ? 'Outdoors'
-      : scen.towns[slot.preview.townNum]?.name ?? `Town ${slot.preview.townNum}`;
-    const day = Math.floor(slot.preview.age / 3700) + 1;
-    return `${slot.name} — ${where}, day ${day} (${when.toLocaleString()})`;
+  const seriesLabel = (game: SeriesInfo): string => {
+    const where = placeOf({ place: game.cover.place, townNum: game.cover.preview.townNum });
+    const day = Math.floor(game.cover.preview.age / 3700) + 1;
+    return `${game.name} — ${where}, day ${day} (${new Date(game.cover.savedAt).toLocaleString()})`;
   };
 
   const canSaveNow = (): string | null => {
@@ -1595,6 +1631,92 @@ async function main(): Promise<void> {
     redraw();
   };
 
+  /**
+   * This tab's game is being saved into series `id` (null: not yet). Kept in
+   * sessionStorage as well, so reloading `?play=` finds it again.
+   */
+  const rememberSeries = (id: string | null): void => {
+    univ.seriesId = id;
+    try {
+      if (id === null) window.sessionStorage.removeItem(SERIES_KEY);
+      else window.sessionStorage.setItem(SERIES_KEY, id);
+    } catch { /* private mode: a reload just goes to the menu */ }
+  };
+
+  /** The name a brand-new series gets: what the player typed, else the lead PC's. */
+  let nextSeriesName: string | null = null;
+  const placeNow = (): string => univ.party.townNum < TOWN_NUM_OUTDOORS && univ.town !== null
+    ? scen.towns[univ.party.townNum]?.name ?? '' : 'Outdoors';
+
+  /**
+   * The autosave back half (`try_auto_save`, boe.fileio.cpp:520), redesigned:
+   * `autosave.ts` only notes that a save is wanted, and the scheduler writes it
+   * into the game's series when the game is at an idle, savable moment. See
+   * `platform/saveScheduler.ts` for how it keeps that off the frame budget.
+   */
+  let autosaveFailed = false;
+  const scheduler = new SaveScheduler({
+    ready: () => !dialogs.active && !midAction() && canSaveNow() === null,
+    capture: () => {
+      if (!univ.party.pcs.some((pc) => pc.isAlive)) return null;
+      return {
+        raw: serialiseSave(univ).serialise(),
+        preview: previewOfUniverse(univ),
+        place: placeNow(),
+        thumb: captureSaveThumb(canvas),
+      };
+    },
+    seriesId: () => univ.seriesId,
+    setSeriesId: rememberSeries,
+    seriesName: () => {
+      const typed = nextSeriesName;
+      nextSeriesName = null;
+      return typed ?? `${univ.party.pcs.find((pc) => pc.name !== '')?.name ?? 'Adventurers'}'s party`;
+    },
+    budgetBytes: () => getAutosavePrefs().budgetMb * 1024 * 1024,
+    saved: ({ kind, reason, overBudget }) => {
+      autosaveFailed = false;
+      // The tick is every few moves; only the named moments say so.
+      if (kind === 'milestone') univ.addStringToBuf(`Autosave: Game saved (${reason}).`);
+      if (overBudget) univ.addStringToBuf("Autosave: this game's saves are over their size limit.");
+      redraw();
+    },
+    failed: (err) => {
+      // Once, not every tick: a full disk would otherwise fill the log.
+      if (autosaveFailed) return;
+      autosaveFailed = true;
+      univ.addStringToBuf(`Autosave: Save not completed (${String(err)})`);
+      redraw();
+    },
+    slow: (p95) => {
+      const prefs = getAutosavePrefs();
+      if (prefs.every <= 0 || prefs.every >= 160) return;
+      setAutosavePrefs({ ...prefs, every: prefs.every * 2 });
+      univ.addStringToBuf(`Autosave: saving takes ${p95.toFixed(0)} ms here, so it will save every ${prefs.every * 2} moves.`);
+      redraw();
+    },
+  });
+  // A direct `?scenario=` link starts afresh each load, so it only autosaves
+  // once the player has made a save of their own (as the C++ insists on).
+  const fromMainMenu = new URLSearchParams(window.location.search).has('play');
+  setAutosaveSink((why) => {
+    if (!saveStoreAvailable() || (univ.seriesId === null && !fromMainMenu)) return;
+    scheduler.request(why, why === 'Tick' ? 'auto' : 'milestone');
+  });
+  // The page is going away or out of sight: get the newest state down now, so a
+  // reload picks the game up where it was, not where the last tick left it.
+  if (saveStoreAvailable()) {
+    const leaving = (): void => {
+      if (univ.seriesId !== null || fromMainMenu) scheduler.flush('Leaving');
+    };
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') leaving();
+    });
+    window.addEventListener('pagehide', leaving);
+  }
+  // For the verifiers, like `__univ`.
+  Object.assign(window as unknown as Record<string, unknown>, { __scheduler: scheduler });
+
   const saveGameFlow = async (): Promise<void> => {
     if (dialogs.active) return;
     const refusal = canSaveNow();
@@ -1608,42 +1730,16 @@ async function main(): Promise<void> {
       redraw();
       return;
     }
-    const data = saveGame(univ);
-    // The picture for the startup screen's list, taken before the slot picker
-    // covers the view.
-    const thumb = await captureTerrainView(canvas);
-    const slots = await listSaves();
-    const picked = await dialogs.run({
-      text: 'Save the game in which slot?',
-      rows: [
-        { name: 'new', label: 'New slot…' },
-        { name: 'file', label: 'Export to a file…' },
-        ...slots.map((slot) => ({ name: `slot:${slot.name}`, label: `Overwrite ${slotLabel(slot)}` })),
-      ],
-      escapeButton: 'cancel',
-      buttons: [{ name: 'cancel', label: 'Cancel' }],
-    });
-    if (picked === 'cancel') {
+    // A game's first save names it; after that, Save adds to its series.
+    if (univ.seriesId === null) {
+      const typed = (await askForText('Name this saved game:', false)).trim();
       redraw();
-      return;
-    }
-    if (picked === 'file') {
-      exportSave(univ.party.pcs[0]?.name ?? 'exile', data);
-      univ.addStringToBuf('Game exported.');
-      redraw();
-      return;
-    }
-    const name = picked === 'new'
-      ? (await askForText('Name this saved game:', false)).trim()
-      : picked.slice('slot:'.length);
-    if (name === '') {
-      redraw();
-      return;
+      if (typed === '') return;
+      nextSeriesName = typed;
     }
     try {
-      await putSave(name, data, thumb);
-      univ.saveSlot = name;
-      univ.addStringToBuf(`Game saved: ${name}.`);
+      const seq = await scheduler.saveNow('Manual', 'manual');
+      univ.addStringToBuf(seq === null ? 'Save: nothing to save.' : 'Game saved.');
     } catch (err) {
       univ.addStringToBuf(`Save failed: ${String(err)}`);
     }
@@ -1651,51 +1747,53 @@ async function main(): Promise<void> {
   };
 
   /**
-   * `try_auto_save`'s back half (boe.fileio.cpp:520). The C++ refuses until
-   * there is a file to autosave *beside* — "Autosave: Make a manual save
-   * first." — and then rotates through `<name>.auto/1..5`, overwriting the
-   * oldest once the ring is full. Here the ring is five IndexedDB slots named
-   * after the manual one, and `univ.saveSlot` is `univ.file`.
-   *
-   * Fire and forget: the trigger sites are inside `increase_age` and
-   * `start_town_mode`, neither of which can wait on a promise.
+   * Make the live game the snapshot `seq` of series `seriesId` (absent: its
+   * newest), and carry on saving into that series — a branch, if the snapshot
+   * isn't a leaf. Another scenario means another world to fetch, so the page
+   * reopens on it and picks the snapshot back up.
    */
-  const autoSlotName = (base: string, n: number): string => `${base}.auto ${n}`;
-
-  const doAutoSave = (reason: AutosaveReason): void => {
-    if (!saveStoreAvailable()) return;
-    const base = univ.saveSlot;
-    if (base === null) {
-      univ.addStringToBuf('Autosave: Make a manual save first.');
-      return;
-    }
-    const max = getAutosavePrefs().max;
-    void (async () => {
-      try {
-        const slots = await listSaves();
-        const mine = new Map(slots
-          .filter((s) => s.name.startsWith(`${base}.auto `))
-          .map((s) => [s.name, s]));
-        let target = '';
-        for (let n = 1; n <= max; n++) {
-          if (!mine.has(autoSlotName(base, n))) {
-            target = autoSlotName(base, n);
-            break;
-          }
-        }
-        if (target === '') {
-          // The ring is full, so the oldest goes.
-          target = [...mine.values()].sort((a, b) => a.savedAt - b.savedAt)[0]!.name;
-        }
-        await putSave(target, saveGame(univ), await captureTerrainView(canvas));
-        univ.addStringToBuf(`Autosave: Game saved (${reason}).`);
-      } catch (err) {
-        univ.addStringToBuf(`Autosave: Save not completed (${String(err)})`);
-      }
+  const restoreFrom = async (seriesId: string, seq?: number): Promise<boolean> => {
+    const game = await getSeries(seriesId);
+    if (game === null) {
+      univ.addStringToBuf('Load: that saved game no longer exists.');
       redraw();
-    })();
+      return false;
+    }
+    const at = seq ?? game.head;
+    const data = await getSnapshot(seriesId, at);
+    if (data === null) {
+      univ.addStringToBuf('Load: that save is missing.');
+      redraw();
+      return false;
+    }
+    try {
+      const preview = readSavePreview(data);
+      if (preview.scenarioId === '' && saveStoreAvailable()) {
+        // A party between scenarios: `finish_load_party` puts it in memory and
+        // goes back to the startup screen (boe.fileio.cpp:66).
+        await setPartyInMemory(data);
+        window.location.href = import.meta.env.BASE_URL;
+        return true;
+      }
+      if (preview.scenarioId !== scen.id) {
+        window.sessionStorage.setItem(PENDING_SAVE_KEY, JSON.stringify({ seriesId, seq: at }));
+        window.location.href = urlWith('play', preview.scenarioId);
+        return true;
+      }
+      applySave(data, univ);
+      await setHead(seriesId, at);
+      rememberSeries(seriesId);
+      scheduler.reset();
+      resumeAfterLoad();
+      univ.addStringToBuf('Game loaded.');
+      redraw();
+      return true;
+    } catch (err) {
+      univ.addStringToBuf(`Load failed: ${String(err)}`);
+      redraw();
+      return false;
+    }
   };
-  setAutosaveSink(doAutoSave);
 
   const resumeAfterLoad = (): void => {
     session.resumeLoadedGame();
@@ -1742,7 +1840,8 @@ async function main(): Promise<void> {
       return false;
     }
     const res = applyE3Save(data, univ, defaults);
-    univ.saveSlot = null;
+    rememberSeries(null);
+    scheduler.reset();
     resumeAfterLoad();
     if (res.town) session.resumeInSavedTown(res.town.num, res.town.loc);
     for (const w of res.warnings) univ.addStringToBuf(w);
@@ -1779,13 +1878,15 @@ async function main(): Promise<void> {
       redraw();
       return false;
     }
-    const slots = saveStoreAvailable() ? await listSaves() : [];
+    const games = saveStoreAvailable() ? await listSeries() : [];
+    const rows = [{ name: 'file', label: 'Import a file…' }];
+    for (const game of games) {
+      rows.push({ name: `series:${game.id}`, label: seriesLabel(game) });
+      if (game.count > 1) rows.push({ name: `older:${game.id}`, label: `      ↳ Older saves of ${game.name}…` });
+    }
     const picked = await dialogs.run({
-      text: slots.length > 0 ? 'Load which saved game?' : 'No saved games in this browser.',
-      rows: [
-        { name: 'file', label: 'Import a file…' },
-        ...slots.map((slot) => ({ name: `slot:${slot.name}`, label: slotLabel(slot) })),
-      ],
+      text: games.length > 0 ? 'Load which saved game?' : 'No saved games in this browser.',
+      rows,
       escapeButton: 'cancel',
       buttons: [{ name: 'cancel', label: 'Cancel' }],
     });
@@ -1794,53 +1895,33 @@ async function main(): Promise<void> {
       return false;
     }
 
-    let data: Uint8Array | null = null;
-    if (picked === 'file') {
-      const chosen = await importSave();
-      data = chosen?.data ?? null;
-    } else {
-      data = await getSave(picked.slice('slot:'.length));
-    }
-    if (data === null) {
-      redraw();
-      return false;
-    }
-    // A save belongs to one scenario, and swapping scenarios means reloading
-    // the whole world — which this port does by restarting on the new one.
     try {
-      if (isE3Save(data)) return await loadE3Save(data);
-      const preview = readSavePreview(data);
-      if (preview.scenarioId === '' && saveStoreAvailable()) {
-        // A party between scenarios: `finish_load_party` puts it in memory and
-        // goes back to the startup screen (boe.fileio.cpp:66).
-        await setPartyInMemory(data);
-        window.location.href = import.meta.env.BASE_URL;
-        return true;
-      }
-      if (preview.scenarioId !== scen.id) {
-        // Another scenario means another world to fetch, so the page reopens on
-        // it and picks the slot back up. Only a stored slot can make that trip;
-        // an imported file's bytes have nowhere to wait.
-        if (picked === 'file') {
-          univ.addStringToBuf(
-            `That game was played in "${preview.scenarioId}", not "${scen.id}". ` +
-            `Open that scenario first, then import it.`);
+      if (picked === 'file') {
+        const chosen = await importSave();
+        if (chosen === null) {
           redraw();
           return false;
         }
-        window.sessionStorage.setItem(PENDING_SAVE_KEY, picked.slice('slot:'.length));
-        window.location.href = urlWith('play', preview.scenarioId);
-        return true;
+        if (isE3Save(chosen.data)) return await loadE3Save(chosen.data);
+        // Any file becomes a series of its own, then opens like one.
+        const outcome = await importAsSeries(chosen);
+        if ('error' in outcome) {
+          univ.addStringToBuf(outcome.error);
+          redraw();
+          return false;
+        }
+        return await restoreFrom(outcome.seriesId);
       }
-      applySave(data, univ);
-      // The C++ sets `univ.file` from what it loaded, so the autosave keeps
-      // rotating alongside the same manual save. An imported file has no slot
-      // of its own until it is saved.
-      univ.saveSlot = picked === 'file' ? null : picked.slice('slot:'.length);
-      resumeAfterLoad();
-      univ.addStringToBuf('Game loaded.');
-      redraw();
-      return true;
+      if (picked.startsWith('older:')) {
+        const id = picked.slice('older:'.length);
+        const seq = await browseSeries(id, scen.title);
+        if (seq === null) {
+          redraw();
+          return false;
+        }
+        return await restoreFrom(id, seq);
+      }
+      return await restoreFrom(picked.slice('series:'.length));
     } catch (err) {
       univ.addStringToBuf(`Load failed: ${String(err)}`);
       redraw();
@@ -2467,34 +2548,6 @@ async function main(): Promise<void> {
    * screen if the player cannot act.
    */
   const midAction = (): boolean => acting || session.busy || animPending() > 0;
-
-  /**
-   * Keep the game's state where a reload finds it (`getResume`, at the top of
-   * `main`). Only at a moment the game could be saved — never mid-action or
-   * under a dialog, and never in combat, which a save can't hold — so a reload
-   * in a fight goes back to the moment before it. Every two seconds when
-   * something has changed, and whenever the page is hidden.
-   */
-  const keepResume = (): void => {
-    if (!saveStoreAvailable()) return;
-    let last: Uint8Array | null = null;
-    let writing = false;
-    const keep = (): void => {
-      if (writing || dialogs.active || midAction() || canSaveNow() !== null) return;
-      if (!univ.party.pcs.some((pc) => pc.isAlive)) return;
-      const raw = serialiseSave(univ).serialise();
-      if (last !== null && last.length === raw.length && last.every((b, i) => b === raw[i])) return;
-      last = raw;
-      writing = true;
-      putResume(gzipSync(raw), univ.saveSlot)
-        .catch(() => undefined)
-        .finally(() => { writing = false; });
-    };
-    setInterval(keep, 2000);
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') keep();
-    });
-  };
 
   /**
    * Whether a click on the terrain is a *shot* rather than a step: a loaded
@@ -3495,32 +3548,22 @@ async function main(): Promise<void> {
   // load) is applied now that the world it belongs to is in place. It runs over
   // the new game `startNewGame` just began, which is exactly what
   // `load_party` does to the C++'s freshly-constructed universe.
-  if (openSlot !== null) {
+  if (openTarget !== null) {
     try {
-      const data = await getSave(openSlot);
-      if (data === null) throw new Error(`no saved game called "${openSlot}"`);
+      const game = await getSeries(openTarget.seriesId);
+      if (game === null) throw new Error('that saved game no longer exists');
+      const at = openTarget.seq ?? game.head;
+      const data = await getSnapshot(game.id, at);
+      if (data === null) throw new Error('that save is missing');
       applySave(data, univ);
-      univ.saveSlot = openSlot;
+      await setHead(game.id, at);
+      rememberSeries(game.id);
       resumeAfterLoad();
-      univ.addStringToBuf(`Game loaded: ${openSlot}.`);
+      if (!resuming) univ.addStringToBuf(`Game loaded: ${game.name}.`);
     } catch (err) {
-      univ.addStringToBuf(`Load failed: ${String(err)}`);
+      univ.addStringToBuf(`${resuming ? "Couldn't pick the game back up" : 'Load failed'}: ${String(err)}`);
     }
   }
-
-  if (resume !== null) {
-    try {
-      applySave(resume.data, univ);
-      univ.saveSlot = resume.slot;
-      resumeAfterLoad();
-    } catch (err) {
-      univ.addStringToBuf(`Couldn't pick the game back up: ${String(err)}`);
-    }
-  }
-  // Only a game the main menu started: a `?scenario=` link (the verifiers,
-  // the debug panel) starts afresh on every load and mustn't overwrite it.
-  if (new URLSearchParams(window.location.search).has('play')) keepResume();
-
   hideLoadingUi();
   refitDesktop();
   setStatus();
@@ -3528,7 +3571,7 @@ async function main(): Promise<void> {
   // An installed scenario's first fresh start leaves behind a picture of where
   // it begins, for the startup screen. Taken now, before anything the
   // scenario opens with can put a dialog over it.
-  if (!isBundled && !installedPreview && openSlot === null && scenarioStoreAvailable()) {
+  if (!isBundled && !installedPreview && openTarget === null && scenarioStoreAvailable()) {
     void captureTerrainView(canvas).then((png) => (png ? setScenarioPreview(name, png) : undefined));
   }
   setInterval(() => {
@@ -3573,7 +3616,11 @@ async function main(): Promise<void> {
               redraw();
               return;
             }
-            exportSave(univ.saveSlot ?? univ.party.pcs[0]?.name ?? 'exile', saveGame(univ));
+            const data = saveGame(univ);
+            void (async () => {
+              const game = univ.seriesId !== null && saveStoreAvailable() ? await getSeries(univ.seriesId) : null;
+              exportSave(game?.name ?? univ.party.pcs[0]?.name ?? 'exile', data);
+            })();
           },
           enabled: () => canSaveNow() === null,
         },

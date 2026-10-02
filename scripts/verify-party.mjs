@@ -19,7 +19,7 @@ const SHOTS = process.env.SHOTS_DIR ?? '/tmp/exile-party-shots';
 mkdirSync(SHOTS, { recursive: true });
 const BASE = process.argv[2] ?? 'http://localhost:5199/';
 
-const browser = await chromium.launch();
+const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 const page = await browser.newPage({ viewport: { width: 1300, height: 950 } });
 const errors = [];
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
@@ -79,7 +79,7 @@ await page.evaluate(() => { window.__univ.party.gold = 4321; });
 const before = await page.evaluate(() => ({
   loc: { ...window.__univ.party.townLoc }, age: window.__univ.party.age, gold: window.__univ.party.gold,
 }));
-await page.waitForTimeout(2600); // keepResume's interval
+await page.evaluate(() => window.__scheduler.saveNow('Test', 'auto')); // what leaving the page does
 await page.reload();
 await inGame();
 await page.waitForTimeout(1000);
@@ -95,20 +95,28 @@ check('and keeps its URL', new URL(page.url()).searchParams.get('play') === 'val
 // A save made in the scenario is offered from there, with its picture.
 await page.evaluate(async () => {
   const store = await import('/src/platform/saveStore.ts');
-  const { captureTerrainView } = await import('/src/render/preview.ts');
-  await store.putSave('Party test', window.__saveGame(), await captureTerrainView(document.querySelector('canvas')));
+  const io = await import('/src/fileio/saveIo.ts');
+  const { captureSaveThumb } = await import('/src/render/preview.ts');
+  const bytes = window.__saveGame();
+  await store.createSeries('Party test', {
+    data: bytes, preview: io.readSavePreview(bytes), kind: 'manual', reason: 'Test',
+    thumb: await captureSaveThumb(document.querySelector('canvas')),
+  });
 });
 await page.goBack();
 await page.waitForSelector('.startup-party li', { timeout: 30000 });
 check('Back returns to the main menu', new URL(page.url()).searchParams.get('play') === null, page.url());
 check('it says where the party is', (await panel()).includes('Now adventuring in Valley of Dying Things'));
 check('the save shows its picture', await page.evaluate(
-  () => document.querySelector('[data-slot="Party test"] img') !== null));
+  () => [...document.querySelectorAll('.startup-save')].some((e) => e.textContent.includes('Party test') && e.querySelector('img') !== null)));
 await page.screenshot({ path: `${SHOTS}/p3c-menu-in-scenario.png` });
 await page.click('text=Continue Valley of Dying Things');
 await inGame();
 await page.waitForTimeout(800);
-check('Continue picks up the save', await page.evaluate(() => window.__univ.saveSlot === 'Party test'));
+check('Continue picks up the save', await page.evaluate(async () => {
+  const store = await import('/src/platform/saveStore.ts');
+  return (await store.getSeries(window.__univ.seriesId))?.name === 'Party test';
+}));
 
 // File › Main Menu, confirmed, goes there too.
 await page.locator('#game-menu-bar .menu-item', { hasText: 'File' }).first().click();

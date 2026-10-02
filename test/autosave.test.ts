@@ -7,8 +7,8 @@ import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import {
-  AUTOSAVE_TRIGGER_DEFAULTS, AutosaveReason, DEFAULT_AUTOSAVE_PREFS,
-  autosaveTriggerOn, setAutosavePrefs, setAutosaveSink, tryAutoSave,
+  AUTOSAVE_TRIGGER_DEFAULTS, AutosaveReason, AutosaveWhy, DEFAULT_AUTOSAVE_PREFS,
+  autosaveTriggerOn, setAutosavePrefs, setAutosaveSink, tickAutoSave, tryAutoSave,
 } from '../src/game/autosave';
 import { GameSession } from '../src/game/session';
 import { PartyPreset } from '../src/universe/player';
@@ -33,8 +33,8 @@ afterEach(() => {
 });
 
 /** Collects the reasons that get through to the host. */
-function watch(): AutosaveReason[] {
-  const seen: AutosaveReason[] = [];
+function watch(): AutosaveWhy[] {
+  const seen: AutosaveWhy[] = [];
   setAutosaveSink((reason) => seen.push(reason));
   return seen;
 }
@@ -49,14 +49,14 @@ describe('try_auto_save', () => {
   });
 
   it('lets a per-reason preference override the default either way', () => {
-    setAutosavePrefs({ enabled: true, triggers: { Eat: true, EnterTown: false }, max: 5 });
+    setAutosavePrefs({ enabled: true, triggers: { Eat: true, EnterTown: false }, every: 10, budgetMb: 10 });
     expect(autosaveTriggerOn('Eat')).toBe(true);
     expect(autosaveTriggerOn('EnterTown')).toBe(false);
   });
 
   it('the master switch silences all of them', () => {
     const seen = watch();
-    setAutosavePrefs({ enabled: false, triggers: {}, max: 5 });
+    setAutosavePrefs({ enabled: false, triggers: {}, every: 10, budgetMb: 10 });
     tryAutoSave('EnterTown');
     expect(seen).toEqual([]);
   });
@@ -94,6 +94,36 @@ describe('the trigger sites', () => {
     expect(seen).toEqual([]);
     session.univ.party.food = 100;
     expect(await session.rest()).toBe(true);
-    expect(seen).toEqual(['RestComplete']);
+    // Resting passes many turns, each of which counts toward the tick.
+    expect(seen.filter((why) => why !== 'Tick')).toEqual(['RestComplete']);
+  });
+});
+
+describe('the tick', () => {
+  it('fires once per `every` moves', () => {
+    const seen = watch();
+    setAutosavePrefs({ ...DEFAULT_AUTOSAVE_PREFS, every: 3 });
+    for (let i = 0; i < 9; i++) tickAutoSave();
+    expect(seen).toEqual(['Tick', 'Tick', 'Tick']);
+  });
+
+  it('is off at 0 and silenced by the master switch', () => {
+    const seen = watch();
+    setAutosavePrefs({ ...DEFAULT_AUTOSAVE_PREFS, every: 0 });
+    for (let i = 0; i < 20; i++) tickAutoSave();
+    setAutosavePrefs({ ...DEFAULT_AUTOSAVE_PREFS, enabled: false, every: 1 });
+    for (let i = 0; i < 20; i++) tickAutoSave();
+    expect(seen).toEqual([]);
+  });
+
+  it('comes from taking a step in the game, and costs no random numbers', async () => {
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    await session.startNewGame();
+    session.endTownMode({ x: 0, y: 0 });
+    setAutosavePrefs({ ...DEFAULT_AUTOSAVE_PREFS, every: 1 });
+    const seen = watch();
+    const { increaseAgeEffects } = await import('../src/game/increaseAge');
+    await increaseAgeEffects(session);
+    expect(seen).toContain('Tick');
   });
 });

@@ -1619,7 +1619,10 @@ Notes for M2 implementer:
 - (2026-10-02) **E3's talk-start cases, ported** (`towns/talkStart.ts`; the `TODO(E3-talkstart)` above is closed). Three are in Gale and never open a conversation: a townsperson after hush money (dialog 0xc60, Yes pays 100 or all there is), Mayor Rali and Commander Leona (brush-off, then, once 0xc94 is set, "leave"). Refusing, or being known, starts **Gale's guards**: party+0x14b (flag (19,9)) set to 25, ticked by `e3GaleTick` (`src/game/e3Gale.ts`, `FUN_10c0_61c4` at `10c0:6e4b`): down by one a turn in Gale's records 16–19, reset in any other town, paused outdoors and in fights; at 0 the `escort` flag's node, "Gale guards surround you!" and the cell at (18,47). The others open their conversation after a dialog: Rentar-Ihrno on the crystal (once, 0xc09), General Baziron taking the Dervish's scroll (200 gold, 5 xp each via `FUN_10b0_1ff2` = award_party_xp; E3-SUSPECTED-BUGS #5 now wired there), Bon-Ihrno (once, party+0x4cd; his title is E3's misspelling "Bon-Ihnro"). Personality 337's talk record is placeholder text ("n7") because E3 never lets him talk.
 
 - (2026-10-02) **Don't `translate` a scrolling strip to follow a pad.** The talk presets used to move by the right pad's `--tr-y`, and a large offset put the scroll box's own top above the screen, where no scrolling reaches. Offset the content inside the box instead (`.td-follows-pad .ts-list::before/::after` spacers, which give way before the list has to scroll).
-
+- (2026-10-02) **Saves can be cheap enough to take every few moves, but only if almost nothing happens on the main thread.** Measured (`scripts/bench-save.ts`, valleydy and zakhazi): `serialiseSave` is ~6 ms in Node (~4.5 ms median, 8 p95 in Chromium), `gzipSync` another 7–10 ms, and a fresh game is 185–200 KB raw and **14 KB gzipped**. So the gzip goes to fflate's worker (`gzip(…, cb)`), the write is a deferred idle callback, and only the serialise stays on the main thread. `scripts/bench-save-ui.mjs` walks 60 steps with saving off, every 10 moves and on every move: no long tasks and the same p95 frame in all three. Saving every move still only managed 14 writes in 60 moves, because requests coalesce while a write is in flight.
+- (2026-10-02) **An IndexedDB transaction dies if you await anything that isn't one of its own requests.** `saveStore.ts`'s `transact` takes a callback that may only `await run(req)`; a `thin()` call is fine (it's synchronous) but a `fetch` or a worker round trip inside it would auto-commit the transaction under you. gzip happens before the transaction opens, for that reason.
+- (2026-10-02) **A hover that re-renders the panel beside it swallows the click.** The restore tree first rebuilt its detail panel on `mouseenter`; the panel's height changed, the scroll box beside it was `align-items: stretch`, so the node moved under the pointer between mousedown and mouseup and no click ever fired (Playwright saw `mouseenter, mouseleave, mouseenter` and nothing else). Hover is a floating tooltip now; only a click or an arrow key touches the panel.
+- (2026-10-02) **Playwright's pinned Chromium (1228) isn't the one in this container (1194 at `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`).** `verify-party.mjs`, `verify-screen.mjs`, `verify-saves.mjs` and `bench-save-ui.mjs` take `CHROMIUM_PATH=…`. The only console error on a clean run here is a 404 for `library/catalog.json`, which isn't generated in a fresh checkout; `verify-saves.mjs` ignores 404s, the other two report it.
 - (2026-10-01) **The live game's dice are seeded off the clock now, so a browser check that depends on a roll is flaky.** `verify-e3.mjs`'s orb flight pressed arrows a fixed 300ms after Use, and the orb's rolled damage sometimes outlasted that and swallowed the keys. Wait on `session.settled()`, or pin `?seed=`.
 - (2026-10-01) **A ported function's `run_a_missile` calls are easy to lose, and nothing notices.** They spend no draws while the monsters are going (`drawTextBar`'s `monstersGoing` gate), so the corpus never complains; only a play-tester sees that a slime's Spark never crossed the screen. `monst_cast_mage`/`monst_cast_priest` had lost all 24 of theirs. Grep the C++ function for `run_a_missile` when porting one.
 - (2026-10-01) **A play-test difference that depends on where you stand isn't a dice difference.** Colchis's "This is very odd..." was on time from the south and west gates and a step late from the north one. Drive every entrance (`positionParty` + a real key press) before deciding a report doesn't reproduce.
@@ -3713,7 +3716,7 @@ The M6 list below is kept for the history of what it covered:
     the gold, an SDF, a wounded PC, the party's square and a wounded monster
     all came back.
 
-- **The autosave (M7, 2026-08-01).** `game/autosave.ts` ports `try_auto_save`
+- **The autosave (M7, 2026-08-01) — superseded 2026-10-02 by the save series (see "Save series" at the bottom; DIVERGENCES #47). The text below describes the ring of five it replaced.** `game/autosave.ts` ports `try_auto_save`
   (boe.fileio.cpp:520) and `check_autosave_trigger` (:513): a master `Autosave`
   switch, then a per-reason `Autosave_<reason>` preference on top of it. Five of
   the six reasons default on; **Eat defaults off**, since it fires far more
@@ -12519,7 +12522,7 @@ Beyond the corpus, the honest inventory is still `grep -rn "TODO(M" src/`.
   autosave details page and "reset instant help" opening on top of it.
   Stored in `localStorage` under the C++'s own names (`PlaySounds`,
   `GameSpeed`, `TargetLock`, `ShowInstantHelp`, `Autosave`,
-  `Autosave_<reason>`, `Autosave_Max`) and applied at startup.
+  `Autosave_<reason>`; `Autosave_Max` until 2026-10-02, when it became `Autosave_Every` and `Autosave_BudgetMb`) and applied at startup.
   - **Only what a browser can honour is shown.** Window alignment, the two
     scale groups, the in-game file browser, the splash screen and
     directional-key scrolling are removed, and the block they took at the top
@@ -16155,3 +16158,60 @@ with Major Blessing for every PC. Both done:
 - The old saves' unused parts of `t_d`, past a smaller town's size, hold
   the previous town's bytes. That is leftover memory, so compare only the
   parts the town fills.
+
+## Save series (2026-10-02)
+
+Autosave and saved games were redesigned together (DIVERGENCES #47; PLAN.md's
+"Rewind" item is settled by this). Corpus-neutral: saving rolls no dice.
+
+- **A game is a series; a series is a tree.** IndexedDB `exile-js` v2
+  (`platform/saveStore.ts`; v1's flat `saves` store is dropped, nothing had
+  shipped): `series` (name, scenario, head, count, bytes, and a `cover` — the
+  head's preview and thumbnail, so the startup screen never reads the tree),
+  `snaps` (parent, game age, kind, reason, place, preview, thumbnail) and
+  `blobs` (the gzipped `.exg`, read only on restore/export). The party in memory
+  has its own `party` store. `univ.seriesId` replaces `univ.saveSlot`; a tab's
+  series is also in `sessionStorage` (`exile-js.series`) so a reload of `?play=`
+  reopens its head. The old `\0resume` row and `keepResume`'s 2-second
+  serialise are gone: a page hide/unload flushes a snapshot (`scheduler.flush`,
+  synchronous gzip, no picture) instead.
+- **Restore never deletes.** `setHead(series, seq)`, then the next save is a
+  child of `seq`, a second child if it already had one: a branch.
+- **Retention is pure and tested** (`platform/saveRetention.ts`,
+  `test/saveRetention.test.ts`): never thin the root, head, leaves, forks or
+  manual saves; the newest 12 on the head's lineage whole, then a grid in *game
+  time* (⅛ day, day, week — a grid, not rank-from-newest, which drifts);
+  milestones whole for 2 days, then one per town and day; abandoned branches
+  thin harder; then the 10 MB budget evicts the least valuable first.
+  `RETENTION` holds the constants. Runs every 10 appends, in the append's
+  transaction. Imports are not thinned until their next appends.
+- **Scheduler** (`platform/saveScheduler.ts`): `autosave.ts` only *notes* a
+  request (`tickAutoSave()` from `increaseAgeEffects`, once per move, plus the
+  six milestone reasons); the write is an idle callback, only at a savable
+  moment, coalesced, skipping a byte-identical game, and times its own
+  main-thread cost (p95 over 12 ms doubles the tick). A direct `?scenario=`
+  link only autosaves once the player has saved, as OBoE insisted.
+- **UI.** Startup: one card per series with Older saves… / Export / Rename /
+  Delete and Import; the **restore tree** (`platform/saveTree.ts`, layout in the
+  pure `saveTreeLayout.ts`) draws nodes by game time (relaxed to a minimum
+  spacing — ten moves in a town are ten ticks of a 3,700-tick day) and branches
+  by row; milestone nodes are orange, manual a blue star, the head ringed; hover
+  is a tooltip with the picture, a click fills the panel (details, **Restore**
+  with the "starts a new branch" callout, Download `.exg`, Delete this branch).
+  In game, Open lists series with an "Older saves…" row under each; Ctrl+S adds a
+  `manual` snapshot to the game's series (naming it the first time).
+- **Zip** (`platform/saveZip.ts`): `series.json` + `NNNN.exg` + `NNNN.thumb`; a
+  zip without `series.json` imports as a line of saves ordered by game age. A
+  single `.exg` imports as a new one-save series, never merged.
+- **Preferences:** `Autosave_Every` (moves; 0 = never) and `Autosave_BudgetMb`
+  replace `Autosave_Max` in pref-autosave.xml.
+- **Measured**: ~26 KB per snapshot (14 KB `.exg` + a 234-px WebP), so 10 MB is
+  ~380 snapshots. Deltas between consecutive saves (95% of bytes unchanged)
+  would stretch that further; not needed yet.
+- **Checks**: `test/saveRetention.test.ts`, `saveTreeLayout.test.ts`,
+  `saveStore.test.ts` (fake-indexeddb, a dev dependency), `saveScheduler.test.ts`;
+  `scripts/verify-saves.mjs` (ticks, branch, tree, zip, prefs, with screenshots),
+  `scripts/bench-save.ts` and `scripts/bench-save-ui.mjs`.
+- Not done: `docs/` is built from the sources and was not rebuilt; stepping
+  back a single turn (PLAN.md "Rewind"); an in-game "Older saves…" for a game
+  whose scenario isn't the loaded one goes through the same page reload as before.
