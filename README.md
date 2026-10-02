@@ -57,6 +57,59 @@ Thomas
 
 ---
 
+## Progress, and how to help
+
+The port runs, but **it needs play-testing**, Exile III above all. It has
+only been played through in pieces, and a lot of it has been read out of the
+old binary without anyone checking it in play. Nearly every remaining bug is
+the kind you only find by playing.
+
+### What needs testing
+
+- **Exile III, start to finish.** Anything that plays differently from the
+  original counts: a quest that won't finish, a door that won't open, a
+  monster or shop that isn't the same, text that's wrong.
+- **The open questions in [`E3-CHECK-IN-ORIGINAL.md`](E3-CHECK-IN-ORIGINAL.md).**
+  Each one is something the port couldn't settle by reading the original's
+  code, and it says where to go, what to do and what the port does now. Each
+  question has its own saved game for the *original* Exile III (`Q01.SAV`
+  to `Q27.SAV`): a strong party with the question's story flags and items
+  set, standing next to the place to look. They're made from the original's
+  installer in `vendor/exile3/`, so they're not committed. To make them:
+
+  ```
+  npm install
+  npm run e3            # unpacks and converts Exile III into e3data/
+  E3_CHECK_SAVES=e3data/check-saves npx vitest run test/e3checkSaves.test.ts
+  ```
+
+  That writes the saves to `e3data/check-saves/`, with a `README.TXT` saying
+  what each one is for. Copy one over the original's `exile3.sav` (the
+  original runs under [OTVDM](https://github.com/otya128/winevdm)) and load
+  it there. The port loads the same file too (**File → Open Game… → Import a file…**),
+  so you can compare the two.
+- **The community scenarios and the three that shipped with Blades of
+  Exile.** They're less likely to break than Exile III, but they haven't been
+  played much either.
+- **The touch controls** on a phone or tablet (View menu).
+
+### Reporting what you find
+
+The best way to help is to play, then
+[open an issue](https://github.com/thbrown/blades-of-exile-ts/issues) that
+says:
+
+- what happened, and what you expected to happen;
+- where you were and what you did just before;
+- ideally, **a saved game that shows it**. For a difference from the
+  original, the most useful thing of all is an `exile3.sav` that shows the
+  difference in *both* the original Exile III and the port. **File → Export
+  as Exile III Save…** in the port writes one from where you're standing,
+  and both games can load it.
+
+Answers to the questions in `E3-CHECK-IN-ORIGINAL.md` are welcome as issues
+too, even "it does the same thing as the port."
+
 ## Running it
 
 ```

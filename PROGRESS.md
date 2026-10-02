@@ -1612,6 +1612,8 @@ Notes for M2 implementer:
 
 ## Findings / gotchas log
 
+- (2026-10-02) **Don't `translate` a scrolling strip to follow a pad.** The talk presets used to move by the right pad's `--tr-y`, and a large offset put the scroll box's own top above the screen, where no scrolling reaches. Offset the content inside the box instead (`.td-follows-pad .ts-list::before/::after` spacers, which give way before the list has to scroll).
+
 - (2026-10-01) **The live game's dice are seeded off the clock now, so a browser check that depends on a roll is flaky.** `verify-e3.mjs`'s orb flight pressed arrows a fixed 300ms after Use, and the orb's rolled damage sometimes outlasted that and swallowed the keys. Wait on `session.settled()`, or pin `?seed=`.
 - (2026-10-01) **A ported function's `run_a_missile` calls are easy to lose, and nothing notices.** They spend no draws while the monsters are going (`drawTextBar`'s `monstersGoing` gate), so the corpus never complains; only a play-tester sees that a slime's Spark never crossed the screen. `monst_cast_mage`/`monst_cast_priest` had lost all 24 of theirs. Grep the C++ function for `run_a_missile` when porting one.
 - (2026-10-01) **A play-test difference that depends on where you stand isn't a dice difference.** Colchis's "This is very odd..." was on time from the south and west gates and a step late from the north one. Drive every entrance (`positionParty` + a real key press) before deciding a report doesn't reproduce.
@@ -16049,6 +16051,9 @@ The user's list, and what each turned out to be:
   - [x] Talk's presets are one column, not pairs, Done last after a rule;
         like every strip, they keep their height and scroll when they don't
         fit (shrinking them to fit was tried and dropped, 2026-10-01).
+  - [x] They follow the right pad's Y offset with a spacer inside the list,
+        not by moving the strip, so a large offset can't carry Look off the
+        top of the screen (2026-10-02; `verify-screen.mjs` checks ±160px).
   - [x] Every dialog strip's list is centred in the height
         (`justify-content: safe center`).
   - [x] Get: Done ends the pile on the right, after a rule.
