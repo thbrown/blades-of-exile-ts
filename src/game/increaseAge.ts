@@ -20,7 +20,7 @@
 import { bugFixed } from './bugFixes';
 import { DamageType } from '../data/monster';
 import { TRACE_AGE } from '../core/trace';
-import { tryAutoSave } from './autosave';
+import { tickAutoSave, tryAutoSave } from './autosave';
 import { ItemAbil, abilGroup, abilHarms } from '../data/item';
 import { Lighting } from '../data/town';
 import { getProtLevel, hasAbilEquip, hasE3AbilEquip } from '../universe/inventory';
@@ -210,6 +210,7 @@ export async function increaseAgeEffects(session: GameSession): Promise<void> {
   const outdoors = session.isOutdoors;
   const town = session.inTown;
   if (!outdoors && !town) return;
+  tickAutoSave();
 
   // **The clock ticks here, not in the move** (boe.actions.cpp:3362). This port
   // used to advance `age` inside `outdMoveParty`/`townMoveParty`, which is one

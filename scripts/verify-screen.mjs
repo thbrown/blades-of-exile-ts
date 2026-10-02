@@ -8,7 +8,7 @@ import { mkdirSync } from 'node:fs';
 const SHOTS = process.env.SHOTS_DIR ?? '/tmp/exile-shots';
 mkdirSync(SHOTS, { recursive: true });
 
-const browser = await chromium.launch();
+const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 const page = await browser.newPage({ viewport: { width: 1280, height: 960 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
@@ -2455,8 +2455,10 @@ console.log('SAVE/LOAD:', JSON.stringify(saved));
 // why this one clicks every step instead of calling __loadGame.
 const menuItems = await page.evaluate(async () => {
   const store = await import('/src/platform/saveStore.ts');
+  const io = await import('/src/fileio/saveIo.ts');
   window.__univ.party.gold = 8888;
-  await store.putSave('VerifySlot', window.__saveGame());
+  const bytes = window.__saveGame();
+  await store.createSeries('VerifySlot', { data: bytes, preview: io.readSavePreview(bytes), kind: 'manual', reason: 'Test' });
   window.__univ.party.gold = 3;
   return null;
 });
@@ -2467,7 +2469,7 @@ const fileMenu = await page.evaluate(() =>
 await page.locator('#game-menu-bar .dropdown li', { hasText: 'Open Game' }).first().click();
 await page.waitForTimeout(300);
 const pickerRow = await page.evaluate(() =>
-  window.__dialogs.active?.placedRows?.find((r) => r.name === 'slot:VerifySlot')?.rect ?? null);
+  window.__dialogs.active?.placedRows?.find((r) => r.name.startsWith('series:') && r.label?.startsWith('VerifySlot'))?.rect ?? null);
 let menuLoad = { picker: fileMenu, row: pickerRow, gold: null };
 if (pickerRow !== null) {
   const box = await page.locator('#canvas').boundingBox();
@@ -2479,7 +2481,7 @@ if (pickerRow !== null) {
     picker: null,
     row: 'clicked',
     gold: window.__univ.party.gold,
-    slot: window.__univ.saveSlot,
+    slot: window.__univ.seriesId !== null,
     dialogGone: window.__dialogs.active === null,
   }));
 }
@@ -2492,8 +2494,10 @@ console.log('MENU LOAD:', JSON.stringify({ fileMenu, ...menuLoad }));
 // with the gold it was saved with.
 await page.evaluate(async () => {
   const store = await import('/src/platform/saveStore.ts');
+  const io = await import('/src/fileio/saveIo.ts');
   window.__univ.party.gold = 7171;
-  await store.putSave('ResumeSlot', window.__saveGame());
+  const bytes = window.__saveGame();
+  await store.createSeries('ResumeSlot', { data: bytes, preview: io.readSavePreview(bytes), kind: 'manual', reason: 'Test' });
 });
 //
 // Instant help starts off, as for a player who has turned it off: its boxes
@@ -2515,7 +2519,7 @@ await page.waitForTimeout(800);
 const resumed = await page.evaluate(() => ({
   offered: null,
   gold: window.__univ.party.gold,
-  slot: window.__univ.saveSlot,
+  slot: window.__univ.seriesId !== null,
   inTown: window.__session.inTown,
   tail: window.__univ.transcript.slice(-2),
 }));

@@ -324,10 +324,8 @@ const RACE_NAMES: Partial<Record<Race, string>> = {
  * `finish_create` is left to `GameSession.startNewGame`, which does it for
  * every living PC. Returns false if the player cancels or leaves nobody.
  *
- * The C++ then asks where to save (`do_save(true)`); this port's saves are
- * named slots offered from the File menu, and the game says "Autosave: Make a
- * manual save first." until there is one, as the C++ does when that save is
- * cancelled.
+ * The C++ then asks where to save (`do_save(true)`); this port does not ask:
+ * the game's first save, manual or the autosave's, starts its series.
  */
 export async function startNewParty(host: PartyEditorHost): Promise<boolean> {
   const confirm = new XmlDialog(host.ctx, host.store, getDialogDef('new-party'));

@@ -183,8 +183,13 @@ in `src/` and `tools/` is done. Not in either original.
   per-turn delta before settling the numbers.
 - **Thinning with age:** every turn for the last ~200, then one per 10 turns,
   then one per game day, with files no snapshot uses dropped.
-- **Open:** whether it replaces BoE's five-slot autosave (`doAutoSave`) or
-  sits beside it — ask the user when this starts.
+- **Settled 2026-10-02**: it replaces BoE's five-slot autosave. The save
+  series (PROGRESS.md "Save series") is the history, and already has the
+  timeline (as a tree, since restoring branches), the thinning and the
+  thumbnails. What remains of Rewind is **a key that steps back one turn**,
+  which wants a snapshot per turn: measure first, since a series now takes a
+  save every 10 moves, a save costs ~4 ms of main thread, and the 10 MB
+  budget holds ~380 of them (about 26 KB each, picture included).
 
 # Part 2: Playing Exile 3 in blades-of-exile-ts
 

@@ -608,6 +608,24 @@
       .startup-saves {
         grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
       }
+      .startup-save {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .startup-save .startup-card {
+        flex: 1 1 auto;
+        width: 100%;
+      }
+      .startup-save-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .startup-save-actions .startup-party-button {
+        padding: 3px 8px;
+        font-size: 11px;
+      }
       .startup-party-button {
         font-size: 12px;
         padding: 5px 12px;

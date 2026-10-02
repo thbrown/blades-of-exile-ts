@@ -1446,6 +1446,25 @@ export interface SavePreview {
   }[];
 }
 
+/**
+ * The same preview `readSavePreview` would read back from `saveGame(univ)`, but
+ * straight from the universe. The autosave runs on the main thread every few
+ * moves and cannot afford to unzip and re-parse what it just wrote.
+ */
+export function previewOfUniverse(univ: Universe): SavePreview {
+  return {
+    scenarioId: univ.scenario.id,
+    age: univ.party.age,
+    gold: univ.party.gold,
+    townNum: univ.party.townNum < TOWN_NUM_OUTDOORS && univ.town !== null
+      ? univ.party.townNum : TOWN_NUM_OUTDOORS,
+    pcs: univ.party.pcs.map((pc) => ({
+      name: pc.name, level: pc.level, mainStatus: pc.mainStatus, graphic: pc.whichGraphic,
+      race: pc.race, health: pc.curHealth, maxHealth: pc.maxHealth, sp: pc.curSp, maxSp: pc.maxSp,
+    })),
+  };
+}
+
 export function readSavePreview(data: Uint8Array): SavePreview {
   const ball = openSave(data);
   const partyText = ball.text('save/party.txt');
