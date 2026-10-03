@@ -16371,4 +16371,11 @@ game's saves were first called a *series*; the same day they were renamed a
   the gzip and holds nothing up. **Steps missing from the tree are the cap**:
   past 50 autosaves each new one evicts an older one (weighted to the old),
   so a long walk's early steps thin out by design.
+- **Autosaving that is off now says so, once** (console): the master switch
+  off in Preferences, no IndexedDB, or — the usual one — a game opened by a
+  `?scenario=` link that hasn't been saved yet (it autosaves only after the
+  first Ctrl+S, as OBoE insisted; from the main menu it is on at once). Before,
+  these dropped every request without a word, so the console showed only
+  manual saves. `await __saveReport()` prints the tree by role and by
+  kind/reason, and every gap of more than one turn on the line being played.
 

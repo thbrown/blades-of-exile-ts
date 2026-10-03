@@ -93,10 +93,10 @@ import { applyPartySave, applySave, previewOfUniverse, readSavePreview, saveGame
 import { aroundWaitFade } from './platform/waitFade';
 import { gunzipSync } from 'fflate';
 import { sameTarContents } from './fileio/tarball';
-import { SnapKind } from './platform/saveRetention';
+import { SnapKind, lineage, roles } from './platform/saveRetention';
 import {
   TreeInfo, createTree, exportSave, getPartyInMemory, getTree, getSnapshot, importSave, listTrees,
-  getSnapInfo, listSnaps, newestSnapshot, appendSnapshot, setSnapshotThumb, saveStoreAvailable, setHead, setPartyActiveScenario, setPartyInMemory, renameTree, deleteTree,
+  SnapInfo, getSnapInfo, listSnaps, newestSnapshot, appendSnapshot, setSnapshotThumb, saveStoreAvailable, setHead, setPartyActiveScenario, setPartyInMemory, renameTree, deleteTree,
 } from './platform/saveStore';
 import { SaveScheduler } from './platform/saveScheduler';
 import { browseTree, exportTreeZip, importAsTree, placeOf } from './platform/saveActions';
@@ -925,6 +925,11 @@ async function main(): Promise<void> {
     setBugFixes(getBoolPref('FixBugs', false));
     const reasons = Object.keys(AUTOSAVE_TRIGGER_DEFAULTS);
     setAutosavePrefs(readAutosavePrefs(reasons, AUTOSAVE_TRIGGER_DEFAULTS));
+    // The master switch stops the requests before they reach the scheduler,
+    // so nothing else would ever say it is off.
+    if (!getAutosavePrefs().enabled) {
+      console.log('[save] not autosaving: Autosave is off in File › Preferences (only Ctrl+S saves)');
+    }
   };
   applyPrefs();
 
@@ -1756,8 +1761,21 @@ async function main(): Promise<void> {
   const fromMainMenu = new URLSearchParams(window.location.search).has('play');
   /** Whether this game is written into a tree as it goes. */
   const autosaving = (): boolean => saveStoreAvailable() && (univ.treeId !== null || fromMainMenu);
+  /** The last thing said about why the game isn't autosaving, so it is said once. */
+  let offNoted: string | null = null;
+  const noteAutosaveOff = (why: string | null): void => {
+    if (why === offNoted) return;
+    offNoted = why;
+    console.log(why === null ? '[save] autosaving: every move is saved' : `[save] not autosaving: ${why}`);
+  };
   setAutosaveSink((why) => {
-    if (!autosaving()) return;
+    if (!saveStoreAvailable()) { noteAutosaveOff('this browser has no IndexedDB to keep saves in'); return; }
+    if (!autosaving()) {
+      noteAutosaveOff('this game was opened by a ?scenario= link and hasn\'t been saved yet. '
+        + 'Save it once (Ctrl+S) and it autosaves from then on — or start it from the main menu');
+      return;
+    }
+    noteAutosaveOff(null);
     scheduler.request(why, why === 'Tick' ? 'auto' : 'milestone');
   });
   // The page is going away or out of sight: get the newest state down now, so a
@@ -1773,6 +1791,35 @@ async function main(): Promise<void> {
   }
   // For the verifiers, like `__univ`.
   Object.assign(window as unknown as Record<string, unknown>, { __scheduler: scheduler });
+  /**
+   * `await __saveReport()` in the console: this game's tree, counted by what
+   * each save is to it and why it was taken, and every gap in game time
+   * between a save and its parent on the line being played — for finding
+   * moves that weren't saved.
+   */
+  Object.assign(window as unknown as Record<string, unknown>, {
+    __saveReport: async (): Promise<void> => {
+      if (univ.treeId === null) { console.log('[save] this game has no tree yet'); return; }
+      const tree = await getTree(univ.treeId);
+      const snaps = await listSnaps(univ.treeId);
+      const roleBy = roles(snaps);
+      const tally = (key: (s: SnapInfo) => string): Record<string, number> => {
+        const out: Record<string, number> = {};
+        for (const sn of snaps) out[key(sn)] = (out[key(sn)] ?? 0) + 1;
+        return out;
+      };
+      console.log(`[save] tree "${tree?.name}": ${snaps.length} saves, head #${tree?.head}, cap ${tree?.maxAuto ?? 'default'}`);
+      console.log('[save] by role', tally((sn) => roleBy.get(sn.seq) ?? '?'));
+      console.log('[save] by kind and reason', tally((sn) => `${sn.kind}/${sn.reason}`));
+      const byId = new Map(snaps.map((sn) => [sn.seq, sn]));
+      const line = [...lineage(snaps, tree?.head ?? 0)].map((seq) => byId.get(seq)!).reverse();
+      const gaps = line.slice(1).map((sn, i) => ({ seq: sn.seq, from: line[i]!.gameAge, to: sn.gameAge, reason: sn.reason }))
+        .filter((g) => g.to - g.from > 1);
+      console.log(`[save] the played line: ${line.length} saves, game time ${line[0]?.gameAge} to ${line.at(-1)?.gameAge};`
+        + ` ${gaps.length} gaps of more than one turn (an outdoor step is 10 turns, resting many):`);
+      console.table(gaps.slice(0, 60));
+    },
+  });
 
   const saveGameFlow = async (): Promise<void> => {
     if (dialogs.active) return;
