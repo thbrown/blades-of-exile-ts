@@ -424,6 +424,15 @@ function townTer255(town: number, terrain: number[][]): number[][] {
   return terrain.map((col) => col.map((t) => (t === 255 ? E3_TER_255_OPAQUE : t)));
 }
 
+/**
+ * Exile 3's swamps, which its move code handles itself (`10c0:16a0`, the
+ * session's `e3Swamp`): the cave swamp, where Cave Lore wards off the poison,
+ * and the surface one, where Woodsman does. E3's `move_sound` (`1030:0af2`)
+ * plays no footstep on either — the arm's squelch is their only sound.
+ */
+export const E3_SWAMPS = { caveLore: 88, woodsman: 90 } as const;
+const SILENT_STEPS = new Set<number>([E3_SWAMPS.caveLore, E3_SWAMPS.woodsman]);
+
 function terrainXml(types: E3TerrainType[], hiddenAs: Map<number, number>): string {
   const out = [XML_HEAD, '<terrains boes="2.0.0">\n'];
   types.forEach((t, id) => {
@@ -440,7 +449,7 @@ function terrainXml(types: E3TerrainType[], hiddenAs: Map<number, number>): stri
         <ride>${t.blockage < 3}</ride>
         <archetype>false</archetype>
         <light>0</light>
-        <step-sound>step</step-sound>
+        <step-sound>${SILENT_STEPS.has(id) ? 'none' : 'step'}</step-sound>
         <trim>none</trim>
         <ground>0</ground>
         <trim-for>-1</trim-for>
@@ -838,6 +847,7 @@ function scenarioXml(
         <town-timers>repeat</town-timers>
         <inn>exile3</inn>
         <lava>exile3</lava>
+        <swamp>exile3:${E3_SWAMPS.caveLore},${E3_SWAMPS.woodsman}</swamp>
         <backgrounds>exile3</backgrounds>
         <message-pics>exile3</message-pics>
         <message-sounds>exile3</message-sounds>

@@ -11,8 +11,8 @@ import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { GameSession } from '../src/game/session';
 import {
   SnapInput, appendSnapshot, createTree, deleteBranch, deleteSnapshot, deleteTree, getAllSnapshots,
-  getPartyInMemory, getSnapshot, importTree, listTrees, listSnaps, renameTree, setHead, setMaxAuto,
-  setPartyInMemory,
+  getPartyInMemory, getSnapInfo, getSnapshot, importTree, listTrees, listSnaps, newestSnapshot, promoteSnapshot,
+  renameTree, setHead, setMaxAuto, setPartyInMemory,
 } from '../src/platform/saveStore';
 import { isZip, treeFromZip, treeToZip } from '../src/platform/saveZip';
 import { autoCount, roles } from '../src/platform/saveRetention';
@@ -76,6 +76,26 @@ describe('the tree store', () => {
     expect(made.kind).toBe('branch');
     const next = await appendSnapshot(tree.id, snap(260));
     expect(next.snap.kind).toBe('auto');
+  });
+
+  it('promotes a save in place, and a promoted branch save still starts its branch', async () => {
+    const { tree } = await createTree('Promote', snap(0, 'manual'));
+    for (let i = 1; i <= 3; i++) await appendSnapshot(tree.id, snap(i * 100));
+    await setHead(tree.id, 2);
+    const { snap: branch } = await appendSnapshot(tree.id, snap(250));
+    await promoteSnapshot(tree.id, branch.seq, 'milestone', 'EnterTown');
+    expect(await getSnapInfo(tree.id, branch.seq)).toMatchObject({ kind: 'milestone', reason: 'EnterTown' });
+    expect(roles(await listSnaps(tree.id)).get(branch.seq)).toBe('branch');
+  });
+
+  it('finds the save played last by the clock, not by game time or the head', async () => {
+    const { tree } = await createTree('Clock', { ...snap(0, 'manual'), savedAt: 1000 });
+    await appendSnapshot(tree.id, { ...snap(5000), savedAt: 2000 });
+    await setHead(tree.id, 1);
+    // A branch from the start: earlier in the game, but played later.
+    await appendSnapshot(tree.id, { ...snap(100), savedAt: 3000 });
+    await setHead(tree.id, 2);
+    expect(await newestSnapshot(tree.id)).toBe(3);
   });
 
   it('keeps every save until the cap, then holds the autosaves at it', async () => {

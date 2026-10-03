@@ -90,7 +90,7 @@ describe('the save scheduler', () => {
     expect(r.tree()).not.toBeNull();
   });
 
-  it('skips a save identical to the last, but not a manual one', async () => {
+  it('skips a save identical to the last, and Save on an unchanged game adds nothing', async () => {
     const r = rig();
     r.setAge(10);
     r.sched.request('Tick', 'auto');
@@ -102,22 +102,98 @@ describe('the save scheduler', () => {
     r.sched.request('Tick', 'auto');
     await r.flushIdle();
     expect(await listSnaps(r.tree()!)).toHaveLength(2);
-    await r.sched.saveNow('Manual', 'manual');
+    // The player saves where the tick just did: that save becomes theirs.
+    expect(await r.sched.saveNow('Manual', 'manual')).toBe(2);
     const snaps = await listSnaps(r.tree()!);
-    expect(snaps).toHaveLength(3);
-    expect(snaps.map((s) => s.parent)).toEqual([null, 1, 2]);
-    expect((await getSnapshot(r.tree()!, 3))!.length).toBeGreaterThan(0);
+    expect(snaps).toHaveLength(2);
+    expect(snaps[1]).toMatchObject({ kind: 'manual', reason: 'Manual' });
+    expect(snaps.map((s) => s.parent)).toEqual([null, 1]);
+    expect((await getSnapshot(r.tree()!, 2))!.length).toBeGreaterThan(0);
   });
 
-  it('lets a loaded game start fresh', async () => {
+  it('keeps one of two identical saves: milestone, then manual, then auto', async () => {
+    const saved: { kind: string; promoted?: boolean }[] = [];
+    const s = rig({ saved: (x) => { saved.push(x); } });
+    // A tick, then a milestone on the same game (the tick caught the move first).
+    s.setAge(1);
+    s.sched.request('Tick', 'auto');
+    s.sched.captureIfPending();
+    s.sched.request('EnterTown', 'milestone');
+    s.sched.captureIfPending();
+    await s.flushIdle();
+    let snaps = await listSnaps(s.tree()!);
+    expect(snaps).toHaveLength(1);
+    expect(snaps[0]).toMatchObject({ kind: 'milestone', reason: 'EnterTown' });
+    expect(saved.at(-1)).toMatchObject({ kind: 'milestone', promoted: true });
+    // A manual save on top of the milestone leaves it a milestone.
+    expect(await s.sched.saveNow('Manual', 'manual')).toBe(1);
+    snaps = await listSnaps(s.tree()!);
+    expect(snaps).toHaveLength(1);
+    expect(snaps[0]!.kind).toBe('milestone');
+  });
+
+  it('starts a loaded game out as the save it came from', async () => {
     const r = rig();
     r.setAge(5);
     r.sched.request('Tick', 'auto');
     await r.flushIdle();
-    r.sched.reset();
+    // As if save 1 were loaded: nothing changed, so nothing is written…
+    r.sched.loaded(r.tree()!, 1, 'auto', new Uint8Array([1, 2, 3, 5, 0]));
+    r.sched.request('Tick', 'auto');
+    await r.flushIdle();
+    r.sched.flush('Leaving');
+    await r.sched.settled();
+    expect(await listSnaps(r.tree()!)).toHaveLength(1);
+    // …until it does.
+    r.setAge(6);
     r.sched.request('Tick', 'auto');
     await r.flushIdle();
     expect(await listSnaps(r.tree()!)).toHaveLength(2);
+  });
+
+  it('parks a capture the page leaves before it is written, and unparks it once it is', async () => {
+    let parked: unknown = null;
+    let release: () => void = () => undefined;
+    const slow = new Promise<void>((res) => { release = res; });
+    const r = rig({
+      park: (u) => { parked = u; },
+      unpark: () => { parked = null; },
+      compress: async (raw) => { await slow; return new Uint8Array([0x1f, 0x8b, ...raw]); },
+    });
+    r.setAge(1);
+    r.sched.request('Start', 'milestone');
+    r.sched.captureIfPending();
+    // The tree doesn't exist until that first write lands: nowhere to park yet.
+    r.sched.flush('Leaving');
+    expect(parked).toBeNull();
+    release();
+    await r.flushIdle();
+    expect(r.tree()).not.toBeNull();
+
+    let hold: () => void = () => undefined;
+    const r2 = rig({
+      park: (u) => { parked = u; },
+      unpark: () => { parked = null; },
+    });
+    r2.setAge(1);
+    r2.sched.request('Start', 'milestone');
+    await r2.flushIdle();
+    const held = new Promise<void>((res) => { hold = res; });
+    // The next write is stuck behind the gzip worker as the page goes.
+    (r2.sched as unknown as { deps: SchedulerDeps }).deps.compress = async (raw) => {
+      await held;
+      return new Uint8Array([0x1f, 0x8b, ...raw]);
+    };
+    r2.setAge(2);
+    r2.sched.request('Tick', 'auto');
+    r2.sched.captureIfPending();
+    r2.setAge(3);
+    r2.sched.flush('Leaving');
+    expect(parked).toMatchObject({ treeId: r2.tree(), kind: 'auto', reason: 'Leaving' });
+    hold();
+    await r2.sched.settled();
+    expect(parked).toBeNull();
+    expect((await listSnaps(r2.tree()!)).map((s) => s.gameAge)).toEqual([1, 2, 3]);
   });
 
   it('reports a save that fails, rather than throwing', async () => {

@@ -11,6 +11,13 @@
  * Hovering a node previews it; clicking one shows its screenshot and a card of
  * what the party had, with what may be done to it.
  *
+ * A row of buttons under the tree walks it without aiming at a dot — on a
+ * phone the dots of a long game are too close to tap. ◀ is the save before
+ * (the parent: back along this save's own history), ▶ the save after on the
+ * same branch (at a fork, the child on its own row, else the first), ▲ ▼ hop
+ * to the nearest save on the row above or below, and ⏮ ⏭ go to the first
+ * save and to where the game is now. The arrow keys, Home and End do the same.
+ *
  * The dialog is one fixed size, whatever is selected — the note under the
  * card always has its room — and its only buttons bottom right are Cancel and
  * Restore. Restoring never deletes: playing on from an old save starts a
@@ -69,6 +76,12 @@ const CSS = `
 .stree-pane { position: relative; overflow: hidden; min-height: 0; background: rgba(255,255,255,.6);
   border: 1px solid #000; border-radius: 3px; }
 .stree-pane svg { position: absolute; inset: 0; display: block; }
+.stree-left { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 6px; min-height: 0; }
+.stree-nav { display: flex; gap: 4px; align-items: center; }
+.stree-nav button { padding: 3px 0; width: 36px; font-size: 13px; line-height: 1.2; }
+.stree-nav .stree-where { flex: 1 1 auto; min-width: 0; padding-left: 6px; color: #333; font-size: 11px;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.stree-key-toggle { display: none; }
 .stree-detail { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: hidden; }
 .stree-shot { width: 100%; aspect-ratio: 351 / 279; background: #111; border: 1px solid #000; border-radius: 3px;
   object-fit: cover; display: block; box-sizing: border-box; flex: none; }
@@ -103,9 +116,26 @@ const CSS = `
 .stree-node { cursor: pointer; }
 .stree-node:focus { outline: none; }
 .stree-node:hover .ring { stroke: #000; stroke-width: 1.5; }
+/* A phone: the whole screen; the tree on top with its buttons, the save's
+   picture and card side by side under it; the key folded behind a button. */
 @media (max-width: 640px) {
-  .stree-body { grid-template-columns: 1fr; grid-template-rows: minmax(120px, 1fr) auto; }
-  .stree-detail { overflow: auto; max-height: 55vh; }
+  .stree-back { padding: 0; }
+  .stree { width: 100vw; height: 100vh; height: 100dvh; border-radius: 0; border: none; }
+  .stree header { padding: 8px 10px 6px; }
+  .stree h2 { font-size: 20px; }
+  .stree-key-toggle { display: inline-block; }
+  .stree-legend { display: none; width: 100%; justify-content: flex-start; }
+  .stree.show-key .stree-legend { display: flex; }
+  .stree-body { grid-template-columns: 1fr; grid-template-rows: minmax(150px, 1fr) auto; gap: 8px; padding: 0 10px; }
+  .stree-nav button { width: auto; flex: 0 0 44px; min-height: 38px; font-size: 15px; }
+  .stree-nav .stree-where { display: none; }
+  .stree-detail { display: grid; grid-template-columns: 40% minmax(0, 1fr); align-items: start; gap: 8px;
+    overflow: auto; max-height: 48vh; max-height: 48dvh; }
+  .stree-detail > .stree-note, .stree-detail > .stree-node-actions { grid-column: 1 / -1; }
+  .stree-note { min-height: 0; }
+  .stree footer { padding: 8px 10px; gap: 8px; }
+  .stree footer .grow { flex-basis: 100%; height: 0; }
+  .stree footer .grow ~ button { flex: 1 1 0; min-height: 40px; }
 }
 `;
 
@@ -168,6 +198,8 @@ const when = (snap: SnapInfo): string =>
 
 export function showSaveTree(parent: HTMLElement, opts: SaveTreeOptions): { close: () => void } {
   addCss();
+  /** A touch screen: bigger hit areas, and no hover preview (a tap selects). */
+  const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
   let snaps = [...opts.snaps];
   let roleBy = roles(snaps);
   let maxAuto = opts.maxAuto ?? DEFAULT_MAX_AUTO_SAVES;
@@ -213,12 +245,22 @@ export function showSaveTree(parent: HTMLElement, opts: SaveTreeOptions): { clos
   key('Saved by you', () => mark('manual', 'manual', 4));
   key('Branch save', () => mark('auto', 'branch', 5));
   key('End save', () => mark('auto', 'end', 5));
-  head.append(title, legend);
+  // On a phone the key folds away behind a button (CSS shows it there only).
+  const keyToggle = h('button', 'small stree-key-toggle', 'Key');
+  keyToggle.type = 'button';
+  keyToggle.setAttribute('aria-expanded', 'false');
+  keyToggle.addEventListener('click', () => {
+    keyToggle.setAttribute('aria-expanded', String(box.classList.toggle('show-key')));
+  });
+  head.append(title, keyToggle, legend);
 
   const body = h('div', 'stree-body');
+  const left = h('div', 'stree-left');
   const pane = h('div', 'stree-pane');
+  const nav = h('div', 'stree-nav');
+  left.append(pane, nav);
   const detail = h('div', 'stree-detail');
-  body.append(pane, detail);
+  body.append(left, detail);
 
   // Footer: the tree's own settings on the left; Cancel and Restore, only, on the right.
   const foot = h('footer');
@@ -265,6 +307,28 @@ export function showSaveTree(parent: HTMLElement, opts: SaveTreeOptions): { clos
 
   let selected = opts.head;
   const nodeEls = new Map<number, SVGGElement>();
+
+  type Step = 'first' | 'back' | 'up' | 'down' | 'fwd' | 'now';
+  const navButtons = new Map<Step, HTMLButtonElement>();
+  const where = h('span', 'stree-where');
+  for (const [step, label, tip] of [
+    ['first', '⏮', 'First save'],
+    ['back', '◀', 'The save before'],
+    ['up', '▲', 'The branch above'],
+    ['down', '▼', 'The branch below'],
+    ['fwd', '▶', 'The save after, on this branch'],
+    ['now', '⏭', 'Where the game is now'],
+  ] as const) {
+    const b = h('button', undefined, label);
+    b.type = 'button';
+    b.title = tip;
+    b.setAttribute('aria-label', tip);
+    b.dataset['step'] = step;
+    b.addEventListener('click', () => { go(step); });
+    navButtons.set(step, b);
+    nav.append(b);
+  }
+  nav.append(where);
 
   const updateCounts = (): void => {
     const bytes = snaps.reduce((sum, n) => sum + n.bytes, 0);
@@ -410,13 +474,16 @@ export function showSaveTree(parent: HTMLElement, opts: SaveTreeOptions): { clos
       const p = layout.at.get(n.seq)!;
       const live = layout.onHead.has(n.seq);
       const g = s('g', { class: 'stree-node', transform: `translate(${p.x},${y(p.lane)})`, tabindex: 0,
-        opacity: live ? 1 : 0.75, 'data-seq': n.seq, 'data-role': roleOf(n) });
+        opacity: live ? 1 : 0.75, 'data-seq': n.seq, 'data-lane': p.lane, 'data-role': roleOf(n) });
+      // A finger needs more than the dot: the invisible hit area grows to
+      // half the space to the neighbours, so a tap lands on the nearer save.
+      if (coarse) g.append(s('circle', { r: Math.max(dot + 4, Math.min(16, layout.gap / 2, row / 2)), fill: 'transparent' }));
       g.append(s('circle', { class: 'ring', r: dot + 4, fill: 'transparent', stroke: 'transparent' }));
       if (n.seq === opts.head) g.append(s('circle', { r: dot + 3, fill: 'none', stroke: '#111', 'stroke-width': 2 }));
       g.append(mark(n.kind, roleOf(n), dot));
       // Hovering previews in a tooltip, which can't move anything under the
       // pointer; clicking (or arrowing onto a node) selects it for the panel.
-      g.addEventListener('mouseenter', () => { showTip(n, g); });
+      g.addEventListener('mouseenter', () => { if (!coarse) showTip(n, g); });
       g.addEventListener('mouseleave', () => { tip.hidden = true; });
       g.addEventListener('click', () => { select(n.seq); });
       g.addEventListener('dblclick', () => { opts.restore(n.seq); });
@@ -433,6 +500,54 @@ export function showSaveTree(parent: HTMLElement, opts: SaveTreeOptions): { clos
     selected = seq;
     showDetail(seq);
     markSelected();
+  };
+
+  /** Where each step goes from the selected save; null where it can't. */
+  const target = (step: Step): number | null => {
+    const here = snaps.find((n) => n.seq === selected);
+    const layout = draw.layout;
+    const at = layout.at.get(selected);
+    if (here === undefined || at === undefined) return null;
+    switch (step) {
+      case 'first': {
+        const root = snaps.find((n) => n.parent === null);
+        return root === undefined || root.seq === selected ? null : root.seq;
+      }
+      case 'now':
+        return opts.head === selected || !layout.at.has(opts.head) ? null : opts.head;
+      case 'back':
+        return here.parent;
+      case 'fwd': {
+        const kids = snaps.filter((n) => n.parent === selected).sort((a, b) => a.seq - b.seq);
+        return (kids.find((k) => layout.at.get(k.seq)?.lane === at.lane) ?? kids[0])?.seq ?? null;
+      }
+      case 'up':
+      case 'down': {
+        // The nearest save in time on the nearest row that way.
+        const dy = step === 'down' ? 1 : -1;
+        let best: { seq: number; score: number } | null = null;
+        for (const [seq, p] of layout.at) {
+          const my = (p.lane - at.lane) * dy;
+          if (my <= 0) continue;
+          const score = my * 1e6 + Math.abs(p.x - at.x);
+          if (best === null || score < best.score) best = { seq, score };
+        }
+        return best?.seq ?? null;
+      }
+    }
+  };
+
+  const go = (step: Step): void => {
+    const seq = target(step);
+    if (seq === null) return;
+    select(seq);
+    nodeEls.get(seq)?.focus({ preventScroll: true });
+  };
+
+  const updateNav = (): void => {
+    for (const [step, b] of navButtons) b.disabled = target(step) === null;
+    const snap = snaps.find((n) => n.seq === selected);
+    where.textContent = snap === undefined ? '' : `${opts.placeName(snap)} — day ${dayOf(snap)} · ${when(snap)}`;
   };
 
   const tip = h('div', 'stree-tip');
@@ -462,9 +577,13 @@ export function showSaveTree(parent: HTMLElement, opts: SaveTreeOptions): { clos
       g.querySelector('.ring')?.setAttribute('stroke', seq === selected ? '#000' : 'transparent');
       g.querySelector('.ring')?.setAttribute('stroke-width', seq === selected ? '2' : '1');
     }
+    updateNav();
   };
 
-  // Arrow keys walk the tree: left/right along the branch, up/down between lanes.
+  // The keys walk the tree as the buttons do.
+  const KEY_STEP: Record<string, Step> = {
+    ArrowLeft: 'back', ArrowRight: 'fwd', ArrowUp: 'up', ArrowDown: 'down', Home: 'first', End: 'now',
+  };
   box.addEventListener('keydown', (e) => {
     // Nothing typed here may reach the game underneath.
     e.stopPropagation();
@@ -474,26 +593,10 @@ export function showSaveTree(parent: HTMLElement, opts: SaveTreeOptions): { clos
       opts.restore(selected);
       return;
     }
-    const layout = draw.layout;
-    const here = layout.at.get(selected);
-    if (here === undefined || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
-    if ((e.target as Element).tagName === 'INPUT') return;
+    const step = KEY_STEP[e.key];
+    if (step === undefined || (e.target as Element).tagName === 'INPUT') return;
     e.preventDefault();
-    const dx = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-    const dy = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
-    let best: { seq: number; score: number } | null = null;
-    for (const [seq, p] of layout.at) {
-      if (seq === selected) continue;
-      const mx = (p.x - here.x) * dx;
-      const my = (p.lane - here.lane) * dy;
-      if (dx !== 0 ? mx <= 0 : my <= 0) continue;
-      const score = dx !== 0 ? mx + Math.abs(p.lane - here.lane) * 1000 : my * 1000 + Math.abs(p.x - here.x);
-      if (best === null || score < best.score) best = { seq, score };
-    }
-    if (best !== null) {
-      nodeEls.get(best.seq)?.focus();
-      select(best.seq);
-    }
+    go(step);
   });
   back.addEventListener('mousedown', (e) => { if (e.target === back) opts.close(); });
 

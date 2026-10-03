@@ -13,8 +13,8 @@
  * and the community library (`catalog.json`), best reviewed first. A search
  * box and a row of toggles narrow it. Each is a card with a picture — where a
  * new game starts, or the scenario's own icon from `scenpics` until there is
- * one. Scenarios can be added with the button or by dropping files anywhere on
- * the screen: a `.boes`, an `.exs` and its `.bmp`, or a zip.
+ * one. Scenarios the player installed earlier still list here; adding one from
+ * files is gone until the scenario editor lands.
  *
  * Plain DOM and no canvas: this runs before the graphics sheets have loaded.
  * `?scenario=` skips it entirely, which is what a direct link and the headless
@@ -80,7 +80,7 @@ export interface StartupChoice {
   scenarioId: string;
   /**
    * Set when the player picked a saved game rather than a fresh start; `seq`
-   * is the snapshot, absent for "the newest". With an empty `scenarioId` it is
+   * is the snapshot, absent for the one played last (by the clock). With an empty `scenarioId` it is
    * a party-only save, which becomes the party in memory (`finish_load_party`
    * returning to the startup screen).
    */
@@ -111,6 +111,10 @@ export interface StartupPc {
 const PENCIL_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">'
   + '<path d="M11.5 1.5l3 3L5 14H2v-3z M10 3l3 3" fill="none" stroke="currentColor" stroke-width="1.5" '
   + 'stroke-linejoin="round"/></svg>';
+/** A clock with its hand turned back: the game's older saves. */
+const HISTORY_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">'
+  + '<path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9 M2 2v3h3 M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" '
+  + 'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const TRASH_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">'
   + '<path d="M2 4h12 M6 4V2h4v2 M3.5 4l1 10h7l1-10 M6.5 7v4.5 M9.5 7v4.5" fill="none" stroke="currentColor" '
   + 'stroke-width="1.5" stroke-linejoin="round"/></svg>';
@@ -149,9 +153,6 @@ export interface StartupLibrary {
   install: (entry: LibraryEntry) => Promise<void>;
 }
 
-/** Install every scenario among some files; throws with a reason if there are none. */
-export type ImportScenarios = (files: { name: string; data: Uint8Array }[]) => Promise<StartupScenario[]>;
-
 export interface StartupOptions {
   /** Spiderweb's own scenarios, shipped with the game. */
   official: readonly StartupScenario[];
@@ -160,8 +161,6 @@ export interface StartupOptions {
   tree: readonly StartupTree[];
   /** Absent when there's nowhere to keep saves (no IndexedDB). */
   saveActions?: StartupSaveActions;
-  /** Absent when there's nowhere to keep a scenario (no IndexedDB). */
-  importScenarios?: ImportScenarios;
   library?: StartupLibrary;
   /** Absent when there's nowhere to keep one (no IndexedDB). */
   party?: StartupParty;
@@ -240,10 +239,6 @@ function pictureElement(icon: number | string | undefined, preview: string | und
   return frame;
 }
 
-async function readFiles(list: FileList | File[]): Promise<{ name: string; data: Uint8Array }[]> {
-  return Promise.all([...list].map(async (f) => ({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) })));
-}
-
 /**
  * The main menu's two grounds, both tiles of `pixpats.png`: the granite of the
  * game's own window frame (the tile at the top left) behind the page, and the
@@ -318,7 +313,7 @@ interface Card {
  * itself first, so the caller can get on with loading against a clean page.
  */
 export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Promise<StartupChoice> {
-  const { official, added, tree, saveActions, importScenarios, library, party } = opts;
+  const { official, added, tree, saveActions, library, party } = opts;
   return new Promise((resolve) => {
     // The masthead sits above the card, not in it.
     installBackdrop();
@@ -328,9 +323,7 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
     const root = el('div', 'startup');
     page.append(header(), root);
 
-    const cleanups: (() => void)[] = [];
     const choose = (choice: StartupChoice): void => {
-      for (const c of cleanups) c();
       page.remove();
       resolve(choice);
     };
@@ -401,8 +394,9 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
 
     // Saved games have a card of their own too, so continuing and starting
     // fresh read as two different choices. One card a game, however long its
-    // history: Resume continues from the newest, and a click anywhere else on
-    // the card opens its tree, to pick an earlier point.
+    // history: a click on the card carries on from its newest save (by the
+    // clock, not by game time — after going back to an old save, that is the
+    // last one played), and the clock icon opens its tree, to pick an earlier point.
     if (tree.length > 0 || saveActions !== undefined) {
       const savesCard = el('div', 'startup startup-saves-card');
       savesCard.append(el('h2', undefined, 'Continue a saved game'));
@@ -422,28 +416,16 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
         words.append(el('small', 'startup-save-line', game.detail));
         words.append(el('small', 'startup-save-line', game.when));
         card.append(words);
-        const resume = (): void => { choose({ scenarioId: game.scenarioId, tree: { id: game.id } }); };
-        const browse = (): void => {
-          if (saveActions === undefined) { resume(); return; }
-          void saveActions.browse(game.id).then((seq) => {
-            if (seq === 'deleted') card.remove();
-            else if (seq !== null) choose({ scenarioId: game.scenarioId, tree: { id: game.id, seq } });
-          });
-        };
         // A save names its own scenario, so picking one here is also how a
         // party in a scenario other than the default gets opened at all.
-        card.title = saveActions === undefined ? 'Resume this game' : 'Pick a point in this game to go back to';
-        card.addEventListener('click', browse);
+        const resume = (): void => { choose({ scenarioId: game.scenarioId, tree: { id: game.id } }); };
+        card.title = 'Carry on from the newest save';
+        card.addEventListener('click', resume);
         card.addEventListener('keydown', (e) => {
           if (e.target !== card || (e.key !== 'Enter' && e.key !== ' ')) return;
           e.preventDefault();
-          browse();
+          resume();
         });
-        const resumeButton = el('button', 'startup-party-button primary startup-resume', 'Resume') as HTMLButtonElement;
-        resumeButton.title = 'Carry on from the newest save';
-        resumeButton.dataset['action'] = 'resume';
-        resumeButton.addEventListener('click', (e) => { e.stopPropagation(); resume(); });
-        words.append(resumeButton);
         if (saveActions !== undefined) {
           const tools = el('span', 'startup-save-tools');
           const iconButton = (icon: string, tip: string, action: string, run: () => void): void => {
@@ -455,6 +437,12 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
             b.addEventListener('click', (e) => { e.stopPropagation(); run(); });
             tools.append(b);
           };
+          iconButton(HISTORY_ICON, 'Older saves: pick a point in this game to go back to', 'history', () => {
+            void saveActions.browse(game.id).then((seq) => {
+              if (seq === 'deleted') card.remove();
+              else if (seq !== null) choose({ scenarioId: game.scenarioId, tree: { id: game.id, seq } });
+            });
+          });
           iconButton(PENCIL_ICON, 'Rename this game', 'rename', () => {
             const next = window.prompt('Name this game:', title.textContent ?? game.name)?.trim();
             if (next === undefined || next === '' || next === title.textContent) return;
@@ -632,83 +620,6 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
     }
     render();
 
-    if (importScenarios !== undefined) {
-      const add = el('button', 'startup-choice startup-add');
-      add.append(el('strong', undefined, 'Add a scenario…'));
-      add.append(el('small', undefined,
-        'A .zip from the scenario archive, an .exs (and its .bmp), or an Open Blades of Exile .boes — '
-        + 'or drop the files anywhere here.'));
-      const problem = el('p', 'startup-problem');
-      problem.hidden = true;
-
-      const addFiles = (files: { name: string; data: Uint8Array }[]): void => {
-        if (files.length === 0) return;
-        problem.hidden = true;
-        root.classList.add('busy');
-        importScenarios(files).then((scens) => {
-          let last: HTMLElement | null = null;
-          for (const scen of scens) {
-            // Installing an id that's already listed replaces it.
-            const at = cards.findIndex((c) => c.id === scen.id && c.group === 'added');
-            if (at >= 0) cards.splice(at, 1);
-            const card = scenarioCard(scen, 'added', 1000 + cards.length);
-            cards.push(card);
-            last = card.node;
-          }
-          cards.sort((a, b) => a.rank - b.rank);
-          list.replaceChildren(...cards.map((c) => c.node));
-          render();
-          last?.scrollIntoView({ block: 'nearest' });
-          last?.focus();
-        }).catch((err: unknown) => {
-          problem.textContent = `That couldn't be added: ${err instanceof Error ? err.message : String(err)}`;
-          problem.hidden = false;
-        }).finally(() => { root.classList.remove('busy'); });
-      };
-
-      add.addEventListener('click', () => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.multiple = true;
-        input.accept = '.zip,.exs,.bmp,.boes';
-        input.addEventListener('change', () => {
-          if (input.files) void readFiles(input.files).then(addFiles);
-        });
-        input.click();
-      });
-
-      // Drop anywhere on the page while the screen is up.
-      let depth = 0;
-      const onEnter = (e: DragEvent): void => {
-        if (!e.dataTransfer?.types.includes('Files')) return;
-        e.preventDefault();
-        depth++;
-        root.classList.add('dropping');
-      };
-      const onLeave = (): void => {
-        depth = Math.max(0, depth - 1);
-        if (depth === 0) root.classList.remove('dropping');
-      };
-      const onOver = (e: DragEvent): void => { e.preventDefault(); };
-      const onDrop = (e: DragEvent): void => {
-        e.preventDefault();
-        depth = 0;
-        root.classList.remove('dropping');
-        const files = e.dataTransfer?.files;
-        if (files && files.length > 0) void readFiles(files).then(addFiles);
-      };
-      window.addEventListener('dragenter', onEnter);
-      window.addEventListener('dragleave', onLeave);
-      window.addEventListener('dragover', onOver);
-      window.addEventListener('drop', onDrop);
-      cleanups.push(() => {
-        window.removeEventListener('dragenter', onEnter);
-        window.removeEventListener('dragleave', onLeave);
-        window.removeEventListener('dragover', onOver);
-        window.removeEventListener('drop', onDrop);
-      });
-      root.append(add, problem);
-    }
 
     host.append(page);
     // So Enter or a stray keypress doesn't fall through to nothing, and the

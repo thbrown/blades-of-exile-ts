@@ -1032,6 +1032,16 @@ What this port does instead (`platform/saveStore.ts`, `saveRetention.ts`,
   player can delete a milestone, a manual save or an autosave by hand, a
   branch from its first save, and the whole game from its root.
 - **Restoring never deletes**: playing on from an older snapshot starts a branch.
+- **No game is saved twice in a row** (2026-10-03). A save of the same game
+  as the one just written — compared without the tar headers' write times —
+  isn't added; if it is the better kind (milestone, then the player's own,
+  then an autosave) the save already there takes its kind instead. A loaded
+  game counts as the save it came from, so reloading or restoring adds nothing.
+- **A reload resumes on the last move** (2026-10-03). The page can go before
+  the last move's write lands, so on the way out that move is also parked in
+  localStorage, gzipped on the main thread, and the next load of the game adds
+  it to the tree. A game's card on the main menu opens the save played last by
+  the clock, which after an unplayed restore is not the head.
 - **`Autosave_Max` is gone** (nothing rotates), and so are `Autosave_Every` and
   `Autosave_BudgetMb`; stored values of them are ignored.
 

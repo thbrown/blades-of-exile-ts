@@ -18,13 +18,27 @@
  *    are never dropped or folded; only requests made *between* two captures
  *    fold into one, and a milestone outranks a tick.
  *
- * A capture identical to the last one is skipped (the player stood still).
+ * **No two saves in a row are the same game.** A capture identical to the last
+ * one (the player stood still, or a milestone fired on the move a tick just
+ * saved) is not written again. If it is the better kind — a milestone over the
+ * player's own save over an autosave — the save already written takes its kind
+ * and reason instead (`promoteSnapshot`); otherwise it is dropped. A loaded
+ * game starts out as the save it came from (`loaded`), so reloading, or
+ * restoring and standing still, adds nothing.
+ *
+ * **A page going away** (`flush`) cannot wait for IndexedDB, let alone for the
+ * gzip worker a write may be stuck behind. So the newest capture, if its write
+ * hasn't landed, is also handed to `park` — gzipped on the main thread, for the
+ * host to keep somewhere synchronous — and `unpark`ed once it has. The next
+ * load of that tree adds it (`main.ts`).
+ *
  * Saving rolls no dice, so `get_ran`'s order is untouched.
  */
 
 import { gzip, gzipSync } from 'fflate';
 import { SavePreview } from '../fileio/saveIo';
-import { AppendResult, SnapInput, appendSnapshot, createTree } from './saveStore';
+import { sameTarContents } from '../fileio/tarball';
+import { AppendResult, SnapInput, appendSnapshot, createTree, promoteSnapshot } from './saveStore';
 import { SnapKind } from './saveRetention';
 
 /** What the host hands over for one save: the cheap, must-be-synchronous half. */
@@ -47,14 +61,37 @@ export interface SchedulerDeps {
   setTreeId(id: string): void;
   /** The name a new tree is given. */
   treeName(): string;
-  /** A save landed. */
-  saved?(result: { treeId: string; seq: number; kind: SnapKind; reason: string; evicted: number }): void;
+  /** A save landed — or an identical one already written took this one's kind (`promoted`). */
+  saved?(result: { treeId: string; seq: number; kind: SnapKind; reason: string; evicted: number; promoted?: boolean }): void;
   failed?(err: unknown): void;
   /** Run `fn` when the browser is idle. Replaceable for tests. */
   idle?(fn: () => void): void;
   /** gzip, off the main thread. Replaceable for tests. */
   compress?(raw: Uint8Array): Promise<Uint8Array>;
+  /**
+   * The page is going away before this capture's write has landed: keep it
+   * somewhere synchronous (a gzipped `.exg`), to be added to the tree on the
+   * next load.
+   */
+  park?(unsaved: Unsaved): void;
+  /** What was parked has been written after all. */
+  unpark?(): void;
 }
+
+/** A capture parked by `flush`. */
+export interface Unsaved {
+  treeId: string;
+  /** A gzipped `.exg`, as the tree stores it. */
+  data: Uint8Array;
+  kind: SnapKind;
+  reason: string;
+}
+
+/**
+ * Which of two identical saves is kept: a milestone, then the player's own,
+ * then an autosave. A branch save is an autosave that happened to start a branch.
+ */
+export const KIND_RANK: Record<SnapKind, number> = { auto: 1, branch: 1, manual: 2, milestone: 3 };
 
 /** How long to wait before asking again when the game isn't at a savable moment. */
 const RETRY_MS = 500;
@@ -72,14 +109,28 @@ const defaultIdle = (fn: () => void): void => {
   else setTimeout(fn, 50);
 };
 
-/** One captured save, waiting for its write. */
+/** The newest game captured: what the next capture is compared with. */
+interface Last {
+  treeId: string | null;
+  raw: Uint8Array;
+  kind: SnapKind;
+  reason: string;
+  /** Its seq once written; null if the write failed. Never rejects. */
+  seq: Promise<number | null>;
+  /** Whether it is in the tree yet. */
+  landed: boolean;
+}
+
+/** One queued piece of work: a capture to write, or a save already written to promote. */
 interface Job {
   kind: SnapKind;
   reason: string;
-  cap: Capture;
+  /** Absent for a promotion. */
+  cap?: Capture;
+  rec: Last;
   /** gzip on the main thread and skip the picture: the page is going away. */
   sync: boolean;
-  done(seq: number): void;
+  done(seq: number | null): void;
   fail(err: unknown): void;
 }
 
@@ -88,14 +139,15 @@ export class SaveScheduler {
   private armed = false;
   private readonly queue: Job[] = [];
   private draining: Promise<void> | null = null;
-  /** The last capture taken, to skip an identical one. */
-  private last: { treeId: string | null; raw: Uint8Array } | null = null;
+  private last: Last | null = null;
+  /** What `flush` handed to `park`, until it lands. */
+  private parked: Last | null = null;
 
   constructor(private readonly deps: SchedulerDeps) {}
 
   /** A save is wanted (from `autosave.ts`). Cheap: just a note, and an idle callback. */
   request(reason: string, kind: SnapKind): void {
-    if (this.pending === null || (kind === 'milestone' && this.pending.kind === 'auto')) {
+    if (this.pending === null || KIND_RANK[kind] > KIND_RANK[this.pending.kind]) {
       this.pending = { kind, reason };
     }
     this.arm();
@@ -128,12 +180,13 @@ export class SaveScheduler {
   }
 
   /**
-   * Save right now, because the player asked (Ctrl+S): no idle wait, no skip for
-   * an unchanged game. Resolves with the new snapshot's seq, or null if there
-   * was nothing to save.
+   * Save right now, because the player asked (Ctrl+S): no idle wait. An
+   * unchanged game is not saved twice — the save it already is becomes a
+   * manual one, unless it is a milestone. Resolves with the seq of the save
+   * that holds the game, or null if there was nothing to save.
    */
   async saveNow(reason: string, kind: SnapKind = 'manual'): Promise<number | null> {
-    return this.enqueue(kind, reason, true, false);
+    return this.enqueue(kind, reason, false, true);
   }
 
   /**
@@ -155,15 +208,21 @@ export class SaveScheduler {
    * Save now if the game is at a savable moment and has changed — for when the
    * page is being hidden or closed, which will not wait for a worker. Every
    * write still queued gzips on the main thread from here on, without its
-   * picture.
+   * picture; and the newest capture, if it isn't in the tree yet, is parked.
    */
   flush(reason: string): void {
     for (const job of this.queue) job.sync = true;
-    if (!this.deps.ready()) return;
-    const kind = this.pending?.kind ?? 'auto';
-    this.pending = null;
-    void this.enqueue(kind, reason, false, true)
-      .catch((err: unknown) => { this.deps.failed?.(err); });
+    if (this.deps.ready()) {
+      const kind = this.pending?.kind ?? 'auto';
+      this.pending = null;
+      void this.enqueue(kind, reason, true, false)
+        .catch((err: unknown) => { this.deps.failed?.(err); });
+    }
+    const rec = this.last;
+    const treeId = rec?.treeId ?? this.deps.treeId();
+    if (rec === null || rec.landed || treeId === null || this.deps.park === undefined) return;
+    this.deps.park({ treeId, data: gzipSync(rec.raw, { level: 3 }), kind: rec.kind, reason: rec.reason });
+    this.parked = rec;
   }
 
   /** Resolves when nothing is queued or in flight — for tests and page unload. */
@@ -185,19 +244,32 @@ export class SaveScheduler {
 
   /**
    * Capture now and queue the write; resolves with the seq once it is written,
-   * or null if there was nothing to capture or it was the same as the last.
+   * or null if there was nothing to capture. A capture the same as the last
+   * promotes that save if it outranks it (resolving with its seq), and is
+   * otherwise dropped — resolving with null, or with the last save's seq
+   * when `sameSeq` asks for it.
    */
-  private enqueue(kind: SnapKind, reason: string, force: boolean, sync: boolean): Promise<number | null> {
+  private enqueue(kind: SnapKind, reason: string, sync: boolean, sameSeq: boolean): Promise<number | null> {
     const cap = this.deps.capture();
     if (cap === null) return Promise.resolve(null);
     const treeId = this.deps.treeId();
-    if (!force && this.last !== null && (this.last.treeId === null || this.last.treeId === treeId)
-      && sameBytes(this.last.raw, cap.raw)) {
-      return Promise.resolve(null);
+    const last = this.last;
+    if (last !== null && (last.treeId === null || last.treeId === treeId) && sameTarContents(last.raw, cap.raw)) {
+      if (KIND_RANK[kind] <= KIND_RANK[last.kind]) return sameSeq ? last.seq : Promise.resolve(null);
+      last.kind = kind;
+      last.reason = reason;
+      return this.push({ kind, reason, rec: last, sync });
     }
-    this.last = { treeId, raw: cap.raw };
-    return new Promise<number>((done, fail) => {
-      this.queue.push({ kind, reason, cap, sync, done, fail });
+    const rec: Last = { treeId, raw: cap.raw, kind, reason, seq: Promise.resolve(null), landed: false };
+    this.last = rec;
+    const written = this.push({ kind, reason, cap, rec, sync });
+    rec.seq = written.catch(() => null);
+    return written;
+  }
+
+  private push(job: Omit<Job, 'done' | 'fail'>): Promise<number | null> {
+    return new Promise<number | null>((done, fail) => {
+      this.queue.push({ ...job, done, fail });
       this.drain();
     });
   }
@@ -207,7 +279,7 @@ export class SaveScheduler {
     this.draining = (async () => {
       for (let job = this.queue.shift(); job !== undefined; job = this.queue.shift()) {
         try {
-          job.done(await this.write(job));
+          job.done(job.cap === undefined ? await this.promote(job) : await this.write(job, job.cap));
         } catch (err) {
           job.fail(err);
         }
@@ -218,8 +290,8 @@ export class SaveScheduler {
     });
   }
 
-  private async write(job: Job): Promise<number> {
-    const { cap, kind, reason } = job;
+  private async write(job: Job, cap: Capture): Promise<number> {
+    const { kind, reason, rec } = job;
     const [data, thumb] = job.sync
       ? [gzipSync(cap.raw, { level: 3 }), null]
       : await Promise.all([(this.deps.compress ?? compressAsync)(cap.raw), cap.thumb]);
@@ -233,24 +305,45 @@ export class SaveScheduler {
       treeId = made.tree.id;
       seq = made.snap.seq;
       this.deps.setTreeId(treeId);
-      if (this.last !== null && this.last.treeId === null) this.last = { ...this.last, treeId };
     } else {
       const result: AppendResult = await appendSnapshot(treeId, input);
       seq = result.snap.seq;
       evicted = result.evicted.length;
     }
+    rec.treeId = treeId;
+    this.landed(rec);
     this.deps.saved?.({ treeId, seq, kind, reason, evicted });
     return seq;
   }
 
-  /** Forget the byte comparison — a game was loaded, so the next save is a new state. */
+  /** An identical save is already written (or being written, just ahead): give it this kind. */
+  private async promote(job: Job): Promise<number | null> {
+    const seq = await job.rec.seq;
+    const treeId = job.rec.treeId ?? this.deps.treeId();
+    if (seq === null || treeId === null) return null;
+    await promoteSnapshot(treeId, seq, job.kind, job.reason);
+    this.deps.saved?.({ treeId, seq, kind: job.kind, reason: job.reason, evicted: 0, promoted: true });
+    return seq;
+  }
+
+  private landed(rec: Last): void {
+    rec.landed = true;
+    if (this.parked === rec) {
+      this.parked = null;
+      this.deps.unpark?.();
+    }
+  }
+
+  /** Forget the last capture: what is in memory now is not known to be any save. */
   reset(): void {
     this.last = null;
   }
-}
 
-function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-  return true;
+  /**
+   * The game in memory is now save `seq` of `treeId`, as `raw` serialises it
+   * (taken right after loading it), so standing still saves nothing.
+   */
+  loaded(treeId: string, seq: number, kind: SnapKind, raw: Uint8Array): void {
+    this.last = { treeId, raw, kind, reason: '', seq: Promise.resolve(seq), landed: true };
+  }
 }

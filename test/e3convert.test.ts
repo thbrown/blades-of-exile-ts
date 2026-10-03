@@ -8,7 +8,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { TerObstruct, TerSpec } from '../src/data/terrain';
+import { StepSound, TerObstruct, TerSpec } from '../src/data/terrain';
 import type { Scenario } from '../src/data/scenario';
 import { ItemAbil, ItemType, useMagic } from '../src/data/item';
 import { Attitude, DamageType, MonstTime } from '../src/data/monster';
@@ -199,6 +199,14 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(scen.featureFlags['lava']).toBe('exile3');
     // Fort Emergence, where the play-test found it cold.
     expect(scen.towns[21]!.terrain.some((col) => col.includes(75))).toBe(true);
+  });
+
+  it("leaves E3's swamps to their own arm: no special, no footstep, the swamp flag", () => {
+    for (const id of [88, 90]) {
+      expect(scen.terTypes[id]).toMatchObject({ name: 'Swamp', special: TerSpec.NONE, stepSound: StepSound.NONE });
+    }
+    // Cave Lore's swamp first, then Woodsman's (`10c0:16a0`).
+    expect(scen.featureFlags['swamp']).toBe('exile3:88,90');
   });
 
   it("enters E3's lit dungeons with the dungeon sound", () => {

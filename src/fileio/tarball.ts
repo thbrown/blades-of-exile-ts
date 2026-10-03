@@ -65,6 +65,36 @@ export function writeTar(entries: readonly TarEntry[]): Uint8Array {
   return out;
 }
 
+/**
+ * Whether two tars written by `writeTar` hold the same files. Not a byte
+ * compare: every header carries the time it was written (`mtime`, in
+ * seconds, as the C++ stamps it) and a checksum over that, so the same game
+ * saved a second apart differs in those bytes and nowhere else.
+ */
+export function sameTarContents(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  // Equal lengths and equal size fields put the headers at the same places in
+  // both, so walking `a`'s headers finds `b`'s too; a size that differs is a
+  // header byte outside mtime, so it is caught as a difference.
+  let header = -1;
+  let next = 0;
+  for (let i = 0; i < a.length; i++) {
+    if (i === next) {
+      header = i;
+      if (a[i] === 0) next = -1; // padding: no more headers
+      else {
+        let size = 0;
+        for (let k = i + 124; k < i + 136 && a[k] !== 0 && a[k] !== 0x20; k++) size = size * 8 + (a[k]! - 0x30);
+        next = i + BLOCK + Math.ceil(size / BLOCK) * BLOCK;
+      }
+    }
+    if (a[i] === b[i]) continue;
+    const off = i - header;
+    if (header < 0 || next === -1 || off >= BLOCK || off < 136 || off >= 156) return false;
+  }
+  return true;
+}
+
 /** `tarball::readFrom`. Stops at the end of the data or at a zeroed header. */
 export function readTar(data: Uint8Array): TarEntry[] {
   const entries: TarEntry[] = [];

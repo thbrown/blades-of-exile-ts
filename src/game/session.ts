@@ -2716,6 +2716,18 @@ export class GameSession {
     forced: boolean,
   ): Promise<{ canEnter: boolean; forced: boolean }> {
     const stop = { canEnter: false, forced: false };
+    const swamps = this.e3Swamps();
+    if (swamps !== null) {
+      if (ter === swamps.caveLore || ter === swamps.woodsman) {
+        this.e3Swamp(ter, swamps, inCombatMove);
+        return { canEnter: true, forced };
+      }
+      // E3's `one_sound` remembers the last sound it played, and plays it
+      // again only after a different one. The port has no such memory for
+      // the rest of the game's sounds, so a step off the swamp stands in for
+      // whatever other `one_sound` would have come between.
+      this.lastOneSound = -1;
+    }
     switch (spec.special) {
       case TerSpec.CHANGE_WHEN_STEP_ON: {
         // An unlocked door: walking into it swaps the terrain for flag1, and
@@ -3020,6 +3032,58 @@ export class GameSession {
       return;
     }
     await hitParty(this.univ, amount, DamageType.FIRE);
+  }
+
+  /**
+   * The `swamp` = `exile3:<cave>,<surface>` feature flag: Exile 3's two
+   * swamps, and which trait wards off which. Null for any other scenario.
+   */
+  private e3Swamps(): { caveLore: number; woodsman: number } | null {
+    const m = /^exile3:(\d+),(\d+)$/.exec(this.univ.scenario.featureFlags['swamp'] ?? '');
+    return m === null ? null : { caveLore: Number(m[1]), woodsman: Number(m[2]) };
+  }
+
+  /** What `one_sound` last played (`e3Swamp`); -1 for nothing. */
+  private lastOneSound = -1;
+
+  /**
+   * Exile 3's swamps, terrains 88 and 90: the move code's arm for them
+   * (`10c0:16a0`), which E3 has where BoE has a DANGEROUS terrain special.
+   * It differs from that in every detail, so it is its own arm:
+   *
+   *  - only a **boat** spares the party (`in_boat`, party+0x6a66, as E3's
+   *    `move_sound` reads it); flying over a swamp doesn't;
+   *  - sound 17 through `one_sound` (`FUN_1030_0a31`), before any roll, on
+   *    every step — so it squelches on the first step in and is quiet while
+   *    the party wades on, as BoE 1997's swamps were. E3's `move_sound` plays
+   *    no footstep on either swamp, so this is the only sound;
+   *  - out of combat every living PC, in combat only the one who moved (with
+   *    no check that they are alive, as E3 has none);
+   *  - a PC with **Cave Lore** (trait 4, PC+1809) can't be hurt in the cave
+   *    swamp, nor one with **Woodsman** (trait 5, PC+1810) in the surface
+   *    one — tested before the roll, so a warded PC spends no die;
+   *  - `get_ran(1,1,3) == 2`, one in three, poisons by 1 (`FUN_10b0_933f`,
+   *    BoE 1997's `poison_pc`).
+   *
+   * The arm never refuses the move, and the swamp has no terrain special, so
+   * resting and riding there are as E3 has them: allowed.
+   */
+  private e3Swamp(ter: number, swamps: { caveLore: number; woodsman: number }, inCombatMove: boolean): void {
+    if (this.univ.party.inBoat >= 0) return;
+    if (this.lastOneSound !== 17) {
+      this.sound?.play(17);
+      this.lastOneSound = 17;
+    }
+    const roll = (pc: Player): void => {
+      if (pc.traits[Trait.CAVE_LORE] && ter !== swamps.woodsman) return;
+      if (pc.traits[Trait.WOODSMAN] && ter !== swamps.caveLore) return;
+      if (this.univ.rng.getRan(1, 1, 3) === 2) pc.poison(1, this.univ.rng);
+    };
+    if (inCombatMove) {
+      roll(this.univ.currentPc);
+      return;
+    }
+    for (const pc of this.univ.party.pcs) if (pc.mainStatus === MainStatus.ALIVE) roll(pc);
   }
 
   /**

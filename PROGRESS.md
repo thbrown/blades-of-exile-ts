@@ -1612,6 +1612,9 @@ Notes for M2 implementer:
 
 ## Findings / gotchas log
 
+- (2026-10-03) **Two saves of the same game a second apart never matched byte for byte**: every tar header carries `mtime` in seconds (`tarball.cpp:35` stamps it too), so the scheduler's "skip an unchanged game" only ever worked within one second, and each reload wrote a fresh copy of the save it had just loaded. `sameTarContents` compares tars without each header's mtime and checksum; the writer is unchanged.
+- (2026-10-03) **Exile III's swamps did nothing**: the converter wrote every terrain with a footstep and no special unless the E3 move code had its own arm the converter knew about (lava did). The move code picks an arm with a 23-entry switch on the terrain number (values at `10c0:186a`, targets 0x2e bytes on; `nedis.py --table`); 88 and 90 go to `10c0:16a0`. That arm: a boat spares the party (`in_boat`, party+0x6a66 — not flight); `one_sound(17)` (`FUN_1030_0a31`, which skips a repeat of the last one_sound, as BoE 1997's did); then each living PC out of combat, or the moving PC in one, unless Cave Lore (trait 4, PC+1809) in swamp 88 or Woodsman (trait 5, PC+1810) in 90, rolls `get_ran(1,1,3) == 2` to be poisoned by 1. E3's `move_sound` (`1030:0af2`) plays no footstep on either. Ported as `e3Swamp` under the `swamp` = `exile3:88,90` flag, with no terrain special, so resting and horses there are unchanged (E3's rest and horse code never test them). BoE scenarios already squelched: their swamps carry OBoE's SPLASH step sound.
+- (2026-10-03) **After a `git pull`, run `npm install`**: the save-store tests import `fake-indexeddb`, a dev dependency added with the save trees, and fail to load without it ("Failed to load url fake-indexeddb/auto").
 - (2026-10-02) **The TODO inventory had gaps of its own.** An audit found two real gaps nobody could grep for: `apply_light_mask` (a bare `TODO:` in `screen.ts`, now `TODO(M8)`) and six of E3's talk-start cases, Baziron's 200 gold among them (only in this file's prose; now `TODO(E3-talkstart)` in `tools/e3convert/towns/talkStart.ts`, with what each does). Two file headers listed gaps closed long ago (`saveIo.ts`: the journal, split party, creature saves; `increaseAge.ts`: `dump_gold`, the eating autosave), and `startTownMode` had a stale orphaned doc comment. The inventory is now `git grep -n "TODO(" -- src tools` (CLAUDE.md), since Exile III's gaps live in the converter. It reads: M9 5 (replay harness), e3save 5, campaign 5, M8 2, E3-movies 1, E3-talkstart 1. The talk-start cases and the light mask were both done the same day (below). Note there is no M9 in `PLAN.md`; it is this file's name for replay-harness work.
 - (2026-10-02) **`apply_light_mask`, ported from the 1997 release, not OBoE** (`src/render/lightMask.ts`; the `TODO(M8)` above is closed). A dark town's light is a rounded pool now: the view less an 84×108 ellipse round each square whose eight neighbours are lit, and a 2×2-tile block at each square whose eight are all that well lit, painted black before the unseen mask. 1997's shapes, since OBoE's ellipse (84×106, offsets it calls a guess) is visibly different; 1997's `is_dark` test kept too (no mask when the whole view is lit), and its zeroing of the 3s right of and below each block, which changes the shape. OBoE's `fog_lifted` skip kept. Drawn on its own canvas with `destination-out`, cached until the shapes change, since a path can't fill a rectangle less a union of overlapping shapes.
 - (2026-10-02) **`verify-screen.mjs`'s ENCOUNTER check is flaky on the clock-seeded dice**: some runs end its 40 turns with the guard wandered off (`closed: -2`) and nobody hurt, so `encounter.hurt > 0` fails with no error. Three fails in six runs on 2026-10-02, with and without the change under test. Pinning `?seed=` would fix it.
@@ -16313,4 +16316,41 @@ game's saves were first called a *series*; the same day they were renamed a
   `verify-saves.mjs` (the quick walk, fixed size, no scrolling, Cancel/Restore,
   the card, branch saves, Delete save). Its Exile III import section needs
   `public/scenarios/exile3`, which a fresh checkout doesn't have.
+
+**Play-test round (2026-10-03, later): reloads, duplicates, the card, the tree on a phone.**
+- **A reload lost the last move about one time in four** when it came
+  straight after the move: `flush` on `pagehide` queues behind a write still
+  waiting on the gzip worker and the thumbnail, and the page is gone first.
+  Now `flush` also hands the newest unwritten capture to `park` (main.ts:
+  localStorage `exile-js.unsaved`, gzipped synchronously), `unpark`ed when it
+  lands; opening that tree again adds it (`adoptUnsaved`, a child of the
+  head, skipped if the head is already that game) and takes its picture once
+  it is on screen (`setSnapshotThumb`). Measured with an immediate reload
+  after a walk: HEAD lost the move in 4 of 16 reloads, this in none of 12 (and
+  none of the verifier's six, on every run since).
+- **No two saves in a row are the same game** (DIVERGENCES #47): an
+  identical capture promotes the save already written if it outranks it
+  (`KIND_RANK`: milestone 3 > manual 2 > auto/branch 1; `promoteSnapshot`),
+  else is dropped; Ctrl+S on an unchanged game no longer adds a copy. A loaded
+  game starts as its save (`SaveScheduler.loaded`, taken after
+  `resumeAfterLoad`), so a reload that changed nothing adds nothing — it used
+  to add a "Leaving" save every time.
+- **The startup card**: no Resume button; a click on the card carries on from
+  the save played last **by the clock** (`newestSnapshot`; a reload still
+  uses the head), and a clock icon beside Rename opens the tree.
+- **"Add a scenario…" is gone**, with its drag-and-drop, until the scenario
+  editor lands; scenarios installed before still list, and the library still
+  installs.
+- **The restore tree on a phone**: a nav row under the tree (⏮ ◀ ▲ ▼ ▶ ⏭; ◀ is
+  the parent, ▶ the child on the same row else the first, ▲▼ the nearest save
+  on the next row, ⏭ where the game is now), shared with the arrow keys, Home
+  and End; on a coarse pointer a bigger hit area and no hover preview; under
+  640px the whole screen, the key behind a button, picture and card side by
+  side, Cancel | Restore full width. Nodes carry `data-lane`.
+- **Exile III's swamps** squelch and poison (below, 2026-10-03).
+- Checks: `test/tarball.test.ts` (new), `saveScheduler.test.ts` (dedupe,
+  `loaded`, park/unpark), `saveStore.test.ts` (promote, newest by clock),
+  `damage.test.ts` and `e3convert.test.ts` (swamps); `verify-saves.mjs` (six
+  immediate reloads, an idle reload adds nothing, the card's icons, the tree
+  at 390×844 walked by its buttons).
 

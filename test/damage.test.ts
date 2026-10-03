@@ -517,6 +517,54 @@ describe('damaging terrain', () => {
   });
 
   /**
+   * Exile 3's swamps (`10c0:16a0`, the `swamp` = `exile3:cave,surface` flag):
+   * `one_sound(17)` before any roll, then one `get_ran(1,1,3)` per PC that
+   * isn't warded — Cave Lore in the cave swamp — and a boat spares the party
+   * outright, sound and all. Any walkable square stands in for the swamp.
+   */
+  it("poisons and squelches in E3's swamps, and Cave Lore spends no roll", async () => {
+    const saved = scen.featureFlags['swamp'];
+    try {
+      const walk = async (setUp: (univ: Universe) => void, swamp = true): Promise<{ univ: Universe; draws: number; played: number[] }> => {
+        // Into the first square beside the start the party can enter, whose
+        // terrain the flag names as the cave swamp.
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]] as const) {
+          const { univ, session } = newGame();
+          const at = { x: univ.party.townLoc.x + dx, y: univ.party.townLoc.y + dy };
+          scen.featureFlags['swamp'] = swamp ? `exile3:${univ.town!.record.terrain[at.x]![at.y]!},9999` : 'exile3:9998,9999';
+          const played: number[] = [];
+          session.sound = { play: (n: number) => { played.push(n); } } as unknown as GameSession['sound'];
+          setUp(univ);
+          const before = univ.rng.gameCalls;
+          if (await session.moveTo(at)) return { univ, draws: univ.rng.gameCalls - before, played };
+        }
+        throw new Error('nowhere to step');
+      };
+      const dry = await walk(() => undefined, false);
+      expect(dry.played).not.toContain(17);
+      const plain = await walk(() => undefined);
+      expect(plain.played[0]).toBe(17);
+      // The rolls shift every draw after them, so only "none at all" is exact:
+      // the same count as the dry step.
+      expect(plain.draws).not.toBe(dry.draws);
+      expect(plain.univ.party.pcs.some((pc) => (pc.status[Status.POISON] ?? 0) > 0)).toBe(true);
+      const warded = await walk((univ) => { univ.party.pcs.forEach((pc) => { pc.traits[Trait.CAVE_LORE] = true; }); });
+      expect(warded.played[0]).toBe(17);
+      expect(warded.draws).toBe(dry.draws);
+      // Woodsman is the other swamp's: no help in this one.
+      const woods = await walk((univ) => { univ.party.pcs.forEach((pc) => { pc.traits[Trait.WOODSMAN] = true; }); });
+      expect(woods.draws).toBe(plain.draws);
+      // A boat spares the party: no squelch, no rolls.
+      const boat = await walk((univ) => { univ.party.inBoat = 0; });
+      expect(boat.played).not.toContain(17);
+      expect(boat.draws).toBe(dry.draws);
+    } finally {
+      if (saved === undefined) delete scen.featureFlags['swamp'];
+      else scen.featureFlags['swamp'] = saved;
+    }
+  });
+
+  /**
    * Exile 3's lava (`10c0:15ab`, the `lava` = `exile3` flag): "  LAVA!" and
    * the terrain's dice, and firewalk is tested before the roll, so it spends
    * no draws and says "You walk over the lava." instead.

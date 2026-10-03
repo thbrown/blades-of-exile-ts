@@ -91,9 +91,12 @@ import { TalkAction } from './game/talk';
 import { loadOpcodes, loadScenario } from './fileio/loadScenario';
 import { applyPartySave, applySave, previewOfUniverse, readSavePreview, saveGame, serialiseSave } from './fileio/saveIo';
 import { aroundWaitFade } from './platform/waitFade';
+import { gunzipSync } from 'fflate';
+import { sameTarContents } from './fileio/tarball';
+import { SnapKind } from './platform/saveRetention';
 import {
   TreeInfo, createTree, exportSave, getPartyInMemory, getTree, getSnapshot, importSave, listTrees,
-  listSnaps, saveStoreAvailable, setHead, setPartyActiveScenario, setPartyInMemory, renameTree, deleteTree,
+  getSnapInfo, listSnaps, newestSnapshot, appendSnapshot, setSnapshotThumb, saveStoreAvailable, setHead, setPartyActiveScenario, setPartyInMemory, renameTree, deleteTree,
 } from './platform/saveStore';
 import { SaveScheduler } from './platform/saveScheduler';
 import { browseTree, exportTreeZip, importAsTree, placeOf } from './platform/saveActions';
@@ -208,6 +211,15 @@ const PENDING_SAVE_KEY = 'exile-js.pendingSave';
 const TREE_KEY = 'exile-js.tree';
 
 /**
+ * The newest move of a game whose page went away before it could be written
+ * into the tree (`SaveScheduler.flush`): its tree, kind and reason, and the
+ * gzipped `.exg` in base64. localStorage, not sessionStorage, so closing the
+ * tab and coming back by the main menu loses nothing either. The next load of
+ * that tree adds it (`adoptUnsaved`).
+ */
+const UNSAVED_KEY = 'exile-js.unsaved';
+
+/**
  * An Exile III save (`exile3.sav`) picked on the startup screen. It can only
  * be read with Exile III loaded, so it is parked here — base64, with its file
  * name — and the page opened on Exile III, which reads it and starts a tree.
@@ -227,34 +239,17 @@ function fromBase64(text: string): Uint8Array {
   return out;
 }
 
+/** Two gzipped `.exg`s hold the same game: compared unzipped, and without the times they were written. */
+function sameGame(a: Uint8Array, b: Uint8Array): boolean {
+  return sameTarContents(gunzipSync(a), gunzipSync(b));
+}
+
 /**
  * Restart on the party-death dialog: `start_new_game`, the party editor and
  * then the startup screen. The page reloads to get a clean Universe, and this
  * tells the reloaded page to go straight to the editor.
  */
 const PENDING_NEW_PARTY_KEY = 'exile-js.pendingNewParty';
-
-/**
- * The startup screen's "Add a scenario…" and drag-and-drop: install every
- * scenario among the files — a `.boes`, an `.exs` with or without its `.bmp`,
- * or a zip of those. A bundled id is refused rather than shadowed, since the
- * bundled copy is what would load.
- */
-async function importScenarioFiles(files: { name: string; data: Uint8Array }[]): Promise<StartupScenario[]> {
-  const found = identifyScenarioFiles(files);
-  if (found.length === 0) {
-    throw new Error('no Blades of Exile scenario (.exs or .boes) in '
-      + (files.length === 1 ? files[0]!.name : `those ${files.length} files`));
-  }
-  const added: StartupScenario[] = [];
-  for (const pkg of found) {
-    if (BUNDLED_SCENARIOS.includes(pkg.id)) {
-      throw new Error(`"${pkg.id}" is already one of the bundled scenarios`);
-    }
-    added.push(startupEntry(await installScenario(pkg)));
-  }
-  return added;
-}
 
 /**
  * Where the scenario library's `catalog.json` lives: the bucket in a
@@ -535,7 +530,6 @@ async function main(): Promise<void> {
         };
       }),
       ...(saveStoreAvailable() ? { saveActions } : {}),
-      ...(scenarioStoreAvailable() ? { importScenarios: importScenarioFiles } : {}),
       ...(library ? { library } : {}),
       ...(saveStoreAvailable() ? {
         party: {
@@ -556,7 +550,8 @@ async function main(): Promise<void> {
       // A party-only save: `finish_load_party` makes it the party in memory and
       // stays on the startup screen (boe.fileio.cpp:66).
       const game = await getTree(choice.tree.id);
-      const data = await getSnapshot(choice.tree.id, choice.tree.seq ?? game?.head ?? 1);
+      const seq = choice.tree.seq ?? await newestSnapshot(choice.tree.id).catch(() => null) ?? game?.head ?? 1;
+      const data = await getSnapshot(choice.tree.id, seq);
       if (data !== null) await setPartyInMemory(data);
       window.location.reload();
       return;
@@ -1729,6 +1724,14 @@ async function main(): Promise<void> {
       if (kind === 'milestone' && reason !== 'Start') univ.addStringToBuf(`Autosave: Game saved (${reason}).`);
       redraw();
     },
+    park: ({ treeId, data, kind, reason }) => {
+      try {
+        window.localStorage.setItem(UNSAVED_KEY, JSON.stringify({ treeId, kind, reason, data: toBase64(data) }));
+      } catch { /* full or private: the tree's last write is what there is */ }
+    },
+    unpark: () => {
+      try { window.localStorage.removeItem(UNSAVED_KEY); } catch { /* nothing kept */ }
+    },
     failed: (err) => {
       // Once, not every tick: a full disk would otherwise fill the log.
       if (autosaveFailed) return;
@@ -1826,8 +1829,8 @@ async function main(): Promise<void> {
       applySave(data, univ);
       await setHead(treeId, at);
       rememberTree(treeId);
-      scheduler.reset();
       resumeAfterLoad();
+      await markLoaded(treeId, at);
       univ.addStringToBuf('Game loaded.');
       redraw();
       return true;
@@ -1835,6 +1838,48 @@ async function main(): Promise<void> {
       univ.addStringToBuf(`Load failed: ${String(err)}`);
       redraw();
       return false;
+    }
+  };
+
+  /**
+   * The game in memory is save `seq` of `treeId`, just loaded: so it isn't
+   * saved again until it changes, and an identical save of a lesser kind
+   * doesn't demote it.
+   */
+  const markLoaded = async (treeId: string, seq: number): Promise<void> => {
+    const info = await getSnapInfo(treeId, seq).catch(() => null);
+    scheduler.loaded(treeId, seq, info?.kind ?? 'auto', serialiseSave(univ).serialise());
+  };
+
+  /**
+   * A move parked as the page went away (`UNSAVED_KEY`) becomes tree
+   * `treeId`'s newest save, a child of its head, unless the head is already
+   * that game. Resolves with its seq, or null if there was none for this tree.
+   */
+  const adoptUnsaved = async (treeId: string): Promise<number | null> => {
+    type Parked = { treeId: string; kind: SnapKind; reason: string; data: string };
+    const read = (): Parked | null => {
+      try {
+        return JSON.parse(window.localStorage.getItem(UNSAVED_KEY) ?? 'null') as Parked | null;
+      } catch { return null; }
+    };
+    const parked = read();
+    if (parked === null || parked.treeId !== treeId) return null;
+    try {
+      const data = fromBase64(parked.data);
+      const game = await getTree(treeId);
+      if (game === null) return null;
+      const head = await getSnapshot(treeId, game.head);
+      // The write landed after all, just not in time to say so.
+      if (head !== null && sameGame(head, data)) return null;
+      const preview = readSavePreview(data);
+      const { snap } = await appendSnapshot(treeId, {
+        data, preview, kind: parked.kind, reason: parked.reason,
+        place: preview.townNum < TOWN_NUM_OUTDOORS ? scen.towns[preview.townNum]?.name ?? '' : 'Outdoors',
+      });
+      return snap.seq;
+    } finally {
+      window.localStorage.removeItem(UNSAVED_KEY);
     }
   };
 
@@ -3611,13 +3656,25 @@ async function main(): Promise<void> {
     try {
       const game = await getTree(openTarget.treeId);
       if (game === null) throw new Error('that saved game no longer exists');
-      const at = openTarget.seq ?? game.head;
+      // A move that never reached the tree is its newest save now; then the
+      // save asked for, else (a reload) where the tab was, else (a card on
+      // the main menu) the save played last, by the clock.
+      const adopted = await adoptUnsaved(game.id).catch(() => null);
+      const at = openTarget.seq ?? adopted
+        ?? (resuming ? game.head : await newestSnapshot(game.id) ?? game.head);
       const data = await getSnapshot(game.id, at);
       if (data === null) throw new Error('that save is missing');
       applySave(data, univ);
       await setHead(game.id, at);
       rememberTree(game.id);
       resumeAfterLoad();
+      await markLoaded(game.id, at);
+      // A move picked back up was written with no picture (the page was
+      // going); now that it is on screen, take one.
+      if (adopted !== null && at === adopted) {
+        void captureSaveThumb(canvas).then((thumb) => thumb === null ? undefined : setSnapshotThumb(game.id, adopted, thumb))
+          .catch(() => undefined);
+      }
       if (!resuming) univ.addStringToBuf(`Game loaded: ${game.name}.`);
     } catch (err) {
       univ.addStringToBuf(`${resuming ? "Couldn't pick the game back up" : 'Load failed'}: ${String(err)}`);

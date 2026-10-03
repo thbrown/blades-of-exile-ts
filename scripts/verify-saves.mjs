@@ -120,14 +120,15 @@ check('it counts its saves', cards[0].includes(`${total} saves`), cards[0]);
 check('the card has a picture', await page.evaluate(() => document.querySelector('.startup-save img') !== null));
 await page.screenshot({ path: `${SHOTS}/s1-startup-card.png` });
 
-check('the card has Resume, Rename and Delete',
-  await page.evaluate(() => ['resume', 'rename', 'delete'].every((a) => document.querySelector(`.startup-save [data-action="${a}"]`))));
+check('the card has Older saves, Rename and Delete icons, and no Resume button',
+  await page.evaluate(() => ['history', 'rename', 'delete'].every((a) => document.querySelector(`.startup-save [data-action="${a}"]`))
+    && document.querySelector('.startup-save [data-action="resume"]') === null));
 check('and no Older saves or Export', !cards[0].includes('Older saves') && !cards[0].includes('Export'), cards[0]);
 const lines = await page.$$eval('.startup-save .startup-save-line', (els) => els.map((e) => e.scrollWidth <= e.clientWidth));
 check('where and when each fit on one line', lines.length === 2 && lines.every(Boolean), lines);
 
-// ---- the tree: a click on the card itself
-await page.click('.startup-save .startup-words strong');
+// ---- the tree: the clock icon on the card (a click on the card itself resumes)
+await page.click('.startup-save [data-action="history"]');
 await page.waitForSelector('.stree .stree-node');
 const nodes = await page.$$eval('.stree-node', (els) => els.length);
 check('the tree draws every save', nodes === total, { nodes, total });
@@ -169,7 +170,8 @@ await inGame();
 await page.waitForTimeout(1200);
 const loaded = await page.evaluate(() => ({ age: window.__univ.party.age, id: window.__univ.treeId }));
 check('Restore loads that save', loaded.age === wantAge && loaded.id === treeId, { loaded, wantAge });
-await page.evaluate(() => window.__scheduler.saveNow('Tick', 'auto'));
+// A restored game is the save it came from until it changes, so change it.
+await page.evaluate(() => { window.__univ.party.gold += 1; return window.__scheduler.saveNow('Tick', 'auto'); });
 const after = await snapsOf();
 const forked = after.filter((s) => after.filter((c) => c.parent === s.seq).length > 1);
 check('playing on from it branches the tree further', forked.length === 2 && after.length === total + 1, { forks: forked.map((f) => f.seq) });
@@ -239,6 +241,78 @@ const before = (await page.$$('.startup-save')).length;
 await page.locator('.startup-save').first().locator('[data-action="delete"]').click(); // the newest: the import
 await page.waitForTimeout(500);
 check('Delete removes a game', (await page.$$('.startup-save')).length === before - 1);
+
+// ---- a reload puts the party exactly where it was, even straight after a move
+// (the page used to go before the last move's write landed: 1 reload in 4 lost
+// it), and a reload that changed nothing adds no save.
+await page.goto(`${BASE}?play=valleydy&pace=1`);
+await inGame();
+await page.waitForTimeout(1000);
+const whereNow = () => page.evaluate(() => JSON.stringify({
+  age: window.__univ.party.age, loc: window.__univ.party.townLoc, out: window.__univ.party.locInSec,
+  town: window.__univ.party.townNum, tree: window.__univ.treeId,
+}));
+const reloads = [];
+for (let run = 0; run < 6; run++) {
+  for (const key of ['ArrowLeft', 'ArrowRight', 'ArrowLeft']) {
+    await page.waitForFunction(() => !window.__session.busy && window.__animPending() === 0, { timeout: 10000 });
+    await page.keyboard.press(key);
+    await page.waitForTimeout(30);
+  }
+  const was = await whereNow();
+  await page.reload(); // at once: no idle time for the write
+  await inGame();
+  await page.waitForTimeout(800);
+  reloads.push(was === await whereNow());
+}
+check('reloading straight after a move resumes exactly there', reloads.every(Boolean), reloads);
+const countNow = async () => (await snapsOf()).length;
+const beforeIdle = await countNow();
+await page.reload();
+await inGame();
+await page.waitForTimeout(800);
+check('a reload that changed nothing adds no save', await countNow() === beforeIdle, { beforeIdle });
+
+// ---- the tree on a phone: the whole screen, and buttons to walk it
+await page.setViewportSize({ width: 390, height: 844 });
+await page.goto(BASE);
+await page.waitForSelector('.startup-save');
+await page.click('.startup-save [data-action="history"]');
+await page.waitForSelector('.stree .stree-node');
+await page.waitForTimeout(300);
+await page.screenshot({ path: `${SHOTS}/s6-tree-phone.png` });
+check('on a phone the tree fills the screen and nothing scrolls sideways', await page.evaluate(() => {
+  const box = document.querySelector('.stree').getBoundingClientRect();
+  return Math.round(box.width) === 390 && document.documentElement.scrollWidth <= 390
+    && [...document.querySelectorAll('.stree *')].every((e) => e.getBoundingClientRect().right <= 391);
+}));
+check('the key folds behind a button', await page.evaluate(() =>
+  getComputedStyle(document.querySelector('.stree-legend')).display === 'none'
+  && getComputedStyle(document.querySelector('.stree-key-toggle')).display !== 'none'));
+const navState = () => page.evaluate(() => ({
+  sel: [...document.querySelectorAll('.stree-node')].find((g) => g.querySelector('.ring')?.getAttribute('stroke') === '#000')?.dataset.seq,
+  off: [...document.querySelectorAll('.stree-nav button:disabled')].map((b) => b.dataset.step),
+  lane: [...document.querySelectorAll('.stree-node')].find((g) => g.querySelector('.ring')?.getAttribute('stroke') === '#000')
+    ?.dataset.lane,
+}));
+await page.click('.stree-nav [data-step="first"]');
+const atRoot = await navState();
+check('⏮ goes to the first save, where ◀ has nowhere to go', atRoot.off.includes('back') && atRoot.off.includes('first'), atRoot);
+await page.click('.stree-nav [data-step="now"]');
+check('⏭ goes to where the game is now', (await navState()).off.includes('now'));
+await page.click('.stree-nav [data-step="first"]');
+let steps = 0;
+for (; steps < 200 && !(await navState()).off.includes('fwd'); steps++) await page.click('.stree-nav [data-step="fwd"]');
+const atEnd = await navState();
+check('▶ walks one branch to its end', steps > 5 && atEnd.lane === atRoot.lane, { steps, atEnd });
+await page.click('.stree-nav [data-step="down"]');
+const below = await navState();
+await page.click('.stree-nav [data-step="up"]');
+const backUp = await navState();
+check('▼ and ▲ hop between branches', below.lane !== atEnd.lane && backUp.lane === atEnd.lane, { below, backUp });
+await page.screenshot({ path: `${SHOTS}/s7-tree-phone-walked.png` });
+await page.click('.stree footer button:not(.primary)'); // Cancel
+await page.setViewportSize({ width: 1300, height: 950 });
 
 // ---- an Exile III save, imported on the main menu, becomes a game with a tree
 await page.goto(`${BASE}?scenario=exile3&pace=1`);

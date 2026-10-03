@@ -38,11 +38,11 @@ await page.goto(process.argv[2] ?? 'http://localhost:5199/?pace=1');
 // works: the four bundled scenarios are offered by their real titles, and
 // clicking one starts the game.
 await page.waitForSelector('.startup .startup-choice', { timeout: 20000 });
-// The scenarios and saves, not the "Add a scenario…" button beside them.
 const startupChoices = await page.evaluate(() =>
   // The official scenarios: the badged cards, by title.
   [...document.querySelectorAll('.startup-card:has(.startup-badge.official) strong')]
     .map((e) => e.textContent));
+// "Add a scenario…" is gone until the scenario editor lands.
 const startupCanAdd = await page.evaluate(() => document.querySelector('.startup .startup-add') !== null);
 await page.screenshot({ path: `${SHOTS}/00-startup.png` });
 const valley = page.locator('.startup .startup-choice', { hasText: 'Valley of Dying Things' });
@@ -2513,7 +2513,7 @@ await page.waitForSelector('.startup .startup-choice', { timeout: 20000 });
 const resumeOffered = await page.evaluate(() =>
   [...document.querySelectorAll('.startup .startup-choice strong')].map((e) => e.textContent));
 await page.screenshot({ path: `${SHOTS}/00b-startup-resume.png` });
-await page.locator('.startup .startup-save', { hasText: 'ResumeSlot' }).first().locator('[data-action="resume"]').click();
+await page.locator('.startup .startup-save', { hasText: 'ResumeSlot' }).first().locator('.startup-words strong').click();
 await page.waitForFunction(() => window.__session !== undefined, { timeout: 30000 });
 await page.waitForTimeout(800);
 const resumed = await page.evaluate(() => ({
@@ -3615,7 +3615,7 @@ const ok =
   // The startup screen names all five bundled scenarios, Exile III among
   // them, and gets out of the way.
   startupChoices.length === 5 && startupChoices.includes('Exile III: Ruined World') &&
-  startupCanAdd &&
+  !startupCanAdd &&
   startupChoices.includes('Valley of Dying Things') &&
   startupGone === true &&
   // …and comes back offering the saved game, which resumes into its own world.

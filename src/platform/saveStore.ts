@@ -352,6 +352,37 @@ export async function deleteSnapshot(treeId: string, seq: number): Promise<void>
   });
 }
 
+/**
+ * Save `seq` is the same game as a better kind of save that was just asked
+ * for (`saveScheduler.ts`): it takes that kind and reason, rather than the
+ * tree holding the game twice. A branch save stays a branch by its shape
+ * (`isBranchStart`).
+ */
+export async function promoteSnapshot(treeId: string, seq: number, kind: SnapKind, reason: string): Promise<void> {
+  await transact('readwrite', [SNAPS], async (get) => {
+    const snap = await run(get(SNAPS).get([treeId, seq]) as IDBRequest<SnapInfo | undefined>);
+    if (snap === undefined) return;
+    await run(get(SNAPS).put({ ...snap, kind, reason }));
+  });
+}
+
+/**
+ * Give save `seq` its picture after the fact — for one written without (the
+ * page was going away), once the game it holds is on screen again.
+ */
+export async function setSnapshotThumb(treeId: string, seq: number, thumb: Uint8Array): Promise<void> {
+  await transact('readwrite', [TREES, SNAPS], async (get) => {
+    const snap = await run(get(SNAPS).get([treeId, seq]) as IDBRequest<SnapInfo | undefined>);
+    const tree = await run(get(TREES).get(treeId) as IDBRequest<TreeInfo | undefined>);
+    if (snap === undefined || tree === undefined || snap.thumb) return;
+    const bytes = thumb.length;
+    await run(get(SNAPS).put({ ...snap, thumb: new Uint8Array(thumb), bytes: snap.bytes + bytes }));
+    tree.bytes += bytes;
+    if (tree.head === seq) tree.cover = { ...tree.cover, thumb: new Uint8Array(thumb) };
+    await run(get(TREES).put(tree));
+  });
+}
+
 /** The live game is now at `seq` (a restore): the next save branches from it if it is not a leaf. */
 export async function setHead(treeId: string, seq: number): Promise<void> {
   await transact('readwrite', [TREES, SNAPS], async (get) => {
@@ -381,6 +412,26 @@ export async function listSnaps(treeId: string): Promise<SnapInfo[]> {
   const rows = await transact('readonly', [SNAPS],
     (get) => run(get(SNAPS).getAll(treeRange(treeId)) as IDBRequest<SnapInfo[]>));
   return rows.sort((a, b) => a.seq - b.seq);
+}
+
+/**
+ * The save played last, by the clock: the greatest `savedAt` (ties to the
+ * later seq). Not the head — after going back to an old save and not moving,
+ * the head is that old save — and not the latest in game time, which a branch
+ * started from an early save is behind. Null for a tree with no saves.
+ */
+export async function newestSnapshot(treeId: string): Promise<number | null> {
+  let best: SnapInfo | null = null;
+  for (const s of await listSnaps(treeId)) {
+    if (best === null || s.savedAt > best.savedAt || (s.savedAt === best.savedAt && s.seq > best.seq)) best = s;
+  }
+  return best?.seq ?? null;
+}
+
+/** One save's row (no `.exg`), or null. */
+export async function getSnapInfo(treeId: string, seq: number): Promise<SnapInfo | null> {
+  return await transact('readonly', [SNAPS],
+    (get) => run(get(SNAPS).get([treeId, seq]) as IDBRequest<SnapInfo | undefined>)) ?? null;
 }
 
 export async function getSnapshot(treeId: string, seq: number): Promise<Uint8Array | null> {
