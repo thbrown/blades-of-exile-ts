@@ -17,7 +17,7 @@ Also some utility pages to help me dev:
 
 ## A Letter from a Human
 
-Dear fellow human,
+Dear Fellow Human,
 
 I regret to inform you that, other than the top portion of this README, nearly this whole project was written by AI. And a particularly jargony verbose AI at that. So probably don't waste your time reading it. However, this repo does, in fact, contain a working typescript port of Spiderweb Software's "Blades of Exile".
 
@@ -25,7 +25,7 @@ I started this project because I really love Exile III. If you're reading this, 
 
 Of course there has been Blades of Exile, which [was open sourced a whole ago](https://www.spiderwebsoftware.com/blades/opensource.html) (now it lives at https://codeberg.org/OpenBoE/oboe). I was pleased to find an [itch.io](https://nqn.itch.io/blades-of-exile) version, but I encountered a few bugs after playing through it for a bit and I really just want to play Exile III again. 
 
-So, when AI actually got good for coding (super early 2026) I decided I was going to try to get all of the open Blades of Exile repo to compile to web assembly (WASM), which, if you don't know, is a way to get programs written in languages like C++ to run in the browser. The plan was to then see if there was a way I could scenario-ify Exile III given the assets and old 16-bit binary. The WASM bit worked better than I thought it would, but that's not to say it worked well. [Repo](https://github.com/thbrown/exile-wasm) [Play](https://thbrown.github.io/exile-wasm/). On top off all that, I know precious little about C++ build systems so was mostly flying blind. Also, it seems, [I wasn't the only one with this idea](https://spiderwebforums.ipbhost.com/topic/34030-oboe-playable-in-the-browser-via-enscriptenwasm/) [Repo](https://github.com/mtstanfield/blades-of-exile-web) [Play](https://mtstanfield.github.io/blades-of-exile-web/). 
+So, when AI actually got good for coding (super early 2026) I decided I was going to try to get all of the open Blades of Exile repo to compile to web assembly (WASM), which, if you don't know, is a way to get programs written in languages like C++ to run in the browser. The plan was to then see if there was a way I could scenario-ify Exile III given the assets and old 16-bit binary. The WASM bit worked better than I thought it would, but that's not to say it worked well. [Repo](https://github.com/thbrown/exile-wasm) [Play](https://thbrown.github.io/exile-wasm/). Also, it seems, [I wasn't the only one with this idea](https://spiderwebforums.ipbhost.com/topic/34030-oboe-playable-in-the-browser-via-enscriptenwasm/) [Repo](https://github.com/mtstanfield/blades-of-exile-web) [Play](https://mtstanfield.github.io/blades-of-exile-web/). 
 
 I had the same problem with the corners!
 
@@ -33,7 +33,7 @@ I had the same problem with the corners!
 
 Both of these implementations are way too buggy to really enjoy.
 
-So, I decided not to pursue the Exile III scenarioification. On the other hand, I do know a fair bit about FE web dev...
+On top off all that, I know precious little about C++ build systems so was mostly flying blind. So, I decided not to pursue the Exile III scenarioification. On the other hand, I do know a fair bit about FE web dev...
 
 Then it occurred to me. WASM is such a 2024 way of getting old programs running in a web browser. These days we just dispatch 100 sub-agents to port C++ to javascript and *POOF* there is Exile III like it was in the olden days.
 
@@ -48,8 +48,6 @@ Now, I have only played a very small part of a few scenarios. So are probably ma
 Right now, I'm trying to get Exile III into a BOE scenario. You can see it in the list of scenarios! You can even start playing it! But it doesn't work very well yet. Is it possible to get the whole thing working? Idk, but it's looking increasingly probable and if there was ever a time that this feat was do-able since this game originally came out, it's now. So standby.
 
 I might attempt to port the editor at some point and host some nice cloud bucket for actively sharing/rating new scenarios, but no promises here. It's less likely I will scenario-ify Exile I and Exile II, just because I never played them when I was younger so the nostalgia batteries that are powering this Exile III porting adventure won't work there.
-
-With all that said, please enjoy this work as you will.
 
 Sincerely,
 
@@ -117,9 +115,6 @@ npm install
 npm run dev          # http://localhost:5199
 npx vitest run       # the tests, headless
 ```
-
-`CLAUDE.md` lists every check, and `PROGRESS.md` and `PLAN.md` hold the state
-of the project and its plan.
 
 ## Where it comes from
 
@@ -200,4 +195,3 @@ something that ties you to the scenario. For example:
 I'll attempt to decide in good faith, and may decline a request I can't 
 connect to the scenario's author. That applies especially to a single request 
 covering many scenarios by different authors.
-
