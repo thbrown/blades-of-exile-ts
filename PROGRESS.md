@@ -16353,4 +16353,22 @@ game's saves were first called a *series*; the same day they were renamed a
   `damage.test.ts` and `e3convert.test.ts` (swamps); `verify-saves.mjs` (six
   immediate reloads, an idle reload adds nothing, the card's icons, the tree
   at 390×844 walked by its buttons).
+- **Opening a save flashed the fresh game** for 15–35 ms: the page starts a
+  new game, then awaits IndexedDB for the save, and any redraw in between
+  (a resize, a sheet arriving) painted the new game's opening screen under the
+  spinner. `redraw` is held (`holdFrames`) until the save is applied; the
+  adopted save's picture is taken after that first real draw. Pinned in
+  `verify-saves.mjs` by fingerprinting every canvas frame while a save opens
+  (fails on the commit before: one stray frame in three of three runs).
+- **Every save is logged to the console** (`SchedulerDeps.log`): `[save] #57
+  auto (Tick) at game time 1234 · waited 12ms for a savable moment ·
+  serialise 2.7ms · gzip 8ms · picture 8ms · write 1ms · total 24ms`, with
+  `queued …` when it waited behind another write and `evicted …` when the cap
+  dropped an old autosave; also lines for a request folded into one not yet
+  captured, a save skipped as identical, a promotion, a wait for a savable
+  moment, and a capture parked as the page left. A 30-step walk at 20–80 ms a
+  key logs 30 saves of 23–125 ms each; the picture (8–30 ms) runs alongside
+  the gzip and holds nothing up. **Steps missing from the tree are the cap**:
+  past 50 autosaves each new one evicts an older one (weighted to the old),
+  so a long walk's early steps thin out by design.
 

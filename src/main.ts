@@ -836,7 +836,16 @@ async function main(): Promise<void> {
     gameScreen.h = h;
     fitDesktop();
   };
+  /**
+   * Opening a saved game starts a new one first (`load_party` over a fresh
+   * universe, below) and only then reads the save out of IndexedDB. Anything
+   * drawn in between — a resize, a sheet arriving — would flash the new
+   * game's opening screen under the spinner, so nothing is drawn until the
+   * save is in place.
+   */
+  let holdFrames = openTarget !== null || pendingE3 !== null;
   const redraw = (): void => {
+    if (holdFrames) return;
     syncCompact();
     syncAim();
     // The desktop around the game screen gets the same background pattern.
@@ -1732,6 +1741,8 @@ async function main(): Promise<void> {
     unpark: () => {
       try { window.localStorage.removeItem(UNSAVED_KEY); } catch { /* nothing kept */ }
     },
+    // Every save, and every one not written, with where the time went.
+    log: (line) => { console.log(line); },
     failed: (err) => {
       // Once, not every tick: a full disk would otherwise fill the log.
       if (autosaveFailed) return;
@@ -3652,6 +3663,7 @@ async function main(): Promise<void> {
   // load) is applied now that the world it belongs to is in place. It runs over
   // the new game `startNewGame` just began, which is exactly what
   // `load_party` does to the C++'s freshly-constructed universe.
+  let needsThumb: { treeId: string; seq: number } | null = null;
   if (openTarget !== null) {
     try {
       const game = await getTree(openTarget.treeId);
@@ -3670,11 +3682,8 @@ async function main(): Promise<void> {
       resumeAfterLoad();
       await markLoaded(game.id, at);
       // A move picked back up was written with no picture (the page was
-      // going); now that it is on screen, take one.
-      if (adopted !== null && at === adopted) {
-        void captureSaveThumb(canvas).then((thumb) => thumb === null ? undefined : setSnapshotThumb(game.id, adopted, thumb))
-          .catch(() => undefined);
-      }
+      // going); it gets one once it is on screen, below.
+      if (adopted !== null && at === adopted) needsThumb = { treeId: game.id, seq: adopted };
       if (!resuming) univ.addStringToBuf(`Game loaded: ${game.name}.`);
     } catch (err) {
       univ.addStringToBuf(`${resuming ? "Couldn't pick the game back up" : 'Load failed'}: ${String(err)}`);
@@ -3684,10 +3693,16 @@ async function main(): Promise<void> {
   // A new game is saved as soon as it can be — after whatever the scenario
   // opens with — so it is on the main menu from the start: its tree's root.
   if (univ.treeId === null && autosaving()) scheduler.request('Start', 'milestone');
+  holdFrames = false;
   hideLoadingUi();
   refitDesktop();
   setStatus();
   redraw();
+  if (needsThumb !== null) {
+    const { treeId, seq } = needsThumb;
+    void captureSaveThumb(canvas).then((thumb) => thumb === null ? undefined : setSnapshotThumb(treeId, seq, thumb))
+      .catch(() => undefined);
+  }
   // An installed scenario's first fresh start leaves behind a picture of where
   // it begins, for the startup screen. Taken now, before anything the
   // scenario opens with can put a dialog over it.

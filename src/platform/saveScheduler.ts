@@ -76,6 +76,11 @@ export interface SchedulerDeps {
   park?(unsaved: Unsaved): void;
   /** What was parked has been written after all. */
   unpark?(): void;
+  /**
+   * One line per save — what it was and where its time went — and per save
+   * that wasn't written and why. The host sends it to the console.
+   */
+  log?(line: string): void;
 }
 
 /** A capture parked by `flush`. */
@@ -121,12 +126,25 @@ interface Last {
   landed: boolean;
 }
 
+/** Where one save's time went, in ms (`performance.now()`), for the log. */
+interface Timing {
+  /** When the save was asked for (the move ended), if it was a request. */
+  asked?: number;
+  /** When the game was serialised. */
+  captured: number;
+  /** How long serialising took (the main-thread part). */
+  captureMs: number;
+  /** When the picture was ready, once it is. */
+  thumbAt?: number;
+}
+
 /** One queued piece of work: a capture to write, or a save already written to promote. */
 interface Job {
   kind: SnapKind;
   reason: string;
   /** Absent for a promotion. */
   cap?: Capture;
+  time?: Timing;
   rec: Last;
   /** gzip on the main thread and skip the picture: the page is going away. */
   sync: boolean;
@@ -134,8 +152,11 @@ interface Job {
   fail(err: unknown): void;
 }
 
+const now = (): number => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+const ms = (n: number): string => `${n.toFixed(n < 10 ? 1 : 0)}ms`;
+
 export class SaveScheduler {
-  private pending: { kind: SnapKind; reason: string } | null = null;
+  private pending: { kind: SnapKind; reason: string; asked: number } | null = null;
   private armed = false;
   private readonly queue: Job[] = [];
   private draining: Promise<void> | null = null;
@@ -147,8 +168,15 @@ export class SaveScheduler {
 
   /** A save is wanted (from `autosave.ts`). Cheap: just a note, and an idle callback. */
   request(reason: string, kind: SnapKind): void {
-    if (this.pending === null || KIND_RANK[kind] > KIND_RANK[this.pending.kind]) {
-      this.pending = { kind, reason };
+    if (this.pending === null) {
+      this.pending = { kind, reason, asked: now() };
+    } else {
+      // Two requests with no capture between them are one save: the game
+      // hasn't been serialised since the first, so there is only one state.
+      const into = this.pending;
+      if (KIND_RANK[kind] > KIND_RANK[into.kind]) this.pending = { kind, reason, asked: into.asked };
+      this.deps.log?.(`[save] ${reason} folded into ${into.reason}: no capture since it was asked for`
+        + ` ${ms(now() - into.asked)} ago`);
     }
     this.arm();
   }
@@ -162,7 +190,7 @@ export class SaveScheduler {
     if (this.pending === null || !this.deps.ready()) return;
     const job = this.pending;
     this.pending = null;
-    void this.enqueue(job.kind, job.reason, false, false)
+    void this.enqueue(job.kind, job.reason, false, false, job.asked)
       .catch((err: unknown) => { this.deps.failed?.(err); });
   }
 
@@ -172,8 +200,10 @@ export class SaveScheduler {
     const go = (): void => {
       this.armed = false;
       if (this.pending === null) return;
-      if (!this.deps.ready()) this.arm(RETRY_MS);
-      else this.captureIfPending();
+      if (!this.deps.ready()) {
+        this.deps.log?.(`[save] ${this.pending.reason} waiting: not a moment the game can be saved`);
+        this.arm(RETRY_MS);
+      } else this.captureIfPending();
     };
     if (delay > 0) setTimeout(() => { (this.deps.idle ?? defaultIdle)(go); }, delay);
     else (this.deps.idle ?? defaultIdle)(go);
@@ -197,8 +227,9 @@ export class SaveScheduler {
    */
   async saveIfChanged(reason: string): Promise<number | null> {
     const kind = this.pending?.kind ?? 'auto';
+    const asked = this.pending?.asked;
     this.pending = null;
-    const seq = await this.enqueue(kind, reason, false, false);
+    const seq = await this.enqueue(kind, reason, false, false, asked);
     // Whatever was queued ahead of it has landed too.
     await this.drained();
     return seq;
@@ -214,15 +245,18 @@ export class SaveScheduler {
     for (const job of this.queue) job.sync = true;
     if (this.deps.ready()) {
       const kind = this.pending?.kind ?? 'auto';
+      const asked = this.pending?.asked;
       this.pending = null;
-      void this.enqueue(kind, reason, true, false)
+      void this.enqueue(kind, reason, true, false, asked)
         .catch((err: unknown) => { this.deps.failed?.(err); });
     }
     const rec = this.last;
     const treeId = rec?.treeId ?? this.deps.treeId();
     if (rec === null || rec.landed || treeId === null || this.deps.park === undefined) return;
+    const t0 = now();
     this.deps.park({ treeId, data: gzipSync(rec.raw, { level: 3 }), kind: rec.kind, reason: rec.reason });
     this.parked = rec;
+    this.deps.log?.(`[save] page leaving before the last save was written: parked it (${ms(now() - t0)})`);
   }
 
   /** Resolves when nothing is queued or in flight — for tests and page unload. */
@@ -249,20 +283,29 @@ export class SaveScheduler {
    * otherwise dropped — resolving with null, or with the last save's seq
    * when `sameSeq` asks for it.
    */
-  private enqueue(kind: SnapKind, reason: string, sync: boolean, sameSeq: boolean): Promise<number | null> {
+  private enqueue(
+    kind: SnapKind, reason: string, sync: boolean, sameSeq: boolean, asked?: number,
+  ): Promise<number | null> {
+    const captured = now();
     const cap = this.deps.capture();
+    const captureMs = now() - captured;
     if (cap === null) return Promise.resolve(null);
     const treeId = this.deps.treeId();
     const last = this.last;
     if (last !== null && (last.treeId === null || last.treeId === treeId) && sameTarContents(last.raw, cap.raw)) {
-      if (KIND_RANK[kind] <= KIND_RANK[last.kind]) return sameSeq ? last.seq : Promise.resolve(null);
+      if (KIND_RANK[kind] <= KIND_RANK[last.kind]) {
+        this.deps.log?.(`[save] ${reason} skipped: the same game as the last save (${last.kind}), serialised in ${ms(captureMs)}`);
+        return sameSeq ? last.seq : Promise.resolve(null);
+      }
       last.kind = kind;
       last.reason = reason;
       return this.push({ kind, reason, rec: last, sync });
     }
+    const time: Timing = { captured, captureMs, ...(asked !== undefined ? { asked } : {}) };
+    void cap.thumb.then(() => { time.thumbAt = now(); }, () => undefined);
     const rec: Last = { treeId, raw: cap.raw, kind, reason, seq: Promise.resolve(null), landed: false };
     this.last = rec;
-    const written = this.push({ kind, reason, cap, rec, sync });
+    const written = this.push({ kind, reason, cap, time, rec, sync });
     rec.seq = written.catch(() => null);
     return written;
   }
@@ -279,7 +322,7 @@ export class SaveScheduler {
     this.draining = (async () => {
       for (let job = this.queue.shift(); job !== undefined; job = this.queue.shift()) {
         try {
-          job.done(job.cap === undefined ? await this.promote(job) : await this.write(job, job.cap));
+          job.done(job.cap === undefined ? await this.promote(job) : await this.write(job, job.cap, now()));
         } catch (err) {
           job.fail(err);
         }
@@ -290,11 +333,19 @@ export class SaveScheduler {
     });
   }
 
-  private async write(job: Job, cap: Capture): Promise<number> {
+  private async write(job: Job, cap: Capture, started: number): Promise<number> {
     const { kind, reason, rec } = job;
+    let gzipMs = 0;
+    const gzip = async (): Promise<Uint8Array> => {
+      const t = now();
+      const out = job.sync ? gzipSync(cap.raw, { level: 3 }) : await (this.deps.compress ?? compressAsync)(cap.raw);
+      gzipMs = now() - t;
+      return out;
+    };
     const [data, thumb] = job.sync
-      ? [gzipSync(cap.raw, { level: 3 }), null]
-      : await Promise.all([(this.deps.compress ?? compressAsync)(cap.raw), cap.thumb]);
+      ? [await gzip(), null]
+      : await Promise.all([gzip(), cap.thumb]);
+    const stored = now();
     const input: SnapInput = { data, preview: cap.preview, place: cap.place, thumb, kind, reason };
 
     let treeId = this.deps.treeId();
@@ -312,6 +363,23 @@ export class SaveScheduler {
     }
     rec.treeId = treeId;
     this.landed(rec);
+    const done = now();
+    const t = job.time;
+    if (t !== undefined && this.deps.log !== undefined) {
+      const parts = [
+        `#${seq} ${kind} (${reason}) at game time ${cap.preview.age}`,
+        ...(t.asked !== undefined ? [`waited ${ms(t.captured - t.asked)} for a savable moment`] : []),
+        `serialise ${ms(t.captureMs)}`,
+        ...(started - (t.captured + t.captureMs) > 1
+          ? [`queued ${ms(started - (t.captured + t.captureMs))} behind earlier saves`] : []),
+        `gzip ${ms(gzipMs)}${job.sync ? ' (sync)' : ''}`,
+        job.sync ? 'no picture' : `picture ${t.thumbAt === undefined ? '?' : ms(t.thumbAt - t.captured)}`,
+        `write ${ms(done - stored)}`,
+        `total ${ms(done - (t.asked ?? t.captured))}`,
+        ...(evicted > 0 ? [`evicted ${evicted} old autosave${evicted === 1 ? '' : 's'} (over the cap)`] : []),
+      ];
+      this.deps.log(`[save] ${parts.join(' · ')}`);
+    }
     this.deps.saved?.({ treeId, seq, kind, reason, evicted });
     return seq;
   }
@@ -322,6 +390,7 @@ export class SaveScheduler {
     const treeId = job.rec.treeId ?? this.deps.treeId();
     if (seq === null || treeId === null) return null;
     await promoteSnapshot(treeId, seq, job.kind, job.reason);
+    this.deps.log?.(`[save] #${seq} became a ${job.kind} (${job.reason}): the same game, so no second save`);
     this.deps.saved?.({ treeId, seq, kind: job.kind, reason: job.reason, evicted: 0, promoted: true });
     return seq;
   }

@@ -28,6 +28,25 @@ await page.addInitScript(() => {
       ShowInstantHelp: false, DisplayMode: 5, UIScale: 2,
     }));
   } catch { /* the default will do */ }
+  // While `verify.frames` is set, a fingerprint of every new canvas frame, so
+  // a check can see what was shown while a saved game opened.
+  if (sessionStorage.getItem('verify.frames') === null) return;
+  window.__frames = [];
+  const tick = () => {
+    const c = document.getElementById('canvas');
+    if (c && c.width > 0) {
+      const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      let h = 0;
+      let lit = 0;
+      for (let i = 0; i < d.length; i += 4 * 97) {
+        h = (h * 31 + d[i] + d[i + 1] * 7 + d[i + 2] * 13) >>> 0;
+        if (d[i] + d[i + 1] + d[i + 2] > 30) lit++;
+      }
+      if (window.__frames.at(-1)?.h !== h) window.__frames.push({ h, lit });
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
 });
 
 const failures = [];
@@ -272,6 +291,17 @@ await page.reload();
 await inGame();
 await page.waitForTimeout(800);
 check('a reload that changed nothing adds no save', await countNow() === beforeIdle, { beforeIdle });
+// Opening a save starts a fresh game first; none of it may reach the screen.
+await page.evaluate(() => sessionStorage.setItem('verify.frames', '1'));
+await page.reload();
+await inGame();
+await page.waitForTimeout(1500);
+const opened = await page.evaluate(() => {
+  sessionStorage.removeItem('verify.frames');
+  const shown = window.__frames.filter((f) => f.lit > 50);
+  return { shown: shown.length, last: window.__frames.length, other: shown.filter((f) => f.h !== window.__frames.at(-1).h).length };
+});
+check('opening a saved game shows nothing before the save itself', opened.other === 0 && opened.shown >= 1, opened);
 
 // ---- the tree on a phone: the whole screen, and buttons to walk it
 await page.setViewportSize({ width: 390, height: 844 });
