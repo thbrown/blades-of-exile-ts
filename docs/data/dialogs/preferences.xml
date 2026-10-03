@@ -52,7 +52,7 @@
 	<text name='misc-head' size='large' relative='pos-in pos' anchor='targeting-head' top='60' left='0' width='182' height='17'>Miscellaneous:</text>
 	<led name='nosound' relative='pos-in pos' anchor='misc-head' top='6' left='15'>No Sounds</led>
 	<led name='fancypicker' relative='pos-in pos' rel-anchor='prev' top='10' left='0'>Use in-game save file browser</led>
-	<led name='autosave-toggle' relative='pos-in pos' rel-anchor='prev' top='10' left='0'>Autosave</led>
+	<text name='autosave-toggle' relative='pos-in pos' rel-anchor='prev' top='10' left='0' width='118' height='12'>Autosave: every move</text>
 	<button name='autosave-details' type='tiny' text-size='10' relative='pos pos-in' rel-anchor='prev' top='0' left='4'>
 		Details
 	</button>
