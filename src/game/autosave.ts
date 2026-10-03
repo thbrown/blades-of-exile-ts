@@ -43,15 +43,17 @@ export const AUTOSAVE_TRIGGER_DEFAULTS: Record<AutosaveReason, boolean> = {
 /** What the sink is told: a milestone, or the periodic tick. */
 export type AutosaveWhy = AutosaveReason | 'Tick';
 
+/**
+ * There is no master switch: OBoE's `Autosave` preference is gone, and a
+ * stored value of it is ignored. The game always saves itself; only which
+ * moments are named milestones is a choice.
+ */
 export interface AutosavePrefs {
-  /** The master switch, `Autosave`. */
-  enabled: boolean;
   /** Per-reason overrides; anything absent falls back to the default above. */
   triggers: Partial<Record<AutosaveReason, boolean>>;
 }
 
 export const DEFAULT_AUTOSAVE_PREFS: AutosavePrefs = {
-  enabled: true,
   triggers: {},
 };
 
@@ -76,9 +78,8 @@ export function autosaveTriggerOn(reason: AutosaveReason): boolean {
   return prefs.triggers[reason] ?? AUTOSAVE_TRIGGER_DEFAULTS[reason];
 }
 
-/** `try_auto_save` — the master switch, then the trigger, then the host. */
+/** `try_auto_save` — the trigger, then the host (there is no master switch). */
 export function tryAutoSave(reason: AutosaveReason): void {
-  if (!prefs.enabled) return;
   if (!autosaveTriggerOn(reason)) return;
   sink?.(reason);
 }
@@ -90,6 +91,5 @@ export function tryAutoSave(reason: AutosaveReason): void {
  * scheduler only captures between actions.)
  */
 export function tickAutoSave(): void {
-  if (!prefs.enabled) return;
   sink?.('Tick');
 }

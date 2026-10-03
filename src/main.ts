@@ -925,11 +925,8 @@ async function main(): Promise<void> {
     setBugFixes(getBoolPref('FixBugs', false));
     const reasons = Object.keys(AUTOSAVE_TRIGGER_DEFAULTS);
     setAutosavePrefs(readAutosavePrefs(reasons, AUTOSAVE_TRIGGER_DEFAULTS));
-    // The master switch stops the requests before they reach the scheduler,
-    // so nothing else would ever say it is off.
-    if (!getAutosavePrefs().enabled) {
-      console.log('[save] not autosaving: Autosave is off in File › Preferences (only Ctrl+S saves)');
-    }
+    // OBoE's master switch is gone; a stored `false` would only confuse.
+    clearPref('Autosave');
   };
   applyPrefs();
 
@@ -960,7 +957,6 @@ async function main(): Promise<void> {
       setPref('TargetLock', next.targetLock);
       setPref('ShowInstantHelp', next.showInstantHelp);
       setPref('FixBugs', next.fixBugs);
-      setPref('Autosave', next.autosave.enabled);
       for (const [reason, on] of Object.entries(next.autosave.triggers)) {
         setPref(`Autosave_${reason}`, on);
       }
@@ -1756,11 +1752,13 @@ async function main(): Promise<void> {
       redraw();
     },
   });
-  // A direct `?scenario=` link starts afresh each load, so it only autosaves
-  // once the player has made a save of their own (as the C++ insists on).
-  const fromMainMenu = new URLSearchParams(window.location.search).has('play');
-  /** Whether this game is written into a tree as it goes. */
-  const autosaving = (): boolean => saveStoreAvailable() && (univ.treeId !== null || fromMainMenu);
+  /**
+   * Whether this game is written into a tree as it goes: always, where there
+   * is somewhere to keep it. A direct `?scenario=` link used to wait for a
+   * save of the player's own first, as OBoE insists; it starts afresh each
+   * load, so each load of one is now a game (a card) of its own.
+   */
+  const autosaving = (): boolean => saveStoreAvailable();
   /** The last thing said about why the game isn't autosaving, so it is said once. */
   let offNoted: string | null = null;
   const noteAutosaveOff = (why: string | null): void => {
@@ -1769,12 +1767,7 @@ async function main(): Promise<void> {
     console.log(why === null ? '[save] autosaving: every move is saved' : `[save] not autosaving: ${why}`);
   };
   setAutosaveSink((why) => {
-    if (!saveStoreAvailable()) { noteAutosaveOff('this browser has no IndexedDB to keep saves in'); return; }
-    if (!autosaving()) {
-      noteAutosaveOff('this game was opened by a ?scenario= link and hasn\'t been saved yet. '
-        + 'Save it once (Ctrl+S) and it autosaves from then on — or start it from the main menu');
-      return;
-    }
+    if (!autosaving()) { noteAutosaveOff('this browser has no IndexedDB to keep saves in'); return; }
     noteAutosaveOff(null);
     scheduler.request(why, why === 'Tick' ? 'auto' : 'milestone');
   });

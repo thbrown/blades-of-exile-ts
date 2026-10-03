@@ -16251,7 +16251,7 @@ game's saves were first called a *series*; the same day they were renamed a
   six milestone reasons); the write is an idle callback, only at a savable
   moment, coalesced, skipping a byte-identical game, and times its own
   main-thread cost (p95 over 12 ms doubles the tick). A direct `?scenario=`
-  link only autosaves once the player has saved, as OBoE insisted.
+  link only autosaves once the player has saved, as OBoE insisted (no longer: 2026-10-03, below).
 - **UI.** Startup: one card per series with Older saves… / Export / Rename /
   Delete and Import; the **restore tree** (`platform/saveTree.ts`, layout in the
   pure `saveTreeLayout.ts`) draws nodes by game time (relaxed to a minimum
@@ -16378,4 +16378,12 @@ game's saves were first called a *series*; the same day they were renamed a
   these dropped every request without a word, so the console showed only
   manual saves. `await __saveReport()` prints the tree by role and by
   kind/reason, and every gap of more than one turn on the line being played.
+- **Autosave can't be turned off, and a `?scenario=` link autosaves too**
+  (the play-tester had a stored `Autosave = false` from an earlier version,
+  which silently stopped every save). OBoE's master switch is gone from
+  Preferences (the row is now the label "Autosave: every move" beside
+  Details, which still chooses the milestones), `AutosavePrefs.enabled` is
+  gone, and a stored `Autosave` is cleared on load. A direct link no longer
+  waits for a first manual save: it starts a fresh game each load, so each
+  load of one is a game of its own on the main menu.
 

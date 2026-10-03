@@ -82,10 +82,11 @@ export function clearPref(name: string): void {
  */
 export function readAutosavePrefs(
   reasons: readonly string[], defaults: Record<string, boolean>,
-): { enabled: boolean; triggers: Record<string, boolean> } {
+): { triggers: Record<string, boolean> } {
   const triggers: Record<string, boolean> = {};
   for (const r of reasons) triggers[r] = getBoolPref(`Autosave_${r}`, defaults[r] ?? true);
-  return { enabled: getBoolPref('Autosave', true), triggers };
+  // `Autosave`, the master switch, is gone: the game always saves itself.
+  return { triggers };
 }
 
 /** Tests only: drop the in-memory copy so the next read goes back to storage. */

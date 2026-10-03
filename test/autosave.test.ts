@@ -49,17 +49,11 @@ describe('try_auto_save', () => {
   });
 
   it('lets a per-reason preference override the default either way', () => {
-    setAutosavePrefs({ enabled: true, triggers: { Eat: true, EnterTown: false } });
+    setAutosavePrefs({ triggers: { Eat: true, EnterTown: false } });
     expect(autosaveTriggerOn('Eat')).toBe(true);
     expect(autosaveTriggerOn('EnterTown')).toBe(false);
   });
 
-  it('the master switch silences all of them', () => {
-    const seen = watch();
-    setAutosavePrefs({ enabled: false, triggers: {} });
-    tryAutoSave('EnterTown');
-    expect(seen).toEqual([]);
-  });
 
   it('does nothing at all with no host installed', () => {
     expect(() => tryAutoSave('EnterTown')).not.toThrow();
@@ -100,12 +94,10 @@ describe('the trigger sites', () => {
 });
 
 describe('the tick', () => {
-  it('fires on every move, and the master switch silences it', () => {
+  it('fires on every move, whatever the milestone triggers say: there is no master switch', () => {
     const seen = watch();
-    setAutosavePrefs(DEFAULT_AUTOSAVE_PREFS);
+    setAutosavePrefs({ triggers: { EnterTown: false, ExitTown: false, RestComplete: false } });
     for (let i = 0; i < 3; i++) tickAutoSave();
-    setAutosavePrefs({ ...DEFAULT_AUTOSAVE_PREFS, enabled: false });
-    for (let i = 0; i < 20; i++) tickAutoSave();
     expect(seen).toEqual(['Tick', 'Tick', 'Tick']);
   });
 

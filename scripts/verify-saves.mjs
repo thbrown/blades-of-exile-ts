@@ -62,7 +62,7 @@ const snapsOf = () => page.evaluate(async () => {
   }));
 });
 
-// ---- play: a direct link autosaves only once the player has saved
+// ---- play: a direct link autosaves from the start, like a game from the main menu
 await page.goto(`${BASE}?scenario=valleydy&pace=1`);
 await inGame();
 await page.waitForTimeout(800);
@@ -70,7 +70,7 @@ while (await page.evaluate(() => !!window.__dialogs?.active)) { await page.keybo
 await page.keyboard.press('ArrowDown');
 await page.waitForTimeout(600);
 await page.evaluate(() => window.__scheduler.settled());
-check('a direct link makes no tree by itself', await page.evaluate(() => window.__univ.treeId === null));
+check('a direct link is a game with a tree of its own at once', await page.evaluate(() => window.__univ.treeId !== null));
 
 await page.evaluate(() => window.__scheduler.saveNow('Manual', 'manual'));
 check('Save makes the game a tree', await page.evaluate(() => window.__univ.treeId !== null));
@@ -102,7 +102,7 @@ await page.evaluate(() => window.__scheduler.settled());
 let snaps = await snapsOf();
 check('moving autosaves into the same tree', snaps.length >= 30, snaps.length);
 
-check('the first is the manual root', snaps[0].kind === 'manual' && snaps[0].parent === null);
+check('the first is the Start milestone, the root', snaps[0].kind === 'milestone' && snaps[0].parent === null);
 check('each is a child of the one before', snaps.every((s, i) => i === 0 || s.parent === snaps[i - 1].seq));
 check('each has a picture and a place', snaps.every((s) => s.thumb && s.place !== ''), snaps.map((s) => s.place));
 

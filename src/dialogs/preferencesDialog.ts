@@ -159,7 +159,6 @@ export async function preferencesDialog(
   dlg.setLed(SPEED_LEDS[prefs.gameSpeed] ?? 'med', 'red');
   dlg.setLed('target-lock', on(prefs.targetLock));
   dlg.setLed('nosound', on(!prefs.playSounds));
-  dlg.setLed('autosave-toggle', on(prefs.autosave.enabled));
   dlg.setLed('easier', on(prefs.easyMode));
   dlg.setLed('lesswm', on(prefs.lessWm));
   dlg.setLed('nohelp', on(!prefs.showInstantHelp));
@@ -186,7 +185,7 @@ export async function preferencesDialog(
     gameSpeed: Math.max(0, SPEED_LEDS.findIndex(lit)),
     targetLock: lit('target-lock'),
     showInstantHelp: !lit('nohelp'),
-    autosave: { ...autosave, enabled: lit('autosave-toggle') },
+    autosave,
     easyMode: lit('easier'),
     lessWm: lit('lesswm'),
     displayMode: compact ? prefs.displayMode : Math.max(0, DISPLAY_LEDS.findIndex(lit)),
@@ -208,5 +207,5 @@ async function autosaveDialog(
   if ((await host.nest(dlg)) !== 'okay') return null;
   const triggers: Partial<Record<AutosaveReason, boolean>> = {};
   for (const t of TRIGGERS) triggers[t] = dlg.getLed(t) !== 'off';
-  return { enabled: prefs.enabled, triggers };
+  return { triggers };
 }

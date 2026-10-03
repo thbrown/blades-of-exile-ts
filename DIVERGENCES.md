@@ -1043,7 +1043,9 @@ What this port does instead (`platform/saveStore.ts`, `saveRetention.ts`,
   it to the tree. A game's card on the main menu opens the save played last by
   the clock, which after an unplayed restore is not the head.
 - **`Autosave_Max` is gone** (nothing rotates), and so are `Autosave_Every` and
-  `Autosave_BudgetMb`; stored values of them are ignored.
+  `Autosave_BudgetMb`; stored values of them are ignored. So is the master
+  switch, `Autosave` (2026-10-03): the game always saves itself, and a game
+  opened by a direct `?scenario=` link no longer waits for a manual save first.
 
 Nothing here touches a rule: saving rolls no dice, and the replay corpus is
 unchanged. A player can tell the difference, which is the point.
