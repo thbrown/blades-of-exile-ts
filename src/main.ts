@@ -98,7 +98,7 @@ import {
 import { SaveScheduler } from './platform/saveScheduler';
 import { browseTree, exportTreeZip, importAsTree, placeOf } from './platform/saveActions';
 import {
-  AUTOSAVE_BUDGET_MB_DEFAULT, AUTOSAVE_EVERY_DEFAULT, AUTOSAVE_TRIGGER_DEFAULTS, AutosaveReason, getAutosavePrefs, setAutosavePrefs,
+  AUTOSAVE_TRIGGER_DEFAULTS, AutosaveReason, getAutosavePrefs, setAutosavePrefs,
   setAutosaveSink,
 } from './game/autosave';
 import { MENU_SEPARATOR, MenuItem, installFullScreenButton, installMenuBar, installMenuToggle } from './platform/menu';
@@ -485,7 +485,7 @@ async function main(): Promise<void> {
     const resumeGame = activeId === undefined ? undefined
       : games.find((game) => game.scenarioId === activeId);
     const saveActions: StartupSaveActions = {
-      browse: (id) => browseTree(id, titleOf(games.find((g) => g.id === id)?.scenarioId ?? '') ?? ''),
+      browse: (id) => browseTree(id, titleOf(games.find((g) => g.id === id)?.scenarioId ?? '') ?? '', true),
       rename: renameTree,
       remove: deleteTree,
       importFile: async () => {
@@ -920,8 +920,7 @@ async function main(): Promise<void> {
     setTargetLockPref(getBoolPref('TargetLock', true));
     setBugFixes(getBoolPref('FixBugs', false));
     const reasons = Object.keys(AUTOSAVE_TRIGGER_DEFAULTS);
-    setAutosavePrefs(readAutosavePrefs(
-      reasons, AUTOSAVE_TRIGGER_DEFAULTS, AUTOSAVE_EVERY_DEFAULT, AUTOSAVE_BUDGET_MB_DEFAULT));
+    setAutosavePrefs(readAutosavePrefs(reasons, AUTOSAVE_TRIGGER_DEFAULTS));
   };
   applyPrefs();
 
@@ -953,8 +952,6 @@ async function main(): Promise<void> {
       setPref('ShowInstantHelp', next.showInstantHelp);
       setPref('FixBugs', next.fixBugs);
       setPref('Autosave', next.autosave.enabled);
-      setPref('Autosave_Every', next.autosave.every);
-      setPref('Autosave_BudgetMb', next.autosave.budgetMb);
       for (const [reason, on] of Object.entries(next.autosave.triggers)) {
         setPref(`Autosave_${reason}`, on);
       }
@@ -1725,13 +1722,11 @@ async function main(): Promise<void> {
       nextTreeName = null;
       return typed ?? `${univ.party.pcs.find((pc) => pc.name !== '')?.name ?? 'Adventurers'}'s party`;
     },
-    budgetBytes: () => getAutosavePrefs().budgetMb * 1024 * 1024,
-    saved: ({ kind, reason, overBudget }) => {
+    saved: ({ kind, reason }) => {
       autosaveFailed = false;
       // The tick is every move; only the named moments say so. The first
       // save, as a game starts, is the tree's root and goes unremarked.
       if (kind === 'milestone' && reason !== 'Start') univ.addStringToBuf(`Autosave: Game saved (${reason}).`);
-      if (overBudget) univ.addStringToBuf("Autosave: this game's saves are over their size limit.");
       redraw();
     },
     failed: (err) => {
@@ -1739,13 +1734,6 @@ async function main(): Promise<void> {
       if (autosaveFailed) return;
       autosaveFailed = true;
       univ.addStringToBuf(`Autosave: Save not completed (${String(err)})`);
-      redraw();
-    },
-    slow: (p95) => {
-      const prefs = getAutosavePrefs();
-      if (prefs.every <= 0 || prefs.every >= 160) return;
-      setAutosavePrefs({ ...prefs, every: prefs.every * 2 });
-      univ.addStringToBuf(`Autosave: saving takes ${p95.toFixed(0)} ms here, so it will save every ${prefs.every * 2} moves.`);
       redraw();
     },
   });
@@ -1975,8 +1963,9 @@ async function main(): Promise<void> {
       }
       if (picked.startsWith('older:')) {
         const id = picked.slice('older:'.length);
-        const seq = await browseTree(id, scen.title);
-        if (seq === null) {
+        // Not the game being played: that one can't be deleted from under itself.
+        const seq = await browseTree(id, scen.title, id !== univ.treeId);
+        if (seq === null || seq === 'deleted') {
           redraw();
           return false;
         }
@@ -2757,6 +2746,8 @@ async function main(): Promise<void> {
       }
     }
     if (midAction()) return;
+    // The last move's end, saved before this one changes it (`saveScheduler.ts`).
+    scheduler.captureIfPending();
     acting = true;
     const done = (): void => {
       acting = false;
@@ -3048,12 +3039,15 @@ async function main(): Promise<void> {
       // With touch controls, a tap anywhere on the party or item panel opens
       // its sheet (`touchSheet`) instead: the panels' own buttons are a few
       // pixels wide at a phone's scale.
-      if (touchControlsOn() && inRect(WIN_RECTS.pcStats, x, y)) {
+      // Only while the pads are actually on screen: touch controls can be on
+      // by default (a touch-only pointer) at a moment the pads are hidden.
+      const magnify = touchControlsOn() && touchPads?.visible() === true;
+      if (magnify && inRect(WIN_RECTS.pcStats, x, y)) {
         sheetOpen = 'party';
         redraw();
         return;
       }
-      if (touchControlsOn() && inRect(WIN_RECTS.inven, x, y)) {
+      if (magnify && inRect(WIN_RECTS.inven, x, y)) {
         sheetOpen = 'inventory';
         redraw();
         return;
@@ -3270,6 +3264,8 @@ async function main(): Promise<void> {
       // start a *new* action. It matters more than it used to: a monster round
       // now takes real time, where before it was over within the keystroke.
       if (midAction()) return;
+      // The last move's end, saved before this key changes it (`saveScheduler.ts`).
+      scheduler.captureIfPending();
       // Enter shoots at the aim cursor's square — the click on it, exactly.
       if (key === 'Enter' && screen.aimAt !== null && aimNow() !== null) {
         void actOn(screen.aimAt);
@@ -3486,6 +3482,8 @@ async function main(): Promise<void> {
         return;
       }
       animLoopRunning = false;
+      // The turn's last animation is over: if the game is at rest, save it now.
+      scheduler.captureIfPending();
       // The queue has drained: hand the view back to whoever owns it.
       recentreOnParty();
     };

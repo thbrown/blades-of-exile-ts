@@ -1447,8 +1447,8 @@ export interface SavePreview {
 
 /**
  * The same preview `readSavePreview` would read back from `saveGame(univ)`, but
- * straight from the universe. The autosave runs on the main thread every few
- * moves and cannot afford to unzip and re-parse what it just wrote.
+ * straight from the universe. The autosave runs on the main thread after every
+ * move and cannot afford to unzip and re-parse what it just wrote.
  */
 export function previewOfUniverse(univ: Universe): SavePreview {
   return {

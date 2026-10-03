@@ -9,10 +9,10 @@
  * and turn off the one that fires every time the party eats. Five default on;
  * **Eat defaults off**, because it happens far more often than the rest.
  *
- * On top of those, a **tick** saves every `Autosave_Every` moves — by default
- * every one, so closing the tab, or going to the main menu, never loses a
- * move. Older saves thin out (`saveRetention.ts`), so the cost is bounded,
- * and a move that changed nothing isn't written at all (`saveScheduler.ts`).
+ * On top of those, a **tick** saves after every move, so closing the tab, or
+ * going to the main menu, never loses one. Each tree keeps a capped pool of
+ * these autosaves (`saveRetention.ts`), so the cost is bounded, and a move
+ * that changed nothing isn't written at all (`saveScheduler.ts`).
  *
  * Like `setPrintResult` and `setLivingSound` this is a module-level hook: the
  * call sites are deep inside `increase_age`, `start_town_mode` and
@@ -40,12 +40,6 @@ export const AUTOSAVE_TRIGGER_DEFAULTS: Record<AutosaveReason, boolean> = {
   Eat: false,
 };
 
-/** A save every this many moves, by default. */
-export const AUTOSAVE_EVERY_DEFAULT = 1;
-
-/** The most one game's saves may take up, in megabytes, by default. */
-export const AUTOSAVE_BUDGET_MB_DEFAULT = 10;
-
 /** What the sink is told: a milestone, or the periodic tick. */
 export type AutosaveWhy = AutosaveReason | 'Tick';
 
@@ -54,17 +48,11 @@ export interface AutosavePrefs {
   enabled: boolean;
   /** Per-reason overrides; anything absent falls back to the default above. */
   triggers: Partial<Record<AutosaveReason, boolean>>;
-  /** The tick: save every this many turns of game time; 0 turns it off. */
-  every: number;
-  /** The most one tree may take up, in MB. */
-  budgetMb: number;
 }
 
 export const DEFAULT_AUTOSAVE_PREFS: AutosavePrefs = {
   enabled: true,
   triggers: {},
-  every: AUTOSAVE_EVERY_DEFAULT,
-  budgetMb: AUTOSAVE_BUDGET_MB_DEFAULT,
 };
 
 let prefs: AutosavePrefs = DEFAULT_AUTOSAVE_PREFS;
@@ -95,16 +83,13 @@ export function tryAutoSave(reason: AutosaveReason): void {
   sink?.(reason);
 }
 
-let movesSinceTick = 0;
-
 /**
  * The periodic save, called once per move — each pass of `increase_age`, which
- * is a step, a spell, a turn spent. (Resting calls it once per hour it passes;
- * the host coalesces those into one write.)
+ * is a step, a spell, a turn spent, in town as well as outdoors. (Resting
+ * calls it once per hour it passes; those fold into one save, because the
+ * scheduler only captures between actions.)
  */
 export function tickAutoSave(): void {
-  if (!prefs.enabled || prefs.every <= 0) return;
-  if (++movesSinceTick < prefs.every) return;
-  movesSinceTick = 0;
+  if (!prefs.enabled) return;
   sink?.('Tick');
 }

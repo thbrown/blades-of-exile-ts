@@ -12,7 +12,7 @@ import { SavePreview, readSavePreview } from '../fileio/saveIo';
 import { ImportedNode, TreeInfo, SnapInfo } from './saveStore';
 import { SnapKind } from './saveRetention';
 
-const KINDS: readonly SnapKind[] = ['auto', 'milestone', 'manual'];
+const KINDS: readonly SnapKind[] = ['auto', 'milestone', 'manual', 'branch'];
 
 interface TreeJson {
   version: 1;

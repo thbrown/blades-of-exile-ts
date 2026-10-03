@@ -8,8 +8,8 @@ import { TOWN_NUM_OUTDOORS } from '../universe/party';
 import { isE3Save } from '../fileio/e3save';
 import { readSavePreview } from '../fileio/saveIo';
 import {
-  SnapInfo, createTree, deleteBranch, downloadFile, getAllSnapshots, getTree, getSnapshot, importTree,
-  listSnaps,
+  SnapInfo, createTree, deleteBranch, deleteSnapshot, deleteTree, downloadFile, getAllSnapshots, getTree,
+  getSnapshot, importTree, listSnaps, maxAutoOf, setMaxAuto,
 } from './saveStore';
 import { isZip, treeFromZip, treeToZip } from './saveZip';
 import { showSaveTree } from './saveTree';
@@ -69,10 +69,14 @@ export async function downloadSnapshot(treeId: string, seq: number): Promise<voi
 
 /**
  * Show a game's tree, to restore from. Resolves with the snapshot the player
- * chose to restore, or null if they closed it. `scenarioTitle` is whatever
- * the caller knows the scenario as.
+ * chose to restore, null if they closed it, or 'deleted' if they deleted the
+ * whole game — which is only offered with `canDeleteGame` (the startup screen,
+ * never the game being played). `scenarioTitle` is whatever the caller knows
+ * the scenario as.
  */
-export async function browseTree(treeId: string, scenarioTitle: string): Promise<number | null> {
+export async function browseTree(
+  treeId: string, scenarioTitle: string, canDeleteGame = false,
+): Promise<number | null | 'deleted'> {
   const [tree, snaps] = await Promise.all([getTree(treeId), listSnaps(treeId)]);
   if (tree === null) return null;
   return new Promise((resolve) => {
@@ -81,12 +85,27 @@ export async function browseTree(treeId: string, scenarioTitle: string): Promise
       scenarioTitle,
       snaps,
       head: tree.head,
+      maxAuto: maxAutoOf(tree),
       placeName: placeOf,
       restore: (seq) => { view.close(); resolve(seq); },
       download: (seq) => { void downloadSnapshot(treeId, seq); },
       exportTree: () => { void exportTreeZip(treeId); },
+      deleteSnapshot: async (seq) => {
+        await deleteSnapshot(treeId, seq);
+        return listSnaps(treeId);
+      },
       deleteBranch: async (seq) => {
         await deleteBranch(treeId, seq);
+        return listSnaps(treeId);
+      },
+      ...(canDeleteGame ? {
+        deleteTree: () => {
+          void deleteTree(treeId).then(() => { view.close(); resolve('deleted'); },
+            (err: unknown) => { window.alert(String(err)); });
+        },
+      } : {}),
+      setMaxAuto: async (max) => {
+        await setMaxAuto(treeId, max);
         return listSnaps(treeId);
       },
       close: () => { view.close(); resolve(null); },

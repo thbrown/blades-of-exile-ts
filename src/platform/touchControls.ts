@@ -160,6 +160,14 @@ export class TouchControls {
     }, { capture: true });
   }
 
+  /**
+   * Whether the pads are on screen now — on, wanted by the current mode, and
+   * not hidden by the stylesheet. A tap only magnifies a panel while they are.
+   */
+  visible(): boolean {
+    return touchControlsOn() && !this.root.hidden && this.root.getClientRects().length > 0;
+  }
+
   /** Bring the pads in line with the game. Called from every redraw. */
   sync(): void {
     const on = touchControlsOn();

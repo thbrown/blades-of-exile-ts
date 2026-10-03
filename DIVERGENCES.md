@@ -1016,18 +1016,24 @@ What this port does instead (`platform/saveStore.ts`, `saveRetention.ts`,
   six (`EnterTown`, `ExitTown`, `RestComplete`, `TownWaitComplete`,
   `EndOutdoorCombat`, `Eat`, with the same `Autosave_<reason>` preferences and
   the same defaults, Eat off), now called *milestones*; on top of them a
-  **tick** saves every `Autosave_Every` moves (1: every move, so leaving loses
-  nothing; a move that changed nothing writes nothing). A game started from
+  **tick** saves after every move, indoors and out (so leaving loses nothing;
+  a move that changed nothing writes nothing). `Autosave_Every` was a
+  preference for a day and is gone (2026-10-03). A game started from
   the main menu is saved as soon as it starts, which makes its tree, so "Make
   a manual save first" is gone; and going to the main menu saves the game
   rather than asking whether to throw away what is unsaved.
-- **Thinning, not rotation.** Old snapshots thin on a fixed grid in game time
-  (every one of the newest dozen, then eight a day, a day, a week), milestones
-  survive longer, and a 10 MB per-game budget (`Autosave_BudgetMb`) is the
-  backstop. The root, the head, every branch tip and fork, and the player's own
-  saves are never thinned.
+- **A capped pool of autosaves, not rotation** (2026-10-03, replacing a day of
+  grid thinning and a 10 MB budget). Each tree keeps up to `maxAuto`
+  autosaves (50 by default, set per game in the restore tree); past that, each
+  new one evicts an old one at random, weighted `ln(1 + newer)`, so the newest
+  never goes and the history thins with age. Milestones, the player's own
+  saves, the root, a branch's first save (*branch save*) and every branch's
+  last (*end save*) are never evicted and don't count toward the cap. The
+  player can delete a milestone, a manual save or an autosave by hand, a
+  branch from its first save, and the whole game from its root.
 - **Restoring never deletes**: playing on from an older snapshot starts a branch.
-- **`Autosave_Max` is gone** (nothing rotates); stored values of it are ignored.
+- **`Autosave_Max` is gone** (nothing rotates), and so are `Autosave_Every` and
+  `Autosave_BudgetMb`; stored values of them are ignored.
 
 Nothing here touches a rule: saving rolls no dice, and the replay corpus is
 unchanged. A player can tell the difference, which is the point.

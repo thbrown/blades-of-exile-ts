@@ -1,28 +1,46 @@
 /**
- * Which snapshots of a save tree to keep — pure, so it is tested headless.
+ * Which snapshots of a save tree are kept — pure, so it is tested headless.
  *
  * A game's saves are a *tree*: every snapshot has a parent (the root has none), and
- * restoring an old one then playing on grows a second child under it. Saving
- * happens every few moves, so the history has to thin out with age or it would
- * eat the browser's storage; but it must stay possible to get back to the
- * major milestones.
+ * restoring an old one then playing on grows a second child under it. The game
+ * saves after every move, so something has to go; what goes is decided here.
  *
- * Snapshot-thinning schemes (Time Machine, snapper, restic's `--keep-*`) all
- * agree on one thing worth copying: thin on a **fixed grid**, never by rank from
- * the newest. Rank-based thinning drifts — today's keeper is tomorrow's victim,
- * and the store churns. A grid keeps whatever it kept. The grid here is in
- * **game time** (`party.age`, 3700 to a day), because wall-clock gaps mean
- * nothing — a week away from the game is not a week of the game.
+ * **Only autosaves are ever thinned, and only down to a cap** (`maxAuto` on the
+ * tree, `DEFAULT_MAX_AUTO_SAVES` by default). Until the cap is reached nothing
+ * is deleted at all. Past it, each new autosave evicts one old one, picked at
+ * random with the odds leaning on the old: an autosave with k newer ones
+ * weighs `ln(1 + k)`. So the newest autosave (k = 0) never goes — the move
+ * just before this one is always there — and the history thins smoothly with
+ * age instead of being cut off at a fixed depth. The dice are `Math.random`,
+ * never the game's: saving must not touch `get_ran`'s sequence.
  *
- * Never deleted: the root (the tree's identity), the head (where the live game
- * is), every leaf (a branch's tip — deleting one would lose a branch outright),
- * every fork point, and manual saves, which are the player's own.
+ * A node's **role** is what it is to the tree, which is not always what it was
+ * saved as:
+ *  - the **root** — the tree's identity; it only goes with the whole game;
+ *  - a **branch** save — the first save of a branch, the child a restore grew.
+ *    It only goes with its branch. Stored as kind `'branch'` when it is
+ *    written; a tree from before that is read by shape (below);
+ *  - an **end** save — a leaf, the tip of a branch (the live game's newest save
+ *    is one). It only goes with its branch. A leaf stops being an end the
+ *    moment play continues from it, so this is worked out, never stored;
+ *  - otherwise its kind: `auto`, `milestone` (a named moment) or `manual`
+ *    (the player's own). Milestones and manual saves are never thinned, but the
+ *    player may delete them one at a time.
+ *
+ * Only role-`auto` nodes count toward the cap. Fork points (two or more
+ * children) are role-`auto` when they were autosaves, but are never evicted:
+ * they are where the player went back to, and the branches hang off them.
  */
 
 /** Game ticks in a day (`party.age` / 3700). */
 export const DAY = 3700;
 
-export type SnapKind = 'auto' | 'milestone' | 'manual';
+/** How many autosaves a tree keeps, unless the player says otherwise. */
+export const DEFAULT_MAX_AUTO_SAVES = 50;
+
+export type SnapKind = 'auto' | 'milestone' | 'manual' | 'branch';
+
+export type SnapRole = 'root' | 'branch' | 'end' | 'auto' | 'milestone' | 'manual';
 
 export interface SnapNode {
   seq: number;
@@ -31,32 +49,10 @@ export interface SnapNode {
   /** `party.age` when it was saved — the tree's time axis. */
   gameAge: number;
   kind: SnapKind;
-  /** Which town (200 = outdoors); milestones are thinned per town and day. */
+  /** Which town (200 = outdoors). */
   townNum: number;
-  /** Stored size, thumbnail included, for the budget. */
+  /** Stored size, thumbnail included. */
   bytes: number;
-}
-
-/** Tuning, all in one place — calibrate against `scripts/bench-save.ts`. */
-export const RETENTION = {
-  /** The newest this many snapshots on the head's lineage are all kept. */
-  recent: 12,
-  /** Within a day of the head: one per this many ticks. */
-  dayGrid: DAY / 8,
-  /** Within a week: one per day. Beyond: one per `farGrid`. */
-  weekGrid: DAY,
-  farGrid: 7 * DAY,
-  /** Milestones are all kept this close to the head. */
-  milestoneKeepAll: 2 * DAY,
-  /** Default per-tree budget. */
-  budgetBytes: 10 * 1024 * 1024,
-};
-
-export interface ThinResult {
-  /** Snapshots to delete (children of these are reparented — see `reparent`). */
-  remove: number[];
-  /** True if even the protected set exceeds the budget. */
-  overBudget: boolean;
 }
 
 /** The root→head path, as a set of seqs. */
@@ -70,72 +66,143 @@ export function lineage(nodes: readonly SnapNode[], head: number): Set<number> {
   return path;
 }
 
-export function thin(
-  nodes: readonly SnapNode[], head: number, budgetBytes: number = RETENTION.budgetBytes,
-): ThinResult {
-  const childCount = new Map<number, number>();
-  for (const n of nodes) {
-    if (n.parent !== null) childCount.set(n.parent, (childCount.get(n.parent) ?? 0) + 1);
+/** Children by parent, each list in seq order. */
+export function childrenOf(nodes: readonly SnapNode[]): Map<number, SnapNode[]> {
+  const children = new Map<number, SnapNode[]>();
+  for (const n of [...nodes].sort((a, b) => a.seq - b.seq)) {
+    if (n.parent === null) continue;
+    const list = children.get(n.parent) ?? [];
+    list.push(n);
+    children.set(n.parent, list);
   }
-  const protectedNode = (n: SnapNode): boolean =>
-    n.parent === null || n.seq === head || n.kind === 'manual'
-    || (childCount.get(n.seq) ?? 0) !== 1; // a leaf (0) or a fork (2+)
+  return children;
+}
 
-  const onHead = lineage(nodes, head);
-  const headAge = nodes.find((n) => n.seq === head)?.gameAge ?? 0;
-  const keep = new Set<number>();
-  for (const n of nodes) if (protectedNode(n)) keep.add(n.seq);
+/**
+ * Whether `n` starts a branch: saved as one, or — for a tree written before
+ * branch saves had a kind — a child of a fork that isn't its first child.
+ */
+export function isBranchStart(n: SnapNode, children: ReadonlyMap<number, readonly SnapNode[]>): boolean {
+  if (n.kind === 'branch') return true;
+  if (n.parent === null) return false;
+  const siblings = children.get(n.parent) ?? [];
+  return siblings.length >= 2 && siblings[0]!.seq !== n.seq;
+}
 
-  // Newest wins each grid cell, so what a later pass keeps is what an earlier
-  // one did: scan oldest→newest and let the later node overwrite the cell.
-  const bySeq = [...nodes].sort((a, b) => a.seq - b.seq);
-  const cells = new Map<string, number>();
-  const claim = (key: string, seq: number): void => { cells.set(key, seq); };
+export function roleOf(n: SnapNode, children: ReadonlyMap<number, readonly SnapNode[]>): SnapRole {
+  if (n.parent === null) return 'root';
+  if (isBranchStart(n, children)) return 'branch';
+  if ((children.get(n.seq) ?? []).length === 0) return 'end';
+  // A stored 'branch' was caught above.
+  return n.kind as Exclude<SnapKind, 'branch'>;
+}
 
-  const lineageNewestFirst = bySeq.filter((n) => onHead.has(n.seq)).reverse();
-  const recent = new Set(lineageNewestFirst.slice(0, RETENTION.recent).map((n) => n.seq));
+/** Every node's role, by seq. */
+export function roles(nodes: readonly SnapNode[]): Map<number, SnapRole> {
+  const children = childrenOf(nodes);
+  return new Map(nodes.map((n) => [n.seq, roleOf(n, children)]));
+}
 
-  for (const n of bySeq) {
-    if (protectedNode(n)) continue;
-    if (onHead.has(n.seq)) {
-      if (recent.has(n.seq)) { keep.add(n.seq); continue; }
-      const behind = Math.max(0, headAge - n.gameAge);
-      if (n.kind === 'milestone') {
-        if (behind <= RETENTION.milestoneKeepAll) { keep.add(n.seq); continue; }
-        claim(`m:${n.townNum}:${Math.floor(n.gameAge / DAY)}`, n.seq);
-      }
-      const width = behind <= DAY ? RETENTION.dayGrid
-        : behind <= 7 * DAY ? RETENTION.weekGrid : RETENTION.farGrid;
-      claim(`a:${width}:${Math.floor(n.gameAge / width)}`, n.seq);
-    } else {
-      // An abandoned branch: its tip and fork point are protected; the rest
-      // thins to a milestone per town and one snapshot a day.
-      if (n.kind === 'milestone') claim(`bm:${n.townNum}`, n.seq);
-      claim(`b:${Math.floor(n.gameAge / DAY)}`, n.seq);
-    }
+/** How many nodes count toward the autosave cap. */
+export function autoCount(nodes: readonly SnapNode[], head: number): number {
+  const r = roles(nodes);
+  return nodes.filter((n) => n.seq !== head && r.get(n.seq) === 'auto').length;
+}
+
+/** The autosaves that may be evicted, oldest first. */
+export function autoCandidates(nodes: readonly SnapNode[], head: number): SnapNode[] {
+  const children = childrenOf(nodes);
+  return nodes
+    .filter((n) => n.seq !== head && roleOf(n, children) === 'auto'
+      && (children.get(n.seq) ?? []).length === 1)
+    .sort((a, b) => a.seq - b.seq);
+}
+
+/**
+ * One autosave to evict, or null if none may go. Weighted `ln(1 + k)` by how
+ * many candidates are newer, so the newest is never picked (unless it is the
+ * only one, and the cap is below one).
+ */
+export function pickAutoVictim(
+  nodes: readonly SnapNode[], head: number, rand: () => number = Math.random,
+): number | null {
+  const pool = autoCandidates(nodes, head);
+  if (pool.length === 0) return null;
+  const weights = pool.map((_, i) => Math.log(1 + (pool.length - 1 - i)));
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (total <= 0) return pool[0]!.seq;
+  let r = rand() * total;
+  for (const [i, w] of weights.entries()) {
+    if (r < w) return pool[i]!.seq;
+    r -= w;
   }
-  for (const seq of cells.values()) keep.add(seq);
+  // Floating-point slack at the very top of the range: the last with weight.
+  for (let i = weights.length - 1; i >= 0; i--) if (weights[i]! > 0) return pool[i]!.seq;
+  return pool[0]!.seq;
+}
 
-  const remove = nodes.filter((n) => !keep.has(n.seq)).map((n) => n.seq);
-
-  // The budget backstop: drop the least valuable of what is left until it fits.
-  const gone = new Set(remove);
-  let total = nodes.reduce((sum, n) => sum + (gone.has(n.seq) ? 0 : n.bytes), 0);
-  if (total > budgetBytes) {
-    // Least valuable first: abandoned branches, then the head lineage's plain
-    // snapshots, then its milestones; within each, the furthest back goes first.
-    const tier = (n: SnapNode): number => !onHead.has(n.seq) ? 0 : n.kind === 'milestone' ? 2 : 1;
-    const behind = (n: SnapNode): number => Math.max(0, headAge - n.gameAge);
-    const victims = nodes
-      .filter((n) => !gone.has(n.seq) && !protectedNode(n))
-      .sort((a, b) => tier(a) - tier(b) || behind(b) - behind(a));
-    for (const v of victims) {
-      if (total <= budgetBytes) break;
-      total -= v.bytes;
-      remove.push(v.seq);
-    }
+/**
+ * Autosaves to evict until at most `max` remain — the order they were
+ * picked in. Fewer, if the rest are all protected.
+ */
+export function trimAutos(
+  nodes: readonly SnapNode[], head: number, max: number, rand: () => number = Math.random,
+): number[] {
+  // Deleting the first child of a fork would make its sibling look first, so
+  // a branch known only by its shape is pinned down before anything goes.
+  let tree = freezeBranches(nodes);
+  const gone: number[] = [];
+  while (autoCount(tree, head) > max) {
+    const victim = pickAutoVictim(tree, head, rand);
+    if (victim === null) break;
+    gone.push(victim);
+    tree = reparent(tree, [victim]);
   }
-  return { remove, overBudget: total > budgetBytes };
+  return gone;
+}
+
+/**
+ * The tree with every branch start known only by its shape (a tree saved
+ * before branch saves had a kind) given kind `'branch'`, so deleting around it
+ * can't change what it is. Nodes that change are new objects.
+ */
+export function freezeBranches<T extends SnapNode>(nodes: readonly T[]): T[] {
+  const children = childrenOf(nodes);
+  return nodes.map((n) => (n.kind === 'auto' && isBranchStart(n, children) ? { ...n, kind: 'branch' } : n));
+}
+
+/**
+ * Whether the player may delete this one save on its own: a milestone, a
+ * manual save or a plain autosave, but never the root, a branch's first or
+ * last save, or the save the live game is at.
+ */
+export function canDeleteSingle(nodes: readonly SnapNode[], seq: number, head: number): boolean {
+  if (seq === head) return false;
+  const n = nodes.find((m) => m.seq === seq);
+  if (n === undefined) return false;
+  const role = roleOf(n, childrenOf(nodes));
+  return role === 'auto' || role === 'milestone' || role === 'manual';
+}
+
+/** `seq` and everything below it. */
+export function subtree(nodes: readonly SnapNode[], seq: number): Set<number> {
+  const children = childrenOf(nodes);
+  const out = new Set<number>();
+  const todo = [seq];
+  while (todo.length > 0) {
+    const at = todo.pop()!;
+    if (out.has(at)) continue;
+    out.add(at);
+    for (const c of children.get(at) ?? []) todo.push(c.seq);
+  }
+  return out;
+}
+
+/** Whether the branch starting at `seq` may be deleted: it starts one, and the live game isn't on it. */
+export function canDeleteBranch(nodes: readonly SnapNode[], seq: number, head: number): boolean {
+  const n = nodes.find((m) => m.seq === seq);
+  if (n === undefined || !isBranchStart(n, childrenOf(nodes))) return false;
+  return !subtree(nodes, seq).has(head);
 }
 
 /**

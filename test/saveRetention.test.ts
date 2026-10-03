@@ -1,113 +1,117 @@
 import { describe, expect, it } from 'vitest';
-import { DAY, RETENTION, SnapKind, SnapNode, lineage, reparent, thin } from '../src/platform/saveRetention';
+import {
+  SnapKind, SnapNode, autoCandidates, autoCount, canDeleteBranch, canDeleteSingle, childrenOf, lineage,
+  pickAutoVictim, reparent, roleOf, roles, trimAutos,
+} from '../src/platform/saveRetention';
 
-/** A straight history, one save per `step` ticks, `n` of them. */
-function chain(n: number, step = 10, milestoneEvery = 0): SnapNode[] {
-  return Array.from({ length: n }, (_, i) => ({
-    seq: i + 1,
-    parent: i === 0 ? null : i,
-    gameAge: i * step,
-    kind: (milestoneEvery > 0 && i % milestoneEvery === 0 ? 'milestone' : 'auto') as SnapKind,
-    townNum: Math.floor(i / 500) % 3,
-    bytes: 20_000,
-  }));
+const node = (seq: number, parent: number | null, kind: SnapKind = 'auto'): SnapNode =>
+  ({ seq, parent, gameAge: seq * 10, kind, townNum: 0, bytes: 100 });
+
+/** A straight line 1..n, the root a milestone. */
+function chain(n: number, kinds: Record<number, SnapKind> = {}): SnapNode[] {
+  return Array.from({ length: n }, (_, i) =>
+    node(i + 1, i === 0 ? null : i, kinds[i + 1] ?? (i === 0 ? 'milestone' : 'auto')));
 }
 
-/** Apply a thinning pass, as the store does. */
-function settle(nodes: SnapNode[], head: number): SnapNode[] {
-  return reparent(nodes, thin(nodes, head).remove);
+/** A seeded stand-in for Math.random, so the tests are repeatable. */
+function seeded(seed: number): () => number {
+  let x = seed;
+  return () => {
+    x = (x * 1103515245 + 12345) % 2147483648;
+    return x / 2147483648;
+  };
 }
 
-describe('snapshot thinning', () => {
-  it('keeps a short history whole', () => {
-    expect(thin(chain(10), 10).remove).toEqual([]);
+describe('roles', () => {
+  it('names the root, a branch start, an end, and the rest by kind', () => {
+    // 1-2-3-4 with 5-6 branching off 2 (5 saved as a branch).
+    const nodes = [...chain(4), node(5, 2, 'branch'), node(6, 5)];
+    const r = roles(nodes);
+    expect([1, 2, 3, 4, 5, 6].map((s) => r.get(s))).toEqual(['root', 'auto', 'auto', 'end', 'branch', 'end']);
   });
 
-  it('never deletes the root, the head, a leaf, a fork, or a manual save', () => {
-    const nodes = chain(3000, 40);
-    nodes[1500]!.kind = 'manual';
-    // A branch off node 700 that ends in a leaf.
-    nodes.push({ seq: 5000, parent: 700, gameAge: 700 * 40 + 1, kind: 'auto', townNum: 0, bytes: 1 });
-    const gone = new Set(thin(nodes, 3000).remove);
-    for (const seq of [1, 3000, 5000, 700, 1501]) expect(gone.has(seq)).toBe(false);
-    expect(gone.size).toBeGreaterThan(2000);
+  it('recognises a branch saved before branches had a kind, by its shape', () => {
+    const nodes = [...chain(4), node(5, 2), node(6, 5)];
+    expect(roleOf(nodes[4]!, childrenOf(nodes))).toBe('branch');
+    // The fork's first child is the line carrying on, not a branch.
+    expect(roleOf(nodes[2]!, childrenOf(nodes))).toBe('auto');
   });
 
-  it('thins a long history to a size that grows far slower than the history', () => {
-    const small = settle(chain(2000, 40), 2000).length;
-    const big = settle(chain(20000, 40), 20000).length;
-    expect(big).toBeLessThan(small * 10 * 0.5);
-    expect(big).toBeLessThan(2000);
+  it('a milestone or manual save in the middle keeps its kind', () => {
+    const r = roles(chain(5, { 3: 'milestone', 4: 'manual' }));
+    expect([r.get(3), r.get(4)]).toEqual(['milestone', 'manual']);
+  });
+});
+
+describe('the autosave pool', () => {
+  it('counts only plain autosaves — not the root, ends, branch starts, milestones or manual saves', () => {
+    const nodes = [...chain(6, { 3: 'milestone', 4: 'manual' }), node(7, 2, 'branch'), node(8, 7)];
+    // 2 and 5 are plain autosaves; 6 and 8 are ends; 7 starts a branch.
+    expect(autoCount(nodes, 6)).toBe(2);
+    expect(autoCandidates(nodes, 6).map((n) => n.seq)).toEqual([5]); // 2 is a fork
   });
 
-  it('is idempotent, and stable as the head moves on a little', () => {
-    const once = settle(chain(5000, 40), 5000);
-    expect(thin(once, 5000).remove).toEqual([]);
-    // Extend the same history by a few saves: nothing already kept far back is dropped.
-    const more = [...once];
-    for (let i = 1; i <= 5; i++) {
-      more.push({ seq: 5000 + i, parent: 5000 + i - 1, gameAge: (4999 + i) * 40, kind: 'auto', townNum: 0, bytes: 20_000 });
+  it('never picks the newest autosave, and leans hard on the old', () => {
+    const nodes = chain(52); // 50 candidates: 2..51
+    const rand = seeded(7);
+    const hits = new Map<number, number>();
+    for (let i = 0; i < 20000; i++) {
+      const v = pickAutoVictim(nodes, 52, rand)!;
+      hits.set(v, (hits.get(v) ?? 0) + 1);
     }
-    const dropped = new Set(thin(more, 5005).remove);
-    const farKept = once.filter((n) => n.gameAge < 4000 * 40);
-    expect(farKept.filter((n) => dropped.has(n.seq)).length).toBeLessThanOrEqual(2);
+    expect(hits.get(51)).toBeUndefined();
+    expect(hits.has(52)).toBe(false); // the head
+    expect(hits.has(1)).toBe(false); // the root
+    const old = (hits.get(2) ?? 0) + (hits.get(3) ?? 0) + (hits.get(4) ?? 0);
+    const recent = (hits.get(48) ?? 0) + (hits.get(49) ?? 0) + (hits.get(50) ?? 0);
+    expect(old).toBeGreaterThan(recent * 2);
   });
 
-  it('keeps the tree connected after reparenting', () => {
-    const nodes = chain(4000, 40);
-    nodes.push({ seq: 9000, parent: 1000, gameAge: 40_001, kind: 'auto', townNum: 0, bytes: 1 });
-    nodes.push({ seq: 9001, parent: 9000, gameAge: 40_050, kind: 'auto', townNum: 0, bytes: 1 });
-    const after = settle(nodes, 4000);
-    const ids = new Set(after.map((n) => n.seq));
-    expect(after.filter((n) => n.parent === null)).toHaveLength(1);
-    for (const n of after) if (n.parent !== null) expect(ids.has(n.parent)).toBe(true);
-    // Every node still reaches the root.
-    for (const n of after) {
-      let at: SnapNode | undefined = n;
-      let hops = 0;
-      while (at && at.parent !== null && hops++ < 10_000) at = after.find((m) => m.seq === at!.parent);
-      expect(at?.parent).toBeNull();
-    }
-    expect(lineage(after, 4000).has(1)).toBe(true);
+  it('trims to the cap and leaves everything else alone', () => {
+    const nodes = chain(80, { 10: 'milestone', 20: 'manual', 30: 'milestone' });
+    const gone = trimAutos(nodes, 80, 50, seeded(3));
+    const kept = reparent(nodes, gone);
+    expect(autoCount(kept, 80)).toBe(50);
+    for (const seq of [1, 10, 20, 30, 79, 80]) expect(kept.some((n) => n.seq === seq)).toBe(true);
+    // Still one connected line.
+    expect(lineage(kept, 80).size).toBe(kept.length);
   });
 
-  it('keeps every milestone near the head and one per town and day further back', () => {
-    const nodes = chain(4000, 40, 7);
-    const after = settle(nodes, 4000);
-    const headAge = 3999 * 40;
-    const near = nodes.filter((n) => n.kind === 'milestone' && headAge - n.gameAge <= RETENTION.milestoneKeepAll);
-    const kept = new Set(after.map((n) => n.seq));
-    for (const n of near) expect(kept.has(n.seq)).toBe(true);
-    const far = after.filter((n) => n.kind === 'milestone' && headAge - n.gameAge > 30 * DAY);
-    const cells = new Set(far.map((n) => `${n.townNum}:${Math.floor(n.gameAge / DAY)}`));
-    expect(far.length).toBeLessThanOrEqual(cells.size + 5);
+  it('does nothing under the cap', () => {
+    expect(trimAutos(chain(30), 30, 50)).toEqual([]);
   });
 
-  it('thins an abandoned branch harder than the head lineage', () => {
-    const nodes = chain(400, 20);
-    // 300 saves off node 100, none of them the head's lineage.
-    for (let i = 0; i < 300; i++) {
-      nodes.push({ seq: 1000 + i, parent: i === 0 ? 100 : 999 + i, gameAge: 2000 + i * 20, kind: 'auto', townNum: 0, bytes: 1 });
-    }
-    const gone = new Set(thin(nodes, 400).remove);
-    const branchGone = nodes.filter((n) => n.seq >= 1000 && gone.has(n.seq)).length;
-    expect(branchGone).toBeGreaterThan(250);
-    expect(gone.has(1299)).toBe(false); // its tip
+  it('keeps fork points, so branches stay where they grew from', () => {
+    const nodes = [...chain(10), node(11, 3, 'branch'), node(12, 6, 'branch')];
+    const gone = trimAutos(nodes, 10, 0, seeded(1));
+    expect(gone).not.toContain(3);
+    expect(gone).not.toContain(6);
+    expect(gone.sort((a, b) => a - b)).toEqual([2, 4, 5, 7, 8, 9]);
+  });
+});
+
+describe('deleting by hand', () => {
+  const nodes = [...chain(6, { 3: 'milestone', 4: 'manual' }), node(7, 2, 'branch'), node(8, 7)];
+
+  it('allows a milestone, a manual save or a plain autosave on its own', () => {
+    expect([2, 3, 4, 5].map((s) => canDeleteSingle(nodes, s, 6))).toEqual([true, true, true, true]);
   });
 
-  it('enforces the budget but never deletes the protected set', () => {
-    const nodes = chain(300, 5_000); // spread over many days so thinning alone keeps a lot
-    const loose = thin(nodes, 300, Infinity);
-    const keptLoose = nodes.length - loose.remove.length;
-    const tight = thin(nodes, 300, 20_000 * 20);
-    expect(nodes.length - tight.remove.length).toBeLessThanOrEqual(20);
-    expect(nodes.length - tight.remove.length).toBeLessThan(keptLoose);
-    expect(tight.remove).not.toContain(1);
-    expect(tight.remove).not.toContain(300);
-    // Absurdly small: the protected set (root + head) is over budget, and it says so.
-    const tiny = thin(nodes, 300, 1);
-    expect(tiny.overBudget).toBe(true);
-    expect(tiny.remove).not.toContain(1);
-    expect(tiny.remove).not.toContain(300);
+  it('refuses the root, a branch start, an end and the live game', () => {
+    expect([1, 7, 8, 6].map((s) => canDeleteSingle(nodes, s, 6))).toEqual([false, false, false, false]);
+  });
+
+  it('deletes a branch only from its first save, and not the one being played', () => {
+    expect(canDeleteBranch(nodes, 7, 6)).toBe(true);
+    expect(canDeleteBranch(nodes, 8, 6)).toBe(false);
+    expect(canDeleteBranch(nodes, 7, 8)).toBe(false);
+    expect(canDeleteBranch(nodes, 1, 6)).toBe(false);
+  });
+});
+
+describe('reparent', () => {
+  it('hangs orphans on the nearest surviving ancestor', () => {
+    const kept = reparent(chain(5), [2, 3]);
+    expect(kept.map((n) => [n.seq, n.parent])).toEqual([[1, null], [4, 1], [5, 4]]);
   });
 });

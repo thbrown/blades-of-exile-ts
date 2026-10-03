@@ -15,6 +15,7 @@ import { PartyPreset } from '../src/universe/player';
 import { Skill, Status, Trait } from '../src/universe/skills';
 import { SUPPORTED_FEATURES, resetFeatureFlags, setFeatureFlags } from '../src/game/featureFlags';
 import { Universe } from '../src/universe/universe';
+import { setLivingSound } from '../src/universe/living';
 
 const opcodes = buildOpcodeTable(
   readFileSync(new URL('../public/data/strings/specials-opcodes.txt', import.meta.url), 'utf8'),
@@ -203,6 +204,28 @@ describe('locked doors', () => {
     expect(pc.curHealth).toBeLessThan(before);
     expect(before - pc.curHealth).toBeLessThanOrEqual(4);
     expect(session.univ.transcript.join(' | ')).toContain("Didn't work");
+  });
+
+  /**
+   * Neither C++ has a sound of its own for a bash that fails (unlike a picked
+   * lock's, `LOCK_FAILED`): what the player hears is the 1d4 hit's boom, from
+   * `damage_pc` → `boom_space`. This pins that it is heard at all.
+   */
+  it('a failed bash is heard: the hit it costs makes its boom sound', async () => {
+    const session = newSession();
+    const where = findTerrain(session, TerSpec.UNLOCKABLE)!;
+    const spec = session.univ.terrainType(session.univ.town!.record.terrain[where.x]![where.y]!);
+    const flag3 = spec.flag3;
+    spec.flag3 = 0;
+    const heard: number[] = [];
+    setLivingSound((n) => { heard.push(n); });
+    try {
+      await session.bashDoor(where, 0);
+    } finally {
+      setLivingSound(null);
+      spec.flag3 = flag3;
+    }
+    expect(heard.length).toBeGreaterThan(0);
   });
 
   /**

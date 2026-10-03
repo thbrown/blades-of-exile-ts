@@ -52,6 +52,22 @@ describe('tree layout', () => {
     expect(new Set([l.at.get(5)!.lane, l.at.get(7)!.lane]).size).toBe(2);
   });
 
+  it('squeezes a wide tree to fit, keeping the order', () => {
+    const nodes = Array.from({ length: 200 }, (_, i) => node(i + 1, i === 0 ? null : i, i * 3));
+    const l = layoutTree(nodes, 200, { ...OPTS, fitWidth: 500 });
+    expect(l.width).toBeLessThanOrEqual(500);
+    const xs = nodes.map((n) => l.at.get(n.seq)!.x);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(500 - OPTS.pad);
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(OPTS.pad);
+    expect(xs).toEqual([...xs].sort((a, b) => a - b));
+    expect(l.gap).toBeLessThan(OPTS.minGap);
+  });
+
+  it('starts from the first save, not day 1', () => {
+    const l = layoutTree([node(1, null, 3700 * 300), node(2, 1, 3700 * 300 + 50)], 2, OPTS);
+    expect(l.at.get(1)!.x).toBe(OPTS.pad);
+  });
+
   it('labels each new day on the main line once', () => {
     const l = layoutTree([node(1, null, 0), node(2, 1, 4000), node(3, 2, 4100), node(4, 3, 8000)], 4, OPTS);
     expect(l.days.map((d) => d.day)).toEqual([1, 2, 3]);

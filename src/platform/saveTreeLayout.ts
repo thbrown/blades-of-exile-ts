@@ -7,6 +7,8 @@
  * dozen would be one blob. So x is `age * scale`, pushed right where needed to
  * keep `minGap` pixels between the distinct ages — the order, and roughly the
  * spacing, are the game's own time. Nodes of the same age share an x.
+ * Given `fitWidth`, a tree wider than that is squeezed to it — the restore
+ * view never scrolls — and `gap` says how close the nodes ended up.
  *
  * **y is the branch.** The lineage from the root to the head is lane 0. Every
  * other branch (a run of nodes from a fork point to the next fork or a tip)
@@ -22,6 +24,8 @@ export interface TreeLayout {
   lanes: number;
   /** Total width in px. */
   width: number;
+  /** The smallest distance between two distinct ages, after any squeeze. */
+  gap: number;
   /** For drawing the day labels: x of the first node of each new day on lane 0. */
   days: { x: number; day: number }[];
   onHead: Set<number>;
@@ -31,8 +35,10 @@ export interface LayoutOptions {
   /** Pixels per game day before relaxing. */
   scale: number;
   minGap: number;
-  /** Left margin. */
+  /** Left and right margin. */
   pad: number;
+  /** Squeeze the tree to this many px across, if it is wider. */
+  fitWidth?: number;
 }
 
 const DAY = 3700;
@@ -52,10 +58,20 @@ export function layoutTree(nodes: readonly SnapNode[], head: number, opts: Layou
   const ages = [...new Set(nodes.map((n) => n.gameAge))].sort((a, b) => a - b);
   const xOfAge = new Map<number, number>();
   let prev = -Infinity;
+  // Measured from the first save, not day 1: an imported game can start late.
+  const age0 = ages[0] ?? 0;
   for (const age of ages) {
-    const x = Math.max(opts.pad + (age / DAY) * opts.scale, prev + opts.minGap);
+    const x = Math.max(opts.pad + ((age - age0) / DAY) * opts.scale, prev + opts.minGap);
     xOfAge.set(age, x);
     prev = x;
+  }
+  let gap = ages.length > 1 ? opts.minGap : Infinity;
+  if (opts.fitWidth !== undefined && ages.length > 1 && prev + opts.pad > opts.fitWidth) {
+    const first = opts.pad;
+    const squeeze = Math.max(0, opts.fitWidth - 2 * opts.pad) / (prev - first);
+    for (const [age, x] of xOfAge) xOfAge.set(age, first + (x - first) * squeeze);
+    gap = opts.minGap * squeeze;
+    prev = opts.fitWidth - opts.pad;
   }
 
   // y: split into branches. The root's branch is the head lineage's; at a fork
@@ -119,5 +135,5 @@ export function layoutTree(nodes: readonly SnapNode[], head: number, opts: Layou
     const day = Math.floor(n.gameAge / DAY) + 1;
     if (day !== lastDay) { days.push({ x: at.get(n.seq)!.x, day }); lastDay = day; }
   }
-  return { at, lanes: Math.max(1, lanes), width: prev + opts.pad, days, onHead };
+  return { at, lanes: Math.max(1, lanes), width: prev + opts.pad, gap, days, onHead };
 }
