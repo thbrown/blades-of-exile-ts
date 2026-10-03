@@ -605,8 +605,78 @@
         margin: 0 0 2px;
         font-size: 13px;
       }
-      .startup-saves {
-        grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
+      /* A saved game is a card as wide as a scenario's: the picture, then
+         where and when, then Resume. A click anywhere else opens its tree. */
+      .startup-save {
+        cursor: pointer;
+      }
+      .startup-save .startup-words {
+        flex: 1 1 auto;
+        align-self: stretch;
+        min-width: 0;
+      }
+      .startup-save-line {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .startup-save .startup-resume {
+        align-self: flex-start;
+        margin-top: auto;
+        padding: 3px 14px;
+      }
+      .startup-save .startup-facts + .startup-save-line {
+        margin-top: 2px;
+      }
+      /* The import card: a game card's size, dashed, with a + where the
+         picture would be. */
+      .startup-save-import {
+        border-style: dashed;
+        background: transparent;
+      }
+      .startup-save-import .startup-words {
+        align-self: stretch;
+      }
+      .startup-import-picture {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.08);
+        border-bottom: 1px dashed #000;
+      }
+      .startup-import-plus {
+        font-size: 56px;
+        line-height: 1;
+        color: #333;
+      }
+      /* Rename and Delete ride on the picture's top corner. */
+      .startup-save-tools {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        display: flex;
+        gap: 4px;
+      }
+      .startup-icon-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        background: rgba(244, 244, 244, 0.88);
+        border: 1px solid #000;
+        border-radius: 3px;
+        color: #000;
+        cursor: pointer;
+      }
+      .startup-icon-button:hover,
+      .startup-icon-button:focus {
+        background: #fff;
+        outline: 1px solid #000;
+      }
+      .startup-icon-button[data-action='delete']:hover {
+        color: #a00;
       }
       .startup-party-button {
         font-size: 12px;
@@ -1235,10 +1305,10 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="/blades-of-exile-ts/assets/main-GyXR6KC8.js"></script>
-    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/tiling-BmOjkOo-.js">
-    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/e3ItemUse--ZE8VqJ5.js">
-    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/terrainPics-B9QEYqKw.js">
+    <script type="module" crossorigin src="/blades-of-exile-ts/assets/main-DeAViy2R.js"></script>
+    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/tiling-JmA9qcTC.js">
+    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/e3ItemUse-DB54jOzs.js">
+    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/terrainPics-G58k-v-T.js">
   </head>
   <body>
     <nav id="game-menu-bar"></nav>
