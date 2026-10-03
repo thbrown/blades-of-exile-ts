@@ -1,5 +1,8 @@
-import { cpSync, createReadStream, existsSync, readdirSync, rmSync, statSync } from 'node:fs';
-import { extname, join, normalize } from 'node:path';
+import { createHash } from 'node:crypto';
+import {
+  cpSync, createReadStream, existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync,
+} from 'node:fs';
+import { extname, join, normalize, relative, resolve, sep } from 'node:path';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 import { exile3ConversionVersion } from './tools/e3convert/version';
@@ -90,11 +93,56 @@ function devLibrary(): Plugin {
   };
 }
 
+/**
+ * The service worker that makes the published site an offline-capable PWA
+ * (src/platform/serviceWorker.js says what it caches and why). After a build,
+ * it lists every file in the output that a player needs without a network —
+ * all of it except the library's previews and scenario zips and the Exile III
+ * installer, which are large and fetched only on demand — and writes the
+ * worker to `<outDir>/sw.js` with that list and a version hashed from the
+ * files' contents and the worker's own, so a build that changes any of them
+ * installs afresh.
+ *
+ * Must come after `embedLibrary()` and `exile3Installer()` in `plugins`: it
+ * lists what their `closeBundle` hooks (synchronous, so run in order) leave.
+ */
+function serviceWorker(): Plugin {
+  const source = join(process.cwd(), 'src', 'platform', 'serviceWorker.js');
+  const onDemand = [/^library\/files\//, /^library\/previews\//, /^exile3\/EXL3INST\.EXE$/];
+  let root = '';
+  return {
+    name: 'service-worker',
+    apply: 'build',
+    configResolved(config) { root = resolve(config.root, config.build.outDir); },
+    closeBundle() {
+      if (!existsSync(root)) return;
+      const files: string[] = [];
+      const walk = (dir: string): void => {
+        for (const name of readdirSync(dir).sort()) {
+          const full = join(dir, name);
+          if (statSync(full).isDirectory()) { walk(full); continue; }
+          const path = relative(root, full).split(sep).join('/');
+          if (path === 'sw.js' || onDemand.some((re) => re.test(path))) continue;
+          files.push(path);
+        }
+      };
+      walk(root);
+      const template = readFileSync(source, 'utf8');
+      const hash = createHash('sha256').update(template);
+      for (const f of files) hash.update(f).update('\0').update(readFileSync(join(root, f)));
+      const worker = template
+        .replace('__SW_VERSION__', () => hash.digest('hex').slice(0, 16))
+        .replace('__SW_PRECACHE__', () => JSON.stringify(files));
+      writeFileSync(join(root, 'sw.js'), worker);
+    },
+  };
+}
+
 export default defineConfig(({ command }) => ({
   // GitHub Pages serves this repo at /blades-of-exile-ts/; keep the dev server at root
   // so local URLs (and verify-screen.mjs) don't need to change.
   base: command === 'build' ? '/blades-of-exile-ts/' : '/',
-  plugins: [devLibrary(), embedLibrary(), exile3Installer()],
+  plugins: [devLibrary(), embedLibrary(), exile3Installer(), serviceWorker()],
   define: { __EXILE3_VERSION__: JSON.stringify(exile3ConversionVersion()) },
   build: {
     outDir: 'docs',

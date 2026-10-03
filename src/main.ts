@@ -4,6 +4,7 @@
  */
 
 import { setBugFixes } from './game/bugFixes';
+import { registerServiceWorker } from './platform/pwa';
 import { animAt, animSchedule, combatPace, setCombatPace } from './game/anim';
 import { useItem } from './game/itemUse';
 import { dropItemAt, handleDropItem, handleGiveItem } from './game/giveDrop';
@@ -329,6 +330,7 @@ function showLoadingUi(): void {
 }
 
 async function main(): Promise<void> {
+  registerServiceWorker();
   // The pop-out map is this same page with none of the game in it.
   if (new URLSearchParams(window.location.search).get('popout') === 'map') {
     hideLoadingUi();

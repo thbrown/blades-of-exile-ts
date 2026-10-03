@@ -16405,3 +16405,44 @@ game's saves were first called a *series*; the same day they were renamed a
   step through them, and the selected dot is drawn on top. `TreeLayout.gap`
   is now the median spacing.
 
+### Installable and offline: the site is a PWA (2026-10-03)
+
+- **The published site installs as an app and plays offline** once it has
+  been loaded online. `public/manifest.webmanifest` (icons in `public/icons/`,
+  the game's own `boe-icon.png` scaled up by nearest neighbour) makes it
+  installable; `src/platform/serviceWorker.js` is the worker, registered by
+  `src/platform/pwa.ts` from `main()` in **production builds only** — the dev
+  server has no `sw.js`, so `npm run dev` and every verify script against it
+  are untouched.
+- **What's cached.** The `serviceWorker()` plugin in `vite.config.ts` writes
+  `<outDir>/sw.js` after a build, listing every output file *except* the
+  library's previews and zips and the Exile III installer (~15 MB precached:
+  the code, graphics, sounds, fonts, dialogs, the four bundled scenarios, the
+  Exile III pages, the library catalog). The version is a hash of those files
+  and the worker's source, so each build that changes anything installs a new
+  cache and deletes the old. Previews and `EXL3INST.EXE` are cached the first
+  time they're fetched; library zips never are — an installed scenario is
+  already whole in IndexedDB, as are Exile III once converted and the saves.
+  Pages are network-first (online players always get the latest build) and
+  fall back to the cached `index.html` with any query string.
+- **The worker takes over at once** (`skipWaiting` + `clients.claim`), or a
+  player who only ever reloads one tab would never get an update. A tab still
+  on the old build that later lazy-loads a chunk gets it from the network —
+  the same as with no worker at all.
+- *Gotcha*: **`cache.match` needs `ignoreVary`.** Module scripts are requested
+  with an `Origin` header the install's `addAll` didn't send, and a server
+  answering `Vary: Origin` (Vite's preview does) never matches them: offline,
+  the page loaded and every `<script type="module">` failed `ERR_FAILED`.
+- *Gotcha*: **`vite preview` serves at `/` unless given `--base`** — the
+  config sets `/blades-of-exile-ts/` for `build` only, so a preview of a
+  build 404s its own assets without it.
+- `scripts/verify-offline.mjs` is the gate: build to a scratch `--outDir`,
+  `npx vite preview --base /blades-of-exile-ts/ --outDir … --port 4173`, then
+  the script loads it online, waits for the worker, cuts the network, and
+  checks the startup screen, a new Valley game into Fort Talrus, and a
+  `?scenario=stealth` link all load with no failed request. Passes.
+- Unrelated, seen while checking: `verify-screen.mjs` prints FAIL with
+  "ERRORS: none" on this branch's base too (2026-10-03) — the clock-seeded
+  dice change what the Verify Shop stocks and whether the bash breaks the
+  lock, so one of its later assertions depends on the seed. Not chased here.
+
