@@ -11,7 +11,7 @@ This port also ships with a customizable mobile-device overlay under togglable "
 ## Try it
 https://thbrown.github.io/blades-of-exile-ts/
 
-It installs as an app (your browser's "Install" or "Add to Home Screen") and plays offline once it has loaded. Scenarios from the library work offline after you've installed them.
+It installs as an app (your browser's "Install" or "Add to Home Screen") and plays offline once it has loaded. A scenario works offline once you've played it online, and library scenarios once you've installed them.
 
 Also some utility pages to help me dev:
 [Map](https://thbrown.github.io/blades-of-exile-ts/exile3/map#valorim@168.0,240.0,0.061)

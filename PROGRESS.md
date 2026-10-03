@@ -16415,16 +16415,34 @@ game's saves were first called a *series*; the same day they were renamed a
   server has no `sw.js`, so `npm run dev` and every verify script against it
   are untouched.
 - **What's cached.** The `serviceWorker()` plugin in `vite.config.ts` writes
-  `<outDir>/sw.js` after a build, listing every output file *except* the
-  library's previews and zips and the Exile III installer (~15 MB precached:
-  the code, graphics, sounds, fonts, dialogs, the four bundled scenarios, the
-  Exile III pages, the library catalog). The version is a hash of those files
-  and the worker's source, so each build that changes anything installs a new
-  cache and deletes the old. Previews and `EXL3INST.EXE` are cached the first
-  time they're fetched; library zips never are — an installed scenario is
-  already whole in IndexedDB, as are Exile III once converted and the saves.
-  Pages are network-first (online players always get the latest build) and
-  fall back to the cached `index.html` with any query string.
+  `<outDir>/sw.js` after a build. **Precached** (~7.4 MB, down from ~15): the code, graphics,
+  sounds, fonts, dialogs, the Exile III pages, the library catalog, and of
+  each bundled scenario only its `scenario.xml` and `preview.png` — what the
+  startup screen shows. The version is a hash of those files, the scenarios'
+  hashes and the worker's source, so each build that changes anything
+  installs a new precache and deletes the old. Library previews and
+  `EXL3INST.EXE` are cached the first time they're fetched; library zips
+  never are — an installed scenario is already whole in IndexedDB, as are
+  Exile III once converted and the saves. Pages are network-first (online
+  players always get the latest build) and fall back to the cached
+  `index.html` with any query string.
+- **A bundled scenario is cached only once it's played online** (the user's
+  call, 2026-10-03: don't spend space on scenarios nobody opened). The first
+  request the game makes for any of its other files fetches the whole
+  directory, once, into `boe-scenario-<id>-<hash>` — the hash over that
+  scenario's files, so a build that leaves it alone keeps the cache as it is,
+  with no download. A build that changes it refreshes it the next time it's
+  played online; until then, and offline, the old build's copy serves, and
+  it's deleted only once the new copy is whole. A scenario a build drops has
+  its cache deleted on activate. Offline, an unplayed scenario's files come
+  back as a 503 marked `X-BoE-Not-Offline`, which `FetchSource` turns into
+  `ScenarioNotOfflineError`; `main()`'s catch shows its message ("hasn't been
+  played while online…") with a link back to the scenarios, instead of
+  `Error: TypeError: Failed to fetch` under an empty canvas.
+- *Gotcha*: **a load error has been invisible in play.** `body.playing` and
+  `body.starting` both hide `#status` (index.html), so `main()`'s
+  `Error: …` line never showed after the startup screen. The offline message
+  clears both classes and hides the canvas; other errors are as they were.
 - **The worker takes over at once** (`skipWaiting` + `clients.claim`), or a
   player who only ever reloads one tab would never get an update. A tab still
   on the old build that later lazy-loads a chunk gets it from the network —
@@ -16436,11 +16454,20 @@ game's saves were first called a *series*; the same day they were renamed a
 - *Gotcha*: **`vite preview` serves at `/` unless given `--base`** — the
   config sets `/blades-of-exile-ts/` for `build` only, so a preview of a
   build 404s its own assets without it.
-- `scripts/verify-offline.mjs` is the gate: build to a scratch `--outDir`,
-  `npx vite preview --base /blades-of-exile-ts/ --outDir … --port 4173`, then
-  the script loads it online, waits for the worker, cuts the network, and
-  checks the startup screen, a new Valley game into Fort Talrus, and a
-  `?scenario=stealth` link all load with no failed request. Passes.
+- *Gotcha*: **Playwright's `context.setOffline` doesn't cut the service
+  worker off.** The page's requests fail, but the worker's own `fetch()`
+  still reaches the server, so a scenario never cached loaded "offline"
+  straight through it. The gate stops the server instead.
+- *Gotcha*: **`embedLibrary()` and `exile3Installer()` mishandled an
+  absolute `--outDir`**: they joined it onto the working directory, so a
+  build to `/tmp/x` skipped the Exile III step and copied the library to
+  `<repo>/tmp/x/library`. All three plugins now `resolve(config.root, …)`.
+- `scripts/verify-offline.mjs <outDir>` is the gate: build to a scratch
+  `--outDir`, and the script serves it with `vite preview`, plays a new
+  Valley game online, checks only Valley got a scenario cache, stops the
+  server, then checks the startup screen (every card), a new Valley game into
+  Fort Talrus, a `?scenario=valleydy` link, and that A Small Rebellion — never
+  played — says it isn't saved, by link and by its card. Passes.
 - Unrelated, seen while checking: `verify-screen.mjs` prints FAIL with
   "ERRORS: none" on this branch's base too (2026-10-03) — the clock-seeded
   dice change what the Verify Shop stocks and whether the bash breaks the

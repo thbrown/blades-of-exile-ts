@@ -22,6 +22,18 @@ function lastSegment(path: string): string {
   return parts[parts.length - 1] ?? '';
 }
 
+/**
+ * A bundled scenario fetched offline that the service worker hasn't kept,
+ * because it has never been played online (src/platform/serviceWorker.js).
+ */
+export class ScenarioNotOfflineError extends Error {
+  constructor() {
+    super('This scenario hasn\'t been played while online, so it isn\'t saved for offline play. '
+      + 'Open it once with a connection and it will be.');
+    this.name = 'ScenarioNotOfflineError';
+  }
+}
+
 export class FetchSource implements ScenarioSource {
   readonly id: string;
 
@@ -33,6 +45,7 @@ export class FetchSource implements ScenarioSource {
 
   private async get(path: string): Promise<Response> {
     const resp = await fetch(this.baseUrl + path);
+    if (resp.status === 503 && resp.headers.has('X-BoE-Not-Offline')) throw new ScenarioNotOfflineError();
     if (!resp.ok) throw new Error(`failed to fetch ${this.baseUrl}${path}: ${resp.status}`);
     this.onLoad?.(path);
     return resp;

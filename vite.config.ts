@@ -19,10 +19,10 @@ function embedLibrary(): Plugin {
   return {
     name: 'embed-library',
     apply: 'build',
-    configResolved(config) { outDir = config.build.outDir; },
+    configResolved(config) { outDir = resolve(config.root, config.build.outDir); },
     closeBundle() {
       if (process.env['VITE_LIBRARY_URL']) return;
-      const to = join(process.cwd(), outDir, 'library');
+      const to = join(outDir, 'library');
       rmSync(to, { recursive: true, force: true });
       if (!existsSync(join(from, 'catalog.json'))) {
         console.warn('No library/dist/catalog.json — the site will have no scenario library. '
@@ -47,7 +47,7 @@ function exile3Installer(): Plugin {
   let outDir = 'docs';
   return {
     name: 'exile3-installer',
-    configResolved(config) { outDir = config.build.outDir; },
+    configResolved(config) { outDir = resolve(config.root, config.build.outDir); },
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         const path = (req.url ?? '').split('?')[0]!;
@@ -57,11 +57,11 @@ function exile3Installer(): Plugin {
       });
     },
     closeBundle() {
-      if (!existsSync(join(process.cwd(), outDir))) return;
-      rmSync(join(process.cwd(), outDir, 'scenarios', 'exile3'), { recursive: true, force: true });
+      if (!existsSync(outDir)) return;
+      rmSync(join(outDir, 'scenarios', 'exile3'), { recursive: true, force: true });
       // The installer goes beside the Exile III pages (exile3/*.html), so
       // only its own files are replaced, not the whole directory.
-      const to = join(process.cwd(), outDir, 'exile3');
+      const to = join(outDir, 'exile3');
       for (const f of readdirSync(vendor)) rmSync(join(to, f), { recursive: true, force: true });
       cpSync(vendor, to, { recursive: true });
     },
@@ -98,10 +98,12 @@ function devLibrary(): Plugin {
  * (src/platform/serviceWorker.js says what it caches and why). After a build,
  * it lists every file in the output that a player needs without a network —
  * all of it except the library's previews and scenario zips and the Exile III
- * installer, which are large and fetched only on demand — and writes the
- * worker to `<outDir>/sw.js` with that list and a version hashed from the
- * files' contents and the worker's own, so a build that changes any of them
- * installs afresh.
+ * installer, which are large and fetched only on demand, and the bundled
+ * scenarios, each cached whole once played (only the `scenario.xml` and
+ * `preview.png` the startup screen shows are precached). It writes the
+ * worker to `<outDir>/sw.js` with those lists, each scenario's files under a
+ * hash of their contents, and a version hashed from every file and the
+ * worker's own source, so a build that changes any of them installs afresh.
  *
  * Must come after `embedLibrary()` and `exile3Installer()` in `plugins`: it
  * lists what their `closeBundle` hooks (synchronous, so run in order) leave.
@@ -109,6 +111,9 @@ function devLibrary(): Plugin {
 function serviceWorker(): Plugin {
   const source = join(process.cwd(), 'src', 'platform', 'serviceWorker.js');
   const onDemand = [/^library\/files\//, /^library\/previews\//, /^exile3\/EXL3INST\.EXE$/];
+  const scenarioFile = /^scenarios\/([^/]+)\/(.+)$/;
+  const startupScreen = new Set(['scenario.xml', 'preview.png']);
+  const sha = (data: string | Buffer): string => createHash('sha256').update(data).digest('hex').slice(0, 16);
   let root = '';
   return {
     name: 'service-worker',
@@ -117,22 +122,33 @@ function serviceWorker(): Plugin {
     closeBundle() {
       if (!existsSync(root)) return;
       const files: string[] = [];
+      const scenarios: Record<string, { hash: string; files: string[] }> = {};
+      const scenarioHashes: Record<string, string[]> = {};
       const walk = (dir: string): void => {
         for (const name of readdirSync(dir).sort()) {
           const full = join(dir, name);
           if (statSync(full).isDirectory()) { walk(full); continue; }
           const path = relative(root, full).split(sep).join('/');
           if (path === 'sw.js' || onDemand.some((re) => re.test(path))) continue;
+          const [, id, file] = scenarioFile.exec(path) ?? [];
+          if (id && file && !startupScreen.has(file)) {
+            (scenarios[id] ??= { hash: '', files: [] }).files.push(file);
+            (scenarioHashes[id] ??= []).push(`${file}\0${sha(readFileSync(full))}`);
+            continue;
+          }
           files.push(path);
         }
       };
       walk(root);
+      for (const [id, entry] of Object.entries(scenarios)) entry.hash = sha(scenarioHashes[id]!.join('\n'));
       const template = readFileSync(source, 'utf8');
       const hash = createHash('sha256').update(template);
       for (const f of files) hash.update(f).update('\0').update(readFileSync(join(root, f)));
+      for (const [id, entry] of Object.entries(scenarios)) hash.update(`${id}\0${entry.hash}`);
       const worker = template
         .replace('__SW_VERSION__', () => hash.digest('hex').slice(0, 16))
-        .replace('__SW_PRECACHE__', () => JSON.stringify(files));
+        .replace('__SW_PRECACHE__', () => JSON.stringify(files))
+        .replace('__SW_SCENARIOS__', () => JSON.stringify(scenarios));
       writeFileSync(join(root, 'sw.js'), worker);
     },
   };

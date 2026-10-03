@@ -122,7 +122,7 @@ import { Scenario } from './data/scenario';
 import { noScenario, readScenarioFromXml } from './fileio/scenarioXml';
 import { parseXmlDoc } from './fileio/xml';
 import { TOWN_NUM_OUTDOORS } from './universe/party';
-import { FetchSource } from './fileio/source';
+import { FetchSource, ScenarioNotOfflineError } from './fileio/source';
 import { InputRouter } from './platform/input';
 import { Snd, SoundPlayer } from './platform/sound';
 import { installCustomSheets, installSheetOverrides, loadCustomSheets } from './render/customPics';
@@ -3999,6 +3999,19 @@ async function main(): Promise<void> {
 
 main().catch((err) => {
   hideLoadingUi();
-  document.getElementById('status')!.textContent = `Error: ${err}`;
+  const status = document.getElementById('status')!;
+  if (err instanceof ScenarioNotOfflineError) {
+    // Something the player can act on, not a fault: say so where it's seen
+    // (not under an empty canvas), with the way back to the other scenarios.
+    // `playing`/`starting` hide the status line (index.html).
+    document.body.classList.remove('playing', 'starting');
+    document.getElementById('canvas-wrap')?.classList.add('hidden');
+    const back = document.createElement('a');
+    back.href = import.meta.env.BASE_URL;
+    back.textContent = 'Back to the scenarios';
+    status.replaceChildren(`${err.message} `, back);
+    return;
+  }
+  status.textContent = `Error: ${err}`;
   console.error(err);
 });
