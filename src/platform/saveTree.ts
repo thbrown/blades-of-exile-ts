@@ -446,11 +446,13 @@ export function showSaveTree(parent: HTMLElement, opts: SaveTreeOptions): { clos
     updateCounts();
     const width = Math.max(200, pane.clientWidth);
     const height = Math.max(80, pane.clientHeight);
-    const layout = layoutTree(snaps, opts.head, { scale: 900, minGap: 24, pad: 18, fitWidth: width });
+    const layout = layoutTree(snaps, opts.head, { scale: 24, pad: 18, fitWidth: width });
     draw.layout = layout;
     const row = Math.min(38, (height - TOP - 6) / layout.lanes);
-    // Dots shrink when the tree is crowded, so neighbours don't merge.
-    const dot = Math.max(2.5, Math.min(6, layout.gap / 2.6, row / 3.2));
+    // One size, however crowded: saves a move apart are drawn a move apart and
+    // may overlap, and the buttons under the tree step through them. Only a
+    // tree with many rows makes them smaller, so the rows stay apart.
+    const dot = Math.max(2.5, Math.min(6, row / 3.2));
     const svg = s('svg', { width, height, viewBox: `0 0 ${width} ${height}` });
     // A tree of a lane or two sits in the middle of the pane, not stuck to its top.
     const top = TOP + Math.max(0, (height - TOP - 6 - layout.lanes * row) / 2);
@@ -488,7 +490,7 @@ export function showSaveTree(parent: HTMLElement, opts: SaveTreeOptions): { clos
         opacity: live ? 1 : 0.75, 'data-seq': n.seq, 'data-lane': p.lane, 'data-role': roleOf(n) });
       // A finger needs more than the dot: the invisible hit area grows to
       // half the space to the neighbours, so a tap lands on the nearer save.
-      if (coarse) g.append(s('circle', { r: Math.max(dot + 4, Math.min(16, layout.gap / 2, row / 2)), fill: 'transparent' }));
+      if (coarse) g.append(s('circle', { r: Math.max(dot + 4, Math.min(16, row / 2)), fill: 'transparent' }));
       g.append(s('circle', { class: 'ring', r: dot + 4, fill: 'transparent', stroke: 'transparent' }));
       if (n.seq === opts.head) g.append(s('circle', { r: dot + 3, fill: 'none', stroke: '#111', 'stroke-width': 2 }));
       g.append(mark(n.kind, roleOf(n), dot));
@@ -504,7 +506,7 @@ export function showSaveTree(parent: HTMLElement, opts: SaveTreeOptions): { clos
     }
     pane.replaceChildren(svg);
     markSelected();
-  }, { layout: layoutTree([], 0, { scale: 1, minGap: 1, pad: 0 }) });
+  }, { layout: layoutTree([], 0, { scale: 1, pad: 0 }) });
 
   const select = (seq: number): void => {
     if (seq === selected && detail.firstChild !== null) return;
@@ -587,6 +589,13 @@ export function showSaveTree(parent: HTMLElement, opts: SaveTreeOptions): { clos
     for (const [seq, g] of nodeEls) {
       g.querySelector('.ring')?.setAttribute('stroke', seq === selected ? '#000' : 'transparent');
       g.querySelector('.ring')?.setAttribute('stroke-width', seq === selected ? '2' : '1');
+    }
+    // Saves a move apart can overlap: the chosen one is drawn on top.
+    const chosen = nodeEls.get(selected);
+    if (chosen !== undefined && chosen.parentNode !== null && chosen.nextSibling !== null) {
+      const focused = document.activeElement === chosen;
+      chosen.parentNode.appendChild(chosen);
+      if (focused) chosen.focus({ preventScroll: true });
     }
     updateNav();
   };

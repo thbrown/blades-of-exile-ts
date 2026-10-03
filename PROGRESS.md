@@ -16393,4 +16393,14 @@ game's saves were first called a *series*; the same day they were renamed a
   another branch to keep) and none of the stretch is on the live game's
   line. `deleteBranch` takes either. The first child's line counts too, from
   its own tip, so the line abandoned by a restore can go from its end.
+- **The restore tree's x axis is moves** (`saveTreeLayout.ts`): it was game
+  time at 900 px a day with a 24 px minimum gap, and a town move is 1 tick
+  (under a pixel), so nearly every gap was the minimum and saves many turns
+  apart looked as close as saves one move apart. Now a gap is its ticks,
+  divided by `OUTDOOR_TICKS_PER_MOVE` (10) when the later save is outdoors,
+  linear up to `LINEAR_MOVES` (10) and `10 + 5·log2(moves/10)` past it, at up
+  to 24 px a move, squeezed to the pane. No minimum gap; the dots are one size
+  (smaller only when there are many rows) and may overlap — the nav buttons
+  step through them, and the selected dot is drawn on top. `TreeLayout.gap`
+  is now the median spacing.
 

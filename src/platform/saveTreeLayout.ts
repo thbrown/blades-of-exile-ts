@@ -2,13 +2,19 @@
  * Where each snapshot of a tree goes when the tree is drawn: across by
  * in-game time, down by branch. Pure, so it is tested without a DOM.
  *
- * **x is game time**, `gameAge`, but relaxed: saves cluster (ten moves in a
- * town is ten ticks of a 3700-tick day), and on a true linear axis the newest
- * dozen would be one blob. So x is `age * scale`, pushed right where needed to
- * keep `minGap` pixels between the distinct ages — the order, and roughly the
- * spacing, are the game's own time. Nodes of the same age share an x.
- * Given `fitWidth`, a tree wider than that is squeezed to it — the restore
- * view never scrolls — and `gap` says how close the nodes ended up.
+ * **x is game time, counted in moves.** A move in town (or a fight) is one
+ * tick of `party.age`; outdoors the clock runs ten ticks to a step. So the
+ * distance between two saves is their tick difference, divided by ten when
+ * the later one is outdoors — saves a move apart are a step apart wherever
+ * they were taken, and five moves apart are five times as far. Past
+ * `LINEAR_MOVES` the distance grows with the log of the gap instead, so a
+ * night's rest (hundreds of moves) is clearly longer without flattening the
+ * rest of the tree. There is no minimum spacing: crowded saves draw smaller
+ * (the restore view's dots shrink with `gap`) rather than evening out.
+ *
+ * `scale` is pixels per move; given `fitWidth`, a tree wider than that is
+ * squeezed to it — the restore view never scrolls — and `gap` says how close
+ * the nodes typically ended up (the median, so one crowd doesn't decide it). Nodes of the same age share an x.
  *
  * **y is the branch.** The lineage from the root to the head is lane 0. Every
  * other branch (a run of nodes from a fork point to the next fork or a tip)
@@ -24,7 +30,7 @@ export interface TreeLayout {
   lanes: number;
   /** Total width in px. */
   width: number;
-  /** The smallest distance between two distinct ages, after any squeeze. */
+  /** The median distance between neighbouring distinct ages, after any squeeze. */
   gap: number;
   /** For drawing the day labels: x of the first node of each new day on lane 0. */
   days: { x: number; day: number }[];
@@ -32,9 +38,8 @@ export interface TreeLayout {
 }
 
 export interface LayoutOptions {
-  /** Pixels per game day before relaxing. */
+  /** Pixels per move, at most (a wider tree is squeezed to `fitWidth`). */
   scale: number;
-  minGap: number;
   /** Left and right margin. */
   pad: number;
   /** Squeeze the tree to this many px across, if it is wider. */
@@ -42,6 +47,21 @@ export interface LayoutOptions {
 }
 
 const DAY = 3700;
+/** `TOWN_NUM_OUTDOORS`: where a save outdoors says it is. */
+const OUTDOORS = 200;
+/** Outdoors the clock runs this many ticks to a step. */
+export const OUTDOOR_TICKS_PER_MOVE = 10;
+/** Gaps up to this many moves are drawn to scale; longer ones by their log. */
+export const LINEAR_MOVES = 10;
+
+/**
+ * How far apart two saves `ticks` of game time apart are drawn, in moves:
+ * linear up to `LINEAR_MOVES`, then 5 more for every doubling.
+ */
+export function moveDistance(ticks: number, outdoors: boolean): number {
+  const moves = Math.max(0, ticks) / (outdoors ? OUTDOOR_TICKS_PER_MOVE : 1);
+  return moves <= LINEAR_MOVES ? moves : LINEAR_MOVES + 5 * Math.log2(moves / LINEAR_MOVES);
+}
 
 export function layoutTree(nodes: readonly SnapNode[], head: number, opts: LayoutOptions): TreeLayout {
   const children = new Map<number, SnapNode[]>();
@@ -54,25 +74,27 @@ export function layoutTree(nodes: readonly SnapNode[], head: number, opts: Layou
   }
   const onHead = lineage(nodes, head);
 
-  // x: distinct ages, left to right, never closer than minGap.
+  // x: distinct ages, left to right, as far apart as the moves between them.
   const ages = [...new Set(nodes.map((n) => n.gameAge))].sort((a, b) => a - b);
+  const outdoorsAt = new Map<number, boolean>();
+  for (const n of nodes) if (!outdoorsAt.has(n.gameAge)) outdoorsAt.set(n.gameAge, n.townNum >= OUTDOORS);
+  const unitsOfAge = new Map<number, number>();
+  let units = 0;
+  ages.forEach((age, i) => {
+    if (i > 0) units += moveDistance(age - ages[i - 1]!, outdoorsAt.get(age) ?? false);
+    unitsOfAge.set(age, units);
+  });
+  let scale = opts.scale;
+  if (opts.fitWidth !== undefined && units > 0 && 2 * opts.pad + units * scale > opts.fitWidth) {
+    scale = Math.max(0, opts.fitWidth - 2 * opts.pad) / units;
+  }
   const xOfAge = new Map<number, number>();
-  let prev = -Infinity;
-  // Measured from the first save, not day 1: an imported game can start late.
-  const age0 = ages[0] ?? 0;
-  for (const age of ages) {
-    const x = Math.max(opts.pad + ((age - age0) / DAY) * opts.scale, prev + opts.minGap);
-    xOfAge.set(age, x);
-    prev = x;
-  }
-  let gap = ages.length > 1 ? opts.minGap : Infinity;
-  if (opts.fitWidth !== undefined && ages.length > 1 && prev + opts.pad > opts.fitWidth) {
-    const first = opts.pad;
-    const squeeze = Math.max(0, opts.fitWidth - 2 * opts.pad) / (prev - first);
-    for (const [age, x] of xOfAge) xOfAge.set(age, first + (x - first) * squeeze);
-    gap = opts.minGap * squeeze;
-    prev = opts.fitWidth - opts.pad;
-  }
+  for (const [age, u] of unitsOfAge) xOfAge.set(age, opts.pad + u * scale);
+  // The typical spacing, not the tightest: one quick walk shouldn't shrink
+  // every dot in the tree.
+  const spacings = ages.slice(1).map((age, i) => xOfAge.get(age)! - xOfAge.get(ages[i]!)!).sort((a, b) => a - b);
+  const gap = spacings.length === 0 ? Infinity : spacings[Math.floor(spacings.length / 2)]!;
+  const prev = opts.pad + units * scale;
 
   // y: split into branches. The root's branch is the head lineage's; at a fork
   // the child that continues a branch is the head's, or else the newest.

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { SnapNode } from '../src/platform/saveRetention';
-import { layoutTree } from '../src/platform/saveTreeLayout';
+import { LINEAR_MOVES, layoutTree, moveDistance } from '../src/platform/saveTreeLayout';
 
-const node = (seq: number, parent: number | null, gameAge: number): SnapNode =>
-  ({ seq, parent, gameAge, kind: 'auto', townNum: 0, bytes: 1 });
-const OPTS = { scale: 100, minGap: 20, pad: 10 };
+const node = (seq: number, parent: number | null, gameAge: number, townNum = 0): SnapNode =>
+  ({ seq, parent, gameAge, kind: 'auto', townNum, bytes: 1 });
+const OPTS = { scale: 20, pad: 10 };
 
 describe('tree layout', () => {
   it('puts the head lineage on lane 0, ordered by game time', () => {
@@ -15,10 +15,24 @@ describe('tree layout', () => {
     expect(l.lanes).toBe(1);
   });
 
-  it('keeps nodes a minimum distance apart even when their ages are close', () => {
-    const l = layoutTree([node(1, null, 0), node(2, 1, 1), node(3, 2, 2)], 3, OPTS);
-    expect(l.at.get(2)!.x - l.at.get(1)!.x).toBeGreaterThanOrEqual(20);
-    expect(l.at.get(3)!.x - l.at.get(2)!.x).toBeGreaterThanOrEqual(20);
+  it('spaces saves by the moves between them: five moves are five times one', () => {
+    const l = layoutTree([node(1, null, 0), node(2, 1, 1), node(3, 2, 6)], 3, OPTS);
+    const one = l.at.get(2)!.x - l.at.get(1)!.x;
+    expect(one).toBe(OPTS.scale);
+    expect(l.at.get(3)!.x - l.at.get(2)!.x).toBeCloseTo(5 * one);
+  });
+
+  it('counts an outdoor step (ten ticks) as one move, like a step in town', () => {
+    const l = layoutTree([node(1, null, 0, 200), node(2, 1, 10, 200), node(3, 2, 11, 5)], 3, OPTS);
+    expect(l.at.get(2)!.x - l.at.get(1)!.x).toBeCloseTo(l.at.get(3)!.x - l.at.get(2)!.x);
+  });
+
+  it('draws long gaps by their log, so a rest is longer but not overwhelming', () => {
+    expect(moveDistance(LINEAR_MOVES, false)).toBe(LINEAR_MOVES);
+    expect(moveDistance(2 * LINEAR_MOVES, false)).toBe(LINEAR_MOVES + 5);
+    const rest = moveDistance(1000, false);
+    expect(rest).toBeGreaterThan(LINEAR_MOVES);
+    expect(rest).toBeLessThan(60);
   });
 
   it('gives a branch its own lane, drawn from the fork', () => {
@@ -60,7 +74,7 @@ describe('tree layout', () => {
     expect(Math.max(...xs)).toBeLessThanOrEqual(500 - OPTS.pad);
     expect(Math.min(...xs)).toBeGreaterThanOrEqual(OPTS.pad);
     expect(xs).toEqual([...xs].sort((a, b) => a - b));
-    expect(l.gap).toBeLessThan(OPTS.minGap);
+    expect(l.gap).toBeLessThan(OPTS.scale);
   });
 
   it('starts from the first save, not day 1', () => {

@@ -170,11 +170,13 @@ check('the branch starts with a branch save', await page.evaluate(() => document
 const sizeBefore = await page.evaluate(() => { const r = document.querySelector('.stree').getBoundingClientRect(); return [r.width, r.height]; });
 
 // Click an old node that has children: the callout warns about the branch.
-await page.hover(`.stree-node[data-seq="${snaps[2].seq}"]`);
+// Saves a move apart are drawn a move apart, so a quick walk is a crowd of
+// overlapping dots: events go to the node itself, as the nav buttons would.
+await page.locator(`.stree-node[data-seq="${snaps[2].seq}"]`).dispatchEvent('mouseenter');
 check('hovering a node shows its picture', await page.evaluate(() => { const t = document.querySelector('.stree-tip'); return !t.hidden && t.querySelector('img') !== null; }));
 await page.screenshot({ path: `${SHOTS}/s2b-tree-hover.png` });
 const oldSeq = snaps[1].seq;
-await page.click(`.stree-node[data-seq="${oldSeq}"]`);
+await page.locator(`.stree-node[data-seq="${oldSeq}"]`).dispatchEvent('click');
 const callout = await page.$eval('.stree-note', (e) => e.textContent);
 const sizeAfter = await page.evaluate(() => { const r = document.querySelector('.stree').getBoundingClientRect(); return [r.width, r.height]; });
 check('choosing an older save does not resize the dialog', sizeBefore.join() === sizeAfter.join(), { sizeBefore, sizeAfter });
@@ -184,10 +186,10 @@ check('restoring an older save warns that it branches', callout.includes('new br
 // The tip of the line that isn't being played: its branch can go from there.
 const endSeq = await page.evaluate(() => [...document.querySelectorAll('.stree-node[data-role="end"]')]
   .map((g) => g.dataset.seq).find((seq) => document.querySelector(`.stree-node[data-seq="${seq}"] circle[stroke="#111"]`) === null));
-await page.click(`.stree-node[data-seq="${endSeq}"]`);
+await page.locator(`.stree-node[data-seq="${endSeq}"]`).dispatchEvent('click');
 check('an end save off the live line offers Delete branch', await page.evaluate(() =>
   [...document.querySelectorAll('.stree-node-actions button')].some((b) => b.textContent === 'Delete branch')), { endSeq });
-await page.click(`.stree-node[data-seq="${oldSeq}"]`);
+await page.locator(`.stree-node[data-seq="${oldSeq}"]`).dispatchEvent('click');
 check('the detail panel has its picture', await page.evaluate(() => document.querySelector('.stree-shot')?.tagName === 'IMG'));
 await page.screenshot({ path: `${SHOTS}/s3-tree-selected.png` });
 const wantAge = snaps[1].age;
