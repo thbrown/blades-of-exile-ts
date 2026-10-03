@@ -17,7 +17,8 @@
 import { SavePreview } from '../fileio/saveIo';
 import { pickLocalFile } from './pickFile';
 import {
-  DEFAULT_MAX_AUTO_SAVES, SnapKind, SnapNode, canDeleteBranch, canDeleteSingle, freezeBranches, lineage,
+  DEFAULT_MAX_AUTO_SAVES, SnapKind, SnapNode, branchOfEnd, canDeleteBranch, canDeleteFromEnd, canDeleteSingle,
+  freezeBranches, lineage,
   reparent, subtree, trimAutos,
 } from './saveRetention';
 
@@ -456,7 +457,8 @@ export async function deleteTree(id: string): Promise<void> {
 }
 
 /**
- * Delete a whole branch: `seq`, which must start one, and everything below it.
+ * Delete a whole branch: from `seq`, its first save, and everything below
+ * it; or from `seq`, its end save, back up to the fork it split off from.
  * Refused if the live game is on it; the root's "branch" is the whole game
  * (`deleteTree`). Returns how many snapshots went.
  */
@@ -466,8 +468,12 @@ export async function deleteBranch(treeId: string, seq: number): Promise<number>
     if (tree === undefined) return 0;
     const snaps = await run(get(SNAPS).getAll(treeRange(treeId)) as IDBRequest<SnapInfo[]>);
     if (lineage(snaps, tree.head).has(seq)) throw new Error("that save is on the game you're playing");
-    if (!canDeleteBranch(snaps, seq, tree.head)) throw new Error('that save does not start a branch');
-    const doomed = subtree(snaps, seq);
+    // From its first save, the branch and everything below it; from its end
+    // save, back up to where it split off.
+    let doomed: Set<number>;
+    if (canDeleteBranch(snaps, seq, tree.head)) doomed = subtree(snaps, seq);
+    else if (canDeleteFromEnd(snaps, seq, tree.head)) doomed = new Set(branchOfEnd(snaps, seq));
+    else throw new Error('that save neither starts nor ends a branch that can go');
     for (const s of snaps) {
       if (!doomed.has(s.seq)) continue;
       await run(get(SNAPS).delete([treeId, s.seq]));

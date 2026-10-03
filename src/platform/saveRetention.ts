@@ -206,6 +206,38 @@ export function canDeleteBranch(nodes: readonly SnapNode[], seq: number, head: n
 }
 
 /**
+ * The branch an end save closes: the saves from just below the nearest fork
+ * above it down to it, tip first. Every one of them has a single child (the
+ * nearest fork is where that stops), so deleting them takes no other branch
+ * with them. Null when `seq` isn't a leaf, or no fork is above it — a tree of
+ * one line has no other branch to keep.
+ */
+export function branchOfEnd(nodes: readonly SnapNode[], seq: number): number[] | null {
+  const children = childrenOf(nodes);
+  if ((children.get(seq) ?? []).length > 0) return null;
+  const byId = new Map(nodes.map((n) => [n.seq, n]));
+  const run: number[] = [];
+  for (let at = byId.get(seq); at !== undefined; at = at.parent === null ? undefined : byId.get(at.parent)) {
+    run.push(at.seq);
+    if (at.parent === null) return null;
+    if ((children.get(at.parent) ?? []).length > 1) return run;
+  }
+  return null;
+}
+
+/**
+ * Whether the branch an end save closes may be deleted from it: there is
+ * another branch to keep, and none of it is on the line the live game is
+ * playing (the live game may have been restored partway along it).
+ */
+export function canDeleteFromEnd(nodes: readonly SnapNode[], seq: number, head: number): boolean {
+  const run = branchOfEnd(nodes, seq);
+  if (run === null) return false;
+  const live = lineage(nodes, head);
+  return !run.some((s) => live.has(s));
+}
+
+/**
  * The tree after deleting `remove`: each survivor whose parent went is hung from
  * its nearest surviving ancestor, so the tree stays connected.
  */

@@ -181,6 +181,13 @@ check('choosing an older save does not resize the dialog', sizeBefore.join() ===
 check('a plain autosave in the middle can be deleted by itself', await page.evaluate(() =>
   [...document.querySelectorAll('.stree-node-actions button')].some((b) => b.textContent === 'Delete save')));
 check('restoring an older save warns that it branches', callout.includes('new branch'), callout);
+// The tip of the line that isn't being played: its branch can go from there.
+const endSeq = await page.evaluate(() => [...document.querySelectorAll('.stree-node[data-role="end"]')]
+  .map((g) => g.dataset.seq).find((seq) => document.querySelector(`.stree-node[data-seq="${seq}"] circle[stroke="#111"]`) === null));
+await page.click(`.stree-node[data-seq="${endSeq}"]`);
+check('an end save off the live line offers Delete branch', await page.evaluate(() =>
+  [...document.querySelectorAll('.stree-node-actions button')].some((b) => b.textContent === 'Delete branch')), { endSeq });
+await page.click(`.stree-node[data-seq="${oldSeq}"]`);
 check('the detail panel has its picture', await page.evaluate(() => document.querySelector('.stree-shot')?.tagName === 'IMG'));
 await page.screenshot({ path: `${SHOTS}/s3-tree-selected.png` });
 const wantAge = snaps[1].age;

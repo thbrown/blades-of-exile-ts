@@ -16386,4 +16386,11 @@ game's saves were first called a *series*; the same day they were renamed a
   gone, and a stored `Autosave` is cleared on load. A direct link no longer
   waits for a first manual save: it starts a fresh game each load, so each
   load of one is a game of its own on the main menu.
+- **A branch can be deleted from its end save** as well as from its first:
+  `branchOfEnd` is the leaf back up to (not including) the nearest fork —
+  every save on that stretch has one child, so no other branch goes with it
+  — and `canDeleteFromEnd` allows it only when that fork exists (there is
+  another branch to keep) and none of the stretch is on the live game's
+  line. `deleteBranch` takes either. The first child's line counts too, from
+  its own tip, so the line abandoned by a restore can go from its end.
 

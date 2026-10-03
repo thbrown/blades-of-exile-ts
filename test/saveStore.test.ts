@@ -166,6 +166,19 @@ describe('the tree store', () => {
     expect((await listSnaps(tree.id)).map((s) => s.seq)).toEqual([1, 2, 3, 4]);
   });
 
+  it('deletes a branch from its end save, back to the fork', async () => {
+    const { tree } = await createTree('Tips', snap(0, 'manual'));
+    for (let i = 1; i <= 3; i++) await appendSnapshot(tree.id, snap(i * 100)); // 2, 3, 4
+    await setHead(tree.id, 2);
+    await appendSnapshot(tree.id, snap(250)); // 5, child of 2: the live line
+    await appendSnapshot(tree.id, snap(260)); // 6
+    // 4 ends the line that carried on from 2 before the restore: 3 and 4 go.
+    expect(await deleteBranch(tree.id, 4)).toBe(2);
+    expect((await listSnaps(tree.id)).map((s) => s.seq)).toEqual([1, 2, 5, 6]);
+    // Now there is one line: nothing to delete from its end.
+    await expect(deleteBranch(tree.id, 6)).rejects.toThrow();
+  });
+
   it('renames and deletes a tree', async () => {
     const { tree } = await createTree('Old name', snap(0, 'manual'));
     await renameTree(tree.id, 'New name');

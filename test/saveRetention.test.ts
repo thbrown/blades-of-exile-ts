@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SnapKind, SnapNode, autoCandidates, autoCount, canDeleteBranch, canDeleteSingle, childrenOf, lineage,
+  SnapKind, SnapNode, autoCandidates, autoCount, branchOfEnd, canDeleteBranch, canDeleteFromEnd, canDeleteSingle,
+  childrenOf, lineage,
   pickAutoVictim, reparent, roleOf, roles, trimAutos,
 } from '../src/platform/saveRetention';
 
@@ -113,5 +114,29 @@ describe('reparent', () => {
   it('hangs orphans on the nearest surviving ancestor', () => {
     const kept = reparent(chain(5), [2, 3]);
     expect(kept.map((n) => [n.seq, n.parent])).toEqual([[1, null], [4, 1], [5, 4]]);
+  });
+});
+
+describe('deleting a branch from its end save', () => {
+  // 1-2-3-4-5, and a branch 6-7-8 from 3.
+  const tree = (): SnapNode[] => [...chain(5), node(6, 3, 'branch'), node(7, 6), node(8, 7)];
+
+  it('takes the saves back to the fork, and no further', () => {
+    expect(branchOfEnd(tree(), 8)).toEqual([8, 7, 6]);
+    // The first child's line counts as a branch too, from its own end.
+    expect(branchOfEnd(tree(), 5)).toEqual([5, 4]);
+  });
+
+  it('only from an end save, and only when there is another branch', () => {
+    expect(branchOfEnd(tree(), 7)).toBeNull();
+    expect(branchOfEnd(chain(5), 5)).toBeNull();
+    expect(canDeleteFromEnd(chain(5), 5, 1)).toBe(false);
+  });
+
+  it("never the branch the live game is on, even partway along it", () => {
+    expect(canDeleteFromEnd(tree(), 8, 5)).toBe(true);
+    expect(canDeleteFromEnd(tree(), 8, 8)).toBe(false);
+    expect(canDeleteFromEnd(tree(), 8, 7)).toBe(false);
+    expect(canDeleteFromEnd(tree(), 5, 8)).toBe(true);
   });
 });

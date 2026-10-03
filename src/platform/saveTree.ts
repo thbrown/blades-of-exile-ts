@@ -25,7 +25,9 @@
  * before any graphics load) and the in-game Load command share it.
  */
 
-import { DEFAULT_MAX_AUTO_SAVES, SnapRole, autoCount, canDeleteBranch, canDeleteSingle, roles } from './saveRetention';
+import {
+  DEFAULT_MAX_AUTO_SAVES, SnapRole, autoCount, branchOfEnd, canDeleteBranch, canDeleteFromEnd, canDeleteSingle, roles,
+} from './saveRetention';
 import { SnapInfo } from './saveStore';
 import { layoutTree } from './saveTreeLayout';
 
@@ -44,7 +46,7 @@ export interface SaveTreeOptions {
   exportTree?: () => void;
   /** Delete one save, keeping what came after; resolves with the fresh tree. */
   deleteSnapshot?: (seq: number) => Promise<readonly SnapInfo[]>;
-  /** Delete a whole branch from its first save; resolves with the fresh tree. */
+  /** Delete a whole branch, from its first save or its end save; resolves with the fresh tree. */
   deleteBranch?: (seq: number) => Promise<readonly SnapInfo[]>;
   /** Delete the whole game (offered on its first save); the caller closes the view. */
   deleteTree?: () => void;
@@ -410,6 +412,15 @@ export function showSaveTree(parent: HTMLElement, opts: SaveTreeOptions): { clos
     } else if (opts.deleteBranch && role === 'branch' && canDeleteBranch(snaps, seq, opts.head)) {
       button('Delete branch', true, () => {
         if (!window.confirm('Delete this branch — this save and every save after it? This cannot be undone.')) return;
+        after(opts.deleteBranch!(seq));
+      });
+    } else if (opts.deleteBranch && role === 'end' && canDeleteFromEnd(snaps, seq, opts.head)) {
+      // The tip of a branch that isn't the one being played: the branch back
+      // to where it split off goes, the other branches stay.
+      const n = branchOfEnd(snaps, seq)?.length ?? 0;
+      button('Delete branch', true, () => {
+        if (!window.confirm(`Delete this branch — the ${n} save${n === 1 ? '' : 's'} from where it split off up to this one? `
+          + 'This cannot be undone.')) return;
         after(opts.deleteBranch!(seq));
       });
     } else if (opts.deleteTree && role === 'root') {
