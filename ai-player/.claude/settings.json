@@ -1,0 +1,16 @@
+{
+  "enabledMcpjsonServers": ["exile"],
+  "permissions": {
+    "allow": [
+      "mcp__exile",
+      "Read(runs/**)",
+      "Edit(runs/**)",
+      "Write(runs/**)"
+    ],
+    "deny": [
+      "Bash",
+      "WebFetch",
+      "WebSearch"
+    ]
+  }
+}
