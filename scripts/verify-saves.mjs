@@ -25,7 +25,7 @@ page.on('dialog', (d) => { void d.accept(); });
 await page.addInitScript(() => {
   try {
     localStorage.setItem('exile-js:prefs', JSON.stringify({
-      ShowInstantHelp: false, DisplayMode: 5, UIScale: 2, Autosave_Every: 1,
+      ShowInstantHelp: false, DisplayMode: 5, UIScale: 2,
     }));
   } catch { /* the default will do */ }
 });
@@ -55,6 +55,25 @@ check('a direct link makes no tree by itself', await page.evaluate(() => window.
 
 await page.evaluate(() => window.__scheduler.saveNow('Manual', 'manual'));
 check('Save makes the game a tree', await page.evaluate(() => window.__univ.treeId !== null));
+// Every move is saved, even a quick walk: each key as soon as the game takes
+// one, with no idle time between (the idle callback alone saved ~1 in 4).
+const walked = new Set();
+for (let i = 0; i < 30; i++) {
+  await page.waitForFunction(() => !window.__session.busy && window.__animPending() === 0, { timeout: 10000 });
+  if (i > 0) walked.add(await page.evaluate(() => window.__univ.party.age));
+  await page.keyboard.press(i % 2 === 0 ? 'ArrowLeft' : 'ArrowRight');
+  await page.waitForTimeout(40);
+}
+await page.waitForFunction(() => !window.__session.busy && window.__animPending() === 0, { timeout: 10000 });
+walked.add(await page.evaluate(() => window.__univ.party.age));
+await page.waitForTimeout(1500);
+await page.evaluate(() => window.__scheduler.settled());
+const walkedSnaps = await snapsOf();
+// The root counts: a first key that did not move leaves the game where it was saved.
+const newAges = new Set(walkedSnaps.map((s) => s.age));
+const missed = [...walked].filter((a) => !newAges.has(a));
+check('a quick 30-move walk saves every move it made', walked.size >= 25 && missed.length === 0,
+  { moves: walked.size, saved: walkedSnaps.length - 1, missed });
 for (const key of ['ArrowRight', 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'ArrowUp']) {
   await page.keyboard.press(key);
   await page.waitForTimeout(450);
@@ -62,7 +81,8 @@ for (const key of ['ArrowRight', 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowU
 await page.waitForTimeout(1500);
 await page.evaluate(() => window.__scheduler.settled());
 let snaps = await snapsOf();
-check('moving autosaves into the same tree', snaps.length >= 4, snaps.length);
+check('moving autosaves into the same tree', snaps.length >= 30, snaps.length);
+
 check('the first is the manual root', snaps[0].kind === 'manual' && snaps[0].parent === null);
 check('each is a child of the one before', snaps.every((s, i) => i === 0 || s.parent === snaps[i - 1].seq));
 check('each has a picture and a place', snaps.every((s) => s.thumb && s.place !== ''), snaps.map((s) => s.place));
@@ -116,7 +136,18 @@ await page.screenshot({ path: `${SHOTS}/s2-tree.png` });
 const lanes = await page.evaluate(() => new Set([...document.querySelectorAll('.stree-node')]
   .map((g) => g.getAttribute('transform').split(',')[1])).size);
 check('the branch sits on its own row', lanes === 2, lanes);
-check('the newest save needs no callout', await page.evaluate(() => document.querySelector('.stree-callout') === null));
+check('the newest save needs no callout', await page.evaluate(() => document.querySelector('.stree-note')?.textContent === ''));
+check('the tree fits its pane: no scrolling', await page.evaluate(() => {
+  const pane = document.querySelector('.stree-pane');
+  const box = document.querySelector('.stree');
+  return pane.scrollWidth <= pane.clientWidth && pane.scrollHeight <= pane.clientHeight
+    && box.scrollHeight <= box.clientHeight && getComputedStyle(pane).overflow === 'hidden';
+}));
+check('Cancel and Restore are the only buttons bottom right', await page.evaluate(() =>
+  [...document.querySelectorAll('.stree footer .grow ~ button')].map((b) => b.textContent).join('|') === 'Cancel|Restore'));
+check('the game info is in a card', await page.evaluate(() => document.querySelector('.stree-detail .stree-card dl') !== null));
+check('the branch starts with a branch save', await page.evaluate(() => document.querySelector('.stree-node[data-role="branch"]') !== null));
+const sizeBefore = await page.evaluate(() => { const r = document.querySelector('.stree').getBoundingClientRect(); return [r.width, r.height]; });
 
 // Click an old node that has children: the callout warns about the branch.
 await page.hover(`.stree-node[data-seq="${snaps[2].seq}"]`);
@@ -124,7 +155,11 @@ check('hovering a node shows its picture', await page.evaluate(() => { const t =
 await page.screenshot({ path: `${SHOTS}/s2b-tree-hover.png` });
 const oldSeq = snaps[1].seq;
 await page.click(`.stree-node[data-seq="${oldSeq}"]`);
-const callout = await page.$eval('.stree-callout', (e) => e.textContent);
+const callout = await page.$eval('.stree-note', (e) => e.textContent);
+const sizeAfter = await page.evaluate(() => { const r = document.querySelector('.stree').getBoundingClientRect(); return [r.width, r.height]; });
+check('choosing an older save does not resize the dialog', sizeBefore.join() === sizeAfter.join(), { sizeBefore, sizeAfter });
+check('a plain autosave in the middle can be deleted by itself', await page.evaluate(() =>
+  [...document.querySelectorAll('.stree-node-actions button')].some((b) => b.textContent === 'Delete save')));
 check('restoring an older save warns that it branches', callout.includes('new branch'), callout);
 check('the detail panel has its picture', await page.evaluate(() => document.querySelector('.stree-shot')?.tagName === 'IMG'));
 await page.screenshot({ path: `${SHOTS}/s3-tree-selected.png` });
@@ -139,7 +174,7 @@ const after = await snapsOf();
 const forked = after.filter((s) => after.filter((c) => c.parent === s.seq).length > 1);
 check('playing on from it branches the tree further', forked.length === 2 && after.length === total + 1, { forks: forked.map((f) => f.seq) });
 
-// ---- the autosave preferences: how often, and how much to keep
+// ---- the autosave preferences: the triggers only (it saves every move)
 const canvasPoint = (x, y) => page.evaluate(({ x, y }) => {
   const c = document.querySelector('canvas');
   const r = c.getBoundingClientRect();
@@ -161,7 +196,7 @@ await page.locator('#game-menu-bar .menu-item.open .dropdown li', { hasText: 'Pr
 await page.waitForTimeout(300);
 await clickDialogButton('autosave-details');
 const prefNames = await page.evaluate(() => [...window.__dialogs.active.def.byName.keys()]);
-check('the autosave dialog asks how often and how much', prefNames.includes('every') && prefNames.includes('budget'), prefNames.slice(0, 8));
+check('the autosave dialog no longer asks how often or how much', !prefNames.includes('every') && !prefNames.includes('budget'), prefNames.slice(0, 8));
 await page.screenshot({ path: `${SHOTS}/s3b-autosave-prefs.png` });
 await page.keyboard.press('Enter'); // OK on the autosave dialog
 await page.waitForTimeout(250);

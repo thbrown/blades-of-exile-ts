@@ -49,14 +49,14 @@ describe('try_auto_save', () => {
   });
 
   it('lets a per-reason preference override the default either way', () => {
-    setAutosavePrefs({ enabled: true, triggers: { Eat: true, EnterTown: false }, every: 10, budgetMb: 10 });
+    setAutosavePrefs({ enabled: true, triggers: { Eat: true, EnterTown: false } });
     expect(autosaveTriggerOn('Eat')).toBe(true);
     expect(autosaveTriggerOn('EnterTown')).toBe(false);
   });
 
   it('the master switch silences all of them', () => {
     const seen = watch();
-    setAutosavePrefs({ enabled: false, triggers: {}, every: 10, budgetMb: 10 });
+    setAutosavePrefs({ enabled: false, triggers: {} });
     tryAutoSave('EnterTown');
     expect(seen).toEqual([]);
   });
@@ -100,27 +100,31 @@ describe('the trigger sites', () => {
 });
 
 describe('the tick', () => {
-  it('fires once per `every` moves', () => {
+  it('fires on every move, and the master switch silences it', () => {
     const seen = watch();
-    setAutosavePrefs({ ...DEFAULT_AUTOSAVE_PREFS, every: 3 });
-    for (let i = 0; i < 9; i++) tickAutoSave();
+    setAutosavePrefs(DEFAULT_AUTOSAVE_PREFS);
+    for (let i = 0; i < 3; i++) tickAutoSave();
+    setAutosavePrefs({ ...DEFAULT_AUTOSAVE_PREFS, enabled: false });
+    for (let i = 0; i < 20; i++) tickAutoSave();
     expect(seen).toEqual(['Tick', 'Tick', 'Tick']);
   });
 
-  it('is off at 0 and silenced by the master switch', () => {
+  it('ticks indoors as well as outdoors', async () => {
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    await session.startNewGame();
+    expect(session.inTown).toBe(true);
+    setAutosavePrefs(DEFAULT_AUTOSAVE_PREFS);
     const seen = watch();
-    setAutosavePrefs({ ...DEFAULT_AUTOSAVE_PREFS, every: 0 });
-    for (let i = 0; i < 20; i++) tickAutoSave();
-    setAutosavePrefs({ ...DEFAULT_AUTOSAVE_PREFS, enabled: false, every: 1 });
-    for (let i = 0; i < 20; i++) tickAutoSave();
-    expect(seen).toEqual([]);
+    const { increaseAgeEffects } = await import('../src/game/increaseAge');
+    await increaseAgeEffects(session);
+    expect(seen).toContain('Tick');
   });
 
   it('comes from taking a step in the game, and costs no random numbers', async () => {
     const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
     await session.startNewGame();
     session.endTownMode({ x: 0, y: 0 });
-    setAutosavePrefs({ ...DEFAULT_AUTOSAVE_PREFS, every: 1 });
+    setAutosavePrefs(DEFAULT_AUTOSAVE_PREFS);
     const seen = watch();
     const { increaseAgeEffects } = await import('../src/game/increaseAge');
     await increaseAgeEffects(session);

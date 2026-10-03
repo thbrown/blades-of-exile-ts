@@ -188,8 +188,9 @@ in `src/` and `tools/` is done. Not in either original.
   timeline (as a tree, since restoring branches), the thinning and the
   thumbnails. What remains of Rewind is **a key that steps back one turn**:
   the tree now takes a save every move (one that changes nothing writes
-  nothing), a save costs ~4 ms of main thread, and the 10 MB budget holds
-  ~380 of them (about 26 KB each, picture included) before thinning.
+  nothing), a save costs ~4 ms of main thread, and each tree keeps its newest
+  autosaves densely (a cap of 50 by default, thinned with age; about 26 KB
+  each, picture included).
 
 # Part 2: Playing Exile 3 in blades-of-exile-ts
 

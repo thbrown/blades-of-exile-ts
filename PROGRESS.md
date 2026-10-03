@@ -1628,6 +1628,9 @@ Notes for M2 implementer:
 - (2026-10-01) **A play-test difference that depends on where you stand isn't a dice difference.** Colchis's "This is very odd..." was on time from the south and west gates and a step late from the north one. Drive every entrance (`positionParty` + a real key press) before deciding a report doesn't reproduce.
 - (2026-10-01) **Ghidra's decompile of E3's movie script `3148` is fiction in places**: it shows a skip-the-walking flag (`local_b`) set to `'\x10'`, `'3'`, `'5'`, but `[bp - 9]` is written once, to 0, in the whole function; it also mislabels the jump table's cases. Read the movies from `nedis.py 1098:3148` and its printed jump table only. Also: a `?scenario=` link starts the game before `main.ts` installs `onScenarioIntro`, so it never shows intros or the E3 movie; a UI check of them has to come in through the startup screen (`verify-e3.mjs`'s last section).
 - (2026-10-01) **Editing `src/` while a `verify-*.mjs` run is going makes vite reload the page under it**, and the run then times out somewhere unrelated (a touch-dialog tap, "Loading valleydy…" in the shot). Finish the edits, then run the checks.
+- (2026-10-03) **"Only the newest autosave shows" had two causes, neither of them the trigger.** Indoor and outdoor moves both tick (`increaseAgeEffects` → `tickAutoSave`). But the scheduler only captured in an idle callback, and `ready()` is false while any animation is pending — so during a walk the idle callback kept missing its window and the ticks folded into one (bench-save-ui's 14 saves in 60 moves); then retention kept only the newest 12 on the line. Now the host captures at its action gates (`scheduler.captureIfPending()` before a click or key starts an action, and when the animation loop drains): a new move can only start once `midAction()` is false, so that is exactly the moment the last move's end state exists and nothing has changed it yet. verify-saves walks 30 moves with keys sent the moment the game takes them and checks every move's age is in the tree.
+- (2026-10-03) **A failed bash has no sound of its own, in either C++.** What is heard is the 1d4 hit's boom (`damage_pc` → `boom_space`, sound type 0 → file 97; 5 → 73 with `bash-door=1997`). Pick-lock's failure is the one with `LOCK_FAILED`. `doors.test.ts` pins that a failed bash is heard.
+- (2026-10-03) **Deleting a fork's first child can turn its sibling into "the first child"**, which is how a branch start is recognised in a tree saved before branch saves had a kind. `freezeBranches` writes those down as kind `'branch'` before anything is evicted.
 - (2026-09-25) **A vehicle number in a `.map` file resizes the scenario's list to it — down as well as up** (`loadTownMapData`, OBoE's too), so a later town naming a lower number deletes every vehicle above it. Number them in load order (town, x, y). E3's converter does (`vehicleNumbers`).
 - (2026-09-25) **Check an opcode name against `SpecType` before using it.** The names are `specials-opcodes.txt`'s lines by position (as in OBoE), and several read wrong: `relocate` is `TOWN_RELOCATE_CREATURE` (party relocation is `set-sector`), `stair-generic` is `TOWN_GENERIC_BUTTON` and `button-generic` is `TOWN_GENERIC_STAIR`, and `town-attitude` is `MAKE_TOWN_HOSTILE` (one creature is `set-attitude`). `buildOpcodeTable` plus `SpecType[...]` is a one-line check.
 - (2026-09-23) **E3 data is big-endian and `[x][y]`.** Read it with `LegacyReader(data, true)`. The terrain byte is `x*48 + y`. *(Corrected 2026-09-24: I first claimed `outdoor-to-json.js`'s output was transposed, but `display.js` draws `map[i*48+j]` at column `i`, so it was right all along.)* Everything that Ghidra shows as `DS:-0x500e + …` is a zone field. The town record is loaded at `DS:0004`, so subtract 4.
@@ -16232,7 +16235,7 @@ game's saves were first called a *series*; the same day they were renamed a
   synchronous gzip, no picture) instead.
 - **Restore never deletes.** `setHead(series, seq)`, then the next save is a
   child of `seq`, a second child if it already had one: a branch.
-- **Retention is pure and tested** (`platform/saveRetention.ts`,
+- **Retention is pure and tested** (superseded 2026-10-03 by the autosave cap, below) (`platform/saveRetention.ts`,
   `test/saveRetention.test.ts`): never thin the root, head, leaves, forks or
   manual saves; the newest 12 on the head's lineage whole, then a grid in *game
   time* (⅛ day, day, week — a grid, not rank-from-newest, which drifts);
@@ -16270,3 +16273,44 @@ game's saves were first called a *series*; the same day they were renamed a
 - Not done: `docs/` is built from the sources and was not rebuilt; stepping
   back a single turn (PLAN.md "Rewind"); an in-game "Older saves…" for a game
   whose scenario isn't the loaded one goes through the same page reload as before.
+
+**Play-test round (2026-10-03): every move saved, a capped autosave pool, the tree restyled.**
+- **Every move is saved** (see the gotcha of the same date). `SaveScheduler`
+  splits a save into a synchronous capture and an ordered write queue, so no
+  capture is ever dropped; `captureIfPending` is called at both action gates in
+  `main.ts` and when `startAnimLoop` drains. The `slow` back-off and the
+  `Autosave_Every` and `Autosave_BudgetMb` preferences are gone (the autosave
+  dialog says what happens instead).
+- **Retention is a cap, not a grid** (`saveRetention.ts`, DIVERGENCES #47):
+  `TreeInfo.maxAuto` (default `DEFAULT_MAX_AUTO_SAVES` = 50, set in the tree's
+  footer) bounds the *autosaves*; past it, `appendSnapshot` evicts one picked
+  with weight `ln(1 + newer)` — `Math.random`, never `get_ran`. A node's
+  **role** (`roleOf`): the root, a **branch save** (stored as kind `'branch'`
+  when an autosave starts a branch; read by shape in older trees), an **end
+  save** (any leaf, worked out each time), else its kind. Only role-`auto`
+  nodes count or go, and fork points are never evicted.
+- **Deleting by hand**: `deleteSnapshot` (a milestone, manual save or
+  autosave, not the root, a branch's first or last save, or the live one),
+  `deleteBranch` (only from a branch save, not the line being played), and the
+  root's "Delete whole game" (startup screen only, so never the game in play).
+  `setMaxAuto` trims at once, after a confirm.
+- **The restore tree**: one fixed size (`min(1000px, …) × min(640px, …)`); the
+  game's paper and the Dungeon face, as the startup cards; the tree squeezed to
+  its pane (`layoutTree`'s `fitWidth`), never scrolling, the dots shrinking
+  when crowded; the snapshot's details in a card with a row per PC; a note slot
+  that always keeps its room; marks by role (green diamond for a branch save,
+  hollow ring for an end save) in a legend in the header; per-save Download /
+  Delete under the card; **Cancel** and **Restore** the only buttons bottom
+  right (Restore on the newest just carries on). Double-click or Enter on a
+  node restores it.
+- **Magnified panels only while the pads show**: `TouchControls.visible()`
+  gates the party/inventory sheet, so touch controls defaulting on for a
+  touch-only pointer don't magnify a click when the pads aren't on screen.
+- Checks: `saveRetention.test.ts` rewritten (roles, weighting, cap, deletion
+  rules), `saveStore.test.ts` (cap at 50, branch kind, single delete, legacy
+  branch), `saveScheduler.test.ts` (30 back-to-back moves → 30 saves),
+  `saveTreeLayout.test.ts` (fit), `doors.test.ts` (bash sound);
+  `verify-saves.mjs` (the quick walk, fixed size, no scrolling, Cancel/Restore,
+  the card, branch saves, Delete save). Its Exile III import section needs
+  `public/scenarios/exile3`, which a fresh checkout doesn't have.
+

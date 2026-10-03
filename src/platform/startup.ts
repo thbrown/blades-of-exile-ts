@@ -67,7 +67,8 @@ export interface StartupSaveActions {
    * Open the restore tree for a game. Resolves with the snapshot the player
    * chose to restore, or null if they closed it.
    */
-  browse: (treeId: string) => Promise<number | null>;
+  /** The restore tree: a save to go back to, null if closed, 'deleted' if the game was deleted there. */
+  browse: (treeId: string) => Promise<number | null | 'deleted'>;
   rename: (treeId: string, name: string) => Promise<void>;
   remove: (treeId: string) => Promise<void>;
   /** Import an `.exg` or a tree zip, giving the new tree's id (null: cancelled or refused). */
@@ -425,7 +426,8 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
         const browse = (): void => {
           if (saveActions === undefined) { resume(); return; }
           void saveActions.browse(game.id).then((seq) => {
-            if (seq !== null) choose({ scenarioId: game.scenarioId, tree: { id: game.id, seq } });
+            if (seq === 'deleted') card.remove();
+            else if (seq !== null) choose({ scenarioId: game.scenarioId, tree: { id: game.id, seq } });
           });
         };
         // A save names its own scenario, so picking one here is also how a

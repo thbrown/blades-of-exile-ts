@@ -25,7 +25,6 @@ function rig(over: Partial<SchedulerDeps> = {}) {
     treeId: () => tree,
     setTreeId: (id) => { tree = id; },
     treeName: () => 'Test game',
-    budgetBytes: () => 10 * 1024 * 1024,
     idle: (fn) => { idle.push(fn); },
     compress: (raw) => Promise.resolve(new Uint8Array([0x1f, 0x8b, ...raw])),
     ...over,
@@ -133,18 +132,31 @@ describe('the save scheduler', () => {
     expect(r.tree()).toBeNull();
   });
 
-  it('asks the host to back off when the serialise is slow', async () => {
-    let t = 0;
-    const slow: number[] = [];
-    const r = rig({
-      now: () => (t += 20), // every capture "takes" 20 ms
-      slow: (p95) => { slow.push(p95); },
-    });
-    for (let i = 0; i < 20; i++) {
+  it('captures every move when the host asks before each action, and writes them all in order', async () => {
+    const r = rig();
+    // A walk: a tick from inside each move, then the next move's gate. No
+    // idle callback runs in between, and the writes are still in flight.
+    for (let i = 1; i <= 30; i++) {
       r.setAge(i);
       r.sched.request('Tick', 'auto');
-      await r.flushIdle();
+      r.sched.captureIfPending();
     }
-    expect(slow.length).toBeGreaterThan(0);
+    await r.flushIdle();
+    const snaps = await listSnaps(r.tree()!);
+    expect(snaps).toHaveLength(30);
+    expect(snaps.map((s) => s.gameAge)).toEqual(Array.from({ length: 30 }, (_, i) => i + 1));
+    expect(snaps.slice(1).every((s, i) => s.parent === snaps[i]!.seq)).toBe(true);
+  });
+
+  it('captures nothing at a moment the game cannot be saved', async () => {
+    const r = rig();
+    r.setReady(false);
+    r.sched.request('Tick', 'auto');
+    r.sched.captureIfPending();
+    expect(r.sched.queued).toBe(0);
+    r.setReady(true);
+    r.sched.captureIfPending();
+    await r.flushIdle();
+    expect(await listSnaps(r.tree()!)).toHaveLength(1);
   });
 });

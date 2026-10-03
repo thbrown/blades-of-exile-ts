@@ -196,13 +196,11 @@ export async function preferencesDialog(
   };
 }
 
-/** pref-autosave.xml — how often it ticks, how much it may keep, and the six triggers. */
+/** pref-autosave.xml — the six triggers (the tick is every move, and not a preference). */
 async function autosaveDialog(
   ctx: CanvasRenderingContext2D, store: SheetStore, prefs: AutosavePrefs, host: PreferencesHost,
 ): Promise<AutosavePrefs | null> {
   const dlg = new XmlDialog(ctx, store, getDialogDef('pref-autosave'));
-  dlg.setNum('every', prefs.every);
-  dlg.setNum('budget', prefs.budgetMb);
   for (const t of TRIGGERS) {
     dlg.setLed(t, (prefs.triggers[t] ?? AUTOSAVE_TRIGGER_DEFAULTS[t]) ? 'red' : 'off');
   }
@@ -210,6 +208,5 @@ async function autosaveDialog(
   if ((await host.nest(dlg)) !== 'okay') return null;
   const triggers: Partial<Record<AutosaveReason, boolean>> = {};
   for (const t of TRIGGERS) triggers[t] = dlg.getLed(t) !== 'off';
-  return { enabled: prefs.enabled, triggers, every: Math.max(0, dlg.getTextAsNum('every')),
-    budgetMb: Math.max(1, dlg.getTextAsNum('budget')) };
+  return { enabled: prefs.enabled, triggers };
 }

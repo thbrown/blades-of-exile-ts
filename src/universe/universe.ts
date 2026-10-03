@@ -59,7 +59,7 @@ export class Universe {
   /**
    * `cUniverse::file`, redesigned: the save *tree* this game is written into
    * (`platform/saveStore.ts`), null until its first save. Where the C++ names a
-   * file and rotates five autosaves beside it, a tree holds every autosave
+   * file and rotates five autosaves beside it, a tree holds the autosaves
    * of the game as a tree, and a load picks the snapshot the live game
    * continues from.
    */

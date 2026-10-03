@@ -16,7 +16,10 @@
 
 import { SavePreview } from '../fileio/saveIo';
 import { pickLocalFile } from './pickFile';
-import { RETENTION, SnapKind, SnapNode, lineage, reparent, thin } from './saveRetention';
+import {
+  DEFAULT_MAX_AUTO_SAVES, SnapKind, SnapNode, canDeleteBranch, canDeleteSingle, freezeBranches, lineage,
+  reparent, subtree, trimAutos,
+} from './saveRetention';
 
 // The project's old name, kept: renaming it would lose what players have stored.
 const DB_NAME = 'exile-js';
@@ -45,8 +48,11 @@ export interface TreeInfo {
   nextSeq: number;
   /** Stored size of every snapshot, thumbnails included. */
   bytes: number;
-  /** Saves since thinning last ran. */
-  sinceThin: number;
+  /**
+   * The most autosaves it keeps (`saveRetention.ts`); absent means
+   * `DEFAULT_MAX_AUTO_SAVES`. The player sets it in the restore tree.
+   */
+  maxAuto?: number;
   /** How many snapshots it holds. */
   count: number;
   /** The head snapshot's summary, so the startup screen needn't read the tree. */
@@ -228,7 +234,7 @@ export async function createTree(
   const snap = snapRow(id, 1, null, input);
   const tree: TreeInfo = {
     id, name, scenarioId: input.preview.scenarioId, createdAt: snap.savedAt, updatedAt: snap.savedAt,
-    head: 1, nextSeq: 2, bytes: snap.bytes, sinceThin: 0, count: 1, cover: coverOf(snap),
+    head: 1, nextSeq: 2, bytes: snap.bytes, count: 1, cover: coverOf(snap),
   };
   await transact('readwrite', [TREES, SNAPS, BLOBS], async (get) => {
     await run(get(TREES).put(tree));
@@ -238,54 +244,69 @@ export async function createTree(
   return { tree, snap };
 }
 
-/** How many saves between thinning passes. */
-const THIN_EVERY = 10;
-
 export interface AppendResult {
   snap: SnapInfo;
   tree: TreeInfo;
-  /** The budget could not be met without deleting a branch tip or the like. */
-  overBudget: boolean;
+  /** Autosaves evicted to make room. */
+  evicted: number[];
 }
 
+/** A tree's autosave cap. */
+export const maxAutoOf = (tree: TreeInfo): number => tree.maxAuto ?? DEFAULT_MAX_AUTO_SAVES;
+
 /**
- * Save `input` as a child of the tree's head, and make it the new head — which
- * is how a branch starts when the head is not a leaf. Thinning runs here every
- * few saves, in the same transaction.
+ * Save `input` as a child of the tree's head, and make it the new head. When
+ * the head already has a child this starts a branch, and an autosave doing so
+ * is stored as a **branch** save, which the cap never touches. Past the cap,
+ * one old autosave is evicted (`saveRetention.ts`), in the same transaction.
  */
 export async function appendSnapshot(
-  treeId: string, input: SnapInput, budgetBytes: number = RETENTION.budgetBytes,
+  treeId: string, input: SnapInput, rand: () => number = Math.random,
 ): Promise<AppendResult> {
   return transact('readwrite', [TREES, SNAPS, BLOBS], async (get) => {
     const tree = await run(get(TREES).get(treeId) as IDBRequest<TreeInfo | undefined>);
     if (tree === undefined) throw new Error('that saved game no longer exists');
-    const snap = snapRow(treeId, tree.nextSeq, tree.head, input);
+    const snaps = await run(get(SNAPS).getAll(treeRange(treeId)) as IDBRequest<SnapInfo[]>);
+    const forks = snaps.some((s) => s.parent === tree.head);
+    const kind: SnapKind = forks && input.kind === 'auto' ? 'branch' : input.kind;
+    const snap = snapRow(treeId, tree.nextSeq, tree.head, { ...input, kind });
     await run(get(SNAPS).put(snap));
     await run(get(BLOBS).put({ treeId, seq: snap.seq, data: new Uint8Array(input.data) }));
+    snaps.push(snap);
     tree.head = snap.seq;
     tree.nextSeq += 1;
     tree.bytes += snap.bytes;
     tree.updatedAt = snap.savedAt;
-    tree.sinceThin += 1;
     tree.count += 1;
     tree.cover = coverOf(snap);
-    let overBudget = false;
-    if (tree.sinceThin >= THIN_EVERY || tree.bytes > budgetBytes) {
-      tree.sinceThin = 0;
-      overBudget = await thinInTransaction(get, tree, budgetBytes);
-    }
+    const evicted = await evictInTransaction(get, tree, snaps, maxAutoOf(tree), rand);
     await run(get(TREES).put(tree));
-    return { snap, tree, overBudget };
+    return { snap, tree, evicted };
   });
 }
 
-/** Thin one tree in an open transaction; reports whether it is still over budget. */
-async function thinInTransaction(
-  get: (name: StoreName) => IDBObjectStore, tree: TreeInfo, budgetBytes: number,
-): Promise<boolean> {
-  const snaps = await run(get(SNAPS).getAll(treeRange(tree.id)) as IDBRequest<SnapInfo[]>);
-  const { remove, overBudget } = thin(snaps, tree.head, budgetBytes);
-  if (remove.length === 0) return overBudget;
+/**
+ * Bring one tree down to `max` autosaves in an open transaction. Before
+ * anything is deleted, a branch start known only by its shape (a tree saved
+ * before branch saves had a kind) is written down as one: deleting the save
+ * before it can change which child of a fork looks like the first.
+ */
+async function evictInTransaction(
+  get: (name: StoreName) => IDBObjectStore, tree: TreeInfo, snaps: SnapInfo[], max: number,
+  rand: () => number,
+): Promise<number[]> {
+  const remove = trimAutos(snaps, tree.head, max, rand);
+  if (remove.length === 0) return remove;
+  const frozen = freezeBranches(snaps);
+  for (const [i, row] of frozen.entries()) if (row !== snaps[i]) await run(get(SNAPS).put(row));
+  await removeInTransaction(get, tree, frozen, remove);
+  return remove;
+}
+
+/** Delete `remove` from an open transaction, hanging their children on what is left. */
+async function removeInTransaction(
+  get: (name: StoreName) => IDBObjectStore, tree: TreeInfo, snaps: readonly SnapInfo[], remove: readonly number[],
+): Promise<void> {
   const kept = reparent(snaps, remove);
   const before = new Map(snaps.map((s) => [s.seq, s]));
   for (const seq of remove) {
@@ -298,7 +319,37 @@ async function thinInTransaction(
     const row = before.get(node.seq)!;
     if (row.parent !== node.parent) await run(get(SNAPS).put({ ...row, parent: node.parent }));
   }
-  return overBudget;
+}
+
+/** Change a tree's autosave cap, evicting at once if it went down. Returns how many went. */
+export async function setMaxAuto(treeId: string, max: number, rand: () => number = Math.random): Promise<number> {
+  return transact('readwrite', [TREES, SNAPS, BLOBS], async (get) => {
+    const tree = await run(get(TREES).get(treeId) as IDBRequest<TreeInfo | undefined>);
+    if (tree === undefined) return 0;
+    tree.maxAuto = Math.max(0, Math.floor(max));
+    const snaps = await run(get(SNAPS).getAll(treeRange(treeId)) as IDBRequest<SnapInfo[]>);
+    const gone = await evictInTransaction(get, tree, snaps, tree.maxAuto, rand);
+    await run(get(TREES).put(tree));
+    return gone.length;
+  });
+}
+
+/**
+ * Delete one save — a milestone, a manual save or an autosave — keeping what
+ * came after it. Refused for the root, a branch's first or last save, and the
+ * save the live game is at (`canDeleteSingle`).
+ */
+export async function deleteSnapshot(treeId: string, seq: number): Promise<void> {
+  await transact('readwrite', [TREES, SNAPS, BLOBS], async (get) => {
+    const tree = await run(get(TREES).get(treeId) as IDBRequest<TreeInfo | undefined>);
+    if (tree === undefined) return;
+    const snaps = await run(get(SNAPS).getAll(treeRange(treeId)) as IDBRequest<SnapInfo[]>);
+    if (!canDeleteSingle(snaps, seq, tree.head)) {
+      throw new Error("the first and last saves of a branch can only be deleted with the branch");
+    }
+    await removeInTransaction(get, tree, snaps, [seq]);
+    await run(get(TREES).put(tree));
+  });
 }
 
 /** The live game is now at `seq` (a restore): the next save branches from it if it is not a leaf. */
@@ -354,9 +405,9 @@ export async function deleteTree(id: string): Promise<void> {
 }
 
 /**
- * Delete `seq` and everything below it — a whole abandoned branch. Refused for
- * anything on the head's lineage (that is the game being played, and includes the
- * root); returns how many snapshots went.
+ * Delete a whole branch: `seq`, which must start one, and everything below it.
+ * Refused if the live game is on it; the root's "branch" is the whole game
+ * (`deleteTree`). Returns how many snapshots went.
  */
 export async function deleteBranch(treeId: string, seq: number): Promise<number> {
   return transact('readwrite', [TREES, SNAPS, BLOBS], async (get) => {
@@ -364,13 +415,8 @@ export async function deleteBranch(treeId: string, seq: number): Promise<number>
     if (tree === undefined) return 0;
     const snaps = await run(get(SNAPS).getAll(treeRange(treeId)) as IDBRequest<SnapInfo[]>);
     if (lineage(snaps, tree.head).has(seq)) throw new Error("that save is on the game you're playing");
-    const doomed = new Set([seq]);
-    for (let grew = true; grew;) {
-      grew = false;
-      for (const s of snaps) {
-        if (s.parent !== null && doomed.has(s.parent) && !doomed.has(s.seq)) { doomed.add(s.seq); grew = true; }
-      }
-    }
+    if (!canDeleteBranch(snaps, seq, tree.head)) throw new Error('that save does not start a branch');
+    const doomed = subtree(snaps, seq);
     for (const s of snaps) {
       if (!doomed.has(s.seq)) continue;
       await run(get(SNAPS).delete([treeId, s.seq]));
@@ -399,7 +445,7 @@ export async function importTree(
   const tree: TreeInfo = {
     id, name, scenarioId, createdAt: Math.min(now, ...rows.map((r) => r.savedAt)), updatedAt: now,
     head, nextSeq: Math.max(0, ...rows.map((r) => r.seq)) + 1,
-    bytes: rows.reduce((sum, r) => sum + r.bytes, 0), sinceThin: 0, count: rows.length,
+    bytes: rows.reduce((sum, r) => sum + r.bytes, 0), count: rows.length,
     cover: coverOf(rows.find((r) => r.seq === head) ?? rows[rows.length - 1]!),
   };
   await transact('readwrite', [TREES, SNAPS, BLOBS], async (get) => {
