@@ -251,6 +251,13 @@ const e3Item = await page.evaluate(() => {
   window.__session.checkGameOver();
   return { name: item.fullName, e3: item.e3Ability, pic: item.graphicNum };
 });
+// Exile III's ending movie comes first, with the party in it; Escape skips it.
+const ending = await page.waitForFunction(() => window.__dialogs?.active?.kind === 'e3-movie'
+  && window.__dialogs.active.scene, null, { timeout: 30000 }).then((h) => h.jsonValue(), () => null);
+await page.waitForTimeout(3000);
+await page.screenshot({ path: `${SHOTS}/p8b-exile3-ending.png` });
+check('winning Exile III plays its ending', ending === 'ending', { ending });
+await page.keyboard.press('Escape');
 await dialogUp('save');
 await page.keyboard.press('Escape');
 await page.waitForSelector('.startup-party li', { timeout: 30000 });

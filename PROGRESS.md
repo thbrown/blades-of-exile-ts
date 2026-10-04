@@ -1612,6 +1612,7 @@ Notes for M2 implementer:
 
 ## Findings / gotchas log
 
+- (2026-10-04) **E3's title movie and ending are ported** (section "Exile III's title movie and ending" above), so `TODO(E3-movies)` is gone. Two things worth knowing: movie 0 finds its squares by **special-spot number** in town 84 (`6b63`), not from a table, and movie 2 runs with **the player's own living PCs** and their names. Ghidra's `1dcb` is as fictional as its `3148` was: no strings, a made-up skip flag. Gotcha: an `nedis.py` jump table's targets can land mid-instruction in the listing (`jmp 0x5255` into `add sp, 2` after a call; `2578` into a `mov es, ax` the listing filter hid): read the bytes there as the start of the shared tail they are.
 - (2026-10-04) **Parties and scenarios, checked against 1997.** The original's startup screen offers Load Game, Make New Party and Join Scenario (a party in memory required; `STARTUP.CPP:35`), and a win goes back to it with the party and an offer to save it (`ACTIONS.CPP:1433`); it has no campaign state at all. All of that is here, Exile III included in both directions. `verify-party.mjs` now walks the party in memory into Exile III (its opening movie is a dialog of kind `e3-movie`, skipped scene by scene with Escape, not Enter), checks it lands in Fort Emergence unchanged, wins, and carries an E3 item into A Small Rebellion with its E3 code and an exported picture. What OBoE adds beyond 1997 and this port doesn't yet: `exportSummons`, stored PCs, scenarios won and played (`TODO(campaign)`).
 - (2026-10-03) **Odds and ends before a push.** The PWA icons are now the main menu's logo (`data/graphics/icon.png`, 38×38), scaled by whole multiples with nearest-neighbour onto the theme colour, the maskable one into the middle 80%: `node scripts/make-icons.mjs` remakes all four. **File › Main Menu from a `?scenario=` link went straight back into the scenario**: `urlWith(null)` drops `play` and `party` but not `scenario`; `mainMenuUrl()` drops it too, for both Main Menu paths and the death dialog's New Party. Exile III is the first card on the startup screen (`BUNDLED_SCENARIOS` is in display order). `scenario-previews.mjs` gained `--redo` and `PREVIEWS_OUT=<dir>`, to retake previews after a rendering change and compare before replacing. The **content audit now covers all 341** library scenarios (`library-content-ratings.tsv`): the 173 new ones were read in six batches by subagents, which also grepped each scenario's whole text for slurs and sexual content involving minors, since the keyword categories have neither; `content-audit.ts` now writes that text (`library/audit/text/<id>.txt`). None rated worse than R; the TSV gives each one's reasons, and the closest calls (paladin, marktplc, crusader, magiflut, market) went to the user to decide.
 - (2026-10-03) **A party leaving Exile III lost its whole pack at the next scenario's door.** All 475 E3 items are custom pictures (sheet 11, 2100–2199), and `enterWithParty` took custom-pictured items away as 1997 did, because `exportGraphics` wasn't ported. Now it is (`src/universe/exportGraphics.ts`, run by `handleVictory` with the page's sheets via `session.scenarioSheets`): every custom picture a carried or stored item or PC uses is copied onto `party.exportSheet` and renumbered 10000 + cell; the sheet travels as `save/export.png` (`src/fileio/png.ts`, a pure encoder/decoder so saves still load synchronously and headless; the converter's PNG writer moved there); `syncPartySheet` puts it in the `SheetStore` (now `ImageBitmap | OffscreenCanvas`) before each frame; `itemGraphic` and `customGraphic(…, true)` draw it. The door now strips only pictures still 1000..9999. DIVERGENCES #7 (user's decision: OBoE for pictures) and #48 (OBoE's `addGraphic` never marks the cell it fills, so every item picture would share cell 0 — fixed). Summoning items and the soul crystal still go at the door: `exportSummons` is still `TODO(campaign)`. `verify-party.mjs`'s win now checks the custom-pictured item survives on a 280×180 party sheet, and a call-special item keeps the removed-special-items path covered. Tests: `exportGraphics.test.ts`, `e3ItemsEnterBoe.test.ts` (needs the local exile3 conversion).
@@ -15873,10 +15874,60 @@ black and the title screen. The converter writes them as
 picture the game has no sheet for as it is. `E3MovieScreen` plays them before
 the movie; Escape, a click or Skip moves on one scene at a time.
 
-**Left out**: movies 0 and 2, since the port has neither E3's title screen
-nor its ending yet (`TODO(E3-movies)` in `e3Movie.ts`). E3 plays the intro
-*before* party creation; here a party is made on the startup screen, so the
-movie comes after, on entering the scenario.
+**Left out** at the time: movies 0 and 2. Both landed 2026-10-04 (below).
+E3 plays the intro *before* party creation; here a party is made on the
+startup screen, so the movie comes after, on entering the scenario.
+
+### Exile III's title movie and ending, ported (2026-10-04)
+
+The last two of E3's three movies (`src/game/e3Movie.ts`, `frame0` and
+`frame2`; the intro is `frame1`). `E3Movie` takes the movie's number;
+`MOVIES` has each one's stage, first frame and loop frame.
+
+- **Movie 0, the title screen's** (`1098:47dd`, frames 0–239, town 84): the
+  party raids Varik's temple — the guards, the priest's summons, the
+  secret door at (19,2), PC 2's dart trap ("(Click)" … "Ow."), the chest,
+  the guardian that kills Throg, and the trip to the healer ("Where's my
+  dagger?" "Oh, shut up."). It plays on a new game after the opening
+  pictures and before the intro, as scene `title` (DIVERGENCES.md #40).
+  - Its squares are **town 84's special spots, by number**
+    (`FUN_1098_6b63`: the first spot whose `spec_id` is n). The converted
+    town numbers spots its own way, so `MOVIE0_SPOTS` keeps TOWN.DAT's,
+    and the test checks them against `readE3Town`.
+  - New mechanics, all in the stage: items in containers are kept (undrawn)
+    so the chest can be opened (item byte +0x12, the preset's +9 —
+    `contained`) and picked up (`variety` 0); the `[bp - 7]` no-walk flag,
+    which this script does set; `Delay(16)` pauses (`FUN_1048_02a8`);
+    `run_a_boom`'s `x_adj`/`y_adj`, which 1997's `do_explosion_anim` adds
+    to the explosion's square (NEWGRAPH.CPP:672), used to put two hits in
+    the middle of the 2-square guardian.
+  - E3 bug, harmless and not kept: frame 136's item search starts at slot
+    115, one past the end of 115 (`5621: si = 0x73`).
+- **Movie 2, the ending** (`1098:1dcb`, frames 600–887, town 66): the
+  fortress falls, Blackcrag pulls the party out one PC at a time
+  ("Welcome, %-12.12s"), the Empress Prazac, Anaximander and the scroll,
+  "Dervishes of the Empire", Rentar-Ihrno's shade ("Never forget."), the
+  walk into the sun, THE END and the credits. Town 66's creatures 0–3 are
+  Rentar-Ihrno, Prazac, Anaximander and Blackcrag's mage.
+  - **It uses the real party**: `08bd(2)` skips the four stand-in PCs and
+    builds `DS:5446`, the living PCs in party order; frame 600 places them
+    and 662–667 bring each to Blackcrag, skipping on at the first empty
+    slot. `MovieParty` carries their graphics and names.
+  - **Party+0xac ≥ 3 (the Anama took them in; SDF (4,0)) changes four of
+    the Empress's lines** ("I have found out you are Anama." …).
+  - It plays on winning: `session.onVictory` in `main.ts` runs it before the
+    congratulations dialog, as E3 runs it after the pedestal's 0xd3b.
+    What E3 does after it is odd (town 66, PC status 7); the port goes to
+    the victory dialog (DIVERGENCES.md #40, E3-CHECK-IN-ORIGINAL #28).
+- `E3MovieScreen` now plays a list of scenes — `logo`, `start`, `title`,
+  `movie` for a new game; `ending` alone at the end — and a skip moves on
+  one scene, ending the showing on the last. `verify-e3.mjs` expects the
+  four opening scenes; `verify-party.mjs` checks a won Exile III plays the
+  ending before the save dialog.
+- Strings: the movies' literals sit just before their functions in segment
+  1098 (`0x1079`–`0x1db2` for the ending, `0x4579`–`0x47d0` for the title
+  movie). Ghidra's decompile of `1dcb` drops every one of them and invents
+  its usual `local_9 = '\x10'` — read `nedis.py` only.
 
 ### Play-test fixes: maps from E3 saves, the item scrollbar, party cards, the name (2026-10-01)
 

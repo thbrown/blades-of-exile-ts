@@ -1,5 +1,5 @@
 /**
- * Exile III's intro movie on screen (`game/e3Movie.ts` is the movie itself).
+ * Exile III's movies on screen (`game/e3Movie.ts` is the movies themselves).
  *
  * E3 keeps two pictures, and so does this: the terrain gworld that
  * `draw_terrain` paints off screen (279 × 351, the terrain view with its
@@ -13,18 +13,21 @@
  * centre, as there), and "Click mouse to continue." in the bottom right. A
  * click or Escape skips it, and the touch overlay has a Skip button.
  *
- * **The opening comes first**: the two pictures E3 shows as it starts
- * (`1050:010b`), on black — the Spiderweb Software logo with sound 95 for 3
- * seconds, then the adventurers on the mountain (START.BMP) with sound 22 for
- * 5. E3 shows them once, when the program starts, and can't skip them; here
- * they lead into the movie, and a skip moves on to the next scene.
+ * **A new game's showing is E3's start-up, in order**: the two pictures E3
+ * shows as it starts (`1050:010b`), on black — the Spiderweb Software logo
+ * with sound 95 for 3 seconds, then the adventurers on the mountain
+ * (START.BMP) with sound 22 for 5 — then movie 0, which E3 loops behind its
+ * title screen, then movie 1, the intro, which its New Game plays. E3 shows
+ * the pictures once, when the program starts, and can't skip them; here each
+ * skip moves on one scene, and a skip of the last ends it. **The ending** is
+ * movie 2 alone.
  */
 
 import type { ModalScreen, TouchView } from '../dialogs/dialog';
 import type { Scenario } from '../data/scenario';
 import {
   E3Movie, MovieSkipped, TER_SCRN,
-  type MovieGfx, type MovieRan, type MovieSprite, type MovieStage, type Rect,
+  type MovieGfx, type MovieNumber, type MovieParty, type MovieRan, type MovieSprite, type MovieStage, type Rect,
 } from '../game/e3Movie';
 import { Colours } from './colours';
 import { desktop } from './desktop';
@@ -85,40 +88,52 @@ const OPENING = {
   },
 } as const;
 
-type Scene = keyof typeof OPENING | 'movie';
+/** A scene: an opening picture, or a movie — `title` is 0, `movie` 1 (the intro), `ending` 2. */
+type Scene = keyof typeof OPENING | 'title' | 'movie' | 'ending';
+
+const MOVIE_SCENES: Partial<Record<Scene, MovieNumber>> = { title: 0, movie: 1, ending: 2 };
+
+/** What a screen shows: a new game's opening, or the ending with the party that won. */
+export type E3Showing = { kind: 'opening' } | { kind: 'ending'; party: MovieParty };
 
 export class E3MovieScreen implements ModalScreen, MovieGfx {
   /** For the scripts that drive the UI, to know the movie from a dialog. */
   readonly kind = 'e3-movie';
   private readonly gworld = canvas(TER_SCRN.w, TER_SCRN.h);
   private readonly shown = canvas(TER_SCRN.w, TER_SCRN.h);
-  private readonly movie: E3Movie;
+  private readonly scenes: Scene[];
   private skipped = false;
-  /** A skip asked for during an opening picture: the next wait ends it. */
+  /** A skip asked for during a scene that isn't the last: the next wait ends it. */
   private sceneSkipped = false;
   /** Which is showing; public for the UI scripts. */
-  scene: Scene = 'logo';
+  scene: Scene;
   private readonly waiting = new Set<() => void>();
   private repaintQueued = false;
 
   constructor(
     private readonly ctx: CanvasRenderingContext2D,
     private readonly store: SheetStore,
-    scen: Scenario,
+    private readonly scen: Scenario,
     private readonly host: E3MovieHost,
+    private readonly showing: E3Showing = { kind: 'opening' },
   ) {
-    this.movie = new E3Movie(scen, this, host.ran);
-    this.shown.fillStyle = Colours.BLACK;
-    this.shown.fillRect(0, 0, TER_SCRN.w, TER_SCRN.h);
+    this.scenes = showing.kind === 'ending' ? ['ending'] : ['logo', 'start', 'title', 'movie'];
+    this.scene = this.scenes[0]!;
   }
 
-  /** Play the opening and the movie; resolves when it ends or is skipped. */
+  /** Play every scene; resolves when the last ends or is skipped. */
   async play(): Promise<void> {
     try {
-      for (const scene of ['logo', 'start'] as const) await this.opening(scene);
-      this.scene = 'movie';
-      this.queueRepaint();
-      await this.movie.play();
+      for (const scene of this.scenes) {
+        try {
+          const n = MOVIE_SCENES[scene];
+          if (n === undefined) await this.opening(scene as keyof typeof OPENING);
+          else await this.movie(scene, n);
+        } catch (e) {
+          // A skip of this scene goes on to the next; a skip of everything doesn't.
+          if (!(e instanceof MovieSkipped) || this.skipped) throw e;
+        }
+      }
     } catch (e) {
       if (!(e instanceof MovieSkipped)) throw e;
     }
@@ -132,17 +147,23 @@ export class E3MovieScreen implements ModalScreen, MovieGfx {
     this.sceneSkipped = false;
     this.queueRepaint();
     this.sound(o.sound);
-    try {
-      await this.wait(o.ms);
-    } catch (e) {
-      // A skip of this picture goes on to the next; a skip of everything doesn't.
-      if (!(e instanceof MovieSkipped) || this.skipped) throw e;
-    }
+    await this.wait(o.ms);
   }
 
-  /** Escape, a click or Skip: past an opening picture, or out of the movie. */
+  /** One movie, on a fresh stage, from black (`0e09` sets each one up anew). */
+  private async movie(scene: Scene, n: MovieNumber): Promise<void> {
+    this.scene = scene;
+    this.sceneSkipped = false;
+    this.shown.fillStyle = Colours.BLACK;
+    this.shown.fillRect(0, 0, TER_SCRN.w, TER_SCRN.h);
+    this.queueRepaint();
+    const party = this.showing.kind === 'ending' ? this.showing.party : undefined;
+    await new E3Movie(this.scen, this, this.host.ran, n, party).play();
+  }
+
+  /** Escape, a click or Skip: on to the next scene, or out after the last. */
   private skipScene(): string | null {
-    if (this.scene === 'movie') return 'skip';
+    if (this.scene === this.scenes[this.scenes.length - 1]) return 'skip';
     this.sceneSkipped = true;
     for (const stop of this.waiting) stop();
     this.waiting.clear();
@@ -160,7 +181,7 @@ export class E3MovieScreen implements ModalScreen, MovieGfx {
 
   wait(ms: number): Promise<void> {
     if (this.skipped) return Promise.reject(new MovieSkipped());
-    if (this.sceneSkipped && this.scene !== 'movie') {
+    if (this.sceneSkipped) {
       this.sceneSkipped = false;
       return Promise.reject(new MovieSkipped());
     }
@@ -265,6 +286,7 @@ export class E3MovieScreen implements ModalScreen, MovieGfx {
         }
       }
     for (const item of stage.items) {
+      if (item.contained || !item.present) continue;
       const q = item.loc.x - c.x + TER_VIEW_CENTER;
       const r = item.loc.y - c.y + TER_VIEW_CENTER;
       if (!onView(q, r)) continue;
@@ -347,8 +369,8 @@ export class E3MovieScreen implements ModalScreen, MovieGfx {
     const { ctx } = this;
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    if (this.scene !== 'movie') {
-      const o = OPENING[this.scene];
+    if (MOVIE_SCENES[this.scene] === undefined) {
+      const o = OPENING[this.scene as keyof typeof OPENING];
       ctx.fillStyle = Colours.BLACK;
       ctx.fillRect(0, 0, desktop.w, desktop.h);
       const img = this.store.get(o.sheet);

@@ -139,7 +139,8 @@ import { TouchControls, type TouchPadHost, setTouchControls, touchControlsOn } f
 import { openTouchLayoutPanel } from './platform/touchLayout';
 import { type Aiming, aimSpaceAction, autoAim, currentAim, moveAim, talkAim } from './game/aimCursor';
 import { E3_PATTERN_SLOTS, tilePattern } from './render/tiling';
-import { E3MovieScreen } from './render/e3MovieScreen';
+import { E3MovieScreen, type E3Showing } from './render/e3MovieScreen';
+import { e3Flag } from '../tools/e3convert/flags';
 import {
   DEFAULT_UI_SCALE, DisplayMode, UI_SCALES, UI_SCALE_FIT, desktop, placeBesideGame,
 } from './render/desktop';
@@ -1355,13 +1356,15 @@ async function main(): Promise<void> {
    * the message node before the one that ended it — so neither does this.
    */
   /**
-   * Exile III's intro movie, "Exile (verb) - ..." (`render/e3MovieScreen.ts`),
-   * on a new game only: E3's New Game plays it before the party is made
-   * (`10c8:00b7`), and a saved game never gets here. Escape, a click or the
-   * touch overlay's Skip ends it. Its dice are a stream of its own, so the
-   * game's draws — and every replay — are where they would be without it.
+   * Exile III's movies (`render/e3MovieScreen.ts`). The opening — E3's
+   * start-up pictures, its title screen's movie and the intro, "Exile (verb)
+   * - ..." — plays on a new game only: E3's New Game plays the intro before
+   * the party is made (`10c8:00b7`), and a saved game never gets here. The
+   * ending plays on winning. Escape, a click or the touch overlay's Skip
+   * moves on a scene. Their dice are a stream of their own, so the game's
+   * draws — and every replay — are where they would be without them.
    */
-  const playExile3Intro = async (): Promise<void> => {
+  const playExile3Movie = async (showing: E3Showing): Promise<void> => {
     const dice = new GameRng();
     dice.seedGame(Date.now() >>> 0);
     const movie = new E3MovieScreen(ctx, store, univ.scenario, {
@@ -1379,7 +1382,7 @@ async function main(): Promise<void> {
       },
       ran: (min, max) => dice.getRan(1, min, max),
       prompt: () => !touchControlsOn(),
-    });
+    }, showing);
     await dialogs.runScreenQueued(() => {
       // Closes itself at the end; a skip closes it first and stops it here.
       void movie.play().then(
@@ -1400,7 +1403,7 @@ async function main(): Promise<void> {
    * `basic_buttons[0]`, Done — shown if any of the messages has text.
    */
   session.onScenarioIntro = async () => {
-    if (name === EXILE3_ID) await playExile3Intro();
+    if (name === EXILE3_ID) await playExile3Movie({ kind: 'opening' });
     const { introMsgs, introPic, introMessPic } = univ.scenario;
     if (!introMsgs.some((m) => m !== '')) return;
     // The C++ redraws the game screen first (`redraw_screen`, boe.party.cpp:220),
@@ -1429,6 +1432,21 @@ async function main(): Promise<void> {
 
   session.onVictory = () => {
     void (async () => {
+      // Exile III's pedestal says its goodbye (dialog 0xd3b), then E3 plays
+      // its ending movie (`1078:5ad8`), with the PCs still standing.
+      if (name === EXILE3_ID) {
+        // The Anama's verdict, party+0xac, is SDF (4, 0) as the converter's
+        // `partyFlag(0xac)` maps it.
+        const [row, col] = e3Flag(0, 0xac - 0x84);
+        await playExile3Movie({
+          kind: 'ending',
+          party: {
+            pcs: univ.party.pcs.filter((pc) => pc.isAlive)
+              .map((pc) => ({ graphic: pc.whichGraphic, name: pc.name })),
+            anama: (univ.party.stuffDone[row]?.[col] ?? 0) >= 3,
+          },
+        });
+      }
       // `handle_victory` empties `scen_name` first, so what "Save First" writes
       // is the party alone — the same bytes that become the party in memory.
       const party = saveGame(univ, true);

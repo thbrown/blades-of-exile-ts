@@ -384,6 +384,27 @@ Still open: the other nine squares.
 - **Question:** does it ever come on the entering move? If it never does,
   E3's monsters don't act on that move, and the port needs to know why.
 
+### 28. The title movie and the ending (2026-10-04)
+
+- **Where:** the title screen (movie 0 plays behind it), and the end: the
+  pedestal in the Keep of Rentar-Ihrno, Release, Power Up, Begin with all
+  four vats full. A save just before the pedestal would do for the second.
+- **Do:** watch the title screen's movie once round (the party raiding
+  Varik's temple, to "Oh, shut up."), and the ending through to "Farewell,
+  and goodnight.". Then click, and note **what the game does after the
+  ending**: where the party is, whether it can still move, save or load.
+- **Why:** both scripts were read from the EXE (`1098:47dd`, `1098:1dcb`),
+  but where E3 puts the title movie on its title screen isn't known (the
+  port centres it as it does the intro), and what comes after the ending
+  is odd in the code: `0e09` leaves the game in town mode in the ending's
+  own town (66) at (4,13), with every living PC's status set to 7, which
+  is no status BoE has. The port goes to the victory dialog instead.
+- **The port:** the title movie between the opening pictures and the intro
+  on a new game, about three minutes; the ending before the victory dialog,
+  about four, with the party's own PCs, "Welcome, <name>" for each.
+- **Question:** where on the title screen is the movie? And after the
+  ending's click, what can the party do?
+
 ## Waiting on a ruling (already written up elsewhere)
 
 - **DIVERGENCES.md #30 and #31**, marked "open for the user".

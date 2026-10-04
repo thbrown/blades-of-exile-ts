@@ -1,31 +1,31 @@
 /**
- * Exile III's intro movie — "Exile (verb) - To banish or expel ...", the
- * history of Exile told over a little play on the game's own map renderer —
+ * Exile III's three movies — little plays on the game's own map renderer —
  * ported from EXILE3.EXE's segment `1098`.
  *
  * E3 has three of these scripted cutscenes, picked by `FUN_1098_08bd(n)` and
  * stepped one frame at a time by `FUN_1098_103c`:
  *
  * - movie 0 (`47dd`, frames 0–239) is the title screen's background loop, the
- *   party raiding Varik's temple;
- * - **movie 1 (`3148`, frames 300–517) is this one.** The title screen's New
- *   Game and Intro buttons both call `FUN_1098_0e09(1)` (`10c8:00b7`), which
- *   plays it until a click, and New Game then builds the party;
- * - movie 2 (`1dcb`) is the ending, played from `1078:5ad8` after the last
- *   battle.
- *
- * Only movie 1 is ported.
- * TODO(E3-movies): movies 0 and 2 — they belong to E3's title screen and its
- * ending, neither of which this port has yet.
+ *   party raiding Varik's temple ("'Let's go!'" … "Oh, shut up.");
+ * - movie 1 (`3148`, frames 300–517) is the intro, "Exile (verb) - To banish
+ *   or expel ...". The title screen's New Game and Intro buttons both call
+ *   `FUN_1098_0e09(1)` (`10c8:00b7`), which plays it until a click, and New
+ *   Game then builds the party;
+ * - movie 2 (`1dcb`, frames 600–887) is the ending: the fortress falls,
+ *   Blackcrag pulls the party out, the Empress's rewards, Rentar-Ihrno's
+ *   shade, and the credits. The pedestal's last button plays it
+ *   (`1078:5ad8`, `0e09(2)`), with the party's own PCs.
  *
  * **The stage is a town**: `08bd` loads TOWN.DAT's town 84, "Anim Data"
- * (`FUN_1040_4075`), puts its creatures on their start squares and its items
- * down, gives the party four PCs with graphics 0, 10, 20 and 30 off the edge
- * of the map, and sets the game to combat mode (`overall_mode` 10) so they
- * draw one by one. A frame then moves things about by hand — the creatures'
- * and PCs' squares are written directly — and draws through the same
- * `draw_terrain`, missile and explosion code the game uses, which E3 shares
- * with Blades of Exile 1997 (NEWGRAPH.CPP), `cartoon_happening` and all.
+ * (`FUN_1040_4075`) for movies 0 and 1, or town 66 for movie 2 (`1040:1e1c`),
+ * puts its creatures on their start squares and its items down, and sets the
+ * game to combat mode (`overall_mode` 10) so the PCs draw one by one. Movies
+ * 0 and 1 have four PCs of their own, graphics 0, 10, 20 and 30, off the edge
+ * of the map; movie 2 has the party's living PCs, as they are. A frame then
+ * moves things about by hand — the creatures' and PCs' squares are written
+ * directly — and draws through the same `draw_terrain`, missile and explosion
+ * code the game uses, which E3 shares with Blades of Exile 1997
+ * (NEWGRAPH.CPP), `cartoon_happening` and all.
  *
  * Everything here is a port of that code, kept apart from the game's own
  * Universe: the movie writes squares, terrain and creatures freely, so it has
@@ -50,6 +50,57 @@ const s8 = (n: number): number => ((n + 128) & 0xff) - 128;
 
 /** Town 84, "Anim Data", the stage `08bd` loads for movies 0 and 1. */
 export const MOVIE_TOWN = 84;
+/** Town 66, the ending's stage: the keep, Blackcrag, the palace and the street outside. */
+export const ENDING_TOWN = 66;
+
+/** Which of E3's three movies: 0 the title loop, 1 the intro, 2 the ending. */
+export type MovieNumber = 0 | 1 | 2;
+
+/**
+ * Where each movie plays: its stage, its first frame (`08bd`: `n * 300`) and
+ * the frame it loops on, which this port stops before (DIVERGENCES.md #40).
+ * Movie 0 restarts at 240 (`5e6d`: the counter to -1 and `08bd(0)` again);
+ * movie 2 at 888 (`2748`: the counter to 599, the camera back to the keep).
+ */
+export const MOVIES: Record<MovieNumber, { town: number; first: number; end: number }> = {
+  0: { town: MOVIE_TOWN, first: 0, end: 240 },
+  1: { town: MOVIE_TOWN, first: 300, end: 518 },
+  2: { town: ENDING_TOWN, first: 600, end: 888 },
+};
+
+/**
+ * The party movie 2 is played with: its living PCs in party order (E3's
+ * `DS:5446`, built by `08bd`), and whether the Anama took it in — party+0xac
+ * at 3 or more, which changes four of the Empress's lines.
+ */
+export interface MovieParty {
+  pcs: { graphic: number; name: string }[];
+  anama: boolean;
+}
+
+/**
+ * Movie 0's squares are town 84's special spots, looked up by number
+ * (`FUN_1098_6b63`: the first of the town's forty spots whose `spec_id` is
+ * `n`). These are TOWN.DAT's, as `tools/e3convert/town.ts` reads them; the
+ * converted town numbers its spots its own way, so the table is kept here,
+ * and `test/e3Movie.test.ts` checks it against TOWN.DAT.
+ */
+export const MOVIE0_SPOTS: Readonly<Record<number, Loc>> = Object.fromEntries(([
+  [1, 1, 7], [2, 5, 1], [3, 16, 4], [4, 16, 5], [5, 16, 9], [6, 18, 1], [7, 19, 2], [8, 24, 6],
+  [9, 25, 4], [10, 25, 6], [11, 25, 8], [12, 26, 4], [13, 26, 8], [14, 26, 17], [15, 26, 18],
+  [16, 27, 4], [17, 27, 8], [18, 27, 13], [19, 28, 15], [20, 29, 6], [21, 29, 13], [22, 30, 18],
+  [23, 31, 18],
+] as const).map(([id, x, y]) => [id, loc(x, y)]));
+
+/**
+ * Movie 2's squares, a table at `DS:1e7a` that `1dcb` copies to its stack
+ * frame on every call (`[bp - 0x8c]` on). The last two are never read.
+ */
+export const MOVIE2_LOCS: readonly Loc[] = [
+  [4, 4], [5, 4], [6, 3], [6, 4], [6, 5], [5, 2], [5, 6], [4, 13], [4, 12], [4, 14], [3, 11], [3, 13],
+  [3, 15], [4, 18], [4, 19], [4, 20], [4, 21], [4, 22], [4, 23], [4, 24], [4, 25], [4, 26], [1, 13],
+  [6, 11], [6, 13], [6, 15], [1, 4], [19, 21], [31, 21], [23, 30], [28, 30], [5, 17], [5, 13],
+].map(([x, y]) => loc(x!, y!));
 
 /**
  * Movie 1's squares, a table at `DS:1ec0` that `3148` copies to its stack
@@ -101,7 +152,17 @@ export interface MoviePc {
   graphic: number;
 }
 
-export interface MovieItem { loc: Loc; graphic: number }
+export interface MovieItem {
+  loc: Loc;
+  graphic: number;
+  /**
+   * In a container (the item record's byte +0x12, the preset's +9), so not
+   * drawn. Movie 0 empties a chest by clearing it.
+   */
+  contained: boolean;
+  /** Its `variety` is still set; movie 0 picks some up by zeroing it. */
+  present: boolean;
+}
 
 /** The town, creatures, PCs and camera of one showing — what `08bd` builds. */
 export class MovieStage {
@@ -127,18 +188,22 @@ export class MovieStage {
   /** `combat_posing_monster`: a PC, or 100 + a creature, drawn mid-swing; -1 none. */
   posing = -1;
   /** The frame counter, `DS:3dd6`. */
-  frame = MOVIE1_FIRST_FRAME - 1;
+  frame: number;
 
-  constructor(private readonly scen: Scenario) {
-    const town = scen.towns[MOVIE_TOWN];
-    if (!town) throw new Error(`Exile III has no town ${MOVIE_TOWN} for its movie`);
+  constructor(private readonly scen: Scenario, readonly movie: MovieNumber = 1, party?: MovieParty) {
+    const { town: townNum, first } = MOVIES[movie];
+    this.frame = first - 1;
+    const town = scen.towns[townNum];
+    if (!town) throw new Error(`Exile III has no town ${townNum} for its movie`);
     this.terrain = Array.from({ length: 64 }, (_, x) =>
       Array.from({ length: 64 }, (_, y) => (x < town.maxDim && y < town.maxDim ? town.terrain[x]![y]! : 0)));
     this.sfx = Array.from({ length: 64 }, () => new Array<number>(64).fill(0));
     this.bounds = { ...town.inTownRect };
-    // Thirty from the town, and thirty empty slots after (`08bd`).
+    // Movies 0 and 1 take thirty from the town and leave thirty empty slots
+    // after (`08bd`); movie 2's town is loaded as the game loads one, all sixty.
+    const fromTown = movie === 2 ? 60 : 30;
     this.creatures = Array.from({ length: 60 }, (_, i) => {
-      const start = i < 30 ? town.creatures[i] : undefined;
+      const start = i < fromTown ? town.creatures[i] : undefined;
       const number = start?.number ?? 0;
       const m = scen.scenMonsters[number];
       return {
@@ -154,14 +219,23 @@ export class MovieStage {
     });
     this.creatureState = new Array<number>(60).fill(-1);
     this.creatureTarget = Array.from({ length: 60 }, () => loc(0, 0));
-    // Four PCs, off the map at x 50 until the script brings them on.
-    this.pcs = Array.from({ length: 4 }, (_, i) => ({ loc: loc(50, 0), direction: 0, graphic: i * 10 }));
+    // Four PCs, off the map at x 50 until the script brings them on; or, for
+    // the ending, the party's living ones, which its first frame places. (E3
+    // leaves those where they stood, but nothing draws before that frame.)
+    this.pcs = movie === 2
+      ? (party?.pcs ?? []).slice(0, 6).map((p) => ({ loc: loc(50, 0), direction: 0, graphic: p.graphic }))
+      : Array.from({ length: 4 }, (_, i) => ({ loc: loc(50, 0), direction: 0, graphic: i * 10 }));
     this.pcState = new Array<number>(6).fill(-1);
     this.pcTarget = Array.from({ length: 6 }, () => loc(0, 0));
-    // The town's preset items, less the ones in containers, which never draw.
+    // The town's preset items, in the slots `08bd` puts them in. Those in
+    // containers are kept, undrawn, since movie 0 opens a chest.
     this.items = town.presetItems
-      .filter((p) => p.code >= 0 && !p.contained)
-      .map((p) => ({ loc: loc(p.loc.x, p.loc.y), graphic: scen.scenItems[p.code]?.graphicNum ?? 0 }));
+      .filter((p) => p.code >= 0)
+      .slice(0, 115)
+      .map((p) => ({
+        loc: loc(p.loc.x, p.loc.y), graphic: scen.scenItems[p.code]?.graphicNum ?? 0,
+        contained: p.contained, present: true,
+      }));
   }
 
   /** The terrain record for terrain number `ter`. */
@@ -243,6 +317,9 @@ export interface StoredBoom {
   offset: number;
   place: number;
   type: number;
+  /** `x_adj`, `y_adj`: pixels it is moved by, from its square's corner. */
+  xAdj: number;
+  yAdj: number;
   /** Where it sits in the terrain picture, decided when it first draws. */
   rect: { left: number; top: number };
 }
@@ -323,8 +400,15 @@ export class E3Movie {
   private boomAnimActive = false;
   private haveBoom = false;
 
-  constructor(scen: Scenario, readonly gfx: MovieGfx, readonly ran: MovieRan) {
-    this.stage = new MovieStage(scen);
+  /** Movie 2's PCs' names and the Anama's verdict; empty for the others. */
+  private readonly party: MovieParty;
+
+  constructor(
+    scen: Scenario, readonly gfx: MovieGfx, readonly ran: MovieRan,
+    readonly movie: MovieNumber = 1, party?: MovieParty,
+  ) {
+    this.party = party ?? { pcs: [], anama: false };
+    this.stage = new MovieStage(scen, movie, this.party);
   }
 
   // ------------------------------------------------------------- drawing
@@ -420,16 +504,16 @@ export class E3Movie {
   }
 
   /** `run_a_boom` (`FUN_1098_6e5b`). */
-  private async runABoom(where: Loc, type: number): Promise<void> {
+  private async runABoom(where: Loc, type: number, xAdj = 0, yAdj = 0): Promise<void> {
     if (type < 0 || type > 2) return;
     this.startMissileAnim();
-    this.addExplosion(where, -1, 0, type);
+    this.addExplosion(where, -1, 0, type, xAdj, yAdj);
     await this.doExplosionAnim(0);
     this.endMissileAnim();
   }
 
-  /** `add_explosion` (`FUN_1098_6ee7`); the movie never offsets one. */
-  private addExplosion(dest: Loc, val: number, place: number, type: number): void {
+  /** `add_explosion` (`FUN_1098_6ee7`). */
+  private addExplosion(dest: Loc, val: number, place: number, type: number, xAdj = 0, yAdj = 0): void {
     if (!this.boomAnimActive) return;
     // Lose redundant explosions.
     for (const b of this.booms)
@@ -439,7 +523,7 @@ export class E3Movie {
     this.haveBoom = true;
     const offset = i === 0 ? 0 : -this.ran(0, 2);
     void val;
-    this.booms[i] = { dest: { ...dest }, offset, place, type, rect: { left: 0, top: 0 } };
+    this.booms[i] = { dest: { ...dest }, offset, place, type, xAdj, yAdj, rect: { left: 0, top: 0 } };
   }
 
   /**
@@ -462,7 +546,7 @@ export class E3Movie {
       const b = this.booms[i];
       if (!b || special >= 2) continue;
       cur = b.type;
-      b.rect = { left: 13 + 28 * (b.dest.x - ul.x), top: 13 + 36 * (b.dest.y - ul.y) };
+      b.rect = { left: 13 + 28 * (b.dest.x - ul.x) + b.xAdj, top: 13 + 36 * (b.dest.y - ul.y) + b.yAdj };
       if (b.place === 1) {
         b.rect.left += this.ran(0, 50) - 25;
         b.rect.top += this.ran(0, 50) - 25;
@@ -617,9 +701,10 @@ export class E3Movie {
     // last one, as E3's stack slot does.
     let target = loc(0, 0);
     for (let i = 0; i < 4; i++) {
-      const pc = s.pcs[i]!;
+      // E3's loop runs to 4 whatever the party; the ending's may be smaller.
+      const pc = s.pcs[i];
       const state = s.pcState[i]!;
-      if (pc.loc.x >= 50 || state < 0) continue;
+      if (!pc || pc.loc.x >= 50 || state < 0) continue;
       if (state === 6) target = { ...s.pcTarget[i]! };
       if (state >= 100) target = { ...s.creatures[state - 100]!.loc };
       if (state >= 100 && E3Movie.adjacent(pc.loc, target) && s.frame % 2 === 0) {
@@ -680,14 +765,35 @@ export class E3Movie {
    * frame it would loop on. `MovieSkipped` out of `gfx.wait` stops it.
    */
   async play(): Promise<void> {
-    while (this.stage.frame + 1 < MOVIE1_END_FRAME) {
+    while (this.stage.frame + 1 < MOVIES[this.movie].end) {
       await this.frame();
       await this.delayTicks(FRAME_TICKS);
     }
   }
 
-  /** `FUN_1098_3148` — one frame of movie 1. */
+  /** `FUN_1098_103c` — one frame of whichever movie this is. */
   async frame(): Promise<void> {
+    if (this.movie === 0) return this.frame0();
+    if (this.movie === 2) return this.frame2();
+    return this.frame1();
+  }
+
+  /**
+   * The tail most frames end with: everyone walks (unless the frame said not
+   * to), nobody is posing, and a redraw. Each script has its own copy; this
+   * is what they share.
+   */
+  private async tail(walk = true): Promise<void> {
+    if (walk) {
+      await this.walkPcs();
+      await this.walkCreatures();
+    }
+    this.stage.posing = -1;
+    this.redraw();
+  }
+
+  /** `FUN_1098_3148` — one frame of movie 1. */
+  private async frame1(): Promise<void> {
     const s = this.stage;
     const L = MOVIE1_LOCS;
     const m = s.creatures;
@@ -1114,9 +1220,768 @@ export class E3Movie {
     // The camera drifts down, then back up, past the history's lines.
     if (f > 333 && f <= 345) s.center.y++;
     if (f > 347 && f <= 359) s.center.y--;
-    await this.walkPcs();
-    await this.walkCreatures();
-    s.posing = -1;
-    this.redraw();
+    await this.tail();
   }
+
+
+  // ------------------------------------------------- movie 0, the title loop
+
+  /** `run_a_missile` as the scripts call it: always lobbed (path 1). */
+  private missile(from: Loc, to: Loc, type: number, sound: number, len: number): Promise<void> {
+    return this.runAMissile({ ...from }, { ...to }, type, 1, sound, len);
+  }
+
+  /** Arrive or leave in a flash: nine magic explosions, the change between their halves. */
+  private async teleport(where: Loc, change: () => void): Promise<void> {
+    this.startMissileAnim();
+    this.flash(where);
+    await this.doExplosionAnim(1);
+    change();
+    await this.doExplosionAnim(2);
+    this.endMissileAnim();
+  }
+
+  /** Fire on each of `where`, all at once (`place_type` 0). */
+  private async fireOn(where: Loc[]): Promise<void> {
+    this.startMissileAnim();
+    for (const w of where) this.addExplosion(w, -1, 0, 0);
+    await this.doExplosionAnim(0);
+    this.endMissileAnim();
+  }
+
+  /**
+   * `FUN_1098_47dd` — one frame of movie 0, the title screen's: four
+   * adventurers raid Varik's temple, one of them finds a trap, Throg dies,
+   * and they go and get him raised. Its squares are town 84's special spots
+   * (`MOVIE0_SPOTS`); its creatures are the temple's, 0–12.
+   */
+  private async frame0(): Promise<void> {
+    const s = this.stage;
+    const m = s.creatures;
+    const pc = s.pcs;
+    s.frame++;
+    const r = this.ran(0, 2);
+    // Frame 12 skips ahead to 15 and plays it; 13 and 14 never come.
+    if (s.frame === 12) s.frame = 15;
+    const f = s.frame;
+    const spot = (n: number): Loc => ({ ...MOVIE0_SPOTS[n]! });
+    const say = (text: string, at: Loc): void => this.caption(text, at);
+    const hit = r * 10 + 13;
+    /** `[bp - 7]`: a frame that moves people by hand stops the walking. */
+    let walk = true;
+    const allPcs = (from: number, set: (i: number) => void): void => {
+      for (let i = from; i < 4; i++) set(i);
+    };
+
+    switch (f) {
+      case 0: s.center = loc(4, 4); break;
+      // The four come in at the temple's door and head for its gate.
+      case 1: case 2: case 3: case 4:
+        pc[f - 1]!.loc = spot(2);
+        s.pcState[f - 1] = 6;
+        s.pcTarget[f - 1] = spot(1);
+        if (f === 3) say("'Let's go!'", pc[0]!.loc);
+        if (f === 4) {
+          say("'Varik's temple.'", pc[2]!.loc);
+          this.gfx.sound(77);
+        }
+        break;
+      case 5:
+        say("'Varik's temple.'", pc[2]!.loc);
+        s.creatureState[0] = 3;
+        break;
+      case 6: case 7: case 8: case 9: case 10: {
+        const gate = spot(1);
+        for (const p of pc) if (same(p.loc, gate)) p.loc.x = 50;
+        break;
+      }
+      case 11: s.center = loc(16, 15); break;
+      // Inside: the four come in by the south door, into the guards.
+      case 15: case 16: case 17: case 18:
+        pc[f - 15]!.loc = loc(17, 20);
+        s.pcState[f - 15] = 6;
+        s.pcTarget[f - 15] = spot(7);
+        if (f === 17) {
+          say("'Humans!'", m[3]!.loc);
+          this.gfx.sound(46);
+        }
+        if (f === 18) {
+          s.pcState[0] = 103;
+          s.pcState[1] = 104;
+          s.creatureState[1] = 0;
+          s.creatureState[2] = 0;
+          s.creatureState[3] = 1;
+        }
+        break;
+      case 19:
+        s.pcTarget[2] = loc(15, 16);
+        s.pcTarget[3] = loc(17, 16);
+        break;
+      case 20:
+        this.pose(2);
+        await this.missile(pc[2]!.loc, m[3]!.loc, 7, 11, 100);
+        await this.boomSpace(m[3]!.loc, hit, 2);
+        break;
+      case 21:
+        this.pose(3);
+        await this.missile(pc[3]!.loc, m[3]!.loc, 2, 11, 100);
+        await this.runABoom(m[3]!.loc, 0);
+        this.kill(3);
+        return;
+      case 22:
+        this.pose(1);
+        await this.boomSpace(m[1]!.loc, hit, 2);
+        this.kill(1);
+        return;
+      case 23:
+        this.pose(0);
+        await this.boomSpace(m[2]!.loc, hit, 1);
+        this.kill(2);
+        return;
+      case 24:
+        say("'Easy!'", pc[0]!.loc);
+        allPcs(0, (i) => { s.pcState[i] = -1; });
+        break;
+      case 25:
+        allPcs(0, (i) => {
+          s.pcState[i] = 6;
+          s.pcTarget[i] = spot(5);
+        });
+        break;
+      case 32: case 33: say("'How dare you!'", m[6]!.loc); break;
+      case 34: case 35: say("'This is sacred ground!'", m[7]!.loc); break;
+      case 36:
+        say("'Not to us.'", pc[0]!.loc);
+        this.redraw();
+        this.gfx.sound(18);
+        return;
+      case 37:
+        s.pcTarget[0] = spot(4);
+        s.pcTarget[1] = spot(4);
+        s.creatureState[4] = 0;
+        s.creatureState[5] = 1;
+        break;
+      case 38:
+        s.pcState[0] = 104;
+        s.pcState[1] = 105;
+        break;
+      case 39:
+        // The priest summons help where the camera is.
+        this.pose(106);
+        await this.missile(m[6]!.loc, s.center, 8, 61, 120);
+        say("'Take that!'", m[6]!.loc);
+        m[8]!.loc = { ...s.center };
+        this.redraw();
+        return;
+      case 40:
+        say("'Take that!'", m[6]!.loc);
+        s.creatureState[8] = 0;
+        break;
+      case 43:
+        this.pose(3);
+        await this.missile(pc[3]!.loc, spot(3), 2, 11, 120);
+        await this.fireOn([4, 5, 6, 7, 8].map((i) => m[i]!.loc));
+        return;
+      case 44:
+        this.pose(2);
+        await this.missile(pc[2]!.loc, m[8]!.loc, 7, 11, 120);
+        await this.boomSpace(m[8]!.loc, hit, 1);
+        this.kill(8);
+        return;
+      case 46:
+        this.pose(106);
+        await this.missile(m[6]!.loc, pc[2]!.loc, 14, 24, 100);
+        await this.runABoom(pc[2]!.loc, 2);
+        return;
+      case 47:
+        this.pose(107);
+        await this.missile(m[7]!.loc, pc[3]!.loc, 15, 24, 100);
+        await this.runABoom(pc[3]!.loc, 0);
+        return;
+      case 50:
+        this.pose(0);
+        await this.boomSpace(m[4]!.loc, hit, 2);
+        this.kill(4);
+        s.pcState[0] = 107;
+        return;
+      case 51:
+        s.creatureTarget[5] = spot(7);
+        s.creatureState[5] = 6;
+        break;
+      case 52: {
+        this.pose(3);
+        const at = spot(3);
+        await this.missile(pc[3]!.loc, at, 2, 11, 120);
+        this.stage.makeSfx(at.x, at.y, 6);
+        // Throg, PC 0, is caught in it too.
+        await this.fireOn([...[5, 6, 7, 8].map((i) => m[i]!.loc), pc[0]!.loc]);
+        this.kill(6);
+        return;
+      }
+      case 53:
+        say("'Sorry, Throg.'", pc[3]!.loc);
+        this.pose(107);
+        await this.missile(m[7]!.loc, pc[0]!.loc, 11, 24, 100);
+        await this.runABoom(pc[0]!.loc, 0);
+        return;
+      case 54:
+        this.pose(0);
+        await this.boomSpace(m[7]!.loc, hit, 3);
+        this.kill(7);
+        s.pcState[0] = 6;
+        return;
+      case 56: say("'Victory!'", pc[0]!.loc); break;
+      case 57:
+        this.pose(2);
+        await this.missile(pc[2]!.loc, m[5]!.loc, 7, 11, 100);
+        await this.boomSpace(m[5]!.loc, hit, 1);
+        this.kill(5);
+        break;
+      case 58:
+        allPcs(0, (i) => {
+          s.pcState[i] = 6;
+          s.pcTarget[i] = spot(4);
+        });
+        break;
+      case 62: case 63: say("'What now?'", pc[2]!.loc); break;
+      case 64: case 65: say("'I'll check the map.'", pc[3]!.loc); break;
+      case 68: say("'Hurry up!'", pc[1]!.loc); break;
+      case 69: say("'Be patient.'", pc[3]!.loc); break;
+      case 71: case 72: say("'Throg want kill.'", pc[0]!.loc); break;
+      case 73: say("'Ah!'", pc[3]!.loc); break;
+      case 74: case 75: say("'There's a secret passage.'", pc[3]!.loc); break;
+      case 76: case 77: say("'Northeast corner.'", pc[3]!.loc); break;
+      case 78: case 79: say("'I'll check it out.'", pc[2]!.loc); break;
+      case 80: case 81:
+        s.pcState[2] = 6;
+        s.pcTarget[2] = spot(7);
+        say("'Watch your back.'", pc[1]!.loc);
+        break;
+      case 86:
+        // The secret door at (19, 2) opens, and PC 2 steps into it.
+        pc[2]!.direction = 6;
+        s.center.y = s8(s.center.y - 1);
+        pc[2]!.loc.y = 2;
+        s.terrain[19]![2] = 0x77;
+        this.redraw();
+        this.gfx.sound(58);
+        return;
+      case 87:
+        pc[2]!.loc.y = 1;
+        s.center.y = s8(s.center.y - 1);
+        walk = false;
+        break;
+      case 88:
+        pc[2]!.loc.x = s8(pc[2]!.loc.x - 1);
+        walk = false;
+        break;
+      case 89:
+        await this.teleport(pc[2]!.loc, () => { pc[2]!.loc.x = 50; });
+        break;
+      case 91:
+        s.pcState[2] = -1;
+        s.center = loc(26, 6);
+        break;
+      case 92: {
+        const at = spot(20);
+        await this.teleport(at, () => { pc[2]!.loc = at; });
+        break;
+      }
+      case 93: case 94: say('Hmmm.', pc[2]!.loc); break;
+      case 95: case 96: case 107:
+        pc[2]!.loc.x = s8(pc[2]!.loc.x - 1);
+        break;
+      case 97:
+        pc[2]!.loc.x = s8(pc[2]!.loc.x - 1);
+        this.redraw();
+        say('(Click)', pc[2]!.loc);
+        this.redraw();
+        this.gfx.sound(34);
+        // `FUN_1048_02a8(16)`: `Delay(16)`, unless the no-delay switch is on.
+        await this.delayTicks(16);
+        say('Uh oh.', pc[2]!.loc);
+        this.redraw();
+        await this.delayTicks(16);
+        break;
+      // The trap: darts from the walls, three and three.
+      case 98: await this.missile(spot(9), spot(13), 2, 11, 100); return;
+      case 99: await this.missile(spot(13), spot(16), 2, 11, 100); return;
+      case 100:
+        await this.missile(spot(16), pc[2]!.loc, 2, 11, 100);
+        await this.runABoom(pc[2]!.loc, 0);
+        return;
+      case 101: await this.missile(spot(11), spot(12), 2, 11, 100); return;
+      case 102: await this.missile(spot(12), spot(17), 2, 11, 100); return;
+      case 103:
+        await this.missile(spot(17), pc[2]!.loc, 2, 11, 100);
+        await this.runABoom(pc[2]!.loc, 0);
+        return;
+      case 105: case 106: say('Ow.', pc[2]!.loc); break;
+      case 109: say('Finally!', pc[2]!.loc); break;
+      case 110: {
+        // The chest: what's in it comes out.
+        const at = spot(8);
+        for (const it of s.items) if (same(it.loc, at)) it.contained = false;
+        this.redraw();
+        this.gfx.sound(9);
+        return;
+      }
+      case 111: case 112: case 113: case 114: {
+        // ... and is picked up, the last first, one a frame.
+        const at = spot(8);
+        const it = lastItemAt(s.items, at);
+        if (it) {
+          it.present = false;
+          it.loc.x = 50;
+        }
+        this.redraw();
+        return;
+      }
+      case 115:
+        s.pcState[2] = 6;
+        s.pcTarget[2] = spot(20);
+        break;
+      case 120:
+        s.pcState[2] = -1;
+        pc[2]!.loc.x = 29;
+        break;
+      case 121:
+        await this.teleport(pc[2]!.loc, () => { pc[2]!.loc.x = 50; });
+        break;
+      case 123: s.center = spot(3); break;
+      case 125: {
+        const at = spot(6);
+        await this.teleport(at, () => { pc[2]!.loc = at; });
+        break;
+      }
+      case 126:
+        s.pcState[2] = 6;
+        s.pcTarget[2] = spot(7);
+        s.center.y = s8(s.center.y + 1);
+        break;
+      case 127:
+        s.pcTarget[2] = spot(4);
+        s.center.y = s8(s.center.y + 1);
+        say('Welcome back!', pc[1]!.loc);
+        break;
+      case 128: say('Welcome back!', pc[1]!.loc); break;
+      case 129: case 130: say("Let's go.", pc[3]!.loc); break;
+      case 131:
+        allPcs(1, (i) => {
+          s.pcState[i] = 6;
+          s.pcTarget[i]!.y = s8(s.pcTarget[i]!.y + 2);
+        });
+        break;
+      case 132: case 133: say('Nice dagger.', pc[0]!.loc); break;
+      case 134: case 135: say('NO!', pc[2]!.loc); break;
+      case 136: {
+        // The dagger on the altar is taken. E3's search starts one slot past
+        // the end of its 115 (`si = 0x73`), reading whatever follows; here it
+        // starts at the last real one.
+        const at = spot(3);
+        const it = lastItemAt(s.items, at);
+        if (it) it.present = false;
+        this.redraw();
+        return;
+      }
+      case 137:
+        this.gfx.sound(5);
+        s.center.y = s8(s.center.y + 2);
+        this.redraw();
+        return;
+      case 138: case 139: say('Uh oh.', pc[2]!.loc); break;
+      case 140: {
+        // The guardian rises, in fire across both its squares.
+        const top = loc(16, 9);
+        const bottom = loc(16, 10);
+        this.startMissileAnim();
+        for (let k = 0; k < 7; k++) this.addExplosion(top, -1, 1, 0);
+        for (let k = 0; k < 7; k++) this.addExplosion(bottom, -1, 1, 0);
+        await this.doExplosionAnim(1);
+        m[9]!.loc = top;
+        await this.doExplosionAnim(2);
+        this.endMissileAnim();
+        break;
+      }
+      case 141:
+        this.pose(109);
+        await this.missile(m[9]!.loc, spot(4), 2, 11, 120);
+        await this.fireOn(pc.map((p) => p.loc));
+        return;
+      case 142:
+        s.pcState[0] = 109;
+        s.pcState[1] = 109;
+        s.pcTarget[2]!.x = s8(s.pcTarget[2]!.x + 2);
+        s.pcTarget[3]!.x = s8(s.pcTarget[3]!.x - 2);
+        s.pcTarget[2]!.y = s8(s.pcTarget[2]!.y - 1);
+        s.pcTarget[3]!.y = s8(s.pcTarget[3]!.y - 1);
+        break;
+      case 143: {
+        const at = spot(4);
+        this.stage.makeSfx(at.x, at.y, 6);
+        this.pose(109);
+        await this.missile(m[9]!.loc, at, 2, 11, 120);
+        await this.fireOn(pc.map((p) => p.loc));
+        return;
+      }
+      case 145:
+        // Throg falls.
+        this.pose(109);
+        await this.missile(m[9]!.loc, pc[0]!.loc, 15, 11, 100);
+        await this.boomSpace(pc[0]!.loc, 71, 2);
+        this.stage.makeSfx(pc[0]!.loc.x, pc[0]!.loc.y, 3);
+        pc[0]!.loc.x = 50;
+        this.redraw();
+        this.gfx.sound(29);
+        return;
+      case 146: case 157:
+        this.pose(3);
+        await this.missile(pc[3]!.loc, m[9]!.loc, f === 146 ? 11 : 15, 25, 100);
+        // Half a square down, into the middle of the guardian.
+        await this.runABoom(m[9]!.loc, 0, 0, 18);
+        return;
+      case 147: case 153:
+        this.pose(2);
+        await this.missile(pc[2]!.loc, m[9]!.loc, 3, 11, 100);
+        await this.boomSpace(m[9]!.loc, hit, f === 147 ? 3 : 2);
+        return;
+      case 148: s.creatureState[9] = 1; break;
+      case 150: {
+        const at = { ...s.center };
+        at.x = s8(at.x + 1);
+        this.pose(3);
+        await this.missile(pc[3]!.loc, at, 8, 61, 120);
+        m[10]!.loc = at;
+        this.redraw();
+        return;
+      }
+      case 151: s.creatureState[10] = 109; break;
+      case 155:
+        this.pose(109);
+        await this.boomSpace(m[10]!.loc, hit, 3);
+        this.kill(10);
+        return;
+      case 158: {
+        const at = spot(4);
+        at.y = s8(at.y + 2);
+        this.pose(109);
+        await this.missile(m[9]!.loc, at, 2, 11, 120);
+        await this.fireOn([1, 2, 3].map((i) => pc[i]!.loc));
+        return;
+      }
+      case 159:
+        this.pose(1);
+        await this.boomSpace(m[9]!.loc, hit, 2);
+        this.kill(9);
+        return;
+      case 160:
+        allPcs(1, (i) => {
+          s.pcState[i] = 6;
+          s.pcTarget[i] = spot(5);
+        });
+        break;
+      case 163: case 164: say("Throg's dead.", pc[1]!.loc); break;
+      case 165: case 166: say('Good.', pc[2]!.loc); break;
+      case 167: case 168: say('Can we go now?', pc[3]!.loc); break;
+      case 169:
+        allPcs(1, (i) => {
+          s.pcState[i] = 6;
+          s.pcTarget[i]!.y = s8(s.pcTarget[i]!.y + 11);
+        });
+        break;
+      case 180: case 181: case 182: case 183: case 184: case 185:
+        allPcs(1, (i) => { if (pc[i]!.loc.y === 19) pc[i]!.loc.x = 50; });
+        break;
+      // Out by the temple's gate, and back to the start; then the healer's.
+      case 187:
+        s.center = loc(4, 4);
+        m[0]!.loc.x = 50;
+        break;
+      case 188: case 189: case 190:
+        pc[f - 187]!.loc = spot(1);
+        s.pcTarget[f - 187] = spot(2);
+        break;
+      case 191: case 192: case 193: case 194: case 195:
+        allPcs(1, (i) => { if (pc[i]!.loc.y === 2) pc[i]!.loc.x = 50; });
+        break;
+      case 197: s.center = loc(27, 15); break;
+      case 198: say('Yawn.', m[12]!.loc); break;
+      case 199: case 200: case 201:
+        pc[f - 198]!.loc = spot(23);
+        s.pcTarget[1] = spot(14);
+        s.pcTarget[2] = spot(15);
+        s.pcTarget[3] = spot(18);
+        break;
+      case 204: s.pcTarget[3] = spot(21); break;
+      case 206: case 207: say('Yes?', m[11]!.loc); break;
+      case 208: case 209: say('Dead friend.', pc[3]!.loc); break;
+      case 210: case 211: say('Too bad.', m[11]!.loc); break;
+      case 212: case 213: say('1000 gold.', m[11]!.loc); break;
+      case 214: case 215: say('Here you go.', pc[3]!.loc); break;
+      case 217:
+        // Throg, raised.
+        this.gfx.sound(24);
+        pc[0]!.loc = spot(18);
+        s.pcState[0] = -1;
+        break;
+      case 218: case 219: say('What happened?', pc[0]!.loc); break;
+      case 220: case 221: say("Don't ask.", pc[3]!.loc); break;
+      case 222:
+        allPcs(0, (i) => {
+          s.pcState[i] = 6;
+          s.pcTarget[i] = spot(19);
+          s.pcTarget[i]!.y = s8(s.pcTarget[i]!.y + 3);
+        });
+        break;
+      case 224: case 225: say('Try again?', pc[1]!.loc); break;
+      case 226: case 227: say('Why not?', pc[2]!.loc); break;
+      case 228: case 229: say("Where's my dagger?", pc[0]!.loc); break;
+      case 230: case 231: say('Oh, shut up.', pc[3]!.loc); break;
+      case 232:
+        allPcs(0, (i) => {
+          s.pcState[i] = 6;
+          s.pcTarget[i] = spot(22);
+        });
+        break;
+      case 234: case 235: case 236: case 237: case 238:
+        allPcs(0, (i) => { if (pc[i]!.loc.x >= 30) pc[i]!.loc.x = 50; });
+        break;
+      default:
+        break;
+    }
+    // The camera drifts north as they climb to the temple, and south as they
+    // leave it. (The tail also has movie 1's drift, frames 334–359, which
+    // this movie never reaches.)
+    if (f > 25 && f <= 34) s.center.y = s8(s.center.y - 1);
+    if (f > 169 && f <= 176) s.center.y = s8(s.center.y + 1);
+    await this.tail(walk);
+  }
+
+  // ------------------------------------------------- movie 2, the ending
+
+  /** `FUN_1098_6e9c(where, type)`: twelve explosions scattered round a square. */
+  private async scatter(where: Loc, type: number): Promise<void> {
+    this.startMissileAnim();
+    for (let k = 0; k < 12; k++) this.addExplosion(where, -1, 1, type);
+    await this.doExplosionAnim(0);
+    this.endMissileAnim();
+  }
+
+  /** The keep coming down: fire on `n` squares picked at random, x then y, in 0–8. */
+  private async collapse(n: number): Promise<void> {
+    this.startMissileAnim();
+    for (let k = 0; k < n; k++) {
+      const x = this.ran(0, 8);
+      const y = this.ran(0, 8);
+      this.addExplosion(loc(x, y), -1, 0, 0);
+    }
+    await this.doExplosionAnim(0);
+    this.endMissileAnim();
+  }
+
+  /**
+   * `FUN_1098_1dcb` — one frame of movie 2, the ending. Its creatures are
+   * town 66's: 0 Rentar-Ihrno, 1 the Empress Prazac, 2 Anaximander, 3
+   * Blackcrag's mage. Captions are posted and shown by the tail's redraw.
+   */
+  private async frame2(): Promise<void> {
+    const s = this.stage;
+    const L = MOVIE2_LOCS;
+    const m = s.creatures;
+    const pc = s.pcs;
+    // The narrator's square: three above the camera, as the frame starts.
+    const cap = loc(s.center.x, s8(s.center.y - 3));
+    s.frame++;
+    const f = s.frame;
+    // Rolled, as every movie frame rolls, and never used.
+    this.ran(0, 2);
+    const say = (text: string, at: Loc): void => this.caption(text, at);
+    const anama = this.party.anama;
+    /** Two frames of a line, the way most of the script runs: `[frame, text, square]`. */
+    const lines: readonly (readonly [number, string, Loc])[] = endingLines(L, cap, anama);
+    const line = lines.find(([at]) => at === f || at + 1 === f || (at === 841 && f === 843));
+
+    switch (f) {
+      case 600:
+        // The keep: the party round the pedestal.
+        s.center = { ...L[0]! };
+        pc.forEach((p, k) => { p.loc = { ...L[1 + k]! }; });
+        break;
+      case 607: s.center = { ...L[27]! }; break;
+      case 609: s.center = { ...L[28]! }; break;
+      case 611: s.center = { ...L[29]! }; break;
+      case 613: s.center = { ...L[30]! }; break;
+      case 608: case 610: case 612: case 614:
+        await this.scatter(s.center, 0);
+        return;
+      case 615: case 652: s.center = { ...L[0]! }; break;
+      case 628:
+        // Rentar-Ihrno teleports out.
+        await this.teleport(L[26]!, () => { m[0]!.loc.x = 40; });
+        break;
+      case 631: case 632: case 635: case 636: case 653: case 656:
+        await this.collapse(f < 653 ? 8 : 16);
+        return;
+      case 637: case 638: case 657: case 658:
+        // Blackcrag. The caption is still placed by the keep's camera.
+        s.center = { ...L[7]! };
+        break;
+      case 645: case 661: case 700:
+        // The mage casts.
+        this.pose(103);
+        this.redraw();
+        this.gfx.sound(25);
+        return;
+      case 662: case 663: case 664: case 665: case 666: case 667: {
+        // One at a time, the PCs appear in Blackcrag; after the last, on.
+        const k = f - 662;
+        const who = pc[k];
+        if (!who) {
+          s.frame = 667;
+          break;
+        }
+        await this.teleport(L[7 + k]!, () => { who.loc = { ...L[7 + k]! }; });
+        // `sprintf("Welcome, %-12.12s        ", name)`.
+        const name = (this.party.pcs[k]?.name ?? '').slice(0, 12).padEnd(12);
+        say(`Welcome, ${name}        `, L[24]!);
+        break;
+      }
+      case 701:
+        await this.teleport(L[23]!, () => { m[2]!.loc = { ...L[23]! }; });
+        break;
+      case 748: case 818: m[1]!.loc.x = s8(m[1]!.loc.x - 1); break;
+      case 760: m[1]!.loc.x = s8(m[1]!.loc.x + 1); break;
+      case 764:
+        // Rentar-Ihrno's shade.
+        await this.teleport(L[22]!, () => { m[0]!.loc = { ...L[22]! }; });
+        break;
+      case 801:
+        await this.teleport(L[26]!, () => { m[0]!.loc = { ...L[26]! }; });
+        break;
+      case 826:
+        // Outside, for the cheers and the credits.
+        s.center = { ...L[17]! };
+        break;
+      case 888:
+        // E3 loops from here (`2748`): the camera to the keep, the counter to
+        // 599, Rentar-Ihrno back, Anaximander nine squares east. This port
+        // stops before it (`MOVIES[2].end`).
+        s.center = { ...L[0]! };
+        s.frame = 599;
+        m[0]!.loc = { ...L[26]! };
+        m[2]!.loc.x = s8(m[2]!.loc.x + 9);
+        break;
+      default:
+        break;
+    }
+    if (line) say(line[1], line[2]);
+    await this.tail();
+  }
+}
+
+/** The last item slot on `at` — E3's searches run down from the top. */
+function lastItemAt(items: MovieItem[], at: Loc): MovieItem | undefined {
+  for (let i = items.length - 1; i >= 0; i--) if (same(items[i]!.loc, at)) return items[i];
+  return undefined;
+}
+
+/**
+ * Movie 2's lines: the first of the two frames each is posted on (`THE END`
+ * has three), what, and over which square. `cap` is the narrator's, three
+ * above the camera as the frame starts; `anama` picks the Empress's second
+ * speech (party+0xac at 3 or more, `21de`–`2273`).
+ */
+function endingLines(L: readonly Loc[], cap: Loc, anama: boolean): (readonly [number, string, Loc])[] {
+  const at = (k: number): Loc => L[k]!;
+  const run = (first: number, square: Loc, texts: string[]): (readonly [number, string, Loc])[] =>
+    texts.map((t, i) => [first + 2 * i, t, square] as const);
+  return [
+    [601, 'The reaction is set into motion ...', cap],
+    ...run(603, at(26), ['You fools!', '           What have you done?']),
+    ...run(616, at(26), ['Curse you!', 'My fortress', 'is lost!', 'But you shall', 'die with it!', 'I am off ...']),
+    [629, 'Uh oh.', at(1)],
+    [633, 'The place is falling apart!', at(1)],
+    ...run(637, cap, ['Meanwhile ...', '... in Blackcrag Fortress ...']),
+    [641, 'Have they succeeded?', at(24)],
+    [643, 'One moment ...', at(25)],
+    [646, 'They have!', at(25)],
+    [648, 'Then get them out of there!           ', at(24)],
+    [650, 'I will try ...', at(25)],
+    [654, 'Nice knowing you all.', at(1)],
+    [657, 'Hurry!', at(24)],
+    [659, 'I have them!', at(25)],
+    [668, 'What happened?', at(7)],
+    ...run(670, at(24), ['Your task is done.', 'Valorim is saved.   ']),
+    [674, 'Why are we here?', at(7)],
+    ...run(676, at(24), [
+      'We have been watching you,           ', 'hoping to help when        ', 'your task was done.        ',
+      ...(anama
+        ? ['I have found out you are Anama.           ', 'I assure you we will think           ',
+          'upon your faith more kindly           ', 'in the future.  ']
+        : ['So we have come full circle.           ', 'The people of Exile,        ',
+          'who we abused so severely,             ', 'have come back to save us.        ']),
+    ]),
+    [690, 'It was no problem.', at(7)],
+    ...run(692, at(24), ['It is time for rewards.        ', 'One more must join us now.           ',
+      'Bring Anaximander here.        ']),
+    [698, 'As you command.', at(25)],
+    [702, 'Greetings, Anaximander.    ', at(24)],
+    [704, 'Greetings, your majesty.         ', at(23)],
+    [706, 'They completed their task.           ', at(24)],
+    [708, 'So I have heard.    ', at(23)],
+    ...run(710, at(24), ['I am of my word, and will             ', 'meet my end of our bargain.            ']),
+    [714, 'She pulls out a scroll.          ', cap],
+    ...run(716, at(24), [
+      'This document entitles the           ', 'people of Exile to the lands           ',
+      'of southeastern Valorim.          ', 'They are rich and nearly                 ',
+      'empty. There, the people of                 ', 'Exile may have the peace and               ',
+      'future they have earned.               ',
+    ]),
+    [730, 'Anaximander takes the scroll. ', cap],
+    ...run(732, at(23), ['The people of Exile    ', 'Thank your majesty    ', 'for her kindness.   ']),
+    [738, 'Prazac turns to you. ', cap],
+    ...run(740, at(24), ['And now your reward.     ', 'Of course, you will be given            ',
+      'many thousands of gold pieces.               ', 'In addition ...      ']),
+    [748, 'Prazac touches you on the shoulder. ', cap],
+    ...run(750, at(32), ['I bestow upon you the highest    ', 'honor the Empire can bestow.    ',
+      'I declare all of you    ', 'to be Dervishes of the Empire.    ']),
+    [758, 'Hmmph.', at(31)],
+    [760, 'Prazac returns to her throne. ', cap],
+    [762, 'Suddenly ... ', cap],
+    ...run(765, cap, ['The shade of Rentar-Ihrno appears,', 'projected from far below the surface.',
+      'Her head is bowed in defeat.']),
+    ...run(771, at(24), ['Why are you here?     ', 'Come to cause more death?        ']),
+    ...run(775, at(22), [
+      'No.', 'We have lost.', '            You have defeated us.', 'But.',
+      '                Our memories are eternal.', '                        Our vengeance will still be had.',
+      '               One day, your children', '                 will pay for your crimes,',
+      '           by the multitudes.', '      Never forget.', '                  Every moment of every day,',
+      '                     the souls cry for vengeance.', '      Never forget.',
+    ]),
+    [802, 'We will not forget.      ', at(24)],
+    [804, 'We almost got her.', at(7)],
+    ...run(806, at(24), ['It does not matter.      ', 'More blood will not help.             ',
+      'We will pay for our crimes            ', 'for many years to come.      ', 'But enough of that!      ',
+      'It is the time to celebrate!               ']),
+    ...run(818, at(32), ['A crowd of people is waiting    ', 'outside, dying to see the          ',
+      'saviors of Valorim.     ', 'Let us go.   ']),
+    // Frame 826 moves the camera and posts this line too: three frames.
+    [826, 'You walk outside,', at(14)],
+    [827, 'You walk outside,', at(14)],
+    ...run(829, at(15), ['into the bright sun,']),
+    ...run(831, at(16), ['To bask in the cheers ']),
+    ...run(833, at(17), ["of the Empire's people."]),
+    ...run(835, at(18), ['After decades of struggle,']),
+    ...run(837, at(19), ['The people of Exile']),
+    ...run(839, at(20), ['will know peace at last.']),
+    [841, 'THE END', at(21)],
+    // The credits, a column down the street from L[14].
+    ...['THE EXILE SAGA', 'Credits:', 'Design, Programming:', 'Jeff Vogel', 'Art for Exile I and II:',
+      'Shirley Monroe'].map((t, i) => [844 + 2 * i, t, at(14 + i)] as const),
+    ...['Art for Exile III:', 'Andrew Hunter', 'Title Screen Graphic:', 'Nohl Lyons', 'Testing:',
+      'The hard working AOL crew.'].map((t, i) => [856 + 2 * i, t, at(14 + i)] as const),
+    ...['Thanks to:', 'Shirley Monroe', 'Mariann Krizsan', 'The beta testers', 'Comedy Central',
+      'And everyone who registered,', 'and made this game possible.'].map((t, i) => [868 + 2 * i, t, at(14 + i)] as const),
+    [882, 'Farewell, and goodnight.', at(17)],
+  ];
 }

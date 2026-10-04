@@ -898,17 +898,30 @@ copy and reads the PC's own number once, as the dialog opens, so the figure
 never moves. A player can tell, and no draw depends on it, so the port
 follows 1997 (`RaceAbilPick.tnl`, `src/dialogs/partyEditor.ts`).
 
-### 40. Exile III's intro movie (2026-10-01)
+### 40. Exile III's movies (2026-10-01; title and ending 2026-10-04)
 
-Not a 1997/OBoE question — neither has the movie — but where the port's
-showing of E3's (`src/game/e3Movie.ts`) differs from E3's own:
+Not a 1997/OBoE question — neither has the movies — but where the port's
+showing of E3's three (`src/game/e3Movie.ts`) differs from E3's own:
 
-- **It plays once.** E3's `3148` restarts at frame 518 and `0e09` loops it
-  until a click. Here it plays before a new game and then gets out of the way.
+- **Each plays once.** E3's `0e09` loops a movie until a click: the intro
+  restarts at frame 518, the title movie at 240, the ending at 888. Here
+  each plays to its loop and then gets out of the way.
+- **The title movie comes between the opening pictures and the intro**, on
+  a new game. E3 loops it behind its title screen, between the start-up
+  pictures and New Game; the port has no title screen, so it stands where
+  the title screen stood, centred like the intro (where E3 puts it is
+  E3-CHECK-IN-ORIGINAL #28). A skip moves on to the intro.
+- **After the ending, the victory dialog.** E3 leaves the game in town
+  mode in the ending's town (66) at (4,13), every living PC's status at 7
+  (`0e09`, `0fcb`–`1031`), a state BoE has no name for. The port ends the
+  scenario as BoE does (`handle_victory`), with the party in memory.
+- **The ending's PCs are the ones standing.** E3 draws only living PCs,
+  and places only those (`DS:5446`); so does the port. A dead PC isn't
+  welcomed to Blackcrag in either.
 - **It comes after the party is made**, on entering the scenario: E3's New
   Game plays it first and builds the party after, but this port makes parties
   on the startup screen, before any scenario.
-- **Its dice are its own** (a separate `GameRng`), not the game stream E3's
+- **Their dice are their own** (a separate `GameRng`), not the game stream E3's
   `get_ran` draws on. A player can't tell; the replay corpus would.
 - **Escape skips it as well as a click**, and on touch the overlay's Skip.
 - **The opening pictures lead into it**: E3 shows the Spiderweb logo and

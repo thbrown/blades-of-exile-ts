@@ -488,11 +488,11 @@ if ((await page.evaluate(() => document.querySelector('.startup-party')?.innerTe
 await page.click('.startup-card[data-id="exile3"]');
 const movieUp = await page.waitForFunction(() => window.__dialogs?.active?.kind === 'e3-movie', null, { timeout: 60000 })
   .then(() => true, () => false);
-// The opening first: the Spiderweb logo, then the adventurers, each skipped
-// on its own by Escape.
+// The opening first: the Spiderweb logo, the adventurers, and the title
+// screen's movie (the raid on Varik's temple), each skipped on its own by Escape.
 const scenes = [];
-for (const name of ['09a-logo', '09b-start']) {
-  await page.waitForTimeout(1000);
+for (const name of ['09a-logo', '09b-start', '09c-title']) {
+  await page.waitForTimeout(name === '09c-title' ? 5000 : 1000);
   scenes.push(await page.evaluate(() => window.__dialogs?.active?.scene ?? null));
   await shot(name);
   await page.keyboard.press('Escape');
@@ -500,7 +500,7 @@ for (const name of ['09a-logo', '09b-start']) {
 await page.waitForTimeout(5000);
 scenes.push(await page.evaluate(() => window.__dialogs?.active?.scene ?? null));
 await shot('09-movie');
-if (scenes.join() !== 'logo,start,movie') errors.push(`the opening's scenes were ${scenes.join()}`);
+if (scenes.join() !== 'logo,start,title,movie') errors.push(`the opening's scenes were ${scenes.join()}`);
 await page.keyboard.press('Escape');
 await page.waitForTimeout(800);
 const afterMovie = await page.evaluate(() => ({
