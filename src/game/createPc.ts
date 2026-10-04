@@ -62,6 +62,26 @@ export function newPc(univ: Universe, spot: number): Player {
 }
 
 /**
+ * Options › Add a New PC's gates — `handle_new_pc` (boe.actions.cpp:3698):
+ * the refusal to print, or null to go on and make the PC.
+ *
+ * BoE allows it in a town with a tavern. Exile III's own handler
+ * (`10e8:0f74`) asks for Fort Emergence instead — no E3 town has a tavern,
+ * so BoE's test refused everywhere — through the `add-pc` =
+ * `exile3:<town>:<refusal>` flag. Its first two messages are BoE's word for
+ * word. With six PCs E3 prints its second and then goes on regardless,
+ * into a creation that finds no slot; here that stops at the message.
+ */
+export function addPcRefusal(univ: Universe, inTown: boolean): string | null {
+  if (!inTown) return 'Add PC: Town mode only.';
+  if (univ.party.freeSpace() === 6) return 'Add PC: You already have 6 PCs.';
+  const e3 = /^exile3:(\d+):(.*)$/s.exec(univ.scenario.featureFlags['add-pc'] ?? '');
+  if (e3) return univ.party.townNum === Number(e3[1]) ? null : e3[2]!;
+  if (univ.town?.record.hasTavern) return null;
+  return 'Add PC: You cannot add new characters in this town. Try in the town you started in.';
+}
+
+/**
  * `pick_race_abil` in mode 0 (pc.editors.cpp:247) — the race LED group and the
  * seventeen trait LEDs, all toggles, with `done` keeping and `cancel`
  * discarding.

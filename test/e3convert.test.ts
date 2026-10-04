@@ -51,6 +51,7 @@ import { FieldType } from '../src/data/fields';
 import { Spell } from '../src/data/spell';
 import { specialIncreaseAge } from '../src/game/specialIncreaseAge';
 import { giveE3StartItems } from '../src/game/e3StartItems';
+import { addPcRefusal } from '../src/game/createPc';
 import { loadSave, saveGame } from '../src/fileio/saveIo';
 import { SpecCtx, SpecCtxType } from '../src/game/specials/context';
 import { partyFlag } from '../tools/e3convert/script';
@@ -208,6 +209,21 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     }
     // Cave Lore's swamp first, then Woodsman's (`10c0:16a0`).
     expect(scen.featureFlags['swamp']).toBe('exile3:88,90');
+  });
+
+  it("adds a PC in Fort Emergence and nowhere else, as E3's Options menu does (10e8:0f74)", () => {
+    expect(scen.featureFlags['add-pc']).toBe('exile3:21:Add PC: Only in Fort Emergence.');
+    expect(scen.towns.some((t) => t.hasTavern)).toBe(false);
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    session.startNewGame();
+    const { univ } = session;
+    expect(univ.party.townNum).toBe(21);
+    expect(addPcRefusal(univ, true)).toBe('Add PC: You already have 6 PCs.');
+    univ.party.pcs[5]!.mainStatus = MainStatus.ABSENT;
+    expect(addPcRefusal(univ, true)).toBeNull();
+    expect(addPcRefusal(univ, false)).toBe('Add PC: Town mode only.');
+    session.startTownMode(128, FORCED_ENTRY); // Marish
+    expect(addPcRefusal(univ, true)).toBe('Add PC: Only in Fort Emergence.');
   });
 
   it("starts a party with E3's own gear, and half the time a third item (1010:6bbe)", () => {
