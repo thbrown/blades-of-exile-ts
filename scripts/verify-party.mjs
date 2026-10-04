@@ -215,6 +215,58 @@ check('it enters a world smaller than the last one', busywork.scen === 'busywork
   && busywork.sector?.x === 0 && errors.length === beforeErrors, { ...busywork, errors: errors.slice(beforeErrors) });
 await page.screenshot({ path: `${SHOTS}/p7-busywork.png` });
 
+// Into Exile III and back out: the party in memory takes Exile III's door
+// like any other, and what it wins there comes out with it. Exile III's items
+// are all custom pictures, so this is `exportGraphics` end to end.
+const playThrough = async () => {
+  for (let i = 0; i < 40 && !(await page.evaluate(() => window.__session !== undefined
+    && document.body.classList.contains('playing') && !window.__dialogs?.active)); i++) {
+    // Exile III's opening movie is skipped scene by scene with Escape.
+    const open = await page.evaluate(() => window.__dialogs?.active
+      && (window.__dialogs.active.kind === 'e3-movie' ? 'movie' : 'dialog'));
+    if (open) await page.keyboard.press(open === 'movie' ? 'Escape' : 'Enter');
+    await page.waitForTimeout(500);
+  }
+};
+await page.goto(BASE);
+await page.waitForSelector('.startup-party');
+await page.click('.startup-card[data-id="exile3"]');
+await page.waitForFunction(() => window.__univ?.scenario.id === 'exile3', null, { timeout: 120000 });
+await playThrough();
+const intoE3 = await page.evaluate(() => ({
+  scen: window.__univ.scenario.id,
+  town: window.__univ.town?.record.name,
+  level: window.__univ.party.pcs[0].level,
+  gold: window.__univ.party.gold,
+}));
+check('it walks into Exile III, in Fort Emergence', intoE3.scen === 'exile3'
+  && intoE3.town === 'Fort Emergence' && intoE3.level === 9, intoE3);
+await page.screenshot({ path: `${SHOTS}/p8-exile3.png` });
+const e3Item = await page.evaluate(() => {
+  const univ = window.__univ;
+  // An E3 item with rules of its own (an `e3Ability`), as the party might win.
+  const item = univ.scenario.scenItems.find((it) => it.variety !== 0 && it.e3Ability > 0);
+  univ.party.pcs[0].items[5] = { ...item };
+  window.__session.specials.endScenario = true;
+  window.__session.checkGameOver();
+  return { name: item.fullName, e3: item.e3Ability, pic: item.graphicNum };
+});
+await dialogUp('save');
+await page.keyboard.press('Escape');
+await page.waitForSelector('.startup-party li', { timeout: 30000 });
+check('winning Exile III leaves the party in memory', (await panel()).includes('Level 9'));
+await page.click('.startup-card[data-id="stealth"]');
+await page.waitForFunction(() => window.__univ?.scenario.id === 'stealth', null, { timeout: 60000 });
+await playThrough();
+const outOfE3 = await page.evaluate((want) => {
+  const it = window.__univ.party.pcs[0].items.find((i) => i.variety !== 0 && i.fullName === want.name);
+  return it && { name: it.fullName, e3: it.e3Ability, pic: it.graphicNum,
+    sheet: window.__univ.party.exportSheet && window.__univ.party.exportSheet.width };
+}, e3Item);
+check('its Exile III item comes too, with its E3 rules and its picture', outOfE3 !== undefined
+  && outOfE3.e3 === e3Item.e3 && outOfE3.pic >= 10000 && outOfE3.sheet === 280, { e3Item, outOfE3 });
+await page.screenshot({ path: `${SHOTS}/p9-e3-item-in-stealth.png` });
+
 await page.goto(BASE);
 await page.waitForSelector('.startup-party');
 await page.click('text=Forget Party');
