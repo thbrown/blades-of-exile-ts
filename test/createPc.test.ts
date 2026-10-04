@@ -11,7 +11,7 @@ import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import {
-  PcGraphicPick, RaceAbilPick, SpendXp, XpMode, newPc, pcNameOk, xpSkillMax,
+  PcGraphicPick, RaceAbilPick, SpendXp, XpMode, addPcRefusal, newPc, pcNameOk, xpSkillMax,
 } from '../src/game/createPc';
 import { GameSession } from '../src/game/session';
 import { PartyPreset } from '../src/universe/player';
@@ -62,6 +62,27 @@ describe('new_pc', () => {
     expect(s.univ.party.nextPcId).toBe(1006);
     expect(newPc(s.univ, 5).uniqueId).toBe(1006);
     expect(s.univ.party.nextPcId).toBe(1007);
+  });
+});
+
+describe('handle_new_pc', () => {
+  it('adds a PC in a town with a tavern, with a slot free, and nowhere else', () => {
+    const s = inTown();
+    const { univ } = s;
+    const record = univ.town!.record;
+    const tavern = record.hasTavern;
+    try {
+      expect(addPcRefusal(univ, false)).toBe('Add PC: Town mode only.');
+      expect(addPcRefusal(univ, true)).toBe('Add PC: You already have 6 PCs.');
+      univ.party.pcs[5]!.mainStatus = MainStatus.ABSENT;
+      record.hasTavern = true;
+      expect(addPcRefusal(univ, true)).toBeNull();
+      record.hasTavern = false;
+      expect(addPcRefusal(univ, true))
+        .toBe('Add PC: You cannot add new characters in this town. Try in the town you started in.');
+    } finally {
+      record.hasTavern = tavern;
+    }
   });
 });
 

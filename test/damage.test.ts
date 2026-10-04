@@ -565,6 +565,34 @@ describe('damaging terrain', () => {
   });
 
   /**
+   * In combat E3's swamp arm rolls for the mover first (`10c0:1731`) and only
+   * then asks after the ward (`10c0:1750`), so a warded mover spends a die
+   * where out of combat they spend none.
+   */
+  it("rolls for a combat mover in E3's swamps before asking after the ward", () => {
+    const { univ, session } = newGame();
+    const swamp = (session as unknown as {
+      e3Swamp(ter: number, swamps: { caveLore: number; woodsman: number }, inCombat: boolean): void;
+    }).e3Swamp.bind(session);
+    const pc = univ.currentPc;
+    const asked: number[][] = [];
+    univ.rng.getRan = (times: number, min: number, max: number): number => {
+      asked.push([times, min, max]);
+      return 2; // the bite, if nothing wards it off
+    };
+    pc.traits[Trait.CAVE_LORE] = true;
+    swamp(88, { caveLore: 88, woodsman: 90 }, true);
+    expect(asked).toEqual([[1, 1, 3]]);
+    expect(pc.status[Status.POISON] ?? 0).toBe(0);
+    // Out of combat the same PC rolls nothing, and the others are bitten.
+    asked.length = 0;
+    swamp(88, { caveLore: 88, woodsman: 90 }, false);
+    expect(asked.filter(([t, lo, hi]) => t === 1 && lo === 1 && hi === 3).length)
+      .toBe(univ.party.pcs.filter((p) => p.mainStatus === MainStatus.ALIVE && !p.traits[Trait.CAVE_LORE]).length);
+    expect(pc.status[Status.POISON] ?? 0).toBe(0);
+  });
+
+  /**
    * Exile 3's lava (`10c0:15ab`, the `lava` = `exile3` flag): "  LAVA!" and
    * the terrain's dice, and firewalk is tested before the roll, so it spends
    * no draws and says "You walk over the lava." instead.
