@@ -3047,6 +3047,55 @@ export class GameSession {
     return m === null ? null : { caveLore: Number(m[1]), woodsman: Number(m[2]) };
   }
 
+  /**
+   * The `waterfall` = `exile3:<terrain>` feature flag: Exile 3's waterfall
+   * terrain, which its outdoor move handles itself. Null for any other
+   * scenario.
+   */
+  private e3Waterfall(): number | null {
+    const m = /^exile3:(\d+)$/.exec(this.univ.scenario.featureFlags['waterfall'] ?? '');
+    return m === null ? null : Number(m[1]);
+  }
+
+  /**
+   * Exile 3's waterfalls, the tail of its outdoor move (`1010:7c2e`), run
+   * after every outdoor move made in a boat. While the square just **south**
+   * of the party is the waterfall, the boat goes over it:
+   *  - "  Waterfall!" (`1010:7125`), and the party moves two squares south
+   *    (party+0x12e7 and +0x12e9, its global and local y, each `+= 2`) —
+   *    always south, whichever way the boat was going, and onto water: every
+   *    waterfall on E3's map has water two squares below it;
+   *  - `FUN_10b0_a395`, the count of living PCs with **Cave Lore**, and only
+   *    if there is one, `get_ran(1,0,1) == 0` (no die is spent otherwise):
+   *    "  (No supplies lost.)" (`1010:7147`);
+   *  - else food becomes `food * 19 / 20`, silently: what is kept rounds
+   *    down, so a twentieth is lost rounded up, and a party with any food at
+   *    all loses at least one;
+   *  - sound 28 (`FUN_1030_0404`) and `FUN_1048_02a8(8)`, a short wait this
+   *    port doesn't make, then the test again, so falls one above another
+   *    are taken one after the other.
+   * Woodsman has no say: E3 counts Cave Lore alone.
+   * The squares carried over are marked explored, as BoE's waterfalls do;
+   * E3 redraws the screen around the party (`FUN_1080_0b09`) instead.
+   */
+  private e3Waterfalls(waterfall: number): void {
+    const { univ } = this;
+    const { party } = univ;
+    while (univ.out.at(party.outLoc.x, party.outLoc.y + 1) === waterfall) {
+      univ.addStringToBuf('  Waterfall!');
+      party.outLoc = { x: party.outLoc.x, y: party.outLoc.y + 2 };
+      party.locInSec = { x: party.locInSec.x, y: party.locInSec.y + 2 };
+      this.updateExplored(party.outLoc);
+      const caveLore = party.pcs.some((pc) => pc.mainStatus === MainStatus.ALIVE && pc.traits[Trait.CAVE_LORE]);
+      if (caveLore && univ.rng.getRan(1, 0, 1) === 0) {
+        univ.addStringToBuf('  (No supplies lost.)');
+      } else {
+        party.food = Math.trunc((party.food * 19) / 20);
+      }
+      this.sound?.play(28);
+    }
+  }
+
   /** What `one_sound` last played (`e3Swamp`); -1 for nothing. */
   private lastOneSound = -1;
 
@@ -3139,6 +3188,10 @@ export class GameSession {
   private runWaterfalls(town: boolean): void {
     const { univ } = this;
     const { party } = univ;
+    // Exile III's waterfalls are its own; no BoE waterfall special is on its
+    // map, so the loop below finds none there.
+    const e3Waterfall = town ? null : this.e3Waterfall();
+    if (e3Waterfall !== null) this.e3Waterfalls(e3Waterfall);
     let where = town ? party.townLoc : party.outLoc;
     for (;;) {
       const dir = this.findWaterfall(where, town);

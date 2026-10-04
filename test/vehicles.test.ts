@@ -11,6 +11,7 @@ import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { PartyPreset } from '../src/universe/player';
+import { MainStatus, Trait } from '../src/universe/skills';
 import { Universe } from '../src/universe/universe';
 
 const opcodes = buildOpcodeTable(
@@ -155,6 +156,122 @@ describe('boats and horses', () => {
     expect(await session.moveTo(east)).toBe(true);
     expect(univ.party.inBoat).toBe(0);
     expect(univ.transcript.at(-1)).toBe('Move: You board the boat.');
+  });
+
+  /**
+   * Exile III's waterfalls (`1010:7c2e`, the `waterfall` = `exile3:<terrain>`
+   * flag): a boat that ends an outdoor move with the waterfall just south of
+   * it goes two squares south, again while there's another below, and a
+   * twentieth of the food goes with it unless a living Cave Lore PC wins a
+   * coin toss — which is only tossed when there is one.
+   */
+  it("carries a boat over Exile III's waterfalls, Cave Lore sometimes saving the food", async () => {
+    const saved = scen.featureFlags['waterfall'];
+    try {
+      const water = scen.terTypes.findIndex((t) => t.boatOver);
+      // Any terrain that isn't the water stands in for the waterfall.
+      const fall = water === 0 ? 1 : 0;
+      scen.featureFlags['waterfall'] = `exile3:${fall}`;
+      const setUp = (): { session: GameSession; univ: Universe; above: { x: number; y: number } } => {
+        const session = newSession();
+        const { univ } = session;
+        const start = { ...univ.party.outLoc };
+        const above = { x: start.x + 1, y: start.y };
+        univ.out.set(start.x, start.y, water);
+        univ.out.set(above.x, above.y, water);
+        univ.out.set(above.x, above.y + 1, fall);
+        univ.out.set(above.x, above.y + 2, water);
+        univ.out.set(above.x, above.y + 3, water);
+        const boat = univ.party.boats[0]!;
+        boat.exists = true;
+        boat.whichTown = 200;
+        boat.loc = univ.party.globalToLocal(start);
+        boat.sector = {
+          x: univ.party.outdoorCorner.x + univ.party.iwc.x,
+          y: univ.party.outdoorCorner.y + univ.party.iwc.y,
+        };
+        univ.party.inBoat = 0;
+        for (const pc of univ.party.pcs) pc.traits.fill(false);
+        return { session, univ, above };
+      };
+      const runFalls = (session: GameSession): void =>
+        (session as unknown as { runWaterfalls(town: boolean): void }).runWaterfalls(false);
+
+      // The move east ends over the fall: over it goes, boat and all.
+      {
+        const { session, univ, above } = setUp();
+        expect(await session.moveTo(above)).toBe(true);
+        const below = { x: above.x, y: above.y + 2 };
+        expect(univ.party.outLoc).toEqual(below);
+        expect(univ.party.locInSec).toEqual(univ.party.globalToLocal(below));
+        expect(univ.party.boats[0]!.loc).toEqual(univ.party.globalToLocal(below));
+        expect(univ.transcript).toContain('  Waterfall!');
+      }
+
+      // Without Cave Lore: 19/20 of the food is kept, rounded down, with no die.
+      {
+        const { session, univ, above } = setUp();
+        univ.party.outLoc = { ...above };
+        univ.party.locInSec = univ.party.globalToLocal(above);
+        univ.party.food = 30;
+        const calls = univ.rng.gameCalls;
+        runFalls(session);
+        expect(univ.party.food).toBe(28);
+        expect(univ.rng.gameCalls).toBe(calls);
+        expect(univ.transcript).not.toContain('  (No supplies lost.)');
+      }
+
+      // Two falls in a row are taken one after the other.
+      {
+        const { session, univ, above } = setUp();
+        univ.out.set(above.x, above.y + 3, fall);
+        univ.out.set(above.x, above.y + 4, water);
+        univ.party.outLoc = { ...above };
+        univ.party.locInSec = univ.party.globalToLocal(above);
+        univ.party.food = 100;
+        runFalls(session);
+        expect(univ.party.outLoc).toEqual({ x: above.x, y: above.y + 4 });
+        expect(univ.party.food).toBe(90);
+        expect(univ.transcript.filter((s) => s === '  Waterfall!').length).toBe(2);
+      }
+
+      // A living Cave Lore PC: one `get_ran(1,0,1)`, and a 0 saves the food.
+      // Woodsman counts for nothing here, and neither does a dead cave-lorist.
+      for (const [roll, kept] of [[0, true], [1, false]] as const) {
+        const { session, univ, above } = setUp();
+        univ.party.pcs[0]!.traits[Trait.CAVE_LORE] = true;
+        univ.party.pcs[1]!.traits[Trait.WOODSMAN] = true;
+        univ.party.outLoc = { ...above };
+        univ.party.locInSec = univ.party.globalToLocal(above);
+        univ.party.food = 30;
+        const getRan = univ.rng.getRan.bind(univ.rng);
+        const asked: number[][] = [];
+        univ.rng.getRan = (times: number, min: number, max: number): number => {
+          asked.push([times, min, max]);
+          getRan(times, min, max);
+          return roll;
+        };
+        runFalls(session);
+        expect(asked).toEqual([[1, 0, 1]]);
+        expect(univ.party.food).toBe(kept ? 30 : 28);
+        expect(univ.transcript.includes('  (No supplies lost.)')).toBe(kept);
+      }
+      {
+        const { session, univ, above } = setUp();
+        univ.party.pcs[0]!.traits[Trait.CAVE_LORE] = true;
+        univ.party.pcs[0]!.mainStatus = MainStatus.DEAD;
+        univ.party.outLoc = { ...above };
+        univ.party.locInSec = univ.party.globalToLocal(above);
+        univ.party.food = 30;
+        const calls = univ.rng.gameCalls;
+        runFalls(session);
+        expect(univ.rng.gameCalls).toBe(calls);
+        expect(univ.party.food).toBe(28);
+      }
+    } finally {
+      if (saved === undefined) delete scen.featureFlags['waterfall'];
+      else scen.featureFlags['waterfall'] = saved;
+    }
   });
 
   /**

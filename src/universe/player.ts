@@ -238,9 +238,11 @@ export class Player extends Living {
       if (this.race === Race.VAHNATAI) tr -= 2;
     }
     if (hasAbilEquip(this, ItemAbil.BOOST_STAT, which, true)) tr++;
-    // Exile III's Micah's Gloves (its code 99) add one to dexterity's, worn
-    // in the first sixteen slots (`stat_adj`, `10b0:87af`; DIVERGENCES.md #23).
-    if (which === Skill.DEXTERITY && this.items.slice(0, 16)
+    // Exile III's Micah's Gloves (its code 99) add one to intelligence's, worn
+    // in the first sixteen slots (`stat_adj`, `10b0:87af`; DIVERGENCES.md #23):
+    // the test sits inside `if (which == 2)` at `10b0:87e2`, beside Magically
+    // Apt's, so it is intelligence, as the item sheet says — not dexterity.
+    if (which === Skill.INTELLIGENCE && this.items.slice(0, 16)
       .some((item, i) => this.equip[i] && item.variety !== ItemType.NO_ITEM && item.e3Ability === 99)) tr++;
     return tr;
   }
@@ -529,6 +531,13 @@ export class Player extends Living {
         // and it doesn't come through here.
         break;
     }
+    // TODO(e3newgame): Exile III's own finishing (`FUN_1010_6b20` at
+    // `1010:6bbe`, and `10b0:12bf` for a PC made mid-game) gives the same two
+    // items by race from its own table (DGROUP 0x5f2), then on
+    // `get_ran(1,0,1) == 0` a third, `get_ran(1,0,11)` into DGROUP 0x5fe:
+    // weak poison, lockpicks, Scroll: Flame, the four weak potions (curing,
+    // healing, energy, speed), Scroll: Slow, torches, throwing knives, bronze
+    // gauntlets or boots. That third item isn't given here.
     // Both slots are equipped outright, whatever they are — note that means a
     // nephil walks in with their arrows equipped, which is what a bow wants.
     this.equip[0] = true;

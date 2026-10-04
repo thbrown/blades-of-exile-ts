@@ -433,6 +433,14 @@ function townTer255(town: number, terrain: number[][]): number[][] {
 export const E3_SWAMPS = { caveLore: 88, woodsman: 90 } as const;
 const SILENT_STEPS = new Set<number>([E3_SWAMPS.caveLore, E3_SWAMPS.woodsman]);
 
+/**
+ * Exile 3's waterfall, which its outdoor move handles itself (`1010:7c2e`,
+ * the session's `e3Waterfalls`): a boat that ends a move with this terrain
+ * just south of it goes over, two squares south. The terrain itself is
+ * left as it is, with no special; the `waterfall` flag names it.
+ */
+export const E3_WATERFALL = 77;
+
 function terrainXml(types: E3TerrainType[], hiddenAs: Map<number, number>): string {
   const out = [XML_HEAD, '<terrains boes="2.0.0">\n'];
   types.forEach((t, id) => {
@@ -848,6 +856,7 @@ function scenarioXml(
         <inn>exile3</inn>
         <lava>exile3</lava>
         <swamp>exile3:${E3_SWAMPS.caveLore},${E3_SWAMPS.woodsman}</swamp>
+        <waterfall>exile3:${E3_WATERFALL}</waterfall>
         <backgrounds>exile3</backgrounds>
         <message-pics>exile3</message-pics>
         <message-sounds>exile3</message-sounds>

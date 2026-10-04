@@ -209,6 +209,34 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(scen.featureFlags['swamp']).toBe('exile3:88,90');
   });
 
+  it("leaves E3's waterfalls to the outdoor move: no special, the waterfall flag", async () => {
+    expect(scen.terTypes[77]).toMatchObject({ name: 'Waterfall', special: TerSpec.NONE });
+    expect(scen.featureFlags['waterfall']).toBe('exile3:77');
+    // Zone 61 (7,6), the falls at (41–43, 18): sail south onto (42,17) and
+    // the river takes the boat over, to (42,19).
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    session.attachSpecials(new Proxy({}, { get: () => () => Promise.resolve(0) }) as never);
+    const party = session.univ.party;
+    session.debugLeaveTown();
+    session.positionParty(7, 6, 42, 16);
+    const toGlobal = (x: number, y: number) =>
+      ({ x: 48 * (7 - party.outdoorCorner.x) + x, y: 48 * (6 - party.outdoorCorner.y) + y });
+    expect(session.univ.out.at(toGlobal(42, 18).x, toGlobal(42, 18).y)).toBe(77);
+    const boat = party.boats[0]!;
+    boat.exists = true;
+    boat.whichTown = 200;
+    boat.loc = { x: 42, y: 16 };
+    boat.sector = { x: 7, y: 6 };
+    party.inBoat = 0;
+    for (const pc of party.pcs) pc.traits.fill(false);
+    party.food = 100;
+    await session.move(Direction.S);
+    expect(party.outLoc).toEqual(toGlobal(42, 19));
+    expect(boat.loc).toEqual({ x: 42, y: 19 });
+    expect(session.univ.transcript).toContain('  Waterfall!');
+    expect(party.food).toBeLessThan(100);
+  });
+
   it("enters E3's lit dungeons with the dungeon sound", () => {
     expect(scen.featureFlags['dungeon-sound']).toBe('22-23,25-33,35-38,44-47,50-79,86,200');
   });

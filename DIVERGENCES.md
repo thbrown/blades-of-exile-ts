@@ -586,8 +586,8 @@ And, 2026-09-29, its wards: poison, disease and dumbfounding by E3's codes;
 damage resistances that always halve (E3 never quarters) and stack by kind,
 with the Iceshield a *fire* ward as E3 has it; the Silver Ankh, not a
 life-saving item, against undead drain, stun and icy touch; Aescal's Ring
-ending disease; Micah's Gloves adding to dexterity's adjustment rather than
-the skill. **An E3 item is cursed by its code (14, 95), not bladbase's
+ending disease; Micah's Gloves adding to intelligence's adjustment (not
+dexterity's, as this once said: corrected 2026-10-04) rather than the skill. **An E3 item is cursed by its code (14, 95), not bladbase's
 flag**, which curses five more items, and lifting the curse zeroes the code,
 so uncursed Dancing Boots stop dancing.
 
