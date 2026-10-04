@@ -1007,6 +1007,9 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
 
     it("The Barrier Cavern: the crystal smashed, the war begun again, the shards, and the ways out", async () => {
       const q = new QuestRunner(scen);
+      // Both armies attack as the crystal breaks, before the test can clear
+      // them: a party of starting PCs lives or dies by the dice there.
+      for (const pc of q.party.pcs) { pc.level = 30; pc.maxHealth = 600; pc.curHealth = 600; }
       await q.enter(103, { x: 26, y: 17 });
       await q.clearHostiles();
       const has255 = () => q.town.record.terrain.some((col) => col.some((t) => t === 255 || t === 256));

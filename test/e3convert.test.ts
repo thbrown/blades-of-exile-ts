@@ -50,6 +50,7 @@ import { e3DayCount, e3TownState } from '../tools/e3convert/flags';
 import { FieldType } from '../src/data/fields';
 import { Spell } from '../src/data/spell';
 import { specialIncreaseAge } from '../src/game/specialIncreaseAge';
+import { giveE3StartItems } from '../src/game/e3StartItems';
 import { loadSave, saveGame } from '../src/fileio/saveIo';
 import { SpecCtx, SpecCtxType } from '../src/game/specials/context';
 import { partyFlag } from '../tools/e3convert/script';
@@ -207,6 +208,48 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     }
     // Cave Lore's swamp first, then Woodsman's (`10c0:16a0`).
     expect(scen.featureFlags['swamp']).toBe('exile3:88,90');
+  });
+
+  it("starts a party with E3's own gear, and half the time a third item (1010:6bbe)", () => {
+    expect(scen.featureFlags['start-items'])
+      .toBe('exile3:41,143,112,107,40,158;176,175,202,272,273,274,276,203,25,105,169,173');
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    const { univ } = session;
+    const races = univ.party.pcs.map((pc) => pc.race);
+    expect(races).toEqual([Race.HUMAN, Race.SLITH, Race.NEPHIL, Race.HUMAN, Race.HUMAN, Race.HUMAN]);
+    // The first PC wins the toss and draws pool slot 3, the third wins and
+    // draws slot 11, and the rest lose it.
+    const answers = [0, 3, 1, 0, 11, 1, 1, 1];
+    const asked: number[][] = [];
+    univ.rng.getRan = (times: number, min: number, max: number): number => {
+      asked.push([times, min, max]);
+      return answers.shift() ?? 1;
+    };
+    session.finishNewParty();
+    expect(asked).toEqual([[1, 0, 1], [1, 0, 11], [1, 0, 1], [1, 0, 1], [1, 0, 11], [1, 0, 1], [1, 0, 1], [1, 0, 1]]);
+    const name = (pc: number, slot: number) => univ.party.pcs[pc]!.items[slot]!;
+    const want: Record<number, [number, number]> = { [Race.HUMAN]: [41, 143], [Race.NEPHIL]: [112, 107], [Race.SLITH]: [40, 158] };
+    univ.party.pcs.forEach((pc, i) => {
+      const [a, b] = want[pc.race]!;
+      expect(name(i, 0).fullName).toBe(scen.scenItems[a]!.fullName);
+      expect(name(i, 1).fullName).toBe(scen.scenItems[b]!.fullName);
+      expect([pc.equip[0], pc.equip[1], name(i, 0).ident, name(i, 1).ident]).toEqual([true, true, true, true]);
+    });
+    expect(name(0, 0).fullName).toBe('Bronze Knife');
+    expect(name(1, 0).fullName).toBe('Stone Spear');
+    expect(name(2, 0).fullName).toBe('Cavewood Bow');
+    expect(name(0, 2).fullName).toBe('Weak Curing P.');
+    expect(name(0, 2).ident).toBe(true);
+    expect(univ.party.pcs[0]!.equip[2]).toBe(false);
+    expect(name(2, 2).fullName).toBe('Boots');
+    for (const i of [1, 3, 4, 5]) expect(name(i, 2).variety).toBe(ItemType.NO_ITEM);
+    // A PC made mid-game (`10b0:12bf`) gets the pair and no roll.
+    const pc = univ.party.pcs[5]!;
+    pc.items[0] = { ...pc.items[0]!, variety: ItemType.NO_ITEM };
+    asked.length = 0;
+    giveE3StartItems(univ, pc, false);
+    expect(asked).toEqual([]);
+    expect(pc.items[0]!.fullName).toBe('Bronze Knife');
   });
 
   it("leaves E3's waterfalls to the outdoor move: no special, the waterfall flag", async () => {

@@ -74,6 +74,7 @@ import { ItemShopMode, ItemShopState, handleItemShopAction } from './itemShop';
 import { isContainerAt } from './loot';
 import { NO_TARGET } from './spellPick';
 import { doRest, handleRest } from './rest';
+import { giveE3StartItems } from './e3StartItems';
 import { makeTownHostile } from './townAttitude';
 import { OUT_HALF_DIM, OUT_MAX_DIM } from '../universe/curOut';
 import { Population, TOWN_NUM_OUTDOORS } from '../universe/party';
@@ -427,10 +428,16 @@ export class GameSession {
     this.beginScenario(force);
   }
 
-  /** `finish_create` for every living PC — the tail of `start_new_game`. */
+  /**
+   * `finish_create` for every living PC — the tail of `start_new_game` —
+   * and in Exile III its own gear and bonus roll in their place
+   * (`giveE3StartItems`).
+   */
   finishNewParty(): void {
     for (const pc of this.univ.party.pcs) {
-      if (pc.mainStatus === MainStatus.ALIVE) pc.finishCreate();
+      if (pc.mainStatus !== MainStatus.ALIVE) continue;
+      pc.finishCreate();
+      giveE3StartItems(this.univ, pc, true);
     }
   }
 
@@ -3114,7 +3121,9 @@ export class GameSession {
    *    no check that they are alive, as E3 has none);
    *  - a PC with **Cave Lore** (trait 4, PC+1809) can't be hurt in the cave
    *    swamp, nor one with **Woodsman** (trait 5, PC+1810) in the surface
-   *    one — tested before the roll, so a warded PC spends no die;
+   *    one. Out of combat that is tested before the roll (`10c0:16e1`), so
+   *    a warded PC spends no die; in combat it is tested *after* it
+   *    (`10c0:1731`, then `10c0:1750`), so the mover always rolls;
    *  - `get_ran(1,1,3) == 2`, one in three, poisons by 1 (`FUN_10b0_933f`,
    *    BoE 1997's `poison_pc`).
    *
@@ -3127,16 +3136,18 @@ export class GameSession {
       this.sound?.play(17);
       this.lastOneSound = 17;
     }
-    const roll = (pc: Player): void => {
-      if (pc.traits[Trait.CAVE_LORE] && ter !== swamps.woodsman) return;
-      if (pc.traits[Trait.WOODSMAN] && ter !== swamps.caveLore) return;
-      if (this.univ.rng.getRan(1, 1, 3) === 2) pc.poison(1, this.univ.rng);
-    };
+    const warded = (pc: Player): boolean =>
+      (pc.traits[Trait.CAVE_LORE] === true && ter !== swamps.woodsman)
+      || (pc.traits[Trait.WOODSMAN] === true && ter !== swamps.caveLore);
+    const bites = (): boolean => this.univ.rng.getRan(1, 1, 3) === 2;
     if (inCombatMove) {
-      roll(this.univ.currentPc);
+      const pc = this.univ.currentPc;
+      if (bites() && !warded(pc)) pc.poison(1, this.univ.rng);
       return;
     }
-    for (const pc of this.univ.party.pcs) if (pc.mainStatus === MainStatus.ALIVE) roll(pc);
+    for (const pc of this.univ.party.pcs) {
+      if (pc.mainStatus === MainStatus.ALIVE && !warded(pc) && bites()) pc.poison(1, this.univ.rng);
+    }
   }
 
   /**

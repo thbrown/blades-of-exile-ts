@@ -531,13 +531,8 @@ export class Player extends Living {
         // and it doesn't come through here.
         break;
     }
-    // TODO(e3newgame): Exile III's own finishing (`FUN_1010_6b20` at
-    // `1010:6bbe`, and `10b0:12bf` for a PC made mid-game) gives the same two
-    // items by race from its own table (DGROUP 0x5f2), then on
-    // `get_ran(1,0,1) == 0` a third, `get_ran(1,0,11)` into DGROUP 0x5fe:
-    // weak poison, lockpicks, Scroll: Flame, the four weak potions (curing,
-    // healing, energy, speed), Scroll: Slow, torches, throwing knives, bronze
-    // gauntlets or boots. That third item isn't given here.
+    // Exile III gives its own two items, and at a new game rolls for a third,
+    // after this (`game/e3StartItems.ts`).
     // Both slots are equipped outright, whatever they are — note that means a
     // nephil walks in with their arrows equipped, which is what a bow wants.
     this.equip[0] = true;
