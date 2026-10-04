@@ -180,6 +180,18 @@ function urlWith(param: (typeof GAME_PARAMS)[number] | null, value = ''): string
   return `${window.location.pathname}${search === '' ? '' : `?${search}`}`;
 }
 
+/**
+ * The startup screen's URL from inside a game: `urlWith(null)` less
+ * `?scenario=` too, which would otherwise start the same scenario again.
+ * Other parameters (debug switches and the like) stay.
+ */
+function mainMenuUrl(): string {
+  const q = new URLSearchParams(urlWith(null).split('?')[1] ?? '');
+  q.delete('scenario');
+  const search = q.toString();
+  return `${window.location.pathname}${search === '' ? '' : `?${search}`}`;
+}
+
 function scenarioFromQuery(): string | null {
   const q = new URLSearchParams(window.location.search).get('scenario');
   return q && /^[a-z0-9_-]+$/i.test(q) ? q : null;
@@ -196,7 +208,8 @@ function scenarioFromQuery(): string | null {
  * modified one: vendor/exile3/README.md) and serves the installer instead,
  * which the browser converts on first play (platform/exile3.ts).
  */
-const BUNDLED_SCENARIOS = ['valleydy', 'stealth', 'zakhazi', 'busywork', 'exile3'];
+// In the startup screen's order: Exile III first, as the biggest of them.
+const BUNDLED_SCENARIOS = ['exile3', 'valleydy', 'stealth', 'zakhazi', 'busywork'];
 
 /**
  * A save for a scenario other than the one running can't be applied in place —
@@ -426,7 +439,7 @@ async function main(): Promise<void> {
         return { id, title: id, blurb: '' };
       }
     })));
-    // The player's own library follows the bundled four.
+    // The player's own library follows the bundled five.
     const added: StartupScenario[] = [];
     const installedIds = new Set<string>();
     const withoutGraphics = new Set<string>();
@@ -1250,7 +1263,7 @@ async function main(): Promise<void> {
     if (autosaving() && canSaveNow() === null && !midAction()) {
       try {
         await scheduler.saveIfChanged('MainMenu');
-        window.location.href = urlWith(null);
+        window.location.href = mainMenuUrl();
         return;
       } catch (err) {
         univ.addStringToBuf(`Autosave: Save not completed (${String(err)})`);
@@ -1261,7 +1274,7 @@ async function main(): Promise<void> {
     confirm.setText('warning', confirm.getText('warning').replace('{{action}}', 'Going to the main menu'));
     confirm.setText('okay', 'Main Menu');
     if ((await dialogs.runNested(confirm)) === 'cancel') return;
-    window.location.href = urlWith(null);
+    window.location.href = mainMenuUrl();
   };
 
   /** `get_num_of_items` (boe.items.cpp:667) — how many out of a stack. */
@@ -1315,7 +1328,7 @@ async function main(): Promise<void> {
           if (saveStoreAvailable()) await setPartyInMemory(null);
           window.sessionStorage.removeItem(TREE_KEY);
           window.sessionStorage.setItem(PENDING_NEW_PARTY_KEY, '1');
-          window.location.href = urlWith(null);
+          window.location.href = mainMenuUrl();
           return;
         }
         if (choice === 'quit') {

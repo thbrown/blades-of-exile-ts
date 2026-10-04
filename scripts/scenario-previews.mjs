@@ -12,10 +12,14 @@
  * with `?scenario=`. Re-run `scripts/build-library.ts` afterwards so the
  * catalog points at them. Entries that already have a preview are skipped.
  *
+ * `--redo` takes them again even where one exists (after a change to what the
+ * game draws, such as the light mask), and `PREVIEWS_OUT=<dir>` writes them
+ * there as `<id>.png` instead, to compare with the ones in place first.
+ *
  * Needs `npx vite --port 5199` running.
  *
  * Usage: node scripts/scenario-previews.mjs [id ...]
- *        node scripts/scenario-previews.mjs --library
+ *        node scripts/scenario-previews.mjs --library [--redo]
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -23,12 +27,15 @@ import { chromium } from 'playwright';
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:5199/';
 const library = process.argv.includes('--library');
-const args = process.argv.slice(2).filter((a) => a !== '--library');
+const redo = process.argv.includes('--redo');
+const outDir = process.env.PREVIEWS_OUT;
+const args = process.argv.slice(2).filter((a) => a !== '--library' && a !== '--redo');
 const ids = library
   ? JSON.parse(readFileSync('library/dist/catalog.json', 'utf8')).scenarios.map((e) => e.id)
-    .filter((id) => !existsSync(`library/dist/previews/${id}.png`))
+    .filter((id) => redo || !existsSync(`library/dist/previews/${id}.png`))
   : args.length ? args : ['valleydy', 'stealth', 'zakhazi', 'busywork'];
-const outPath = (id) => (library ? `library/dist/previews/${id}.png` : `public/scenarios/${id}/preview.png`);
+const outPath = (id) => (outDir ? `${outDir}/${id}.png`
+  : library ? `library/dist/previews/${id}.png` : `public/scenarios/${id}/preview.png`);
 // WIN_RECTS.terView (render/layout.ts).
 const TER = { top: 7, left: 19, bottom: 358, right: 298 };
 

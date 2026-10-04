@@ -4,6 +4,8 @@
  * scenarios on Spiderweb's archive. Writes `library/audit/<id>.json`: how many
  * words of text there are, and per category the matching passages with their
  * surroundings. The flags only point at what to read; they don't decide.
+ * `library/audit/text/<id>.txt` is the scenario's whole text (less what most
+ * scenarios share), for reading past the flags.
  *
  * Usage: npx vite-node scripts/content-audit.ts
  */
@@ -51,7 +53,7 @@ function allText(s: Scenario): string[] {
 
 const opcodes = buildOpcodeTable(readFileSync('public/data/strings/specials-opcodes.txt', 'utf8'));
 const catalog = JSON.parse(readFileSync('library/dist/catalog.json', 'utf8')) as LibraryCatalog;
-mkdirSync('library/audit', { recursive: true });
+mkdirSync('library/audit/text', { recursive: true });
 
 // Every scenario starts from the editor's stock items, monsters and terrains
 // ("Ale", "Demon", "Bloodfire Sword"…), so a string most scenarios share is
@@ -90,6 +92,9 @@ for (const entry of catalog.scenarios) {
       }
     }
   }
+  // The whole text too, one string a paragraph, for a reader to search for
+  // what no list of words anticipates.
+  writeFileSync(join('library/audit/text', `${entry.id}.txt`), texts.join('\n\n'));
   writeFileSync(join('library/audit', `${entry.id}.json`), JSON.stringify({
     id: entry.id, title: entry.title, listed: entry.contentRating, words, counts, hits,
     listing: entry.description,
