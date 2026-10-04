@@ -18,7 +18,8 @@ export interface ItemGraphic {
 
 export function itemGraphic(num: number): ItemGraphic | null {
   if (num >= 1000) {
-    const g = customGraphic(num - 1000);
+    // 10000+ is the party's own sheet (`exportGraphics`), 1000+ the scenario's.
+    const g = num >= 10000 ? customGraphic(num - 10000, true) : customGraphic(num - 1000);
     return g && { ...g, inset: { x: 0, y: 0 } };
   }
   if (num < 55) {

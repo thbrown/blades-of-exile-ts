@@ -53,6 +53,7 @@ import type { SpellTarget } from './spellCombatTarget';
 import { LoadedMissile, fireMissile, isLoaded, loadMissile } from './missiles';
 import { setCentreSink } from './missileAnim';
 import { CurTown } from '../universe/curTown';
+import { type ScenarioSheet, exportGraphics } from '../universe/exportGraphics';
 import { NUM_INVEN_SLOTS, type Player } from '../universe/player';
 import {
   GiveStatus,
@@ -440,15 +441,18 @@ export class GameSession {
    * finishes. The Universe must already hold the new scenario, with the party
    * applied to it (`applyPartySave`).
    *
-   * **Which items are taken away** is both engines' lists together. The
-   * original strips items with a custom picture (`graphic_num >= 150`, which
-   * is 1000+ here) and summoning items; OBoE instead carries those across
-   * (`exportGraphics`, `exportSummons`), which this port can't yet
-   * (`TODO(campaign)`), so without the original's rule they would arrive as
-   * blank pictures and monsters of the wrong scenario. OBoE adds the items
-   * that call a special node, and slayers and wards against IMPORTANT
-   * creatures; those abilities don't exist in the original, so there is no
-   * disagreement. DIVERGENCES.md #7.
+   * **Which items are taken away** is both engines' lists together, less
+   * what `exportGraphics` has made portable. The original strips items with a
+   * custom picture (`graphic_num >= 150`, which is 1000+ here) and summoning
+   * items; OBoE carries those across (`exportGraphics`, `exportSummons`).
+   * This port exports the pictures when a scenario is won, as OBoE does, so a
+   * picture of 10000+ is the party's own and stays; one still in 1000..9999
+   * was never exported (a party saved before the export existed) and would
+   * draw a cell of the wrong scenario, so it goes as in 1997. Summoning items
+   * still go too, until `exportSummons` is ported (`TODO(campaign)`). OBoE
+   * adds the items that call a special node, and slayers and wards against
+   * IMPORTANT creatures; those abilities don't exist in the original, so
+   * there is no disagreement. DIVERGENCES.md #7.
    *
    * **Stored items** follow the original: "yes" hands over all of them, as
    * many as the party can carry. OBoE lets the player pick.
@@ -3416,12 +3420,14 @@ export class GameSession {
    * goodbye with a message node before the end-scenario node, so anything added
    * here would be a second ending on top of the author's.
    *
-   * TODO(campaign): `exportGraphics`, `exportSummons` and `clear_stored_pcs` — the
-   * three lines that carry a party out of one scenario and into the next. They
-   * need the campaign-level state (custom sheets, stored PCs) that `saveIo.ts`
-   * already lists as unmodelled.
+   * `exportGraphics` runs here, as the first of the three lines that carry a
+   * party out of one scenario and into the next, with the scenario's sheets
+   * from `scenarioSheets` (the host's; headless, the cells copy blank).
+   * TODO(campaign): the other two, `exportSummons` and `clear_stored_pcs`, need
+   * the campaign-level state (stored PCs) that `saveIo.ts` lists as unmodelled.
    */
   private handleVictory(): void {
+    exportGraphics(this.univ, this.scenarioSheets ?? (() => null));
     this.scenarioWon = true;
     if (this.specials) this.specials.endScenario = false;
     // Fire-and-forget behind the animation queue, for the same reason the death
@@ -3429,6 +3435,12 @@ export class GameSession {
     // screen when the flag is read.
     void animSettle().then(() => { this.onVictory?.(); });
   }
+
+  /**
+   * The scenario's custom sheets as pixels, for `exportGraphics` on a win. The
+   * host sets it; the session has no images of its own.
+   */
+  scenarioSheets: ScenarioSheet | null = null;
 
   /** Whether `handle_victory` has run — the game is over and won. */
   get won(): boolean { return this.scenarioWon; }
@@ -6313,7 +6325,8 @@ export { OUT_HALF_DIM, SECTOR_SIZE };
  * `GameSession.enterWithParty` for whose rule each test is.
  */
 export function carriedOutOfScenario(item: Item): boolean {
-  if (item.graphicNum >= 1000) return false; // original: a custom picture
+  // original: a custom picture — unless `exportGraphics` made it the party's
+  if (item.graphicNum >= 1000 && item.graphicNum < 10000) return false;
   switch (item.ability) {
     case ItemAbil.SUMMONING:
     case ItemAbil.MASS_SUMMONING: // original

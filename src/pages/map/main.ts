@@ -24,7 +24,7 @@ import { SECTOR_SIZE } from '../../data/outdoors';
 import { Scenario } from '../../data/scenario';
 import { ROAD_DEST, ROAD_SRC } from '../../render/layout';
 import { terrainGraphic } from '../../render/terrainPics';
-import { SheetStore, TILE_H, TILE_W } from '../../render/sheets';
+import { type SheetImage, SheetStore, TILE_H, TILE_W } from '../../render/sheets';
 import { el, installBackdrop, loadExile3, searchable } from '../common';
 
 const ZW = SECTOR_SIZE * TILE_W;
@@ -211,7 +211,7 @@ class Pyramid {
   }
 
   /** `place_road`: the centre, and a stub toward each neighbour it reaches. */
-  private drawRoad(ctx: CanvasRenderingContext2D, fields: ImageBitmap, wx: number, wy: number, px: number, py: number): void {
+  private drawRoad(ctx: CanvasRenderingContext2D, fields: SheetImage, wx: number, wy: number, px: number, py: number): void {
     const blit = (src: typeof ROAD_SRC.centre, dest: typeof ROAD_DEST.centre): void => {
       ctx.drawImage(fields, src.left, src.top, src.right - src.left, src.bottom - src.top,
         px + dest.left, py + dest.top, dest.right - dest.left, dest.bottom - dest.top);

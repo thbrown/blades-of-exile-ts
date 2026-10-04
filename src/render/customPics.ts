@@ -6,8 +6,9 @@
  * `find_graphic(n)` is sheet `n / 100`, cell `n % 100`, ten 28×36 cells to a
  * row. A number past the last sheet, or a cell the sheet isn't big enough to
  * hold, draws the blank graphic — here, nothing (`null`). The party's own
- * sheet (pictures of 10000 and up, carried between scenarios) is campaign
- * state this port doesn't keep, so those are blank too.
+ * sheet (pictures of 10000 and up, carried between scenarios by
+ * `exportGraphics`) is one sheet that grows downwards, so its cells are
+ * counted straight down it rather than a hundred to a sheet.
  *
  * Like the other render lookups this is module state, set once when a
  * scenario loads: every caller is a synchronous draw with no session to hand.
@@ -42,9 +43,35 @@ export function customSheetSize(i: number): { w: number; h: number } | null {
   return sheetSizes[i] ?? null;
 }
 
+/** The store key for the party's picture sheet. */
+export const PARTY_SHEET_NAME = 'party-sheet';
+
+let partySheet: Rgba | null = null;
+
+/**
+ * Put the party's picture sheet (`party.exportSheet`) where the draws can
+ * find it. Called before every frame: a load, a win or a party walking into a
+ * scenario each replace the sheet object, and this only repaints when it has.
+ */
+export function syncPartySheet(store: SheetStore, sheet: Rgba | null): void {
+  if (sheet === partySheet) return;
+  partySheet = sheet;
+  if (sheet === null || typeof OffscreenCanvas === 'undefined') return;
+  const canvas = new OffscreenCanvas(sheet.width, sheet.height);
+  canvas.getContext('2d')?.putImageData(
+    new ImageData(new Uint8ClampedArray(sheet.data), sheet.width, sheet.height), 0, 0);
+  store.put(PARTY_SHEET_NAME, canvas);
+}
+
 /** `cCustomGraphics::find_graphic(which, party)`. */
 export function customGraphic(which: number, party = false): CustomGraphic | null {
-  if (party || which < 0) return null;
+  if (which < 0) return null;
+  if (party) {
+    if (partySheet === null) return null;
+    const rect = calcRect(which % 10, Math.floor(which / 10));
+    if (rect.right > partySheet.width || rect.bottom > partySheet.height) return null;
+    return { sheetName: PARTY_SHEET_NAME, rect };
+  }
   const sheet = Math.floor(which / 100);
   const size = sheetSizes[sheet];
   if (!size) return null;

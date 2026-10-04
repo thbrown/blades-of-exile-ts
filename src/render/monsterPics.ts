@@ -26,8 +26,8 @@ export function monsterDims(pic: number): { w: number; h: number } {
  * `size` is the monster's width × height in squares. It only matters for a
  * custom picture (1000 and up), whose cells run part by part, then the other
  * facing, then the attack pose (boe.graphutil.cpp:188): `pic % 1000 + part`,
- * plus `size` facing right, plus `2 * size` mid-swing. From 10000 it would
- * be the party's own sheet, which this port doesn't carry.
+ * plus `size` facing right, plus `2 * size` mid-swing. From 10000 it is the
+ * party's own sheet, though `exportGraphics` puts no monsters there yet.
  */
 export function monsterGraphic(pic: number, mode = 0, part = 0, size = 1): MonstGraphic | null {
   if (pic >= 1000) {

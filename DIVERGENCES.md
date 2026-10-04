@@ -240,9 +240,10 @@ anything, since it read the structs natively.
 
 ### 7. Taking a party into a scenario (2026-09-23)
 
-**DECIDED: the original wherever the two differ.** The party can visibly tell
-every difference, and several of OBoE's choices depend on `exportGraphics`
-and `exportSummons`, which this port doesn't have yet (`TODO(campaign)`).
+**DECIDED: the original wherever the two differ** — except custom pictures,
+which since 2026-10-03 follow OBoE (below). The party can visibly tell every
+difference, and several of OBoE's choices depend on `exportSummons`, which
+this port doesn't have yet (`TODO(campaign)`).
 Each point below was checked in both sources: `put_party_in_scen` and
 `init_party_scen_data` (PARTY.CPP:320, :440), and `put_party_in_scen`
 (boe.party.cpp:119) and `cUniverse::enter_scenario` (universe.cpp:1384).
@@ -250,7 +251,8 @@ The code is in `Universe.enterScenario` and `GameSession.enterWithParty`.
 
 | | 1997 | OBoE | here |
 |---|---|---|---|
-| Items taken away | a custom picture (`graphic_num >= 150`, 1000+ here), summoning | call-special abilities, IMPORTANT slayers and wards | **both lists**: OBoE's abilities don't exist in 1997, so the two lists don't conflict |
+| Items taken away | a custom picture (`graphic_num >= 150`, 1000+ here), summoning | call-special abilities, IMPORTANT slayers and wards | **both lists, less exported pictures**: OBoE's abilities don't exist in 1997, so the two lists don't conflict; a picture `exportGraphics` made the party's (10000+) stays |
+| Custom pictures | the item goes | copied to the party's sheet on a win (`exportGraphics`), item kept | **OBoE** (2026-10-03, user's decision). 1997 had no party sheet to keep them on, and Exile III's items are *all* custom pictures (sheet 11), so 1997's rule emptied an E3 party's pack at the next scenario's door. A picture still 1000..9999 at the door was never exported (a party saved before this) and still goes |
 | Soul crystal | emptied | kept (exported) | emptied |
 | Monsters seen (`m_seen`) | emptied | kept | emptied |
 | Stored items, on "yes" | all of them, as many as the party can carry | the player picks | all of them |
@@ -1049,6 +1051,23 @@ What this port does instead (`platform/saveStore.ts`, `saveRetention.ts`,
 
 Nothing here touches a rule: saving rolls no dice, and the replay corpus is
 unchanged. A player can tell the difference, which is the point.
+
+### 48. `addGraphic` gives every picture its own cell (2026-10-03)
+
+**DECIDED: fixed.** OBoE's `cUniverse::addGraphic` (universe.cpp:1173), which
+`exportGraphics` uses to lay pictures onto the party's sheet, finds a free
+run of cells and then marks `pos + 1 .. pos + n - 1` used — never `pos`
+itself. Every one-cell picture (every item) therefore lands in the same first
+free cell, each copy over the last, and all of a party's exported items wear
+the last one's picture. Four-cell pictures (PCs, missiles) are only spared
+because their other three cells are marked. `exportGraphics.ts` marks `pos`
+too.
+
+There is no 1997 behaviour to weigh it against — the original has no party
+sheet — and no dice: it changes which cell a picture is copied to, nothing
+else. Keeping it would make #7's carried pictures wrong for any party with two
+custom items, which is every Exile III party. A save OBoE wrote with its
+collapsed numbering still loads, wearing OBoE's pictures.
 
 ## Agreements worth recording
 

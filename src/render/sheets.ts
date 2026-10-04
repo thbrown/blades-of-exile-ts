@@ -31,9 +31,15 @@ export function findGraphic(pic: number): SheetPos {
   return { sheet, rect: calcRect(cell % TILES_PER_ROW, Math.floor(cell / TILES_PER_ROW)) };
 }
 
+/**
+ * A sheet as drawn: decoded from a PNG, or (the party's picture sheet, built
+ * from pixels the save loader decoded itself) painted on a canvas.
+ */
+export type SheetImage = ImageBitmap | OffscreenCanvas;
+
 /** Cache of decoded sheet images keyed by resource name (e.g. "ter1"). */
 export class SheetStore {
-  private images = new Map<string, ImageBitmap>();
+  private images = new Map<string, SheetImage>();
 
   /**
    * Load `<baseUrl><file>.png` and keep it as `name`. `file` defaults to the
@@ -42,7 +48,7 @@ export class SheetStore {
    */
   async load(
     name: string, baseUrl = `${import.meta.env.BASE_URL}data/graphics/`, file = name,
-  ): Promise<ImageBitmap> {
+  ): Promise<SheetImage> {
     const existing = this.images.get(name);
     if (existing) return existing;
     const resp = await fetch(`${baseUrl}${file}.png`);
@@ -53,7 +59,7 @@ export class SheetStore {
   }
 
   /** Keep already-fetched PNG bytes as `name` — a packed scenario's own sheets. */
-  async loadBytes(name: string, png: Uint8Array): Promise<ImageBitmap> {
+  async loadBytes(name: string, png: Uint8Array): Promise<SheetImage> {
     const existing = this.images.get(name);
     if (existing) return existing;
     const bmp = await createImageBitmap(new Blob([png as BlobPart], { type: 'image/png' }));
@@ -62,12 +68,12 @@ export class SheetStore {
   }
 
   /** Keep an already-decoded image as `name`; returns it. */
-  put(name: string, bmp: ImageBitmap): ImageBitmap {
-    this.images.set(name, bmp);
-    return bmp;
+  put<T extends SheetImage>(name: string, img: T): T {
+    this.images.set(name, img);
+    return img;
   }
 
-  get(name: string): ImageBitmap | undefined {
+  get(name: string): SheetImage | undefined {
     return this.images.get(name);
   }
 

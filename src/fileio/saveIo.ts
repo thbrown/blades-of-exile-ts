@@ -9,6 +9,7 @@
  *   save/pc1..6.txt     cPlayer           save/townmaps.dat  every town's fog
  *   save/scenario.txt   the scenario's mutable bits         save/out.txt   cCurOut
  *   save/setup.dat      cParty::setup     save/outmaps.dat   every sector's fog
+ *   save/export.png     the party's picture sheet, when it has one (exportGraphics.ts)
  *
  * Two standing divergences, both because this port models less than the C++
  * does rather than because the format was changed:
@@ -53,6 +54,8 @@ import { Party, TOWN_NUM_OUTDOORS, timerIsValid } from '../universe/party';
 import { NUM_INVEN_SLOTS, Player } from '../universe/player';
 import { MainStatus, PartyStatus, Race, Status } from '../universe/skills';
 import { Universe } from '../universe/universe';
+import type { Rgba } from './legacy/bmp';
+import { decodePng, encodePng } from './png';
 import { TagFile, TagPage, asHex } from './tagfile';
 import { Tarball } from './tarball';
 
@@ -1415,7 +1418,40 @@ export function serialiseSave(univ: Universe, outOfScenario = false): Tarball {
     ball.addText('save/out.txt', writeCurOut(univ.out));
     ball.addText('save/outmaps.dat', writeOutMaps(univ.scenario));
   }
+  // The party's picture sheet, in or out of a scenario (fileio_party.cpp:625).
+  if (univ.party.exportSheet !== null) ball.add('save/export.png', exportPng(univ.party.exportSheet));
   return ball;
+}
+
+/**
+ * The autosave writes after every move, and the sheet only changes when a
+ * scenario is won (`exportGraphics` replaces it rather than drawing into it),
+ * so each sheet is encoded once.
+ */
+const encodedSheets = new WeakMap<Rgba, Uint8Array>();
+function exportPng(sheet: Rgba): Uint8Array {
+  let png = encodedSheets.get(sheet);
+  if (png === undefined) {
+    png = encodePng(sheet);
+    encodedSheets.set(sheet, png);
+  }
+  return png;
+}
+
+/**
+ * `save/export.png` onto the party (fileio_party.cpp:423). One that won't
+ * decode is reported and left out, as the C++ does, rather than failing the
+ * load: the party loses pictures, not its game.
+ */
+function readExportSheet(ball: Tarball, party: Party): void {
+  const png = ball.get('save/export.png');
+  if (png === undefined) return;
+  try {
+    party.exportSheet = decodePng(png);
+    encodedSheets.set(party.exportSheet, png);
+  } catch (err) {
+    console.warn(`There was an error loading the party custom graphics: ${String(err)}`);
+  }
 }
 
 /**
@@ -1591,6 +1627,7 @@ export function applySave(data: Uint8Array, univ: Universe): void {
     if (text === undefined) throw new Error(`corrupt save: no save/pc${i + 1}.txt`);
     readPlayer(TagFile.parse(text), univ.party.pcs[i]!);
   }
+  readExportSheet(ball, univ.party);
 
   const scenText = ball.text('save/scenario.txt');
   if (scenText !== undefined) readScenarioState(TagFile.parse(scenText), scenario);
@@ -1639,6 +1676,7 @@ export function applyPartySave(data: Uint8Array, univ: Universe): void {
     if (text === undefined) throw new Error(`corrupt save: no save/pc${i + 1}.txt`);
     readPlayer(TagFile.parse(text), univ.party.pcs[i]!);
   }
+  readExportSheet(ball, univ.party);
   univ.party.townNum = TOWN_NUM_OUTDOORS;
   univ.town = null;
 }

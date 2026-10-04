@@ -21,6 +21,7 @@ import { getBoolPref, setPref } from './prefs';
 import { TouchDialogPanel, type TouchDialogHost } from './touchDialog';
 import { applyPadLayout } from './touchLayout';
 import { TouchSpellPanel, type TouchSpellHost } from './touchSpells';
+import type { SheetImage } from '../render/sheets';
 
 const PREF = 'TouchControls';
 
@@ -46,7 +47,7 @@ export interface TouchPadHost {
   buttons(mode: ToolbarMode): readonly ToolbarButton[];
   press(which: ToolbarButton): void;
   /** `buttons.png`, or the scenario's own, once it's loaded. */
-  sheet(): ImageBitmap | undefined;
+  sheet(): SheetImage | undefined;
   /**
    * A spell or missile being aimed with the cursor (`game/aimCursor.ts`), and
    * what Space would do to it; null when nothing is.
@@ -109,7 +110,7 @@ export class TouchControls {
   private readonly right: HTMLElement;
   /** What the left pad was last built for, so a redraw that changes nothing is free. */
   private shownMode: ToolbarMode | null = null;
-  private shownSheet: ImageBitmap | undefined;
+  private shownSheet: SheetImage | undefined;
   private shownAim = '';
   private centre: HTMLButtonElement | null = null;
   private repeat: { timer: number; pointer: number } | null = null;
@@ -234,7 +235,7 @@ export class TouchControls {
     }
   }
 
-  private buildActions(mode: ToolbarMode, sheet: ImageBitmap | undefined, space: 'cast' | 'rotate' | null): void {
+  private buildActions(mode: ToolbarMode, sheet: SheetImage | undefined, space: 'cast' | 'rotate' | null): void {
     this.left.replaceChildren();
     // Space while aiming: a multi-target spell goes off with what it has, a
     // wall turns. First, since it's what the player is in the middle of.
@@ -308,7 +309,7 @@ export class TouchControls {
 }
 
 /** One toolbar icon, cut from the sheet as `drawToolbar` cuts it. */
-function iconCanvas(sheet: ImageBitmap, btn: ToolbarButton): HTMLCanvasElement {
+function iconCanvas(sheet: SheetImage, btn: ToolbarButton): HTMLCanvasElement {
   // The bottom row's buttons are half height, with a 32×16 label for an icon.
   const [placed] = placeButtons([btn]);
   const src = buttonIconRect(placed!);

@@ -151,6 +151,11 @@ await page.evaluate(() => {
   const custom = { ...univ.party.pcs[0].items[0] };
   custom.graphicNum = 1003; // a picture from this scenario's own sheets
   univ.party.pcs[0].items[3] = custom;
+  // The win exports that picture to the party's sheet, so it stays; an item
+  // that calls one of this scenario's nodes still goes at the next door.
+  const caller = { ...univ.party.pcs[0].items[0] };
+  caller.ability = 81; // CALL_SPECIAL
+  univ.party.pcs[0].items[4] = caller;
   window.__session.specials.endScenario = true;
   window.__session.checkGameOver();
 });
@@ -175,11 +180,16 @@ const rebellion = await page.evaluate(() => ({
   scen: window.__univ.scenario.id,
   gold: window.__univ.party.gold,
   level: window.__univ.party.pcs[0].level,
-  custom: window.__univ.party.pcs[0].items.some((i) => i.graphicNum >= 1000),
+  exported: window.__univ.party.pcs[0].items.filter((i) => i.variety !== 0 && i.graphicNum >= 10000).length,
+  stale: window.__univ.party.pcs[0].items.some((i) => i.variety !== 0 && i.graphicNum >= 1000 && i.graphicNum < 10000),
+  caller: window.__univ.party.pcs[0].items.some((i) => i.variety !== 0 && i.ability === 81),
+  sheet: window.__univ.party.exportSheet && [window.__univ.party.exportSheet.width, window.__univ.party.exportSheet.height],
   age: window.__univ.party.age,
 }));
 check('it carries into A Small Rebellion', rebellion.scen === 'stealth' && rebellion.gold === 777
-  && rebellion.level === 9 && !rebellion.custom, rebellion);
+  && rebellion.level === 9 && !rebellion.caller, rebellion);
+check('with its custom-pictured item on the party sheet', rebellion.exported === 1 && !rebellion.stale
+  && JSON.stringify(rebellion.sheet) === '[280,180]', rebellion);
 await page.screenshot({ path: `${SHOTS}/p6-rebellion.png` });
 
 await page.goto(BASE);

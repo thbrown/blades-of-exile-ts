@@ -208,6 +208,12 @@ export class Party {
    */
   summons: import('../data/monster').Monster[] = [];
   /**
+   * The party's own picture sheet (`cCustomGraphics::party_sheet`): the
+   * custom pictures `exportGraphics` carried out of earlier scenarios,
+   * numbered 10000 + cell. Saved as `save/export.png`; null when it has none.
+   */
+  exportSheet: import('../fileio/legacy/bmp').Rgba | null = null;
+  /**
    * The soul crystal's four slots (`cParty::imprisoned_monst`): monster
    * numbers Capture Soul has caught, which Simulacrum then summons. 0 is an
    * empty slot, so monster 0 can never be stored — the C++ has the same hole.

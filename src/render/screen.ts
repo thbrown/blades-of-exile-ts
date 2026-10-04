@@ -8,6 +8,7 @@
 import { E3_JOBS_ON_PANEL, JOB_STR, e3HeldJobs, e3JobText, e3JobsBase } from '../game/e3Jobs';
 import { offersUse } from '../game/e3ItemUse';
 import { Direction, Location, dist } from '../core/location';
+import { syncPartySheet } from './customPics';
 import { type Item, ItemAbil, ItemType } from '../data/item';
 import { variety } from '../data/itemVariety';
 import { EffectPattern, SpellPat, WALL_ROTATIONS, getBuiltinPattern } from '../data/pattern';
@@ -272,6 +273,7 @@ export class Screen {
   draw(session: GameSession): void {
     const { ctx } = this;
     ctx.imageSmoothingEnabled = false;
+    syncPartySheet(this.store, session.univ.party.exportSheet);
     if (this.startupBackdrop) {
       ctx.fillStyle = Colours.BLACK;
       ctx.fillRect(0, 0, BOE_WIDTH, BOE_HEIGHT);

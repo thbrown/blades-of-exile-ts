@@ -125,7 +125,7 @@ import { TOWN_NUM_OUTDOORS } from './universe/party';
 import { FetchSource, ScenarioNotOfflineError } from './fileio/source';
 import { InputRouter } from './platform/input';
 import { Snd, SoundPlayer } from './platform/sound';
-import { installCustomSheets, installSheetOverrides, loadCustomSheets } from './render/customPics';
+import { customSheetName, installCustomSheets, installSheetOverrides, loadCustomSheets } from './render/customPics';
 import { captureSaveThumb, captureTerrainView } from './render/preview';
 import { BG_DARK, BG_LIGHT, setDefaultDialogBackground, setExile3Dialogs } from './render/tiling';
 import { changeCursor, cursorCss, setScenarioCursors } from './platform/cursors';
@@ -1399,6 +1399,19 @@ async function main(): Promise<void> {
     // `custom_choice_dialog` with `basic_buttons[0]`, Done, alone.
     await dialogs.runScreenQueued(() => threeChoiceDialog(ctx, store, strs,
       [{ name: 'btn1', label: 'Done' }], introMessPic ?? introPic, 6 /* PIC_SCEN */));
+  };
+
+  // `exportGraphics` on a win copies cells out of the scenario's own sheets,
+  // which only the page has, as images; it wants their pixels.
+  session.scenarioSheets = (n) => {
+    const img = store.get(customSheetName(n));
+    if (img === undefined || typeof OffscreenCanvas === 'undefined') return null;
+    const canvas = new OffscreenCanvas(img.width, img.height);
+    const c = canvas.getContext('2d');
+    if (c === null) return null;
+    c.drawImage(img, 0, 0);
+    const { data } = c.getImageData(0, 0, img.width, img.height);
+    return { width: img.width, height: img.height, data };
   };
 
   session.onVictory = () => {
