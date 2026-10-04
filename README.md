@@ -135,6 +135,18 @@ npx vitest run       # the tests, headless
   The files are trimmed to the scenario, its graphics and the author's
   documents.
 
+## AI player
+
+For testing and for fun the build provides an interface for AI to play. This is how I run it:
+
+```
+  cd ai-player
+  npm install
+  claude --model haiku
+```
+
+Then ask something like `Start a game of 'Exile III: Runined World' and play throught the slimes mission` A Chromium window opens on the game so you can watch it play. The dev server starts itself if it isn't already running.
+
 ## Licence
 
 blades-of-exile-ts is released under the **GNU General Public License, version 2**

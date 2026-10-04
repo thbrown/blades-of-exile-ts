@@ -15,5 +15,5 @@
     "noEmit": true,
     "types": ["vite/client"]
   },
-  "include": ["src", "test", "tools"]
+  "include": ["src", "test", "tools", "ai-player/bridge"]
 }

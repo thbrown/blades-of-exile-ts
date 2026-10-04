@@ -78,7 +78,8 @@ const CSS = `
 .stree-pane { position: relative; overflow: hidden; min-height: 0; background: rgba(255,255,255,.6);
   border: 1px solid #000; border-radius: 3px; }
 .stree-pane svg { position: absolute; inset: 0; display: block; }
-.stree-left { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 6px; min-height: 0; }
+.stree-left { display: grid; grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr);
+  gap: 6px; min-height: 0; }
 .stree-nav { display: flex; gap: 4px; align-items: center; }
 .stree-nav button { padding: 3px 0; width: 36px; font-size: 13px; line-height: 1.2; }
 .stree-nav .stree-where { flex: 1 1 auto; min-width: 0; padding-left: 6px; color: #333; font-size: 11px;
@@ -118,9 +119,9 @@ const CSS = `
 .stree-node { cursor: pointer; }
 .stree-node:focus { outline: none; }
 .stree-node:hover .ring { stroke: #000; stroke-width: 1.5; }
-/* A phone: the whole screen; the tree on top with its buttons, the save's
-   picture and card side by side under it; the key folded behind a button. */
-@media (max-width: 640px) {
+/* A phone, either way up: the whole screen, finger-sized buttons, and the key
+   folded behind a button. */
+@media (max-width: 640px), (max-height: 500px) {
   .stree-back { padding: 0; }
   .stree { width: 100vw; height: 100vh; height: 100dvh; border-radius: 0; border: none; }
   .stree header { padding: 8px 10px 6px; }
@@ -128,8 +129,12 @@ const CSS = `
   .stree-key-toggle { display: inline-block; }
   .stree-legend { display: none; width: 100%; justify-content: flex-start; }
   .stree.show-key .stree-legend { display: flex; }
-  .stree-body { grid-template-columns: 1fr; grid-template-rows: minmax(150px, 1fr) auto; gap: 8px; padding: 0 10px; }
   .stree-nav button { width: auto; flex: 0 0 44px; min-height: 38px; font-size: 15px; }
+}
+/* Upright: the tree on top with its buttons, the save's picture and card
+   side by side under it. */
+@media (max-width: 640px) {
+  .stree-body { grid-template-columns: 1fr; grid-template-rows: minmax(150px, 1fr) auto; gap: 8px; padding: 0 10px; }
   .stree-nav .stree-where { display: none; }
   .stree-detail { display: grid; grid-template-columns: 40% minmax(0, 1fr); align-items: start; gap: 8px;
     overflow: auto; max-height: 48vh; max-height: 48dvh; }
@@ -138,6 +143,26 @@ const CSS = `
   .stree footer { padding: 8px 10px; gap: 8px; }
   .stree footer .grow { flex-basis: 100%; height: 0; }
   .stree footer .grow ~ button { flex: 1 1 0; min-height: 40px; }
+}
+/* On its side (after the upright rules, so a small phone on its side gets
+   these): too short for the desktop column, whose card ran off the bottom.
+   The tree takes the height; beside it a narrower column with a shorter
+   picture, which scrolls to reach the card and the save's buttons. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .stree header { padding: 5px 10px 4px; gap: 4px 10px; }
+  .stree h2 { font-size: 18px; }
+  .stree-title small { font-size: 10px; }
+  .stree-body { grid-template-columns: minmax(0, 1fr) clamp(200px, 36%, 300px); grid-template-rows: none;
+    gap: 8px; padding: 0 10px; }
+  .stree-nav button { min-height: 36px; }
+  .stree-nav .stree-where { display: block; }
+  .stree-detail { display: flex; gap: 6px; max-height: none; overflow: hidden auto; overscroll-behavior: contain; }
+  .stree-detail .stree-shot { max-height: 38vh; max-height: 38dvh; object-fit: contain; }
+  .stree-note { min-height: 0; }
+  .stree-node-actions button.small { min-height: 34px; }
+  .stree footer { padding: 6px 10px; }
+  .stree footer .grow { flex: 1 1 auto; height: auto; }
+  .stree footer .grow ~ button { flex: none; min-height: 38px; }
 }
 `;
 

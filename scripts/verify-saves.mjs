@@ -351,6 +351,30 @@ const backUp = await navState();
 check('▼ and ▲ hop between branches', below.lane !== atEnd.lane && backUp.lane === atEnd.lane, { below, backUp });
 await page.screenshot({ path: `${SHOTS}/s7-tree-phone-walked.png` });
 await page.click('.stree footer button:not(.primary)'); // Cancel
+
+// ---- and on its side: the tree beside a column that scrolls, nothing overlapping
+for (const [w, ht] of [[844, 390], [667, 375]]) {
+  await page.setViewportSize({ width: w, height: ht });
+  await page.goto(BASE);
+  await page.waitForSelector('.startup-save');
+  await page.click('.startup-save [data-action="history"]');
+  await page.waitForSelector('.stree .stree-node');
+  await page.waitForTimeout(300);
+  if (w === 844) await page.screenshot({ path: `${SHOTS}/s8-tree-phone-landscape.png` });
+  check(`on a phone on its side (${w}×${ht}) the tree fills the screen, beside the save's card`, await page.evaluate(() => {
+    const r = (q) => document.querySelector(q).getBoundingClientRect();
+    const box = r('.stree');
+    const detail = document.querySelector('.stree-detail');
+    const actions = r('.stree-node-actions');
+    return Math.round(box.width) === innerWidth && Math.round(box.height) === innerHeight
+      && r('.stree-left').right <= r('.stree-detail').left
+      && r('.stree-body').bottom <= r('.stree footer').top + 1
+      && [...document.querySelectorAll('.stree *')].every((e) => e.getBoundingClientRect().right <= innerWidth + 1)
+      // The save's own buttons are reachable by scrolling the column.
+      && actions.bottom - detail.getBoundingClientRect().top <= detail.scrollHeight + 1;
+  }));
+  await page.click('.stree footer button:not(.primary)');
+}
 await page.setViewportSize({ width: 1300, height: 950 });
 
 // ---- an Exile III save, imported on the main menu, becomes a game with a tree

@@ -1,0 +1,13 @@
+{
+  "name": "exile-ai-player",
+  "private": true,
+  "type": "module",
+  "description": "An MCP server that lets a Claude Code session play Blades of Exile in a live browser window.",
+  "scripts": {
+    "server": "node server/server.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.0",
+    "zod": "^4.6.5"
+  }
+}

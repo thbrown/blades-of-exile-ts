@@ -27,3 +27,6 @@ tools/e3convert/ghidra/project/
 # Exile 3 converted by tools/e3convert/ensure.ts before dev and build — a
 # modified copy, which its licence does not let us commit; always regenerated
 public/scenarios/exile3/
+
+# The AI player's runs: logs, screenshots, its notes and its browser profile (ai-player/README.md)
+ai-player/runs/

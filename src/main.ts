@@ -135,7 +135,7 @@ import { BOE_HEIGHT, BOE_WIDTH, COMPACT_HEIGHT, ITEM_SBAR_RECT, ToolbarButton, W
 
 import { CHROME_SHEETS, Screen, toolbarButtons, toolbarMode } from './render/screen';
 import { TouchSheet } from './platform/touchSheet';
-import { TouchControls, setTouchControls, touchControlsOn } from './platform/touchControls';
+import { TouchControls, type TouchPadHost, setTouchControls, touchControlsOn } from './platform/touchControls';
 import { openTouchLayoutPanel } from './platform/touchLayout';
 import { type Aiming, aimSpaceAction, autoAim, currentAim, moveAim, talkAim } from './game/aimCursor';
 import { E3_PATTERN_SLOTS, tilePattern } from './render/tiling';
@@ -2972,7 +2972,7 @@ async function main(): Promise<void> {
     redraw();
   };
 
-  touchPads = new TouchControls({
+  const touchHost: TouchPadHost = {
     // Hidden wherever the canvas's toolbar can't be clicked either: under a
     // dialog, in a shop or a conversation — and on the main menu.
     mode: () => (document.body.classList.contains('starting') || dialogs.active || session.shop || session.talk
@@ -3005,6 +3005,14 @@ async function main(): Promise<void> {
       type: (field, text) => dialogs.touchType(field, text),
       enter: () => { dialogs.handleKey('Enter'); },
     },
+  };
+  touchPads = new TouchControls(touchHost);
+  // The game's choices as names, for the AI player (ai-player/bridge): the
+  // same toolbar, dialog strips and talk words a finger gets, live or not —
+  // and which square the game is waiting for (Talk, Use, Bash, Pick Lock).
+  Object.assign(window as unknown as Record<string, unknown>, {
+    __touchHost: touchHost,
+    __pendingSquare: () => pending,
   });
 
   /**
