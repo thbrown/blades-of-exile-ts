@@ -57,6 +57,7 @@ node scripts/verify-screen.mjs   # drives the real UI in Chromium, screenshots i
 node scripts/verify-party.mjs    # the party in memory, carried between scenarios
 node scripts/verify-saves.mjs    # save trees: autosave ticks, the restore tree, branches, zip, E3 import
 node scripts/bench-save-ui.mjs   # what saving costs the frame rate (CHROMIUM_PATH=… for another Chromium)
+node scripts/verify-offline.mjs DIR  # the PWA: a build in DIR, played online, then with its server stopped
 ```
 
 `floating-promises.mjs` is cheap and worth the habit: **`get_ran`'s call order

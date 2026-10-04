@@ -5,10 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Blades of Exile</title>
     <link rel="icon" type="image/png" href="/blades-of-exile-ts/data/graphics/icon.png" />
-    <!-- Installable: Add to Home Screen opens it full-screen, without the
-         browser's bars. public/pwa/ is made by scripts/make-pwa-icons.mjs. -->
+    <!-- Installable, and playable offline once loaded (src/platform/pwa.ts). -->
     <link rel="manifest" href="/blades-of-exile-ts/manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="/blades-of-exile-ts/pwa/icon-192.png" />
+    <link rel="apple-touch-icon" href="/blades-of-exile-ts/icons/apple-touch-icon.png" />
     <meta name="theme-color" content="#1a1a1a" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -34,13 +33,6 @@
         src: url('/blades-of-exile-ts/data/fonts/maidenword.ttf') format('truetype');
       }
 
-      /* No double-tap zoom anywhere (iOS ignores user-scalable=no). Pinch
-         still zooms. touch-action isn't inherited but an element's effective
-         value is narrowed by its ancestors', so this reaches every element,
-         and the ones set to none below stay none. */
-      html {
-        touch-action: manipulation;
-      }
       body {
         background: #1a1a1a;
         color: #ddd;
@@ -108,8 +100,11 @@
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      #spinner.hidden, #loading-file.hidden, #progress-wrap.hidden {
+      #spinner.hidden, #loading-file.hidden, #progress-wrap.hidden, #canvas-wrap.hidden {
         display: none;
+      }
+      #status a {
+        color: #9cf;
       }
       @keyframes spin {
         to {
@@ -1302,10 +1297,10 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="/blades-of-exile-ts/assets/main-DPgcdCcb.js"></script>
-    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/tiling-DAI3lJaY.js">
-    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/e3ItemUse-uaubI_fI.js">
-    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/terrainPics-paVOyIjm.js">
+    <script type="module" crossorigin src="/blades-of-exile-ts/assets/main-DeoUmdNT.js"></script>
+    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/tiling-CydMbiZ1.js">
+    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/e3ItemUse-CxO4VtdW.js">
+    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/terrainPics-DoTOZxHR.js">
   </head>
   <body>
     <nav id="game-menu-bar"></nav>

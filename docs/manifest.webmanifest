@@ -1,7 +1,7 @@
 {
   "name": "Blades of Exile",
   "short_name": "Exile",
-  "description": "Jeff Vogel's Blades of Exile, in the browser.",
+  "description": "Spiderweb Software's Blades of Exile, in the browser — plays offline once installed.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -9,7 +9,8 @@
   "background_color": "#1a1a1a",
   "theme_color": "#1a1a1a",
   "icons": [
-    { "src": "pwa/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "pwa/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
