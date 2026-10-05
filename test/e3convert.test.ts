@@ -50,6 +50,8 @@ import { e3DayCount, e3TownState } from '../tools/e3convert/flags';
 import { FieldType } from '../src/data/fields';
 import { Spell } from '../src/data/spell';
 import { specialIncreaseAge } from '../src/game/specialIncreaseAge';
+import { giveE3StartItems } from '../src/game/e3StartItems';
+import { addPcRefusal } from '../src/game/createPc';
 import { loadSave, saveGame } from '../src/fileio/saveIo';
 import { SpecCtx, SpecCtxType } from '../src/game/specials/context';
 import { partyFlag } from '../tools/e3convert/script';
@@ -207,6 +209,91 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     }
     // Cave Lore's swamp first, then Woodsman's (`10c0:16a0`).
     expect(scen.featureFlags['swamp']).toBe('exile3:88,90');
+  });
+
+  it("adds a PC in Fort Emergence and nowhere else, as E3's Options menu does (10e8:0f74)", () => {
+    expect(scen.featureFlags['add-pc']).toBe('exile3:21:Add PC: Only in Fort Emergence.');
+    expect(scen.towns.some((t) => t.hasTavern)).toBe(false);
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    session.startNewGame();
+    const { univ } = session;
+    expect(univ.party.townNum).toBe(21);
+    expect(addPcRefusal(univ, true)).toBe('Add PC: You already have 6 PCs.');
+    univ.party.pcs[5]!.mainStatus = MainStatus.ABSENT;
+    expect(addPcRefusal(univ, true)).toBeNull();
+    expect(addPcRefusal(univ, false)).toBe('Add PC: Town mode only.');
+    session.startTownMode(128, FORCED_ENTRY); // Marish
+    expect(addPcRefusal(univ, true)).toBe('Add PC: Only in Fort Emergence.');
+  });
+
+  it("starts a party with E3's own gear, and half the time a third item (1010:6bbe)", () => {
+    expect(scen.featureFlags['start-items'])
+      .toBe('exile3:41,143,112,107,40,158;176,175,202,272,273,274,276,203,25,105,169,173');
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    const { univ } = session;
+    const races = univ.party.pcs.map((pc) => pc.race);
+    expect(races).toEqual([Race.HUMAN, Race.SLITH, Race.NEPHIL, Race.HUMAN, Race.HUMAN, Race.HUMAN]);
+    // The first PC wins the toss and draws pool slot 3, the third wins and
+    // draws slot 11, and the rest lose it.
+    const answers = [0, 3, 1, 0, 11, 1, 1, 1];
+    const asked: number[][] = [];
+    univ.rng.getRan = (times: number, min: number, max: number): number => {
+      asked.push([times, min, max]);
+      return answers.shift() ?? 1;
+    };
+    session.finishNewParty();
+    expect(asked).toEqual([[1, 0, 1], [1, 0, 11], [1, 0, 1], [1, 0, 1], [1, 0, 11], [1, 0, 1], [1, 0, 1], [1, 0, 1]]);
+    const name = (pc: number, slot: number) => univ.party.pcs[pc]!.items[slot]!;
+    const want: Record<number, [number, number]> = { [Race.HUMAN]: [41, 143], [Race.NEPHIL]: [112, 107], [Race.SLITH]: [40, 158] };
+    univ.party.pcs.forEach((pc, i) => {
+      const [a, b] = want[pc.race]!;
+      expect(name(i, 0).fullName).toBe(scen.scenItems[a]!.fullName);
+      expect(name(i, 1).fullName).toBe(scen.scenItems[b]!.fullName);
+      expect([pc.equip[0], pc.equip[1], name(i, 0).ident, name(i, 1).ident]).toEqual([true, true, true, true]);
+    });
+    expect(name(0, 0).fullName).toBe('Bronze Knife');
+    expect(name(1, 0).fullName).toBe('Stone Spear');
+    expect(name(2, 0).fullName).toBe('Cavewood Bow');
+    expect(name(0, 2).fullName).toBe('Weak Curing P.');
+    expect(name(0, 2).ident).toBe(true);
+    expect(univ.party.pcs[0]!.equip[2]).toBe(false);
+    expect(name(2, 2).fullName).toBe('Boots');
+    for (const i of [1, 3, 4, 5]) expect(name(i, 2).variety).toBe(ItemType.NO_ITEM);
+    // A PC made mid-game (`10b0:12bf`) gets the pair and no roll.
+    const pc = univ.party.pcs[5]!;
+    pc.items[0] = { ...pc.items[0]!, variety: ItemType.NO_ITEM };
+    asked.length = 0;
+    giveE3StartItems(univ, pc, false);
+    expect(asked).toEqual([]);
+    expect(pc.items[0]!.fullName).toBe('Bronze Knife');
+  });
+
+  it("leaves E3's waterfalls to the outdoor move: no special, the waterfall flag", async () => {
+    expect(scen.terTypes[77]).toMatchObject({ name: 'Waterfall', special: TerSpec.NONE });
+    expect(scen.featureFlags['waterfall']).toBe('exile3:77');
+    // Zone 61 (7,6), the falls at (41–43, 18): sail south onto (42,17) and
+    // the river takes the boat over, to (42,19).
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    session.attachSpecials(new Proxy({}, { get: () => () => Promise.resolve(0) }) as never);
+    const party = session.univ.party;
+    session.debugLeaveTown();
+    session.positionParty(7, 6, 42, 16);
+    const toGlobal = (x: number, y: number) =>
+      ({ x: 48 * (7 - party.outdoorCorner.x) + x, y: 48 * (6 - party.outdoorCorner.y) + y });
+    expect(session.univ.out.at(toGlobal(42, 18).x, toGlobal(42, 18).y)).toBe(77);
+    const boat = party.boats[0]!;
+    boat.exists = true;
+    boat.whichTown = 200;
+    boat.loc = { x: 42, y: 16 };
+    boat.sector = { x: 7, y: 6 };
+    party.inBoat = 0;
+    for (const pc of party.pcs) pc.traits.fill(false);
+    party.food = 100;
+    await session.move(Direction.S);
+    expect(party.outLoc).toEqual(toGlobal(42, 19));
+    expect(boat.loc).toEqual({ x: 42, y: 19 });
+    expect(session.univ.transcript).toContain('  Waterfall!');
+    expect(party.food).toBeLessThan(100);
   });
 
   it("enters E3's lit dungeons with the dungeon sound", () => {

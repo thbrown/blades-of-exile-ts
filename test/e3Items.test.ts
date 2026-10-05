@@ -160,21 +160,24 @@ describe("Exile III's item rules (src/game/e3Items.ts)", () => {
     expect(pc.status[Status.DUMB] ?? 0).toBe(0);
   });
 
-  it('Micah\'s Gloves add to dexterity\'s adjustment, not to the skill', () => {
+  it('Micah\'s Gloves add to intelligence\'s adjustment, not to the skill', () => {
     const { pc } = setup();
     pc.equip.fill(false);
-    const before = pc.statAdj(Skill.DEXTERITY);
-    const skill = pc.skill(Skill.DEXTERITY);
+    const before = pc.statAdj(Skill.INTELLIGENCE);
+    const dex = pc.statAdj(Skill.DEXTERITY);
+    const skill = pc.skill(Skill.INTELLIGENCE);
     wear(pc, 10, 99, 1, ItemAbil.BOOST_STAT);
-    pc.items[10]!.abilData = Skill.DEXTERITY;
-    expect(pc.statAdj(Skill.DEXTERITY)).toBe(before + 1);
-    expect(pc.skill(Skill.DEXTERITY)).toBe(skill);
+    pc.items[10]!.abilData = Skill.INTELLIGENCE;
+    expect(pc.statAdj(Skill.INTELLIGENCE)).toBe(before + 1);
+    expect(pc.skill(Skill.INTELLIGENCE)).toBe(skill);
+    // Not dexterity's: `10b0:87e2` is `if (which == 2)`.
+    expect(pc.statAdj(Skill.DEXTERITY)).toBe(dex);
     // Past the sixteenth slot E3 doesn't look.
     pc.items[20] = pc.items[10]!;
     pc.equip[20] = true;
     pc.items[10] = { ...pc.items[10]!, variety: ItemType.NO_ITEM };
     pc.equip[10] = false;
-    expect(pc.statAdj(Skill.DEXTERITY)).toBe(before);
+    expect(pc.statAdj(Skill.INTELLIGENCE)).toBe(before);
   });
 
   it('lifting a curse zeroes E3\'s curse code, so Dancing Boots stop dancing', () => {

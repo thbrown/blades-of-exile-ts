@@ -49,7 +49,7 @@ import {
   PARTY_EDITOR_DIALOG_DEFS, PartyEditorHost, confirmDeletePc, createPc, pickPcGraphic,
   pickPcName, pickRaceAbil, startNewParty,
 } from './dialogs/partyEditor';
-import { XpMode } from './game/createPc';
+import { XpMode, addPcRefusal } from './game/createPc';
 import {
   LIBRARY_DIALOG_DEFS, alchemyHelpDialog, alchemyKnownDialog, choiceDialog, pcSpellsDialog,
   skillInfoDialog, spellInfoDialog, tipOfDayDialog,
@@ -1116,19 +1116,16 @@ async function main(): Promise<void> {
 
   /**
    * Options › Add a New PC — `handle_new_pc` (boe.actions.cpp:3698). Town
-   * only, and only in a town with a tavern.
+   * only, and only in a town with a tavern, or Exile III's Fort Emergence
+   * (`addPcRefusal`).
    */
   const newPcFlow = async (): Promise<void> => {
-    if (!isTown(session.mode)) {
-      univ.addStringToBuf('Add PC: Town mode only.');
-    } else if (univ.party.freeSpace() === 6) {
-      univ.addStringToBuf('Add PC: You already have 6 PCs.');
-    } else if (univ.town?.record.hasTavern) {
+    const refusal = addPcRefusal(univ, isTown(session.mode));
+    if (refusal !== null) {
+      univ.addStringToBuf(refusal);
+    } else {
       giveHelp(56, 0);
       await createPc(partyHost, 6, false);
-    } else {
-      univ.addStringToBuf(
-        'Add PC: You cannot add new characters in this town. Try in the town you started in.');
     }
     screen.itemWindow.setStatWindowForPc(univ, univ.curPc);
     redraw();

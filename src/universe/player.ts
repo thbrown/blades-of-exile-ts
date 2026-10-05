@@ -238,9 +238,11 @@ export class Player extends Living {
       if (this.race === Race.VAHNATAI) tr -= 2;
     }
     if (hasAbilEquip(this, ItemAbil.BOOST_STAT, which, true)) tr++;
-    // Exile III's Micah's Gloves (its code 99) add one to dexterity's, worn
-    // in the first sixteen slots (`stat_adj`, `10b0:87af`; DIVERGENCES.md #23).
-    if (which === Skill.DEXTERITY && this.items.slice(0, 16)
+    // Exile III's Micah's Gloves (its code 99) add one to intelligence's, worn
+    // in the first sixteen slots (`stat_adj`, `10b0:87af`; DIVERGENCES.md #23):
+    // the test sits inside `if (which == 2)` at `10b0:87e2`, beside Magically
+    // Apt's, so it is intelligence, as the item sheet says — not dexterity.
+    if (which === Skill.INTELLIGENCE && this.items.slice(0, 16)
       .some((item, i) => this.equip[i] && item.variety !== ItemType.NO_ITEM && item.e3Ability === 99)) tr++;
     return tr;
   }
@@ -529,6 +531,8 @@ export class Player extends Living {
         // and it doesn't come through here.
         break;
     }
+    // Exile III gives its own two items, and at a new game rolls for a third,
+    // after this (`game/e3StartItems.ts`).
     // Both slots are equipped outright, whatever they are — note that means a
     // nephil walks in with their arrows equipped, which is what a bow wants.
     this.equip[0] = true;

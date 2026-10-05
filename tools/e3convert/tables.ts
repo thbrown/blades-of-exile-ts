@@ -218,6 +218,33 @@ export function readE3Start(exe: Uint8Array): E3Start {
   return { town: 21, loc: { x: ds[0x5f0] ?? 0, y: ds[0x5f1] ?? 0 } };
 }
 
+/** A new PC's gear in E3: two items by species, and a new game's bonus pool. */
+export interface E3StartItems {
+  /** Human, Nephil, Slith: the items for slots 0 and 1, both worn. */
+  bySpecies: [number, number][];
+  /** A new game's third item, one of these, half the time. */
+  bonus: number[];
+}
+
+/**
+ * E3's starting gear (`FUN_1010_6b20` at `1010:6bbe`): word pairs at DGROUP
+ * 0x5f2, indexed `race * 4` bytes, and twelve words at 0x5fe for the third
+ * item, `get_ran(1,0,11)`. A PC made mid-game (`10b0:12bf`) copies its pairs
+ * from DGROUP 0x3000, which holds the same six words.
+ */
+export function readE3StartItems(exe: Uint8Array): E3StartItems {
+  const ds = readNeSegment(exe, neAutoDataSegment(exe));
+  const word = (off: number) => (ds[off] ?? 0) | ((ds[off + 1] ?? 0) << 8);
+  const words = (off: number, n: number) => Array.from({ length: n }, (_, i) => word(off + 2 * i));
+  const pairs = words(0x5f2, 6);
+  const midGame = words(0x3000, 6);
+  if (pairs.some((w, i) => w !== midGame[i])) throw new Error('E3 start items: DGROUP 0x5f2 and 0x3000 disagree');
+  return {
+    bySpecies: [0, 1, 2].map((r) => [pairs[2 * r]!, pairs[2 * r + 1]!]),
+    bonus: words(0x5fe, 12),
+  };
+}
+
 /**
  * A boat or horse in E3's starting tables: BoE 1997's `boat_record_type`,
  * 10 bytes, little-endian in memory. Record `k` is E3's vehicle `k`; record 0
