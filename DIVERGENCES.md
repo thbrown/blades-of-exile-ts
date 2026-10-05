@@ -1027,18 +1027,16 @@ What this port does instead (`platform/saveStore.ts`, `saveRetention.ts`,
 `saveScheduler.ts`; PROGRESS.md "Save trees"). It was first called a save
 *series*; it was renamed *tree* the same day, at the user's word:
 
-- **One tree of snapshots per game.** The named moments are the same
-  six (`EnterTown`, `ExitTown`, `RestComplete`, `TownWaitComplete`,
-  `EndOutdoorCombat`, `Eat`, with the same `Autosave_<reason>` preferences),
-  now called *milestones*; on top of them a **tick** saves after every move,
+- **One tree of snapshots per game.** A **tick** saves after every move,
   indoors and out (so leaving loses nothing; a move that changed nothing
-  writes nothing). **Since 2026-10-05 the six default off** — they marked
-  nearly every town door as a milestone — and two of this port's own default
-  on: `QuestComplete` (a quest's status set to completed) and `Journal` (an
-  events-journal entry added, Exile III's thirty-four plot events). The tick
-  still saves those six moments, as ordinary autosaves. A tick also waits
-  for a 500 ms pause in the walking (`AUTOSAVE_QUIET_MS`), so a held arrow
-  key saves where the walk stops rather than between every pair of steps. `Autosave_Every` was a
+  writes nothing), once the walking pauses for 200 ms (`AUTOSAVE_QUIET_MS`),
+  so a held arrow key saves where the walk stops. Two moments make that save
+  a *milestone*: a quest completed and an events-journal entry (Exile III's
+  thirty-four plot events). **OBoE's six named moments (`EnterTown`,
+  `ExitTown`, `RestComplete`, `TownWaitComplete`, `EndOutdoorCombat`, `Eat`)
+  and their `Autosave_<reason>` preferences are gone** (2026-10-05, at the
+  user's word): with every move saved they marked nothing, and Preferences
+  has no autosave row at all; stored values are cleared on load. `Autosave_Every` was a
   preference for a day and is gone (2026-10-03). A game started from
   the main menu is saved as soon as it starts, which makes its tree, so "Make
   a manual save first" is gone; and going to the main menu saves the game

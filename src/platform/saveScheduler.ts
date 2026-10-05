@@ -114,7 +114,7 @@ const RETRY_MS = 500;
  * every pair of steps (the serialise is synchronous, ~3 ms, and the picture
  * and gzip follow) made the walk stutter; so a walk is saved where it stops.
  */
-export const AUTOSAVE_QUIET_MS = 500;
+export const AUTOSAVE_QUIET_MS = 200;
 
 export const compressAsync = (raw: Uint8Array): Promise<Uint8Array> =>
   new Promise((resolve, reject) => {

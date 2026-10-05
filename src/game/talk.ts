@@ -73,6 +73,11 @@ export class TalkState {
   /** Index into the town's creature list, or -1 when a special started this. */
   readonly monsterIndex: number;
   readonly monsterType: number;
+  /**
+   * The speaker's map picture (`get_monst_picnum`), which the portrait falls
+   * back to when there is no face — a picture number, not the monster's.
+   */
+  readonly monsterPic: number;
   /** The name the conversation shows, which the notes file it under. */
   private readonly speaker: string;
   readonly facePic: number;
@@ -138,6 +143,7 @@ export class TalkState {
     this.monsterIndex = monsterIndex;
     this.personality = personality;
     this.monsterType = monsterType;
+    this.monsterPic = univ.scenario.scenMonsters[monsterType]?.pictureNum ?? monsterType;
     this.facePic = facePic;
 
     const person = this.univ.scenario.townTalk[Math.floor(greeter / 10)]?.people[greeter % 10] ?? null;

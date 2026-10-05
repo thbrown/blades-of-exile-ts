@@ -74,21 +74,6 @@ export function clearPref(name: string): void {
   save();
 }
 
-/**
- * The autosave preferences: `Autosave` and `Autosave_<reason>`, as the C++
- * stores them. (`Autosave_Every` and `Autosave_BudgetMb`, this port's for a
- * while, are no longer read: the game saves every move, and each save tree
- * keeps its own cap on autosaves.)
- */
-export function readAutosavePrefs(
-  reasons: readonly string[], defaults: Record<string, boolean>,
-): { triggers: Record<string, boolean> } {
-  const triggers: Record<string, boolean> = {};
-  for (const r of reasons) triggers[r] = getBoolPref(`Autosave_${r}`, defaults[r] ?? true);
-  // `Autosave`, the master switch, is gone: the game always saves itself.
-  return { triggers };
-}
-
 /** Tests only: drop the in-memory copy so the next read goes back to storage. */
 export function resetPrefsCache(): void {
   cache = null;

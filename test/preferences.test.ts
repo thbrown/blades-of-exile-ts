@@ -8,7 +8,6 @@ import {
   PREFERENCES_DIALOG_DEFS, Preferences, preferencesDialog,
 } from '../src/dialogs/preferencesDialog';
 import { XmlDialog } from '../src/dialogs/xmlDialog';
-import { DEFAULT_AUTOSAVE_PREFS } from '../src/game/autosave';
 import { DisplayMode, UI_SCALE_FIT, desktop } from '../src/render/desktop';
 import { SheetStore } from '../src/render/sheets';
 
@@ -38,7 +37,7 @@ function click(dlg: ModalScreen, name: string): string | null {
 
 const base: Preferences = {
   playSounds: true, gameSpeed: 1, targetLock: true, showInstantHelp: true,
-  autosave: DEFAULT_AUTOSAVE_PREFS, easyMode: false, lessWm: false,
+  easyMode: false, lessWm: false,
   displayMode: DisplayMode.CENTRE, uiScale: 2, fixBugs: false,
 };
 

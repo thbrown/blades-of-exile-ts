@@ -16,7 +16,7 @@
 import { bugFixed } from './bugFixes';
 import { DamageType } from '../data/monster';
 import { TRACE_AGE } from '../core/trace';
-import { tickAutoSave, tryAutoSave } from './autosave';
+import { tickAutoSave } from './autosave';
 import { ItemAbil, abilGroup, abilHarms } from '../data/item';
 import { Lighting } from '../data/town';
 import { getProtLevel, hasAbilEquip, hasE3AbilEquip } from '../universe/inventory';
@@ -379,9 +379,6 @@ export async function increaseAgeEffects(session: GameSession): Promise<void> {
     } else {
       session.sound?.play(6);
       univ.addStringToBuf('You eat.');
-      // The one trigger that defaults *off*, since it fires far more often
-      // than the rest (autosave_trigger_defaults, boe.fileio.cpp:504).
-      tryAutoSave('Eat');
     }
   }
 

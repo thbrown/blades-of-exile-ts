@@ -8,7 +8,6 @@ import { ItemAbil, abilGroup, abilHarms } from '../data/item';
 import { TerSpec } from '../data/terrain';
 import { dist } from '../core/location';
 import { TRACE_AGE } from '../core/trace';
-import { tryAutoSave } from './autosave';
 import { hasAbilEquip } from '../universe/inventory';
 import { MainStatus, PartyStatus, Status, Trait, statusInfo } from '../universe/skills';
 import { Universe } from '../universe/universe';
@@ -227,6 +226,5 @@ export async function handleRest(session: GameSession): Promise<boolean> {
   if (i !== 50) return false;
   doRest(univ, 1200, univ.rng.getRan(5, 1, 10), 50, true, session);
   say('  Rest successful.');
-  tryAutoSave('RestComplete');
   return true;
 }

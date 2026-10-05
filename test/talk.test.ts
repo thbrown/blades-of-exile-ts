@@ -294,3 +294,14 @@ describe('node effects', () => {
   // left in this scenario to assert the "not implemented yet" path against.
   // The specials tests cover the equivalent reporting for node types.
 });
+
+describe('the portrait', () => {
+  it("falls back to the speaker's own picture, not the picture numbered like its monster", () => {
+    const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
+    const type = univ.scenario.scenMonsters.findIndex((m, i) => i > 0 && m && m.pictureNum !== i);
+    expect(type).toBeGreaterThan(0);
+    const talk = new TalkState(univ, -1, 0, type, -1);
+    expect(talk.monsterPic).toBe(univ.scenario.scenMonsters[type]!.pictureNum);
+    expect(talk.monsterPic).not.toBe(type);
+  });
+});

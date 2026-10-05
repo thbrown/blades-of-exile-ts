@@ -424,6 +424,14 @@ Still open: the other nine squares.
 - **Question:** in the original, is the dungeon full again in either case?
   If it stays empty after four other towns, E3 remembers its dead some way
   the port hasn't read.
+- **The user's recollection (2026-10-05):** the bandits' camp stayed empty
+  when they came back much later. Read against the EXE, the Bandit Hideout
+  (town 45) has 39 creatures and a limit of 100 kills, so it can't be
+  "cleaned out"; it isn't among the towns the loader empties on a flag
+  (22, 23, 36, 46, 50, 52, 90, 200, `10d8:107b`–`1166`); and none of its
+  creatures has a time flag. By the code it fills again once four other
+  towns have been visited — so if it doesn't, something else is at work.
+  (A camp met outdoors would be a once-only encounter, not a town.)
 
 ## Waiting on a ruling (already written up elsewhere)
 

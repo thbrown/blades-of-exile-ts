@@ -12,7 +12,6 @@
 import { QuestStatus } from '../data/quest';
 import { locationText } from '../replay/format';
 import { ReplayRecorder } from '../replay/recorder';
-import { tryAutoSave } from './autosave';
 import { Direction, Location, dist, loc, locsEqual, minmax, shiftLoc } from '../core/location';
 import { SIGHT_BLOCKED, canSee } from '../core/sight';
 import { Item, ItemAbil, ItemType, defaultItem } from '../data/item';
@@ -4172,8 +4171,6 @@ export class GameSession {
     if (this.mode !== GameMode.COMBAT) return false;
     if (this.whichCombatType === 0) {
       const ended = this.endOutdoorCombat();
-      // end_combat's tail: only an outdoor fight autosaves (boe.combat.cpp:4480).
-      if (ended) tryAutoSave('EndOutdoorCombat');
       // `set_stat_window_for_pc(univ.cur_pc)` (boe.actions.cpp:1347).
       if (ended) this.onStatWindowForPc?.(this.univ.curPc);
       return ended;
@@ -4353,8 +4350,6 @@ export class GameSession {
       if (!univ.party.isAlive()) break;
     }
     this.checkGameOver();
-    // Only a wait that ran its full course quietly is worth a save point.
-    if (!this.partySeesAMonst() && !interrupted) tryAutoSave('TownWaitComplete');
   }
 
   /**
@@ -5217,8 +5212,6 @@ export class GameSession {
     town.makeExplored(where.x, where.y);
     this.updateExplored(this.univ.party.townLoc);
     this.univ.addStringToBuf(`You enter ${record.name}.`);
-    // start_town_mode's last line (boe.town.cpp:531).
-    tryAutoSave('EnterTown');
   }
 
 
@@ -6304,9 +6297,6 @@ export class GameSession {
     party.locInSec = party.globalToLocal(party.outLoc);
     this.center = { ...party.outLoc };
     this.updateExplored(party.outLoc);
-    // handle_action's `if(left_town) try_auto_save("ExitTown")`
-    // (boe.actions.cpp:813). Here the leaving is unconditional by this point.
-    tryAutoSave('ExitTown');
     return clampToWindow(toReturn);
   }
 

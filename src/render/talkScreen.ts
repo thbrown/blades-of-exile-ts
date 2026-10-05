@@ -84,7 +84,10 @@ export class TalkScreen {
       );
       return;
     }
-    const g = monsterGraphic(talk.monsterType, 0, 0);
+    // `get_monst_picnum` first (boe.newgraph.cpp:945): this drew the picture
+    // *numbered* like the monster, so Exile III's Rentar-Ihrno (monster 177,
+    // picture 1676) showed as BoE's picture 177, a barbarian.
+    const g = monsterGraphic(talk.monsterPic, 0, 0);
     if (!g) return;
     const sheet = this.store.get(g.sheetName);
     if (!sheet) return;

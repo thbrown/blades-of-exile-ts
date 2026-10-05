@@ -1,7 +1,7 @@
 /**
  * `pick_preferences` (boe.dlgutil.cpp:1379) on preferences.xml, with the
- * autosave details page (pref-autosave.xml) and "reset instant help"
- * (confirm-reset-help.xml) it opens on top of itself.
+ * "reset instant help" question (confirm-reset-help.xml) it opens on top of
+ * itself. OBoE's autosave row is gone (2026-10-05): the game saves every move.
  *
  * Only the settings that mean something in a browser are offered. Display
  * alignment and UI scale place the game screen on the page (see
@@ -16,7 +16,6 @@
  * instead, with Medium as the pace the game ships at. Neither touches a die.
  */
 
-import { AUTOSAVE_TRIGGER_DEFAULTS, AutosavePrefs, AutosaveReason } from '../game/autosave';
 import { UI_SCALES, UI_SCALE_FIT, desktop } from '../render/desktop';
 import { SheetStore } from '../render/sheets';
 import { ModalScreen } from './dialog';
@@ -24,7 +23,7 @@ import { DialogControl, DialogDef } from './dialogXml';
 import { getDialogDef } from './dialogStore';
 import { XmlDialog, measureDialogDef } from './xmlDialog';
 
-export const PREFERENCES_DIALOG_DEFS = ['preferences', 'pref-autosave', 'confirm-reset-help'];
+export const PREFERENCES_DIALOG_DEFS = ['preferences', 'confirm-reset-help'];
 
 /** The settings this dialog edits, as the host holds them. */
 export interface Preferences {
@@ -33,7 +32,6 @@ export interface Preferences {
   gameSpeed: number;
   targetLock: boolean;
   showInstantHelp: boolean;
-  autosave: AutosavePrefs;
   /** Party settings rather than preferences once a game is running. */
   easyMode: boolean;
   lessWm: boolean;
@@ -81,9 +79,6 @@ const HIDDEN = [
   'keyshift-head', 'keyshift-options', 'target-adjacent', 'screen-shift', 'keyshift-note',
   'skipsplash',
 ];
-const TRIGGERS: AutosaveReason[] = [
-  'QuestComplete', 'Journal', 'RestComplete', 'TownWaitComplete', 'Eat', 'EnterTown', 'ExitTown', 'EndOutdoorCombat',
-];
 
 export interface PreferencesHost {
   nest(screen: ModalScreen): Promise<string>;
@@ -129,8 +124,8 @@ function browserPreferencesDef(ctx: CanvasRenderingContext2D, compact: boolean, 
 
 /**
  * Show the dialog; resolves with the new settings on OK, or null on Cancel.
- * The autosave details are edited on a copy and only kept if both dialogs
- * are OK'd.
+ * There is nothing about autosaving: the game saves every move, and its
+ * milestones are fixed (`game/autosave.ts`).
  */
 export async function preferencesDialog(
   ctx: CanvasRenderingContext2D, store: SheetStore, prefs: Preferences, host: PreferencesHost,
@@ -167,11 +162,6 @@ export async function preferencesDialog(
   // A group keeps one lit: clicking the lit speed again mustn't turn it off.
   for (const id of SPEED_LEDS) dlg.attachHandler(id, (me) => { me.setLed(id, 'red'); return 'stay'; });
 
-  let autosave: AutosavePrefs = { ...prefs.autosave, triggers: { ...prefs.autosave.triggers } };
-  dlg.attachHandler('autosave-details', () => {
-    void autosaveDialog(ctx, store, autosave, host).then((next) => { if (next) autosave = next; });
-    return 'stay';
-  });
   dlg.attachHandler('resethelp', () => {
     const confirm = new XmlDialog(ctx, store, getDialogDef('confirm-reset-help'));
     void host.nest(confirm).then((answer) => { if (answer === 'yes') host.resetHelp(); });
@@ -185,7 +175,6 @@ export async function preferencesDialog(
     gameSpeed: Math.max(0, SPEED_LEDS.findIndex(lit)),
     targetLock: lit('target-lock'),
     showInstantHelp: !lit('nohelp'),
-    autosave,
     easyMode: lit('easier'),
     lessWm: lit('lesswm'),
     displayMode: compact ? prefs.displayMode : Math.max(0, DISPLAY_LEDS.findIndex(lit)),
@@ -193,19 +182,4 @@ export async function preferencesDialog(
     fixBugs: lit(FIX_BUGS_LED),
     ...(roomDescs ? { roomDescriptions: lit(ROOM_DESCRIPTIONS_LED) } : {}),
   };
-}
-
-/** pref-autosave.xml — the six triggers (the tick is every move, and not a preference). */
-async function autosaveDialog(
-  ctx: CanvasRenderingContext2D, store: SheetStore, prefs: AutosavePrefs, host: PreferencesHost,
-): Promise<AutosavePrefs | null> {
-  const dlg = new XmlDialog(ctx, store, getDialogDef('pref-autosave'));
-  for (const t of TRIGGERS) {
-    dlg.setLed(t, (prefs.triggers[t] ?? AUTOSAVE_TRIGGER_DEFAULTS[t]) ? 'red' : 'off');
-  }
-  dlg.attachHandler('okay', (me) => (me.toast(true) ? 'close' : 'stay'));
-  if ((await host.nest(dlg)) !== 'okay') return null;
-  const triggers: Partial<Record<AutosaveReason, boolean>> = {};
-  for (const t of TRIGGERS) triggers[t] = dlg.getLed(t) !== 'off';
-  return { triggers };
 }

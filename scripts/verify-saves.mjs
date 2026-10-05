@@ -74,7 +74,7 @@ check('a direct link is a game with a tree of its own at once', await page.evalu
 
 await page.evaluate(() => window.__scheduler.saveNow('Manual', 'manual'));
 check('Save makes the game a tree', await page.evaluate(() => window.__univ.treeId !== null));
-// A quick walk is saved where it stops: an autosave tick waits for a 500ms
+// A quick walk is saved where it stops: an autosave tick waits for a 200ms
 // pause in the walking (`AUTOSAVE_QUIET_MS`), so a held key doesn't stutter
 // with a save between every pair of steps.
 const walked = new Set();
@@ -214,32 +214,14 @@ const after = await snapsOf();
 const forked = after.filter((s) => after.filter((c) => c.parent === s.seq).length > 1);
 check('playing on from it branches the tree further', forked.length === 2 && after.length === total + 1, { forks: forked.map((f) => f.seq) });
 
-// ---- the autosave preferences: the triggers only (it saves every move)
-const canvasPoint = (x, y) => page.evaluate(({ x, y }) => {
-  const c = document.querySelector('canvas');
-  const r = c.getBoundingClientRect();
-  return { x: r.left + (x + 0.5) * (r.width / c.width), y: r.top + (y + 0.5) * (r.height / c.height) };
-}, { x, y });
-const clickDialogButton = async (name) => {
-  const rect = await page.evaluate((n) => {
-    const d = window.__dialogs.active;
-    const c = d?.def?.controls.find((k) => k.name === n);
-    return c ? d.screenRect(c) : null;
-  }, name);
-  if (!rect) throw new Error(`no dialog control named ${name}`);
-  const at = await canvasPoint((rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2);
-  await page.mouse.click(at.x, at.y);
-  await page.waitForTimeout(250);
-};
+// ---- Preferences: no autosave settings (it saves every move)
 await page.locator('#game-menu-bar .menu-item', { hasText: 'File' }).first().click();
 await page.locator('#game-menu-bar .menu-item.open .dropdown li', { hasText: 'Preferences' }).first().click();
 await page.waitForTimeout(300);
-await clickDialogButton('autosave-details');
 const prefNames = await page.evaluate(() => [...window.__dialogs.active.def.byName.keys()]);
-check('the autosave dialog no longer asks how often or how much', !prefNames.includes('every') && !prefNames.includes('budget'), prefNames.slice(0, 8));
-await page.screenshot({ path: `${SHOTS}/s3b-autosave-prefs.png` });
-await page.keyboard.press('Enter'); // OK on the autosave dialog
-await page.waitForTimeout(250);
+check('Preferences has nothing about autosaving: the game saves every move',
+  !prefNames.some((n) => n.startsWith('autosave')), prefNames.filter((n) => n.startsWith('autosave')));
+await page.screenshot({ path: `${SHOTS}/s3b-preferences.png` });
 await page.keyboard.press('Enter'); // OK on preferences
 await page.waitForTimeout(300);
 check('the dialogs close', await page.evaluate(() => window.__dialogs.active === null));

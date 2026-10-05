@@ -16642,3 +16642,25 @@ ENCOUNTER flake, below), `verify-saves`, `verify-party`.
   path, sound) — monsters' spells are `1018:7f2c`–`86a6` and `8ca5`–`9541`;
   a PC's cast is `add_missile` (`FUN_1098_6d24`) + `do_missile_anim`
   (`FUN_1098_7034`, args `100, origin, sound`) in `1018:1915`.
+
+**Follow-up, same day:**
+- **Autosave is out of Preferences.** OBoE's six named moments and their
+  `Autosave_<reason>` preferences are gone (`game/autosave.ts` is now the
+  tick and two fixed milestones, `QuestComplete` and `Journal`);
+  `pref-autosave.xml` is deleted, preferences.xml has no autosave row, and
+  stored `Autosave*` prefs are cleared on load. The replay driver swallows a
+  recorded click on OBoE's `autosave-details` like any other preference.
+- **The debounce is 200ms** (`AUTOSAVE_QUIET_MS`), for the user to try.
+- **Rentar-Ihrno talked with a barbarian's face.** With no face, the talk
+  portrait drew `monsterGraphic(monsterType)` — the picture *numbered* like
+  the monster (177, BoE's barbarian) — not the monster's picture (1676).
+  OBoE's `place_talk_face` calls `get_monst_picnum` first; `TalkState.monsterPic`
+  does now. E3's talk screen (`1098:9aa5`) takes `faces[monster]`, then the
+  personality table at DS:2364, then sprite `FUN_1090_09e1` (the same
+  segment-39 table at 0x1068 the converter reads) + 400 — so every faceless
+  E3 speaker was affected. Test: `talk.test.ts`, "the portrait".
+- **Towns remembered**: the user recalls the bandits' camp staying empty
+  late in the game. By the EXE the Bandit Hideout (45: 39 creatures, limit
+  100, not in the loader's flag list at `10d8:107b`, no time flags) refills
+  once four other towns are visited. Added to E3-CHECK-IN-ORIGINAL #29; the
+  user will try `Q29.SAV`.

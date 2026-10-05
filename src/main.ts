@@ -56,7 +56,7 @@ import {
 } from './dialogs/libraryDialogs';
 import { setErrorSink } from './game/showError';
 import {
-  appendIarrayPref, clearPref, getBoolPref, getFloatPref, getIntPref, iarrayPrefContains, readAutosavePrefs,
+  appendIarrayPref, clearPref, getBoolPref, getFloatPref, getIntPref, iarrayPrefContains,
   setPref,
 } from './platform/prefs';
 import { fitCanvasToPage } from './platform/pageLayout';
@@ -103,7 +103,6 @@ import {
 import { SaveScheduler } from './platform/saveScheduler';
 import { browseTree, exportTreeZip, importAsTree, placeOf } from './platform/saveActions';
 import {
-  AUTOSAVE_TRIGGER_DEFAULTS, AutosaveReason, getAutosavePrefs, setAutosavePrefs,
   setAutosaveSink,
 } from './game/autosave';
 import { MENU_SEPARATOR, MenuItem, installFullScreenButton, installMenuBar, installMenuToggle } from './platform/menu';
@@ -941,22 +940,21 @@ async function main(): Promise<void> {
     }
     setTargetLockPref(getBoolPref('TargetLock', true));
     setBugFixes(getBoolPref('FixBugs', false));
-    const reasons = Object.keys(AUTOSAVE_TRIGGER_DEFAULTS);
-    setAutosavePrefs(readAutosavePrefs(reasons, AUTOSAVE_TRIGGER_DEFAULTS));
-    // OBoE's master switch is gone; a stored `false` would only confuse.
-    clearPref('Autosave');
+    // OBoE's autosave preferences are gone (`game/autosave.ts`); stored ones
+    // would only confuse.
+    for (const name of ['Autosave', 'Autosave_EnterTown', 'Autosave_ExitTown', 'Autosave_RestComplete',
+      'Autosave_TownWaitComplete', 'Autosave_EndOutdoorCombat', 'Autosave_Eat',
+      'Autosave_QuestComplete', 'Autosave_Journal']) clearPref(name);
   };
   applyPrefs();
 
   /** File › Preferences — `pick_preferences`. */
   const preferencesFlow = async (): Promise<void> => {
-    const auto = getAutosavePrefs();
     const next = await preferencesDialog(ctx, store, {
       playSounds: getBoolPref('PlaySounds', true),
       gameSpeed: getIntPref('GameSpeed', 1),
       targetLock: getBoolPref('TargetLock', true),
       showInstantHelp: getBoolPref('ShowInstantHelp', true),
-      autosave: auto,
       easyMode: univ.party.easyMode,
       lessWm: univ.party.lessWm,
       displayMode: getIntPref('DisplayMode', DisplayMode.CENTRE),
@@ -975,9 +973,6 @@ async function main(): Promise<void> {
       setPref('TargetLock', next.targetLock);
       setPref('ShowInstantHelp', next.showInstantHelp);
       setPref('FixBugs', next.fixBugs);
-      for (const [reason, on] of Object.entries(next.autosave.triggers)) {
-        setPref(`Autosave_${reason}`, on);
-      }
       // A game is running, so these two are the party's, not preferences
       // (boe.dlgutil.cpp:1408).
       univ.party.easyMode = next.easyMode;
