@@ -365,6 +365,12 @@ describe.skipIf(!dir)('saves for E3-CHECK-IN-ORIGINAL.md', () => {
       todo: 'The party has never seen a slime. Step south into Colchis by its north gate, read "This is very odd...", then take one step. Does "Monster saw you!" come before the step or after? Reload and try again a few times.',
       make: async (q) => { await q.outdoors(3, 9, 10, 29); },
     },
+    {
+      file: 'Q29.SAV', question: '#29, whether a dungeon fills up again',
+      todo: 'The Goblin Lair is a step away. Go in, kill a few goblins, walk out and straight back in: are they still dead? '
+        + 'Then walk out, visit four other towns, and come back: is the lair full again?',
+      make: async (q) => { scen.towns[44]!.canFind = true; await besideTown(q, 44); },
+    },
   ];
 
   it('makes every save, and each loads back here to the same place', async () => {

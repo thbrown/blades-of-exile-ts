@@ -14,6 +14,7 @@ import { skillNames } from '../data/enumTags';
 import { getStr } from '../data/strings';
 import { SpendXp, XpMode, xpSkillMax } from '../game/createPc';
 import { SheetStore } from '../render/sheets';
+import { dialogTextIsWhite } from '../render/tiling';
 import { giveHelp } from '../universe/living';
 import { MainStatus, Skill } from '../universe/skills';
 import { Universe } from '../universe/universe';
@@ -68,8 +69,10 @@ export function spendXpDialog(
     for (let i = 0; i <= 20; i++) {
       const skill = i as Skill;
       const id = skillNames[i]!;
-      // White means it can't change, red only down, green up.
-      let colour = 'white';
+      // White means it can't change, red only down, green up. "White" is
+      // the dialog's own text colour: on Exile III's light dialogs it is
+      // black, or the numbers nothing can change would vanish.
+      let colour = dialogTextIsWhite() ? 'white' : 'black';
       dlg.hide(`${id}-m`).hide(`${id}-p`);
       if (state.canChange(skill, false)) {
         dlg.show(`${id}-m`);

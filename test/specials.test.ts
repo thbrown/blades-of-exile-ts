@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { setAutosaveSink } from '../src/game/autosave';
 import { Direction } from '../src/core/location';
 import { GameRng } from '../src/core/rng';
 import { Scenario } from '../src/data/scenario';
@@ -304,6 +305,22 @@ describe('general nodes', () => {
     univ.party.age += 3700;
     await run();
     expect(univ.party.journal.map((e) => e.day)).toEqual([5, 6]);
+  });
+
+  it('makes a milestone of a new journal entry, and only a new one', async () => {
+    const seen: string[] = [];
+    setAutosaveSink((why) => seen.push(why));
+    try {
+      const { univ, run } = withNodes({
+        0: { type: SpecType.ADD_JOURNAL, ex1a: 1, jumpto: 1 },
+        1: { type: SpecType.ADD_JOURNAL, ex1a: 1 },
+      });
+      univ.scenario.journalStrs = ['', 'Met the mayor.'];
+      await run();
+      expect(seen).toEqual(['Journal']);
+    } finally {
+      setAutosaveSink(null);
+    }
   });
 
   it('blocks the step for a CANT_ENTER node', async () => {

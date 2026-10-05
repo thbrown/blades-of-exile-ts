@@ -13,6 +13,7 @@ import { QuestStatus } from '../../data/quest';
 import { awardPartyXp } from '../damage';
 import { takeClass } from '../../universe/inventory';
 import { doRest } from '../rest';
+import { tryAutoSave } from '../autosave';
 import { SpecCtx, SpecCtxType, SpecialCtx } from './context';
 import { SpecialsEngine, handleMessage, setSdf } from './vm';
 import { setUpLights } from '../lighting';
@@ -317,8 +318,10 @@ export async function generalSpec(
       // past `journal_strs`.
       const str = univ.scenario.journalStrs[spec.ex1a];
       if (spec.ex1a < 0 || str === undefined) break;
-      if (univ.party.addToJournal(str, univ.party.calcDay(), univ.scenario.id))
+      if (univ.party.addToJournal(str, univ.party.calcDay(), univ.scenario.id)) {
         univ.addStringToBuf('Something was added to your journal.');
+        tryAutoSave('Journal');
+      }
       break;
     }
 
@@ -383,6 +386,7 @@ export async function generalSpec(
             univ.party.gold += quest.gold;
           }
           if (quest.xp > 0) awardPartyXp(univ, quest.xp);
+          tryAutoSave('QuestComplete');
           break;
       }
       break;

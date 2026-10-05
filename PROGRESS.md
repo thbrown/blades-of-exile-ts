@@ -1612,6 +1612,7 @@ Notes for M2 implementer:
 
 ## Findings / gotchas log
 
+- (2026-10-05) **OBoE's monster touches never fire** (DIVERGENCES §49): its odds test is backwards and every legacy touch is odds 1000, so poison, acid, webs, sleep and paralysis touches did nothing in any scenario. The live game reads it the right way round under `monster-touch` = `1997`; replays keep OBoE's. Also: a volley's explosion is `explosionType` (1997's `(dam_type > 2) ? 2 : 0`), not the single-hit `boomType` the port used to reuse — that was why Wound burst with sound 75. See "Play-test notes, eighth round".
 - (2026-10-04) **E3's title movie and ending are ported** (section "Exile III's title movie and ending" above), so `TODO(E3-movies)` is gone. Two things worth knowing: movie 0 finds its squares by **special-spot number** in town 84 (`6b63`), not from a table, and movie 2 runs with **the player's own living PCs** and their names. Ghidra's `1dcb` is as fictional as its `3148` was: no strings, a made-up skip flag. Gotcha: an `nedis.py` jump table's targets can land mid-instruction in the listing (`jmp 0x5255` into `add sp, 2` after a call; `2578` into a `mov es, ax` the listing filter hid): read the bytes there as the start of the shared tail they are.
 - (2026-10-04) Gotcha: **rebuilding `docs/` in a fresh container deletes the library.** `library/` is gitignored, so `library/dist` isn't there; `embedLibrary` then removes `docs/library/` and `serviceWorker` writes `sw.js` without `library/catalog.json` in its precache list. Restoring `docs/library` from git afterwards fixes the first but not the second. When the library itself hasn't changed, seed it from the committed copy before building — `mkdir -p library && cp -r docs/library library/dist && npm run build` — and `docs/library` comes out byte-identical. `verify-offline.mjs` runs here with `CHROMIUM_PATH=/opt/pw-browsers/chromium`.
 - (2026-10-04) **Every trait and race test in `EXILE3.EXE`, found by address, and two fixes.** A PC is 0x722 bytes at `es:[bx - 0x7ada]` (main status) on; the traits are bytes at `bx - 0x73cd + n` and the race word at `bx - 0x73be`, so `grep -E -- "- 0x73(c[0-9a-f]|b[ef])\]"` over `nedis.py --all` lists all 44 reads, and `+ 0x70d`/`+ 0x71c` the creation screen's. Checked one by one against the port: the TNL table (DGROUP 0x367c, 0x3682), stat_adj, Toughness, Sluggish, Alert, Frail, Good Constitution (bug 13 confirmed at `1018:acd6`), Nimble (bug 12 at all three sites), Magically Inept, the swamps (88 is the cave swamp: it appears only in sector columns 7–8), the Slith pole-arm and Nephil missile bonuses, the patrol and village (`0xb55` is zone 76 slot 9), and the five Woodsman and two Cave Lore calls all match. Found:
@@ -16545,3 +16546,99 @@ game's saves were first called a *series*; the same day they were renamed a
   dice change what the Verify Shop stocks and whether the bash breaks the
   lock, so one of its later assertions depends on the seed. Not chased here.
 
+
+### Play-test notes, eighth round (2026-10-05)
+
+The user's list, and what each turned out to be. All checks pass: 1,725
+tests (the corpus unchanged), both sweeps, `verify-screen` (but for its known
+ENCOUNTER flake, below), `verify-saves`, `verify-party`.
+
+- [x] **Keypad 5 didn't wait.** It isn't a direction, so its `key` ('5' with
+      Num Lock) reached the letter keys as PC 5. It is `Direction.Here` now,
+      looked up by `code`, so it acts on the party's own square: pause, or
+      stand ready in combat — 1997's `terrain_click[5]`, OBoE's {0,0}. Keypad
+      0 is `z`, as in both.
+- [x] **Keyboard shortcuts didn't click.** 1997's `handle_keystroke` turns
+      the letters into a point on a toolbar button and calls
+      `handle_action`, which clicks it; OBoE calls the handlers silently.
+      `keyClicksButton` (`game/modes.ts`) has 1997's table and mode guards
+      (DIVERGENCES §50).
+- [x] **The training screen's buttons didn't click** — no dialog's did.
+      `dialogs/clickSound.ts` is the hook (set in `main.ts`): `XmlDialog`'s
+      `activate` and the plain `Dialog`'s buttons, by mouse, key or finger,
+      play 37, or 34 for an LED (1997's `cd_press_button`; OBoE's LED test
+      can never pass). The touch overlay's own click went, so nothing plays
+      twice.
+- [x] **The training screen hid the numbers nothing could change**: they are
+      drawn white, and Exile III's dialogs are light. "White" is now the
+      dialog's own text colour (`spendXpDialog.ts`).
+- [x] **Wound's hit sounded and looked wrong.** Wound itself is right: E3's
+      arm (`1018:2679`) is 1997's, missile 14, sound 24,
+      `get_ran(min(7, 2 + bonus + level/2), 1, 4)` unblockable, with E3's
+      `level` and `bonus` set as BoE's (`10b0:87af` is `stat_adj`). So a
+      level-1 priest with Intelligence 2 rolls **no dice** and always does
+      nothing, in E3 too. The hit was wrong: it lands inside a volley, and
+      the port queued the *single-hit* sprite (`boom_gr`, 5 for unblockable)
+      as the explosion, which plays `boom_type_sound[5]` = 75. 1997 queues
+      `(dam_type > 2) ? 2 : 0` (sound 53), OBoE `get_boom_type` (4, also 53),
+      and E3 has 1997's three-entry `boom_type_sound` (`{5,10,53}`, EXE
+      offset 0x5df32). Now `explosionType` is 1997's, and `boomType` draws
+      unblockable as the magic burst (1997's `boom_gr[4]` = 1; OBoE had a
+      sprite of its own). DIVERGENCES §50.
+- [x] **Goblin Fighters never poisoned.** Not E3's doing: OBoE's touch test
+      is backwards (`if(odds > 0 && get_ran(1,1,1000) <= odds) continue;`)
+      and every legacy touch is odds 1000 — poison, acid, webs, sleep and
+      paralysis never fire, disease one time in three. 1997 poisons on every
+      first blow that hurts. New flag `monster-touch` = `1997` reads the test
+      the right way round with the same one roll; replays keep OBoE's
+      (DIVERGENCES §49). Every scenario, not just E3.
+- [x] **The spell dialog's LEDs were on the wrong side.** 1997's dialog 1098,
+      which E3 ships, puts each name in a label 106px to the *left* of its
+      LED (`cd_add_label(…, 53)`): LEDs at 114/247/379/508, headings at
+      10/132/266/396. Under E3's look the grid is laid out so; BoE keeps
+      OBoE's.
+- [x] **The damage numbers were hard to read**: OBoE draws black on a white
+      shadow. 1997's `boom_space` is small bold white, black on the pale
+      magic and cold bursts, no shadow. Now 1997's, for every scenario.
+- [?] **A dungeon refilled after leaving and re-entering.** The port matches
+      E3 as its EXE reads: `end_town_mode` (`10d8:2591`) saves a town only in
+      town mode, into four slots round-robin (party+0x1416 + 0x1594·k, town
+      number at +0x29a6), and the loader (`10d8:0873`) rebuilds any other —
+      1997's rule too. A scratch test (Goblin Lair: clear it, walk out, walk
+      in) kept the dead dead; after four other towns or levels it refills.
+      Asked of the original as **E3-CHECK-IN-ORIGINAL.md #29** (`Q29.SAV`).
+      (The old note that four slots at +0x29a6 would overlap `m_killed` was
+      a misreading: +0x29a6 is each record's town number, near its end.)
+- Saves:
+  - [x] **Holding a key down stuttered.** An autosave tick now waits for a
+        500ms pause in the walking (`AUTOSAVE_QUIET_MS`, `SchedulerDeps.quietMs`):
+        ticks closer than that fold, and the walk is saved where it stops.
+        Milestones, Ctrl+S, Main Menu and the page-hide flush don't wait.
+        `settled()` waits the quiet period out.
+  - [x] **File › Open** lists each game's newest autosave and the player's
+        own newest save as rows of their own (`latestSaves`, by the clock),
+        then "↳ View all save history…" in place of "Older saves of …".
+  - [x] **Fewer milestones.** OBoE's six moments (town in and out, rest,
+        wait, outdoor fight, meal) default *off* as milestones — the tick
+        still saves them — and two new ones default on: `QuestComplete` and
+        `Journal` (an events-journal entry: E3's 34 plot events). The
+        Preferences › Autosave details list all eight.
+  - [x] **The autosave cap deleted the wrong end.** It evicted with weight
+        `ln(1 + newer)`, leaning on the old: over a 1,000-move walk at the
+        cap of 50, every save kept was from the last 200 moves. Now the
+        weight is the candidate's rank from the oldest (the newest still
+        never goes), which keeps about nine from the 800 moves before
+        (`evictionWeights`). A gentler 1-to-2 lean was tried: it kept two.
+
+**Gotchas (2026-10-05):**
+- `verify-screen`'s single `ok` hides which check failed. A copy that
+  wraps each `&&` term in a thunk and prints the false ones finds it in one
+  run; the two failures this round were the known ENCOUNTER flake (above,
+  2026-10-02).
+- A scratch Playwright script that `await`s `__spendXp(...)` hangs: it
+  resolves when the dialog closes. `void` it.
+- `nedis.py --all` piped through a few lines of Python lists every
+  `run_a_missile` (`FUN_1098_6e17`) call with its pushed arguments (type,
+  path, sound) — monsters' spells are `1018:7f2c`–`86a6` and `8ca5`–`9541`;
+  a PC's cast is `add_missile` (`FUN_1098_6d24`) + `do_missile_anim`
+  (`FUN_1098_7034`, args `100, origin, sound`) in `1018:1915`.

@@ -24,6 +24,12 @@ export const KEY_DIRECTIONS: Record<string, Direction> = {
   Numpad1: Direction.SW,
   Numpad4: Direction.W,
   Numpad7: Direction.NW,
+  // Keypad 5 is a click on the party's own square: pause, or stand ready in
+  // combat (1997's `handle_syskeystroke` passes `terrain_click[5]`, the
+  // terrain view's centre; OBoE's `directional_delta[5]` is {0,0}). With Num
+  // Lock on its `key` is '5', which `onKey` would take as PC 5, so this is
+  // looked up by `code` first.
+  Numpad5: Direction.Here,
 };
 
 export interface InputHandlers {
@@ -157,7 +163,8 @@ export class InputRouter {
       this.handlers.onMove(dir, ev.key);
       return;
     }
-    this.handlers.onKey(ev.key, ev);
+    // Keypad 0 is 'z', the inventory, in both 1997 and OBoE.
+    this.handlers.onKey(ev.code === 'Numpad0' ? 'z' : ev.key, ev);
   }
 
   private onPointerDown(ev: PointerEvent): void {

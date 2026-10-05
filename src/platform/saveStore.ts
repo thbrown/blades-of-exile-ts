@@ -429,6 +429,24 @@ export async function newestSnapshot(treeId: string): Promise<number | null> {
   return best?.seq ?? null;
 }
 
+/**
+ * The two saves the Load menu offers for a game: the newest the game made
+ * itself (an autosave, branch save or milestone) and the newest the player
+ * made (Ctrl+S), each by the clock as `newestSnapshot` is. Null where there
+ * is none.
+ */
+export function latestSaves(snaps: readonly SnapInfo[]): { auto: SnapInfo | null; manual: SnapInfo | null } {
+  const newer = (a: SnapInfo | null, b: SnapInfo): SnapInfo =>
+    (a === null || b.savedAt > a.savedAt || (b.savedAt === a.savedAt && b.seq > a.seq) ? b : a);
+  let auto: SnapInfo | null = null;
+  let manual: SnapInfo | null = null;
+  for (const s of snaps) {
+    if (s.kind === 'manual') manual = newer(manual, s);
+    else auto = newer(auto, s);
+  }
+  return { auto, manual };
+}
+
 /** One save's row (no `.exg`), or null. */
 export async function getSnapInfo(treeId: string, seq: number): Promise<SnapInfo | null> {
   return await transact('readonly', [SNAPS],

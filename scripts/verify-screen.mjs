@@ -2469,7 +2469,9 @@ const fileMenu = await page.evaluate(() =>
 await page.locator('#game-menu-bar .dropdown li', { hasText: 'Open Game' }).first().click();
 await page.waitForTimeout(300);
 const pickerRow = await page.evaluate(() =>
-  window.__dialogs.active?.placedRows?.find((r) => r.name.startsWith('tree:') && r.label?.startsWith('VerifySlot'))?.rect ?? null);
+  // A game's newest autosave and the player's own newest save have a row each
+  // (`snap:`); VerifySlot has only the latter, "VerifySlot — your save: …".
+  window.__dialogs.active?.placedRows?.find((r) => /^(snap|tree):/.test(r.name) && r.label?.startsWith('VerifySlot'))?.rect ?? null);
 let menuLoad = { picker: fileMenu, row: pickerRow, gold: null };
 if (pickerRow !== null) {
   const box = await page.locator('#canvas').boundingBox();

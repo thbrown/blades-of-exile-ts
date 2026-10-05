@@ -40,11 +40,12 @@ function watch(): AutosaveWhy[] {
 }
 
 describe('try_auto_save', () => {
-  it('defaults every trigger on except Eat', () => {
-    expect(AUTOSAVE_TRIGGER_DEFAULTS.Eat).toBe(false);
-    expect(autosaveTriggerOn('Eat')).toBe(false);
-    for (const reason of ['EnterTown', 'ExitTown', 'RestComplete', 'EndOutdoorCombat'] as const) {
-      expect(autosaveTriggerOn(reason)).toBe(true);
+  it('makes milestones of achievements only, by default', () => {
+    expect(autosaveTriggerOn('QuestComplete')).toBe(true);
+    expect(autosaveTriggerOn('Journal')).toBe(true);
+    for (const reason of ['EnterTown', 'ExitTown', 'RestComplete', 'TownWaitComplete', 'EndOutdoorCombat', 'Eat'] as const) {
+      expect(AUTOSAVE_TRIGGER_DEFAULTS[reason]).toBe(false);
+      expect(autosaveTriggerOn(reason)).toBe(false);
     }
   });
 
@@ -61,7 +62,13 @@ describe('try_auto_save', () => {
 });
 
 describe('the trigger sites', () => {
+  // OBoE's six are off by default; these tests are about where they fire.
+  const allOn = (): void => {
+    setAutosavePrefs({ triggers: Object.fromEntries(
+      Object.keys(AUTOSAVE_TRIGGER_DEFAULTS).map((k) => [k, true])) as Record<AutosaveReason, boolean> });
+  };
   it('fires EnterTown when the party walks into a town', async () => {
+    allOn();
     const seen = watch();
     const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
     await session.startNewGame();
@@ -69,6 +76,7 @@ describe('the trigger sites', () => {
   });
 
   it('fires ExitTown when it walks back out, and not before', async () => {
+    allOn();
     const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
     await session.startNewGame();
     const seen = watch();
@@ -77,6 +85,7 @@ describe('the trigger sites', () => {
   });
 
   it('fires RestComplete only when the rest actually happens', async () => {
+    allOn();
     const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
     await session.startNewGame();
     // Resting is an outdoor command, so this has to leave town first — and

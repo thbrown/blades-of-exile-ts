@@ -81,6 +81,14 @@ export interface SchedulerDeps {
    * that wasn't written and why. The host sends it to the console.
    */
   log?(line: string): void;
+  /**
+   * How long the game must go without another autosave tick before one is
+   * captured, in ms (`AUTOSAVE_QUIET_MS`); 0 captures every move. Milestones
+   * and the player's own saves never wait.
+   */
+  quietMs?: number;
+  /** The clock, in ms. Replaceable for tests. */
+  now?(): number;
 }
 
 /** A capture parked by `flush`. */
@@ -100,6 +108,13 @@ export const KIND_RANK: Record<SnapKind, number> = { auto: 1, branch: 1, manual:
 
 /** How long to wait before asking again when the game isn't at a savable moment. */
 const RETRY_MS = 500;
+/**
+ * An autosave tick waits for this long a pause in the walking. Holding an
+ * arrow key down moves the party every key repeat, and a capture between
+ * every pair of steps (the serialise is synchronous, ~3 ms, and the picture
+ * and gzip follow) made the walk stutter; so a walk is saved where it stops.
+ */
+export const AUTOSAVE_QUIET_MS = 500;
 
 export const compressAsync = (raw: Uint8Array): Promise<Uint8Array> =>
   new Promise((resolve, reject) => {
@@ -157,6 +172,8 @@ const ms = (n: number): string => `${n.toFixed(n < 10 ? 1 : 0)}ms`;
 
 export class SaveScheduler {
   private pending: { kind: SnapKind; reason: string; asked: number } | null = null;
+  /** When the newest autosave tick was asked for: the walk the quiet period waits out. */
+  private lastTick = -Infinity;
   private armed = false;
   private readonly queue: Job[] = [];
   private draining: Promise<void> | null = null;
@@ -166,8 +183,22 @@ export class SaveScheduler {
 
   constructor(private readonly deps: SchedulerDeps) {}
 
+  private get now(): number {
+    return this.deps.now?.() ?? now();
+  }
+
+  /**
+   * How long the pending save must still wait for the walking to pause: only
+   * an autosave waits, and only `quietMs` from the newest tick.
+   */
+  private quietLeft(): number {
+    if (this.pending === null || this.pending.kind !== 'auto') return 0;
+    return Math.max(0, this.lastTick + (this.deps.quietMs ?? AUTOSAVE_QUIET_MS) - this.now);
+  }
+
   /** A save is wanted (from `autosave.ts`). Cheap: just a note, and an idle callback. */
   request(reason: string, kind: SnapKind): void {
+    if (kind === 'auto') this.lastTick = this.now;
     if (this.pending === null) {
       this.pending = { kind, reason, asked: now() };
     } else {
@@ -175,10 +206,13 @@ export class SaveScheduler {
       // hasn't been serialised since the first, so there is only one state.
       const into = this.pending;
       if (KIND_RANK[kind] > KIND_RANK[into.kind]) this.pending = { kind, reason, asked: into.asked };
-      this.deps.log?.(`[save] ${reason} folded into ${into.reason}: no capture since it was asked for`
-        + ` ${ms(now() - into.asked)} ago`);
+      // A walk folds a tick a step; only say so when something else folds.
+      if (kind !== 'auto' || into.kind !== 'auto') {
+        this.deps.log?.(`[save] ${reason} folded into ${into.reason}: no capture since it was asked for`
+          + ` ${ms(now() - into.asked)} ago`);
+      }
     }
-    this.arm();
+    this.arm(this.quietLeft());
   }
 
   /**
@@ -188,6 +222,8 @@ export class SaveScheduler {
    */
   captureIfPending(): void {
     if (this.pending === null || !this.deps.ready()) return;
+    // Still walking: the tick waits for the pause (its timer is armed).
+    if (this.quietLeft() > 0) return;
     const job = this.pending;
     this.pending = null;
     void this.enqueue(job.kind, job.reason, false, false, job.asked)
@@ -200,7 +236,10 @@ export class SaveScheduler {
     const go = (): void => {
       this.armed = false;
       if (this.pending === null) return;
-      if (!this.deps.ready()) {
+      const wait = this.quietLeft();
+      if (wait > 0) {
+        this.arm(wait);
+      } else if (!this.deps.ready()) {
         this.deps.log?.(`[save] ${this.pending.reason} waiting: not a moment the game can be saved`);
         this.arm(RETRY_MS);
       } else this.captureIfPending();
@@ -263,7 +302,8 @@ export class SaveScheduler {
   async settled(): Promise<void> {
     for (let i = 0; i < 50 && (this.pending !== null || this.draining !== null || this.armed); i++) {
       if (this.draining !== null) await this.drained();
-      else await new Promise((r) => setTimeout(r, 10));
+      // A tick waiting out the quiet period: wait with it, on top of the polls.
+      else await new Promise((r) => setTimeout(r, 10 + this.quietLeft()));
     }
   }
 
@@ -368,7 +408,7 @@ export class SaveScheduler {
     if (t !== undefined && this.deps.log !== undefined) {
       const parts = [
         `#${seq} ${kind} (${reason}) at game time ${cap.preview.age}`,
-        ...(t.asked !== undefined ? [`waited ${ms(t.captured - t.asked)} for a savable moment`] : []),
+        ...(t.asked !== undefined ? [`waited ${ms(t.captured - t.asked)} for a pause in the walking and a savable moment`] : []),
         `serialise ${ms(t.captureMs)}`,
         ...(started - (t.captured + t.captureMs) > 1
           ? [`queued ${ms(started - (t.captured + t.captureMs))} behind earlier saves`] : []),

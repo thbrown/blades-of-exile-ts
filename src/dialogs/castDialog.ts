@@ -101,6 +101,16 @@ const E3_HELP = "Keyboard: Type '1'-'6' to pick caster, Shift-'1' - '6' to selec
  * buttons both fit; everything else keeps the original's numbers.
  */
 const COL_X = [10, 156, 302, 448];
+/**
+ * 1997's dialog 1098, which Exile III ships unchanged, has each LED on the
+ * *right* of its spell: the columns' headings at 10/132/266/396, the LEDs at
+ * 114/247/379/508, and each name a label 106px wide to the LED's left
+ * (`cd_add_label(1098, 37 + i, …, 53)`, PARTY.CPP:2635; flag 53 is "left, 2 ×
+ * 53"). That fits the 605px canvas as it is.
+ */
+const E3_COL_X = [10, 132, 266, 396];
+const E3_LED_X = [114, 247, 379, 508];
+const E3_LABEL_W = 106;
 const GRID_HEAD_Y = 227;
 const LED_Y = 247;
 const LED_PITCH = 14;
@@ -215,12 +225,23 @@ export class CastDialog implements ModalScreen {
   }
 
   private ledRect(i: number): UiRect {
+    const { lamp, label } = this.ledParts(i);
+    // The hit area covers the label as well as the lamp, as OBoE's does.
+    return { left: Math.min(lamp, label.left), top: label.top,
+      right: Math.max(lamp + LED_W, label.right), bottom: label.bottom };
+  }
+
+  /** Where slot `i`'s lamp is drawn (its left edge) and where its name goes. */
+  private ledParts(i: number): { lamp: number; label: UiRect } {
     const col = Math.floor(i / ROWS_PER_COL);
     const row = i % ROWS_PER_COL;
-    const left = FRAME.left + (COL_X[col] ?? 0) + 6;
     const top = FRAME.top + LED_Y + row * LED_PITCH;
-    // The hit area covers the label as well as the lamp, as the original's does.
-    return { left, top, right: left + 140, bottom: top + LED_PITCH };
+    if (this.e3) {
+      const lamp = FRAME.left + (E3_LED_X[col] ?? 0);
+      return { lamp, label: { left: lamp - E3_LABEL_W, top, right: lamp, bottom: top + LED_PITCH } };
+    }
+    const lamp = FRAME.left + (COL_X[col] ?? 0) + 6;
+    return { lamp, label: { left: lamp + LED_W + 3, top, right: lamp + 140, bottom: top + LED_PITCH } };
   }
 
   private rowRects(i: number): { caster: UiRect; target: UiRect } {
@@ -562,14 +583,14 @@ export class CastDialog implements ModalScreen {
       : ['Level 5:', 'Level 6:', 'Level 7:', ''];
     headers.forEach((label, col) => {
       if (!label) return;
-      drawString(ctx, at((COL_X[col] ?? 0), GRID_HEAD_Y, 100), label,
+      drawString(ctx, at(((this.e3 ? E3_COL_X : COL_X)[col] ?? 0), GRID_HEAD_Y, 100), label,
         { size: 12, font: 'bold', colour: TEXT });
     });
 
     for (let i = 0; i < 38; i++) {
       const spell = this.spellAt(i);
       if (spell === Spell.NONE) continue;
-      const rect = this.ledRect(i);
+      const { lamp, label } = this.ledParts(i);
       const usable = this.castable(spell);
       // eLedState is `{led_green = 0, led_red, led_off}`, and led.hpp:18 spells
       // out what they mean *in this dialog*: red is "you can cast it", green is
@@ -577,14 +598,14 @@ export class CastDialog implements ModalScreen {
       const state = this.spell === spell ? 0 : usable ? 1 : 2;
       if (leds) {
         ctx.drawImage(leds, state * LED_W, 0, LED_W, LED_H,
-          rect.left, rect.top + 1, LED_W, LED_H);
+          lamp, label.top + 1, LED_W, LED_H);
       }
       // Simulacrum's cost depends on the creature, so the C++ shows '?'.
       const rawCost = SPELLS[spell]?.cost ?? 0;
       const cost = rawCost < 0 ? '?' : String(rawCost);
       drawString(ctx, {
-        left: rect.left + LED_W + 3, top: rect.top - 1,
-        right: rect.right, bottom: rect.top + LED_PITCH,
+        left: label.left, top: label.top - 1,
+        right: label.right, bottom: label.bottom,
         // 1997's and Exile III's label is "name key cost" (PARTY.CPP's
         // `put_spell_list`); OBoE's is "name (cost)".
       }, this.e3 ? `${spellName(spell)} ${SPELL_KEYS[i]} ${cost}` : `${spellName(spell)} (${cost})`, {

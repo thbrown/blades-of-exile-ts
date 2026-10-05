@@ -31,6 +31,7 @@ import {
 } from './monsterAbilities';
 import { drawTerrain2 } from './textBar';
 import { GameMode, isCombat, isTown } from './modes';
+import { hasFeatureFlag } from './featureFlags';
 import { damageMonst, damagePc, hitChance } from './damage';
 import { onHitTargetSpecial } from './weaponAbilities';
 import { ItemAbil, abilGroup, abilHarms } from '../data/item';
@@ -979,17 +980,23 @@ export async function monsterAttack(
  * GENERAL ability whose delivery is TOUCH announces itself and then runs
  * `monst_basic_abil` on the target it just hit.
  *
- * The odds test is kept verbatim and is **backwards**: the C++ skips the
- * ability when the roll comes in *at or under* its odds, so a 1000-in-1000
- * touch never fires and a 0-odds one always does (0 fails the `> 0` guard).
- * It looks like a slip, but a "fix" would change how hard several monsters
- * hit, so it stays with a test pinning it.
+ * OBoE's odds test is **backwards**: it skips the ability when the roll comes
+ * in *at or under* its odds, so a 1000-in-1000 touch never fires and a 0-odds
+ * one always does (0 fails the `> 0` guard). Every legacy touch is a
+ * 1000-in-1000 template (`TOUCH_POISON`, acid, webs, sleep, paralysis;
+ * disease is 667), so in OBoE a Goblin Fighter never poisons — where 1997's
+ * `monster_attack` (COMBAT.CPP:2329) poisons on every first blow that hurts.
+ * A player can tell, so under `monster-touch` = `1997` (the live game) the
+ * test reads the right way round, with the same one roll: the touch is
+ * skipped when the roll comes in *over* its odds. A replay has no such flag
+ * and keeps OBoE's (DIVERGENCES.md §49).
  */
 async function monsterTouches(
   session: GameSession, monst: Creature, target: Living, attackIndex: number,
 ): Promise<void> {
   const univ = session.univ;
   const pcTarget = target instanceof Player ? target : null;
+  const touchByOdds = hasFeatureFlag('monster-touch', '1997');
 
   for (let key = MonstAbil.MISSILE; key <= MonstAbil.SUMMON; key++) {
     const abil = monst.mon.abil[key];
@@ -1005,7 +1012,10 @@ async function monsterTouches(
       console.log(`      [touch] ${monst.slot} ${monst.mon.name} key=${key}`
         + ` odds=${abil.gen.odds} type=${abil.gen.type}`);
     }
-    if (abil.gen.odds > 0 && univ.rng.getRan(1, 1, 1000) <= abil.gen.odds) continue;
+    if (abil.gen.odds > 0) {
+      const roll = univ.rng.getRan(1, 1, 1000);
+      if (touchByOdds ? roll > abil.gen.odds : roll <= abil.gen.odds) continue;
+    }
 
     let sound = 0;
     switch (key) {

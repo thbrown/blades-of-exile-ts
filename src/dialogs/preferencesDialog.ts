@@ -82,7 +82,7 @@ const HIDDEN = [
   'skipsplash',
 ];
 const TRIGGERS: AutosaveReason[] = [
-  'RestComplete', 'TownWaitComplete', 'Eat', 'EnterTown', 'ExitTown', 'EndOutdoorCombat',
+  'QuestComplete', 'Journal', 'RestComplete', 'TownWaitComplete', 'Eat', 'EnterTown', 'ExitTown', 'EndOutdoorCombat',
 ];
 
 export interface PreferencesHost {

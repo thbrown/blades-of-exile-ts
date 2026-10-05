@@ -19,6 +19,7 @@ import { SheetStore } from '../render/sheets';
 import { drawString, wrapLines } from '../render/text';
 import { CAPTION_H, captionRect, drawCaption, inRect, windowFrames, type ChromeFlavour } from '../render/windowChrome';
 import { dialogBackground, dialogTextIsWhite, tilePattern } from '../render/tiling';
+import { dialogClick } from './clickSound';
 import { PictType } from './dialogXml';
 import { drawPictAt } from './pict';
 
@@ -736,7 +737,10 @@ export class DialogHost {
     }
     if (!this.current) return false;
     const btn = this.current.buttonAt(x, y);
-    if (btn) this.close(btn.name);
+    if (btn) {
+      dialogClick(false);
+      this.close(btn.name);
+    }
     return true;
   }
 
@@ -772,7 +776,10 @@ export class DialogHost {
       return;
     }
     const choice = this.current?.touchView().right.find((c) => c.name === name && !c.disabled);
-    if (choice) this.close(choice.name);
+    if (choice) {
+      dialogClick(false);
+      this.close(choice.name);
+    }
   }
 
   /** Put what a phone's keyboard typed into the top dialog's field. */
@@ -790,7 +797,10 @@ export class DialogHost {
     }
     if (!this.current) return false;
     const btn = this.current.buttonForKey(key);
-    if (btn) this.close(btn.name);
+    if (btn) {
+      dialogClick(false);
+      this.close(btn.name);
+    }
     return true;
   }
 

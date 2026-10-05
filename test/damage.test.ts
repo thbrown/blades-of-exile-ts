@@ -8,7 +8,7 @@ import { Attitude, DamageType } from '../src/data/monster';
 import { Scenario } from '../src/data/scenario';
 import { TerSpec } from '../src/data/terrain';
 import {
-  awardXp, damageMonst, damagePc, hitChance, hitParty, killMonst, killPc,
+  boomType, explosionType, awardXp, damageMonst, damagePc, hitChance, hitParty, killMonst, killPc,
 } from '../src/game/damage';
 import { animClear, setAnimWaiter } from '../src/game/anim';
 import { boomSpace, runBoomAnim, setBoomSink, startBoomAnim } from '../src/game/booms';
@@ -867,5 +867,18 @@ describe('the turn waits for the blow', () => {
       setAnimWaiter(null);
       animClear();
     }
+  });
+});
+
+describe("a hit's burst, by 1997's tables", () => {
+  it('queues the fire burst for fire, weapons and poison in a volley, else the magic one', () => {
+    for (const t of [DamageType.WEAPON, DamageType.FIRE, DamageType.POISON]) expect(explosionType(t)).toBe(0);
+    for (const t of [DamageType.MAGIC, DamageType.UNBLOCKABLE, DamageType.COLD, DamageType.UNDEAD, DamageType.DEMON])
+      expect(explosionType(t)).toBe(2);
+  });
+
+  it("draws Wound's single hit as the magic burst, not OBoE's sprite 5", () => {
+    expect(boomType(DamageType.UNBLOCKABLE)).toBe(1);
+    expect(boomType(DamageType.COLD)).toBe(4);
   });
 });

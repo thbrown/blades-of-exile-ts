@@ -13,6 +13,7 @@ import {
   SnapInput, appendSnapshot, createTree, deleteBranch, deleteSnapshot, deleteTree, getAllSnapshots,
   getPartyInMemory, getSnapInfo, getSnapshot, importTree, listTrees, listSnaps, newestSnapshot, promoteSnapshot,
   renameTree, setHead, setMaxAuto, setPartyInMemory,
+  latestSaves, type SnapInfo,
 } from '../src/platform/saveStore';
 import { isZip, treeFromZip, treeToZip } from '../src/platform/saveZip';
 import { autoCount, roles } from '../src/platform/saveRetention';
@@ -232,5 +233,27 @@ describe('tree zip', () => {
 
   it('refuses things that are not saves', () => {
     expect(treeFromZip(new Uint8Array([1, 2, 3, 4, 5]), 'x')).toBeNull();
+  });
+});
+
+describe('the Load menu', () => {
+  const snap = (seq: number, kind: SnapInfo['kind'], savedAt: number): SnapInfo => ({
+    seq, parent: seq > 0 ? seq - 1 : null, gameAge: seq, kind, townNum: 200, bytes: 1,
+    treeId: 't', savedAt, reason: '', place: '', preview: { scenarioId: 'x', age: seq, gold: 0, townNum: 200, pcs: [] },
+  });
+
+  it("offers the newest autosave and the newest of the player's own, by the clock", () => {
+    const { auto, manual } = latestSaves([
+      snap(0, 'milestone', 10), snap(1, 'manual', 20), snap(2, 'auto', 30),
+      snap(3, 'manual', 40), snap(4, 'branch', 35), snap(5, 'auto', 25),
+    ]);
+    expect(auto?.seq).toBe(4);
+    expect(manual?.seq).toBe(3);
+  });
+
+  it('has no player save to offer in a game never saved by hand', () => {
+    const { auto, manual } = latestSaves([snap(0, 'milestone', 10), snap(1, 'auto', 20)]);
+    expect(auto?.seq).toBe(1);
+    expect(manual).toBeNull();
   });
 });

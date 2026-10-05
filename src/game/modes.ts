@@ -92,3 +92,33 @@ const SCROLLABLE_MODES = new Set<GameMode>([
 export function isScrollable(mode: GameMode): boolean {
   return SCROLLABLE_MODES.has(mode);
 }
+
+/**
+ * Whether a key is, in 1997, a click on a toolbar button — and so makes the
+ * button's click (sound 37, `main_button_click`). The original's
+ * `handle_keystroke` (ACTIONS.CPP:2005) turns these letters into a point on
+ * the button and hands it to `handle_action`, mode guards and all; OBoE calls
+ * the handlers directly and the keys are silent. A player hears the
+ * difference, so this follows 1997 (DIVERGENCES.md's rule). `A` and town's
+ * `w` pass the points 1000 and 1001, which no button contains: silent.
+ */
+export function keyClicksButton(key: string, mode: GameMode): boolean {
+  const out = mode === GameMode.OUTDOORS;
+  const town = mode === GameMode.TOWN;
+  const combat = mode === GameMode.COMBAT;
+  switch (key) {
+    case 'a': return out || town;
+    case 'b': case 'u': case 'L': return town;
+    case 's': return combat || mode === GameMode.FIRING || mode === GameMode.THROWING;
+    case 'x': case 'e': return combat;
+    // m and p also cancel a spell being aimed, by its button.
+    case 'm': case 'p':
+      return out || town || combat || mode === GameMode.SPELL_TARGET || mode === GameMode.FANCY_TARGET;
+    case 'M': case 'P': case 'l': return out || town || combat;
+    case 'r': return out;
+    case 't': case 'f': return town;
+    case 'w': case 'd': return combat;
+    case 'g': return town || combat;
+    default: return false;
+  }
+}

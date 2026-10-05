@@ -3,11 +3,14 @@
  * redesigned as a save *tree* (`platform/saveStore.ts`), not the C++'s ring of
  * five files. Recorded in `DIVERGENCES.md`.
  *
- * The game saves itself at six named moments, which are the tree's
- * **milestones**. Each is a separate preference, `Autosave_<reason>`, on top of
- * the master `Autosave` switch — so a player can keep the town-entry autosave
- * and turn off the one that fires every time the party eats. Five default on;
- * **Eat defaults off**, because it happens far more often than the rest.
+ * The game saves itself at eight named moments, which can make that save one
+ * of the tree's **milestones** (kept for good, and marked in the restore
+ * tree). Each is a separate preference, `Autosave_<reason>`. Only the two that
+ * mark a real achievement default on: **a quest completed** and **an entry in
+ * the events journal** (Exile III's thirty-four plot events). OBoE's six —
+ * entering and leaving a town, a rest, a long wait, an outdoor fight's end, a
+ * meal — default off since 2026-10-05: they came so often that the milestones
+ * marked nothing. The tick saves those moments anyway, as autosaves.
  *
  * On top of those, a **tick** saves after every move, so closing the tab, or
  * going to the main menu, never loses one. Each tree keeps a capped pool of
@@ -23,6 +26,8 @@
  */
 
 export type AutosaveReason =
+  | 'QuestComplete'
+  | 'Journal'
   | 'EnterTown'
   | 'ExitTown'
   | 'RestComplete'
@@ -30,13 +35,18 @@ export type AutosaveReason =
   | 'EndOutdoorCombat'
   | 'Eat';
 
-/** `autosave_trigger_defaults` (boe.fileio.cpp:504). */
+/**
+ * `autosave_trigger_defaults` (boe.fileio.cpp:504), whose six are all on but
+ * Eat; here they are off, and this port's two achievements on.
+ */
 export const AUTOSAVE_TRIGGER_DEFAULTS: Record<AutosaveReason, boolean> = {
-  EnterTown: true,
-  ExitTown: true,
-  RestComplete: true,
-  TownWaitComplete: true,
-  EndOutdoorCombat: true,
+  QuestComplete: true,
+  Journal: true,
+  EnterTown: false,
+  ExitTown: false,
+  RestComplete: false,
+  TownWaitComplete: false,
+  EndOutdoorCombat: false,
   Eat: false,
 };
 

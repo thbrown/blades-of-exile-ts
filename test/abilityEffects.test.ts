@@ -16,6 +16,7 @@ import {
 } from '../src/game/monsterAbilities';
 import { Scenario } from '../src/data/scenario';
 import { damageMonst } from '../src/game/damage';
+import { resetFeatureFlags, setFeatureFlags } from '../src/game/featureFlags';
 import {
   findClearSpot, getSummonMonster, placeMonster, summonMonster,
 } from '../src/game/monsterPlace';
@@ -366,7 +367,8 @@ describe('touch abilities on a landed blow', () => {
     expect(s.univ.transcript.join('\n')).toContain('Burning touch!');
   });
 
-  it('odds above zero suppress the touch when the roll comes in under them', async () => {
+  /** A heavy hitter with a fire touch at `odds`, and twenty swings at a sturdy PC. */
+  const touchTranscript = async (odds: number): Promise<string> => {
     const s = inTown();
     const m = aLiveMonster(s);
     m.attitude = Attitude.HOSTILE_A;
@@ -375,7 +377,7 @@ describe('touch abilities on a landed blow', () => {
     const abil = m.mon.abil[MonstAbil.DAMAGE]!;
     abil.active = true;
     abil.gen.type = MonstGen.TOUCH;
-    abil.gen.odds = 1000; // every roll is <= 1000, so it never fires
+    abil.gen.odds = odds;
     abil.gen.strength = 8;
     abil.gen.extra = DamageType.FIRE;
     const pc = s.univ.party.pcs[0]!;
@@ -384,6 +386,25 @@ describe('touch abilities on a landed blow', () => {
     pc.items.fill(defaultItem());
     pc.equip.fill(false);
     for (let i = 0; i < 20; i++) await monsterAttack(s, m, pc);
-    expect(s.univ.transcript.join('\n')).not.toContain('Burning touch!');
+    return s.univ.transcript.join('\n');
+  };
+
+  it("OBoE's backwards test: a 1000-in-1000 touch never fires (a replay's rule)", async () => {
+    setFeatureFlags({});
+    try {
+      expect(await touchTranscript(1000)).not.toContain('Burning touch!');
+    } finally {
+      resetFeatureFlags();
+    }
+  });
+
+  it("1997's rule, under monster-touch: a 1000-in-1000 touch fires on every blow", async () => {
+    expect(await touchTranscript(1000)).toContain('Burning touch!');
+  });
+
+  it('a 1-in-1000 touch almost never fires under monster-touch', async () => {
+    // Only a roll of exactly 1 lets it through.
+    const text = await touchTranscript(1);
+    expect(text.split('Burning touch!').length - 1).toBeLessThanOrEqual(1);
   });
 });

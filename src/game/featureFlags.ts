@@ -66,6 +66,11 @@ export const SUPPORTED_FEATURES: Readonly<Record<string, readonly string[]>> = {
   // both 1997 builds do (`key_times` start at 30000), where OBoE's missing key
   // fails (DIVERGENCES.md §9).
   'day-reached': ['1997'],
+  // blades-of-exile-ts's own too: a monster's touch (poison, acid, webs, sleep,
+  // paralysis, disease…) fires as often as its odds say, as 1997's do, where
+  // OBoE's backwards test makes a 1000-in-1000 touch never fire
+  // (DIVERGENCES.md §49).
+  'monster-touch': ['1997'],
 };
 
 /** The set in force. Starts as everything this build supports. */

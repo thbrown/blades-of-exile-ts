@@ -27,6 +27,8 @@ function rig(over: Partial<SchedulerDeps> = {}) {
     treeName: () => 'Test game',
     idle: (fn) => { idle.push(fn); },
     compress: (raw) => Promise.resolve(new Uint8Array([0x1f, 0x8b, ...raw])),
+    // Every move saved, unless a test is about the quiet period.
+    quietMs: 0,
     ...over,
   });
   return {
@@ -222,6 +224,45 @@ describe('the save scheduler', () => {
     expect(snaps).toHaveLength(30);
     expect(snaps.map((s) => s.gameAge)).toEqual(Array.from({ length: 30 }, (_, i) => i + 1));
     expect(snaps.slice(1).every((s, i) => s.parent === snaps[i]!.seq)).toBe(true);
+  });
+
+  it('saves a walk where it pauses: ticks closer than the quiet period wait and fold', async () => {
+    let clock = 0;
+    const r = rig({ quietMs: 500, now: () => clock });
+    // Held arrow key: a step every 100ms, the gate before each.
+    for (let i = 1; i <= 10; i++) {
+      r.setAge(i);
+      r.sched.request('Tick', 'auto');
+      r.sched.captureIfPending();
+      clock += 100;
+    }
+    expect(r.sched.queued).toBe(0);
+    // The walk stops; once 500ms have passed since the last step, it saves.
+    clock += 400;
+    r.sched.captureIfPending();
+    await r.flushIdle();
+    expect((await listSnaps(r.tree()!)).map((snap) => snap.gameAge)).toEqual([10]);
+    // Two steps a second apart are two saves, the first at the second's gate.
+    r.setAge(11);
+    r.sched.request('Tick', 'auto');
+    clock += 1000;
+    r.sched.captureIfPending();
+    r.setAge(12);
+    r.sched.request('Tick', 'auto');
+    clock += 1000;
+    r.sched.captureIfPending();
+    await r.flushIdle();
+    expect((await listSnaps(r.tree()!)).map((snap) => snap.gameAge)).toEqual([10, 11, 12]);
+  });
+
+  it('a milestone never waits for the quiet period', async () => {
+    const clock = 0;
+    const r = rig({ quietMs: 500, now: () => clock });
+    r.sched.request('Tick', 'auto');
+    r.sched.request('EnterTown', 'milestone');
+    r.sched.captureIfPending();
+    expect(r.sched.queued).toBe(1);
+    await r.flushIdle();
   });
 
   it('captures nothing at a moment the game cannot be saved', async () => {

@@ -74,8 +74,9 @@ check('a direct link is a game with a tree of its own at once', await page.evalu
 
 await page.evaluate(() => window.__scheduler.saveNow('Manual', 'manual'));
 check('Save makes the game a tree', await page.evaluate(() => window.__univ.treeId !== null));
-// Every move is saved, even a quick walk: each key as soon as the game takes
-// one, with no idle time between (the idle callback alone saved ~1 in 4).
+// A quick walk is saved where it stops: an autosave tick waits for a 500ms
+// pause in the walking (`AUTOSAVE_QUIET_MS`), so a held key doesn't stutter
+// with a save between every pair of steps.
 const walked = new Set();
 for (let i = 0; i < 30; i++) {
   await page.waitForFunction(() => !window.__session.busy && window.__animPending() === 0, { timeout: 10000 });
@@ -91,16 +92,25 @@ const walkedSnaps = await snapsOf();
 // The root counts: a first key that did not move leaves the game where it was saved.
 const newAges = new Set(walkedSnaps.map((s) => s.age));
 const missed = [...walked].filter((a) => !newAges.has(a));
-check('a quick 30-move walk saves every move it made', walked.size >= 25 && missed.length === 0,
-  { moves: walked.size, saved: walkedSnaps.length - 1, missed });
+const endAge = await page.evaluate(() => window.__univ.party.age);
+check('a quick 30-move walk is saved where it stops, not at every step',
+  walked.size >= 25 && newAges.has(endAge) && walkedSnaps.length - 1 <= 5,
+  { moves: walked.size, saved: walkedSnaps.length - 1, missed: missed.length });
+// Moves a pause apart are saved one by one (a blocked step changes nothing,
+// so it adds nothing).
+const pausedAges = new Set();
 for (const key of ['ArrowRight', 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'ArrowUp']) {
   await page.keyboard.press(key);
-  await page.waitForTimeout(450);
+  await page.waitForTimeout(900);
+  pausedAges.add(await page.evaluate(() => window.__univ.party.age));
 }
+pausedAges.delete(endAge);
 await page.waitForTimeout(1500);
 await page.evaluate(() => window.__scheduler.settled());
 let snaps = await snapsOf();
-check('moving autosaves into the same tree', snaps.length >= 30, snaps.length);
+check('moving autosaves into the same tree, one a move when the moves are a pause apart',
+  pausedAges.size >= 2 && [...pausedAges].every((a) => snaps.some((s) => s.age === a)),
+  { moved: [...pausedAges], saved: snaps.map((s) => s.age) });
 
 check('the first is the Start milestone, the root', snaps[0].kind === 'milestone' && snaps[0].parent === null);
 check('each is a child of the one before', snaps.every((s, i) => i === 0 || s.parent === snaps[i - 1].seq));

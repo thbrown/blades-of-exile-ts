@@ -8,11 +8,17 @@
  * **Only autosaves are ever thinned, and only down to a cap** (`maxAuto` on the
  * tree, `DEFAULT_MAX_AUTO_SAVES` by default). Until the cap is reached nothing
  * is deleted at all. Past it, each new autosave evicts one old one, picked at
- * random with the odds leaning on the old: an autosave with k newer ones
- * weighs `ln(1 + k)`. So the newest autosave (k = 0) never goes — the move
- * just before this one is always there — and the history thins smoothly with
- * age instead of being cut off at a fixed depth. The dice are `Math.random`,
- * never the game's: saving must not touch `get_ran`'s sequence.
+ * random with the odds leaning on the *recent*, linearly: a candidate's
+ * weight is its rank from the oldest (1 for the oldest, 2 for the next…). The
+ * newest autosave weighs 0 and never goes — the move just before this one is
+ * always there. Leaning on the recent is what keeps a spread: a save that has
+ * survived is less and less likely to go, so some old ones last. The
+ * `ln(1 + newer)` this replaced (2026-10-05) leaned on the old and kept
+ * nothing but the last stretch of play: over a 1,000-move walk at the
+ * default cap, all fifty saves were from its last 200 moves, where this
+ * keeps about nine from the 800 before them. A gentler 1-to-2 lean was tried
+ * and kept two. The dice are `Math.random`, never the game's: saving must
+ * not touch `get_ran`'s sequence.
  *
  * A node's **role** is what it is to the tree, which is not always what it was
  * saved as:
@@ -37,6 +43,11 @@ export const DAY = 3700;
 
 /** How many autosaves a tree keeps, unless the player says otherwise. */
 export const DEFAULT_MAX_AUTO_SAVES = 50;
+
+/** Each candidate's eviction weight, oldest first: its rank, 1, 2, 3…, and 0 for the newest. */
+export function evictionWeights(n: number): number[] {
+  return Array.from({ length: n }, (_, i) => (i === n - 1 ? 0 : i + 1));
+}
 
 export type SnapKind = 'auto' | 'milestone' | 'manual' | 'branch';
 
@@ -119,16 +130,16 @@ export function autoCandidates(nodes: readonly SnapNode[], head: number): SnapNo
 }
 
 /**
- * One autosave to evict, or null if none may go. Weighted `ln(1 + k)` by how
- * many candidates are newer, so the newest is never picked (unless it is the
- * only one, and the cap is below one).
+ * One autosave to evict, or null if none may go. Weighted by
+ * `evictionWeights`, so the newest is never picked (unless it is the only
+ * one, and the cap is below one).
  */
 export function pickAutoVictim(
   nodes: readonly SnapNode[], head: number, rand: () => number = Math.random,
 ): number | null {
   const pool = autoCandidates(nodes, head);
   if (pool.length === 0) return null;
-  const weights = pool.map((_, i) => Math.log(1 + (pool.length - 1 - i)));
+  const weights = evictionWeights(pool.length);
   const total = weights.reduce((a, b) => a + b, 0);
   if (total <= 0) return pool[0]!.seq;
   let r = rand() * total;

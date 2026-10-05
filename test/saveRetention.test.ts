@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   SnapKind, SnapNode, autoCandidates, autoCount, branchOfEnd, canDeleteBranch, canDeleteFromEnd, canDeleteSingle,
   childrenOf, lineage,
-  pickAutoVictim, reparent, roleOf, roles, trimAutos,
+  evictionWeights, pickAutoVictim, reparent, roleOf, roles, trimAutos,
 } from '../src/platform/saveRetention';
 
 const node = (seq: number, parent: number | null, kind: SnapKind = 'auto'): SnapNode =>
@@ -52,11 +52,11 @@ describe('the autosave pool', () => {
     expect(autoCandidates(nodes, 6).map((n) => n.seq)).toEqual([5]); // 2 is a fork
   });
 
-  it('never picks the newest autosave, and leans hard on the old', () => {
+  it('never picks the newest autosave, and leans a little on the recent', () => {
     const nodes = chain(52); // 50 candidates: 2..51
     const rand = seeded(7);
     const hits = new Map<number, number>();
-    for (let i = 0; i < 20000; i++) {
+    for (let i = 0; i < 40000; i++) {
       const v = pickAutoVictim(nodes, 52, rand)!;
       hits.set(v, (hits.get(v) ?? 0) + 1);
     }
@@ -65,7 +65,29 @@ describe('the autosave pool', () => {
     expect(hits.has(1)).toBe(false); // the root
     const old = (hits.get(2) ?? 0) + (hits.get(3) ?? 0) + (hits.get(4) ?? 0);
     const recent = (hits.get(48) ?? 0) + (hits.get(49) ?? 0) + (hits.get(50) ?? 0);
-    expect(old).toBeGreaterThan(recent * 2);
+    // Weights by rank: (47 + 48 + 49) / (1 + 2 + 3) = 24 times.
+    expect(recent / old).toBeGreaterThan(16);
+    expect(recent / old).toBeLessThan(36);
+  });
+
+  it('weighs the candidates by rank, and the newest 0', () => {
+    expect(evictionWeights(1)).toEqual([0]);
+    expect(evictionWeights(2)).toEqual([1, 0]);
+    expect(evictionWeights(4)).toEqual([1, 2, 3, 0]);
+  });
+
+  it('keeps a spread of a long game, not just its last stretch', () => {
+    // A walk of 1,000 moves under a cap of 50. `ln(1 + newer)`, the rule
+    // before, kept none from before move 800; by rank, about nine.
+    let nodes = chain(2);
+    const rand = seeded(11);
+    for (let seq = 3; seq <= 1000; seq++) {
+      nodes.push(node(seq, seq - 1));
+      const gone = trimAutos(nodes, seq, 50, rand);
+      nodes = reparent(nodes, gone);
+    }
+    const early = nodes.filter((n) => n.seq > 1 && n.seq <= 800).length;
+    expect(early).toBeGreaterThanOrEqual(4);
   });
 
   it('trims to the cap and leaves everything else alone', () => {

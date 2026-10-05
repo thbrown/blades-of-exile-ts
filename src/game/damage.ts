@@ -50,14 +50,19 @@ export function hitChance(level: number): number {
   return HIT_CHANCE[Math.max(0, Math.min(HIT_CHANCE.length - 1, level))] ?? 99;
 }
 
-/** boom_gr (boe.specials.cpp:61) — which explosion graphic a damage type uses. */
+/**
+ * boom_gr (boe.specials.cpp:61) — which hit sprite a damage type uses. 1997's
+ * (SPECIALS.CPP:65, `{3,0,2,1,1,4,3,3}`) but for acid, which 1997 hasn't got:
+ * **unblockable damage is the magic burst, 1**, where OBoE drew a sprite of
+ * its own, 5 (DIVERGENCES.md §50). Exile III's Wound is the one a player meets.
+ */
 const BOOM_GR: Partial<Record<DamageType, number>> = {
   [DamageType.WEAPON]: 3,
   [DamageType.FIRE]: 0,
   [DamageType.POISON]: 2,
   [DamageType.MAGIC]: 1,
   [DamageType.ACID]: 6,
-  [DamageType.UNBLOCKABLE]: 5,
+  [DamageType.UNBLOCKABLE]: 1,
   [DamageType.COLD]: 4,
   [DamageType.UNDEAD]: 3,
   [DamageType.DEMON]: 3,
@@ -206,7 +211,7 @@ export async function damagePc(
   if (boomAnimActive()) {
     if (howMuch < 0) howMuch = 0;
     pc.markedDamage += howMuch;
-    boomSpace(hitLocation(univ, pc), boomType(damType), howMuch,
+    boomSpace(hitLocation(univ, pc), explosionType(damType), howMuch,
       getSoundType(damType, options.soundType ?? -1), univ.rng);
     return howMuch;
   }
@@ -442,7 +447,7 @@ export async function damageMonst(
   if (boomAnimActive()) {
     if (howMuch < 0) howMuch = 0;
     victim.markedDamage += howMuch;
-    boomSpace(victim.curLoc, boomType(damType), howMuch, getSoundType(damType), univ.rng,
+    boomSpace(victim.curLoc, explosionType(damType), howMuch, getSoundType(damType), univ.rng,
       bigCreatureAdj(victim));
     return howMuch;
   }
@@ -878,6 +883,19 @@ function bigCreatureAdj(victim: Creature): { xAdj: number; yAdj: number } {
 /** The explosion graphic a damage type uses, for whoever draws it. */
 export function boomType(damType: DamageType): number {
   return BOOM_GR[damType] ?? 3;
+}
+
+/**
+ * The explosion a hit inside a volley queues — 1997's `(dam_type > 2) ? 2 : 0`
+ * (SPECIALS.CPP:1239, PARTY.CPP:3489): fire, weapons and poison the fire
+ * burst, everything else the magic one; Exile III has the same three-kind
+ * table (`boom_type_sound` `{5,10,53}`, EXE offset 0x5df32). OBoE's
+ * `get_boom_type` gives unblockable 4 and cold 5, and this port used to take
+ * the single-hit sprite (`boomType`) instead, so a Wound landed with
+ * explosion 5 and sound 75, which neither original plays (DIVERGENCES.md §50).
+ */
+export function explosionType(damType: DamageType): number {
+  return damType === DamageType.WEAPON || damType === DamageType.FIRE || damType === DamageType.POISON ? 0 : 2;
 }
 
 /** Where a hit should be drawn, for the animation the host will own. */

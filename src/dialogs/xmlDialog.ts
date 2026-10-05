@@ -28,6 +28,7 @@ import {
   pictNaturalSize,
 } from './dialogXml';
 import type { ModalScreen, TouchChoice, TouchView } from './dialog';
+import { dialogClick } from './clickSound';
 import { drawPictAt } from './pict';
 import { windowFrames } from '../render/windowChrome';
 
@@ -711,6 +712,7 @@ export class XmlDialog implements ModalScreen {
   private activate(name: string): string | null {
     if (this.hidden.has(name)) return null;
     const control = this.def.byName.get(name);
+    dialogClick(control?.kind === 'led');
     // An LED toggles itself before its handler sees the click, as cLedGroup
     // does when it selects one of its own.
     if (control?.kind === 'led') {

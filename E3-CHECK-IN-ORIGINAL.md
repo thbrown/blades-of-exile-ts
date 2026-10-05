@@ -11,7 +11,7 @@ Coordinates are town squares (x, y), as the port's debug panel
 
 **Saved games for the original** (2026-09-30): `E3_CHECK_SAVES=e3data/check-saves
 npx vitest run test/e3checkSaves.test.ts` writes one `exile3.sav` per
-question, `Q01.SAV` to `Q27.SAV` (#3 has ten, `Q03A`–`Q03J`; #2 shares `Q01`; #26 needs none), and a
+question, `Q01.SAV` to `Q29.SAV` (#3 has ten, `Q03A`–`Q03J`; #2 shares `Q01`; #26 and #28 need none), and a
 `README.TXT` saying what each holds and where to walk. Each has a strong
 party (every spell E3 sells, and Major Blessing) with the question's flags
 and items set, standing in the town by the place to look (2026-10-01), or
@@ -404,6 +404,26 @@ Still open: the other nine squares.
   about four, with the party's own PCs, "Welcome, <name>" for each.
 - **Question:** where on the title screen is the movie? And after the
   ending's click, what can the party do?
+
+### 29. Does a dungeon fill up again? (2026-10-05)
+
+- **Where:** the Goblin Lair (town 44), or any dungeon with a fight in it.
+- **Do:** kill some of its creatures, walk out, and walk straight back in.
+  Then do it again, but visit **four other towns or dungeon levels** before
+  coming back.
+- **Why:** reported in play-testing: "all the enemies spawn again". E3's
+  `end_town_mode` (`10d8:2591`) saves the town's creatures only while
+  `overall_mode` (DGROUP 0x3d50) is 1, into one of four slots
+  (party+0x1416 + 0x1594·k, town number at +0x29a6) taken round-robin; its
+  loader (`10d8:0873`) restores a town found there and builds any other
+  afresh from its records. That is 1997's rule too (TOWN.CPP:241, :575).
+  A town is also "cleaned out" once more than its limit have died there
+  (the Goblin Lair's is 100; 183 of E3's towns have 10000).
+- **The port:** the same: straight back in, the dead stay dead; after four
+  other towns, the dungeon is full again.
+- **Question:** in the original, is the dungeon full again in either case?
+  If it stays empty after four other towns, E3 remembers its dead some way
+  the port hasn't read.
 
 ## Waiting on a ruling (already written up elsewhere)
 

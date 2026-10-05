@@ -77,7 +77,8 @@ import { CastDialog } from './dialogs/castDialog';
 import { forcedCast, storeFor } from './game/spellRepeat';
 import { GetItemsDialog } from './dialogs/getItemsDialog';
 import { placeSpellPattern } from './game/spellPatterns';
-import { GameMode, isCombat, isOut, isScrollable, isTown } from './game/modes';
+import { setDialogClickSound } from './dialogs/clickSound';
+import { GameMode, isCombat, isOut, isScrollable, isTown, keyClicksButton } from './game/modes';
 import { Boom, setBoomSink } from './game/booms';
 import { FocusEvent, animPending, setAnimWaiter, setFocusSink } from './game/anim';
 import { Missile, setMissileSink } from './game/missileAnim';
@@ -97,7 +98,7 @@ import { sameTarContents } from './fileio/tarball';
 import { SnapKind, lineage, roles } from './platform/saveRetention';
 import {
   TreeInfo, createTree, exportSave, getPartyInMemory, getTree, getSnapshot, importSave, listTrees,
-  SnapInfo, getSnapInfo, listSnaps, newestSnapshot, appendSnapshot, setSnapshotThumb, saveStoreAvailable, setHead, setPartyActiveScenario, setPartyInMemory, renameTree, deleteTree,
+  SnapInfo, getSnapInfo, latestSaves, listSnaps, newestSnapshot, appendSnapshot, setSnapshotThumb, saveStoreAvailable, setHead, setPartyActiveScenario, setPartyInMemory, renameTree, deleteTree,
 } from './platform/saveStore';
 import { SaveScheduler } from './platform/saveScheduler';
 import { browseTree, exportTreeZip, importAsTree, placeOf } from './platform/saveActions';
@@ -775,6 +776,7 @@ async function main(): Promise<void> {
     animSchedule(() => sound.play(which), animAt());
   };
   setLivingSound(playSound);
+  setDialogClickSound((n) => sound.play(n));
   // Transcript lines wait for their slot too, for the same reason: the C++
   // repaints the pane after the animation, not during it.
   univ.transcriptClock = animAt;
@@ -1701,6 +1703,12 @@ async function main(): Promise<void> {
     const day = Math.floor(game.cover.preview.age / 3700) + 1;
     return `${game.name} — ${where}, day ${day} (${new Date(game.cover.savedAt).toLocaleString()})`;
   };
+  /** One save, as the Load menu lists it: where, which day, and when. */
+  const snapLabel = (snap: SnapInfo): string => {
+    const where = placeOf({ place: snap.place, townNum: snap.preview.townNum });
+    const day = Math.floor(snap.preview.age / 3700) + 1;
+    return `${where}, day ${day} (${new Date(snap.savedAt).toLocaleString()})`;
+  };
 
   const canSaveNow = (): string | null => {
     if (isCombat(session.mode)) return 'Save: Not in combat.';
@@ -2068,9 +2076,14 @@ async function main(): Promise<void> {
     }
     const games = saveStoreAvailable() ? await listTrees() : [];
     const rows = [{ name: 'file', label: 'Import a file…' }];
+    // Each game's newest autosave and the player's own newest save, then the
+    // whole tree behind a row of its own.
     for (const game of games) {
-      rows.push({ name: `tree:${game.id}`, label: treeLabel(game) });
-      if (game.count > 1) rows.push({ name: `older:${game.id}`, label: `      ↳ Older saves of ${game.name}…` });
+      const { auto, manual } = latestSaves(await listSnaps(game.id));
+      if (auto) rows.push({ name: `snap:${game.id}:${auto.seq}`, label: `${game.name} — autosave: ${snapLabel(auto)}` });
+      if (manual) rows.push({ name: `snap:${game.id}:${manual.seq}`, label: `${game.name} — your save: ${snapLabel(manual)}` });
+      if (!auto && !manual) rows.push({ name: `tree:${game.id}`, label: treeLabel(game) });
+      if (game.count > 1) rows.push({ name: `older:${game.id}`, label: '      ↳ View all save history…' });
     }
     const picked = await dialogs.run({
       text: games.length > 0 ? 'Load which saved game?' : 'No saved games in this browser.',
@@ -2110,6 +2123,8 @@ async function main(): Promise<void> {
         }
         return await restoreFrom(id, seq);
       }
+      const snap = /^snap:(.+):(\d+)$/.exec(picked);
+      if (snap) return await restoreFrom(snap[1]!, Number(snap[2]));
       return await restoreFrom(picked.slice('tree:'.length));
     } catch (err) {
       univ.addStringToBuf(`Load failed: ${String(err)}`);
@@ -3040,7 +3055,7 @@ async function main(): Promise<void> {
           if (session.talk && !dialogs.active) void activateTalkWord(Number(talkWord[1]));
           return;
         }
-        sound.play(Snd.BUTTON);
+        // The control clicks itself (`dialogs/clickSound.ts`).
         dialogs.touchPress(name);
       },
       type: (field, text) => dialogs.touchType(field, text),
@@ -3425,6 +3440,8 @@ async function main(): Promise<void> {
       // something different in the original (M/P force a recast, L picks a
       // lock, A is alchemy) are noted where they aren't built yet.
       const inCombat = session.mode === GameMode.COMBAT;
+      // The toolbar button the key stands for clicks, as the mouse's does.
+      if (keyClicksButton(key, session.mode)) sound.play(Snd.BUTTON);
       switch (key) {
         case 'f': case 'F':
           // Toggle combat, both ways — the same key in the original, and only

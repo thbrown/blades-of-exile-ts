@@ -1029,10 +1029,16 @@ What this port does instead (`platform/saveStore.ts`, `saveRetention.ts`,
 
 - **One tree of snapshots per game.** The named moments are the same
   six (`EnterTown`, `ExitTown`, `RestComplete`, `TownWaitComplete`,
-  `EndOutdoorCombat`, `Eat`, with the same `Autosave_<reason>` preferences and
-  the same defaults, Eat off), now called *milestones*; on top of them a
-  **tick** saves after every move, indoors and out (so leaving loses nothing;
-  a move that changed nothing writes nothing). `Autosave_Every` was a
+  `EndOutdoorCombat`, `Eat`, with the same `Autosave_<reason>` preferences),
+  now called *milestones*; on top of them a **tick** saves after every move,
+  indoors and out (so leaving loses nothing; a move that changed nothing
+  writes nothing). **Since 2026-10-05 the six default off** — they marked
+  nearly every town door as a milestone — and two of this port's own default
+  on: `QuestComplete` (a quest's status set to completed) and `Journal` (an
+  events-journal entry added, Exile III's thirty-four plot events). The tick
+  still saves those six moments, as ordinary autosaves. A tick also waits
+  for a 500 ms pause in the walking (`AUTOSAVE_QUIET_MS`), so a held arrow
+  key saves where the walk stops rather than between every pair of steps. `Autosave_Every` was a
   preference for a day and is gone (2026-10-03). A game started from
   the main menu is saved as soon as it starts, which makes its tree, so "Make
   a manual save first" is gone; and going to the main menu saves the game
@@ -1040,8 +1046,10 @@ What this port does instead (`platform/saveStore.ts`, `saveRetention.ts`,
 - **A capped pool of autosaves, not rotation** (2026-10-03, replacing a day of
   grid thinning and a 10 MB budget). Each tree keeps up to `maxAuto`
   autosaves (50 by default, set per game in the restore tree); past that, each
-  new one evicts an old one at random, weighted `ln(1 + newer)`, so the newest
-  never goes and the history thins with age. Milestones, the player's own
+  new one evicts an old one at random, weighted by its rank from the oldest
+  (since 2026-10-05; `ln(1 + newer)` before, which leaned on the old and kept
+  only the last stretch of play), so the newest never goes and some old saves
+  last. Milestones, the player's own
   saves, the root, a branch's first save (*branch save*) and every branch's
   last (*end save*) are never evicted and don't count toward the cap. The
   player can delete a milestone, a manual save or an autosave by hand, a
@@ -1081,6 +1089,54 @@ sheet — and no dice: it changes which cell a picture is copied to, nothing
 else. Keeping it would make #7's carried pictures wrong for any party with two
 custom items, which is every Exile III party. A save OBoE wrote with its
 collapsed numbering still loads, wearing OBoE's pictures.
+
+### 49. A monster's touch (2026-10-05)
+
+**DECIDED: the original's rule in the live game, OBoE's in a replay**, through
+an blades-of-exile-ts feature flag, `monster-touch` = `1997`, as with §14.
+1997's `monster_attack` (COMBAT.CPP:2329) poisons on every first blow that
+does damage, and webs, sleeps, paralyses and burns with acid on every blow;
+disease and the gremlin's theft fire two times in three. OBoE turned these
+into abilities with odds (`TOUCH_POISON` and the rest at 1000, disease at
+667) and then tests them backwards — `if(odds > 0 && get_ran(1,1,1000) <=
+odds) continue;` skips the touch when the roll comes in *under* its odds — so
+a poison, acid, web, sleep or paralysis touch never fires, and disease fires
+one time in three. A Goblin Fighter in Exile III never poisoned anyone
+(reported by the user). Under the flag the test reads the right way round,
+with the same single roll, so the call order is OBoE's either way; a scenario
+made in OBoE's editor gets the odds its designer typed. The corpus has no
+flag and is unchanged.
+
+### 50. Clicks, and the damage numbers (2026-10-05)
+
+**DECIDED: 1997's, where a player hears or sees it.**
+- **A key that stands for a toolbar button clicks** (sound 37): 1997's
+  `handle_keystroke` turns `m`, `p`, `l`, `r`, `t`, `g`, `f`, `a`, `b`, `u`,
+  `L`, `s`, `x`, `e`, `d` and the rest into a point on the button and calls
+  `handle_action`, which clicks it (`main_button_click`). OBoE calls the
+  handlers directly, silently. `keyClicksButton` (`game/modes.ts`) has 1997's
+  mode guards.
+- **A dialog's controls click**, by mouse, key or finger: 37 for a button, 34
+  for an LED (`cd_press_button`). OBoE means the same, but its LED test can
+  never pass, so its LEDs play 37. This port's dialogs were silent.
+- **Keypad 5 waits** (a click on the party's own square, `terrain_click[5]`;
+  OBoE's delta is {0,0}), and keypad 0 is `z`. Both originals agree.
+- **The damage number on a hit is white**, small bold, with no shadow, or
+  black on the two pale bursts (magic and cold) — 1997's `boom_space`
+  (GRAPHICS.CPP:2335). OBoE's is black on a white shadow, hard to read on
+  the terrain.
+- **Which burst a hit draws, and what a volley sounds like.** 1997's
+  `boom_gr` draws unblockable damage as the magic burst (1), where OBoE has a
+  sprite of its own (5); and inside a volley 1997 queues `(dam_type > 2) ? 2
+  : 0` — the fire explosion or the magic one, `boom_type_sound` 5 or 53 —
+  where OBoE's `get_boom_type` adds unblockable (4) and cold (5, sound 75).
+  Exile III has 1997's three-entry `boom_type_sound` (`{5,10,53}`, EXE offset
+  0x5df32). This port was taking the single-hit sprite for the volley too, so
+  Wound — `add_missile(…, 14, …)`, sound 24, the same in all three — burst as
+  explosion 5 with sound 75, which neither original plays (reported by the
+  user). Now both are 1997's (`boomType`, `explosionType` in `damage.ts`).
+
+Nothing here rolls a die.
 
 ## Agreements worth recording
 

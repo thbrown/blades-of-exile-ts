@@ -1234,18 +1234,16 @@ export class Screen {
         );
       }
       if (boom.damage <= 0) continue;
+      // 1997's `boom_space` (GRAPHICS.CPP:2335): small bold white, or black
+      // on the two pale bursts, magic (1) and cold (4); no shadow. OBoE draws
+      // black on a white shadow, which is hard to read on the terrain, and a
+      // player can tell, so this is 1997's. The number sits 8px in (10 for one
+      // digit) and 11px down from the square's corner.
       const text = String(boom.damage);
-      const rect: UiRect = {
-        top: pos.y + 13, left: pos.x, bottom: pos.y + 23, right: pos.x + TILE_W,
-      };
-      // White twice offset either way, then black in the middle — the C++'s
-      // cheap drop shadow.
-      const style = { size: 10, colour: Colours.WHITE };
-      drawStringCentre(
-        this.ctx, { ...rect, top: rect.top - 1, left: rect.left - 1 }, text, style);
-      drawStringCentre(
-        this.ctx, { ...rect, top: rect.top + 1, left: rect.left + 1 }, text, style);
-      drawStringCentre(this.ctx, rect, text, { ...style, colour: Colours.BLACK });
+      const colour = boom.type === 1 || boom.type === 4 ? Colours.BLACK : Colours.WHITE;
+      const left = pos.x + 8 + (boom.damage < 10 ? 2 : 0);
+      drawString(this.ctx, { top: pos.y + 11, left, bottom: pos.y + 23, right: pos.x + TILE_W },
+        text, { size: 10, font: 'bold', colour });
     }
   }
 
