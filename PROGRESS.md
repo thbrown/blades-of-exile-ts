@@ -16773,3 +16773,23 @@ failed on the known ENCOUNTER flake and on the hit-sound check, below).
 - E3-CHECK-IN-ORIGINAL #31 narrowed: the step code lets a creature through
   a *found* secret door (102/119/134 aren't on the list, blockage 1).
 
+- **The fire-immunity flag, swept.** E3's lava test (`1090:34dc`, bit 8 of
+  creature +0x48) reads the immunity byte E3 builds at placement
+  (`1090:023d`) from segment 39's arrays at 4800/5000/5200/5400: 1 resists,
+  2 is immune, in BoE's legacy order magic, fire, cold, poison — and its
+  `damage_monst` (`10c0:4af4`) reads the byte for those four types. The
+  converter's `resist()` builds the same field (no value above 2 exists, so
+  its `>= 2` and E3's `== 2` agree) and the legacy importer maps it to
+  resistances correctly: Fire Lizard, Salamander, Efreet and Fire Golem
+  are fire-immune, Ice Lizard, Ice Drake and Ice Pudding cold-immune. Test:
+  `e3convert.test.ts`. E3's other two rules in `damage_monst` are in the
+  port as OBoE has them: special skill 26 absorbing fire, magic and cold
+  (Rakshasa, odds 1000 in 1000, so always) and the level saving throws.
+  One gap, `TODO(e3lava)`: a fire-immune creature may cross lava 76 in E3,
+  and here none may (20 squares in six towns).
+- **The protection ring the user remembered** is the Iceshield: E3's item
+  data gives it code 16, which `damage_pc` (`10b0:9676`) reads as a *fire*
+  ward; cold's is 66, only the Ring of Warmth. Every ward code was
+  re-checked against `damage_pc` (magic 2, fire 16, undead 48, demon 50,
+  cold 66, resistance 127 on fire/poison/magic/cold) and the port's are
+  E3's. The Iceshield is now E3-SUSPECTED-BUGS #23 for the fixing pass.

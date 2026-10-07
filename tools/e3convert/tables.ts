@@ -195,6 +195,11 @@ export function readE3HiddenEntrances(exe: Uint8Array): Map<number, number> {
  * a special of their own (`secret-doors`). The closed doors open, and the bed
  * refuses only some creatures (`FUN_1090_2960`); neither is kept.
  *
+ * TODO(e3lava): E3 lets a creature with the fire-immunity bit (8, built from
+ * the fire array at segment 39 + 5000, `1090:0285`) cross lava 76; here
+ * `monst-block` keeps every creature off it. 20 squares in towns 31, 52, 57,
+ * 73, 98 and 104. Lava 75 already follows E3, as damaging ground.
+ *
  * E3's blockage 2 is a different list (lava, portals, town and cave entrances,
  * levers, floor 152): the party's placement, its horses and boats, and the
  * outdoor groups (`1080:1440`, `1080:14a4`) read it; a town creature's step

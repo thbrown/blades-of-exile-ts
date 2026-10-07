@@ -418,6 +418,21 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(scen.terTypes[152]!.blockage).toBe(TerObstruct.BLOCK_MONSTERS);
   });
 
+  it("reads E3's four resistance arrays as magic, fire, cold, poison", () => {
+    // E3 builds a creature's immunity byte from segment 39's arrays at 4800,
+    // 5000, 5200 and 5400 (`1090:023d`): 1 resists (bits 1, 4, 0x10, 0x40),
+    // 2 is immune (2, 8, 0x20, 0x80), and its `damage_monst` (`10c0:4af4`)
+    // reads them for magic, fire, cold and poison: BoE's legacy layout. Its
+    // lava test (`1090:34dc`) is bit 8, fire immunity.
+    const res = (name: string) => scen.scenMonsters.find((m) => m?.name === name)!.resist;
+    expect(res('Fire Lizard')[DamageType.FIRE]).toBe(0);
+    expect(res('Fire Lizard')[DamageType.COLD]).toBe(100);
+    expect(res('Ice Lizard')[DamageType.COLD]).toBe(0);
+    expect(res('Ice Lizard')[DamageType.FIRE]).toBe(100);
+    expect(res('Skeleton')[DamageType.POISON]).toBe(0);
+    expect(res('Acolyte')[DamageType.MAGIC]).toBe(50);
+  });
+
   it("builds outdoor arenas from E3's own tables", () => {
     // The engine's copies of FUN_10d8_342b's tables match EXILE3.EXE's.
     const exe = new Uint8Array(readFileSync(join(dir as string, 'EXILE3.EXE')));
