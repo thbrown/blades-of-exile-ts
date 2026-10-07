@@ -1162,7 +1162,12 @@ export class Screen {
    */
   private drawCombatParty(session: GameSession): void {
     const { univ } = session;
-    for (let i = 0; i < univ.party.pcs.length; i++) {
+    // `draw_pcs` (boe.graphutil.cpp:277) draws the active PC a second time
+    // after the six, so when the fight starts with two on one square the one
+    // whose turn it is shows on top.
+    const order = [...univ.party.pcs.keys()];
+    if (univ.curPc < univ.party.pcs.length) order.push(univ.curPc);
+    for (const i of order) {
       const pc = univ.party.pcs[i]!;
       if (!pc.isAlive) continue;
       const q = TER_VIEW_CENTER + pc.combatPos.x - session.center.x;
@@ -1664,8 +1669,10 @@ export class Screen {
 
     const rows = service ? ITEM_ROWS_SHOP : ITEM_ROWS;
     // `item_offset` — which slot the top row is showing. A pack holds 24 and
-    // the panel shows eight, so the scrollbar reaches the other two thirds.
-    const offset = service ? 0 : win.scroll;
+    // the panel shows eight, so the scrollbar reaches the other two thirds —
+    // during a shop's service too (`item_offset = item_sbar->getPosition()`,
+    // boe.text.cpp:231, whatever `stat_screen_mode` is).
+    const offset = win.scroll;
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]!;
       const iNum = i + offset;
@@ -1736,7 +1743,9 @@ export class Screen {
     // shows someone else's things. Skipping them here left them live but
     // unseen.
     this.drawItemBottomButtons(session, at);
-    if (!service) this.itemSbar.draw(this.ctx, this.store);
+    // The bar stays up during a service: the C++ never hides `item_sbar` for
+    // one (only for the shop window itself, boe.graphics.cpp:545).
+    this.itemSbar.draw(this.ctx, this.store);
   }
 
   /**
@@ -1925,16 +1934,16 @@ export class Screen {
     const ly = y - panel.top;
     const rows = service ? ITEM_ROWS_SHOP : ITEM_ROWS;
     // `item_hit = item_sbar->getPosition() + i` (boe.actions.cpp:1811) — the row
-    // clicked is an offset into the list, not the list itself. A shop service
-    // never scrolls.
-    const offset = service ? 0 : this.itemWindow.scroll;
+    // clicked is an offset into the list, not the list itself, in a shop's
+    // service as anywhere else.
+    const offset = this.itemWindow.scroll;
     const special = !service && this.itemWindow.mode >= ItemWinMode.SPECIAL;
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i]!;
       const inside = (rect: UiRect): boolean =>
         lx >= rect.left && lx < rect.right && ly >= rect.top && ly < rect.bottom;
       if (service) {
-        if (inside(row.spec)) return { row: i, part: 'spec' };
+        if (inside(row.spec)) return { row: i + offset, part: 'spec' };
       } else if (special) {
         // Only the two buttons these pages draw are live, and Use sits in the
         // Drop slot — so a click there is a Use, not a Drop.

@@ -11,6 +11,7 @@
  * modality without blocking.
  */
 
+import { type AutoKeys, autoKeys, underlineLetter } from './autoKeys';
 import { Colours } from '../render/colours';
 import { centreOnDesktop, desktop } from '../render/desktop';
 import { UiRect, height, shiftRect, width } from '../render/layout';
@@ -360,6 +361,7 @@ export class Dialog {
       }
     }
 
+    const auto = this.autoKeys();
     for (const btn of this.placed) {
       const btnSheet = this.store.get(btn.large ? 'dlogbtnlg' : 'dlogbtnmed');
       if (btnSheet) {
@@ -374,18 +376,30 @@ export class Dialog {
       // Centre the label on the button face.
       ctx.font = `${TEXT_SIZE}px BoEPlain, sans-serif`;
       const w = ctx.measureText(btn.label).width;
+      const left = btn.rect.left + (width(btn.rect) - w) / 2;
       drawString(
         ctx,
-        {
-          top: btn.rect.top + 5,
-          left: btn.rect.left + (width(btn.rect) - w) / 2,
-          bottom: btn.rect.bottom,
-          right: btn.rect.right,
-        },
+        { top: btn.rect.top + 5, left, bottom: btn.rect.bottom, right: btn.rect.right },
         btn.label,
         { size: TEXT_SIZE, colour: Colours.BLACK },
       );
+      // The free letter key, underlined (`autoKeys.ts`).
+      const letter = auto.letters.get(btn.name);
+      if (letter) underlineLetter(ctx, btn.label, letter.index, left, btn.rect.top + 5 + TEXT_SIZE - 1, Colours.BLACK);
     }
+  }
+
+  /** The free first-letter and number keys (`autoKeys.ts`). */
+  private autoKeys(): AutoKeys {
+    const taken = new Set<string>();
+    for (const r of this.placedRows) if (r.key) taken.add(r.key.toLowerCase());
+    for (const b of this.placed) if (b.key) taken.add(b.key.toLowerCase());
+    // A pick-list's rows are the choices, and its buttons only the way out,
+    // so its digits stay unclaimed.
+    if (this.placedRows.length > 0) for (const d of '0123456789') taken.add(d);
+    return autoKeys(this.placed.map((b) => ({
+      name: b.name, label: b.label, key: b.key?.toLowerCase() ?? null, top: b.rect.top, left: b.rect.left,
+    })), taken);
   }
 
   /** The rows, then the buttons, for the touch overlay. */
@@ -429,6 +443,11 @@ export class Dialog {
     if (button) return button;
     // Enter falls through to the last button, which is the safe/cancel one.
     if (key === 'Enter') return this.placed[this.placed.length - 1] ?? null;
+    const auto = this.autoKeys();
+    const byDigit = auto.digits.get(lower);
+    if (byDigit !== undefined) return this.placed.find((b) => b.name === byDigit) ?? null;
+    for (const [name, letter] of auto.letters)
+      if (letter.key === lower) return this.placed.find((b) => b.name === name) ?? null;
     return null;
   }
 }

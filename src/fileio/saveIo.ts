@@ -52,7 +52,8 @@ import { CurTown } from '../universe/curTown';
 import { Creature, CreatureStatus } from '../universe/creature';
 import { Party, TOWN_NUM_OUTDOORS, timerIsValid } from '../universe/party';
 import { NUM_INVEN_SLOTS, Player } from '../universe/player';
-import { MainStatus, PartyStatus, Race, Status } from '../universe/skills';
+import { MainStatus, PartyStatus, Race, Skill, Status } from '../universe/skills';
+import type { Spell } from '../data/spell';
 import { Universe } from '../universe/universe';
 import type { Rgba } from './legacy/bmp';
 import { decodePng, encodePng } from './png';
@@ -549,6 +550,12 @@ export function writePlayer(file: TagFile, pc: Player): void {
     const slot = pc.items.indexOf(pc.weapPoisoned);
     if (slot >= 0) page.add('POISON', slot);
   }
+  // What M and P recast in combat (`last_cast`, `last_target`). OBoE keeps
+  // them in memory only; saved here (blades-of-exile-ts), as `REPEATCAST` is.
+  for (const [book, type] of [['mage', Skill.MAGE_SPELLS], ['priest', Skill.PRIEST_SPELLS]] as const) {
+    const spell = pc.lastCast[type];
+    if (spell !== undefined && spell >= 0) page.add('LASTCAST', book, spell, pc.lastTarget[type] ?? 6);
+  }
   for (let i = 0; i < NUM_INVEN_SLOTS; i++) {
     const item = pc.items[i]!;
     if (item.variety === ItemType.NO_ITEM) continue;
@@ -595,6 +602,15 @@ export function readPlayer(file: TagFile, pc: Player): void {
       flagsFrom(page, 'EQUIP', pc.equip);
       flagsFrom(page, 'MAGE', pc.mageSpells);
       flagsFrom(page, 'PRIEST', pc.priestSpells);
+      pc.lastCast = {};
+      pc.lastTarget = {};
+      for (const tag of page.list('LASTCAST')) {
+        const type = tag.str(0) === 'mage' ? Skill.MAGE_SPELLS
+          : tag.str(0) === 'priest' ? Skill.PRIEST_SPELLS : null;
+        if (type === null) continue;
+        pc.lastCast[type] = tag.int(1, -1) as Spell;
+        pc.lastTarget[type] = tag.int(2, 6);
+      }
       pc.traits.fill(false);
       for (const tag of page.list('TRAIT')) {
         const which = readEnumTagOrNumber(traitNames, tag.str(0), -1);
@@ -722,6 +738,13 @@ export function writeParty(file: TagFile, party: Party, scenarioId: string): voi
     if (!bank.inited) continue;
     for (let j = 0; j < 6; j++) jobPage.add('JOB', j, bank.jobs[j]!);
   }
+  // What M and P recast (blades-of-exile-ts; `Party.mageStore`): one page.
+  if (party.mageStore.spell >= 0 || party.priestStore.spell >= 0) {
+    const castPage = file.add();
+    castPage.add('REPEATCAST');
+    for (const [book, store] of [['mage', party.mageStore], ['priest', party.priestStore]] as const)
+      if (store.spell >= 0) castPage.add('STORE', book, store.spell, store.caster, store.target);
+  }
   // Exile III's job boards (blades-of-exile-ts; game/e3Jobs.ts): one page, a line a job.
   if (party.e3Jobs) {
     const e3Page = file.add();
@@ -833,6 +856,9 @@ export function readParty(file: TagFile, party: Party): void {
       party.easyMode = page.first('EASY')?.bool(0) ?? false;
       party.lessWm = page.first('LESSWM')?.bool(0) ?? false;
       party.lightLevel = page.first('LIGHT')?.int(0) ?? 0;
+      // An older save has no REPEATCAST page: nothing stored.
+      party.mageStore = { spell: -1, caster: 6, target: 6 };
+      party.priestStore = { spell: -1, caster: 6, target: 6 };
       party.inBoat = page.first('IN')?.int(0) ?? -1;
       party.inHorse = page.first('IN')?.int(1) ?? -1;
       // Absent means "never split", which the C++ restores as -1 — and
@@ -965,6 +991,12 @@ export function readParty(file: TagFile, party: Party): void {
       for (const job of page.list('JOB')) {
         const slot = job.int(0, -1);
         if (slot >= 0 && slot < bank.jobs.length) bank.jobs[slot] = job.int(1, -1);
+      }
+    } else if (page.firstKey() === 'REPEATCAST') {
+      for (const tag of page.list('STORE')) {
+        const store = { spell: tag.int(1, -1), caster: tag.int(2, 6), target: tag.int(3, 6) };
+        if (tag.str(0) === 'mage') party.mageStore = store;
+        else if (tag.str(0) === 'priest') party.priestStore = store;
       }
     } else if (page.firstKey() === 'E3JOBS') {
       const state: E3JobState = {

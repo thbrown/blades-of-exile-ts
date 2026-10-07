@@ -147,7 +147,8 @@ export function runAMissile(
   // per-missile setup has thrown anything away (boe.newgraph.cpp:429) — so a
   // missile that draws nothing still makes its noise. Raised before the
   // booking below, so it is heard as the missile *launches*.
-  if (soundNum > 0) livingSound(soundNum);
+  // `play_sound(-1 * sound_num)`: asynchronous, so the flight isn't held up.
+  if (soundNum > 0) livingSound(-soundNum);
   if (type < 0) return;
   // "Eliminate missiles traveling 0 distance" — do_missile_anim drops any
   // missile whose destination is where it started.

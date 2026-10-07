@@ -41,7 +41,7 @@
   way.
 - Keys follow the original's `handle_keystroke` (boe.actions.cpp:2772):
   arrows/keypad move, **f** fight (and end a fight), **e** end combat,
-  **Space** pause one turn (stand ready in combat), **w** the *long* wait — up
+  **Space** pause one turn (stand ready in combat), **w** (or **Alt+W**) the *long* wait — up
   to eighty turns, town only, **d** parry, **x** hold the turn on
   one PC, **t** talk, **l** look, **u** use, **b** bash, **g** get, **r** rest,
   **L** pick a lock, **1-6** whose pack shows, **9** the special items and
@@ -16664,3 +16664,112 @@ ENCOUNTER flake, below), `verify-saves`, `verify-party`.
   100, not in the loader's flag list at `10d8:107b`, no time flags) refills
   once four other towns are visited. Added to E3-CHECK-IN-ORIGINAL #29; the
   user will try `Q29.SAV`.
+
+### Play-test notes, ninth round (2026-10-06)
+
+The user's list, and what each turned out to be. Tests for the rules are in
+`test/playtest9.test.ts`. Checks: 1,734 tests (the corpus unchanged), both
+sweeps, `verify-saves`, `verify-party`, and `verify-screen` (PASS; two runs
+failed on the known ENCOUNTER flake and on the hit-sound check, below).
+
+- [x] **The item list didn't scroll while identifying** (or selling or
+      enchanting). The port pinned a shop's service to slots 1–8 and hid the
+      scrollbar; `put_item_screen` always offsets by `item_sbar`. Rows, the
+      service buttons' hits, the wheel, the thumb and the touch sheet all
+      scroll now.
+- [x] **Two PCs on one square at the start of a fight**: the active one now
+      draws on top — `draw_pcs` draws it a second time (boe.graphutil.cpp:277).
+- [?] **An archer's hit sounds like a punch.** In the browser an E3 Archer's
+      hit plays 98, the same as the party's own arrows, and E3's EXE says the
+      same (`1018:76ca` pushes 1300; its `boom_space` table is 1997's).
+      Nothing to fix that the code shows; asked as E3-CHECK-IN-ORIGINAL #30.
+- [x] **A fireball's kills all died at once; a dual-wielder's two blows
+      sounded together.** Both originals *block* on any sound outside
+      `always_async` (1997's synchronous `SndPlay`, OBoE's busy-wait); only
+      OBoE's WASM build skipped it. A blocking sound now books its length on
+      the animation timeline (`livingSound` returns it; `SoundPlayer.blockingMs`),
+      `boom_space`'s sprite stays up while its sound plays, `damageMonst`
+      settles after a kill, and missile/volley sounds are the async kind
+      (negative), as the originals pass them. `COMBAT_SOUNDS` are preloaded
+      so their lengths are known. DIVERGENCES §51.
+- [x] **Bashing a door showed the monsters behind it but not the room.**
+      Neither original updates the explored map there; the port now runs
+      1997's monster-door step for the party (`seeThroughOpenedDoor`). §51.
+- [x] **Monsters walked through E3's secret doors.** BoE monsters open any
+      step-change square; in E3 only the party's code opens 101/118/133.
+      Under `secret-doors`, an unfound one is wall to a monster. A *found*
+      one (`terrain_blocked` 1) stays passable: E3-CHECK-IN-ORIGINAL #31.
+      (Rentar-Ihrno and the ruin tile, from an earlier round, is a different
+      question and not looked at here.)
+- [x] **Buying Restore Mind played the priest sound.** 1997 plays 62 ("mmm")
+      for any spell and for a recipe; OBoE 24/25 and 8. Now 62. §51.
+- [x] **The road on the automap was a white box.** OBoE's stub is from
+      trim.png, a one-bit sheet whose stub pixels are white. Now fields.png's
+      road hub (`ROAD_SRC.centre`), on the map window and the world-map page.
+- [–] **`f` ends a fight as well as `e`.** As the user says, fine; no change.
+- [?] **Worgs are hard to kill.** As E3 has them: level 7, AC 1, skill 9,
+      35 HP, bite 3d6, read from segment 39, and E3's `place_monster`
+      (`1090:3d56`) copies the HP unscaled (halved on easy).
+- [x] **M and P forgot their spell after a load.** The out-of-combat stores
+      moved to the party (`Party.mageStore`/`priestStore`; the session has
+      accessors) and are saved (`REPEATCAST`), as is each PC's `lastCast`
+      (`LASTCAST`). Both originals keep them in memory only. §51.
+- [x] **Climbing between levels played the cave sound.** `start_town_mode`
+      plays it only when no town is forced — 1997, OBoE and E3 (`10d8:014c`)
+      alike — so stairs, Word of Recall and a new game are silent. The port
+      played it on every entry. §44 corrected.
+- [?] **Bandit soldiers dodge.** The Bandit Hideout's are Soldiers (skill 8,
+      AC 8, 20 HP). E3's to-hit (`1018:0edd`) is 1997's term for term
+      (`FUN_1090_41c3` is encumbrance): the defender counts only through
+      bless/curse, `+5` a point — the hideout has an Evil Acolyte. Faithful.
+- Features:
+  - [x] **Alt+W is the long wait** (E3's Ctrl+W can't reach a tab; plain `w`
+        always was).
+  - [x] **Prompts answer to 1, 2, 3… and to their buttons' first letters**,
+        underlined (a button's own key letter is underlined too):
+        `dialogs/autoKeys.ts`, in `XmlDialog` and `Dialog`. No digits where a
+        digit already means something (picking a PC), nothing beside a text
+        field, no letter two buttons share. The labels were already bold, so
+        the letter is underlined rather than bolded.
+  - [x] **Preferences › "Auto target"** (`AutoTarget`, default on): off, the
+        aiming cursor starts on the caster. `TargetLock` ("shift screen to
+        show more enemies") still moves the view if it is on.
+
+**Gotchas (2026-10-06):**
+- `verify-screen`'s "BOOMS" check (`played.includes(70)`) fails when the
+  test PC's other equipped weapon, a pole arm, lands first (71). A flake,
+  like ENCOUNTER.
+- `setLivingSound`'s sink now returns the ms a sound blocks; a test sink
+  written `(n) => arr.push(n)` returns the array's length, which is read as
+  milliseconds. Harmless, but write `{ arr.push(n); }`.
+- `nedis.py --all` takes about a second; grep `cmp byte ptr es:[bx + 0x2abe], N`
+  for town-terrain tests by id and `mov byte ptr es:[bx + 0x1000]` for the
+  combat map's.
+
+**Follow-up, same day:**
+- **The save additions are compatible both ways.** `REPEATCAST` (a party
+  page) and `LASTCAST` (lines on a PC's page) are read by name and skipped by
+  any reader that doesn't know them — OBoE's `cParty::readFrom` and
+  `cPlayer::readFrom` and older builds of this port alike, as `E3JOBS`
+  already was. An older save just has nothing stored. Exile III `.SAV`
+  export (`e3SaveExport.ts`) doesn't carry them.
+- **Which squares E3's town creatures won't step on** is a list of its own:
+  the jump table ending `monst_check_special_terrain` (`FUN_1090_2e2b`, 26
+  ids at `1090:3595`). Refused: the walk-through cave walls 7/10/13/16, lava
+  75/76 (unless the creature's bit 8 at +0x146f), portal 78, pit border 86,
+  the secret walls, floors 151/153/187/200 (the rune floors) and the
+  special-encounter squares 237–242. The closed doors open; the bed refuses
+  some creatures (`FUN_1090_2960`). E3's blockage 2 — which the converter
+  had been turning into `monst-block` — is a different list that only the
+  party's placement, horses, boats and the outdoor groups read
+  (`1080:1440`, `1080:14a4`); a town creature's `monst_can_be_there`
+  (`FUN_1080_0fee`) asks only blockage 3 and up. The converter now reads the
+  table (`readE3MonsterRefusals`) and puts `monst-block` on exactly those,
+  so creatures keep off the rune floors and the walk-through cave walls,
+  and can now cross floor 152 and the levers. Blockage 2 stays
+  BLOCK_MONSTERS for the party's placement. Test: `e3convert.test.ts`.
+  Likely the earlier report of Rentar-Ihrno crossing a "ruin" floor to
+  reach the Spiny Worm; not checked on that map.
+- E3-CHECK-IN-ORIGINAL #31 narrowed: the step code lets a creature through
+  a *found* secret door (102/119/134 aren't on the list, blockage 1).
+

@@ -68,7 +68,7 @@ import { Enchant, enchantWeapon } from '../data/enchant';
 import { boomSpace, setBoomScreen } from './booms';
 import { ShopItemType } from '../data/shop';
 import { ShopState, handleSale, shopAllowsDead } from './shop';
-import { SpellStore, emptySpellStore } from './spellRepeat';
+import type { SpellStore } from './spellRepeat';
 import { ItemShopMode, ItemShopState, handleItemShopAction } from './itemShop';
 import { isContainerAt } from './loot';
 import { NO_TARGET } from './spellPick';
@@ -281,8 +281,11 @@ export class GameSession {
    * these as globals; on the session they have the same lifetime and cannot
    * leak between two games in one process.
    */
-  mageStore: SpellStore = emptySpellStore();
-  priestStore: SpellStore = emptySpellStore();
+  /** `store_mage` and its companions: the party's, so they are saved. */
+  get mageStore(): SpellStore { return this.univ.party.mageStore; }
+  set mageStore(store: SpellStore) { this.univ.party.mageStore = store; }
+  get priestStore(): SpellStore { return this.univ.party.priestStore; }
+  set priestStore(store: SpellStore) { this.univ.party.priestStore = store; }
 
   /**
    * `store_last_cast_mage` / `store_last_cast_priest` (boe.party.cpp:100),
@@ -522,9 +525,10 @@ export class GameSession {
     // "preserve legacy behaviour of not calling the enter town node at scenario
     // start"). See `startTownMode`'s `skipEntrySpecial`.
     // Exile III starts a new game in Fort Emergence without the town's
-    // sound (the user checked in the original); BoE plays it, as
-    // `put_party_in_scen` goes through `start_town_mode` like any arrival.
-    // Scenario flag `start-sound` = `none`.
+    // sound (the user checked in the original). So does BoE: the entry is
+    // forced (`force_town_enter`, then entry 9), and `start_town_mode` plays
+    // no sound for a forced town — see there. Scenario flag `start-sound` =
+    // `none` predates finding that and is now belt and braces.
     const silent = this.univ.scenario.featureFlags['start-sound'] === 'none';
     this.startTownMode(this.univ.scenario.startTown, FORCED_ENTRY, true, silent);
     // put_party_in_scen runs the scenario's on-init node last (boe.party.cpp:238)
@@ -3667,12 +3671,28 @@ export class GameSession {
   }
 
   pickLock(where: Location, pcNum: number): void {
-    pickLockAt(this.univ, where, pcNum, this.sound);
+    if (pickLockAt(this.univ, where, pcNum, this.sound) === 'opened') this.seeThroughOpenedDoor();
   }
 
   /** Try to bash a locked door open with a given PC. */
   async bashDoor(where: Location, pcNum: number): Promise<void> {
-    await bashDoorAt(this.univ, where, pcNum, this.sound);
+    if (await bashDoorAt(this.univ, where, pcNum, this.sound) === 'opened') this.seeThroughOpenedDoor();
+  }
+
+  /**
+   * **Not in either original**: neither `bash_door` nor `pick_lock` updates
+   * the explored map, so the room behind a door that gave way stayed black
+   * until the party next moved — while the monsters in it, drawn by
+   * `party_can_see_monst`, showed at once. This is the step 1997 runs when a
+   * *monster* opens a door ("Action may change terrain, so update what's been
+   * seen", MONSTER.C:1137): the party's square in town, each living PC's in
+   * combat. No dice. DIVERGENCES.md §51.
+   */
+  private seeThroughOpenedDoor(): void {
+    if (isCombat(this.mode)) {
+      for (const pc of this.univ.party.pcs)
+        if (pc.mainStatus === MainStatus.ALIVE) this.updateExplored(pc.combatPos);
+    } else if (this.inTown) this.updateExplored(this.univ.party.townLoc);
   }
 
   /**
@@ -5105,7 +5125,13 @@ export class GameSession {
 
     this.mode = GameMode.TOWN;
     this.univ.party.townNum = townNum;
-    if (!silent) {
+    // `play_town_sound` is set only when no town was forced (`town_force >=
+    // 200`): walking in from outdoors. A forced entry — `change_level`'s
+    // stairs, a forced town, Word of Recall, the new game's start town — is
+    // silent in 1997 (TOWN.C:141), OBoE (boe.town.cpp:85) and Exile III
+    // (`10d8:014c`) alike, and entry 9 is the forced one. This port played it
+    // on every staircase (reported in Exile III's Bandit Hideout).
+    if (!silent && entryDir !== FORCED_ENTRY) {
       this.sound?.play(
         record.lightingType === Lighting.LIGHT_NORMAL && !this.dungeonSoundTowns().has(townNum)
           ? Snd.ENTER_TOWN : Snd.ENTER_DUNGEON,
@@ -6114,6 +6140,12 @@ export class GameSession {
     switch (ter.special) {
       case TerSpec.CHANGE_WHEN_STEP_ON:
         canEnter = false;
+        // Exile III's secret doors (`secret-doors`) are wall to a monster: the
+        // only code in EXILE3.EXE that turns 101/118/133 into a door is the
+        // party's — its move (`10c0:0c97`) and its search (`10c0:4409`). The
+        // one door a creature opens by id (`1098:69f8`) is 103/120/108. So
+        // bandits never came through a wall the party hadn't found.
+        if (this.secretDoorTerrains().has(terNum)) break;
         if (!placid) {
           town.record.terrain[where.x]![where.y] = ter.flag1;
           doLook = true;

@@ -346,9 +346,13 @@ function specialXml(t: E3TerrainType, id: number, hiddenAs: Map<number, number>)
     // order are the `lava` feature flag's. This gives up blockage 2: a
     // fire-immune monster may now cross it, where E3 keeps every monster off.
     : !sp && id === 75 ? ['dmg', 10, 8, DamageType.FIRE]
-    // E3's blockage 2 keeps monsters off (lava, portals, town entrances);
-    // BoE's only means that for counters (`is_special`), so the special says it.
-    : !sp && t.blockage === 2 ? ['monst-block', -1, 0, 0]
+    // The squares a town creature won't step onto are E3's own list
+    // (`readE3MonsterRefusals`), not its blockage 2, which a creature's step
+    // never reads: the walk-through cave walls and the rune floors keep them
+    // off, and floor 152 and the levers don't. Blockage 2 stays
+    // BLOCK_MONSTERS, which BoE reads for the party's placement and boats, as
+    // E3 does.
+    : !sp && t.monstRefuses ? ['monst-block', -1, 0, 0]
     : !sp ? ['none', -1, 0, 0]
     : sp.kind === 'sign' ? ['sign', 0, 0, 0]
     : sp.kind === 'belt' ? ['belt', sp.dir, 0, 0]

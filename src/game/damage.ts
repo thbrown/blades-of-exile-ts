@@ -515,6 +515,9 @@ export async function damageMonst(
   if (victim.health < 0) {
     victim.spellNote(SpellNote.DIES);
     killMonst(univ, victim, whoHit, MainStatus.DEAD, options.session);
+    // The death cry blocks (`livingSound`), so the next thing — the next
+    // creature a fireball killed, with its own cry — waits for it.
+    await animSettle();
   } else {
     // Morale falls further the harder the hit was; the steps are cumulative.
     if (howMuch > 0) victim.morale -= 1;

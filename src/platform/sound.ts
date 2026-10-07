@@ -32,6 +32,27 @@ export const Snd = {
   TOO_HEAVY: 41,
 } as const;
 
+/**
+ * `always_async` (sounds.cpp:48; 1997's `always_asynch`, Exile.sound.c:29 —
+ * the same 28). Every other sound blocks when played with a positive number:
+ * see `livingSound`.
+ */
+export const ALWAYS_ASYNC: ReadonlySet<number> = new Set([
+  6, 24, 25, 34, 37, 39, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+  50, 55, 61, 76, 77, 78, 79, 80, 81, 82, 83, 85, 91,
+]);
+
+/**
+ * The blocking sounds a fight makes, warmed at load so the first of each
+ * already knows its length: a sound still being fetched can't block, so it
+ * would overlap the next. Hits (`boom_space`'s table and the armour's clang),
+ * the death cries, and a PC going down.
+ */
+const COMBAT_SOUNDS = [
+  2, 3, 4, 5, 7, 12, 14, 18, 19, 21, 29, 30, 31, 32, 33, 51, 52, 53, 60,
+  69, 70, 71, 72, 73, 75, 86, 87, 88, 89, 97, 98,
+];
+
 export class SoundPlayer {
   private ctx: AudioContext | null = null;
   private buffers = new Map<number, AudioBuffer>();
@@ -86,6 +107,17 @@ export class SoundPlayer {
     this.emit(num);
   }
 
+  /**
+   * How long sound `which` holds the game when played as a blocking sound, in
+   * ms — or 0 if it doesn't: async, sound off, or not loaded yet (the first
+   * play of a sound not in `COMBAT_SOUNDS` overlaps rather than waits).
+   */
+  blockingMs(which: number): number {
+    if (!this.enabled || which <= 0 || ALWAYS_ASYNC.has(which)) return 0;
+    const buf = this.buffers.get(which);
+    return buf ? buf.duration * 1000 : 0;
+  }
+
   private emit(which: number): void {
     const buf = this.buffers.get(which);
     const ctx = this.ctx;
@@ -120,7 +152,7 @@ export class SoundPlayer {
 
   /** Warm the cache for the sounds walking around needs. */
   async preloadCommon(): Promise<void> {
-    await Promise.all(Object.values(Snd).map((n) => this.preload(n)));
+    await Promise.all([...Object.values(Snd), ...COMBAT_SOUNDS].map((n) => this.preload(n)));
   }
 
   /** Warm any extra sounds a scenario's content refers to (door swings, etc.). */

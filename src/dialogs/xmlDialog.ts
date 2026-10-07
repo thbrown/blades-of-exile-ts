@@ -28,6 +28,7 @@ import {
   pictNaturalSize,
 } from './dialogXml';
 import type { ModalScreen, TouchChoice, TouchView } from './dialog';
+import { type AutoKeys, autoKeys, underlineLetter } from './autoKeys';
 import { dialogClick } from './clickSound';
 import { drawPictAt } from './pict';
 import { windowFrames } from '../render/windowChrome';
@@ -705,7 +706,37 @@ export class XmlDialog implements ModalScreen {
       if (control.name && this.keys.get(control.name) === wanted)
         return this.activate(control.name);
     }
+    // Then the shortcuts every prompt gets for free (`autoKeys.ts`).
+    const auto = this.autoKeys();
+    const byDigit = auto.digits.get(wanted);
+    if (byDigit !== undefined) return this.activate(byDigit);
+    for (const [name, letter] of auto.letters)
+      if (letter.key === wanted) return this.activate(name);
     return null;
+  }
+
+  /** The label a button shows, `<key/>` filled in. */
+  private buttonLabel(control: ButtonControl): string {
+    return this.fillKey(control, this.getText(control.name)
+      || (control.type === 'done' ? DONE_LABEL
+        : control.type === 'trait' ? TRAIT_LABEL : control.label));
+  }
+
+  /** The free first-letter and number keys (`autoKeys.ts`); none beside a field. */
+  private autoKeys(): AutoKeys {
+    const taken = new Set<string>();
+    const candidates = [];
+    for (const c of this.clickable()) {
+      const own = (c.name ? this.keys.get(c.name) : undefined) ?? c.defKey ?? null;
+      if (own) taken.add(own);
+      if (c.kind !== 'button' || c.type === 'tiny' || !c.name || this.hidden.has(c.name)) continue;
+      const label = this.buttonLabel(c);
+      if (!label) continue;
+      const r = this.screenRect(c);
+      candidates.push({ name: c.name, label, key: own, top: r.top, left: r.left });
+    }
+    if (this.fields().length > 0) return { letters: new Map(), digits: new Map() };
+    return autoKeys(candidates, taken);
   }
 
   /** Run a control's handler, or close with its name when it has none. */
@@ -1103,9 +1134,7 @@ export class XmlDialog implements ModalScreen {
       this.ctx.fillStyle = Colours.GREY;
       this.ctx.fillRect(rect.left, rect.top, width(rect), height(rect));
     }
-    const label = this.fillKey(control, this.getText(control.name)
-      || (control.type === 'done' ? DONE_LABEL
-        : control.type === 'trait' ? TRAIT_LABEL : control.label));
+    const label = this.buttonLabel(control);
     if (!label) return;
     // The face text is black and centred, at 12pt unless the button says
     // otherwise (a tiny button is 9, a push button 10).
@@ -1123,9 +1152,18 @@ export class XmlDialog implements ModalScreen {
     // `|` is a forced line break, and the block is lifted half a line for each
     // extra line so it stays centred (button.cpp:93).
     const lines = label.split('|');
+    const letter = this.autoKeys().letters.get(control.name);
     let top = rect.top + Math.floor((height(rect) - size) / 2) - Math.trunc(size / 2) * (lines.length - 1);
+    let start = 0;
     for (const line of lines) {
       drawStringCentre(this.ctx, { ...rect, top }, line, style);
+      // The free letter key, underlined where it falls (`autoKeys.ts`).
+      if (letter && letter.index >= start && letter.index < start + line.length) {
+        const w = this.ctx.measureText(line).width;
+        underlineLetter(this.ctx, line, letter.index - start,
+          rect.left + (width(rect) - w) / 2, top + size - 1, style.colour);
+      }
+      start += line.length + 1;
       top += size;
     }
   }

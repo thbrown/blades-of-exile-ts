@@ -163,9 +163,13 @@ describe('buying', () => {
     shop.addSpecial(ShopItemType.MAGE_SPELL, 30);
     const { univ, state } = shopping(shop);
     univ.party.gold = 30000;
-    expect(handleSale(univ, state, 0)).toBe('bought');
+    const heard: number[] = [];
+    const sound = { play: (n: number) => { heard.push(n); } } as unknown as Parameters<typeof handleSale>[3];
+    expect(handleSale(univ, state, 0, sound)).toBe('bought');
     expect(univ.currentPc.mageSpells[30]).toBe(true);
     expect(univ.transcript.at(-1)).toBe('You buy a spell.');
+    // 1997's "mmm" (62, DIALOGUTILS.C:310), not OBoE's casting sound.
+    expect(heard).toEqual([62]);
     // Buying it again is refused and costs nothing.
     const gold = univ.party.gold;
     expect(handleSale(univ, state, 0)).toBe('refused');

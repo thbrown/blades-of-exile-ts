@@ -976,6 +976,13 @@ in the port and nothing in E3. BoE scenarios keep OBoE's line.
 in Fort Emergence silently (the user checked), where `put_party_in_scen`
 reaches `start_town_mode` and its entry sound in both 1997 and OBoE.
 
+**Corrected 2026-10-06: no divergence after all.** `put_party_in_scen` calls
+`force_town_enter` first, and `start_town_mode` plays its sound only when
+no town is forced (`town_force >= 200`; 1997's TOWN.C:141, OBoE's
+boe.town.cpp:85, E3's `10d8:014c`). So a new game is silent in all three,
+and so is every staircase (`change_level`) — which this port wasn't. The
+port now keys the sound on the forced entry; the flag stays, redundant.
+
 ### 45. Where the dice start: the clock at launch (2026-10-01)
 
 **DECIDED: the original's, with an addition.** A live game seeds once, as
@@ -1135,6 +1142,54 @@ flag and is unchanged.
   user). Now both are 1997's (`boomType`, `explosionType` in `damage.ts`).
 
 Nothing here rolls a die.
+
+### 51. Ninth play-test round (2026-10-06)
+
+**DECIDED, item by item.** None of these rolls a die; the corpus is
+unchanged.
+- **Sounds block, as in both originals.** 1997's `play_sound` plays any
+  sound not in `always_asynch` with `SndPlay(…, FALSE)`, which returns when
+  it has finished; native OBoE busy-waits (`while(isPlaying())`). Only
+  OBoE's WASM build skipped the wait, and this port had copied that, so a
+  fireball's death cries, and a dual-wielder's two hits, all sounded at
+  once. A blocking sound now books its length on the animation timeline
+  (`livingSound`, `SoundPlayer.blockingMs`); a hit's sprite stays up
+  while its sound plays (`boom_space` draws, then plays); the missile and
+  volley sounds are the asynchronous kind, as both originals pass them
+  (`play_sound(-1 * n)`). This is the originals' behaviour, not a
+  departure from it.
+- **A lock that gives way updates the explored map** (both originals
+  leave it until the party moves, so the room behind stayed black while
+  its monsters showed). The step is 1997's own for a monster opening a
+  door (MONSTER.C:1137). A divergence from both, for the player.
+- **Buying a spell or a recipe plays 62** ("mmm"), as 1997
+  (DIALOGUTILS.C:256, :310, :325). OBoE plays 25/24 and 8.
+- **The automap's road is the road's texture** (fields.png's hub), not
+  OBoE's stub from trim.png, a one-bit sheet whose stub pixels are white —
+  every road on OBoE's map is a white box. 1997's roads are terrains with
+  map pictures of their own and have no overlay.
+- **E3's unfound secret doors are wall to monsters.** BoE's
+  `monst_check_special_terrain` opens any "change when stepped on" square,
+  and E3's secret doors convert as that; in E3 only the party's move and
+  search code opens one (`10c0:0c97`, `10c0:4409`). Under `secret-doors`.
+  Whether a *found* one stops them is E3-CHECK-IN-ORIGINAL #31.
+- **E3's town creatures keep off E3's own list of squares** (the table in
+  `monst_check_special_terrain`, `1090:3595`: the walk-through cave walls,
+  the rune floors, portals, special-encounter squares, lava), where the
+  converter had used E3's blockage 2, a list E3 reads only for the party
+  and the outdoor groups. A conversion fix: E3's rule, not a divergence.
+- **M and P's stored spells are saved** (`REPEATCAST` on the party page,
+  `LASTCAST` on each PC's). Both originals keep them in memory only, so a
+  load in the same sitting keeps them and a relaunch drops them; here a
+  load usually reloads the page.
+- **Port-only conveniences:** Alt+W is the long wait (E3's Ctrl+W, which a
+  tab can't have; `w` already was); a prompt's buttons answer to 1, 2, 3…
+  and to their first letter, underlined (`dialogs/autoKeys.ts`); and
+  Preferences › Auto target can start the aiming cursor on the caster
+  instead of the nearest enemy.
+- **The item scrollbar works during a shop's service** (identify, sell,
+  enchant): `put_item_screen` always offsets by `item_sbar` and never hides
+  it for a service. The port had it off. A fix, not a divergence.
 
 ## Agreements worth recording
 

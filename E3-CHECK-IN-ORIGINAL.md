@@ -433,6 +433,37 @@ Still open: the other nine squares.
   towns have been visited — so if it doesn't, something else is at work.
   (A camp met outdoors would be a once-only encounter, not a town.)
 
+### 30. What does an archer's arrow sound like when it hits? (2026-10-06)
+
+- **Where:** anywhere with Archers — the Bandit Hideout (town 45) has
+  eleven.
+- **Do:** stand back and let them shoot; listen to a shot that *hits*,
+  and to one that hits a monster beside the party.
+- **Why:** reported in play-testing: the hit "plays the punch sound like a
+  broadsword". E3's monster shot (`1018:76ca`) damages with 0x514 = 1300,
+  sound slot 13, and its `boom_space` table at EXE 0x145a2 is 1997's
+  (`{97,69,…,89,98}`), so slot 13 is file 98. In the port, an Archer's
+  hit plays 98 (checked in the browser), its twang 12 before it; a melee
+  hit from a sword plays 70, a punch 97.
+- **Question:** in the original, is the hit 98 (the same as the party's
+  own arrows hitting)? If it is something else, which?
+
+### 31. Do monsters walk through a secret door the party has found? (2026-10-06)
+
+- **Where:** any secret door the party has opened (Colchis's, at (36,39)).
+- **Do:** open it, step back, and let a monster come for you.
+- **Why:** reported in play-testing: "enemies move through secret doors".
+  An unfound one (101, 118, 133) is now wall to them, as E3 has it — only
+  the party's move and search code (`10c0:0c97`, `10c0:4409`) ever opens
+  one. A found one (102, 119, 134) is `terrain_blocked` 1 at `DS:1c7e`
+  (sight blocked, movement not), which is the only test E3 has, so a
+  monster can walk through it in the port.
+- **The step code (2026-10-06):** a creature's step refuses the squares on
+  the table at `1090:3595`, and the found doors aren't on it — so by the
+  code, yes, it comes through.
+- **Question:** in the original, does a monster come through a door the
+  party has found?
+
 ## Waiting on a ruling (already written up elsewhere)
 
 - **DIVERGENCES.md #30 and #31**, marked "open for the user".

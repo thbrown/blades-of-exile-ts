@@ -31,6 +31,12 @@ export interface Preferences {
   /** `GameSpeed`: 0 fast, 1 medium, 2 slow, 3 quite slow. */
   gameSpeed: number;
   targetLock: boolean;
+  /**
+   * `AutoTarget`, a blades-of-exile-ts preference: a spell or a shot starts
+   * its keyboard cursor on the nearest enemy (on, the default) or on the
+   * caster, so the view stays put (`game/aimCursor.ts`).
+   */
+  autoTarget: boolean;
   showInstantHelp: boolean;
   /** Party settings rather than preferences once a game is running. */
   easyMode: boolean;
@@ -153,6 +159,7 @@ export async function preferencesDialog(
   const on = (b: boolean) => (b ? 'red' : 'off');
   dlg.setLed(SPEED_LEDS[prefs.gameSpeed] ?? 'med', 'red');
   dlg.setLed('target-lock', on(prefs.targetLock));
+  dlg.setLed('auto-target', on(prefs.autoTarget));
   dlg.setLed('nosound', on(!prefs.playSounds));
   dlg.setLed('easier', on(prefs.easyMode));
   dlg.setLed('lesswm', on(prefs.lessWm));
@@ -174,6 +181,7 @@ export async function preferencesDialog(
     playSounds: !lit('nosound'),
     gameSpeed: Math.max(0, SPEED_LEDS.findIndex(lit)),
     targetLock: lit('target-lock'),
+    autoTarget: lit('auto-target'),
     showInstantHelp: !lit('nohelp'),
     easyMode: lit('easier'),
     lessWm: lit('lesswm'),

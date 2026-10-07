@@ -131,7 +131,7 @@ export function printResult(line: string): void {
  * them from just as deep. Same arrangement as `printResult`: the game installs
  * a sink, and with none installed the effects are simply silent.
  */
-let soundSink: ((which: number) => void) | null = null;
+let soundSink: ((which: number, at?: number) => number | void) | null = null;
 
 /**
  * `give_help` (strdlog.cpp:182) — the instant-help box a status effect raises
@@ -166,12 +166,26 @@ export function giveHelp(help1: number, help2 = 0, forced = false): void {
   helpHook?.(help1, help2, forced);
 }
 
-export function setLivingSound(fn: ((which: number) => void) | null): void {
+export function setLivingSound(fn: ((which: number, at?: number) => number | void) | null): void {
   soundSink = fn;
 }
 
-export function livingSound(which: number): void {
-  soundSink?.(which);
+/**
+ * `play_sound(which)`. **A positive number blocks** in both originals unless
+ * the sound is one of `always_async`'s: 1997's `SndPlay(…, FALSE)` and OBoE's
+ * `while(chan[channel].isPlaying());` hold the game until it has finished, so
+ * a fireball's death cries, or a dual-wielder's two blows, are heard one after
+ * another. A negative number is the asynchronous form. The host books a
+ * blocking sound's length on the animation timeline (`anim.ts`), which is how
+ * this port blocks; OBoE's WASM build skipped the wait.
+ *
+ * With `at`, the sound is heard at that moment of the timeline and nothing is
+ * booked — the caller folds the returned length into a slot of its own
+ * (`boomSpace`, whose sprite stays up while its sound plays). Returns how long
+ * the sound blocks for, in ms: 0 when it doesn't, or with no host.
+ */
+export function livingSound(which: number, at?: number): number {
+  return soundSink?.(which, at) ?? 0;
 }
 
 /**

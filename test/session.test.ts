@@ -1163,7 +1163,8 @@ describe('the town-entry sound', () => {
       if (list === undefined) delete scen.featureFlags['dungeon-sound'];
       else scen.featureFlags['dungeon-sound'] = list;
       try {
-        session.startTownMode(scen.startTown, FORCED_ENTRY, true);
+        // Walked into from outdoors (entry 0): a forced entry is silent.
+        session.startTownMode(scen.startTown, 0, true);
       } finally {
         if (saved === undefined) delete scen.featureFlags['dungeon-sound'];
         else scen.featureFlags['dungeon-sound'] = saved;
@@ -1177,7 +1178,21 @@ describe('the town-entry sound', () => {
     expect(heard(`${scen.startTown + 1}-99`)).toContain(16);
   });
 
-  it('is left out of a new game under start-sound = none, as Exile III does', () => {
+  it('is left out of a forced entry: stairs, a forced town, a new game', () => {
+    // `play_town_sound` is set only when `town_force >= 200` — 1997's
+    // TOWN.C:141, OBoE's boe.town.cpp:85 and Exile III's `10d8:014c` alike.
+    // `change_level` forces the town, so a staircase is silent (reported in
+    // Exile III's Bandit Hideout, where it played the cave's sound).
+    const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
+    const session = new GameSession(univ);
+    const played: number[] = [];
+    session.sound = { play: (n: number) => { played.push(n); } } as unknown as GameSession['sound'];
+    session.forceTownEntry(scen.startTown, scen.townStart);
+    session.startTownMode(scen.startTown, FORCED_ENTRY, true);
+    expect(played.filter((n) => n === 16 || n === 95)).toEqual([]);
+  });
+
+  it('is left out of a new game, in BoE as under start-sound = none', () => {
     const heard = (flag: string | undefined): number[] => {
       const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
       const session = new GameSession(univ);
@@ -1194,7 +1209,9 @@ describe('the town-entry sound', () => {
       }
       return played;
     };
-    expect(heard(undefined)).toContain(16);
+    // `put_party_in_scen` forces the start town, so OBoE is silent too;
+    // the flag predates finding that.
+    expect(heard(undefined)).not.toContain(16);
     expect(heard('none')).not.toContain(16);
   });
 });

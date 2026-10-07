@@ -67,7 +67,9 @@ async function capture(
   const missiles: Missile[] = [];
   const sounds: number[] = [];
   setMissileSink((m) => missiles.push(m));
-  setLivingSound((n) => sounds.push(n));
+  // `do_missile_anim` plays its sound asynchronously (negative); the tests
+  // below ask which file.
+  setLivingSound((n) => { sounds.push(Math.abs(n)); });
   try {
     await fn();
   } finally {

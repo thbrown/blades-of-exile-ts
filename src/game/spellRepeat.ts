@@ -18,8 +18,8 @@
  *     remembers their own, because in combat the active PC casts and there is
  *     no caster to choose.
  *
- * The C++ keeps the first set as globals; here they hang off the session, which
- * has the same lifetime and cannot leak between two games in one process.
+ * The C++ keeps the first set as globals; here they are the party's
+ * (`Party.mageStore`), and both sets are saved, so a load brings them back.
  */
 
 import { SPELLS, Spell, SpellSelect } from '../data/spell';
@@ -39,9 +39,6 @@ export interface SpellStore {
   target: number;
 }
 
-export function emptySpellStore(): SpellStore {
-  return { spell: Spell.NONE, caster: NO_TARGET, target: NO_TARGET };
-}
 
 /** Which of the two stores a skill uses. */
 export function storeFor(session: GameSession, type: Skill): SpellStore {

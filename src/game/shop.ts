@@ -271,7 +271,9 @@ export function handleSale(
         say('Not enough gold.');
         return 'refused';
       }
-      sound?.play(8);
+      // 62, the "mmm" of food going down: 1997's `play_sound(62)`
+      // (DIALOGUTILS.C:256). OBoE plays 8. DIVERGENCES.md §51.
+      sound?.play(62);
       say('You buy an alchemical recipe.');
       univ.party.alchemy[item.itemLevel] = true;
       break;
@@ -292,7 +294,9 @@ export function handleSale(
         say('Not enough gold.');
         return 'refused';
       }
-      sound?.play(isMage ? 25 : 24);
+      // 62 for either book, as 1997 (DIALOGUTILS.C:310, :325); OBoE plays
+      // the casting sound of the book (25, 24). DIVERGENCES.md §51.
+      sound?.play(62);
       say('You buy a spell.');
       book[item.itemLevel] = true;
       break;

@@ -110,7 +110,8 @@ describe('do_explosion_anim (a volley)', () => {
       boomSpace({ x: 2, y: 2 }, 0, 9, 5, rng());
       runBoomAnim(rng());
     });
-    expect(sounds).toEqual([5]);
+    // Negative: `play_sound(-1 * snd_num)`, the asynchronous kind.
+    expect(sounds).toEqual([-5]);
     expect(booms.length).toBe(2);
     expect(booms.every((b) => b.animated)).toBe(true);
     expect(booms.every((b) => b.sound === 0)).toBe(true);

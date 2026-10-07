@@ -23,6 +23,7 @@ import { buildOpcodeTable } from '../src/fileio/specialParse';
 import { emitScenario } from '../tools/e3convert/emitNode';
 import { findE3Dir } from '../tools/e3convert/install';
 import { neAutoDataSegment, readNeSegment } from '../tools/e3convert/ne';
+import { readE3MonsterRefusals } from '../tools/e3convert/tables';
 import { GameRng } from '../src/core/rng';
 import { Town } from '../src/data/town';
 import { Universe } from '../src/universe/universe';
@@ -399,6 +400,22 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     town.record.terrain[door.x]![door.y] = 107;
     expect(await session.handleUseSpace(door)).toBe(true);
     expect(town.record.terrain[door.x]![door.y]).toBe(103);
+  });
+
+  it("keeps a town creature off E3's own list of squares, not off blockage 2", () => {
+    // `monst_check_special_terrain`'s table (`1090:3595`): the walk-through
+    // cave walls and the rune floors refuse a creature's step, and floor 152
+    // and the levers (blockage 2) don't. Reported: Rentar-Ihrno crossed a
+    // rune floor to fight the Spiny Worm.
+    const exe = new Uint8Array(readFileSync(join(dir as string, 'EXILE3.EXE')));
+    expect([...readE3MonsterRefusals(exe)].sort((a, b) => a - b))
+      // 75, the burning lava, and the secret walls are on it too, but carry
+      // specials of their own (`dmg`, `secret-doors`).
+      .toEqual([7, 10, 13, 16, 75, 76, 78, 86, 101, 118, 133, 151, 153, 187, 200, 237, 238, 239, 240, 241, 242]);
+    for (const t of [7, 151, 153, 200]) expect(scen.terTypes[t]!.special).toBe(TerSpec.BLOCKED_TO_MONSTERS);
+    for (const t of [152, 243]) expect(scen.terTypes[t]!.special).not.toBe(TerSpec.BLOCKED_TO_MONSTERS);
+    // Blockage 2 still keeps the party from being dealt onto those squares.
+    expect(scen.terTypes[152]!.blockage).toBe(TerObstruct.BLOCK_MONSTERS);
   });
 
   it("builds outdoor arenas from E3's own tables", () => {

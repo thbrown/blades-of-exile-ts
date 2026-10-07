@@ -29,6 +29,8 @@ export interface E3TerrainType {
   boat: boolean;
   /** What happens when the party moves into it; null for nothing. */
   special: E3TerrainSpecial | null;
+  /** A town creature won't step onto it (`readE3MonsterRefusals`). */
+  monstRefuses: boolean;
   /**
    * The kind of outdoor combat arena fought on it (`DS:3850`, int16s, read by
    * `FUN_10d8_342b`): 0–13, an index into `src/game/e3Arena.ts`'s tables.
@@ -182,6 +184,36 @@ export function readE3HiddenEntrances(exe: Uint8Array): Map<number, number> {
   return new Map([...ds.subarray(0x3c0a, 0x3c0a + 12)].map((t, i) => [217 + i, t]));
 }
 
+/**
+ * The terrains a town creature won't step onto: the jump table at the end of
+ * E3's `monst_check_special_terrain` (`FUN_1090_2e2b`, 26 ids at `1090:3595`
+ * and their handlers 52 bytes on), keeping those whose handler refuses the
+ * step (`jmp 0x3525`, `mov al, 0`): the walk-through cave walls 7/10/13/16,
+ * the lava (75, 76; a creature with bit 8 of its flags at +0x146f may
+ * cross it — 75 converts as damaging ground instead), the portal, the floors 151/153/187/200, the pit border and
+ * the special-encounter squares. The secret walls refuse too, but they have
+ * a special of their own (`secret-doors`). The closed doors open, and the bed
+ * refuses only some creatures (`FUN_1090_2960`); neither is kept.
+ *
+ * E3's blockage 2 is a different list (lava, portals, town and cave entrances,
+ * levers, floor 152): the party's placement, its horses and boats, and the
+ * outdoor groups (`1080:1440`, `1080:14a4`) read it; a town creature's step
+ * never does (`FUN_1080_0fee` asks only blockage 3 and up).
+ */
+export function readE3MonsterRefusals(exe: Uint8Array): Set<number> {
+  const code = readNeSegment(exe, (0x1090 - 0x1000) / 8 + 1);
+  const v = new DataView(code.buffer, code.byteOffset, code.byteLength);
+  // The handlers that are a bare `jmp 0x3525`, and lava's, which refuses
+  // unless the creature's fire bit is set.
+  const refusing = new Set([0x3439, 0x34c9, 0x34cd, 0x34d1, 0x34f1]);
+  const out = new Set<number>();
+  for (let i = 0; i < 26; i++) {
+    const t = v.getUint16(0x3595 + 2 * i, true);
+    if (refusing.has(v.getUint16(0x3595 + 52 + 2 * i, true))) out.add(t);
+  }
+  return out;
+}
+
 /** `DS:3850`: each terrain's arena kind, the first of `FUN_10d8_342b`'s tables. */
 export const E3_ARENA_KINDS = 0x3850;
 
@@ -193,12 +225,14 @@ export function readE3Terrain(exe: Uint8Array, strings: Map<number, string>): E3
   const ds = readNeSegment(exe, neAutoDataSegment(exe));
   const blocked = ds.subarray(0x1c7e, 0x1c7e + E3_TERRAIN_COUNT);
   const arenas = new DataView(ds.buffer, ds.byteOffset + E3_ARENA_KINDS, E3_TERRAIN_COUNT * 2);
+  const refusals = readE3MonsterRefusals(exe);
   return Array.from({ length: E3_TERRAIN_COUNT }, (_, t) => ({
     name: strings.get(301 + t) ?? `Terrain ${t}`,
     pic: pics.getInt16(t * 2, true),
     blockage: blocked[t] ?? 0,
     boat: boatPassable(t),
     arena: arenas.getInt16(t * 2, true),
+    monstRefuses: refusals.has(t),
     special: SIGN_TERRAINS.has(t) ? { kind: 'sign' }
       : t >= 247 && t <= 250 ? { kind: 'belt', dir: (t - 247) * 2 } : doorSpecial(t),
   }));

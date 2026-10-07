@@ -18,7 +18,7 @@ import { PartyStatus } from '../universe/skills';
 import { GameMode } from '../game/modes';
 import { GameSession } from '../game/session';
 import { Colours } from './colours';
-import { UiRect } from './layout';
+import { ROAD_SRC, UiRect } from './layout';
 import { customGraphic } from './customPics';
 import { SheetStore } from './sheets';
 import { terrainGraphic } from './terrainPics';
@@ -54,8 +54,14 @@ const MAP_AREA: UiRect = { top: 29, left: 47, bottom: 269, right: 287 };
 /** Each map tile is 6px square, and 40 of them fit the 240px area. */
 const MAP_TILE = 6;
 const MAP_TILES = 40;
-/** The road stub, inset by one pixel: trim.png {8,112,12,116}. */
-const ROAD_SRC: UiRect = { top: 8, left: 112, bottom: 12, right: 116 };
+/**
+ * The road stub, inset by one pixel. OBoE takes trim.png {8,112,12,116},
+ * but trim.png is a one-bit mask sheet and those sixteen pixels are white, so
+ * every road on OBoE's map is a white box (reported in Exile III). This draws
+ * the road's own texture instead: the hub `place_road` lays on the terrain
+ * view, fields.png's `ROAD_SRC.centre`. DIVERGENCES.md §51.
+ */
+const ROAD_STUB_SRC: UiRect = ROAD_SRC.centre;
 /** dlogpics.png is 36x36 cells, four to a row (cPict::drawPresetDlog). */
 const DLOG_PIC = 36;
 /** The map icon the original puts in the corner of the window. */
@@ -389,10 +395,11 @@ export function drawMapTile(
 export function drawRoadStub(
   ctx: CanvasRenderingContext2D, store: SheetStore, dx: number, dy: number, size: number,
 ): boolean {
-  const trim = store.get('trim');
-  if (!trim) return false;
+  const fields = store.get('fields');
+  if (!fields) return false;
   const inset = size / MAP_TILE;
-  ctx.drawImage(trim, ROAD_SRC.left, ROAD_SRC.top, 4, 4,
+  ctx.drawImage(fields, ROAD_STUB_SRC.left, ROAD_STUB_SRC.top,
+    ROAD_STUB_SRC.right - ROAD_STUB_SRC.left, ROAD_STUB_SRC.bottom - ROAD_STUB_SRC.top,
     dx + inset, dy + inset, size - 2 * inset, size - 2 * inset);
   return true;
 }

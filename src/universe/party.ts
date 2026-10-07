@@ -11,6 +11,7 @@
  */
 
 import type { E3JobState } from '../game/e3Jobs';
+import type { SpellStore } from '../game/spellRepeat';
 import { Direction, Location, loc } from '../core/location';
 import { GameRng } from '../core/rng';
 import { hasFeatureFlag } from '../game/featureFlags';
@@ -283,6 +284,16 @@ export class Party {
    * scenario that has them; null until first needed, and in any other.
    */
   e3Jobs: E3JobState | null = null;
+  /**
+   * What **M** and **P** recast out of combat: `store_mage`/`store_priest` and
+   * their caster and target (`game/spellRepeat.ts`). Globals in both originals,
+   * so they outlive a load in the same sitting but not a relaunch; here they
+   * are the party's and **saved** (blades-of-exile-ts, `REPEATCAST`), because
+   * loading a game reloads the page more often than not. No dice.
+   * Spell -1 is none; 6 is nobody.
+   */
+  mageStore: SpellStore = { spell: -1, caster: 6, target: 6 };
+  priestStore: SpellStore = { spell: -1, caster: 6, target: 6 };
   /**
    * `cParty::party_event_timers` — one-shot countdowns a special node started.
    * Unlike town and scenario timers these are *not* periodic: they fire once

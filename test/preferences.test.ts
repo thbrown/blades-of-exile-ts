@@ -36,7 +36,7 @@ function click(dlg: ModalScreen, name: string): string | null {
 }
 
 const base: Preferences = {
-  playSounds: true, gameSpeed: 1, targetLock: true, showInstantHelp: true,
+  playSounds: true, gameSpeed: 1, targetLock: true, autoTarget: true, showInstantHelp: true,
   easyMode: false, lessWm: false,
   displayMode: DisplayMode.CENTRE, uiScale: 2, fixBugs: false,
 };

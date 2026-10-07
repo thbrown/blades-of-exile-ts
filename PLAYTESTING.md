@@ -24,7 +24,7 @@ http://localhost:5199/?scenario=busywork
 
 ### Combat
 - **C** or **SWORD button** — start or end a fight
-- **Space** or **W** — wait / stand ready in combat
+- **Space** — wait / stand ready in combat; **W** or **Alt+W** — the long wait (town)
 - **D** or **SHIELD button** — parry (defensive stance)
 - **S** — shoot (in combat: pick a target; outside: aim a missile weapon)
 - **E** — end combat
@@ -65,6 +65,7 @@ http://localhost:5199/?scenario=busywork
 - **M** — cast a mage spell (opens spell picker)
 - **P** — cast a priest spell (opens spell picker)
 - **Escape** — cancel targeting / close dialogs
+- In a prompt: **1**, **2**, **3**… pick its buttons in order, and an underlined letter picks that button
 
 ### Shops & Conversation
 - **A–H** — buy items in a shop (A = first item, B = second, etc.)

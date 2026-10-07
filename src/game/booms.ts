@@ -24,7 +24,7 @@
 import { Location } from '../core/location';
 import { GameRng } from '../core/rng';
 import { livingSound } from '../universe/living';
-import { animBook, paced } from './anim';
+import { animAt, animBook, paced } from './anim';
 
 /**
  * sound_lookup (boom_space) — sound type to sound file. A *negative* sound
@@ -206,7 +206,9 @@ export function runBoomAnim(rng?: GameRng, onFrame?: () => void, snd = -1): void
   const curBoomType = toPlay[toPlay.length - 1]!.type;
   const file = snd !== -1 ? snd
     : curBoomType < 6 ? (BOOM_TYPE_SOUND[curBoomType] ?? 1) : 1;
-  if (file > 0) livingSound(file);
+  // `play_sound(-1 * snd_num)` (boe.newgraph.cpp:611): the volley's noise is
+  // the asynchronous kind, so it doesn't hold the blast up.
+  if (file > 0) livingSound(-file);
   for (const boom of toPlay) {
     if (boom.type < 0 || boom.type > 6) continue;
     sink?.({ ...boom, starts, expires: starts + boomMs() });
@@ -280,16 +282,25 @@ export function boomSpace(
   // is actually heard — see the sink in main.ts. The C++ gets the timing for
   // free by sleeping through the missile's flight, so `boom_space` isn't even
   // reached until the thing has landed.
-  if (file > 0) livingSound(file);
-  if (type < 0 || type > 6) return;
+  //
+  // **It blocks** (`play_sound(sound_to_play)`, boe.graphics.cpp:1584, after
+  // the sprite is drawn): the sprite stays up while it plays, and the next
+  // blow — a dual-wielder's second weapon — waits for it. So the sound is
+  // heard at the start of the slot and its length is added to it.
+  const at = animAt();
+  const blocks = file > 0 ? livingSound(file, at) : 0;
+  if (type < 0 || type > 6) {
+    if (blocks > 0) animBook(blocks);
+    return;
+  }
   screen?.redraw(where);
   // A hit takes a slot of its own, because `boom_space` sleeps for its whole
   // length: a second blow in the same turn follows the first rather than
   // landing on top of it, and anything waiting on the timeline — the rest of
   // the monster's turn, the party-death announcement — waits for the blast.
-  const starts = animBook(boomMs());
+  const starts = animBook(blocks + boomMs());
   sink?.({
-    where: { ...where }, type, damage, sound: file, starts, expires: starts + boomMs(),
+    where: { ...where }, type, damage, sound: file, starts, expires: starts + blocks + boomMs(),
     animated: false, offset: 0, xAdj, yAdj, placeType,
   });
 }

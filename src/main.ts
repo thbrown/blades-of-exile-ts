@@ -5,7 +5,7 @@
 
 import { setBugFixes } from './game/bugFixes';
 import { registerServiceWorker } from './platform/pwa';
-import { animAt, animSchedule, combatPace, setCombatPace } from './game/anim';
+import { animAt, animBook, animSchedule, combatPace, setCombatPace } from './game/anim';
 import { useItem } from './game/itemUse';
 import { dropItemAt, handleDropItem, handleGiveItem } from './game/giveDrop';
 import {
@@ -771,8 +771,13 @@ async function main(): Promise<void> {
    * sound until the queue reaches it. `animAt()` is the wall clock whenever
    * nothing is animating, so out of combat this changes nothing.
    */
-  const playSound = (which: number): void => {
-    animSchedule(() => sound.play(which), animAt());
+  // A blocking sound (`livingSound`) books its own length, so whatever the
+  // game does next — the next blow's sound, the next death cry — waits for it.
+  const playSound = (which: number, at?: number): number => {
+    const blocks = sound.blockingMs(which);
+    const when = at ?? (blocks > 0 ? animBook(blocks) : animAt());
+    animSchedule(() => sound.play(which), when);
+    return blocks;
   };
   setLivingSound(playSound);
   setDialogClickSound((n) => sound.play(n));
@@ -838,7 +843,9 @@ async function main(): Promise<void> {
     if (aim.token === aimToken && aim.picks === aimPicks && screen.aimAt !== null) return;
     aimToken = aim.token;
     aimPicks = aim.picks;
-    screen.aimAt = autoAim(session, aim);
+    // Preferences › Auto target: off, the cursor starts on the caster, so
+    // the view doesn't jump to an enemy; the arrows move it from there.
+    screen.aimAt = getBoolPref('AutoTarget', true) ? autoAim(session, aim) : { ...aim.from };
   };
   /**
    * View → Hide Toolbar: the compact screen (`COMPACT_HEIGHT`), except while
@@ -954,6 +961,7 @@ async function main(): Promise<void> {
       playSounds: getBoolPref('PlaySounds', true),
       gameSpeed: getIntPref('GameSpeed', 1),
       targetLock: getBoolPref('TargetLock', true),
+      autoTarget: getBoolPref('AutoTarget', true),
       showInstantHelp: getBoolPref('ShowInstantHelp', true),
       easyMode: univ.party.easyMode,
       lessWm: univ.party.lessWm,
@@ -971,6 +979,7 @@ async function main(): Promise<void> {
       setPref('PlaySounds', next.playSounds);
       setPref('GameSpeed', next.gameSpeed);
       setPref('TargetLock', next.targetLock);
+      setPref('AutoTarget', next.autoTarget);
       setPref('ShowInstantHelp', next.showInstantHelp);
       setPref('FixBugs', next.fixBugs);
       // A game is running, so these two are the party's, not preferences
@@ -2442,7 +2451,7 @@ async function main(): Promise<void> {
       return;
     }
     if (session.shop) return;
-    if (!session.itemShop && screen.itemSbar.handleClick(x, y)) {
+    if (screen.itemSbar.handleClick(x, y)) {
       sound.play(Snd.BUTTON);
       screen.itemWindow.scroll = screen.itemSbar.getPosition();
       redraw();
@@ -3073,7 +3082,7 @@ async function main(): Promise<void> {
   const startScrollThumb = (x: number, y: number): boolean => {
     const started = session.shop
       ? screen.shopScreen.startThumbDrag(session.shop, x, y)
-      : !session.itemShop && screen.itemSbar.startThumbDrag(x, y);
+      : screen.itemSbar.startThumbDrag(x, y);
     if (started) redraw();
     return started;
   };
@@ -3162,7 +3171,7 @@ async function main(): Promise<void> {
       }
       const inven = WIN_RECTS.inven;
       const overInven = x >= inven.left && y >= inven.top && x < ITEM_SBAR_RECT.right && y < ITEM_SBAR_RECT.bottom;
-      if (session.itemShop || !overInven || screen.itemSbar.getMaximum() === 0) return false;
+      if (!overInven || screen.itemSbar.getMaximum() === 0) return false;
       if (notches !== 0) {
         screen.itemSbar.handleWheel(-notches);
         screen.itemWindow.scroll = screen.itemSbar.getPosition();
@@ -3222,7 +3231,7 @@ async function main(): Promise<void> {
       // The item scrollbar is its own control on the main window, so it is
       // asked before the panel underneath it.
       if (startScrollThumb(x, y)) return;
-      if (!session.itemShop && screen.itemSbar.handleClick(x, y)) {
+      if (screen.itemSbar.handleClick(x, y)) {
         sound.play(Snd.BUTTON);
         screen.itemWindow.scroll = screen.itemSbar.getPosition();
         redraw();
@@ -3352,6 +3361,14 @@ async function main(): Promise<void> {
       redraw();
     },
     onKey: async (key, event) => {
+      // **Alt+W is the long wait.** Exile III's menus give it Ctrl+W, which a
+      // browser tab can't have: Chrome closes the tab before the page hears
+      // it. Plain `w` is the long wait too, as 1997's keyboard has it. By
+      // `code`, since Alt+W types '∑' on a Mac.
+      if (event.altKey && !event.ctrlKey && !event.metaKey && event.code === 'KeyW') {
+        event.preventDefault();
+        key = 'w';
+      }
       if (dialogs.handleKey(key)) {
         // Tab moves between a dialog's fields, not the browser's focus, and
         // Backspace/Space mustn't scroll or navigate behind a text field.
