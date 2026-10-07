@@ -16793,3 +16793,12 @@ failed on the known ENCOUNTER flake and on the hit-sound check, below).
   re-checked against `damage_pc` (magic 2, fire 16, undead 48, demon 50,
   cold 66, resistance 127 on fire/poison/magic/cold) and the port's are
   E3's. The Iceshield is now E3-SUSPECTED-BUGS #23 for the fixing pass.
+- **The Skill Ring bug wasn't on the fix-bugs list.** It was kept and
+  commented but never logged, so "Fix known bugs" left it alone. Now: #24
+  (E3's Skill Rings, Ogrish and Giant Gauntlets: to-hit added to a
+  lower-is-better roll, `e3AttackAdj`), bug 100 (the engine's own Skill and
+  Giant Strength items, the same slip in 1997 and OBoE; DIVERGENCES §52),
+  and #23 (the Iceshield wards off cold, `e3DamageResist`, by its E3 record
+  248). All three play fixed under the preference; tests in
+  `bugFixes.test.ts`.
+

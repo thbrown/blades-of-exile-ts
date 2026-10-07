@@ -49,6 +49,10 @@ export const KNOWN_BUGS: Readonly<Record<number, KnownBug>> = {
   18: { title: "The Ritual of Sanctification on the spiders' altar can be repeated", ruling: 'undecided' },
   19: { title: 'A moving wall looks for a creature on its own square, not the one ahead', ruling: 'undecided' },
   22: { title: "The intro movie's dying creatures never roll their death cry", ruling: 'undecided' },
+  23: { title: 'The Iceshield wards off fire, not cold', ruling: 'undecided' },
+  24: { title: "Skill Rings and Exile III's gauntlets make a blow harder to land", ruling: 'undecided' },
+  // The Blades of Exile engine's own, in 1997's and OBoE's `pc_attack` alike.
+  100: { title: 'Skill and Giant Strength items make a blow harder to land', ruling: 'undecided' },
 };
 
 let enabled = false;

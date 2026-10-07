@@ -1191,6 +1191,17 @@ unchanged.
   enchant): `put_item_screen` always offsets by `item_sbar` and never hides
   it for a service. The port had it off. A fix, not a divergence.
 
+### 52. The Skill and Giant Strength items' to-hit (2026-10-06)
+
+**DECIDED: kept, and fixed under "Fix known bugs" (bug 100).** Both 1997's
+`pc_attack` (COMBAT.C:567) and OBoE's (boe.combat.cpp:389) *add* a Skill
+item's `5 * (strength / 2 + 1)` and a Giant Strength item's `strength * 2`
+to `hit_adj`, which is added to the roll, and a lower roll hits. So the
+items make a blow harder to land, while the character sheet counts them as
+a bonus. Exile III's code has the same slip for its Skill Rings and
+gauntlets (E3-SUSPECTED-BUGS #24). Under the preference the bonus comes off
+the roll; replays never use it. The damage half was always right.
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

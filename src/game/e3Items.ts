@@ -13,6 +13,7 @@
 import { ItemType, type Item } from '../data/item';
 import { DamageType } from '../data/monster';
 import { e3AbilEquip } from '../universe/inventory';
+import { bugFixed } from './bugFixes';
 import type { Player } from '../universe/player';
 import type { Living } from '../universe/living';
 import { Creature } from '../universe/creature';
@@ -76,10 +77,16 @@ export { e3AbilEquip };
  * gloves, in place of BoE's SKILL and GIANT_STRENGTH. `hit` is added to the
  * roll, where lower hits — so, as in 1997's `pc_attack`, a Skill Ring makes a
  * blow *harder* to land while the character sheet counts it as a bonus. E3
- * has the same slip; kept. 1997's own character sheet still tests these three
- * E3 numbers (INFODLGS.CPP:833–845), with these same sums.
+ * has the same slip; kept, and played the other way round under "Fix known
+ * bugs" (E3-SUSPECTED-BUGS #24). 1997's own character sheet still tests these
+ * three E3 numbers (INFODLGS.CPP:833–845), with these same sums.
  */
 export function e3AttackAdj(pc: Player): { hit: number; dam: number } {
+  const sums = e3AttackSums(pc);
+  return bugFixed(24) ? { hit: -sums.hit, dam: sums.dam } : sums;
+}
+
+function e3AttackSums(pc: Player): { hit: number; dam: number } {
   let hit = 0;
   let dam = 0;
   const skill = e3AbilEquip(pc, E3Abil.SKILL);
@@ -201,6 +208,14 @@ export function e3CombatRoundItems(univ: Universe, pc: Player): void {
  * are left to `Player.poison` and to nothing, respectively (no item carries
  * code 1, and nothing in the port sets the second).
  */
+/** E3's item record for the Iceshield (`<e3-item>`). */
+const E3_ICESHIELD = 248;
+
+/** Every equipped item with E3 ability `code`. */
+function wornWithCode(pc: Player, code: number): Item[] {
+  return pc.items.filter((item, i) => pc.equip[i] && item.variety !== ItemType.NO_ITEM && item.e3Ability === code);
+}
+
 export function e3DamageResist(pc: Player, damType: DamageType, howMuch: number): number {
   const halve = (code: number, ...types: DamageType[]) => {
     if (types.includes(damType) && e3AbilEquip(pc, code)) howMuch = Math.trunc(howMuch / 2);
@@ -208,8 +223,13 @@ export function e3DamageResist(pc: Player, damType: DamageType, howMuch: number)
   halve(E3Abil.UNDEAD_WARD, DamageType.UNDEAD);
   halve(E3Abil.DEMONSLAYER, DamageType.DEMON);
   halve(E3Abil.MAGIC_RES, DamageType.MAGIC);
-  halve(E3Abil.FIRE_RES, DamageType.FIRE);
-  halve(E3Abil.COLD_RES, DamageType.COLD);
+  // The Iceshield (E3 record 248) carries the fire ward's code; under "Fix
+  // known bugs" it wards off cold instead (E3-SUSPECTED-BUGS #23).
+  const iceshield = (item: Item | null) => item !== null && item.e3Item === E3_ICESHIELD && bugFixed(23);
+  const fireWard = wornWithCode(pc, E3Abil.FIRE_RES).some((item) => !iceshield(item));
+  const iceWard = wornWithCode(pc, E3Abil.FIRE_RES).some(iceshield);
+  if (damType === DamageType.FIRE && fireWard) howMuch = Math.trunc(howMuch / 2);
+  if (damType === DamageType.COLD && (iceWard || e3AbilEquip(pc, E3Abil.COLD_RES))) howMuch = Math.trunc(howMuch / 2);
   halve(E3Abil.RESISTANCE, DamageType.FIRE, DamageType.POISON, DamageType.MAGIC, DamageType.COLD);
   return howMuch;
 }

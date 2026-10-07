@@ -1329,8 +1329,9 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     for (const row of scen.outdoors) for (const o of row) scan(o.specials);
     // 11-13, 15-17 and 19 are fixed in the engine: the Airy Stone, E3's
     // nimble test, its disease roll, the returning stack, the balm, alchemy's
-    // slot, the moving walls' creature test and the intro movie's death cry.
-    const inEngine = new Set([11, 12, 13, 15, 16, 17, 19, 22]);
+    // slot, the moving walls' creature test, the intro movie's death cry, the
+    // Iceshield and the Skill Rings.
+    const inEngine = new Set([11, 12, 13, 15, 16, 17, 19, 22, 23, 24]);
     const wired = Object.entries(KNOWN_BUGS).filter(([n, b]) => Number(n) < 100 && !b.unwired && !inEngine.has(Number(n)));
     expect([...named].sort((a, b) => a - b)).toEqual(wired.map(([n]) => Number(n)));
   });

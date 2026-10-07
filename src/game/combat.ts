@@ -26,6 +26,7 @@ import { SpellPat } from '../data/pattern';
 import { placeSpellPattern } from './spellPatterns';
 import { onHitItemAbility } from './weaponAbilities';
 import { e3ActionPoints, e3AttackAdj, e3OnMeleeHit, e3SpecDam } from './e3Items';
+import { bugFixed } from './bugFixes';
 import { drawTerrain } from './textBar';
 import type { GameSession } from './session';
 import type { Item } from '../data/item';
@@ -380,15 +381,20 @@ export async function pcAttack(
   }
 
   // Exile III's items go by E3's own sums (`e3AttackAdj`).
+  // **Both items make a blow harder to land**: a lower roll hits, and both
+  // 1997's `pc_attack` and OBoE's (boe.combat.cpp:389) *add* their bonus to
+  // it, while the character sheet counts it in the PC's favour. Kept; under
+  // "Fix known bugs" it helps (bug 100, `bugFixes.ts`). Off in every replay.
+  const helps = bugFixed(100) ? -1 : 1;
   const skillItem = hasAbilEquip(attacker, ItemAbil.SKILL, -1, true);
   if (skillItem) {
-    hitAdj += 5 * (Math.trunc(skillItem.item.abilStrength / 2) + 1);
+    hitAdj += helps * 5 * (Math.trunc(skillItem.item.abilStrength / 2) + 1);
     damAdj += Math.trunc(skillItem.item.abilStrength / 2);
   }
   const strengthItem = hasAbilEquip(attacker, ItemAbil.GIANT_STRENGTH, -1, true);
   if (strengthItem) {
     damAdj += strengthItem.item.abilStrength;
-    hitAdj += strengthItem.item.abilStrength * 2;
+    hitAdj += helps * strengthItem.item.abilStrength * 2;
   }
   const e3 = e3AttackAdj(attacker);
   hitAdj += e3.hit;

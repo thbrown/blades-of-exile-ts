@@ -16,6 +16,8 @@ import { KNOWN_BUGS, bugFixed, setBugFixes } from '../src/game/bugFixes';
 import { GameSession } from '../src/game/session';
 import { SpecCtx, SpecCtxType, SpecialHost } from '../src/game/specials/context';
 import { handleDisease } from '../src/game/increaseAge';
+import { E3Abil, e3AttackAdj, e3DamageResist } from '../src/game/e3Items';
+import { DamageType } from '../src/data/monster';
 import { curWeight, giveItem } from '../src/universe/inventory';
 import { Status, Trait } from '../src/universe/skills';
 import { PartyPreset } from '../src/universe/player';
@@ -132,5 +134,54 @@ describe("Exile III's disease end-roll (E3-SUSPECTED-BUGS.md #13)", () => {
     expect(shipped).toBeLessThan(150);
     expect(fixed).toBeGreaterThan(240);
     expect(fixed).toBeLessThan(360);
+  });
+});
+
+describe('the to-hit bonus of Skill items (#24, E3; #100, the engine)', () => {
+  /** A PC wearing one ring, every other slot bare. */
+  const wearing = (ring: Partial<ReturnType<typeof defaultItem>>) => {
+    const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
+    const pc = univ.party.pcs[0]!;
+    pc.equip.fill(false);
+    pc.items[0] = { ...defaultItem(), variety: ItemType.RING, ...ring };
+    pc.equip[0] = true;
+    return pc;
+  };
+
+  it("adds E3's Skill Ring to the roll as shipped (a penalty), and takes it off when fixed", () => {
+    const pc = wearing({ itemLevel: 2, e3Ability: E3Abil.SKILL });
+    // (level + 1) × 5 = 15 on a roll where lower hits; damage + level either way.
+    expect(e3AttackAdj(pc)).toEqual({ hit: 15, dam: 2 });
+    setBugFixes(true);
+    expect(e3AttackAdj(pc)).toEqual({ hit: -15, dam: 2 });
+  });
+
+  it("does the same for E3's Giant Gauntlets", () => {
+    const pc = wearing({ itemLevel: 1, e3Ability: E3Abil.GIANT_GAUNTLETS });
+    expect(e3AttackAdj(pc).hit).toBe(5);
+    setBugFixes(true);
+    expect(e3AttackAdj(pc).hit).toBe(-5);
+  });
+
+  it('is listed for the engine as bug 100', () => {
+    expect(KNOWN_BUGS[100]?.ruling).toBe('undecided');
+    setBugFixes(true);
+    expect(bugFixed(100)).toBe(true);
+  });
+});
+
+describe('the Iceshield (#23)', () => {
+  it('halves fire as shipped, and cold instead when fixed', () => {
+    const univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
+    const pc = univ.party.pcs[0]!;
+    pc.equip.fill(false);
+    pc.items[0] = { ...defaultItem(), variety: ItemType.SHIELD, e3Ability: E3Abil.FIRE_RES, e3Item: 248 };
+    pc.equip[0] = true;
+    expect([e3DamageResist(pc, DamageType.FIRE, 10), e3DamageResist(pc, DamageType.COLD, 10)]).toEqual([5, 10]);
+    setBugFixes(true);
+    expect([e3DamageResist(pc, DamageType.FIRE, 10), e3DamageResist(pc, DamageType.COLD, 10)]).toEqual([10, 5]);
+    // A Ruby Charm, the same code on another record, stays a fire ward.
+    pc.items[0] = { ...pc.items[0]!, e3Item: 335 };
+    expect(e3DamageResist(pc, DamageType.FIRE, 10)).toBe(5);
   });
 });
