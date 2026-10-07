@@ -10,7 +10,8 @@ import { GameRng } from '../src/core/rng';
 import { Scenario } from '../src/data/scenario';
 import { GameMode } from '../src/game/modes';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
-import { canDrawTerrainSpot } from '../src/render/screen';
+import { canDrawTerrainSpot, canDrawTownItem } from '../src/render/screen';
+import { defaultItem, ItemType } from '../src/data/item';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable } from '../src/fileio/specialParse';
@@ -144,5 +145,31 @@ describe('canDrawTerrainSpot (town combat, monsters going)', () => {
     expect(s.partyCanSee(far)).toBe(6);
     s.monstersGoing = true;
     expect(canDrawTerrainSpot(s, far.x, far.y, dim, dim)).toBe(false);
+  });
+});
+
+describe('canDrawTownItem', () => {
+  /**
+   * The bug: items were drawn on any square explored and lit from the party's
+   * town square, which in combat is no one's. A dead PC's dropped pack stayed
+   * on screen on ground no living PC could see.
+   */
+  it('in combat, hides an explored, lit square that no living PC can see', () => {
+    const s = newSession();
+    s.startCombat(s.univ.party.direction);
+    const dim = s.univ.town!.record.maxDim;
+    const far = { x: dim - 1, y: dim - 1 };
+    s.univ.town!.makeExplored(far.x, far.y);
+    expect(s.ptInLight(s.univ.party.townLoc, far)).toBe(true);
+    const pack = { ...defaultItem(), variety: ItemType.ONE_HANDED, itemLoc: far };
+    expect(canDrawTownItem(s, pack)).toBe(false);
+  });
+
+  it('shows one at a living PC\'s feet', () => {
+    const s = newSession();
+    s.startCombat(s.univ.party.direction);
+    const pcs = s.univ.party.pcs;
+    const pack = { ...defaultItem(), variety: ItemType.ONE_HANDED, itemLoc: { ...pcs[0]!.combatPos } };
+    expect(canDrawTownItem(s, pack)).toBe(true);
   });
 });

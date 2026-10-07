@@ -56,6 +56,19 @@ export function knownBugsDialog(ctx: CanvasRenderingContext2D, store: SheetStore
     dlg.hide('left');
     dlg.hide('right');
   }
+  // The overlay would name the ◀ by the words beside it, "Page 1 of 4".
+  dlg.touchFace = {
+    view: () => ({
+      right: [
+        ...(pages > 1 ? [
+          { name: 'left', label: '◀ Previous page' },
+          { name: 'right', label: 'Next page ▶', detail: `Page ${page + 1} of ${pages}` },
+        ] : []),
+        { name: 'done', label: 'Done', section: '' },
+      ],
+    }),
+    press: (name) => dlg.pressControl(name),
+  };
   fill();
   return dlg;
 }

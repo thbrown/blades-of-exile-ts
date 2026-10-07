@@ -16819,3 +16819,28 @@ failed on the known ENCOUNTER flake and on the hit-sound check, below).
   one. `KnownBug.title` and `unwired` are therefore player-facing text now.
   `verify-screen.mjs` opens it from the Preferences step.
 
+### Play-test notes, tenth round (2026-10-06)
+
+- [x] **A dead PC's dropped items showed on dark ground in combat.**
+      `drawTownItems` tested "explored, and lit from the party's town
+      square", which in combat is no one's square. Both games test
+      `party_can_see` (boe.graphutil.cpp:302, 1997's GUTILS.CPP:466): any
+      living PC's line of sight, through the light. `canDrawTownItem` does
+      now, in town too, so an item behind a wall no longer shows there either.
+- [x] **Wait in combat spent the PC's points.** In 1997, `w` and the Wait
+      button set `pc_delayed`: the next PC is up and this one keeps its AP,
+      so it comes round again in the round. OBoE's button does the same
+      (its misnamed `handle_stand_ready`); its `w` says "In town only." by
+      dead code. The port's button called `pause` (stand ready: AP to 0).
+      Now `GameSession.delayTurn`, from the button, `w` and Actions › Wait
+      in combat; recorded `handle_wait` still refuses. DIVERGENCES §53.
+- [x] **The known-bugs titles** were developer notes ("Zone 10, spot 2 uses
+      zone 2's block"). Rewritten for players, one line each where they fit.
+- [x] **Preferences on touch** lists its settings under the dialog's own
+      headings (Display alignment, UI scale, Game speed, Targeting,
+      Miscellaneous), with "Which bugs it fixes…" under its option; the bug
+      list's overlay is Previous / Next / Done.
+
+**Gotcha (2026-10-06):** `verify-screen` failed once on the BOOMS flake
+(sound 71 for 70) and passed on the rerun; the unchanged tree failed too.
+

@@ -162,4 +162,21 @@ describe('the preferences dialog', () => {
     expect(rows.find((r) => r.num === 'E3 #24')?.text).not.toMatch(/Not changed/);
     expect(rows.at(-1)?.num).toBe('BoE #100');
   });
+
+  it('the touch overlay lists the settings under their headings', async () => {
+    await preferencesDialog(fakeCtx(), new SheetStore(), base, {
+      resetHelp: () => {},
+      nest: async (screen) => {
+        const right = screen.touchView!()!.right;
+        const sections = right.filter((c) => c.section !== undefined).map((c) => c.section);
+        expect(sections).toEqual(['Game speed', 'Targeting', 'Miscellaneous', '']);
+        expect(right.find((c) => c.name === 'fast')?.section).toBe('Game speed');
+        // The "?" follows its own row.
+        const led = right.findIndex((c) => c.name === 'fancypicker');
+        expect(right[led + 1]?.name).toBe('fixbugs-help');
+        return click(screen, 'okay')!;
+      },
+    });
+  });
 });
+

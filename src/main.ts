@@ -3004,8 +3004,14 @@ async function main(): Promise<void> {
         if (mode === GameMode.TOWN || mode === GameMode.USE_TOWN) selectSpace('use');
         break;
       case ToolbarButton.WAIT:
-        // handle_stand_ready — give up the turn *on guard*, not just idle.
-        if (mode === GameMode.COMBAT) void session.pause();
+        // OBoE's `handle_stand_ready`, which despite its name is Wait: the
+        // next PC is up and this one keeps its action points (`delayTurn`).
+        // This used to call `pause`, the real stand ready, and spent them all.
+        if (mode === GameMode.COMBAT) {
+          session.delayTurn();
+          setStatus();
+          redraw();
+        }
         break;
       case ToolbarButton.LOAD:
         if (mode === GameMode.OUTDOORS) void loadGameFlow();
@@ -3494,7 +3500,14 @@ async function main(): Promise<void> {
           // eighty turns of standing still in town — had no key at all.
           // Only a wait that will pass time gets the night; the refusals are
           // one line and no fade.
-          if (session.mode === GameMode.TOWN && !session.partySeesAMonst()) {
+          // **In combat it is Wait, as in 1997** (ACTIONS.CPP:2067, `j = 5`,
+          // the Wait button): the next PC is up and this one keeps its
+          // points. OBoE's `handle_wait` says "Wait: In town only." there,
+          // by dead code (see `GameSession.wait`); a player can tell, so the
+          // original wins (DIVERGENCES.md). Replays still go through `wait`.
+          if (session.mode === GameMode.COMBAT) {
+            session.delayTurn();
+          } else if (session.mode === GameMode.TOWN && !session.partySeesAMonst()) {
             acting = true;
             try {
               await aroundWaitFade(canvas, () => session.wait(), redraw);
@@ -3952,6 +3965,13 @@ async function main(): Promise<void> {
           label: 'Wait',
           action: () => {
             if (dialogs.active || midAction()) return;
+            // The **w** key's two meanings: Wait for the next PC in combat.
+            if (session.mode === GameMode.COMBAT) {
+              session.delayTurn();
+              setStatus();
+              redraw();
+              return;
+            }
             void session.wait().then(() => { setStatus(); redraw(); });
           },
         },

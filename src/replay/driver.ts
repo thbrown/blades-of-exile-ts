@@ -555,6 +555,10 @@ export async function runReplay(
           }
           break;
         }
+        case 'handle_stand_ready':
+          // Combat's Wait: only this port records it (`delayTurn`).
+          session.delayTurn();
+          break;
         case 'handle_wait':
           // The long wait, which is **w** and not Space. Up to eighty turns
           // pass here, so it is one of the biggest single state changes a

@@ -1202,6 +1202,23 @@ a bonus. Exile III's code has the same slip for its Skill Rings and
 gauntlets (E3-SUSPECTED-BUGS #24). Under the preference the bonus comes off
 the roll; replays never use it. The damage half was always right.
 
+### 53. Waiting in combat (2026-10-06)
+
+**DECIDED: the original's, in play; OBoE's in replays.** In 1997 the **w**
+key in combat presses the Wait button (ACTIONS.CPP:2067, `j = 5`), which
+sets `pc_delayed` (:596): `current_pc++; combat_next_step();` (:1326). The
+next PC is up and the waiting one keeps its action points, so it comes round
+again later in the round. OBoE's Wait button does the same
+(`handle_stand_ready`, boe.actions.cpp:518, misnamed: the real stand ready is
+`char_stand_ready`, under `handle_pause`). But OBoE's **w** goes to
+`handle_wait`, whose combat arm is dead code behind `!is_town()`, so it says
+"Wait: In town only." A player can tell, so the port's **w** key and Actions
+› Wait do 1997's Wait (`GameSession.delayTurn`); a recorded `handle_wait`
+still refuses, as OBoE does. The port's Wait *button* had called `pause`,
+stand ready, which spends every point; a port bug, not a divergence, fixed
+the same day. OBoE doesn't record its Wait at all; this port records it as
+`handle_stand_ready`.
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

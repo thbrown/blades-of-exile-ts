@@ -31,32 +31,32 @@ export interface KnownBug {
 
 export const KNOWN_BUGS: Readonly<Record<number, KnownBug>> = {
   1: { title: "Vilovsky's temple raises Alchemy, though it says Mage Lore", ruling: 'undecided' },
-  2: { title: "Gale's Mass Paralysis spot shows Pachtar's book", ruling: 'undecided' },
-  3: { title: 'Zone 1, spot 3 marks its flag in the opposite order to its neighbours', ruling: 'undecided' },
+  2: { title: "Gale's Mass Paralysis lesson shows the wrong book", ruling: 'undecided' },
+  3: { title: 'A whisper by the stone circle repeats; the others speak once', ruling: 'undecided' },
   4: {
-    title: "Zone 10, spot 2 uses zone 2's block for its line", ruling: 'undecided',
-    unwired: "zone 10's own block has no such string, so there's nothing to fix it to",
+    title: "A beast ambush borrows another place's line", ruling: 'undecided',
+    unwired: "there's no line of its own to use",
   },
-  5: { title: "The Dervish Merchant's welcome back is never reached", ruling: 'undecided' },
-  6: { title: 'The Nephilim village never remembers the party helped', ruling: 'undecided' },
-  7: { title: 'The river ferry back is free, though it says 10 gold', ruling: 'undecided' },
+  5: { title: 'The Dervish Merchant never welcomes you back', ruling: 'undecided' },
+  6: { title: 'The Nephilim village forgets that you helped it', ruling: 'undecided' },
+  7: { title: 'The river ferry back is free, though it asks 10 gold', ruling: 'undecided' },
   // 8 is withdrawn: Gointz's sale does free his boat (party+0x1307 is boat
   // 2's `property`; E3's boats are at party+0x12ea). It was a port error.
-  9: { title: "Masok's first line is overwritten before it is shown", ruling: 'undecided' },
-  10: { title: "The army camp's towers lead to Krizsan", ruling: 'undecided' },
+  9: { title: 'Masok skips the first half of his reply', ruling: 'undecided' },
+  10: { title: "Stepping onto the army camp's towers takes you to Krizsan", ruling: 'undecided' },
   11: { title: 'The Airy Stone weighs 236 once taken', ruling: 'bug' },
-  12: { title: "Exile III's poisons and lock picking help everyone but the nimble", ruling: 'bug' },
-  13: { title: 'Good Constitution does nothing to end disease in Exile III', ruling: 'undecided' },
-  15: { title: 'A stack of returning missiles drops to one after a throw', ruling: 'undecided' },
-  16: { title: 'Raise Dead and Resurrect need no Resurrection Balm', ruling: 'undecided' },
-  17: { title: "Alchemy takes the second ingredient's charge from the wrong item", ruling: 'undecided' },
-  18: { title: "The Ritual of Sanctification on the spiders' altar can be repeated", ruling: 'undecided' },
-  19: { title: 'A moving wall looks for a creature on its own square, not the one ahead', ruling: 'undecided' },
-  22: { title: "The intro movie's dying creatures never roll their death cry", ruling: 'undecided' },
+  12: { title: 'Nimble Fingers hinders poisoning, lock picking and traps', ruling: 'bug' },
+  13: { title: "Good Constitution doesn't help against disease", ruling: 'undecided' },
+  15: { title: 'A stack of returning missiles drops to one when thrown', ruling: 'undecided' },
+  16: { title: "Raise Dead and Resurrect don't need a Resurrection Balm", ruling: 'undecided' },
+  17: { title: 'Alchemy can use up the wrong item', ruling: 'undecided' },
+  18: { title: "The spider altar's ritual can be repeated for experience", ruling: 'undecided' },
+  19: { title: 'Moving walls roll over creatures in their way', ruling: 'undecided' },
+  22: { title: "The intro movie's death cries never vary", ruling: 'undecided' },
   23: { title: 'The Iceshield wards off fire, not cold', ruling: 'undecided' },
-  24: { title: "Skill Rings and Exile III's gauntlets make a blow harder to land", ruling: 'undecided' },
+  24: { title: "Skill Rings and Exile III's gauntlets make you miss more", ruling: 'undecided' },
   // The Blades of Exile engine's own, in 1997's and OBoE's `pc_attack` alike.
-  100: { title: 'Skill and Giant Strength items make a blow harder to land', ruling: 'undecided' },
+  100: { title: 'Skill and Giant Strength items make you miss more', ruling: 'undecided' },
 };
 
 let enabled = false;

@@ -836,6 +836,34 @@ describe('placement, parry and holding a turn', () => {
     expect(univ.transcript).toContain('Stand ready.');
   });
 
+  it('waiting passes to the next PC and keeps the points for later in the round', () => {
+    // 1997's `pc_delayed`, OBoE's Wait button (`handle_stand_ready`): no
+    // parry, nothing spent, and the waiting PC comes round again.
+    const { univ, session } = newGame();
+    hostileBeside(univ, session);
+    session.startCombat(univ.party.direction);
+    const first = univ.curPc;
+    const pc = univ.currentPc;
+    const ap = pc.ap;
+    expect(ap).toBeGreaterThan(0);
+    session.delayTurn();
+    expect(univ.curPc).not.toBe(first);
+    expect(pc.ap).toBe(ap);
+    expect(pc.parry).toBe(0);
+    // Everyone else spends their points; the round is still the same one.
+    for (const other of univ.party.pcs) if (other !== pc) other.ap = 0;
+    session.afterCombatAction();
+    expect(univ.curPc).toBe(first);
+    expect(pc.ap).toBe(ap);
+  });
+
+  it('waiting does nothing out of combat', () => {
+    const { univ, session } = newGame();
+    const before = univ.party.age;
+    session.delayTurn();
+    expect(univ.party.age).toBe(before);
+  });
+
   it('pausing outside combat is a plain pause', async () => {
     const { univ, session } = newGame();
     univ.party.pcs[0]!.status[Status.WEBS] = 4;

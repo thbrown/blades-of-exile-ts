@@ -152,6 +152,15 @@ export const CHROME_SHEETS = [
  * Exported (not just inlined in `drawTerrainView`) so this exact gate is
  * unit-testable without a canvas.
  */
+/**
+ * draw_items' own gate (boe.graphutil.cpp:301): a floor item shows where the
+ * party can see its square — `party_can_see`, in combat any living PC's line
+ * of sight through the light. Exported to be tested without a canvas.
+ */
+export function canDrawTownItem(session: GameSession, item: Item): boolean {
+  return !item.contained && session.partyCanSee(item.itemLoc) < 6;
+}
+
 export function canDrawTerrainSpot(
   session: GameSession, x: number, y: number, maxDim: number, maxDimY: number,
 ): boolean {
@@ -1056,7 +1065,14 @@ export class Screen {
     if (x === 0 || this.extendRoad(session, x - 1, y)) blit(ROAD_SRC.horizontal, ROAD_DEST.left);
   }
 
-  /** draw_items (boe.graphutil.cpp:293) — items lying on the town floor. */
+  /**
+   * draw_items (boe.graphutil.cpp:293; 1997's GUTILS.CPP:446) — items lying
+   * on the town floor, drawn only where `party_can_see`: in town from the
+   * party's square, in combat from any living PC's, through the light. This
+   * used to test "explored, and lit from the party's town square", which in
+   * combat is nobody's square, so a dead PC's dropped pack showed on dark
+   * ground no one could see.
+   */
   private drawTownItems(session: GameSession): void {
     const town = session.univ.town!;
     const center = session.center;
@@ -1065,8 +1081,7 @@ export class Screen {
       const q = item.itemLoc.x - center.x + TER_VIEW_CENTER;
       const row = item.itemLoc.y - center.y + TER_VIEW_CENTER;
       if (q < 0 || row < 0 || q >= TER_VIEW_TILES || row >= TER_VIEW_TILES) continue;
-      if (!town.isExplored(item.itemLoc.x, item.itemLoc.y)) continue;
-      if (!session.ptInLight(session.univ.party.townLoc, item.itemLoc)) continue;
+      if (!canDrawTownItem(session, item)) continue;
       const g = itemGraphic(item.graphicNum);
       if (!g) continue;
       const img = this.store.get(g.sheetName);

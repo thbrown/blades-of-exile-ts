@@ -18,7 +18,7 @@
 
 import { UI_SCALES, UI_SCALE_FIT, desktop } from '../render/desktop';
 import { SheetStore } from '../render/sheets';
-import { ModalScreen } from './dialog';
+import { ModalScreen, TouchView } from './dialog';
 import { ButtonControl, DialogControl, DialogDef } from './dialogXml';
 import { getDialogDef } from './dialogStore';
 import { KNOWN_BUGS_DIALOG_DEFS, knownBugsDialog } from './knownBugsDialog';
@@ -149,6 +149,39 @@ function fixBugsHelp(ctx: CanvasRenderingContext2D, controls: DialogControl[]): 
   };
 }
 
+/** The touch overlay's headings, by the controls each one covers. */
+const TOUCH_SECTIONS: [string, string[]][] = [
+  ['Display alignment', DISPLAY_LEDS],
+  ['UI scale', SCALE_LEDS],
+  ['Game speed', SPEED_LEDS],
+  ['Targeting', ['target-lock', 'auto-target']],
+];
+const TOUCH_MISC = 'Miscellaneous';
+const EXITS = new Set(['okay', 'cancel']);
+
+/**
+ * The touch overlay's list, in sections as the dialog draws them under its
+ * headings: a flat run of twenty LEDs otherwise gives no clue which "1" is a
+ * scale and which a speed. The "?" follows its own row, worded for a finger.
+ */
+function preferencesTouchView(dlg: XmlDialog): TouchView {
+  const view = dlg.controlsTouchView();
+  const help = view.right.findIndex((c) => c.name === FIX_BUGS_HELP);
+  if (help >= 0) {
+    const [choice] = view.right.splice(help, 1);
+    const after = view.right.findIndex((c) => c.name === FIX_BUGS_LED);
+    view.right.splice(after + 1, 0, { ...choice!, label: 'Which bugs it fixes…' });
+  }
+  let last: string | null = null;
+  for (const choice of view.right) {
+    if (EXITS.has(choice.name)) break;
+    const heading = TOUCH_SECTIONS.find(([, names]) => names.includes(choice.name))?.[0] ?? TOUCH_MISC;
+    if (heading !== last) choice.section = heading;
+    last = heading;
+  }
+  return view;
+}
+
 /**
  * Show the dialog; resolves with the new settings on OK, or null on Cancel.
  * There is nothing about autosaving: the game saves every move, and its
@@ -164,6 +197,7 @@ export async function preferencesDialog(
   for (const name of compact ? [...HIDDEN, ...DESKTOP_BLOCK] : HIDDEN) {
     if (!(roomDescs && name === ROOM_DESCRIPTIONS_LED)) dlg.hide(name);
   }
+  dlg.touchFace = { view: () => preferencesTouchView(dlg), press: (name) => dlg.pressControl(name) };
   if (roomDescs) dlg.setText(ROOM_DESCRIPTIONS_LED, 'Show room descriptions more than once');
   dlg.setText(FIX_BUGS_LED, FIX_BUGS_LABEL);
   if (!compact) {

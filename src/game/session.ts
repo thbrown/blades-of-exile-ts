@@ -4283,9 +4283,12 @@ export class GameSession {
    * — but `is_town()` (boe.locutils.cpp:60) is `mode > OUTDOORS && mode <
    * COMBAT`, so it is **false** in combat and the second arm swallows it.
    * Waiting in a fight says "In town only.", which reads like a bug and is
-   * what the original does; the third arm can only ever be reached with
-   * `cartoon_happening` set, which no player input does. The stand-ready it
-   * wanted is on Space instead (`pause`), so nothing is actually lost.
+   * what OBoE does; the third arm can only ever be reached with
+   * `cartoon_happening` set, which no player input does. What that arm wanted
+   * — OBoE's misnamed `handle_stand_ready`, which is Wait and keeps the PC's
+   * points — is `delayTurn`, and in play the **w** key reaches it as 1997's
+   * did (`main.ts`, DIVERGENCES.md §53). Replays come here, and keep the
+   * refusal.
    *
    * The last arm — a town mode that isn't plain MODE_TOWN, i.e. mid-talk or
    * mid-targeting — is the one that tells you to finish up first.
@@ -4301,6 +4304,26 @@ export class GameSession {
       return;
     }
     this.univ.addStringToBuf("Wait: Finish what you're doing first.");
+  }
+
+  /**
+   * Wait in combat — the Wait button, and **w** from the keyboard: pass to the
+   * next PC and **keep this one's action points**, so they come round again
+   * later in the same round. Not stand ready (`pause`), which spends them all
+   * for a free swing at whatever steps up, nor parry.
+   *
+   * 1997's `pc_delayed` (ACTIONS.CPP:596, :1326) and OBoE's misnamed
+   * `handle_stand_ready` (boe.actions.cpp:518) are the same three lines:
+   * `cur_pc++; combat_next_step();` and the stat window follows. No time
+   * passes and nothing is spent, so there's no `advance_time`. OBoE never
+   * records it; this port records `handle_stand_ready`, under OBoE's name, so
+   * its own recordings replay.
+   */
+  delayTurn(): void {
+    if (this.mode !== GameMode.COMBAT) return;
+    this.recorder?.record('handle_stand_ready');
+    this.univ.curPc++;
+    this.afterCombatAction();
   }
 
   /**
