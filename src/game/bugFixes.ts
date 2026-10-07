@@ -19,9 +19,13 @@
 export type BugRuling = 'undecided' | 'bug' | 'legit';
 
 export interface KnownBug {
+  /**
+   * One sentence for players: Preferences' "?" lists every entry by it
+   * (`dialogs/knownBugsDialog.ts`), so write it as they'd meet the bug.
+   */
   title: string;
   ruling: BugRuling;
-  /** Why the preference doesn't change it yet, where it doesn't. */
+  /** Why the preference doesn't change it yet, where it doesn't; shown to players too. */
   unwired?: string;
 }
 

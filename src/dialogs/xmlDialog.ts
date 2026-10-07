@@ -152,6 +152,14 @@ export function measureDialogDef(ctx: CanvasRenderingContext2D, def: DialogDef):
   });
 }
 
+/**
+ * Where an LED's label ends, drawn as `label` with its lamp on the left, in
+ * the definition's coordinates: for a control placed just after it.
+ */
+export function ledLabelRight(ctx: CanvasRenderingContext2D, led: LedControl, label: string): number {
+  return led.rect.left + LED_W + LED_TEXT_SPACE + measureString(ctx, label, textStyle(led.font));
+}
+
 /** A scroll pane's scrollbar width, and how far one wheel notch or arrow moves it. */
 const PANE_BAR = 8;
 const PANE_STEP = 12;

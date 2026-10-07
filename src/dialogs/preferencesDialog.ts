@@ -19,11 +19,12 @@
 import { UI_SCALES, UI_SCALE_FIT, desktop } from '../render/desktop';
 import { SheetStore } from '../render/sheets';
 import { ModalScreen } from './dialog';
-import { DialogControl, DialogDef } from './dialogXml';
+import { ButtonControl, DialogControl, DialogDef } from './dialogXml';
 import { getDialogDef } from './dialogStore';
-import { XmlDialog, measureDialogDef } from './xmlDialog';
+import { KNOWN_BUGS_DIALOG_DEFS, knownBugsDialog } from './knownBugsDialog';
+import { XmlDialog, ledLabelRight, measureDialogDef } from './xmlDialog';
 
-export const PREFERENCES_DIALOG_DEFS = ['preferences', 'confirm-reset-help'];
+export const PREFERENCES_DIALOG_DEFS = ['preferences', 'confirm-reset-help', ...KNOWN_BUGS_DIALOG_DEFS];
 
 /** The settings this dialog edits, as the host holds them. */
 export interface Preferences {
@@ -66,6 +67,9 @@ const ROOM_DESCRIPTIONS_LED = 'skipsplash';
  * browser has no use for and never shows.
  */
 const FIX_BUGS_LED = 'fancypicker';
+const FIX_BUGS_LABEL = 'Fix known bugs in the original games';
+/** The "?" after it, which lists the bugs (`knownBugsDialog`). */
+const FIX_BUGS_HELP = 'fixbugs-help';
 
 /** The pace each speed sets; Medium is the pace the game ships at. */
 export const GAME_SPEED_PACE = [0.6, 1, 1.5, 2.2];
@@ -120,12 +124,29 @@ function browserPreferencesDef(ctx: CanvasRenderingContext2D, compact: boolean, 
     return copy;
   };
   const controls = def.controls.filter((c) => !drop.has(c.name)).map(moved);
+  controls.push(fixBugsHelp(ctx, controls));
   const byName = new Map<string, DialogControl>();
   for (const c of controls) {
     if (c.name) byName.set(c.name, c);
     if (c.kind === 'group') for (const l of c.leds) byName.set(l.name, l);
   }
   return { ...def, controls, byName, measured: true };
+}
+
+/**
+ * The help button ("?", the art cast-spell.xml's uses) just after the "Fix
+ * known bugs" label, level with its lamp.
+ */
+function fixBugsHelp(ctx: CanvasRenderingContext2D, controls: DialogControl[]): ButtonControl {
+  const led = controls.find((c) => c.name === FIX_BUGS_LED);
+  if (led?.kind !== 'led') throw new Error('preferences.xml has no Fix known bugs row');
+  const left = Math.ceil(ledLabelRight(ctx, led, FIX_BUGS_LABEL)) + 8;
+  const top = led.rect.top - 2;
+  const rect = { top, left, bottom: top + 13, right: left + 16 };
+  return {
+    kind: 'button', name: FIX_BUGS_HELP, type: 'help', label: '', wrap: false,
+    rect, fileRect: rect, relative: ['abs'],
+  };
 }
 
 /**
@@ -144,7 +165,7 @@ export async function preferencesDialog(
     if (!(roomDescs && name === ROOM_DESCRIPTIONS_LED)) dlg.hide(name);
   }
   if (roomDescs) dlg.setText(ROOM_DESCRIPTIONS_LED, 'Show room descriptions more than once');
-  dlg.setText(FIX_BUGS_LED, 'Fix known bugs in the original games');
+  dlg.setText(FIX_BUGS_LED, FIX_BUGS_LABEL);
   if (!compact) {
     dlg.setText('other', 'Fit');
     // OBoE's "Small Window (not full screen)" is about an OS window.
@@ -168,6 +189,11 @@ export async function preferencesDialog(
   if (roomDescs) dlg.setLed(ROOM_DESCRIPTIONS_LED, on(prefs.roomDescriptions!));
   // A group keeps one lit: clicking the lit speed again mustn't turn it off.
   for (const id of SPEED_LEDS) dlg.attachHandler(id, (me) => { me.setLed(id, 'red'); return 'stay'; });
+
+  dlg.attachHandler(FIX_BUGS_HELP, () => {
+    void host.nest(knownBugsDialog(ctx, store));
+    return 'stay';
+  });
 
   dlg.attachHandler('resethelp', () => {
     const confirm = new XmlDialog(ctx, store, getDialogDef('confirm-reset-help'));

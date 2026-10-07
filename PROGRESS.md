@@ -16810,3 +16810,12 @@ failed on the known ENCOUNTER flake and on the hit-sound check, below).
   (#15) and the Airy Stone (#11). Only wired fixes belong in `FIXES` in
   `src/pages/items/e3ItemRules.ts`; add one there when a new item fix lands.
 
+- **Preferences lists the known bugs** (2026-10-06). A "?" (the BoE help
+  button's art) sits just after "Fix known bugs in the original games",
+  placed by measuring the label (`ledLabelRight`), and opens
+  `known-bugs.xml` — the port's own dialog, paged like the event journal,
+  six to a page — with every `KNOWN_BUGS` entry, its number (E3 #n, or BoE
+  #100 for the engine's) and "Not changed: …" for a ruled-legit or unwired
+  one. `KnownBug.title` and `unwired` are therefore player-facing text now.
+  `verify-screen.mjs` opens it from the Preferences step.
+

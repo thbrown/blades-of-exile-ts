@@ -1,0 +1,26 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<!-- blades-of-exile-ts's own, in neither 1997's game nor OBoE: the list behind
+     Preferences' "Fix known bugs" (src/dialogs/knownBugsDialog.ts). Paged like
+     event-journal.xml. -->
+<?xml-stylesheet href="dialog.xsl" type="text/xsl"?>
+<dialog defbtn='done'>
+	<pict type='dlog' num='16' top='8' left='8'/>
+	<text size='large' top='8' left='50' width='380' height='16'>Known bugs in the original games</text>
+	<text name='intro' top='28' left='50' width='400' height='58'/>
+	<text name='num1' top='92' left='50' width='60' height='15'/>
+	<text name='str1' framed='true' top='92' left='114' width='336' height='34'/>
+	<text name='num2' top='134' left='50' width='60' height='15'/>
+	<text name='str2' framed='true' top='134' left='114' width='336' height='34'/>
+	<text name='num3' top='176' left='50' width='60' height='15'/>
+	<text name='str3' framed='true' top='176' left='114' width='336' height='34'/>
+	<text name='num4' top='218' left='50' width='60' height='15'/>
+	<text name='str4' framed='true' top='218' left='114' width='336' height='34'/>
+	<text name='num5' top='260' left='50' width='60' height='15'/>
+	<text name='str5' framed='true' top='260' left='114' width='336' height='34'/>
+	<text name='num6' top='302' left='50' width='60' height='15'/>
+	<text name='str6' framed='true' top='302' left='114' width='336' height='34'/>
+	<button name='left' type='left' def-key='left' top='352' left='50'/>
+	<text name='page' top='354' left='120' width='120' height='15'/>
+	<button name='right' type='right' def-key='right' top='352' left='250'/>
+	<button name='done' type='done' top='352' left='384'/>
+</dialog>

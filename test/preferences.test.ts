@@ -8,6 +8,8 @@ import {
   PREFERENCES_DIALOG_DEFS, Preferences, preferencesDialog,
 } from '../src/dialogs/preferencesDialog';
 import { XmlDialog } from '../src/dialogs/xmlDialog';
+import { knownBugRows } from '../src/dialogs/knownBugsDialog';
+import { KNOWN_BUGS } from '../src/game/bugFixes';
 import { DisplayMode, UI_SCALE_FIT, desktop } from '../src/render/desktop';
 import { SheetStore } from '../src/render/sheets';
 
@@ -123,5 +125,41 @@ describe('the preferences dialog', () => {
       nest: async (screen) => click(screen, 'okay')!,
     });
     expect(out).toMatchObject({ displayMode: 4, uiScale: 1.5 });
+  });
+
+  it('the "?" beside Fix known bugs lists them, a page at a time', async () => {
+    const opened: XmlDialog[] = [];
+    await preferencesDialog(fakeCtx(), new SheetStore(), base, {
+      resetHelp: () => {},
+      nest: async (screen) => {
+        const d = screen as XmlDialog;
+        if (opened.length === 0) {
+          opened.push(d);
+          // Just after the LED's label, on its row.
+          const help = d.screenRect(d.def.byName.get('fixbugs-help')!);
+          const led = d.screenRect(d.def.byName.get('fancypicker')!);
+          expect(help.left).toBeGreaterThan(led.left + 100);
+          expect(Math.abs(help.top - led.top)).toBeLessThan(4);
+          expect(click(d, 'fixbugs-help')).toBeNull();
+          return click(d, 'okay')!;
+        }
+        opened.push(d);
+        return 'done';
+      },
+    });
+    expect(opened).toHaveLength(2);
+    const list = opened[1]!;
+    expect(list.getText('num1')).toBe('E3 #1');
+    expect(list.getText('page')).toMatch(/^Page 1 of \d+$/);
+    expect(click(list, 'right')).toBeNull();
+    expect(list.getText('page')).toMatch(/^Page 2 of/);
+  });
+
+  it('lists every known bug, and says which the preference leaves alone', () => {
+    const rows = knownBugRows();
+    expect(rows).toHaveLength(Object.keys(KNOWN_BUGS).length);
+    expect(rows.find((r) => r.num === 'E3 #4')?.text).toMatch(/Not changed: /);
+    expect(rows.find((r) => r.num === 'E3 #24')?.text).not.toMatch(/Not changed/);
+    expect(rows.at(-1)?.num).toBe('BoE #100');
   });
 });

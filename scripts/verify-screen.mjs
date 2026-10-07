@@ -2976,6 +2976,14 @@ const prefs = await page.evaluate(() => {
   } : null;
 });
 await shot('02o-preferences');
+// The "?" beside "Fix known bugs" lists them; Done goes back to Preferences.
+await clickDialogButton('fixbugs-help');
+await page.waitForTimeout(200);
+prefs.bugList = await page.evaluate(() => window.__dialogs.active?.getText?.('num1') ?? null);
+await shot('02o-known-bugs');
+await page.keyboard.press('Enter');
+await page.waitForTimeout(200);
+prefs.backFromBugs = await page.evaluate(() => window.__dialogs.active?.def?.byName.has('fancypicker') ?? false);
 {
   const r = await page.evaluate(() => {
     const d = window.__dialogs.active;
@@ -3645,6 +3653,7 @@ const ok =
   custom.sheet !== null && custom.barrelPic === 1006 &&
   prefs !== null && prefs.speed === 'red' && prefs.displayHidden === true &&
   prefs.ledAfterClick === 'red' && prefs.lessWm === true && prefs.closed === true &&
+  prefs.bugList === 'E3 #1' && prefs.backFromBugs === true &&
   fields.typed === true && fields.fieldError === 'Error' &&
   fields.numAnswer === 75 && fields.textAnswer === 'hello' &&
   desktopOk && touchOk &&
