@@ -66,6 +66,18 @@ describe('Exile III item readings', () => {
     expect(r.verdict).toBe('partly');
   });
 
+  it('says what "Fix known bugs" changes, only where it changes something', () => {
+    const ring = readE3Item(item(101, ItemType.RING, 2), 'Skill', scen);
+    expect(ring.effect).toContain('LESS often');
+    expect(ring.fixed).toContain('DOWN 15');
+    const iceshield = { ...item(16, ItemType.SHIELD, 0, 'Iceshield'), e3Item: 248 };
+    expect(readE3Item(iceshield, 'Protect From Cold', scen).verdict).toBe('differs');
+    expect(readE3Item(iceshield, 'Protect From Cold', scen).fixed).toContain('COLD');
+    // The other fire wards carry the same code and no fix.
+    expect(readE3Item(item(16, ItemType.RING), 'Protect From Fire', scen).fixed).toBe('');
+    expect(readE3Item(item(46, ItemType.RING), 'Regenerate', scen).fixed).toBe('');
+  });
+
   it('spells out what the combat numbers mean', () => {
     const sword = { ...item(0, ItemType.ONE_HANDED, 8), bonus: 2 };
     expect(combatLine(sword)).toBe('Hits for 5–12 (−3 off hand); +10% hit chance.');

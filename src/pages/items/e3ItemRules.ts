@@ -22,6 +22,7 @@ import { Scenario } from '../../data/scenario';
 import { Spell, spellName } from '../../data/spell';
 import { weaponSkillName } from '../../data/itemAbilName';
 import { E3_USE_CODE } from '../../game/e3ItemUse';
+import { E3_ICESHIELD } from '../../game/e3Items';
 
 /**
  * - `agrees`: the item sheet's words fit what the code does.
@@ -40,6 +41,11 @@ export interface ItemReading {
   verdict: Verdict;
   /** Why, when the verdict isn't a plain agreement. */
   note: string;
+  /**
+   * What it does instead under the "Fix known bugs" preference
+   * (`game/bugFixes.ts`), or '' when the preference leaves it alone.
+   */
+  fixed: string;
 }
 
 interface Rule {
@@ -137,7 +143,7 @@ const RULES: Record<number, Rule> = {
     where: 'inventory.ts · E3 code 14',
   },
   15: { effect: (it) => `“You feel strange.” Magic resistance +${it.itemLevel + 6}–${it.itemLevel + 9}.`, where: USE },
-  16: worn('Halves FIRE damage taken while worn.', DAMAGE, /fire protection/i),
+  16: worn('Halves FIRE damage taken while worn — the Iceshield too.', DAMAGE, /fire protection/i),
   17: same('Magic Map needs one in the pack and spends a charge of it.', 'spellTown.ts · 10b0:3f86', /sapphire/i),
   18: { effect: (it) => `“You feel stronger.” Blessed by ${it.itemLevel * 2 + 3}.`, where: USE, agrees: /^bless/i },
   19: cast(Spell.POISON, 'A green ray emerges.'),
@@ -268,9 +274,10 @@ const RULES: Record<number, Rule> = {
   95: worn('Cursed. Now and then in combat (1 in 11 a round) “starts dancing!”: curse 2. No action points lost.',
     ROUND, /dancing|curse/i, 'The sheet says Slow Wearer, which in BoE costs action points; E3’s boots never do.'),
   96: worn('+2 melee damage; the hit roll goes up 1 (1% more misses).', 'e3Items.ts · e3AttackAdj 1018:0edd',
-    /strength/i, 'Much weaker than BoE’s Giant Strength at bladbase strength.', 'partly'),
+    /strength/i, 'Much weaker than BoE’s Giant Strength at bladbase strength; and the hit roll goes the wrong way ' +
+    '(E3-SUSPECTED-BUGS #24).', 'partly'),
   97: worn('+3 melee damage; the hit roll goes up 5 (5% more misses).', 'e3Items.ts · e3AttackAdj 1018:0edd',
-    /strength/i, 'Makes blows land LESS often; the sheet can’t say so.', 'partly'),
+    /strength/i, 'Makes blows land LESS often; the sheet can’t say so (E3-SUSPECTED-BUGS #24).', 'partly'),
   98: worn('Now and then in combat (1 in 13 a round) “feels ill”: the wearer is poisoned by 2.', ROUND),
   99: worn('+1 to the INTELLIGENCE adjustment (spell strength), worn in the first sixteen slots.',
     'player.ts · stat_adj 10b0:87af', /intelligence/i),
@@ -328,11 +335,33 @@ const READABLE: Rule = {
   agrees: /unusual ability|readable/i,
 };
 
+/**
+ * What "Fix known bugs" makes of an item, by E3 code: one line each, naming
+ * its E3-SUSPECTED-BUGS number. Only the fixes that are wired
+ * (`bugFixed(n)` in the engine) belong here.
+ */
+const FIXES: Record<number, (it: Item) => string> = {
+  8: () => 'Nimble Fingers helps the poisoning instead of hindering it (#12).',
+  13: () => 'Raise Dead and Resurrect need a balm, and use it up, as in BoE (#16).',
+  65: () => 'A throw keeps the whole stack, as a returning missile should (#15).',
+  96: () => 'The hit roll goes DOWN 1: 1% more blows land (#24).',
+  97: () => 'The hit roll goes DOWN 5: 5% more blows land (#24).',
+  101: (it) => `The hit roll goes DOWN ${(it.itemLevel + 1) * 5}: ${(it.itemLevel + 1) * 5}% more blows land (#24).`,
+  117: () => 'Once taken it weighs −20, as E3 wrote it, rather than 236 (#11).',
+};
+
+function fixedReading(it: Item): string {
+  // The Iceshield carries the fire ward's code; fixed, it wards off cold.
+  if (it.e3Item === E3_ICESHIELD) return 'Halves COLD damage instead of fire, as its name says (#23).';
+  return FIXES[it.e3Ability]?.(it) ?? '';
+}
+
 /** The Skill Rings: E3's to-hit slip deserves its own words. */
 function skillRing(it: Item): string {
   const l = it.itemLevel;
   return `+${l} melee damage — and the hit roll goes UP ${(l + 1) * 5}, so blows land ${(l + 1) * 5}% ` +
-    'LESS often. E3’s own slip, which 1997’s pc_attack kept; the character sheet counts it as a bonus.';
+    'LESS often. E3’s own slip, which 1997’s pc_attack kept; the character sheet counts it as a bonus ' +
+    '(E3-SUSPECTED-BUGS #24).';
 }
 
 /** Where E3's use codes let an item be used (`E3_USE_CODE`, 1140:0000). */
@@ -356,20 +385,21 @@ export const RULE_CODES = Object.keys(RULES).map(Number);
 export function readE3Item(it: Item, inGameAbil: string, scen: Scenario): ItemReading {
   const code = it.e3Ability;
   if (code < 0) {
-    return { effect: 'Not an Exile III item.', where: '—', verdict: 'none', note: '' };
+    return { effect: 'Not an Exile III item.', where: '—', verdict: 'none', note: '', fixed: '' };
   }
   const rule = code >= 160 ? READABLE : RULES[code];
   if (!rule) {
     return {
       effect: `E3 ability code ${code}: nothing in the port reads it.`, where: '—', verdict: 'unread',
-      note: 'An E3 ability code with no rule in the port at all.',
+      note: 'An E3 ability code with no rule in the port at all.', fixed: '',
     };
   }
   const effect = code === 101 ? skillRing(it) : rule.effect(it, scen);
+  const fixed = fixedReading(it);
   const said = inGameAbil.startsWith('Key skill:') ? '' : inGameAbil;
   if (code === 0 || (code >= 102 && !rule.agrees && !said && rule.where === '—')) {
     return { effect, where: rule.where, verdict: said ? 'differs' : 'none',
-      note: said ? `The sheet says “${said}”, but E3 gives it no ability.` : '' };
+      note: said ? `The sheet says “${said}”, but E3 gives it no ability.` : '', fixed };
   }
   const agrees = typeof rule.agrees === 'function' ? rule.agrees() : rule.agrees;
   const fits = agrees !== undefined && agrees.test(said);
@@ -398,7 +428,12 @@ export function readE3Item(it: Item, inGameAbil: string, scen: Scenario): ItemRe
     verdict = 'differs';
     note = `The sheet says “${said}”, but on a missile E3’s venom does nothing.`;
   }
-  return { effect, where: rule.where, verdict, note };
+  if (it.e3Item === E3_ICESHIELD) {
+    verdict = 'differs';
+    note = `The sheet says “${said}”, as BoE’s Iceshield does; E3 gives it the fire ward’s code ` +
+      '(E3-SUSPECTED-BUGS #23).';
+  }
+  return { effect, where: rule.where, verdict, note, fixed };
 }
 
 /**

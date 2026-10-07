@@ -196,7 +196,7 @@ async function main(): Promise<void> {
       group: groupOf(item.variety),
       variantOf: first ?? null,
       text: searchable([item.fullName, item.name, sheet.type, sheet.abil, reading.effect, reading.note,
-        `#${idx}`, `code ${item.e3Ability}`].join(' ')),
+        reading.fixed && `fix known bugs ${reading.fixed}`, `#${idx}`, `code ${item.e3Ability}`].join(' ')),
     });
   });
   renderTable(card, rows);
@@ -281,7 +281,8 @@ function renderTable(card: HTMLElement, rows: Row[]): void {
     '“+30% hit chance” is added straight on: a blow that would land 40% of the time lands 70% of the time, ',
     'and bonuses stack by adding, so +30% and +30% is +60%, up to a sure hit. (E3 rolls 1–100, and every ',
     'bonus and penalty moves that one roll.) The small grey name under an item is what it’s called until ',
-    'identified.',
+    'identified. A “Fix known bugs” line says what the item does instead with that preference on ',
+    '(Preferences; replays always play the bugs), and the number is the bug’s in E3-SUSPECTED-BUGS.',
   );
   card.append(controls, legend, wrap, empty);
 
@@ -384,6 +385,11 @@ function rowEl(r: Row): HTMLTableRowElement {
   const code: Node[] = [];
   if (r.combat) code.push(el('span', 'combat', r.combat));
   if (r.reading.effect && r.item.e3Ability !== 0) code.push(el('span', 'effect', r.reading.effect));
+  if (r.reading.fixed) {
+    const fixed = el('span', 'fixed');
+    fixed.append(el('strong', undefined, 'Fix known bugs: '), r.reading.fixed);
+    code.push(fixed);
+  }
   const meta: string[] = [];
   if (r.use) meta.push(`Use: ${r.use}`);
   if (r.reading.where !== '—') meta.push(r.reading.where);

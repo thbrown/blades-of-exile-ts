@@ -209,7 +209,7 @@ export function e3CombatRoundItems(univ: Universe, pc: Player): void {
  * code 1, and nothing in the port sets the second).
  */
 /** E3's item record for the Iceshield (`<e3-item>`). */
-const E3_ICESHIELD = 248;
+export const E3_ICESHIELD = 248;
 
 /** Every equipped item with E3 ability `code`. */
 function wornWithCode(pc: Player, code: number): Item[] {

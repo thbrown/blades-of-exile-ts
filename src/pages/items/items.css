@@ -120,6 +120,12 @@ td small {
 .effect {
   display: block;
 }
+.fixed {
+  display: block;
+  margin-top: 3px;
+  padding-left: 6px;
+  border-left: 2px solid #2f5f2f;
+}
 .where {
   margin-top: 3px;
   font-style: italic;

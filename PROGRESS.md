@@ -16802,3 +16802,11 @@ failed on the known ENCOUNTER flake and on the hit-sound check, below).
   248). All three play fixed under the preference; tests in
   `bugFixes.test.ts`.
 
+- **The items page says what "Fix known bugs" changes** (2026-10-06).
+  `readE3Item` gained a `fixed` line, shown under "By the code" and
+  searchable as "fix known bugs": the Skill Rings and both gauntlets (#24),
+  the Iceshield (#23, by record 248, now a "differs" — its sheet already says
+  Cold Protection), weapon poisons (#12), the balm (#16), returning missiles
+  (#15) and the Airy Stone (#11). Only wired fixes belong in `FIXES` in
+  `src/pages/items/e3ItemRules.ts`; add one there when a new item fix lands.
+
