@@ -192,7 +192,7 @@ async function play(file: string): Promise<RunOutcome> {
   const session = new GameSession(univ);
   session.startNewGame();
   seedLoadedReplay(univ.rng, replay);
-  applySave(start.save, univ);
+  applySave(start.save, univ, { oboeIdleOnLoad: true });
   session.resumeLoadedGame();
 
   const result = await runReplay(session, replay, {
@@ -202,7 +202,7 @@ async function play(file: string): Promise<RunOutcome> {
     onLoadParty: (save) => {
       const other = scenarioDirOf(readSavePreview(save).scenarioId);
       if (other !== start.scenarioId) throw new Error(`mid-run load of another scenario: ${other}`);
-      applySave(save, univ);
+      applySave(save, univ, { oboeIdleOnLoad: true });
       session.resumeLoadedGame();
     },
   });

@@ -16862,6 +16862,12 @@ failed on the known ENCOUNTER flake and on the hit-sound check, below).
       and the key loop skips inactive buttons. The user checked the
       original and agreed (2026-10-07).
 
+- [x] **A restored monster forgot it had seen the party** (2026-10-07).
+      OBoE's town loader reads `ALERT` and then forces IDLE
+      (universe.cpp:923); the port copied it. 1997 keeps it. The game keeps
+      the alert now; replays still reset it (`applySave(…, {
+      oboeIdleOnLoad: true })`). DIVERGENCES §54.
+
 **Gotcha (2026-10-06):** an E3 text placement can look wrong at the right
 coordinates. Check the font size (`CreateFont` at 10e8:02xx; the handles
 are DGROUP 0x6ec0–0x6ecc) before the offsets. Measure against the user's

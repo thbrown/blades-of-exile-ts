@@ -1167,7 +1167,18 @@ export function writeCurTown(file: TagFile, univ: Universe, town: CurTown): void
   }
 }
 
-export function readCurTown(file: TagFile, univ: Universe, town: CurTown): void {
+/** How a load treats what the save says about its creatures. */
+export interface LoadOptions {
+  /**
+   * OBoE's forced IDLE (universe.cpp:923, below). Only the replay harnesses
+   * set it: the corpus was recorded in OBoE, so its dice expect it.
+   */
+  oboeIdleOnLoad?: boolean;
+}
+
+export function readCurTown(
+  file: TagFile, univ: Universe, town: CurTown, options: LoadOptions = {},
+): void {
   const dim = town.record.maxDim;
   for (let p = 0; p < file.pages.length; p++) {
     const page = file.pages[p]!;
@@ -1212,9 +1223,15 @@ export function readCurTown(file: TagFile, univ: Universe, town: CurTown): void 
       }
       const c = town.monsters[i]!;
       readCreature(page, c);
-      // `monst.init(i)` gives the slot back; the C++ then forces IDLE.
+      // `monst.init(i)` gives the slot back.
       c.slot = i;
-      c.active = CreatureStatus.IDLE;
+      // **OBoE then forces IDLE** (universe.cpp:923), throwing away the ALERT
+      // that `readFrom` has just read: a monster that had noticed the party
+      // forgets it on a load, and stands still until the next move wakes it
+      // again. 1997 reads `c_town` whole (FILEIO.CPP:260), alert state
+      // included. A player can tell, so the game keeps the alert and replays
+      // keep OBoE's reset. DIVERGENCES §54.
+      if (options.oboeIdleOnLoad) c.active = CreatureStatus.IDLE;
     }
   }
 }
@@ -1646,7 +1663,7 @@ export function freshenForLoad(univ: Universe): void {
  * that lookup inline through `locate_scenario`, which has no browser
  * equivalent.
  */
-export function applySave(data: Uint8Array, univ: Universe): void {
+export function applySave(data: Uint8Array, univ: Universe, options: LoadOptions = {}): void {
   const scenario = univ.scenario;
   const ball = openSave(data);
   const partyText = ball.text('save/party.txt');
@@ -1681,7 +1698,7 @@ export function applySave(data: Uint8Array, univ: Universe): void {
     univ.town = new CurTown(record, univ);
     univ.town.monsters = [];
     univ.town.items = [];
-    readCurTown(townFile, univ, univ.town);
+    readCurTown(townFile, univ, univ.town, options);
   }
 
   // The outdoor window is rebuilt from the corner the party page restored,

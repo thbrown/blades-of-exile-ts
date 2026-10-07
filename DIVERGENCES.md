@@ -1219,6 +1219,18 @@ stand ready, which spends every point; a port bug, not a divergence, fixed
 the same day. OBoE doesn't record its Wait at all; this port records it as
 `handle_stand_ready`.
 
+### 54. A monster's alert on a load (2026-10-07)
+
+**DECIDED: the original's, in play; OBoE's in replays.** OBoE's save keeps
+whether each town creature has noticed the party (`ALERT`, creature.cpp:340)
+and reads it back (:390), but `cCurTown::readFrom` then sets every creature
+to IDLE (universe.cpp:923). A monster standing next to the party when the
+game was saved stands still after a restore, until the party's next move
+alerts it again. 1997 reads `c_town` whole (FILEIO.CPP:260), so its monsters
+keep `active`, and only `monster_targs` is cleared. A player can tell, so the
+port keeps the alert (`readCurTown`). The replay harnesses pass
+`oboeIdleOnLoad`, because the corpus was recorded in OBoE.
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

@@ -276,6 +276,21 @@ describe('.exg round trip', () => {
     expect(back.town!.record.terrain[3]![3]).toBe(17);
   });
 
+  it('keeps a creature that had noticed the party alert, as 1997 does', () => {
+    const town = univ.town!;
+    const [alert, idle] = town.monsters.filter((m) => m.isAlive);
+    alert!.active = CreatureStatus.ALERTED;
+    idle!.active = CreatureStatus.IDLE;
+    const data = saveGame(univ);
+    const back = loadSave(data, scen, new GameRng()).town!.monsters;
+    expect(back[alert!.slot]!.active).toBe(CreatureStatus.ALERTED);
+    expect(back[idle!.slot]!.active).toBe(CreatureStatus.IDLE);
+    // The replays' load: OBoE forgets it (universe.cpp:923). DIVERGENCES §54.
+    const replay = new Universe(scen, new GameRng());
+    applySave(data, replay, { oboeIdleOnLoad: true });
+    expect(replay.town!.monsters[alert!.slot]!.active).toBe(CreatureStatus.IDLE);
+  });
+
   it('restores the outdoor window and the explored maps', () => {
     univ.out.terrain[10]![11] = 23;
     univ.out.explored[10]![11] = 1;
