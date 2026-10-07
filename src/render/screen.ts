@@ -1258,12 +1258,19 @@ export class Screen {
       // on the two pale bursts, magic (1) and cold (4); no shadow. OBoE draws
       // black on a white shadow, which is hard to read on the terrain, and a
       // player can tell, so this is 1997's. The number sits 8px in (10 for one
-      // digit) and 11px down from the square's corner.
+      // digit) and 11px down from the square's corner — E3's own boom_space
+      // too (1050:5c7b), drawn left-aligned (DrawText flags 0x120, 10d0:56ce).
+      //
+      // **Size 12, not OBoE's 10.** Both originals draw it in
+      // `small_bold_font`, `CreateFont(12, …, 700, …, "MS Sans Serif")` (E3's
+      // handle 0x6ec4, 10e8:021e; BLADES.CPP:327). Being left-aligned, the
+      // number is only centred on the splash because that font's digits are
+      // wide: at 10px a "3" sat 2px left of where E3 has it and 1px short.
       const text = String(boom.damage);
       const colour = boom.type === 1 || boom.type === 4 ? Colours.BLACK : Colours.WHITE;
       const left = pos.x + 8 + (boom.damage < 10 ? 2 : 0);
       drawString(this.ctx, { top: pos.y + 11, left, bottom: pos.y + 23, right: pos.x + TILE_W },
-        text, { size: 10, font: 'bold', colour });
+        text, { size: 12, font: 'bold', colour });
     }
   }
 

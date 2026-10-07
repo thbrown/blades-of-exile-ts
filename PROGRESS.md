@@ -16844,3 +16844,27 @@ failed on the known ENCOUNTER flake and on the hit-sound check, below).
 **Gotcha (2026-10-06):** `verify-screen` failed once on the BOOMS flake
 (sound 71 for 70) and passed on the rerun; the unchanged tree failed too.
 
+
+### Play-test notes, eleventh round (2026-10-06)
+
+- [x] **The damage number sat left of centre on a hit.** The position was
+      right — E3's own `boom_space` (1050:5c7b–5cd9) is 1997's: left + 8
+      (+2 for one digit), top + 11, left-aligned (`DrawText` flags 0x120 on
+      the `{0,0,450,20}` rect at DGROUP 0x3774). The *size* was wrong. Both
+      draw it in `small_bold_font`, `CreateFont(12, …, 700, …, "MS Sans
+      Serif")` (E3's handle 0x6ec4, created at 10e8:021e); the port used
+      OBoE's 10. Left-aligned, the number is centred on the splash only
+      because that font's digits are wide, so at 10px it sat ~2px left and
+      looked small. Now 12, matching the user's E3 screenshot.
+- [ ] **Number keys to target in the cast dialog** — reported as working
+      in the original. Not changed: E3 (`FUN_1028_19f4(…,0x44a,10,0x21)`…),
+      1997 (PARTY.CPP:2932) and OBoE all give 1–6 to the caster and
+      shift-1–6 (`!@#$%^`) to the target, and the key loop skips inactive
+      buttons. Waiting on which case the user meant: Shift on a UK
+      keyboard (`"`/`£`, not `@`/`#`), or the menu route's "Cast spell on
+      who?" (`handle_menu_spell`), where 1–6 do pick the target.
+
+**Gotcha (2026-10-06):** an E3 text placement can look wrong at the right
+coordinates. Check the font size (`CreateFont` at 10e8:02xx; the handles
+are DGROUP 0x6ec0–0x6ecc) before the offsets. Measure against the user's
+own screenshot of the original, not against the formula.
