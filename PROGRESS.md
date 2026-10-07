@@ -16856,13 +16856,11 @@ failed on the known ENCOUNTER flake and on the hit-sound check, below).
       OBoE's 10. Left-aligned, the number is centred on the splash only
       because that font's digits are wide, so at 10px it sat ~2px left and
       looked small. Now 12, matching the user's E3 screenshot.
-- [ ] **Number keys to target in the cast dialog** — reported as working
-      in the original. Not changed: E3 (`FUN_1028_19f4(…,0x44a,10,0x21)`…),
-      1997 (PARTY.CPP:2932) and OBoE all give 1–6 to the caster and
-      shift-1–6 (`!@#$%^`) to the target, and the key loop skips inactive
-      buttons. Waiting on which case the user meant: Shift on a UK
-      keyboard (`"`/`£`, not `@`/`#`), or the menu route's "Cast spell on
-      who?" (`handle_menu_spell`), where 1–6 do pick the target.
+- [x] **Number keys to target in the cast dialog** — not a bug. E3
+      (`FUN_1028_19f4(…,0x44a,10,0x21)`…), 1997 (PARTY.CPP:2932) and OBoE
+      all give 1–6 to the caster and shift-1–6 (`!@#$%^`) to the target,
+      and the key loop skips inactive buttons. The user checked the
+      original and agreed (2026-10-07).
 
 **Gotcha (2026-10-06):** an E3 text placement can look wrong at the right
 coordinates. Check the font size (`CreateFont` at 10e8:02xx; the handles
