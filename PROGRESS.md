@@ -16989,8 +16989,12 @@ dice. Not chased.
       `applyE3TownTerrain` lays it on (terrain 255 back to the town's own
       255). Same save: five portcullises open, bodies cleared, three 255s
       gone. The real-save test (`E3_SAV=…`) now checks both, square by square
-      and slot by slot. Still not read: `t_i`, the items on the ground
-      (`TODO(e3save)`).
+      and slot by slot.
+- [x] **…and put back what the party had dropped or taken.** `t_i`, the
+      items on the ground, is read too (`applyE3TownItems`): each matched as
+      a PC's are (`e3ItemToItem`), on its square, with its preset slot
+      (`isSpecial`), property and contained flags. Round-trip and real-save
+      tests check them. The user's two saves happen to match a fresh entry.
 - [x] **The transcript had no scrollbar.** `text_sbar` (boe.main.cpp:388):
       58 lines back, 11 a page, back at the bottom whenever a line is added
       (`Universe.transcriptAdded`); arrows, track, thumb drag and the wheel

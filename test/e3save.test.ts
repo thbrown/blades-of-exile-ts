@@ -19,7 +19,9 @@ import { e3MonsterRecord, e3TownData, e3TownHeader } from '../src/fileio/e3SaveT
 import { e3TownGeometry } from '../tools/e3convert/town';
 import { FieldType } from '../src/data/fields';
 import { e3SaveDefaultsFromJson, e3SaveDefaultsToJson, type E3SaveDefaults } from '../src/fileio/e3SaveDefaults';
-import { applyE3Save, applyE3TownCreatures, applyE3TownDecals, applyE3TownTerrain } from '../src/fileio/e3SaveImport';
+import {
+  applyE3Save, applyE3TownCreatures, applyE3TownDecals, applyE3TownItems, applyE3TownTerrain,
+} from '../src/fileio/e3SaveImport';
 import { exportE3Save, newE3PartyRecord } from '../src/fileio/e3SaveExport';
 import { emitScenario } from '../tools/e3convert/emitNode';
 import { findE3Dir, readE3Files } from '../tools/e3convert/install';
@@ -319,6 +321,11 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     expect(moved.status[Status.POISON]).toBe(3);
     expect(moved.morale).toBe(4);
     expect(back.town.monsters.filter((m) => m.isAlive).length).toBe(live.length - 1);
+    // And its items: the one dropped at (12,13) is still there, the rest where they lay.
+    const before = q.town.items.filter((it) => it.variety !== 0);
+    expect(applyE3TownItems(back.univ, res.town!.items, defaults)).toEqual([]);
+    expect(back.town.items.map((it) => [it.fullName, it.itemLoc, it.isSpecial, it.property, it.contained]))
+      .toEqual(before.map((it) => [it.fullName, it.itemLoc, it.isSpecial, it.property, it.contained]));
   });
 
   /**
@@ -350,6 +357,12 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
         back.session.resumeInSavedTown(res.town.num, res.town.loc);
         applyE3TownCreatures(back.univ, res.town.cTown);
         applyE3TownTerrain(back.univ, res.town.data);
+        // The items on the ground, every one matched and where it lay.
+        expect(applyE3TownItems(back.univ, res.town.items, defaults), file).toEqual([]);
+        const onGround = [...Array(115).keys()]
+          .map((k) => new E3Bytes(save.town!.items.subarray(63 * k, 63 * k + 63)))
+          .filter((r) => r.i16(E3ITEM.VARIETY) !== 0);
+        expect(back.town.items.map((it) => it.itemLoc), file).toEqual(onGround.map((r) => r.loc(E3ITEM.LOC)));
         // The map as E3 left it: an opened portcullis is still open.
         const dim = Math.min(64, back.town.record.maxDim);
         for (let x = 0; x < dim; x++) {

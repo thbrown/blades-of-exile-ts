@@ -117,7 +117,9 @@ import { LoadedPackage, ScenarioPackage, identifyScenarioFiles, loadScenarioPack
 import { PackedSource } from './fileio/packedSource';
 import { isE3Save } from './fileio/e3save';
 import { e3SaveDefaultsFromJson, type E3SaveDefaults } from './fileio/e3SaveDefaults';
-import { applyE3Save, applyE3TownCreatures, applyE3TownDecals, applyE3TownTerrain } from './fileio/e3SaveImport';
+import {
+  applyE3Save, applyE3TownCreatures, applyE3TownDecals, applyE3TownItems, applyE3TownTerrain,
+} from './fileio/e3SaveImport';
 import { exportE3Save } from './fileio/e3SaveExport';
 import { Scenario } from './data/scenario';
 import { noScenario, readScenarioFromXml } from './fileio/scenarioXml';
@@ -2061,6 +2063,7 @@ async function main(): Promise<void> {
       applyE3TownDecals(univ, res.town.decals);
       applyE3TownTerrain(univ, res.town.data);
       applyE3TownCreatures(univ, res.town.cTown);
+      res.warnings.push(...applyE3TownItems(univ, res.town.items, defaults));
     }
     for (const w of res.warnings) univ.addStringToBuf(w);
     univ.addStringToBuf('Exile III game loaded.');

@@ -11,10 +11,10 @@
  * items, which are matched by name against the scenario's.
  *
  * What a save holds that this doesn't read yet (each marked where it would go):
- * - the items on the ground in the town the party stands in (`t_i`): the
- *   town is entered afresh, with no entry special, and then its map as it
- *   stood and `c_town`'s creatures are laid over it (`applyE3TownTerrain`,
- *   `applyE3TownCreatures`), but its items are the ones a fresh entry gives;
+ * - the town the party stands in is entered afresh, with no entry special,
+ *   and then its map, its creatures and its items as they were are laid
+ *   over it (`applyE3TownTerrain`, `applyE3TownCreatures`,
+ *   `applyE3TownItems`);
  * - the four remembered towns' creatures (`creature_save`), the wandering
  *   groups outdoors (`out_c`), the magic shops' stock, the journal and the
  *   encounter and talk notes (E3 keeps string numbers; the engine keeps
@@ -58,10 +58,13 @@ export interface E3Import {
   /**
    * The engine's town to enter, and where, when the save was made in town,
    * with its stains as E3 saved them (`sfx`, 64 by 64), `c_town`, whose
-   * creatures `applyE3TownCreatures` lays on once the town is entered, and
-   * `t_d`, whose map `applyE3TownTerrain` does.
+   * creatures `applyE3TownCreatures` lays on once the town is entered,
+   * `t_d`, whose map `applyE3TownTerrain` does, and `t_i`, whose items
+   * `applyE3TownItems` does.
    */
-  town: { num: number; loc: Location; decals: Uint8Array; cTown: Uint8Array; data: Uint8Array } | null;
+  town: {
+    num: number; loc: Location; decals: Uint8Array; cTown: Uint8Array; data: Uint8Array; items: Uint8Array;
+  } | null;
   /** What couldn't be carried over, for the transcript. */
   warnings: string[];
 }
@@ -302,9 +305,7 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
         num = g.town;
       }
     });
-    // TODO(e3save): t_i's items, instead of a fresh town's.
-    town = { num, loc, decals: save.sfx, cTown: save.town.cTown, data: save.town.data };
-    warnings.push('The town\'s items are the ones it starts with: those on the ground are not read from the save yet.');
+    town = { num, loc, decals: save.sfx, cTown: save.town.cTown, data: save.town.data, items: save.town.items };
   }
   party.townNum = TOWN_NUM_OUTDOORS;
   univ.town = null;
@@ -470,4 +471,39 @@ export function applyE3TownTerrain(univ: Universe, data: Uint8Array): void {
       terrain[x]![y] = t === 255 ? ter255 : t;
     }
   }
+}
+
+/** `t_i`'s item slots (`E3ITEM.SIZE` each). */
+const E3_TOWN_ITEMS_HELD = 115;
+
+/**
+ * A town saved by E3, entered afresh (`E3Import.town`), with the items on
+ * its ground as `t_i` holds them, in place of those a fresh entry put down:
+ * what the party dropped stays dropped, and what it picked up stays gone.
+ * Each comes with its square, its preset slot plus one (`isSpecial`, what
+ * taking it marks), and whether it is someone else's or in a container, as
+ * `e3SaveTown.ts` writes them. Returns what couldn't be matched.
+ */
+export function applyE3TownItems(univ: Universe, items: Uint8Array, defaults: E3SaveDefaults): string[] {
+  const town = univ.town;
+  if (!town) return [];
+  const warnings: string[] = [];
+  const laid: Item[] = [];
+  for (let k = 0; k < E3_TOWN_ITEMS_HELD; k++) {
+    const rec = items.subarray(E3ITEM.SIZE * k, E3ITEM.SIZE * (k + 1));
+    const b = new E3Bytes(rec);
+    if (b.i16(E3ITEM.VARIETY) === 0) continue;
+    const item = e3ItemToItem(univ, rec, defaults);
+    if (item === null) {
+      warnings.push(`The "${b.str(E3ITEM.FULL_NAME, E3ITEM.FULL_NAME_LEN)}" on the ground has no match in the scenario.`);
+      continue;
+    }
+    item.itemLoc = b.loc(E3ITEM.LOC);
+    item.isSpecial = b.u8(E3ITEM.IS_SPECIAL);
+    item.property = b.u8(E3ITEM.PROPERTY) !== 0;
+    item.contained = b.u8(E3ITEM.CONTAINED) !== 0;
+    laid.push(item);
+  }
+  town.items = laid;
+  return warnings;
 }
