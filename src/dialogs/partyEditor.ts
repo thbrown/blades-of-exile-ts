@@ -12,7 +12,7 @@
 
 import { getStr } from '../data/strings';
 import { PcGraphicPick, RaceAbilPick, XpMode, newPc, pcNameOk } from '../game/createPc';
-import { giveE3StartItems } from '../game/e3StartItems';
+import { giveE3StartItems, giveE3StartSpells } from '../game/e3StartItems';
 import { SheetStore } from '../render/sheets';
 import { giveHelp } from '../universe/living';
 import { Player } from '../universe/player';
@@ -187,6 +187,7 @@ export async function createPc(
   if (!inStartup) {
     pc.finishCreate();
     giveE3StartItems(host.univ, pc, false);
+    giveE3StartSpells(host.univ, pc);
   }
   pc.curHealth = pc.maxHealth;
   pc.curSp = pc.maxSp;

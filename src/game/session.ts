@@ -73,7 +73,7 @@ import { ItemShopMode, ItemShopState, handleItemShopAction } from './itemShop';
 import { isContainerAt } from './loot';
 import { NO_TARGET } from './spellPick';
 import { doRest, handleRest } from './rest';
-import { giveE3StartItems } from './e3StartItems';
+import { giveE3StartItems, giveE3StartSpells } from './e3StartItems';
 import { makeTownHostile } from './townAttitude';
 import { OUT_HALF_DIM, OUT_MAX_DIM } from '../universe/curOut';
 import { Population, TOWN_NUM_OUTDOORS } from '../universe/party';
@@ -433,13 +433,14 @@ export class GameSession {
   /**
    * `finish_create` for every living PC — the tail of `start_new_game` —
    * and in Exile III its own gear and bonus roll in their place
-   * (`giveE3StartItems`).
+   * (`giveE3StartItems`), and its own starting spells (`giveE3StartSpells`).
    */
   finishNewParty(): void {
     for (const pc of this.univ.party.pcs) {
       if (pc.mainStatus !== MainStatus.ALIVE) continue;
       pc.finishCreate();
       giveE3StartItems(this.univ, pc, true);
+      giveE3StartSpells(this.univ, pc);
     }
   }
 

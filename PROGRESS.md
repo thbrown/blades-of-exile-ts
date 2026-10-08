@@ -17054,11 +17054,13 @@ Krizsan (towns 0–3). Find a person by `<personality>N<` in `townN.xml`.
       price and who runs them, teachers traced back from `CALL_SCEN_SPEC`
       and special squares. `test/spellRules.test.ts` checks every spell
       has a rule and a few formulas against the code.
-- [ ] **Open question for the user: E3's starting spells.** Every PC here
-      starts knowing spells 0–29 of each school (`BASIC_SPELLS`). Exile
-      III's own new PC record (`e3save.json`'s `mageSpells`, from the EXE)
-      knows 23 mage and 18 priest of those: not Identify (6), True Sight
-      (9), Summon Beast (16), Conflagration (17), Wall of Force (25), Weak
-      Summoning (26), Flame Arrows (27), nor priest 6–8, 15–17, 21, 24–26,
-      28–29 — which is why E3's shops sell them (Velnas sells True Sight for
-      200). Not changed yet; the spells page shows what the port does.
+- [x] **E3's starting spells** (the user's call, 2026-10-07: match the
+      original). Every PC had started knowing spells 0–29 of each school
+      (`BASIC_SPELLS`). Exile III's template PC record (`DS:294e` mage,
+      `DS:296c` priest, read for saves already) knows 23 mage and 18 priest
+      of those: not Identify (6), True Sight (9), Summon Beast (16),
+      Conflagration (17), Wall of Force (25), Weak Summoning (26), Flame
+      Arrows (27), nor priest 6–8, 15–17, 21, 24–26, 28–29, which E3's
+      shops sell. New feature flag `start-spells` = `exile3:<mage>;<priest>`,
+      written by the converter; `giveE3StartSpells` applies it wherever E3's
+      start items are given (a new party, Add PC). The spells page reads it.

@@ -4923,6 +4923,17 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
     });
   });
 
+  it("starts a new party knowing Exile III's own first spells, not all thirty", () => {
+    const q = new QuestRunner(scen);
+    q.session.finishNewParty();
+    const pc = q.party.pcs.find((p) => p.mainStatus === MainStatus.ALIVE)!;
+    const known = (book: boolean[]) => book.slice(0, 30).flatMap((v, i) => (v ? [i] : []));
+    // E3's template PC record (DS:294e, 296c): Identify (6) and True Sight
+    // (9) are bought, from Velnas in Gale among others.
+    expect(known(pc.mageSpells)).toEqual([0, 1, 2, 3, 4, 5, 7, 8, 10, 11, 12, 13, 14, 15, 18, 19, 20, 21, 22, 23, 24, 28, 29]);
+    expect(known(pc.priestSpells)).toEqual([0, 1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 14, 18, 19, 20, 22, 23, 27]);
+  });
+
   describe('the buyers (`FUN_1070_079e`, towns/talkScripts.ts)', () => {
     /** Empties every pack, then gives PC 0 `n` of the item (a stack where it stacks) and PC 1 one more. */
     const stock = (q: QuestRunner, name: string, stack: number): void => {

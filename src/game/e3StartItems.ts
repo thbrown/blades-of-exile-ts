@@ -15,7 +15,8 @@
  */
 
 import type { Item } from '../data/item';
-import type { Player } from '../universe/player';
+import type { Scenario } from '../data/scenario';
+import { BASIC_SPELLS, type Player } from '../universe/player';
 import type { Universe } from '../universe/universe';
 
 interface E3StartItems {
@@ -63,4 +64,30 @@ export function giveE3StartItems(univ: Universe, pc: Player, newGame: boolean): 
   if (univ.rng.getRan(1, 0, 1) !== 0) return;
   const item = e3Item(univ, table.bonus[univ.rng.getRan(1, 0, 11)] ?? -1);
   if (item) pc.items[2] = item;
+}
+
+/**
+ * Exile III's starting spells: the first thirty of each school as E3's
+ * template PC record has them (`DS:294e` mage, `DS:296c` priest, the record
+ * a new PC is copied from), where BoE gives all thirty (`BASIC_SPELLS`).
+ * E3's shops sell the rest (Velnas's True Sight, Identify…). The
+ * `start-spells` = `exile3:<mage>;<priest>` feature flag lists those known,
+ * which the converter reads out of E3's data segment. Null outside
+ * Exile III.
+ */
+export function e3StartSpells(scenario: Scenario): { mage: Set<number>; priest: Set<number> } | null {
+  const m = /^exile3:([\d,]*);([\d,]*)$/.exec(scenario.featureFlags['start-spells'] ?? '');
+  if (m === null) return null;
+  const set = (s: string) => new Set(s.split(',').filter((x) => x !== '').map(Number));
+  return { mage: set(m[1]!), priest: set(m[2]!) };
+}
+
+/** `pc` knows E3's starting spells of the first thirty, as a new PC does there. Nothing elsewhere. */
+export function giveE3StartSpells(univ: Universe, pc: Player): void {
+  const known = e3StartSpells(univ.scenario);
+  if (known === null) return;
+  for (let i = 0; i < BASIC_SPELLS; i++) {
+    pc.mageSpells[i] = known.mage.has(i);
+    pc.priestSpells[i] = known.priest.has(i);
+  }
 }

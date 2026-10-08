@@ -1,8 +1,8 @@
 /**
  * Where a party gets each spell, read out of the scenario as converted:
  *
- * - every PC starts knowing the first thirty of each school
- *   (`BASIC_SPELLS`, what `Player` gives a new one);
+ * - a new PC starts knowing Exile III's own list of the first thirty of
+ *   each school (`e3StartSpells`; all thirty, `BASIC_SPELLS`, elsewhere);
  * - spell shops (`ShopItemType.MAGE_SPELL`/`PRIEST_SPELL`), at their own
  *   price, run by whoever's talk node opens them (`TalkNodeType.SHOP`, the
  *   shop in its second number), in whichever towns that person stands;
@@ -23,6 +23,7 @@ import { ShopItemType } from '../../data/shop';
 import { TalkNodeType } from '../../data/talking';
 import type { Scenario } from '../../data/scenario';
 import { BASIC_SPELLS } from '../../universe/player';
+import { e3StartSpells } from '../../game/e3StartItems';
 
 export type SourceKind = 'start' | 'shop' | 'taught';
 
@@ -94,9 +95,10 @@ export function spellSources(scen: Scenario): Map<Spell, Source[]> {
     }
     out.set(s, list);
   };
+  const start = e3StartSpells(scen);
   for (let i = 0; i < BASIC_SPELLS; i++) {
-    add(i as Spell, { kind: 'start' });
-    add((100 + i) as Spell, { kind: 'start' });
+    if (!start || start.mage.has(i)) add(i as Spell, { kind: 'start' });
+    if (!start || start.priest.has(i)) add((100 + i) as Spell, { kind: 'start' });
   }
 
   // Who stands where: a personality's towns.

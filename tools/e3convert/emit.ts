@@ -855,7 +855,10 @@ function scenarioXml(
   shops: Shop[], specialItems: SpecItem[], specStrings: string[], newDay: number, roadJoins: number[],
   jobBase: number, skribbane: number[], journal: string[], cursors: E3Cursor[], townCount: number, uranium: number, crushed: number, escort: number,
   crumbles: number[], amuletNode: number, unlocks: string, startItems: E3StartItems, addPcRefusal: string,
+  startSpells: { mage: Uint8Array; priest: Uint8Array },
 ): string {
+  // The first thirty of each school a new PC knows (`giveE3StartSpells`).
+  const known = (b: Uint8Array): string => [...b].flatMap((v, i) => (v ? [i] : [])).join(',');
   return `${XML_HEAD}<scenario boes="2.0.0">
     <title>Exile III: Ruined World</title>
     <icon>0</icon>
@@ -890,6 +893,7 @@ function scenarioXml(
         <waterfall>exile3:${E3_WATERFALL}</waterfall>
         <add-pc>exile3:${E3_ADD_PC_TOWN}:${esc(addPcRefusal)}</add-pc>
         <start-items>exile3:${startItems.bySpecies.flat().join(',')};${startItems.bonus.join(',')}</start-items>
+        <start-spells>exile3:${known(startSpells.mage)};${known(startSpells.priest)}</start-spells>
         <backgrounds>exile3</backgrounds>
         <message-pics>exile3</message-pics>
         <message-sounds>exile3</message-sounds>
@@ -1247,7 +1251,8 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   });
   write('debug.json', JSON.stringify(debug));
   // What reading and writing E3's own saves needs from the EXE (src/fileio/e3SaveImport.ts).
-  write('e3save.json', e3SaveDefaultsToJson(readE3SaveDefaults(files.exe, files.town)));
+  const saveDefaults = readE3SaveDefaults(files.exe, files.town);
+  write('e3save.json', e3SaveDefaultsToJson(saveDefaults));
   // E3's job boards (src/game/e3Jobs.ts): their text, as scenario strings.
   // Deliveries match the target's engine personality, E3's less one, so no
   // target may have been cloned for a shop.
@@ -1277,7 +1282,8 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   // Last, since the places' scripts can add shops of their own.
   shops.push(...talk.shops);
   const cursors = readE3Cursors(resources);
-  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, skribbane, e3JournalStrings((id) => strings.get(id) ?? ''), cursors, townCount, uranium, crushed, escort, readE3Crumbles(files.exe), amuletNode, readE3Unlocks(files.exe), readE3StartItems(files.exe), e3Src.exeString!(...E3_ADD_PC_REFUSAL)));
+  write('scenario.xml', scenarioXml(start, findTownEntrance(zones, start.town, FORT_START_ZONE), shops, specialItems, scen.strings, newDay, readE3RoadJoins(files.exe), jobBase, skribbane, e3JournalStrings((id) => strings.get(id) ?? ''), cursors, townCount, uranium, crushed, escort, readE3Crumbles(files.exe), amuletNode, readE3Unlocks(files.exe), readE3StartItems(files.exe), e3Src.exeString!(...E3_ADD_PC_REFUSAL),
+    { mage: saveDefaults.mageSpells, priest: saveDefaults.priestSpells }));
   const sheets = [...terrainSheets, ...monsterArt.sheets, buildItemSheet(read), ...e3MapSheets(read)];
   sheets.forEach((s, i) => write(`graphics/sheet${i}.png`, encodePng(s)));
   // E3's own sounds, which a scenario's `sounds/SNDn.wav` puts in place of
