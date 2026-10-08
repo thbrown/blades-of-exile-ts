@@ -164,7 +164,7 @@ if-creature
 if-near
 if-fixed
 if-field-count
-
+if-panel
 
 
 town-attitude
