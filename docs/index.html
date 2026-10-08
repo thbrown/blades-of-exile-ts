@@ -243,7 +243,9 @@
       }
       .startup-page,
       .startup-page button,
-      .startup-page input {
+      .startup-page input,
+      .loadgame,
+      .loadgame button {
         font-family: 'BoEText', 'DejaVu Sans', Verdana, sans-serif;
       }
       /* The startup screen's host is a flex item of the body, which would size
@@ -654,6 +656,45 @@
         font-size: 56px;
         line-height: 1;
         color: #333;
+      }
+      /* A file held over the import card. */
+      .startup-save-import.drop-here {
+        border-style: solid;
+        outline: 3px solid #000;
+        outline-offset: -3px;
+        background: rgba(255, 255, 255, 0.55);
+      }
+      .startup-save-import.drop-here .startup-import-plus {
+        color: #000;
+      }
+      .startup-badge.current {
+        background: #1d5c1d;
+        color: #fff;
+      }
+      /* File › Load Game: the main menu's saved-game cards, over the game. */
+      .loadgame-back {
+        position: fixed;
+        inset: 0;
+        z-index: 500;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 40px 16px 16px;
+        box-sizing: border-box;
+        background: rgba(0, 0, 0, 0.6);
+        overflow-y: auto;
+      }
+      .startup.loadgame {
+        width: 920px;
+        background: var(--paper-tile, none) 0 0 / 64px 64px repeat, #e4e4e4;
+        image-rendering: pixelated;
+        color: #000;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.7);
+      }
+      .loadgame-foot {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 14px;
       }
       /* Rename and Delete ride on the picture's top corner. */
       .startup-save-tools {
@@ -1200,7 +1241,8 @@
         image-rendering: pixelated;
         border: 1px solid #000;
         box-shadow: 0 4px 18px rgba(0, 0, 0, 0.7);
-        touch-action: manipulation;
+        /* none: a finger on the scrollbar's thumb drags it, not the page. */
+        touch-action: none;
         -webkit-tap-highlight-color: transparent;
         user-select: none;
         -webkit-user-select: none;
@@ -1297,12 +1339,12 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="/blades-of-exile-ts/assets/main-C8UFTpg3.js"></script>
-    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/tiling-CFO3cgAX.js">
-    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/spellTarget-CSFaORBY.js">
-    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/e3ItemUse-CoGJxuMd.js">
-    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/terrainPics-5T5Af4DI.js">
-    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/e3StartItems-CGD8snBQ.js">
+    <script type="module" crossorigin src="/blades-of-exile-ts/assets/main-DrDetaQo.js"></script>
+    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/tiling-DQqhWbJb.js">
+    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/spellTarget-exKzi1Os.js">
+    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/e3ItemUse-CtGVbEIK.js">
+    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/terrainPics-DAoR3H0f.js">
+    <link rel="modulepreload" crossorigin href="/blades-of-exile-ts/assets/e3StartItems-DKzBqD92.js">
   </head>
   <body>
     <nav id="game-menu-bar"></nav>
