@@ -1,0 +1,152 @@
+/* The spells page: one card a spell, on the items page's paper. */
+
+.caster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #000;
+  background: rgba(255, 255, 255, 0.6);
+}
+.slider {
+  display: flex;
+  flex: 1 1 20rem;
+  min-width: 0;
+  max-width: 30rem;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: bold;
+}
+.slider span {
+  flex: none;
+  width: 6.5rem;
+}
+.slider input {
+  flex: 1 1 6rem;
+  min-width: 0;
+}
+.slider output {
+  flex: none;
+  min-width: 4.5rem;
+  font-variant-numeric: tabular-nums;
+}
+.controls .sort-always {
+  display: inline-block;
+}
+
+.spells {
+  display: grid;
+  gap: 10px;
+}
+.spell {
+  border: 1px solid #000;
+  background: rgba(255, 255, 255, 0.6);
+  border-left-width: 5px;
+}
+.spell.mage { border-left-color: #2f3f7a; }
+.spell.priest { border-left-color: #7a5a1f; }
+.spell-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  padding: 8px 12px 6px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.18);
+}
+.spell-head h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12px;
+}
+.fact small {
+  display: inline;
+  margin-right: 4px;
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #555;
+}
+.spell-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 10px 18px;
+  padding: 8px 12px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.spell-body h3 {
+  margin: 0 0 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #555;
+}
+.spell-body p {
+  margin: 0;
+}
+.said p {
+  font-style: italic;
+}
+.does .note {
+  margin-top: 4px;
+  color: #444;
+}
+.numbers-wrap,
+.growth-wrap {
+  margin-top: 6px;
+}
+.numbers-wrap[hidden],
+.growth-wrap[hidden] {
+  display: none;
+}
+.numbers {
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+}
+.growth {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr));
+  gap: 2px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-variant-numeric: tabular-nums;
+}
+.growth .lvl {
+  display: inline-block;
+  min-width: 2.4rem;
+  font-weight: bold;
+  color: #555;
+}
+.growth li.here {
+  font-weight: bold;
+}
+.sources {
+  margin: 0;
+  padding: 0 0 0 1rem;
+}
+.sources li {
+  margin: 0 0 2px;
+}
+.src-where {
+  color: #444;
+}
+.sources .nothing {
+  list-style: none;
+  margin-left: -1rem;
+  color: #777;
+}
+
+@media (max-width: 860px) {
+  .spell-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

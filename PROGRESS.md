@@ -17039,3 +17039,26 @@ stands at **50 of 87, 1,122,563 draws** both before and after this round
 **Gotcha (2026-10-07):** `towns/talkN.xml` is numbered by E3's dialogue
 block, not by town: Agrod's lines are in `talk9.xml` and he stands in
 Krizsan (towns 0–3). Find a person by `<personality>N<` in `townN.xml`.
+- [x] **Symbiosis did nothing right.** `do_priest_spell` had no arm for it:
+      it fell through to Raise Dead's, so on a living PC it charged the
+      points and said "was OK." (and, in Exile III, ate a balm). Ported from
+      OBoE (boe.party.cpp:1142; 1997's PARTY.CPP:2009 has the same with a
+      0–100 die): the target's wounds onto the caster a point at a time.
+      Test in `spellTown.test.ts`. Found writing the spells page.
+- [x] **A spells page** (`exile3/spells.html`, `src/pages/spells/`), beside
+      the items page and the map: all 124 spells, the Library's text, what
+      the code does with the formula in L (level), P (1 + ⌊L/2⌋, aimed
+      combat spells) and B (the Intelligence bonus), the numbers for a
+      caster set with two sliders, the same at L 1–30, and where to learn
+      it, read from the scenario (`spellSources.ts`): shops at their E3
+      price and who runs them, teachers traced back from `CALL_SCEN_SPEC`
+      and special squares. `test/spellRules.test.ts` checks every spell
+      has a rule and a few formulas against the code.
+- [ ] **Open question for the user: E3's starting spells.** Every PC here
+      starts knowing spells 0–29 of each school (`BASIC_SPELLS`). Exile
+      III's own new PC record (`e3save.json`'s `mageSpells`, from the EXE)
+      knows 23 mage and 18 priest of those: not Identify (6), True Sight
+      (9), Summon Beast (16), Conflagration (17), Wall of Force (25), Weak
+      Summoning (26), Flame Arrows (27), nor priest 6–8, 15–17, 21, 24–26,
+      28–29 — which is why E3's shops sell them (Velnas sells True Sight for
+      200). Not changed yet; the spells page shows what the port does.

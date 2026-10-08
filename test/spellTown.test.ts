@@ -254,6 +254,32 @@ describe('do_priest_spell', () => {
     expect(s.univ.transcript.at(-1)).toMatch(/healed \d+\./);
   });
 
+  it('Symbiosis moves the target\'s wounds onto the caster', async () => {
+    const s = inTown();
+    const pc = caster(s);
+    const other = s.univ.party.pcs[2]!;
+    pc.maxHealth = pc.curHealth = 100;
+    other.maxHealth = 40;
+    other.curHealth = 10;
+    other.mainStatus = MainStatus.ALIVE;
+    s.spellTarget = 2;
+    doPriestSpell(s, 0, Spell.SYMBIOSIS);
+    // Thirty points healed; the caster pays one to two for each, less a
+    // lucky roll of 100 or more.
+    expect(other.curHealth).toBe(40);
+    expect(100 - pc.curHealth).toBeGreaterThan(0);
+    expect(100 - pc.curHealth).toBeLessThanOrEqual(60);
+    expect(s.univ.transcript.slice(-3)).toEqual([
+      '  You absorb damage.', `  ${other.name} healed 30.`, `${pc.name} takes ${100 - pc.curHealth}.`,
+    ]);
+    // Not on yourself.
+    s.spellTarget = 0;
+    const sp = pc.curSp;
+    doPriestSpell(s, 0, Spell.SYMBIOSIS);
+    expect(s.univ.transcript.at(-1)).toBe("  Can't cast on self.");
+    expect(pc.curSp).toBe(sp);
+  });
+
   it('Manna feeds the party', async () => {
     const s = inTown();
     caster(s);

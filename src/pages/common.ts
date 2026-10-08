@@ -1,5 +1,5 @@
 /**
- * What the Exile III reference pages (`exile3/items.html`, `exile3/map.html`) share: the
+ * What the Exile III reference pages (`exile3/items.html`, `spells.html`, `map.html`) share: the
  * main menu's look — the game's granite behind, its marble as paper, the
  * Dungeon-face masthead — and a loader that gets Exile III the way the game
  * does.
@@ -57,6 +57,7 @@ export function installBackdrop(): void {
 const PAGES: { href: string; label: string; id: string }[] = [
   { href: `${BASE}`, label: 'Play', id: 'play' },
   { href: `${BASE}exile3/items.html`, label: 'Exile III items', id: 'items' },
+  { href: `${BASE}exile3/spells.html`, label: 'Exile III spells', id: 'spells' },
   { href: `${BASE}exile3/map.html`, label: 'Map of Valorim', id: 'map' },
 ];
 

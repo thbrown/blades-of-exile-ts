@@ -34,6 +34,13 @@ import { startTownTargeting } from './spellTarget';
 import { ItemShopMode } from './itemShop';
 import type { GameSession } from './session';
 
+/** move_to_zero — one step toward zero, from either side. */
+function moveToZero(value: number): number {
+  if (value > 0) return value - 1;
+  if (value < 0) return value + 1;
+  return 0;
+}
+
 /** `increase_light` (boe.party.cpp:288) — brighten the party's own lantern. */
 export function increaseLight(session: GameSession, amount: number): void {
   const { univ } = session;
@@ -574,6 +581,23 @@ export function doPriestSpell(
         line += ' hidden.';
         const r1 = Math.max(0, univ.rng.getRan(0, 1, 3) + Math.trunc(level / 4) + adj);
         target.status[Status.INVISIBLE] = (target.status[Status.INVISIBLE] ?? 0) + r1;
+      } else if (spellNum === Spell.SYMBIOSIS) {
+        // boe.party.cpp:1142 (PARTY.CPP:2009 in 1997): the target's wounds,
+        // a point at a time, onto the caster, who pays a point for each unless
+        // the roll reaches 100, and a second one for a roll under 50.
+        // Until 2026-10-07 this arm was missing, and Symbiosis fell through
+        // to the raising below. OBoE's die (1..100; 1997's is 0..100).
+        const victimBefore = target.curHealth;
+        const casterBefore = pc.curHealth;
+        while (target.maxHealth - target.curHealth > 0 && pc.curHealth > 0) {
+          target.curHealth++;
+          const r1 = univ.rng.getRan(1, 1, 100) + Math.trunc(level / 2) + 3 * adj;
+          if (r1 < 100) pc.curHealth--;
+          if (r1 < 50) pc.curHealth = moveToZero(pc.curHealth);
+        }
+        univ.addStringToBuf('  You absorb damage.');
+        univ.addStringToBuf(`${line} healed ${target.curHealth - victimBefore}.`);
+        line = `${pc.name} takes ${casterBefore - pc.curHealth}.`;
       } else if (spellNum === Spell.REVIVE) {
         line += ' healed.';
         target.heal(250);
