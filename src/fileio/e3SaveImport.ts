@@ -42,7 +42,7 @@ import {
 import { freshenForLoad } from './saveIo';
 import type { Vehicle } from '../data/vehicle';
 import type { E3Job } from '../game/e3Jobs';
-import { E3_JOBS_HELD, E3_JOBS_PER_BOARD, E3_JOB_BANKS } from '../game/e3Jobs';
+import { E3_JOBS_HELD, E3_JOBS_PER_BOARD, E3_JOB_BANKS, e3JobsAsLoaded } from '../game/e3Jobs';
 import { TOWN_NUM_OUTDOORS } from '../universe/party';
 import type { Player } from '../universe/player';
 import { NUM_INVEN_SLOTS, NUM_SPELLS } from '../universe/player';
@@ -259,12 +259,12 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
   party.totalDamTaken = p.i32(E3P.TOTAL_DAM_TAKEN);
   party.direction = p.i16(E3P.DIRECTION);
   for (let k = 0; k < party.alchemy.length; k++) party.alchemy[k] = k < 17 && p.u8(E3P.ALCHEMY + k) !== 0;
-  party.e3Jobs = {
+  party.e3Jobs = e3JobsAsLoaded({
     boards: Array.from({ length: E3_JOB_BANKS }, (_, bank) => Array.from({ length: E3_JOBS_PER_BOARD },
       (_, j) => readJob(p, E3P.JOB_BOARDS + bank * 0x30 + j * 0xc))),
     held: Array.from({ length: E3_JOBS_HELD }, (_, j) => readJob(p, E3P.JOBS_HELD + j * 0xc)),
     failed: Array.from({ length: E3_JOB_BANKS }, (_, bank) => p.u8(E3P.JOBS_FAILED + bank) !== 0),
-  };
+  });
   for (let k = 0; k < 20; k++) {
     const day = p.i16(E3P.KEY_TIMES + 2 * k);
     if (day !== E3P.KEY_TIME_NEVER) party.keyTimes.set(k + 1, day);

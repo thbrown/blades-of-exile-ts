@@ -17075,6 +17075,13 @@ Krizsan (towns 0–3). Find a person by `<personality>N<` in `townN.xml`.
       looked was exported with six empty boards — and E3 only refills them
       every 4,000 ticks. `exportE3Save` now fills them first (the game keeps
       what it exported). Test in `e3save.test.ts`.
+      **Games already imported from such a file are repaired on load**
+      (`e3JobsAsLoaded`): a job state with nothing ever posted — every
+      board slot, held job and failed flag empty — reads as never filled,
+      so the boards are rolled when one is first opened. E3 can't produce
+      that state (it fills all 24 slots for a new party, a party holds four
+      jobs, and a slot only empties when taken), so no real save is
+      touched. Applies to `.exg` saves here and to `exile3.sav` imports.
 - [x] **Major Blessing played a sound for each PC.** `flyMissiles` passed
       the volley's sound to every `runAMissile`, and each played it. The
       whole volley is one `do_missile_anim`, which plays it once, after its

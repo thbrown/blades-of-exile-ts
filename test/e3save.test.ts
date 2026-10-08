@@ -28,6 +28,8 @@ import { findE3Dir, readE3Files } from '../tools/e3convert/install';
 import { readE3SaveDefaults } from '../tools/e3convert/saveDefaults';
 import { partyFlag } from '../tools/e3convert/script';
 import { QuestRunner, loadExile3 } from './support/e3Quest';
+import { e3Jobs } from '../src/game/e3Jobs';
+import { applySave, saveGame } from '../src/fileio/saveIo';
 import { Race, Status, Trait } from '../src/universe/skills';
 import { CreatureStatus } from '../src/universe/creature';
 
@@ -218,6 +220,23 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     const back = new QuestRunner(scen);
     applyE3Save(bytes, back.univ, defaults);
     expect(back.party.e3Jobs?.boards).toEqual(q.party.e3Jobs?.boards);
+  });
+
+  it('refills the boards of a game imported from a save with none posted, as the exporter used to write them', async () => {
+    const q = new QuestRunner(scen);
+    const save = readE3Save(exportE3Save(q.univ, defaults).bytes);
+    // The exporter before 2026-10-07: every board, held job and failed flag empty.
+    save.party.fill(0, E3P.JOBS_HELD, E3P.JOBS_FAILED + 6);
+    const back = new QuestRunner(scen);
+    applyE3Save(writeE3Save(save), back.univ, defaults);
+    expect(back.party.e3Jobs).toBeNull();
+    expect(e3Jobs(back.univ).boards.flat().some((j) => j.kind > 0)).toBe(true);
+    // …and an in-progress game saved here with them empty comes back the same way.
+    back.party.e3Jobs = { ...e3Jobs(back.univ), boards: e3Jobs(back.univ).boards.map((b) => b.map((j) => ({ ...j, kind: 0 }))) };
+    const again = new QuestRunner(scen);
+    applySave(saveGame(back.univ), again.univ);
+    expect(again.party.e3Jobs).toBeNull();
+    expect(e3Jobs(again.univ).boards.flat().some((j) => j.kind > 0)).toBe(true);
   });
 
   it('carries the explored maps: towns of every size, the villages, the zones and the window', async () => {

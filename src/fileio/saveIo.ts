@@ -43,7 +43,7 @@ import {
   Ability, MonstAbil, MonstAbilCat, NUM_MONST_ABIL, abilityCategory, defaultAbilities,
 } from '../data/monsterAbility';
 import { OutWandering } from '../data/outdoors';
-import { E3_JOBS_HELD, E3_JOBS_PER_BOARD, E3_JOB_BANKS, type E3JobState } from '../game/e3Jobs';
+import { E3_JOBS_HELD, E3_JOBS_PER_BOARD, E3_JOB_BANKS, e3JobsAsLoaded, type E3JobState } from '../game/e3Jobs';
 import { QuestStatus, makeJobBank } from '../data/quest';
 import { Scenario } from '../data/scenario';
 import { Vehicle } from '../data/vehicle';
@@ -1017,7 +1017,7 @@ export function readParty(file: TagFile, party: Party): void {
         const b = tag.int(0, -1);
         if (b >= 0 && b < E3_JOB_BANKS) state.failed[b] = true;
       }
-      party.e3Jobs = state;
+      party.e3Jobs = e3JobsAsLoaded(state);
     } else if (page.firstKey() === 'ENCOUNTER') {
       const i = page.first('ENCOUNTER')!.int(0, -1);
       if (i < 0 || i >= party.outC.length) continue;

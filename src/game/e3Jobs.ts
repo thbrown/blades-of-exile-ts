@@ -149,6 +149,22 @@ export function e3Jobs(univ: Universe): E3JobState {
   return state;
 }
 
+/**
+ * `state` as read from a save, or null — "never filled", which `e3Jobs` fills
+ * on first use — when nothing in it was ever posted: every board slot, every
+ * held job and every failed flag empty. E3 fills the boards when it makes a
+ * party, a party holds four jobs at most, and a slot only empties when a job
+ * is taken, so at least twenty slots stay full until the next refill. A state
+ * that empty is the one this port's exporter wrote before it filled the
+ * boards first (2026-10-07), and the games imported from those files kept
+ * it; reading it as unfilled repairs them.
+ */
+export function e3JobsAsLoaded(state: E3JobState): E3JobState | null {
+  const posted = state.boards.some((board) => board.some((j) => j.kind > 0))
+    || state.held.some((j) => j.kind > 0) || state.failed.some((f) => f);
+  return posted ? state : null;
+}
+
 /** `FUN_1080_0000`: the distance between two zones, truncated. */
 export function e3ZoneDistance(a: [number, number], b: [number, number]): number {
   return Math.trunc(Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2));
