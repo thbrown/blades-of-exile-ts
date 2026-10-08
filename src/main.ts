@@ -117,7 +117,7 @@ import { LoadedPackage, ScenarioPackage, identifyScenarioFiles, loadScenarioPack
 import { PackedSource } from './fileio/packedSource';
 import { isE3Save } from './fileio/e3save';
 import { e3SaveDefaultsFromJson, type E3SaveDefaults } from './fileio/e3SaveDefaults';
-import { applyE3Save, applyE3TownDecals } from './fileio/e3SaveImport';
+import { applyE3Save, applyE3TownCreatures, applyE3TownDecals, applyE3TownTerrain } from './fileio/e3SaveImport';
 import { exportE3Save } from './fileio/e3SaveExport';
 import { Scenario } from './data/scenario';
 import { noScenario, readScenarioFromXml } from './fileio/scenarioXml';
@@ -130,9 +130,9 @@ import { customSheetName, installCustomSheets, installSheetOverrides, loadCustom
 import { captureSaveThumb, captureTerrainView } from './render/preview';
 import { BG_DARK, BG_LIGHT, setDefaultDialogBackground, setExile3Dialogs } from './render/tiling';
 import { changeCursor, cursorCss, setScenarioCursors } from './platform/cursors';
-import { giveHelp, setGiveHelp, setLivingSound } from './universe/living';
+import { clearSoundMemory, giveHelp, setGiveHelp, setLivingSound } from './universe/living';
 import { killPc } from './game/damage';
-import { BOE_HEIGHT, BOE_WIDTH, COMPACT_HEIGHT, ITEM_SBAR_RECT, ToolbarButton, WIN_RECTS, gameScreen } from './render/layout';
+import { BOE_HEIGHT, BOE_WIDTH, COMPACT_HEIGHT, ITEM_SBAR_RECT, TEXT_SBAR_RECT, ToolbarButton, WIN_RECTS, gameScreen } from './render/layout';
 
 import { CHROME_SHEETS, Screen, toolbarButtons, toolbarMode } from './render/screen';
 import { TouchSheet } from './platform/touchSheet';
@@ -781,6 +781,9 @@ async function main(): Promise<void> {
     return blocks;
   };
   setLivingSound(playSound);
+  // `handle_one_event`'s `clear_sound_memory()`: each key or press is a new event.
+  window.addEventListener('keydown', clearSoundMemory, true);
+  window.addEventListener('pointerdown', clearSoundMemory, true);
   setDialogClickSound((n) => sound.play(n));
   // `cd_press_button`'s hold: the click (37, which blocks) and 6 ticks, or
   // 10 ticks with sounds off (DLOGTOOL.CPP:1546). A tick is 1/60 s.
@@ -2056,6 +2059,8 @@ async function main(): Promise<void> {
     if (res.town) {
       session.resumeInSavedTown(res.town.num, res.town.loc);
       applyE3TownDecals(univ, res.town.decals);
+      applyE3TownTerrain(univ, res.town.data);
+      applyE3TownCreatures(univ, res.town.cTown);
     }
     for (const w of res.warnings) univ.addStringToBuf(w);
     univ.addStringToBuf('Exile III game loaded.');
@@ -3105,14 +3110,20 @@ async function main(): Promise<void> {
    * (`cScrollbar::handle_mouse_pressed`); game-screen coordinates.
    */
   const startScrollThumb = (x: number, y: number): boolean => {
-    const started = session.shop
+    const started = screen.textSbar.startThumbDrag(x, y) || (session.shop
       ? screen.shopScreen.startThumbDrag(session.shop, x, y)
-      : screen.itemSbar.startThumbDrag(x, y);
+      : screen.itemSbar.startThumbDrag(x, y));
     if (started) redraw();
     return started;
   };
   /** The held thumb follows the pointer; true if one is held. */
   const dragScrollThumb = (y: number): boolean => {
+    if (screen.textSbar.dragging) {
+      const was = screen.textSbar.getPosition();
+      screen.textSbar.dragTo(y);
+      if (screen.textSbar.getPosition() !== was) redraw();
+      return true;
+    }
     if (session.shop) {
       const delta = screen.shopScreen.thumbDragDelta(session.shop, y);
       if (delta === null) return false;
@@ -3161,8 +3172,9 @@ async function main(): Promise<void> {
     onRelease: () => {
       dialogs.handleRelease();
       screen.mapScreen.endDrag();
-      if (screen.itemSbar.dragging || screen.shopScreen.sbar.dragging) {
+      if (screen.itemSbar.dragging || screen.shopScreen.sbar.dragging || screen.textSbar.dragging) {
         screen.itemSbar.endDrag();
+        screen.textSbar.endDrag();
         screen.shopScreen.sbar.endDrag();
         redraw();
       }
@@ -3189,6 +3201,15 @@ async function main(): Promise<void> {
       const y = dy - desktop.gameY;
       // `item_sbar`'s wheel area is the inventory and its bar
       // (`inventory_events_rect`, boe.main.cpp:378), and `shop_sbar`'s the shop.
+      // `text_sbar`'s is the transcript and its bar (`transcript_events_rect`).
+      const text = WIN_RECTS.transcript;
+      if (x >= text.left && y >= text.top && x < TEXT_SBAR_RECT.right && y < text.bottom) {
+        if (notches !== 0) {
+          screen.textSbar.handleWheel(-notches);
+          redraw();
+        }
+        return true;
+      }
       if (session.shop) {
         if (!screen.shopScreen.wheelScrolls(session.shop, x, y)) return false;
         if (notches !== 0) { handleShopHit({ part: 'scroll', delta: notches }); redraw(); }
@@ -3246,6 +3267,14 @@ async function main(): Promise<void> {
       const pcHit = screen.pcRowHit(x, y);
       if (pcHit) {
         pressPcRow(pcHit.index, pcHit.part);
+        return;
+      }
+      // The transcript's scrollbar is its own control too, and a shop leaves
+      // it alone.
+      if (screen.textSbar.startThumbDrag(x, y)) { redraw(); return; }
+      if (screen.textSbar.handleClick(x, y)) {
+        sound.play(Snd.BUTTON);
+        redraw();
         return;
       }
       if (session.shop) {

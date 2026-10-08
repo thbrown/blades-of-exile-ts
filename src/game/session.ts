@@ -1609,11 +1609,16 @@ export class GameSession {
     const town = this.univ.town!;
     let forced = false;
     if (party.inBoat >= 0) {
+      // `is_blocked` here is the whole test, creatures and force barriers
+      // too (boe.locutils.cpp; LOCUTILS.CPP:407 in 1997), not the terrain's
+      // alone: a creature on the shore keeps the party in its boat. With
+      // `townIsBlocked` the party stepped out, the creature then stopped the
+      // move, and the party stood on the water without its boat.
       const ter = town.record.terrain[destination.x]![destination.y]!;
       const terType = this.univ.terrainType(ter);
       const diagonal = destination.x !== party.townLoc.x && destination.y !== party.townLoc.y;
       if (
-        !this.townIsBlocked(destination) && !this.blocksMonsters(destination)
+        !this.isBlocked(destination) && !this.blocksMonsters(destination)
         && (!terType.boatOver || diagonal)
       ) {
         this.univ.addStringToBuf('You leave the boat.');
@@ -1621,10 +1626,10 @@ export class GameSession {
       } else if (diagonal) {
         this.univ.addStringToBuf("Move: Boat can't move diagonally.");
         return 'blocked';
-      } else if (!this.townIsBlocked(destination) && terType.boatOver && terType.special === TerSpec.BRIDGE) {
+      } else if (!this.isBlocked(destination) && terType.boatOver && terType.special === TerSpec.BRIDGE) {
         if ((await this.onConfirmBoatBridge?.()) ?? false) {
           forced = true;
-        } else if (!this.townIsBlocked(destination)) {
+        } else if (!this.isBlocked(destination)) {
           this.univ.addStringToBuf('You leave the boat.');
           party.inBoat = -1;
         }

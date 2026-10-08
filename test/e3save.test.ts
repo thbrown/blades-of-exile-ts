@@ -19,14 +19,15 @@ import { e3MonsterRecord, e3TownData, e3TownHeader } from '../src/fileio/e3SaveT
 import { e3TownGeometry } from '../tools/e3convert/town';
 import { FieldType } from '../src/data/fields';
 import { e3SaveDefaultsFromJson, e3SaveDefaultsToJson, type E3SaveDefaults } from '../src/fileio/e3SaveDefaults';
-import { applyE3Save, applyE3TownDecals } from '../src/fileio/e3SaveImport';
+import { applyE3Save, applyE3TownCreatures, applyE3TownDecals, applyE3TownTerrain } from '../src/fileio/e3SaveImport';
 import { exportE3Save, newE3PartyRecord } from '../src/fileio/e3SaveExport';
 import { emitScenario } from '../tools/e3convert/emitNode';
 import { findE3Dir, readE3Files } from '../tools/e3convert/install';
 import { readE3SaveDefaults } from '../tools/e3convert/saveDefaults';
 import { partyFlag } from '../tools/e3convert/script';
 import { QuestRunner, loadExile3 } from './support/e3Quest';
-import { Race, Trait } from '../src/universe/skills';
+import { Race, Status, Trait } from '../src/universe/skills';
+import { CreatureStatus } from '../src/universe/creature';
 
 describe('the exile3.sav container', () => {
   it('writes an outdoor save of the right size and reads it back', () => {
@@ -257,6 +258,12 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     const live = q.town.monsters.filter((m) => m.isAlive);
     const mover = live[0]!;
     mover.curLoc = { x: 31, y: 32 };
+    mover.health = Math.max(1, mover.health - 1);
+    mover.status[Status.POISON] = 3;
+    mover.morale = 4;
+    // One killed before the save, which a fresh entry would bring back.
+    const victim = live[1]!;
+    victim.active = CreatureStatus.DEAD;
     q.town.items.push({ ...q.town.items[0]!, itemLoc: { x: 12, y: 13 }, isSpecial: 0 });
     q.town.setField(29, 29, FieldType.OBJECT_CRATE, true);
     q.town.setField(28, 29, FieldType.WALL_FIRE, true);
@@ -277,7 +284,7 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     expect(c.str(E3CTOWN.NAME, 30)).toBe('Shayder');
     expect(c.i16(E3CTOWN.WHICH_TOWN)).toBe(4);
     const active = [...Array(60).keys()].filter((i) => c.i16(E3CTOWN.CREATURES + E3CREATURE.SIZE * i) > 0);
-    expect(active.length).toBe(live.length);
+    expect(active.length).toBe(live.length - 1);
     const at = E3CTOWN.CREATURES + E3CREATURE.SIZE * mover.slot;
     expect(c.loc(at + E3CREATURE.LOC)).toEqual({ x: 31, y: 32 });
     expect(c.u8(at + E3CREATURE.NUMBER)).toBe(mover.number);
@@ -302,6 +309,16 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     applyE3TownDecals(back.univ, res.town!.decals);
     expect(back.town.hasField(31, 31, FieldType.SFX_LARGE_SLIME)).toBe(true);
     expect(back.town.hasField(31, 31, FieldType.SFX_SMALL_SLIME)).toBe(false);
+    // And its creatures as they were: the dead stay dead, the living where they stood.
+    expect(back.town.monsters.find((m) => m.slot === victim.slot)!.isAlive).toBe(true);
+    applyE3TownCreatures(back.univ, res.town!.cTown);
+    expect(back.town.monsters.find((m) => m.slot === victim.slot)!.isAlive).toBe(false);
+    const moved = back.town.monsters.find((m) => m.slot === mover.slot)!;
+    expect(moved.curLoc).toEqual({ x: 31, y: 32 });
+    expect(moved.health).toBe(mover.health);
+    expect(moved.status[Status.POISON]).toBe(3);
+    expect(moved.morale).toBe(4);
+    expect(back.town.monsters.filter((m) => m.isAlive).length).toBe(live.length - 1);
   });
 
   /**
@@ -328,6 +345,29 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
       const back = new QuestRunner(scen);
       const res = applyE3Save(bytes, back.univ, defaults);
       expect(res.warnings.filter((w) => /no match/.test(w)), file).toEqual([]);
+      if (res.town) {
+        // The town's creatures as E3 left them: each slot dead or alive, and where.
+        back.session.resumeInSavedTown(res.town.num, res.town.loc);
+        applyE3TownCreatures(back.univ, res.town.cTown);
+        applyE3TownTerrain(back.univ, res.town.data);
+        // The map as E3 left it: an opened portcullis is still open.
+        const dim = Math.min(64, back.town.record.maxDim);
+        for (let x = 0; x < dim; x++) {
+          for (let y = 0; y < dim; y++) {
+            expect(Math.min(255, back.town.record.terrain[x]![y]!), `${file} (${x},${y})`)
+              .toBe(save.town!.data[E3TD.TERRAIN + 64 * x + y]);
+          }
+        }
+        const c = new E3Bytes(save.town!.cTown);
+        for (let k = 0; k < 60; k++) {
+          const at = E3CTOWN.CREATURES + E3CREATURE.SIZE * k;
+          if (c.u8(at + E3CREATURE.NUMBER) === 0) continue;
+          const m = back.town.monsters.find((x) => x.slot === k);
+          const alive = c.i16(at + E3CREATURE.ACTIVE) > 0;
+          expect(m?.isAlive ?? false, `${file} creature ${k}`).toBe(alive);
+          if (alive) expect(m!.curLoc, `${file} creature ${k}`).toEqual(c.loc(at + E3CREATURE.LOC));
+        }
+      }
       const out = readE3Save(exportE3Save(back.univ, defaults).bytes);
       const o = new E3Bytes(out.party);
       for (const at of [E3P.AGE, E3P.GOLD, E3P.FOOD]) expect(o.i32(at), `${file} +${at}`).toBe(p.i32(at));

@@ -10,7 +10,7 @@ import { GameRng } from '../core/rng';
 import { Item, ItemAbil, ItemPreset, ItemType, defaultItem, presetItem } from '../data/item';
 import { Spell } from '../data/spell';
 import { e3AbilEquip, getProtLevel, hasAbilEquip, hasE3AbilEquip } from './inventory';
-import { Living, SpellNote, giveHelp, livingSound, printResult } from './living';
+import { Living, SpellNote, giveHelp, livingOneSound, livingSound, printResult } from './living';
 import { Party } from './party';
 import { hasFeatureFlag } from '../game/featureFlags';
 import {
@@ -281,7 +281,7 @@ export class Player extends Living {
     if (!this.isAlive) return;
     if ((this.status[Status.POISON] ?? 0) <= amount) this.status[Status.POISON] = 0;
     else this.status[Status.POISON] = (this.status[Status.POISON] ?? 0) - amount;
-    livingSound(51);
+    livingOneSound(51);
   }
 
   /** cPlayer::poison (pc.cpp:317) — frailty makes every dose worse. */
@@ -304,7 +304,7 @@ export class Player extends Living {
     if (howMuch > 0) {
       this.applyStatus(Status.POISON, howMuch);
       printResult(`  ${this.name} poisoned.`);
-      livingSound(17);
+      livingOneSound(17);
       // Outside the `give_help_enabled` guard in the C++, as `web` is.
       giveHelp(33);
     }
@@ -326,7 +326,7 @@ export class Player extends Living {
     if (this.traits[Trait.FRAIL] && howMuch === 1 && rng.getRan(1, 0, 1) === 0) howMuch++;
     this.applyStatus(Status.DISEASE, howMuch);
     printResult(`  ${this.name} diseased.`);
-    livingSound(66);
+    livingOneSound(66);
     giveHelp(29);
   }
 
@@ -368,7 +368,7 @@ export class Player extends Living {
     }
     this.applyStatus(Status.WEBS, howMuch);
     printResult(`  ${this.name} webbed.`);
-    livingSound(17);
+    livingOneSound(17);
     giveHelp(31);
   }
 
@@ -383,7 +383,7 @@ export class Player extends Living {
     // apply_status, so acid on a PC is *not* clamped to the usual bounds.
     this.status[Status.ACID] = (this.status[Status.ACID] ?? 0) + howMuch;
     printResult(`  ${this.name} covered with acid!`);
-    livingSound(42);
+    livingOneSound(42);
   }
 
   /** cPlayer::dumbfound (pc.cpp:166). */
@@ -404,7 +404,7 @@ export class Player extends Living {
     }
     this.applyStatus(Status.DUMB, howMuch);
     printResult(`  ${this.name} dumbfounded.`);
-    livingSound(67);
+    livingOneSound(67);
     giveHelp(28);
   }
 

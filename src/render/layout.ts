@@ -206,6 +206,9 @@ export const ITEM_BOTTOM_ICONS = {
   help: r(46, 60, 59, 76),
 } as const;
 
+/** sbar_rect (boe.main.cpp:69) — absolute, beside the transcript. */
+export const TEXT_SBAR_RECT = r(285, 560, 423, 576);
+
 /** item_sbar_rect (boe.main.cpp:71) — absolute, beside the item rows. */
 export const ITEM_SBAR_RECT = r(148, 560, 255, 576);
 

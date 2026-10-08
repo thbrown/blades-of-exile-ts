@@ -16974,3 +16974,39 @@ dice. Not chased.
 - [x] Quest tests: stains under every slime on entry, the build-up, a pool
       taking the whole blast (a creature beside it unhurt), and `castAt`
       now lands a real fire pattern.
+
+
+### Play-test notes, fourteenth round: the Slime Pit, loading (2026-10-07)
+
+- [x] **A loaded E3 game brought the dead back.** Opening an `exile3.sav`
+      made in town entered the town afresh and never read `c_town`'s
+      creatures. `applyE3TownCreatures` lays them on: dead or alive by slot,
+      where they stood, health, spell points, morale, statuses, summons, and
+      whether the town is hostile. On the user's BlockedBoat save the fresh
+      entry had 52 alive; E3's save has 35. The export writes live morale now.
+- [x] **…and closed the portcullises.** `t_d`'s map was ignored too, so
+      everything a panel or script changed came back as TOWN.DAT has it.
+      `applyE3TownTerrain` lays it on (terrain 255 back to the town's own
+      255). Same save: five portcullises open, bodies cleared, three 255s
+      gone. The real-save test (`E3_SAV=…`) now checks both, square by square
+      and slot by slot. Still not read: `t_i`, the items on the ground
+      (`TODO(e3save)`).
+- [x] **The transcript had no scrollbar.** `text_sbar` (boe.main.cpp:388):
+      58 lines back, 11 a page, back at the bottom whenever a line is added
+      (`Universe.transcriptAdded`); arrows, track, thumb drag and the wheel
+      over the pane.
+- [x] **"Thissa takes 5" where E3 says "Claws for 5".** 1997's
+      `damaged_message` was never ported (DIVERGENCES §58).
+- [x] **Leaving a boat onto a creature's square** left the party on the
+      water without its boat. The town test used `townIsBlocked` (terrain
+      only) where 1997 and OBoE ask the whole `is_blocked`, creatures
+      included. Not a divergence: a mistranslation.
+- [x] **Six web sounds in a row.** `one_sound` was ported as `play_sound`.
+      Now `livingOneSound`, forgotten on each key or press, as OBoE does
+      (DIVERGENCES §59, at the user's request; 1997 never forgets).
+
+**Gotcha (2026-10-07):** a baseline corpus run in a `git worktree` reports
+"no draws on the C++" for everything: the oracle's traces are cached in
+`tools/cppharness/traces/`, which isn't in git. Symlink it in. The corpus
+stands at **50 of 87, 1,122,563 draws** both before and after this round
+(not the 51 and 1,231,440 of 2026-09-13; that drop predates this round).

@@ -251,6 +251,20 @@ describe('a monster taking its turn', () => {
     expect(univ.transcript.some((l) => l.includes('attacks'))).toBe(true);
   });
 
+  it("says a blow as 1997's damaged_message does: \"  Claws for 5\", not \"takes 5\"", async () => {
+    const { univ, session, monst } = combatWithOne();
+    const pc = univ.party.pcs[0]!;
+    monst.mon.attacks = [{ dice: 2, sides: 4, type: 1 }];
+    monst.curLoc = loc(pc.combatPos.x + 1, pc.combatPos.y);
+    for (let i = 0; i < 20 && pc.curHealth === 200; i++) {
+      pc.curHealth = 200;
+      await monsterAttack(session, monst, pc);
+    }
+    expect(pc.curHealth).toBeLessThan(200);
+    expect(univ.transcript).toContain(`  Claws for ${200 - pc.curHealth}`);
+    expect(univ.transcript.some((l) => l.includes(`${pc.name} takes`))).toBe(false);
+  });
+
   it('a peaceful monster will not touch the party', async () => {
     const { univ, session, monst } = combatWithOne();
     monst.attitude = Attitude.DOCILE;

@@ -11,9 +11,10 @@
  * items, which are matched by name against the scenario's.
  *
  * What a save holds that this doesn't read yet (each marked where it would go):
- * - the town the party stands in. `c_town` (its creatures, their health and
- *   positions, and its items) is not read: the party is put back on its
- *   square and the town is entered afresh, with no entry special;
+ * - the items on the ground in the town the party stands in (`t_i`): the
+ *   town is entered afresh, with no entry special, and then its map as it
+ *   stood and `c_town`'s creatures are laid over it (`applyE3TownTerrain`,
+ *   `applyE3TownCreatures`), but its items are the ones a fresh entry gives;
  * - the four remembered towns' creatures (`creature_save`), the wandering
  *   groups outdoors (`out_c`), the magic shops' stock, the journal and the
  *   encounter and talk notes (E3 keeps string numbers; the engine keeps
@@ -30,7 +31,7 @@ import { TOWN_STATES } from '../../tools/e3convert/towns/townStates';
 import { e3DayReached, e3TownState } from '../../tools/e3convert/flags';
 import { vehicleNumbers, type E3Vehicle } from '../../tools/e3convert/tables';
 import {
-  E3Bytes, E3CTOWN, E3ITEM, E3P, E3PC, E3_ZONES_ACROSS, E3_ZONE_MAP_SIZE, e3MapBit, e3TownMapAt, readE3Save, type E3Save,
+  E3Bytes, E3CREATURE, E3CTOWN, E3ITEM, E3MONST, E3TD, E3P, E3PC, E3_ZONES_ACROSS, E3_ZONE_MAP_SIZE, e3MapBit, e3TownMapAt, readE3Save, type E3Save,
 } from './e3save';
 import { SECTOR_SIZE } from '../data/outdoors';
 import type { Scenario } from '../data/scenario';
@@ -48,14 +49,19 @@ import { NUM_INVEN_SLOTS, NUM_SPELLS } from '../universe/player';
 import { NUM_SKILLS, NUM_TRAITS } from '../universe/skills';
 import type { Universe } from '../universe/universe';
 import { FieldType } from '../data/fields';
+import { defaultTownperson } from '../data/town';
+import type { Attitude } from '../data/monster';
+import { Creature, CreatureStatus, assignCreature } from '../universe/creature';
+import type { Direction } from '../core/location';
 
 export interface E3Import {
   /**
    * The engine's town to enter, and where, when the save was made in town,
-   * with its stains as E3 saved them (`sfx`, 64 by 64): `applyE3TownDecals`
-   * lays them on once the town is entered.
+   * with its stains as E3 saved them (`sfx`, 64 by 64), `c_town`, whose
+   * creatures `applyE3TownCreatures` lays on once the town is entered, and
+   * `t_d`, whose map `applyE3TownTerrain` does.
    */
-  town: { num: number; loc: Location; decals: Uint8Array } | null;
+  town: { num: number; loc: Location; decals: Uint8Array; cTown: Uint8Array; data: Uint8Array } | null;
   /** What couldn't be carried over, for the transcript. */
   warnings: string[];
 }
@@ -296,9 +302,9 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
         num = g.town;
       }
     });
-    // TODO(e3save): c_town's creatures and t_i's items, instead of a fresh town.
-    town = { num, loc, decals: save.sfx };
-    warnings.push('The town is entered afresh: its creatures and items are not read from the save yet.');
+    // TODO(e3save): t_i's items, instead of a fresh town's.
+    town = { num, loc, decals: save.sfx, cTown: save.town.cTown, data: save.town.data };
+    warnings.push('The town\'s items are the ones it starts with: those on the ground are not read from the save yet.');
   }
   party.townNum = TOWN_NUM_OUTDOORS;
   univ.town = null;
@@ -364,6 +370,104 @@ export function applyE3TownDecals(univ: Universe, decals: Uint8Array): void {
       const bits = decals[64 * x + y] ?? 0;
       for (let k = 0; k < 8; k++) town.setField(x, y, FieldType.SFX_SMALL_BLOOD + k, false);
       for (let k = 0; k < 8; k++) if (bits & (1 << k)) town.setField(x, y, FieldType.SFX_SMALL_BLOOD + k);
+    }
+  }
+}
+
+/** `c_town`'s creature slots (`E3CREATURE`). */
+const E3_CREATURES_HELD = 60;
+
+/**
+ * A town saved by E3, entered afresh (`E3Import.town`), with its creatures
+ * as `c_town` holds them: who is dead, where the living stand, their health,
+ * spell points, morale and statuses, and whether the town has turned on the
+ * party. E3 reads `c_town` back whole and never repopulates (`load_file`),
+ * so a creature killed before the save stays dead, even one a fresh entry
+ * would bring back.
+ *
+ * The converter keeps E3's creature slots, so slot `k` here is the engine
+ * creature with `slot` k (`e3SaveTown.ts` writes them the same way). A
+ * slot E3 holds a creature in that the fresh town doesn't, or holds another
+ * monster in (one summoned, or dropped into a dead creature's place), gets
+ * that monster. Slots E3 leaves empty, and the engine's past E3's sixty,
+ * are left as entered.
+ */
+export function applyE3TownCreatures(univ: Universe, cTown: Uint8Array): void {
+  const town = univ.town;
+  if (!town) return;
+  const c = new E3Bytes(cTown);
+  town.monstHostile = c.u8(E3CTOWN.HOSTILE) !== 0;
+  for (let k = 0; k < E3_CREATURES_HELD; k++) {
+    const at = E3CTOWN.CREATURES + E3CREATURE.SIZE * k;
+    const number = c.u8(at + E3CREATURE.NUMBER);
+    if (number === 0) continue;
+    const active = c.i16(at + E3CREATURE.ACTIVE);
+    let m = town.monsters.find((x) => x.slot === k);
+    if (!m || m.number !== number) {
+      if (active === 0) {
+        if (m) m.active = CreatureStatus.DEAD;
+        continue;
+      }
+      const template = univ.scenario.scenMonsters[number];
+      if (!template) continue;
+      const preset = defaultTownperson();
+      preset.number = number;
+      preset.startAttitude = c.i16(at + E3CREATURE.ATTITUDE) as Attitude;
+      preset.startLoc = c.loc(at + E3CREATURE.START + 2);
+      preset.mobility = c.u8(at + E3CREATURE.MOBILE);
+      while (town.monsters.length < k) {
+        const gap = new Creature();
+        gap.slot = town.monsters.length;
+        gap.active = CreatureStatus.DEAD;
+        town.monsters.push(gap);
+      }
+      const index = m ? town.monsters.indexOf(m) : k;
+      m = assignCreature(k, preset, template, univ.party.easyMode, univ.difficultyAdjust(), town.monsters[index]);
+      if (index < town.monsters.length) town.monsters[index] = m;
+      else town.monsters.push(m);
+    }
+    if (active === 0) {
+      m.active = CreatureStatus.DEAD;
+      continue;
+    }
+    m.active = active === 2 ? CreatureStatus.ALERTED : CreatureStatus.IDLE;
+    m.attitude = c.i16(at + E3CREATURE.ATTITUDE) as Attitude;
+    m.curLoc = c.loc(at + E3CREATURE.LOC);
+    m.mobile = c.u8(at + E3CREATURE.MOBILE) !== 0;
+    m.summonTime = c.i16(at + E3CREATURE.SUMMONED);
+    const mon = at + E3CREATURE.MONST;
+    m.health = c.i16(mon + E3MONST.HEALTH);
+    m.maxHealth = c.i16(mon + E3MONST.M_HEALTH);
+    m.mon.health = m.maxHealth;
+    m.mp = c.i16(mon + E3MONST.MP);
+    m.maxMp = c.i16(mon + E3MONST.MAX_MP);
+    m.morale = c.i16(mon + E3MONST.MORALE);
+    m.mMorale = c.i16(mon + E3MONST.M_MORALE);
+    for (let i = 0; i < 15; i++) m.status[i] = c.i16(mon + E3MONST.STATUS + 2 * i);
+    m.direction = c.u8(mon + E3MONST.DIRECTION) as Direction;
+  }
+}
+
+/**
+ * A town saved by E3, entered afresh (`E3Import.town`), with its map as
+ * `t_d` holds it: the portcullises a panel opened, the walls a script took
+ * down, the bodies cleared away. E3 reads `t_d` back whole (`load_file`), so
+ * a change made in the town before the save is still there after it.
+ *
+ * Terrain 255 goes back to whichever 255 the converter gave this town
+ * (`townTer255` in `tools/e3convert/emit.ts`: one blocks sight, one doesn't).
+ */
+export function applyE3TownTerrain(univ: Universe, data: Uint8Array): void {
+  const town = univ.town;
+  if (!town) return;
+  const terrain = town.record.terrain;
+  const dim = Math.min(64, town.record.maxDim);
+  let ter255 = 255;
+  for (const col of terrain) for (const t of col) if (t > 255) ter255 = t;
+  for (let x = 0; x < dim; x++) {
+    for (let y = 0; y < dim; y++) {
+      const t = data[E3TD.TERRAIN + 64 * x + y] ?? 0;
+      terrain[x]![y] = t === 255 ? ter255 : t;
     }
   }
 }

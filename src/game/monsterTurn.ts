@@ -51,6 +51,9 @@ import { placeSpellPattern } from './spellPatterns';
 import { pointOnScreen } from './session';
 import type { GameSession } from './session';
 
+/** 1997's strings 130–139 (GAMESTR.RC:976), by `MonstMelee`: what `damaged_message` says a blow did. */
+const MELEE_VERBS = ['Hits', 'Claws', 'Bites', 'Slimes', 'Punches', 'Stings', 'Clubs', 'Burns', 'Harms', 'Stabs'];
+
 /**
  * `MMOVE=1` — every step a creature *tries* and whether it took it, the pair to
  * the harness's `BOE_TRACE_MMOVE=1`. Read once at module load, and guarded on
@@ -911,7 +914,9 @@ export async function monsterAttack(
       damaged = await damageMonst(univ, monstTarget, 7, r2, damType,
         { doPrint: false, soundType, session });
     } else if (pcTarget) {
-      damaged = await damagePc(univ, pcTarget, r2, damType, monst.mon.race, { soundType });
+      // 1997 asks `damage_pc` not to print (`+ 30`, COMBAT.CPP:2317) and
+      // says how instead, below; OBoE prints both (DIVERGENCES §58).
+      damaged = await damagePc(univ, pcTarget, r2, damType, monst.mon.race, { soundType, doPrint: false });
       // **`damage_pc`'s return is not the health it took off** (boe.combat.cpp:
       // 2731). It reports the damage it *decided* on, and the last thing it
       // does with that number is a three-way branch: subtract it, clamp to
@@ -928,6 +933,9 @@ export async function monsterAttack(
       if (storeHp - target.getHealth() <= 0) damaged = 0;
     }
     if (damaged > 0) {
+    // `damaged_message` (TEXT.CPP:1203): "  Claws for 5". 1997 says it for a
+    // monster hit too (COMBAT.CPP:2482), which OBoE dropped.
+    univ.addStringToBuf(`  ${MELEE_VERBS[attack.type] ?? MELEE_VERBS[0]} for ${storeHp - target.getHealth()}`);
 
     // A shielded target passes some of it back to the attacker.
     if (target.isShielded(univ.rng)) {

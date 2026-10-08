@@ -23,6 +23,7 @@ import { PartyPreset } from '../src/universe/player';
 import { MainStatus, Race, Skill, Status, Trait } from '../src/universe/skills';
 import { CreatureStatus } from '../src/universe/creature';
 import { Universe } from '../src/universe/universe';
+import { clearSoundMemory, setLivingSound } from '../src/universe/living';
 
 const opcodes = buildOpcodeTable(
   readFileSync(new URL('../public/data/strings/specials-opcodes.txt', import.meta.url), 'utf8'),
@@ -612,7 +613,16 @@ describe('walking into things: webs, crates and conveyors', () => {
     if (!found) return;
     const { s, to } = found;
     s.univ.town!.setField(to.x, to.y, FieldType.FIELD_WEB);
-    await s.moveTo(to);
+    // One web sound for the party, not one a PC: `web` is a `one_sound`.
+    const heard: number[] = [];
+    clearSoundMemory();
+    setLivingSound((n) => { heard.push(n); return 0; });
+    try {
+      await s.moveTo(to);
+    } finally {
+      setLivingSound(null);
+    }
+    expect(heard.filter((n) => n === 17)).toEqual([17]);
     expect(s.univ.transcript.some((l) => l.includes('Webs!'))).toBe(true);
     // Out of combat every PC is webbed, and the web is spent.
     for (const pc of s.univ.party.pcs)

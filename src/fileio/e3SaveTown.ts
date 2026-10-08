@@ -260,6 +260,7 @@ export function e3TownBlocks(
     if (m?.isAlive) {
       r.setI16(E3MONST.HEALTH, m.health);
       r.setI16(E3MONST.MP, Math.min(m.mp, r.i16(E3MONST.MAX_MP)));
+      r.setI16(E3MONST.MORALE, m.morale);
       for (let i = 0; i < 15; i++) r.setI16(E3MONST.STATUS + 2 * i, m.status[i] ?? 0);
       r.setU8(E3MONST.DIRECTION, m.direction < 8 ? m.direction : 0);
     }

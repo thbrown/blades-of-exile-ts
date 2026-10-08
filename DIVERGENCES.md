@@ -1302,6 +1302,31 @@ Exile III's own dialogs have them so. OBoE's `init_buttons` (3choice.cpp:98)
 puts slot 2 rightmost, then 3, then 1. A player can see it, and replays go
 by the button's name, not its place.
 
+### 58. What a monster's blow says (2026-10-07)
+
+**DECIDED: the original's.** A monster's melee hit in 1997 calls
+`damage_pc` with `+ 30`, which keeps it from printing "  Name takes 5.",
+and then `damaged_message` (TEXT.CPP:1203) says the blow instead:
+"  Claws for 5", the verb from strings 130–139 by the attack's type
+(COMBAT.CPP:2317). A blow on another monster says it too (:2482). OBoE
+prints both lines for a PC, and nothing for a monster ("TODO: Maybe this
+damage should be printed?", boe.combat.cpp:2749). Exile III is 1997's, and
+the user saw "Claws for 5" there. Text only: no draws.
+
+### 59. `one_sound`'s memory (2026-10-07)
+
+**DECIDED: OBoE's, at the user's request.** `one_sound` won't replay the
+sound it last played: a web, poison, acid, cure or disease on the whole
+party is one noise, not six (`cPlayer::web` and the rest; 1997's `web_pc`
+and friends). 1997 never forgets (`clear_sound_memory` is defined in
+EXLSOUND.CPP but nothing calls it), so a second web, however much later,
+is silent until some other `one_sound` comes between, which is why the
+original often seems to make no sound at all on a web. OBoE forgets at every
+event (`handle_one_event`, boe.main.cpp:1612), so each action is heard once.
+The user preferred that. The port forgets on each key or press
+(`clearSoundMemory`, main.ts). E3's swamp keeps its own, 1997-style memory
+(`GameSession.lastOneSound`). Sound only: no draws.
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

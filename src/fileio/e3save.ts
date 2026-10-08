@@ -468,6 +468,9 @@ export const E3MONST = {
   M_HEALTH: 4,
   MP: 6,
   MAX_MP: 8,
+  /** i16: morale and the morale it starts with. */
+  MORALE: 28,
+  M_MORALE: 30,
   /** i16[15]. */
   STATUS: 34,
   DIRECTION: 64,

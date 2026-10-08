@@ -188,6 +188,31 @@ export function livingSound(which: number, at?: number): number {
   return soundSink?.(which, at) ?? 0;
 }
 
+/** What `one_sound` last played; -1 once forgotten. */
+let lastOneSound = -1;
+
+/**
+ * `one_sound` (sounds.cpp:143; EXLSOUND.CPP:318 in 1997) — a sound that
+ * isn't played again while it was the last `one_sound` heard, so a whole
+ * party webbed or poisoned at once makes one noise, not six in a row.
+ */
+export function livingOneSound(which: number): number {
+  if (which === lastOneSound) return 0;
+  lastOneSound = which;
+  return livingSound(which);
+}
+
+/**
+ * `clear_sound_memory` — OBoE's `handle_one_event` calls it on every event
+ * (boe.main.cpp:1612), so the next action's `one_sound` is heard again.
+ * 1997 never does: there a second web, however much later, is silent until
+ * some other `one_sound` comes between. OBoE's, at the user's request
+ * (DIVERGENCES §59).
+ */
+export function clearSoundMemory(): void {
+  lastOneSound = -1;
+}
+
 /**
  * `get_ran` is a global in the C++ as well, and a handful of effects reach for
  * it from methods this port gives no `rng` argument (`magic_adjust` is called

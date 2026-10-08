@@ -39,6 +39,7 @@ import {
   ITEM_ROWS,
   ITEM_ROWS_SHOP,
   ITEM_SBAR_RECT,
+  TEXT_SBAR_RECT,
   SPEC_BTN_ICONS,
   FIGHT_BUTTONS,
   OUT_BUTTONS,
@@ -92,6 +93,8 @@ import {
 
 /** `TextStyle` for a posted label — FONT_PLAIN at the port's default size. */
 const LABEL_SIZE = 12;
+/** The transcript's scrollbar at its bottom: 58 lines back from the newest. */
+const TEXT_SBAR_MAX = 58;
 
 /**
  * `bw_pats[3]` — the 50% dither `apply_unseen_mask` shades unexplored ground
@@ -2044,6 +2047,22 @@ export class Screen {
 
   // -------------------------------------------------------------- transcript
 
+  /**
+   * text_sbar (boe.main.cpp:388): 58 lines back, 11 a page, and at 58 — the
+   * newest line at the bottom — whenever a line is added (1997's
+   * `add_string_to_buf`, TEXT.CPP:1386, and OBoE's).
+   */
+  readonly textSbar = (() => {
+    const bar = new Scrollbar(TEXT_SBAR_RECT);
+    bar.setMaximum(TEXT_SBAR_MAX);
+    bar.setPageSize(11);
+    bar.setPosition(TEXT_SBAR_MAX);
+    return bar;
+  })();
+
+  /** `transcriptAdded` when the transcript was last drawn. */
+  private transcriptSeen = 0;
+
   /** print_buf (boe.text.cpp:1077) — newest messages at the bottom. */
   private drawTranscript(session: GameSession): void {
     const panel = WIN_RECTS.transcript;
@@ -2067,18 +2086,27 @@ export class Screen {
     // are re-applied after wrapping, which strips them.
     const visible: string[] = [];
     const maxLines = Math.floor(height(area) / TRANSCRIPT_LINE_HEIGHT);
+    if (session.univ.transcriptAdded !== this.transcriptSeen) {
+      this.transcriptSeen = session.univ.transcriptAdded;
+      this.textSbar.setPosition(TEXT_SBAR_MAX);
+    }
+    // `lines_clipped_below` (print_buf): how far the bar is scrolled back.
+    const below = TEXT_SBAR_MAX - this.textSbar.getPosition();
     // Lines ride the animation timeline like the sounds and the hit sprites do:
     // "Guard takes 3" belongs to the moment the flame lands, not the moment it
     // was cast. Everything the game has said is in `transcript`; this is the
     // part whose moment has come.
     const said = session.univ.visibleTranscript(performance.now());
-    for (let i = said.length - 1; i >= 0 && visible.length < maxLines; i--) {
+    for (let i = said.length - 1; i >= 0 && visible.length < maxLines + below; i--) {
       const message = said[i]!;
       const indent = message.slice(0, message.length - message.trimStart().length);
       const lines = wrapLines(this.ctx, message, maxWidth - indent.length * 4, style);
       for (let j = lines.length - 1; j >= 0; j--) visible.unshift(indent + lines[j]!);
     }
-    const shown = visible.slice(Math.max(0, visible.length - maxLines));
+    // Scrolled back past the oldest line, the oldest page stays: the C++
+    // shows its buffer's empty lines there.
+    const end = Math.max(Math.min(visible.length, maxLines), visible.length - below);
+    const shown = visible.slice(Math.max(0, end - maxLines), end);
     this.ctx.save();
     this.ctx.beginPath();
     this.ctx.rect(area.left, area.top, width(area), height(area));
@@ -2092,6 +2120,11 @@ export class Screen {
       );
     }
     this.ctx.restore();
+    // Compact, the bar is cut short with the frame.
+    this.textSbar.frame = {
+      ...TEXT_SBAR_RECT, bottom: this.isCompact(session) ? COMPACT_TRANSCRIPT_BOTTOM : TEXT_SBAR_RECT.bottom,
+    };
+    this.textSbar.draw(this.ctx, this.store);
   }
 
   // ----------------------------------------------------------------- toolbar

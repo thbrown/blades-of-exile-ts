@@ -128,6 +128,39 @@ describe('boats and horses', () => {
     expect(played).toEqual([85]);
   });
 
+  it('a creature on the shore keeps the party in its boat (is_blocked counts creatures)', async () => {
+    const session = newSession();
+    const { univ } = session;
+    session.startTownMode(1, FORCED_ENTRY);
+    const town = univ.town!;
+    const water = scen.terTypes.findIndex((t) => t.boatOver && t.blockage === 0);
+    const land = scen.terTypes.findIndex((t) => !t.boatOver && t.blockage === 0 && t.special === 0);
+    const at = { x: 10, y: 10 }, shore = { x: 11, y: 10 };
+    const saved = [town.record.terrain[at.x]![at.y]!, town.record.terrain[shore.x]![shore.y]!];
+    try {
+      town.record.terrain[at.x]![at.y] = water;
+      town.record.terrain[shore.x]![shore.y] = land;
+      const boat = univ.party.boats[0]!;
+      Object.assign(boat, { exists: true, whichTown: 1, loc: { ...at }, property: false });
+      univ.party.townLoc = { ...at };
+      univ.party.inBoat = 0;
+      const npc = town.monsters.find((m) => m.isAlive)!;
+      npc.curLoc = { ...shore };
+      await session.moveTo(shore);
+      expect(univ.party.inBoat).toBe(0);
+      expect(univ.party.townLoc).toEqual(at);
+      expect(univ.transcript).not.toContain('You leave the boat.');
+      // With the shore clear, the party steps off.
+      npc.curLoc = { x: 1, y: 1 };
+      expect(await session.moveTo(shore)).toBe(true);
+      expect(univ.party.inBoat).toBe(-1);
+      expect(univ.party.townLoc).toEqual(shore);
+    } finally {
+      town.record.terrain[at.x]![at.y] = saved[0]!;
+      town.record.terrain[shore.x]![shore.y] = saved[1]!;
+    }
+  });
+
   it('CHANGE_HORSE_OWNER flips the property flag (ex2a == 0 takes it, else gives it)', async () => {
     const session = newSession();
     const { univ } = session;

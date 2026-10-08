@@ -420,6 +420,11 @@ export class Universe {
    * 3" would otherwise be on screen while the flame is still in the air.
    */
   transcriptAt: number[] = [];
+  /**
+   * Lines ever added: what the transcript's scrollbar watches to jump back to
+   * the newest, as `add_string_to_buf` does (`text_sbar->setPosition(58)`).
+   */
+  transcriptAdded = 0;
 
   /**
    * Supplies the moment a new line should become visible. The host sets this to
@@ -430,6 +435,7 @@ export class Universe {
 
   /** add_string_to_buf (boe.text.cpp) — one line into the transcript pane. */
   addStringToBuf(text: string): void {
+    this.transcriptAdded++;
     this.transcript.push(text);
     this.transcriptAt.push(this.transcriptClock());
     if (this.transcript.length > TRANSCRIPT_MAX) {
