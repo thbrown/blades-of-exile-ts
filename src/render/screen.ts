@@ -16,7 +16,9 @@ import { groundFromTer, terFromGround } from '../data/scenario';
 import { TerSpec, TrimType, blocksMove } from '../data/terrain';
 import { Lighting } from '../data/town';
 import { LIGHT_MASK_VIEW, lightArea, lightMaskShapes } from './lightMask';
-import { GameSession } from '../game/session';
+import { GameSession, pointOnScreen } from '../game/session';
+import type { Vehicle } from '../data/vehicle';
+import { TOWN_NUM_OUTDOORS } from '../universe/party';
 import { GameMode, isCombat, isScrollable } from '../game/modes';
 import { Boom } from '../game/booms';
 import { Missile, getMissileDirection } from '../game/missileAnim';
@@ -420,6 +422,12 @@ export class Screen {
       }
 
     if (town) this.drawTownItems(session);
+    // draw_outd_boats / draw_town_boat come just before the monsters
+    // (boe.graphics.cpp:1050); a town fight is drawn over its town's boats.
+    if (session.mode !== GameMode.RESTING) {
+      if (session.isOutdoors) this.drawOutdoorVehicles(session);
+      else if (town && (session.inTown || session.whichCombatType === 1)) this.drawTownVehicles(session);
+    }
     if (town) this.drawTownMonsters(session);
     if (!town) this.drawOutdoorGroups(session);
     this.drawPartySymbol(session);
@@ -1132,6 +1140,58 @@ export class Screen {
         );
       }
     }
+  }
+
+  /**
+   * draw_outd_boats (boe.graphutil.cpp:314) — the boats and horses waiting
+   * in the world, other than the one the party is in: a boat is the vehicle
+   * sheet's (0,0), horses its (0,1). A vehicle's square is sector-local, so
+   * its sector says which quarter of the 96×96 window it is in.
+   */
+  private drawOutdoorVehicles(session: GameSession): void {
+    const { party } = session.univ;
+    const centre = party.outLoc;
+    const draw = (list: Vehicle[], inside: number, row: number): void => {
+      list.forEach((v, i) => {
+        if (!v.exists || v.whichTown !== TOWN_NUM_OUTDOORS || i === inside) return;
+        const at = party.localToGlobal(v.loc);
+        at.x += 48 * (v.sector.x - party.outdoorCorner.x - party.iwc.x);
+        at.y += 48 * (v.sector.y - party.outdoorCorner.y - party.iwc.y);
+        if (!pointOnScreen(centre, at) || session.canSeeLight(centre, at) >= 5) return;
+        this.drawVehicle(at.x - centre.x + TER_VIEW_CENTER, at.y - centre.y + TER_VIEW_CENTER, 0, row);
+      });
+    };
+    draw(party.boats, party.inBoat, 0);
+    draw(party.horses, party.inHorse, 1);
+  }
+
+  /**
+   * draw_town_boat (boe.graphutil.cpp:349) — the same in a town, from the
+   * view's centre, and only where the light reaches: a boat is the vehicle
+   * sheet's (1,0), horses its (1,1).
+   */
+  private drawTownVehicles(session: GameSession): void {
+    const { party } = session.univ;
+    const center = session.center;
+    const draw = (list: Vehicle[], inside: number, row: number): void => {
+      list.forEach((v, i) => {
+        if (!v.exists || v.whichTown !== party.townNum || i === inside) return;
+        if (!pointOnScreen(center, v.loc) || session.canSeeLight(center, v.loc) >= 5
+          || !session.ptInLight(center, v.loc)) return;
+        this.drawVehicle(v.loc.x - center.x + TER_VIEW_CENTER, v.loc.y - center.y + TER_VIEW_CENTER, 1, row);
+      });
+    };
+    draw(party.boats, party.inBoat, 0);
+    draw(party.horses, party.inHorse, 1);
+  }
+
+  /** One cell of the vehicle sheet on the view's square (q, row). */
+  private drawVehicle(q: number, row: number, i: number, j: number): void {
+    const img = this.store.get('vehicle');
+    if (!img) return;
+    const pos = terrainSpotPos(q, row);
+    const r = calcRect(i, j);
+    this.ctx.drawImage(img, r.left, r.top, r.width, r.height, pos.x, pos.y, TILE_W, TILE_H);
   }
 
   private drawTownMonsters(session: GameSession): void {

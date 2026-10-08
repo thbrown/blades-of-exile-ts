@@ -44,6 +44,14 @@ export enum SpellWhen {
   OUTDOORS = 4,
 }
 
+/**
+ * Not a spell: what a fire blast tells the square it's centred on, under the
+ * `explode-spots` flag (`placeSpellPattern`). An IF_CONTEXT node naming it in
+ * `ex1b` answers only that, as Exile III's slime pools and slime maker do
+ * (1997's `place_spell_pattern` still carries their code, COMBAT.CPP:3590).
+ */
+export const FIRE_BLAST = 1000;
+
 export enum Spell {
   NONE = -1,
   LIGHT = 0,

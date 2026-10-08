@@ -10,7 +10,7 @@
  * (spot 8), with the Bunker's weapon (special item 33) if they have it.
  */
 
-import { partyFlag as f, partySpecItem, townSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
+import { panelFlag, panelTer, partyFlag as f, partySpecItem, townSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
 
 const BLOCK = 59;
 /** The fight with the Crystal Souls has happened. */
@@ -63,20 +63,20 @@ function fortress(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[
     [15, [s.msg(BLOCK, 0x1b), s.takeFood(15)]],
     [1, [s.msg(BLOCK, 0xf), s.setTer(0x2a, 0x3e, 0x85)]],
   ]), false);
-  /** The cell panel (dialog 0xd28, `FUN_1008_4ecd`'s cases): each lettered button swaps a door. */
+  /**
+   * The cell panel (dialog 0xd28, "Hidden Buttons", `FUN_1008_4ec9`): each
+   * lettered button swaps a door, and the word under it says which way the
+   * door stands (control 7 + 3k, "Dha" while shut); the Thalen button
+   * flips flag 0x1e2, whose word is control 43.
+   */
   const panelButtons = Array.from({ length: 14 }, (_, k) => 5 + 3 * k);
   const press = (button: number): Step[] => {
-    const label = b.dialogText(0xd28, button + 1);
-    if (button === 41) {
-      return [b.ifFlagEq(f(0x1e2), 0, [b.setFlag(f(0x1e2), 1), b.say(`${label}: ${b.exeText(0x1008, 0x4ec4)}`)],
-        [b.setFlag(f(0x1e2), 0), b.say(`${label}: ${b.exeText(0x1008, 0x4ec0)}`)])];
-    }
+    if (button === 41) return [b.ifFlagEq(f(0x1e2), 0, [b.setFlag(f(0x1e2), 1)], [b.setFlag(f(0x1e2), 0)])];
     const k = (button - 5) / 3;
     const door = PANEL_DOORS[k];
     if (k === 0 || !door) return [];
     const [x, y] = door;
-    return [b.swapTer(x, y, DOOR_SHUT, DOOR_OPEN), b.ifTer(x, y, DOOR_SHUT,
-      [b.say(`${label}: ${b.exeText(0x1008, 0x4eb7)}`)], [b.say(`${label}: ${b.exeText(0x1008, 0x4ebb)}`)])];
+    return [b.swapTer(x, y, DOOR_SHUT, DOOR_OPEN)];
   };
   // The alarm is the last button, and closes the panel: every door opens
   // and the guards come.
@@ -84,7 +84,11 @@ function fortress(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[
     b.msg(BLOCK, 0x1c), b.setFlag(ALARM, 1), b.bringIn(201, 1),
     ...PANEL_DOORS.slice(1).map(([x, y]) => b.setTer(x, y, DOOR_OPEN)),
   ];
-  const labels = panelButtons.map((k) => b.dialogText(0xd28, k + 1));
+  const [shut, open] = [0x4eb7, 0x4ebb].map((off) => b.exeText(0x1008, off)) as [string, string];
+  const live = new Map<number, string>([
+    ...PANEL_DOORS.map(([x, y], k): [number, string] => [7 + 3 * k, panelTer(x, y, DOOR_SHUT, shut, open)]),
+    [43, panelFlag(f(0x1e2), [0x4ec0, 0x4ec4].map((off) => b.exeText(0x1008, off)))],
+  ]);
   return new Map<number, Step[]>([
     [1, [b.msg(BLOCK, 0x12), b.setFlag(spot(1), 20),
       ...[0x13, 0x14, 0x15, 0x17, 0x18, 0x19].map((x) => b.setTer(x, 4, 0xc1))]],
@@ -115,7 +119,7 @@ function fortress(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[
     [16, [b.ifSplit([b.msg(BLOCK, 0x13), b.blockMove()])]],
     [17, runeDoor(28, 7, MURDER_CAVE_KEY, 0x14)],
     [18, [b.ifFlagAtLeast(SOULS_FOUGHT, 1, [b.msg(BLOCK, 0x1d)], [b.ifFlagAtLeast(ALARM, 1, [b.msg(BLOCK, 0x1d)], [
-      b.ledPanel(0xd28, panelButtons.map((k) => (k === 44 ? alarm() : press(k))), PANEL, labels, [14]),
+      b.panel(0xd28, [0x1028, 0x62b], panelButtons.map((k) => (k === 44 ? () => alarm() : press(k))), PANEL, live),
     ])])]],
     // The cell's two crystals: one opens the wall E3 tests (36,59) against
     // at (38,59) — E3's own mismatch, kept; the other frees the party.

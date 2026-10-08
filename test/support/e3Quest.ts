@@ -17,6 +17,8 @@ import type { Direction, Location } from '../../src/core/location';
 import type { Scenario } from '../../src/data/scenario';
 import { restoreScenarioState } from '../../src/data/scenarioState';
 import { SpellPat } from '../../src/data/pattern';
+import { DamageType } from '../../src/data/monster';
+import { placeSpellPattern } from '../../src/game/spellPatterns';
 import { SpecType } from '../../src/data/special';
 import { Spell } from '../../src/data/spell';
 import { TerSpec } from '../../src/data/terrain';
@@ -55,6 +57,8 @@ export class QuestRunner {
   readonly univ: Universe;
   /** Everything shown, in order: messages, choices (with the button pressed), talk replies. */
   readonly log: string[] = [];
+  /** Every panel shown (`if-panel`), as its layout with the live text filled in. */
+  readonly panels: string[] = [];
   /** Answers to the next choices, as patterns on the button label; consumed in order. */
   private answers: RegExp[] = [];
   private numbers: number[] = [];
@@ -75,6 +79,14 @@ export class QuestRunner {
 
   get party() { return this.univ.party; }
   get town() { return this.univ.town!; }
+
+  /**
+   * The texts of the `n`-th panel shown (the last by default), in the order
+   * of the dialog's controls: what a player reads on it.
+   */
+  panelTexts(n = this.panels.length - 1): string[] {
+    return [...(this.panels[n] ?? '').matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map((m) => m[1]!);
+  }
 
   /** The last `n` lines of the log, for a failing step's message. */
   tail(n = 12): string { return this.log.slice(-n).join('\n'); }
@@ -99,6 +111,13 @@ export class QuestRunner {
       story: async (title) => { this.log.push(`[story] ${title}`); },
       askText: async (prompt) => { const t = this.texts.shift() ?? ''; this.log.push(`[ask] ${prompt} -> ${t}`); return t; },
       askNum: async (min, _max, prompt) => { const n = this.numbers.shift() ?? min; this.log.push(`[num] ${prompt} -> ${n}`); return n; },
+      // A panel's button comes from the same queue as a typed number; 0 leaves.
+      panel: async (layout, caption) => {
+        const n = this.numbers.shift() ?? 0;
+        this.panels.push(layout);
+        this.log.push(`[panel] ${caption} -> ${n}`);
+        return n;
+      },
       selectPc: async (_opts, title) => { this.log.push(`[pc] ${title} -> ${this.pick}`); return this.pick; },
       getNumOfItems: async (max) => max,
       startShop: (which, costAdj, name) => session.startShopMode(which, costAdj, name),
@@ -281,7 +300,13 @@ export class QuestRunner {
 
   /** A spell (or, with `Spell.NONE`, an exploding missile) landing on (x, y). */
   async castAt(x: number, y: number, spell = Spell.FIREBALL): Promise<void> {
-    await this.session.castSpellOnSpace({ x, y }, spell);
+    // As a real cast: the square hears the spell as it's cast, and then a
+    // fire spell's blast lands on it (`placeSpellPattern`), where Exile III's
+    // pools and slime maker listen (`FIRE_BLAST`).
+    const fire = spell === Spell.FIREBALL || spell === Spell.FIRESTORM || spell === Spell.FLAMESTRIKE;
+    if (await this.session.castSpellOnSpace({ x, y }, spell) && fire) {
+      await placeSpellPattern(this.session, SpellPat.SQUARE, { x, y }, { damage: { type: DamageType.FIRE, dice: 1 }, whoHit: 0 });
+    }
     await this.settle();
   }
 

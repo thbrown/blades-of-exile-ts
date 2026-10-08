@@ -498,6 +498,15 @@ export async function ifThenSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       break;
     }
 
+    case SpecType.IF_PANEL: {
+      // DIVERGENCES.md #55.
+      const layout = panelText(univ, univ.getStr(SpecCtxType.SCEN, spec.m1) ?? '');
+      const caption = spec.m2 >= 0 ? univ.getStr(SpecCtxType.SCEN, spec.m2) ?? '' : '';
+      const pressed = (await ctx.host.panel?.(layout, caption, spec.pic, spec.pictype)) ?? 0;
+      setSdf(univ, spec.sd1, spec.sd2, pressed);
+      break;
+    }
+
     case SpecType.IF_QUEST: {
       if (spec.ex1a < 0 || spec.ex1a >= univ.scenario.quests.length) {
         univ.addStringToBuf('The scenario tried to update a non-existent quest.');
@@ -520,4 +529,26 @@ export async function ifThenSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
   }
 
   if (checkMess) await handleMessage(univ, ctx);
+}
+
+/**
+ * IF_PANEL's live text (DIVERGENCES.md #55): what the panel says as it opens,
+ * in place of each placeholder in its layout.
+ *
+ * - `%{sdf:r,c}` is SDF (r, c)'s value;
+ * - `%{sdf:r,c|a|b|…}` is the word its value picks, 0 the first, a value
+ *   past the end the last;
+ * - `%{ter:x,y,t|a|b}` is `a` while the town's square (x, y) is terrain `t`,
+ *   and `b` otherwise.
+ *
+ * The words are already escaped for the XML they sit in.
+ */
+export function panelText(univ: Universe, layout: string): string {
+  return layout.replace(/%\{(sdf|ter):([\d,]+)((?:\|[^|}]*)*)\}/g, (_, kind: string, at: string, rest: string) => {
+    const [a = 0, b = 0, c = 0] = at.split(',').map(Number);
+    const words = rest === '' ? [] : rest.slice(1).split('|');
+    if (kind === 'ter') return univ.town?.record.terrain[a]?.[b] === c ? words[0] ?? '' : words[1] ?? '';
+    const value = univ.party.getSdf(a, b);
+    return words.length === 0 ? String(value) : words[Math.min(value, words.length - 1)] ?? '';
+  });
 }

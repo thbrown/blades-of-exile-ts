@@ -180,11 +180,15 @@ function agateTower(b: SpecBuilder): Map<number, Step[]> {
     [11, [b.dialog(0xd85), b.townVisible(22)]],
     [12, [b.log(0x1088, 0xc21), b.setTer(0xd, 0x21, 100)]],
     [14, up(0xd, 0xc)], [15, up(0x10, 0xf)], [16, up(0x10, 0x13)], [17, up(0x18, 0x1d)],
-    // The slime maker at (24,41): an exploding missile ends it (`1018:9aa1`),
-    // and the slimes of four kinds (138–141) with it (`FUN_10d8_3d5b`).
-    [21, [b.ifTargeted([b.ifFlagEq(AGATE_GONE, 0, [
+    // The slime maker at (24,41): a fire blast on it ends it (`1018:9aa1`,
+    // as the Slime Pit's pools), and the slimes of four kinds (138–141)
+    // with it (`FUN_10d8_3d5b`).
+    [21, [b.ifBlasted([b.ifFlagEq(AGATE_GONE, 0, [
+      // The crater shows before the dialog, as at the Slime Pit's pools
+      // (E3 alters the square after it).
+      ...b.blastAt(24, 41), b.setTer(24, 41, 0),
       b.dialog(0xd88), b.setFlag(AGATE_GONE, 1), ...[138, 139, 140, 141].map((k) => b.removeCreatures(k)),
-      b.setTer(24, 41, 0),
+      b.blockMove(),
     ])])]],
     [20, [b.askDialog(0xd87, [b.ifMageLoreTotal(8, [b.msg(B, 0x6b), b.teachSpell(0x1a)], [b.msg(B, 0x6a)])])]],
   ]);

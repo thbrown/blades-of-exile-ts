@@ -132,6 +132,8 @@ export type TimerScript = (b: SpecBuilder) => { freq: number; steps: Step[] }[];
 
 /** Blocked terrains a town spot still runs on (water, and three walls). */
 const WALK_INTO = new Set([71, 101, 118, 133]);
+/** E3's water, the one of `WALK_INTO` a boat sails over. */
+const WATER = 71;
 
 /**
  * The three walls of `WALK_INTO` are doors: the town move code's terrain
@@ -253,7 +255,17 @@ export function e3SpotScript(
     // square when its first node is a CANT_ENTER with `ex2a` set, and that
     // node's refusal stands unless the chain changes it. Spots on other
     // blocked terrain are for Use (`use-special-spots`).
-    if (isTown && WALK_INTO.has(terrainAt(s.loc.x, s.loc.y))) {
+    //
+    // The refusal stands in for the terrain's own: E3's spots answer yes and
+    // its move code then stops a party on foot at the water's edge. A party
+    // in a boat sails on (the engine runs the chain for a boat over water
+    // anyway), so on water a boat has the refusal lifted. Until 2026-10-07
+    // it didn't, and the Slime Pit's level 2 had a spot-2 square of water
+    // at (20,21), the boat's only way to the western landing, that silently
+    // refused every boat.
+    const ter = terrainAt(s.loc.x, s.loc.y);
+    if (isTown && WALK_INTO.has(ter)) {
+      if (ter === WATER) n = b.node('if-boat', { ex1: [-1, -1, b.node('block-move', { ex1: [0], ex2: [0] }, n)] }, n);
       n = b.node('block-move', { ex1: [1], ex2: [1] }, n);
     }
     marks.push({ x: s.loc.x, y: s.loc.y, node: n });

@@ -16,6 +16,9 @@ export const Snd = {
   SQUISH: 55,
   CRUNCH: 47,
   SPLASH: 17,
+  /** The oars and the hooves, a boat's or a horse's move (move_sound, boe.main.cpp:2108). */
+  ROW: 48,
+  GALLOP: 85,
   ENTER_TOWN: 16,
   ENTER_DUNGEON: 95,
   BUTTON: 37,

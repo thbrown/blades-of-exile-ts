@@ -12,10 +12,12 @@
  * 108). The other five buttons say "Not authorized."
  */
 
-import { partyFlag as f, townSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
+import { panelFlag, partyFlag as f, townSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
 
 const BLOCK = 58;
 const PANEL: Flag = [291, 19];
+/** The golem panel's status line: 0 its own "Awaiting command.", 1 "Not authorized.", 2 "Done." */
+const PANEL_SAID: Flag = [291, 37];
 /** Belt Alpha and Belt Star: the squares each turns, and their flags. */
 export const BELT_ALPHA = { flag: f(0x4c3), squares: [[5, 51], [6, 51]] as [number, number][] };
 export const BELT_STAR = { flag: f(0x4c5), squares: [[32, 10], [32, 11]] as [number, number][] };
@@ -112,17 +114,21 @@ function level2(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]>
   const stairs = (dlg: number, town: number, x: number, y: number): Step[] =>
     [b.askDialog(dlg, [b.changeTown(town, x, y)]), b.blockMove()];
   const buttons = Array.from({ length: 10 }, (_, k) => 5 + 3 * k);
-  /** E3 shows every setting on the panel; here each press lists them. */
-  const status = (): Step[] => [...PANEL_SETTINGS].map(([button, s]) => {
-    const label = b.dialogText(0xd06, button + 1);
-    return b.ifFlagEq(s.flag, 0, [b.say(`${label}: ${b.exeText(0x1008, s.off)}`)],
-      [b.say(`${label}: ${b.exeText(0x1008, s.on)}`)]);
-  });
+  /**
+   * A button with a setting flips it, and the panel's status line (control
+   * 35) says "Done."; the rest say "Not authorized." (`FUN_1008_4b58`).
+   */
   const press = (button: number): Step[] => {
     const s = PANEL_SETTINGS.get(button);
-    if (!s) return [b.log(0x1008, 0x4b23)];
-    return [b.ifFlagEq(s.flag, 0, [b.setFlag(s.flag, 1)], [b.setFlag(s.flag, 0)]), b.log(0x1008, 0x4b33), ...status()];
+    if (!s) return [b.setFlag(PANEL_SAID, 1)];
+    return [b.ifFlagEq(s.flag, 0, [b.setFlag(s.flag, 1)], [b.setFlag(s.flag, 0)]), b.setFlag(PANEL_SAID, 2)];
   };
+  /** Each setting's word beside its button (control + 2), and the status line. */
+  const live = new Map<number, string>([
+    ...[...PANEL_SETTINGS].map(([button, s]): [number, string] =>
+      [button + 2, panelFlag(s.flag, [b.exeText(0x1008, s.off), b.exeText(0x1008, s.on)])]),
+    [35, panelFlag(PANEL_SAID, [b.dialogText(0xd06, 35), b.exeText(0x1008, 0x4b23), b.exeText(0x1008, 0x4b33)])],
+  ]);
   return new Map<number, Step[]>([
     [1, [b.onceMsg(spot(1), BLOCK, 0x1a)]],
     [2, [b.msg(BLOCK, 0x1b), b.bringIn(200, 1), b.setFlag(spot(2), 20)]],
@@ -138,7 +144,8 @@ function level2(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]>
     [18, [b.ifTer(0x1f, 0x18, 0xf8, [], [b.msg(BLOCK, 0x1d), b.setTer(0x1f, 0x18, 0xf8), b.setTer(0x19, 0x1a, 0x6c)])]],
     [19, [b.askDialog(0xd04, [b.moveParty(0x32, 0x27)])]],
     [20, [b.dialog(0xd05)]],
-    [21, [b.ledPanel(0xd06, buttons.map(press), PANEL, buttons.map((k) => b.dialogText(0xd06, k + 1))), ...setBelts(b)]],
+    // The golem factory's panel (dialog 0xd06, "Golem Factory Control Panel").
+    [21, [b.setFlag(PANEL_SAID, 0), b.panel(0xd06, [0x1028, 0x60f], buttons.map(press), PANEL, live), ...setBelts(b)]],
     [22, [b.lever([b.msg(BLOCK, 0x1f), b.swapTer(0x3b, 0x30, 0xf7, 0xf9)])]],
     [23, [b.ifMageLoreTotal(12, [b.msg(BLOCK, 0x17), b.teachSpell(0x9d)], [b.msg(BLOCK, 0x19)])]],
     [24, [b.ifMageLoreTotal(20, [b.msg(BLOCK, 0x18), b.teachSpell(0x34)], [b.msg(BLOCK, 0x19)])]],

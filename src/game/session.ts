@@ -1340,14 +1340,28 @@ export class GameSession {
     return true;
   }
 
-  /** move_sound (boe.main.cpp:1995), minus the boat/horse/swamp special cases. */
   /**
-   * Public because `combat_move_monster` (boe.monster.cpp:721) plays this
-   * too, from `monsterTurn.ts`'s free-function combat movement, not just the
-   * party's own moves.
+   * move_sound (boe.main.cpp:2094). Public because `combat_move_monster`
+   * (boe.monster.cpp:721) plays this too, from `monsterTurn.ts`'s
+   * free-function combat movement, not just the party's own moves.
+   *
+   * Without its swamp case: OBoE's own "can be removed safely" quiet on a
+   * second splash draws `get_ran(1,1,100)`, and this port has never drawn
+   * it. The boat's oars and the horses' hooves were missing as well until
+   * 2026-10-07, so a boat moved with footsteps; they draw nothing.
    */
   moveSound(ter: number, step: number): void {
     if (!this.sound) return;
+    const { party } = this.univ;
+    if (!this.monstersGoing && !isCombat(this.mode) && party.inBoat >= 0) {
+      // Not onto a town's entrance: entering plays its own.
+      if (this.univ.terrainType(ter).special !== TerSpec.TOWN_ENTRANCE) this.sound.play(Snd.ROW);
+      return;
+    }
+    if (!this.monstersGoing && !isCombat(this.mode) && party.inHorse >= 0) {
+      this.sound.play(Snd.GALLOP);
+      return;
+    }
     switch (this.univ.terrainType(ter).stepSound) {
       case StepSound.SQUISH:
         this.sound.play(Snd.SQUISH);
@@ -2276,6 +2290,13 @@ export class GameSession {
    */
   /** The spell `castSpellOnSpace` last asked a square about, for IF_CONTEXT's TARGET arm. */
   spellOnSpace: number = Spell.NONE;
+
+  /**
+   * Set when a fire blast's centre square took the blast for itself
+   * (`placeSpellPattern`, `explode-spots`): the cast that set it off draws
+   * nothing more of its own. Cleared by the cast that reads it.
+   */
+  blastIntercepted = false;
 
   async castSpellOnSpace(where: Location, spell: Spell): Promise<boolean> {
     const town = this.univ.town;
@@ -5099,6 +5120,22 @@ export class GameSession {
    * effect, and this port runs the chain rather than queueing it, so the only
    * place to say it is here.
    */
+  /**
+   * The scenario flag `slime-stains` = `exile3:<kinds>`: Exile III's town
+   * loader (`10d8:17a9`) puts a small slime stain (`make_sfx(…, 4)`) under
+   * every living creature of the four slime kinds, 138–141, each time a
+   * town is entered — so a slime's square is stained, and so is a square two
+   * of them have stood on twice, larger.
+   */
+  private slimeStains(town: CurTown): void {
+    const m = /^exile3:([\d,]+)$/.exec(this.univ.scenario.featureFlags['slime-stains'] ?? '');
+    if (!m) return;
+    const kinds = new Set(m[1]!.split(',').map(Number));
+    for (const monst of town.monsters) {
+      if (monst.isAlive && kinds.has(monst.number)) town.makeSfx(monst.curLoc.x, monst.curLoc.y, FieldType.SFX_SMALL_SLIME);
+    }
+  }
+
   startTownMode(townNum: number, entryDir: number, skipEntrySpecial = false, silent = false): void {
     if (this.univ.scenario.towns[townNum] === undefined) {
       this.univ.addStringToBuf('The scenario tried to put you into a town that does not exist.');
@@ -5205,6 +5242,7 @@ export class GameSession {
     // boe.town.cpp:450, right after the sweeps: the markers of everything this
     // party has already finished here are gone before the town is drawn once.
     this.eraseTownSpecials();
+    this.slimeStains(town);
 
     // "No hostile monsters present" (boe.town.cpp:473).
     this.univ.party.hostilesPresent = 0;

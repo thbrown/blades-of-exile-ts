@@ -50,12 +50,16 @@ import { GENERATORS } from '../tools/e3convert/towns/shiftingFloors';
 import { e3DayCount, e3TownState } from '../tools/e3convert/flags';
 import { FieldType } from '../src/data/fields';
 import { Spell } from '../src/data/spell';
+import { SpellPat } from '../src/data/pattern';
+import { placeSpellPattern } from '../src/game/spellPatterns';
 import { specialIncreaseAge } from '../src/game/specialIncreaseAge';
 import { giveE3StartItems } from '../src/game/e3StartItems';
 import { addPcRefusal } from '../src/game/createPc';
 import { loadSave, saveGame } from '../src/fileio/saveIo';
 import { SpecCtx, SpecCtxType } from '../src/game/specials/context';
 import { partyFlag } from '../tools/e3convert/script';
+import { parseXmlDoc } from '../src/fileio/xml';
+import { readDialogDef } from '../src/dialogs/dialogXml';
 
 const dir = findE3Dir();
 
@@ -70,6 +74,25 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     scen = await loadScenario(new FsSource(out), opcodes);
   }, 120000);
   afterAll(() => rmSync(out, { recursive: true, force: true }));
+
+  it("lays the Slime Pit's pedestal out as E3 does, a panel of five round buttons", async () => {
+    const node = [...scen.towns[22]!.specials.values()].find((n) => n.type === SpecType.IF_PANEL);
+    expect(node).toBeDefined();
+    expect(scen.specStrs[node!.m2]).toBe('Slimy Control Panel');
+    const def = readDialogDef(await parseXmlDoc(scen.specStrs[node!.m1]!, 'panel.xml'));
+    const at = (name: string) => {
+      const c = def.byName.get(name)!;
+      return [c.kind === 'button' ? c.type : c.kind, c.rect.left, c.rect.top];
+    };
+    // E3's controls 5–9, each 11/10 as far down (1997's `cd_` for a dialog
+    // numbered 2000 or more), as a capture of the original puts them.
+    expect(['b1', 'b2', 'b3', 'b4', 'b5', 'leave'].map(at)).toEqual([
+      ['push', 58, 280], ['push', 74, 232], ['push', 191, 224], ['push', 237, 122], ['push', 310, 53],
+      ['regular', 301, 345],
+    ]);
+    expect(def.byName.get('pic')?.kind).toBe('pict');
+    expect(node!.pic).toBeGreaterThanOrEqual(0);
+  });
 
   it('starts where a new game of Exile 3 does', () => {
     expect(scen.title).toBe('Exile III: Ruined World');
@@ -963,7 +986,7 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     }
   });
 
-  it('lets an exploding missile end a slime pool, which breathes sleep until then', async () => {
+  it('lets a fire blast end a slime pool, which breathes sleep until then', async () => {
     const pit = scen.towns[23]!;
     const kept = pit.terrain.map((col) => [...col]);
     const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
@@ -977,8 +1000,11 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
       specialIncreaseAge(session, 1);
       await settle();
       expect(univ.town!.hasField(34, 22, FieldType.CLOUD_SLEEP)).toBe(true);
-      expect(await session.castSpellOnSpace({ x: 34, y: 22 }, Spell.NONE)).toBe(true);
+      // An exploding arrow's blast (`fireMissile`): 4d6 fire, radius 2.
+      await placeSpellPattern(session, SpellPat.RADIUS_2, { x: 34, y: 22 },
+        { damage: { type: DamageType.FIRE, dice: 4 }, whoHit: 0 });
       await settle();
+      expect(session.blastIntercepted).toBe(true);
       expect(univ.party.getSdf(...partyFlag(0x14e))).toBe(1);
       expect(pit.terrain[34]![22]).toBe(0);
     } finally {

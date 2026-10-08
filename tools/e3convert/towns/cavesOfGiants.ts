@@ -6,7 +6,7 @@
 
 import { DamageType } from '../../../src/data/monster';
 import { FieldType } from '../../../src/data/fields';
-import { PAT_SQUARE, partyFlag as f, partySpecItem, townSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
+import { PAT_SQUARE, panelFlag, partyFlag as f, partySpecItem, townSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
 
 const BLOCK = 58;
 /** The giant's key, from the box on level 2. */
@@ -15,12 +15,11 @@ const GIANTS_KEY = partySpecItem(0x2e);
 const RUNES: Flag[] = Array.from({ length: 7 }, (_, k) => f(0xc28 + k));
 /** Which runes each of the seven buttons toggles (DGROUP 0x2ba). */
 const RUNE_BUTTONS = [[1, 2, 0], [4, 5, 3], [1, 0], [1, 2], [6, 5], [5], [3, 6]];
-/**
- * Where each button sits in the ring on E3's panel (controls 5–11), since
- * the engine's prompt can only name them: the walkthroughs go by position.
- */
-const RUNE_BUTTON_PLACES = ['bottom', 'lower left', 'upper left', 'top', 'upper right', 'lower right', 'bottom right'];
+/** The runes' names (`1008:0773` on, the far pointers at DGROUP 0x2e4). */
+const RUNE_NAMES = [0x773, 0x778, 0x77d, 0x782, 0x788, 0x78c, 0x792];
 const PANEL: Flag = [291, 18];
+/** What the runes' panel last said: 0 nothing, 1 opens, 2 closes, 3 the runes shift. */
+const SAID: Flag = [291, 36];
 
 function upper(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]> {
   const down = (x: number, y: number): Step[] => [b.askDialog(0xce4, [b.changeTown(31, x, y)]), b.blockMove()];
@@ -63,14 +62,17 @@ function lower(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]> 
   /** To the Giant's Forge: out to zone (4,5) and in. */
   const toForge = (): Step[] => [b.msg(BLOCK, 0xb), b.exitTo(4, 5, 0x1a, 0x1d), b.changeTown(0x37, 0x2a, 0x2c)];
   const shut = (): Step[] => lever(0x4066, [[0xc, 0x11, 0], [0xc, 0x12, 0], [0xc, 0x13, 0], [0xd, 0x20, 0], [0xe, 0x20, 0]]);
-  /** All seven runes lit opens (54,23); any dark closes it again. */
+  /**
+   * All seven runes lit opens (54,23); any dark closes it again. The panel
+   * says which (`FUN_1008_48d9`), or that the runes shift.
+   */
   const runeDoor = (): Step => RUNES.reduceRight<Step>(
-    (inner, flag) => b.ifFlagEq(flag, 1, [inner], [b.ifTer(0x36, 0x17, 0x8d, [b.setTer(0x36, 0x17, 0x8c)])]),
+    (inner, flag) => b.ifFlagEq(flag, 1, [inner],
+      [b.ifTer(0x36, 0x17, 0x8d, [b.setTer(0x36, 0x17, 0x8c), b.setFlag(SAID, 2)], [b.setFlag(SAID, 3)])]),
     // Opening it also puts town 54 on the map (party+0x84bb, `can_find_town[54]`).
-    b.ifTer(0x36, 0x17, 0x8c, [b.setTer(0x36, 0x17, 0x8d), b.townVisible(54)]));
-  /** E3 lights the runes on its panel; here each press lists them. */
-  const showRunes = (): Step[] => RUNES.map((flag, k) =>
-    b.ifFlagEq(flag, 1, [b.say(`Rune ${k + 1} glows.`)], [b.say(`Rune ${k + 1} is dark.`)]));
+    b.ifTer(0x36, 0x17, 0x8c, [b.setTer(0x36, 0x17, 0x8d), b.townVisible(54), b.setFlag(SAID, 1)], [b.setFlag(SAID, 3)]));
+  /** Each rune's name, from E3's table at DGROUP 0x2e4, shows while it's lit. */
+  const runeNames = RUNE_NAMES.map((off) => b.exeText(0x1008, off));
   return new Map<number, Step[]>([
     [1, [b.giveItemDialog(0xcf0, spot(1), 0, 300 + GIANTS_KEY)]],
     // The snake pit: the giants' pets come out.
@@ -89,11 +91,15 @@ function lower(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]> 
     // The padlocked door that only the giant's key opens.
     [22, [b.ifTer(0x2f, 0x17, 0x8a, [b.ifSpecItem(GIANTS_KEY,
       [b.msg(BLOCK, 0x11), b.setTer(0x2f, 0x17, 0x87)], [b.msg(BLOCK, 0x10), b.blockMove()])])]],
-    // The lights-out runes (dialog 0xcf4).
-    [23, [b.ledPanel(0xcf4, RUNE_BUTTONS.map((toggles) => [
+    // The lights-out runes (dialog 0xcf4, "Buttons and Runes"): controls
+    // 12–18 name the lit runes, 19 says what the last press did.
+    [23, [b.setFlag(SAID, 0), b.panel(0xcf4, [0x1028, 0x5fd], RUNE_BUTTONS.map((toggles) => [
       ...toggles.map((k) => b.ifFlagEq(RUNES[k]!, 0, [b.setFlag(RUNES[k]!, 1)], [b.setFlag(RUNES[k]!, 0)])),
-      ...showRunes(), runeDoor(),
-    ]), PANEL, RUNE_BUTTON_PLACES)]],
+      runeDoor(),
+    ]), PANEL, new Map([
+      ...RUNES.map((flag, k): [number, string] => [12 + k, panelFlag(flag, ['', runeNames[k]!])]),
+      [19, panelFlag(SAID, ['', ...[0x489b, 0x48b1, 0x48c8].map((off) => b.exeText(0x1008, off))])],
+    ]))]],
     [24, lever(0x407b, [[0x3b, 7, 0]])],
     [25, lever(0x4082, [[0x38, 6, 0]])],
   ]);

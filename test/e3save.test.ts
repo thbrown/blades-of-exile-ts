@@ -19,7 +19,7 @@ import { e3MonsterRecord, e3TownData, e3TownHeader } from '../src/fileio/e3SaveT
 import { e3TownGeometry } from '../tools/e3convert/town';
 import { FieldType } from '../src/data/fields';
 import { e3SaveDefaultsFromJson, e3SaveDefaultsToJson, type E3SaveDefaults } from '../src/fileio/e3SaveDefaults';
-import { applyE3Save } from '../src/fileio/e3SaveImport';
+import { applyE3Save, applyE3TownDecals } from '../src/fileio/e3SaveImport';
 import { exportE3Save, newE3PartyRecord } from '../src/fileio/e3SaveExport';
 import { emitScenario } from '../tools/e3convert/emitNode';
 import { findE3Dir, readE3Files } from '../tools/e3convert/install';
@@ -243,7 +243,7 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     const back = new QuestRunner(scen);
     const res = applyE3Save(writeE3Save(save), back.univ, defaults);
     // Shayder's third record is its first, in state 2.
-    expect(res.town).toEqual({ num: 4, loc: { x: 30, y: 31 } });
+    expect(res.town).toMatchObject({ num: 4, loc: { x: 30, y: 31 } });
     expect(back.party.getSdf(294, 11)).toBe(2);
     expect(partyFlag(0xc00)).toEqual([294, 0]);
     // The squares it had seen go on the record the party was in.
@@ -260,6 +260,8 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     q.town.items.push({ ...q.town.items[0]!, itemLoc: { x: 12, y: 13 }, isSpecial: 0 });
     q.town.setField(29, 29, FieldType.OBJECT_CRATE, true);
     q.town.setField(28, 29, FieldType.WALL_FIRE, true);
+    // A stain, which E3 keeps in the save's `sfx`.
+    q.town.setField(31, 31, FieldType.SFX_LARGE_SLIME, true);
     // A one-shot spot that has run is erased; the others are still there.
     const spots = e3TownHeader(defaults.townDat!, 4);
     const k = [...Array(40).keys()].find((i) => spots[0x1c + 2 * i]! < 64 && spots[0x1c + 2 * i]! > 0)!;
@@ -293,7 +295,13 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     expect(save.town!.data[E3TD.TERRAIN + 64 * 30 + 30]).toBe(q.town.record.terrain[30]![30]);
     // And it loads back here, in Shayder.
     const back = new QuestRunner(scen);
-    expect(applyE3Save(bytes, back.univ, defaults).town).toEqual({ num: 4, loc: { x: 30, y: 30 } });
+    const res = applyE3Save(bytes, back.univ, defaults);
+    expect({ num: res.town?.num, loc: res.town?.loc }).toEqual({ num: 4, loc: { x: 30, y: 30 } });
+    // The town is entered afresh, and then wears the save's stains.
+    back.session.resumeInSavedTown(res.town!.num, res.town!.loc);
+    applyE3TownDecals(back.univ, res.town!.decals);
+    expect(back.town.hasField(31, 31, FieldType.SFX_LARGE_SLIME)).toBe(true);
+    expect(back.town.hasField(31, 31, FieldType.SFX_SMALL_SLIME)).toBe(false);
   });
 
   /**

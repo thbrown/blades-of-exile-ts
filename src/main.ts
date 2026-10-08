@@ -29,6 +29,7 @@ import { e3JobsBase } from './game/e3Jobs';
 import { alchemyChoices, makePotion } from './game/alchemy';
 import { getDialogDef, hasDialogDef, loadDialogDefs } from './dialogs/dialogStore';
 import { XmlDialog } from './dialogs/xmlDialog';
+import { readDialogDef } from './dialogs/dialogXml';
 import { pcInfoDialog } from './dialogs/pcInfoDialog';
 import { itemInfoDialog } from './dialogs/itemInfoDialog';
 import { STR_DIALOG_DEFS, pictTypeOf, strDialog } from './dialogs/strDialog';
@@ -77,7 +78,7 @@ import { CastDialog } from './dialogs/castDialog';
 import { forcedCast, storeFor } from './game/spellRepeat';
 import { GetItemsDialog } from './dialogs/getItemsDialog';
 import { placeSpellPattern } from './game/spellPatterns';
-import { setDialogClickSound } from './dialogs/clickSound';
+import { setDialogClickSound, setDialogPressHold } from './dialogs/clickSound';
 import { GameMode, isCombat, isOut, isScrollable, isTown, keyClicksButton } from './game/modes';
 import { Boom, setBoomSink } from './game/booms';
 import { FocusEvent, animPending, setAnimWaiter, setFocusSink } from './game/anim';
@@ -116,7 +117,7 @@ import { LoadedPackage, ScenarioPackage, identifyScenarioFiles, loadScenarioPack
 import { PackedSource } from './fileio/packedSource';
 import { isE3Save } from './fileio/e3save';
 import { e3SaveDefaultsFromJson, type E3SaveDefaults } from './fileio/e3SaveDefaults';
-import { applyE3Save } from './fileio/e3SaveImport';
+import { applyE3Save, applyE3TownDecals } from './fileio/e3SaveImport';
 import { exportE3Save } from './fileio/e3SaveExport';
 import { Scenario } from './data/scenario';
 import { noScenario, readScenarioFromXml } from './fileio/scenarioXml';
@@ -781,6 +782,9 @@ async function main(): Promise<void> {
   };
   setLivingSound(playSound);
   setDialogClickSound((n) => sound.play(n));
+  // `cd_press_button`'s hold: the click (37, which blocks) and 6 ticks, or
+  // 10 ticks with sounds off (DLOGTOOL.CPP:1546). A tick is 1/60 s.
+  setDialogPressHold(() => (sound.enabled ? sound.blockingMs(37) + 100 : 167));
   // Transcript lines wait for their slot too, for the same reason: the C++
   // repaints the pane after the animation, not during it.
   univ.transcriptClock = animAt;
@@ -1554,6 +1558,18 @@ async function main(): Promise<void> {
     },
     askText: (prompt) => askForText(prompt),
     askNum: askForNum,
+    // IF_PANEL (DIVERGENCES.md #55): a dialog the scenario lays out itself.
+    panel: async (layout, caption, pic, picType) => {
+      const def = readDialogDef(await parseXmlDoc(layout, 'panel.xml'));
+      const picked = await dialogs.runScreenQueued(async () => {
+        const dlg = new XmlDialog(ctx, store, def);
+        dlg.title = caption;
+        if (pic >= 0 && def.byName.has('pic')) dlg.setPictType('pic', pictTypeOf(picType), pic);
+        return dlg;
+      });
+      const button = /^b(\d+)$/.exec(picked);
+      return button ? Number(button[1]) : 0;
+    },
     selectPc: askSelectPc,
     getNumOfItems,
     // `start_shop_mode(ex1a, ex1b, str1)` — see the note in `replay/host.ts`.
@@ -2037,7 +2053,10 @@ async function main(): Promise<void> {
     rememberTree(null);
     scheduler.reset();
     resumeAfterLoad();
-    if (res.town) session.resumeInSavedTown(res.town.num, res.town.loc);
+    if (res.town) {
+      session.resumeInSavedTown(res.town.num, res.town.loc);
+      applyE3TownDecals(univ, res.town.decals);
+    }
     for (const w of res.warnings) univ.addStringToBuf(w);
     univ.addStringToBuf('Exile III game loaded.');
     redraw();

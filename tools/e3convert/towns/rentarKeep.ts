@@ -11,7 +11,7 @@
  * all four vats full, win the game.
  */
 
-import { partyFlag as f, partySpecItem, townSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
+import { panelFlag, partyFlag as f, partySpecItem, townSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
 
 /** The channels' flags, one per lever (`0x2f0 + id` for lever `id`). */
 const CHANNEL = (k: number): Flag => f(0x304 + k);
@@ -69,16 +69,21 @@ function upper(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]> 
     VATS.reduceRight<Step>((inner, k) => b.ifFlagEq(CHANNEL(k), 0, [inner], otherwise), b.seq(then));
   const drain = (): Step[] => CHANNEL_RECTS.map((_, k) => b.setFlag(CHANNEL(k), 0));
   const beep = (): Step => b.msg(B, 0x3a);
-  /** The pedestal's four buttons; with no vat full, none of them does anything. */
-  const pedestal = (): Step => b.ledPanel(0xd39, [
+  /**
+   * The pedestal's four buttons (dialog 0xd39, "Rentar-Ihrno's Control
+   * Panel", `FUN_1008_51e5`); with no vat full, none of them does
+   * anything. Only a Begin that works closes the panel. Each vat's word
+   * (controls 14, 16, 18, 20) is "Z!" while its channel flag is 1.
+   */
+  const pedestal = (): Step => b.panel(0xd39, [0x1028, 0x63a], [
     [noVats([beep()], [...drain(), b.setFlag(PEDESTAL, 0), b.msg(B, 0x39)])],
     [noVats([beep()], [b.ifFlagEq(PEDESTAL, 0, [b.msg(B, 0x3b), b.setFlag(PEDESTAL, 1)], [beep()])])],
     [noVats([beep()], [b.ifFlagEq(PEDESTAL, 1, [b.msg(B, 0x3c), b.setFlag(PEDESTAL, 2)], [beep()])])],
-    [noVats([beep()], [b.ifFlagEq(PEDESTAL, 2, [
-      allVats([b.setFlag(PEDESTAL, 3)], [b.msg(B, 0x3d, 0x3e), ...drain(), b.setFlag(PEDESTAL, 0)]),
-    ], [beep()])])],
-    // E3 keeps the panel open after a failed Begin; here any Begin closes it.
-  ], PANEL, [0, 1, 2, 3].map((k) => b.dialogText(0xd39, 9 + k)), [4]);
+    (again) => [noVats([beep(), again], [b.ifFlagEq(PEDESTAL, 2, [
+      allVats([b.setFlag(PEDESTAL, 3)], [b.msg(B, 0x3d, 0x3e), ...drain(), b.setFlag(PEDESTAL, 0), again]),
+    ], [beep(), again])])],
+  ], PANEL, new Map(VATS.map((k, i): [number, string] =>
+    [14 + 2 * i, panelFlag(CHANNEL(k), [b.exeText(0x1008, 0x51e3), b.exeText(0x1008, 0x51e0), b.exeText(0x1008, 0x51e3)])])));
   return new Map<number, Step[]>([
     [1, [b.dialog(0xd34), b.setFlag(spot(1), 20)]],
     [2, [b.onceMsg(spot(2), B, 0x2a)]],

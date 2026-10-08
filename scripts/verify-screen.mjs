@@ -1542,7 +1542,9 @@ console.log('TRAP:', JSON.stringify({ trapSetup, trapAsked, trapRefused, trapAga
 if (!trapAsked) throw new Error('the trap node put up no dialog');
 if (trapAsked.bled)
   throw new Error('the trap dialog ran past m1 into the strings after it');
-if (trapAsked.buttons.join(',') !== 'No,Yes')
+// 1997's order (DIVERGENCES.md #57): slot 1, No, rightmost — the original
+// passes `{3, 2}` to `custom_choice_dialog` (SPECIALS.CPP:2020).
+if (trapAsked.buttons.join(',') !== 'Yes,No')
   throw new Error(`trap buttons were ${trapAsked.buttons.join(',')}`);
 if (trapRefused.sd === 250) throw new Error('refusing the trap still marked it done');
 if (!trapAgain) throw new Error('the trap did not come back after refusing it');

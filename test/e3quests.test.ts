@@ -196,6 +196,44 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       }
     });
 
+    it('Slime Pit: every slime alive stains its square as the town is entered, and the stains build up', async () => {
+      // E3's town loader (`10d8:17a9`): `make_sfx(…, 4)` under each of the
+      // four slime kinds, and a second small slime on a square makes it large.
+      const q = new QuestRunner(scen);
+      await q.enter(23, { x: 30, y: 10 });
+      const slimes = q.town.monsters.filter((m) => m.isAlive && m.number >= 138 && m.number <= 141);
+      expect(slimes.length).toBeGreaterThan(0);
+      const stained = (m: (typeof slimes)[number]) => [FieldType.SFX_SMALL_SLIME, FieldType.SFX_LARGE_SLIME]
+        .some((f) => q.town.hasField(m.curLoc.x, m.curLoc.y, f));
+      expect(slimes.filter((m) => !stained(m)).map((m) => m.curLoc)).toEqual([]);
+      // `make_sfx`'s build-up (1997, E3's `1038:1185`).
+      const { x, y } = slimes[0]!.curLoc;
+      q.town.setField(x, y, FieldType.SFX_SMALL_SLIME, false);
+      q.town.setField(x, y, FieldType.SFX_LARGE_SLIME, false);
+      q.town.makeSfx(x, y, FieldType.SFX_SMALL_SLIME);
+      q.town.makeSfx(x, y, FieldType.SFX_SMALL_SLIME);
+      expect(q.town.hasField(x, y, FieldType.SFX_LARGE_SLIME)).toBe(true);
+    });
+
+    it("Slime Pit: the boat sails over level 2's spot-2 water to the western landing", async () => {
+      // (20,21) is water with spot 2 on it, whose leading refusal stands in
+      // for water stopping a party on foot. A play-tester's boat was
+      // silently refused there (2026-10-07); E3 sails on.
+      const q = new QuestRunner(scen);
+      await q.enter(23, { x: 22, y: 21 });
+      q.place({ x: 21, y: 21 });
+      const boat = q.party.boats.findIndex((b) => b.exists && b.whichTown === 23);
+      expect(boat).toBeGreaterThanOrEqual(0);
+      Object.assign(q.party.boats[boat]!, { loc: { x: 21, y: 21 }, property: false });
+      q.party.inBoat = boat;
+      expect(await q.go(Direction.W, Direction.W), q.tail()).toEqual([true, true]);
+      expect(q.at).toEqual({ x: 19, y: 21 });
+      // On foot the water still stops the party, spot or no spot.
+      q.party.inBoat = -1;
+      q.place({ x: 21, y: 21 });
+      expect(await q.go(Direction.W)).toEqual([false]);
+    });
+
     it('Slime Pit: five pools burned, the Alien Slime killed, the rune taken, the mission reported and rewarded', async () => {
       const q = new QuestRunner(scen);
       // Krizsan's mayor asks for help first (0xc84, the mission).
@@ -209,8 +247,30 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       expect(q.at, q.tail()).not.toEqual({ x: 28, y: 19 });
       expect(q.log.at(-1)).toMatch(/^\[msg/);
       SLIME_POOLS.forEach(([x, y]) => expect(q.town.record.terrain[x]![y]).toBe(255));
+      // A pool takes the whole blast, as E3's `place_spell_pattern` does:
+      // a creature beside it is untouched, and only then is it a crater.
+      const near = q.town.monsters.find((m) => m.isAlive)!;
+      const [px, py] = SLIME_POOLS[0]!;
+      near.curLoc = { x: px + 1, y: py };
+      const health = near.health;
+      // The crater is there before the pool's dialog is (the user's choice;
+      // E3 alters the square after it).
+      const host = q.session.host!;
+      const [message, choice] = [host.message.bind(host), host.choice.bind(host)];
+      const underDialog: number[] = [];
+      const seen = () => underDialog.push(q.town.record.terrain[px]![py]!);
+      host.message = async (...args) => { seen(); return message(...args); };
+      host.choice = async (...args) => { seen(); return choice(...args); };
       for (const [x, y] of SLIME_POOLS) await q.castAt(x, y, Spell.FIREBALL);
+      Object.assign(host, { message, choice });
+      expect(underDialog[0]).toBe(0);
+      expect(near.health).toBe(health);
       for (let i = 0; i < 5; i++) expect(q.flag(0x14c + i), q.tail()).toBe(1);
+      SLIME_POOLS.forEach(([x, y]) => expect(q.town.record.terrain[x]![y]).toBe(0));
+      // Once burnt, a pool is ground like any other: the next blast there burns as usual.
+      near.curLoc = { x: px + 1, y: py };
+      await q.castAt(px, py, Spell.FIREBALL);
+      expect(near.health).toBeLessThan(health);
       // The last pool opens spot 3's wall.
       expect(q.flag(0x16d)).toBe(20);
       const shown = q.log.length;
@@ -774,6 +834,12 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       q.number(...[1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 4, 4, 6, 6, 0]);
       await q.step(gx, gy);
       expect(q.canReach({ x: gx, y: gy }, elhioc.curLoc), `open\n${q.tail()}`).toBe(true);
+      // The panel shows the dials (controls 13–18) and what was heard: nothing
+      // as it opens, then a quiet grinding for the first three, a loud one after.
+      expect(q.panelTexts(0).slice(-8)).toEqual(['0', '0', '0', '0', '0', '0', '', '']);
+      expect(q.panelTexts(1).slice(-2).join('')).toMatch(/muffled sound of grinding stone/);
+      expect(q.panelTexts().slice(-8, -2)).toEqual(['5', '4', '3', '2', '0', '2']);
+      expect(q.panelTexts().slice(-2).join('')).toMatch(/loud sound of grinding stone/);
       await q.kill(/Elhioc/);
       expect(q.flag(TROGLO_STAGE), q.tail()).toBe(6);
       // His spellbook (spot 11): Wall of Blades and Major Cleansing, for a
@@ -870,6 +936,10 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       q.number(1, 2, 5, 6, 0);
       await q.step(...spot(31, 23));
       expect(q.town.record.terrain[0x36]![0x17], q.tail()).toBe(0x8d);
+      // The panel names each lit rune (controls 12–18) and says what happened.
+      expect(q.panelTexts(0).slice(-8)).toEqual(['', '', '', '', '', '', '', '']);
+      expect(q.panelTexts(1).at(-1)).toBe('The runes shift.');
+      expect(q.panelTexts().slice(-8)).toEqual(['Glah', 'Frag', 'Mung', 'Legov', 'Owa', 'Taful', 'Ayam', 'The portcullis opens.']);
       expect(scen.towns[54]!.canFind, q.tail()).toBe(true);
     });
 
@@ -1588,9 +1658,18 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       const ALPHA = 0x4c3, BETA = 0x4c4, STAR = 0x4c5;
       // The panel (spot 21): Belt Alpha and Belt Beta pressed, Star left alone.
       await q.clearHostiles();
-      q.number(5, 7, 0);
+      q.number(5, 7, 1, 0);
       await q.step(...spot(33, 21));
       expect([q.flag(ALPHA), q.flag(BETA), q.flag(STAR)], q.tail()).toEqual([1, 1, 0]);
+      // The status line: its own words as the panel opens, "Done." after a
+      // setting, and the factory itself is not the party's to switch. Belt
+      // Alpha's word (control 19) and Beta's (25) turn from A to B.
+      const words = (n: number) => q.panelTexts(n).filter((t) => /^(A|B)$/.test(t));
+      expect(q.panelTexts(0)).toContain('Awaiting command.');
+      expect(words(0)).toEqual(['A', 'A', 'A']);
+      expect(q.panelTexts(2)).toContain('Done.');
+      expect(words(2)).toEqual(['B', 'B', 'A']);
+      expect(q.panelTexts(3)).toContain('Not authorized.');
       expect([q.town.record.terrain[5]![51], q.town.record.terrain[6]![51]]).toEqual([249, 249]);
 
       // Belt Alpha south lets the party down to the library (spots 23 and 24).
@@ -4316,6 +4395,9 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       q.number(7, 11, 9, 0);
       await q.look(...spot(36, 18));
       expect(reachesBeside(q, q.at, 37, 61), 'the cell crystals, after').toBe(true);
+      // Each door's word under its letter: three of them open ("Kaik") now.
+      const open = (n: number) => q.panelTexts(n).filter((t) => t === 'Kaik').length;
+      expect(open(q.panels.length - 1) - open(0)).toBe(3);
       expect(guards()).toBe(awake);
       // The crystal marked 2 frees the party.
       q.answer(/^2$/);
@@ -4652,13 +4734,16 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
           expect(r.at, `${i}`).toEqual({ x: 14, y: 32 });
         }
         // Her panel: 1 Emergency Drain Away, 2 Release Slime Compounds,
-        // 3 Power Up Chargers, 4 Begin Process. Out of order, it beeps (and
-        // Begin closes the panel, beep or not; E3 keeps it open).
-        r.number(3, 0);
+        // 3 Power Up Chargers, 4 Begin Process. Out of order, it beeps, and
+        // a Begin that fails leaves the panel open, as E3's does.
+        r.number(3, 4, 0);
         await r.clearHostiles();
         await r.step(...spot(38, 26));
         expect(r.flag(0x208)).toBe(0);
         expect(r.log.some((l) => /\[end\]/.test(l))).toBe(false);
+        expect(r.panels.length, r.tail()).toBe(3);
+        // Every vat full: each one's word reads "Z!".
+        expect(r.panelTexts().filter((t) => t === 'Z!').length).toBe(4);
         r.number(2, 3, 4);
         await r.clearHostiles();
         await r.step(...spot(38, 26));

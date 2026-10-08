@@ -47,10 +47,15 @@ import type { Player } from '../universe/player';
 import { NUM_INVEN_SLOTS, NUM_SPELLS } from '../universe/player';
 import { NUM_SKILLS, NUM_TRAITS } from '../universe/skills';
 import type { Universe } from '../universe/universe';
+import { FieldType } from '../data/fields';
 
 export interface E3Import {
-  /** The engine's town to enter, and where, when the save was made in town. */
-  town: { num: number; loc: Location } | null;
+  /**
+   * The engine's town to enter, and where, when the save was made in town,
+   * with its stains as E3 saved them (`sfx`, 64 by 64): `applyE3TownDecals`
+   * lays them on once the town is entered.
+   */
+  town: { num: number; loc: Location; decals: Uint8Array } | null;
   /** What couldn't be carried over, for the transcript. */
   warnings: string[];
 }
@@ -292,7 +297,7 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
       }
     });
     // TODO(e3save): c_town's creatures and t_i's items, instead of a fresh town.
-    town = { num, loc };
+    town = { num, loc, decals: save.sfx };
     warnings.push('The town is entered afresh: its creatures and items are not read from the save yet.');
   }
   party.townNum = TOWN_NUM_OUTDOORS;
@@ -341,4 +346,24 @@ function readMaps(maps: NonNullable<E3Save['maps']>, scenario: Scenario): void {
 
 export function applyE3Save(data: Uint8Array, univ: Universe, defaults: E3SaveDefaults): E3Import {
   return applyE3SaveRecord(readE3Save(data), univ, defaults);
+}
+
+/**
+ * A town saved by E3, entered afresh (`E3Import.town`), with the stains the
+ * save holds in place of the ones it was entered with: the blood and slime
+ * the dead left, the ash, bones and rubble. E3's `sfx` byte has a bit for
+ * each, in the engine's order from `SFX_SMALL_BLOOD` (`e3SaveTown.ts`
+ * writes the same).
+ */
+export function applyE3TownDecals(univ: Universe, decals: Uint8Array): void {
+  const town = univ.town;
+  if (!town) return;
+  const dim = Math.min(64, town.record.maxDim);
+  for (let x = 0; x < dim; x++) {
+    for (let y = 0; y < dim; y++) {
+      const bits = decals[64 * x + y] ?? 0;
+      for (let k = 0; k < 8; k++) town.setField(x, y, FieldType.SFX_SMALL_BLOOD + k, false);
+      for (let k = 0; k < 8; k++) if (bits & (1 << k)) town.setField(x, y, FieldType.SFX_SMALL_BLOOD + k);
+    }
+  }
 }

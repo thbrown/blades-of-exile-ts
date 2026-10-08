@@ -6,7 +6,7 @@
  * sleep over the 7×7 around them each turn a party is within 8 (`10c0:6325`,
  * `make_sleep_cloud`), and an exploding missile landing on one destroys it
  * (`1018:9bb5`: flags 0x14c–0x150; the last clears spot 3's wall, flag
- * 0x16d). No BoE node reads a missile or a distance: `explode-spots` and
+ * 0x16d). No BoE node reads a blast or a distance: `explode-spots` and
  * `if-near` (DIVERGENCES.md #27) do. The pools are spots of their own,
  * `POOL_SPOT` on (`emit.ts`), where two of them had E3's spot 0, which does
  * nothing.
@@ -21,13 +21,22 @@ export const SLIME_POOLS: [number, number][] = [[13, 2], [11, 19], [34, 22], [46
 export const POOL_SPOT = 80;
 const poolGone = (i: number): Flag => f(0x14c + i);
 
-/** Each pool's spot: an exploding missile destroys it (`1018:9bb5`). */
+/**
+ * Each pool's spot: a fire blast centred on it destroys it (`1018:9bb5`;
+ * 1997's `place_spell_pattern` still has the code, COMBAT.CPP:3600). The
+ * spell is spent but draws nothing of its own: E3 flies a slow fireball,
+ * bursts it, then says so. E3 turns the pool to a crater after the dialog;
+ * here it's a crater as the burst clears, before the dialog — the user's
+ * choice (2026-10-07), since the dialog then sits over what it describes.
+ */
 function poolSteps(b: SpecBuilder, i: number): Step[] {
   const [x, y] = SLIME_POOLS[i]!;
   const others = SLIME_POOLS.map((_, k) => k).filter((k) => k !== i);
   const lastOne = others.reduceRight<Step[]>((inner, k) => [b.ifFlagEq(poolGone(k), 1, inner, [b.dialog(0xca6)])],
     [b.dialog(0xca7), b.setFlag(f(0x16d), 20)]);
-  return [b.ifTargeted([b.ifFlagEq(poolGone(i), 0, [...lastOne, b.setFlag(poolGone(i), 1), b.setTer(x, y, 0)])])];
+  return [b.ifBlasted([b.ifFlagEq(poolGone(i), 0, [
+    ...b.blastAt(x, y), b.setTer(x, y, 0), ...lastOne, b.setFlag(poolGone(i), 1), b.blockMove(),
+  ])])];
 }
 
 /** Level 2's clock: every turn, each pool still there breathes sleep on a party within 8. */
@@ -42,7 +51,7 @@ export function level2Timers(b: SpecBuilder): { freq: number; steps: Step[] }[] 
 const BLOCK = 56;
 /** Which pedestal button was pressed last, 0–4 (`FUN_1008_4251`); `towns/entry.ts` reads it. */
 export const PEDESTAL = f(0x169);
-/** The converter's scratch flag for the typed button number. */
+/** The converter's scratch flag for the button pressed. */
 const PRESSED: Flag = [291, 11];
 
 export function slimePit(town: number) {
@@ -77,12 +86,11 @@ export function slimePit(town: number) {
         [8, [b.onceMsg(spot(8), BLOCK, 0x29)]],
         [9, [b.msg(BLOCK, 0x2f), b.diseaseAll(3)]],
         [11, [b.askDialog(0xc9b, [b.ifFlagEq(f(0xc85), 0, [b.msg(BLOCK, 0x2b, 0x2c)], [b.msg(BLOCK, 0x2d)])])]],
-        // The pedestal of five buttons (dialog 0xc97, `FUN_1008_4292`). E3
-        // shows five LEDs; the last one pressed opens a portcullis on level
-        // 2 (towns/entry.ts). The engine asks for the number instead.
-        [12, [b.dialog(0xc97),
-          b.askNumber('Which button do you press? (1 to 5, or 0 for none)', 0, 5, PRESSED),
-          b.ifFlagAtLeast(PRESSED, 1, [b.copyFlag(PEDESTAL, PRESSED), b.decFlag(PEDESTAL)]),
+        // The pedestal of five buttons (dialog 0xc97, "Slimy Control
+        // Panel", `FUN_1008_4292`): button k (control k + 5) sets the flag
+        // to k (`FUN_1008_4251`), and the panel stays open until Leave. The
+        // last one pressed opens a portcullis on level 2 (towns/entry.ts).
+        [12, [b.panel(0xc97, [0x1028, 0x5be], [0, 1, 2, 3, 4].map((k) => [b.setFlag(PEDESTAL, k)]), PRESSED),
           b.blockMove()]],
         [14, [b.askDialog(0xc9c, [b.ifMageLoreTotal(8,
           [b.msg(BLOCK, 0x32), b.teachSpell(0x19), b.teachSpell(0x1b)], [b.msg(BLOCK, 0x33)])])]],

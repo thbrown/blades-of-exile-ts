@@ -191,6 +191,9 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
           { placeType: spec.ex2b === 1 ? 1 : 0 });
       }
       runBoomAnim(univ.rng, () => drawTerrain(ctx.session), spec.ex2c);
+      // `mondo_boom`/`run_a_boom` block until the blast is over, so what the
+      // chain shows next comes after it.
+      await animSettle();
       break;
     }
 
@@ -218,6 +221,12 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
      * everywhere else — for a one-square creature it is **13, not 0**, so
      * every missile fired at a creature lands half a tile down and right of
      * one fired at bare ground. Kept as written.
+     *
+     * **A blades-of-exile-ts extension:** `ex1a` 1 flies it from the acting
+     * PC (in combat; the party in town) instead, and a positive `ex1b` is
+     * its length in steps for 100 — Exile III's fireball at its slime pools
+     * is 200 (`run_a_missile(pc_pos[current_pc], …, 200)`, 1018:9adb).
+     * Like `run_a_missile` it blocks until it lands.
      */
     case SpecType.TOWN_RUN_MISSILE: {
       if (ctx.whichMode === SpecCtx.TALK) break;
@@ -225,7 +234,10 @@ export async function townSpec(univ: Universe, ctx: SpecialCtx): Promise<void> {
       const there = town?.monsterAt(dest);
       const xAdj = there ? 14 * there.xWidth - 1 : 0;
       const yAdj = there ? 18 * there.yWidth - 1 : 0;
-      runAMissile(ctx.specLoc, dest, spec.pic, spec.ex1c, spec.ex2c, xAdj, yAdj, 100);
+      const from = spec.ex1a !== 1 ? ctx.specLoc
+        : isCombat(ctx.session.mode) ? univ.currentPc.combatPos : univ.party.townLoc;
+      runAMissile(from, dest, spec.pic, spec.ex1c, spec.ex2c, xAdj, yAdj, spec.ex1b > 0 ? spec.ex1b : 100);
+      await animSettle();
       break;
     }
 

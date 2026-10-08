@@ -18,7 +18,7 @@
  */
 
 import { DamageType } from '../../../src/data/monster';
-import { PAT_SQUARE, partyFlag as f, partySpecItem, townSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
+import { PAT_SQUARE, panelFlag, partyFlag as f, partySpecItem, townSpotFlag, type Flag, type SpecBuilder, type Step } from '../script';
 
 const BLOCK = 57;
 /** Vothkaro's story, 0–7. */
@@ -32,8 +32,10 @@ const PAPERS = partySpecItem(0x5e);
 /** Vothkaro's scroll for Sharimik's mayor. */
 const VOTHKARO_SCROLL = partySpecItem(0x62);
 const CELL_TIMER_RUNNING: Flag = [291, 16];
-/** Which button of the gate's panel, for `ledPanel`. */
+/** Which button of the gate's panel, for `panel`. */
 const PANEL: Flag = [291, 17];
+/** What the gate's panel says was heard: 0 nothing yet, 1 muffled, 2 loud. */
+const HEARD: Flag = [291, 35];
 
 /** The cell door, locked (106) or open (103). */
 const CELL_DOOR = { x: 0x38, y: 0x30 };
@@ -113,11 +115,18 @@ function caves(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]> 
     [6, [b.msg(BLOCK, 0x52), b.bringIn(200, 3), b.setFlag(spot(6), 20)]],
     [11, [b.askDialog(0xcda, [b.ifMageLoreTotal(10,
       [b.msg(BLOCK, 0x4d), b.teachSpell(0x9f), b.teachSpell(0xa1)], [b.msg(BLOCK, 0x4c)])])]],
-    // The gate's panel (dialog 0xcdf, `FUN_1008_461a`): each button turns a
-    // dial, and the walls follow. Its labels only mark the ends of the scale.
-    [14, [b.ledPanel(0xcdf, DIALS.map((d) => [
+    // The gate's panel (dialog 0xcdf, "Odd Array of Buttons",
+    // `FUN_1008_461a`): each button turns a dial, and the walls follow.
+    // Controls 13–18 show the dials, and 19–20 what was heard: the first
+    // three turn quietly, the last three loudly. Nothing's heard as it opens.
+    [14, [b.setFlag(HEARD, 0), b.panel(0xcdf, [0x1028, 0x5e8], DIALS.map((d, i) => [
       b.incFlag(d.flag), b.ifFlagAtLeast(d.flag, d.n, [b.setFlag(d.flag, 0)]), ...gate(),
-    ]), PANEL, DIALS.map((_, i) => `dial ${i + 1}`))]],
+      b.setFlag(HEARD, i < 3 ? 1 : 2),
+    ]), PANEL, new Map([
+      ...DIALS.map((d, i): [number, string] => [13 + i, panelFlag(d.flag)]),
+      [19, panelFlag(HEARD, ['', b.exeText(0x1008, 0x45a7), b.exeText(0x1008, 0x45e2)])],
+      [20, panelFlag(HEARD, ['', b.exeText(0x1008, 0x45c6), b.exeText(0x1008, 0x45fe)])],
+    ]))]],
     ...[15, 21, 22].map((id): [number, Step[]] => [id, [b.askDialog(0xcdc, [b.msg(BLOCK, 0x4f), fire()])]]),
     [16, [b.ifTerAtSpot(16, 0xa4, [b.msg(BLOCK, 0x51), b.setTerAtSpot(16, 150)])]],
     [17, upTo(0x15, 0x2b)],

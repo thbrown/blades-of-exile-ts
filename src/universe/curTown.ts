@@ -216,6 +216,25 @@ export class CurTown {
   }
 
   /** `free_for_sfx` (:650) — a decal needs completely clear ground. */
+  /**
+   * 1997's `make_sfx` (FIELDS.CPP:375), which Exile III shares
+   * (`1038:1185`): a stain that builds up. Small blood on small blood is
+   * medium, on medium large, and none goes on large; small slime on small
+   * slime is large. Anything else is `setField`'s. OBoE's `set_sm_blood` and
+   * `set_sm_slime` dropped the build-up (DIVERGENCES.md #56).
+   */
+  makeSfx(x: number, y: number, which: FieldType): boolean {
+    let field = which;
+    if (which === FieldType.SFX_SMALL_BLOOD) {
+      if (this.hasField(x, y, FieldType.SFX_LARGE_BLOOD)) return false;
+      if (this.hasField(x, y, FieldType.SFX_MEDIUM_BLOOD)) field = FieldType.SFX_LARGE_BLOOD;
+      else if (this.hasField(x, y, FieldType.SFX_SMALL_BLOOD)) field = FieldType.SFX_MEDIUM_BLOOD;
+    } else if (which === FieldType.SFX_SMALL_SLIME && this.hasField(x, y, FieldType.SFX_SMALL_SLIME)) {
+      field = FieldType.SFX_LARGE_SLIME;
+    }
+    return this.setField(x, y, field);
+  }
+
   private freeForSfx(x: number, y: number): boolean {
     if (!this.isOnMap(x, y)) return false;
     return this.host.terrainType(this.record.terrain[x]![y]!).blockage === TerObstruct.CLEAR;

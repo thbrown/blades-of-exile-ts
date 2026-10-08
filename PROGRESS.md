@@ -134,7 +134,7 @@ Notes for M2 implementer:
 - The window is **605×430** (`global.hpp:30`), not 800×600 — the earlier plan text was wrong. index.html scales the canvas ×2 in CSS.
 - The inventory panel is a placeholder until the item/equip model lands (M3).
 - Trim stencilling: trim.png is a 1-bit **black-on-white** bitmap; black = "let the neighbouring ground show through". The C++ uses a fragment shader; we use an offscreen tile + `destination-in` against an alpha mask. Masks sit at the same offset inside a 28×36 cell as inside the sheet.
-- Still missing from the terrain view: fields/barriers/webs overlay (`draw_fields`), boats and horses, special-spot markers, and the `sightObscurity` contributions those add.
+- Still missing from the terrain view: fields/barriers/webs overlay (`draw_fields`), special-spot markers, and the `sightObscurity` contributions those add. (Boats and horses were drawn from 2026-10-07.)
 - Monster abilities are captured as lossless `RawAbility` records (monster.ts) — port uAbility union semantics at M5, reference readMonstAbilFromXml (fileio_scen.cpp:1425).
 - Town reader reference: readTownFromXml (fileio_scen.cpp:1839), loadTownMapData; town terrain templates are variable-size (min 24); talkN.xml via readDialogueFromXml.
 - scenarioXml.ts skips deferred sections by name (quests/shops/special-items/strings) — tighten as those land.
@@ -16872,3 +16872,105 @@ failed on the known ENCOUNTER flake and on the hit-sound check, below).
 coordinates. Check the font size (`CreateFont` at 10e8:02xx; the handles
 are DGROUP 0x6ec0–0x6ecc) before the offsets. Measure against the user's
 own screenshot of the original, not against the formula.
+
+
+### Play-test notes, twelfth round (2026-10-07)
+
+- [x] **The Slime Pit's pedestal asked for a typed number.** E3 shows
+      dialog 0xc97, "Slimy Control Panel": five round red buttons laid out
+      over a frame, and Leave. New engine opcode **`if-panel` (167)**: a
+      dialogxml layout in a scenario string, the pressed button into an
+      SDF (DIVERGENCES §55). The converter's `SpecBuilder.panel` lays an
+      E3 dialog out (`e3PanelLayout`) and loops it until Leave, as E3's
+      stays open. The Filth Factory's panel (0xcc0) uses it too, and
+      (same day, at the user's request) the other five: their handlers
+      write labels as they're pressed (`FUN_1028_1cd5`, `cd_set_item_text`;
+      `1caf` a number), which `if-panel` now carries as **live text**
+      filled in as the panel opens (`panelText`; `panelFlag`/`panelTer` in
+      the converter). The dials' numbers, the runes' names (far pointers at
+      DGROUP 0x2e4 — `0xffff` raw, NE relocations to `1008:0773`…), the
+      golem settings and its status line ("Done." / "Not authorized." went
+      to the transcript before), Tinraya's Dha/Kaik doors and Rentar-Ihrno's
+      vats ("Z!"). The `say` lines that stood in for them are gone, and so
+      are `ledPanel` and `askNumber`. A failed Begin on Rentar-Ihrno's panel
+      now leaves it open, as E3 does (a `PanelAction` may take the step
+      that reopens the panel). Quest tests read the panels
+      (`QuestRunner.panels`/`panelTexts`).
+      Windows can now carry their own caption (`ModalScreen.caption`).
+- [x] **The boat on the Slime Pit's level 2 was invisible**, and so was
+      every parked boat and horse in the game: `draw_town_boat` and
+      `draw_outd_boats` (boe.graphutil.cpp:314, :349) had never been
+      ported. `screen.ts` draws them now, before the monsters, under the
+      same light and sight tests.
+- [x] **A boat was silently refused at (20,21) on level 2**, the way to
+      the western landing. The square is water with spot 2 on it, and the
+      converter puts a `CANT_ENTER` in front of every town spot on water or
+      a door wall, standing in for the terrain stopping a party on foot;
+      it stopped boats too. On water, a party in a boat now has the refusal
+      lifted (`if-boat`, `specials.ts`); E3 sails on. Quest test added.
+- [x] **A boat moved to footsteps.** `moveSound` lacked `move_sound`'s
+      boat (48) and horse (85) arms; E3's own (`1030:0af2`) has the same
+      two. The swamp arm stays out: OBoE draws `get_ran` there and this
+      port never has.
+
+**Gotcha (2026-10-07):** `public/scenarios/exile3/` is what the dev server
+serves, and it's only reconverted by `npm run dev`'s `predev` — a server
+already running keeps the old conversion. Run
+`npx vite-node tools/e3convert/ensure.ts` before trying a converter change
+in the browser (`try-spot.mjs` showed the old number prompt until then).
+
+**Gotcha (2026-10-07):** the Tinraya cell panel (0xd28), 11/10 tall, is
+~460px: in a 640×465 desktop (UI scale 2 in a 1280×960 window) its caption
+sits above the top. It's E3's own size — it filled the original's 640×480
+screen.
+
+**Gotcha (2026-10-07):** a far pointer in E3's DGROUP reads `ffff 0000` raw:
+the bytes are the head of an NE relocation chain. `nedis.Ne(...).fix[seg-1]`
+has what it really points at.
+
+**Gotcha (2026-10-07):** E3 dialogs numbered 2000 or more are drawn 11/10
+as tall as their resource says (1997's `cd_`, DLOGTOOL.CPP:653), pictures
+excepted. Every E3 dialog id is over 2000. The panel matched the original's
+capture only once that was applied.
+
+**Gotcha (2026-10-07):** `verify-screen` prints FAIL on this tree and on
+the unchanged one (no console errors); the runs differ only in clock-seeded
+dice. Not chased.
+
+
+### Play-test notes, thirteenth round: the Slime Pit (2026-10-07)
+
+- [x] **A pressed button never looked pressed** — in any dialog. `XmlDialog`
+      had a `pressed` state that nothing set. Now a click, key or tap on a
+      button draws its pressed frame and the host holds it the way 1997's
+      `cd_press_button` does (DLOGTOOL.CPP:1485): the click (37, a blocking
+      sound) plus 6 ticks, or 10 ticks with sounds off, before it acts
+      (`dialogPressHoldMs`, `ModalScreen.pressing`). Unset in tests, so
+      they act at once as before.
+- [x] **The slimes' remains.** Three gaps: an E3 save's stains (`sfx`) were
+      never read back (`applyE3TownDecals`; the user's save held 268 slime
+      squares); E3's town loader stains the square of every live slime
+      (`10d8:17a9`, flag `slime-stains`); and 1997's `make_sfx` build-up —
+      small slime on small slime is large, blood grows small → medium →
+      large — which OBoE dropped (`CurTown.makeSfx`, DIVERGENCES §56).
+- [x] **Rubble crunched, filth squelched, in E3** (`move_sound`,
+      `1030:0af2`: 47 on 37, 79–81, 97–99; 55 on 210). The converter gave
+      every terrain a footstep.
+- [x] **Climb and Leave were swapped.** The node dialog's buttons were in
+      OBoE's order; 1997's (and E3's) puts slot 1 rightmost
+      (DIVERGENCES §57). Every scenario's prompts change.
+- [x] **Burning a pool.** 1997's `place_spell_pattern` still has E3's pool
+      and slime-maker code (COMBAT.CPP:3590), matching E3's `1018:9a2b`: the
+      fire pattern centred on one drops the spell's own animation, flies a
+      200-step fireball from the caster, bursts a dozen explosions
+      (`mondo_boom`), then the dialog, and does no damage. The port asked the
+      square at cast time, so its dialog came first. Now a fire pattern
+      asks its centre for `FIRE_BLAST` (`ifBlasted`/`blastAt` in the
+      converter), `TOWN_RUN_MISSILE` can fly from the caster with a step
+      count, both animation nodes wait for their animation, and a missile
+      longer than 100 steps flies proportionally longer. The crater shows
+      before the dialog, the user's choice (E3 alters the square after it).
+      DIVERGENCES §27.
+- [x] Quest tests: stains under every slime on entry, the build-up, a pool
+      taking the whole blast (a creature beside it unhurt), and `castAt`
+      now lands a real fire pattern.

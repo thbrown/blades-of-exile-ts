@@ -200,6 +200,18 @@ export enum SpecType {
    * (DIVERGENCES.md #34).
    */
   IF_FIELD_COUNT = 166,
+  /**
+   * An blades-of-exile-ts opcode, not in BoE or OBoE: show a panel of
+   * buttons and put the one pressed in SDF (`sd1`, `sd2`), 1 for the first,
+   * 0 for the panel's `leave` (or a closed window). The panel is a dialogxml
+   * definition held in scenario string `m1`; its buttons are `b1`, `b2`, …,
+   * its window caption scenario string `m2` (-1 for the game's), and a
+   * `<pict name='pic'>` in it shows the node's own picture. Exile III's
+   * pedestals and control panels lay out their buttons as a picture of the
+   * thing (BoE 1997's `cd_` dialogs, `0_94` buttons), which no stock dialog
+   * can (DIVERGENCES.md #55).
+   */
+  IF_PANEL = 167,
 
   MAKE_TOWN_HOSTILE = 170,
   TOWN_RUN_MISSILE = 171,

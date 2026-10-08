@@ -18,3 +18,20 @@ export function setDialogClickSound(fn: ((which: number) => void) | null): void 
 export function dialogClick(led: boolean): void {
   play?.(led ? 34 : 37);
 }
+
+/**
+ * How long a pressed button stays drawn down before it acts: 1997's
+ * `cd_press_button` draws the pressed frame, plays 37 (a sound that blocks
+ * until it ends) and waits 6 ticks more before drawing it up again. A hook
+ * like the sound's: unset, as in tests and headless runs, a button acts at
+ * once.
+ */
+let hold: (() => number) | null = null;
+
+export function setDialogPressHold(fn: (() => number) | null): void {
+  hold = fn;
+}
+
+export function dialogPressHoldMs(): number {
+  return hold?.() ?? 0;
+}

@@ -11,7 +11,7 @@ Coordinates are town squares (x, y), as the port's debug panel
 
 **Saved games for the original** (2026-09-30): `E3_CHECK_SAVES=e3data/check-saves
 npx vitest run test/e3checkSaves.test.ts` writes one `exile3.sav` per
-question, `Q01.SAV` to `Q29.SAV` (#3 has ten, `Q03A`–`Q03J`; #2 shares `Q01`; #26 and #28 need none), and a
+question, `Q01.SAV` to `Q29.SAV` and `Q32.SAV` (#3 has ten, `Q03A`–`Q03J`; #2 shares `Q01`; #26, #28, #30 and #31 need none), and a
 `README.TXT` saying what each holds and where to walk. Each has a strong
 party (every spell E3 sells, and Major Blessing) with the question's flags
 and items set, standing in the town by the place to look (2026-10-01), or
@@ -82,7 +82,8 @@ Still open: the other nine squares.
 - **Do:** take the stairs down at (2,60), the far west ones, to level 2,
   and see whether the portcullis just past the stairs is open.
 - **The port:** it's open. The pedestal's "last pressed" starts at 0,
-  which is the top-right button's portcullis.
+  which is the first button's (control 5, the bottom-left one on the
+  panel) portcullis.
 - **Question:** is the first way down open from the start in the original?
 
 ### 6. The Anama: does learning Mage Spells again throw a member out? (2026-09-30)
@@ -126,7 +127,10 @@ Still open: the other nine squares.
   left, top, upper right, lower right, bottom right). Walkthrough A's
   order lights all seven; Tuxedo Jack's numbers do too, but only read as
   some other numbering of the same seven buttons.
-- **Question:** do the positions match what you see?
+- **Since 2026-10-07** the port draws E3's panel itself, buttons where the
+  dialog puts them and each lit rune's name (Glah, Frag, …) in its box, so
+  the positions are no longer the port's words.
+- **Question:** do the runes' names light in the same boxes as in the port?
 
 ### 9. The Concealed Tunnel's moving walls (2026-09-30)
 
@@ -236,8 +240,8 @@ Still open: the other nine squares.
 - **Where:** her pedestal in the Keep of Rentar-Ihrno, with every lever
   below pulled.
 - **Do:** press Begin Process first, before Release Slime Compounds.
-- **The port:** the controls beep and the panel closes (E3's own code
-  keeps it open; noted in `towns/rentarKeep.ts`).
+- **The port:** the controls beep and, since 2026-10-07, the panel stays
+  open, as E3's code (`FUN_1008_51e5`) keeps it.
 - **Question:** does the panel stay up, and does anything else happen?
 
 ### 20. The Lair of Drakos's shifting floor (2026-09-30)
@@ -463,6 +467,22 @@ Still open: the other nine squares.
   code, yes, it comes through.
 - **Question:** in the original, does a monster come through a door the
   party has found?
+
+### 32. How the panels' empty boxes look (2026-10-07)
+
+- **Where:** the Filth Factory (town 26), level 1, the control room's
+  panel at (41,15). `Q32.SAV` stands the party beside it.
+- **Do:** use it and take a screenshot before pressing anything.
+- **The port:** every panel is drawn from its E3 dialog the way the
+  Slime Pit's pedestal is, which a screenshot of the original confirmed
+  (DIVERGENCES.md #55). In that one, a text control E3 leaves empty was
+  drawn framed, so the port frames every empty one: the factory's 250×16
+  strip under the labels left of Leave (which E3's handler,
+  `FUN_1008_436d`, never writes into), and the boxes the other panels
+  fill as they're pressed — the troglodyte gate's dial numbers, the
+  giants' rune names, the Tinraya cell panel's Dha/Kaik words.
+- **Question:** is the factory's box there in the original, and are the
+  other panels' boxes framed too?
 
 ## Waiting on a ruling (already written up elsewhere)
 

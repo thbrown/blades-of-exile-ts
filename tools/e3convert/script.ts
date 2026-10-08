@@ -12,6 +12,7 @@
  */
 
 import type { E3Dialog } from './ne';
+import { FIRE_BLAST } from '../../src/data/spell';
 import { DamageType } from '../../src/data/monster';
 import { FieldType } from '../../src/data/fields';
 import { Skill } from '../../src/universe/skills';
@@ -120,6 +121,87 @@ export interface ScriptSource {
 export const MSG_PIC = 0x2c4;
 /** Anaximander's reports, block 14 (`FUN_1008_386f`), show his sprite. */
 export const ANAX_PIC = 0x1af;
+
+/**
+ * The buttons E3's panels use, by the number after `0_`/`1_` (1997's
+ * `button_type` and `button_strs`, DLOGTOOL.CPP:93): 94 is the round red
+ * button, 9 a regular "Leave".
+ */
+const E3_PANEL_BUTTONS: Record<number, { type: string; label: string }> = {
+  9: { type: 'regular', label: 'Leave' },
+  94: { type: 'push', label: '' },
+};
+
+const xmlText = (s: string): string =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&apos;');
+
+/**
+ * What one of a panel's buttons does: steps after which the panel opens
+ * again, or, given the step that opens it again, steps that decide for
+ * themselves (E3's Begin stays open only when it fails).
+ */
+export type PanelAction = Step[] | ((again: Step) => Step[]);
+
+/** A word for `if-panel`'s live text: escaped, and free of its `|` and `}`. */
+function panelWord(w: string): string {
+  if (/[|}]/.test(w)) throw new Error(`a panel's word can't hold | or }: ${w}`);
+  return xmlText(w);
+}
+
+/**
+ * Live text for a panel (`panelText` in ifthen.ts): flag `flag`'s value, or
+ * the word in `words` it picks (0 the first, past the end the last).
+ */
+export function panelFlag(flag: Flag, words?: string[]): string {
+  return `%{sdf:${flag[0]},${flag[1]}${(words ?? []).map((w) => `|${panelWord(w)}`).join('')}}`;
+}
+
+/** Live text for a panel: `yes` while the town's square (x, y) is terrain `t`, else `no`. */
+export function panelTer(x: number, y: number, t: number, yes: string, no: string): string {
+  return `%{ter:${x},${y},${t}|${panelWord(yes)}|${panelWord(no)}}`;
+}
+
+/**
+ * E3 dialog `d` as a dialogxml panel for `if-panel`: its `0_94` buttons,
+ * named `b1`, `b2`, … in control-id order, a Leave button `leave`, its
+ * picture as the `pic` control and its texts. Positions are the dialog's
+ * own, with every control but a picture 11/10 as far down and as tall, as
+ * 1997's `cd_` code makes them in a dialog numbered 2000 or more
+ * (DLOGTOOL.CPP:653) — which is how they sit in a capture of the Slime
+ * Pit's pedestal. A text E3 leaves empty is drawn framed there (1997
+ * reads it as unframed); `*` is unframed and `+` framed, as in 1997.
+ */
+export function e3PanelLayout(d: E3Dialog, live: ReadonlyMap<number, string> = new Map()): { xml: string; buttons: number } {
+  const down = (y: number): number => Math.floor((y * 11) / 10);
+  const parts: string[] = [];
+  let buttons = 0;
+  let pic = false;
+  for (const c of [...d.controls].sort((a, b) => a.id - b.id)) {
+    const at = (scaled: boolean): string => {
+      const top = scaled ? down(c.y) : c.y;
+      return `top='${top}' left='${c.x}'`;
+    };
+    const tagged = /^(\d+)_(\d+)$/.exec(c.text);
+    if (tagged) {
+      const [kind, n] = [Number(tagged[1]), Number(tagged[2])];
+      if (kind === 5) {
+        if (!pic) parts.push(`<pict name='pic' type='dlog' num='0' ${at(false)}/>`);
+        pic = true;
+        continue;
+      }
+      const button = kind <= 1 ? E3_PANEL_BUTTONS[n] : undefined;
+      if (!button) throw new Error(`E3 dialog ${d.id}: control ${c.id} (${c.text}) is not a panel's`);
+      const name = n === 9 ? 'leave' : `b${++buttons}`;
+      parts.push(`<button name='${name}' type='${button.type}' ${at(true)}>${xmlText(button.label)}</button>`);
+      continue;
+    }
+    const framed = c.text === '' || c.text.startsWith('+');
+    const text = live.get(c.id) ?? xmlText(c.text.replace(/^[*+]/, ''));
+    const size = `width='${c.w}' height='${down(c.y + c.h) - down(c.y)}'`;
+    parts.push(`<text framed='${framed}' ${at(true)} ${size}>${text}</text>`);
+  }
+  return { xml: `<dialog defbtn='leave' escbtn='leave'>${parts.join('')}</dialog>`, buttons };
+}
 
 function msgPic(block: number): number {
   return block === 0xe ? ANAX_PIC : MSG_PIC;
@@ -770,13 +852,28 @@ export class SpecBuilder {
   }
 
   /**
-   * A spot's answer to a blast landing on it (`1018:9a2b`): IF_CONTEXT's
-   * TARGET arm, which a spell cast on the square runs, and under the
-   * `explode-spots` flag an exploding missile too. It must be the spot's
-   * first step, as the engine asks only a spot whose first node is one.
+   * A spot's answer to a fire blast centred on it (`FIRE_BLAST`): E3's own
+   * targets in `place_spell_pattern` (1018:9a2b; 1997's still has them,
+   * COMBAT.CPP:3590). A `blockMove` in `then` takes the blast — the spell
+   * then draws and does nothing of its own — so the chain plays E3's: see
+   * `blastAt`. It must be the spot's first step.
    */
-  ifTargeted(then: Step[]): Step {
-    return (next) => this.node('if-context', { ex1: [16, -1, this.seq(then)(next)] }, next);
+  ifBlasted(then: Step[]): Step {
+    return this.ifSpellTargeted(FIRE_BLAST, then);
+  }
+
+  /**
+   * What E3 shows at the square it took a fire blast on (1018:9ad6): the
+   * volley so far dropped, a slow fireball from the caster
+   * (`run_a_missile(pc_pos[current_pc], l, 2, 1, 11, 0, 0, 200)`), and
+   * `mondo_boom(l, 0)`, a dozen explosions scattered over the square. Each
+   * plays out before the next step, as E3's block.
+   */
+  blastAt(x: number, y: number): Step[] {
+    return [
+      (next) => this.node('anim-missile', { pic: [2, 4], ex1: [1, 200, 1], ex2: [x, y, 11] }, next),
+      (next) => this.node('anim-explode', { ex2: [0, 1, -1] }, next),
+    ];
   }
 
   /**
@@ -1225,19 +1322,6 @@ export class SpecBuilder {
     return this.ifSkillTotal(Skill.MAGE_LORE, value, then, otherwise);
   }
 
-  /**
-   * Asks for a number from `lo` to `hi` and stores it in `flag`
-   * (IF_NUM_RESPONSE). For E3's LED puzzles, whose buttons the engine's
-   * dialogs cannot show five of; the prompt is the converter's own words.
-   */
-  askNumber(prompt: string, lo: number, hi: number, flag: Flag): Step {
-    return (next) => {
-      const m = this.src.scenString?.(prompt);
-      if (m === undefined) throw new Error('askNumber needs ScriptSource.scenString');
-      return this.node('if-num-response', { sdf: flag, msg: [m, lo, hi] }, next);
-    };
-  }
-
   /** `flag -= n`. */
   decFlag(flag: Flag, n = 1): Step {
     return (next) => this.node('inc-sdf', { sdf: flag, ex1: [n, 1] }, next);
@@ -1319,30 +1403,38 @@ export class SpecBuilder {
   }
 
   /**
-   * One of E3's LED panels (BoE 1997's `cd_set_led` dialogs): dialog `id`
-   * has a heading and a button per action, more than the engine's dialogs
-   * show, so the player types the number (as the Slime Pit's pedestal
-   * does). E3's panel stays open until Leave, so this asks again after each
-   * action, and 0 leaves. The prompt is built from the dialog's own labels
-   * in the order of their control ids, or from `labels` (the converter's
-   * words) where the dialog's don't name each button. `scratch` holds the
-   * answer. A button in `closing` (1-based) runs its action and closes the
-   * panel, as E3's do by clearing the dialog's loop flag.
+   * One of E3's button panels as E3 draws it: dialog `id` laid out for the
+   * engine's `if-panel` (DIVERGENCES.md #55), its round buttons where the
+   * dialog puts them, and the window captioned with the EXE's literal at
+   * `title` (`seg:off`, from the caption switch at `1028:0abb`). Button k
+   * of the panel is its k-th `0_94` control in id order, and runs
+   * `actions[k - 1]`; the panel opens again after each, as E3's stays open
+   * until Leave, unless the action takes the step that does so itself
+   * (`PanelAction`). `live` is what E3's handler writes into a text
+   * control, by control id: `panelFlag`, `panelTer`, or text around them.
    */
-  ledPanel(id: number, actions: Step[][], scratch: Flag, labels?: string[], closing: number[] = []): Step {
+  panel(id: number, title: [number, number], actions: PanelAction[], scratch: Flag,
+    live: ReadonlyMap<number, string> = new Map()): Step {
     const d = this.src.dialogs.get(id);
     if (!d) throw new Error(`E3 dialog ${id} not found`);
-    const texts = d.controls.filter((c) => c.text && !/^\d+_\d+$/.test(c.text)).sort((a, b) => a.id - b.id);
-    const [heading, ...own] = texts.map((c) => c.text.replace(/^\*/, ''));
-    const names = labels ?? own;
-    const prompt = `${heading ?? ''} ${names.map((l, i) => `${i + 1} ${l}`).join(', ')} (0 to leave)`;
+    for (const k of live.keys()) {
+      const c = d.controls.find((x) => x.id === k);
+      if (!c || /^\d+_\d+$/.test(c.text)) throw new Error(`E3 dialog ${id} has no text control ${k}`);
+    }
+    const layout = e3PanelLayout(d, live);
+    if (layout.buttons !== actions.length) {
+      throw new Error(`E3 dialog ${id} has ${layout.buttons} buttons, not ${actions.length}`);
+    }
+    const tag = d.controls.find((c) => /^5_\d+$/.test(c.text));
+    const pic = tag ? this.src.dialogPic?.(Number(tag.text.slice(2))) : undefined;
     return (next) => {
-      const m = this.src.scenString?.(prompt);
-      if (m === undefined) throw new Error('ledPanel needs ScriptSource.scenString');
+      const m = this.src.scenString?.(layout.xml);
+      const caption = this.src.scenString?.(this.exeText(...title));
+      if (m === undefined || caption === undefined) throw new Error('panel needs ScriptSource.scenString');
       const ask = this.reserve();
       const again: Step = () => ask;
-      const chosen = this.switchFlag(scratch, [[], ...actions.map((a, k) => (closing.includes(k + 1) ? a : [...a, again]))])(next);
-      this.fill(ask, 'if-num-response', { sdf: scratch, msg: [m, 0, actions.length] }, chosen);
+      const chosen = this.switchFlag(scratch, [[], ...actions.map((a) => (typeof a === 'function' ? a(again) : [...a, again]))])(next);
+      this.fill(ask, 'if-panel', { sdf: scratch, msg: [m, caption], pic }, chosen);
       return ask;
     };
   }

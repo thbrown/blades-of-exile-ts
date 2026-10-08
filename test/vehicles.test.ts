@@ -100,6 +100,34 @@ describe('boats and horses', () => {
     expect(session.univ.transcript.at(-1)).toBe('  Not your horses.');
   });
 
+  it('a boat moves to the oars and horses to their hooves, not to footsteps (move_sound)', async () => {
+    const session = newSession();
+    const { univ } = session;
+    const played: number[] = [];
+    session.sound = { play: (n: number) => { played.push(n); } } as unknown as GameSession['sound'];
+    const water = scen.terTypes.findIndex((t) => t.boatOver);
+    const start = { ...univ.party.outLoc };
+    const east = { x: start.x + 1, y: start.y };
+    univ.out.set(start.x, start.y, water);
+    univ.out.set(east.x, east.y, water);
+    const boat = univ.party.boats[0]!;
+    Object.assign(boat, {
+      exists: true, whichTown: 200, loc: univ.party.globalToLocal(start),
+      sector: { x: univ.party.outdoorCorner.x + univ.party.iwc.x, y: univ.party.outdoorCorner.y + univ.party.iwc.y },
+    });
+    univ.party.inBoat = 0;
+    expect(await session.moveTo(east)).toBe(true);
+    expect(played).toEqual([48]);
+
+    session.startTownMode(1, FORCED_ENTRY);
+    univ.party.horses[0]!.property = false;
+    univ.party.townLoc = { x: 6, y: 25 };
+    expect(await session.moveTo({ x: 6, y: 24 })).toBe(true);
+    played.length = 0;
+    expect(await session.moveTo({ x: 6, y: 25 })).toBe(true);
+    expect(played).toEqual([85]);
+  });
+
   it('CHANGE_HORSE_OWNER flips the property flag (ex2a == 0 takes it, else gives it)', async () => {
     const session = newSession();
     const { univ } = session;

@@ -46,7 +46,7 @@ const CATEGORY_RANGES: [SpecCat, SpecType, SpecType][] = [
   [SpecCat.GENERAL, SpecType.NONE, SpecType.FORGET_TOWNS],
   [SpecCat.ONCE, SpecType.ONCE_GIVE_ITEM, SpecType.ONCE_TRAP],
   [SpecCat.AFFECT, SpecType.SELECT_TARGET, SpecType.AFFECT_TAKE_MAGIC_ITEMS],
-  [SpecCat.IF_THEN, SpecType.IF_SDF, SpecType.IF_FIELD_COUNT],
+  [SpecCat.IF_THEN, SpecType.IF_SDF, SpecType.IF_PANEL],
   [SpecCat.TOWN, SpecType.MAKE_TOWN_HOSTILE, SpecType.TOWN_COPY_TERRAIN],
   [SpecCat.RECT, SpecType.RECT_PLACE_FIELD, SpecType.RECT_UNLOCK],
   [SpecCat.OUTDOOR, SpecType.OUT_MAKE_WANDER, SpecType.OUT_MOVE_PARTY],
@@ -146,6 +146,13 @@ export interface SpecialHost {
    * no Cancel, so what comes back is in range whenever `min < max`.
    */
   askNum(min: number, max: number, prompt: string): Promise<number>;
+  /**
+   * IF_PANEL's panel: the dialogxml `layout`, under window caption `caption`
+   * ('' for the game's), with picture `pic` of type `picType` in its `pic`
+   * control. Answers the button pressed, 1 for `b1`, or 0 for `leave`.
+   * Optional: a host without one (the tests' stubs) answers 0.
+   */
+  panel?(layout: string, caption: string, pic: number, picType: number): Promise<number>;
   /**
    * The select-PC dialog, given the rows `select_pc` has already worked out.
    *

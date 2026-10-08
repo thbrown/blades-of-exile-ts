@@ -429,6 +429,13 @@ function townTer255(town: number, terrain: number[][]): number[][] {
 }
 
 /**
+ * Exile 3's four kinds of slime (138–141): its town loader stains the
+ * square of each one alive as the town is entered (`10d8:17a9`, the
+ * session's `slimeStains`).
+ */
+const E3_SLIMES = [138, 139, 140, 141];
+
+/**
  * Exile 3's swamps, which its move code handles itself (`10c0:16a0`, the
  * session's `e3Swamp`): the cave swamp, where Cave Lore wards off the poison,
  * and the surface one, where Woodsman does. E3's `move_sound` (`1030:0af2`)
@@ -436,6 +443,15 @@ function townTer255(town: number, terrain: number[][]): number[][] {
  */
 export const E3_SWAMPS = { caveLore: 88, woodsman: 90 } as const;
 const SILENT_STEPS = new Set<number>([E3_SWAMPS.caveLore, E3_SWAMPS.woodsman]);
+/**
+ * The rest of E3's `move_sound`: a crunch (47) on hills (37) and the six
+ * rubbles (79–81, 97–99), a squelch (55) on the pile of filth (210), and a
+ * footstep everywhere else. Until 2026-10-07 every one was a footstep.
+ */
+const CRUNCH_STEPS = new Set<number>([37, 79, 80, 81, 97, 98, 99]);
+const SQUISH_STEPS = new Set<number>([210]);
+const stepSound = (id: number): string =>
+  SILENT_STEPS.has(id) ? 'none' : CRUNCH_STEPS.has(id) ? 'crunch' : SQUISH_STEPS.has(id) ? 'squish' : 'step';
 
 /**
  * Exile 3's waterfall, which its outdoor move handles itself (`1010:7c2e`,
@@ -471,7 +487,7 @@ function terrainXml(types: E3TerrainType[], hiddenAs: Map<number, number>): stri
         <ride>${t.blockage < 3}</ride>
         <archetype>false</archetype>
         <light>0</light>
-        <step-sound>${SILENT_STEPS.has(id) ? 'none' : 'step'}</step-sound>
+        <step-sound>${stepSound(id)}</step-sound>
         <trim>none</trim>
         <ground>0</ground>
         <trim-for>-1</trim-for>
@@ -870,6 +886,7 @@ function scenarioXml(
         <inn>exile3</inn>
         <lava>exile3</lava>
         <swamp>exile3:${E3_SWAMPS.caveLore},${E3_SWAMPS.woodsman}</swamp>
+        <slime-stains>exile3:${E3_SLIMES.join(',')}</slime-stains>
         <waterfall>exile3:${E3_WATERFALL}</waterfall>
         <add-pc>exile3:${E3_ADD_PC_TOWN}:${esc(addPcRefusal)}</add-pc>
         <start-items>exile3:${startItems.bySpecies.flat().join(',')};${startItems.bonus.join(',')}</start-items>

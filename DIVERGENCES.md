@@ -673,6 +673,26 @@ the whole part of the straight line.
 passes only for the spell in `ex1b` when it isn't -1 (boe.specials.cpp:3832);
 this port had dropped the test. It is back.
 
+**Revised 2026-10-07: the blast, not the cast.** 1997's own
+`place_spell_pattern` still carries Exile III's code (COMBAT.CPP:3590, the
+Agate Tower's slime maker and the five pools by their squares), and E3's
+`1018:9a2b` is the same: a *fire* pattern centred on one, as it lands, ends
+the volley (`end_missile_anim`, so the spell draws nothing of its own), flies
+a slow fireball from the caster (200 steps), bursts it (`mondo_boom`, a dozen
+explosions over the square), says so, and does no damage. The port asked the
+square as the spell was cast instead, so its dialog came first and the
+spell's own fireball and single burst after. Now, under the flag, a fire
+pattern asks its centre square for `FIRE_BLAST` (a value no spell has) before
+anything else, and a square that answers by refusing takes it
+(`placeSpellPattern`); the spot's chain plays E3's animation with
+`TOWN_RUN_MISSILE` and `TOWN_SFX_BURST`. One step is the user's choice, not
+E3's: the square is a crater as the burst clears, before the dialog, where
+E3 alters it after. Two engine extensions came with it:
+`TOWN_RUN_MISSILE` with `ex1a` 1 flies from the acting PC with `ex1b` steps,
+and both nodes now wait for their animation, as the C++'s calls block. An
+exploding arrow's blast is a fire pattern too, so it no longer needs a call
+of its own.
+
 ### 28. What a summoning spell brings (2026-09-28)
 
 **DECIDED: a scenario flag, `summons` = `exile3`, with Exile III's lists in
@@ -1230,6 +1250,57 @@ alerts it again. 1997 reads `c_town` whole (FILEIO.CPP:260), so its monsters
 keep `active`, and only `monster_targs` is cleared. A player can tell, so the
 port keeps the alert (`readCurTown`). The replay harnesses pass
 `oboeIdleOnLoad`, because the corpus was recorded in OBoE.
+
+### 55. Exile III's button panels (2026-10-07)
+
+**DECIDED: an blades-of-exile-ts opcode, `if-panel` (167).** Exile III's
+pedestals and control panels are BoE 1997's `cd_` dialogs: round red buttons
+(`0_94`, `button_type` 14, 30×30) placed over a framed area as a picture of
+the thing, and a Leave button; the window stays open, each press running the
+panel's handler (`FUN_1008_4251` for the Slime Pit's), until Leave. Neither
+BoE nor OBoE has a node that shows such a thing — a node's dialog has at most
+three buttons in a row — so the port asked for the button's number instead,
+which a play-tester rightly called wrong. `if-panel` shows a dialogxml layout
+held in scenario string `m1`, captioned with string `m2`, its `pic` control
+showing the node's picture, and puts the button pressed in SDF (`sd1`,
+`sd2`): 1 for `b1`, 0 for `leave`. What E3's handlers write into a panel
+as it's pressed (`cd_set_item_text`, `FUN_1028_1cd5`) is live text in the
+layout, filled in each time the panel opens (`panelText`): `%{sdf:r,c}` a
+flag's value, `%{sdf:r,c|a|b|…}` the word it picks, `%{ter:x,y,t|a|b}` the
+word a square's terrain picks. The converter lays the E3 dialog out
+(`e3PanelLayout`): positions as the dialog gives them, every control but a
+picture 11/10 as far down, as 1997's `cd_` does to a dialog numbered 2000 or
+more (DLOGTOOL.CPP:653) — which matches a capture of the original to a pixel
+or two — and the window titles from E3's caption switch (`1028:0abb`). The
+panel closes while a press's action runs and opens again after it.
+
+All seven of Exile III's panels use it: the Slime Pit's pedestal, the Filth
+Factory's, the troglodyte gate's dials, the giants' runes, the golem
+factory's, the Tinraya cell's hidden buttons and Rentar-Ihrno's. A status
+line a handler writes (the golem panel's "Done.", the runes' "The portcullis
+opens.") reads a converter flag the press sets, cleared as the panel first
+opens, as E3's dialog starts from its resource text.
+
+### 56. Stains that build up (2026-10-07)
+
+**DECIDED: the original's.** 1997's `make_sfx` (FIELDS.CPP:375), which Exile
+III shares (`1038:1185`), makes a stain bigger when another lands on it:
+small blood on small blood is medium, on medium large; small slime on small
+slime is large. OBoE's `set_sm_blood`/`set_sm_slime` only set the small one.
+A player can see it and no die is rolled, so a creature's death goes through
+`CurTown.makeSfx`, 1997's rule. Exile III's town loader also stains the
+square of every live slime (creatures 138–141) each time a town is entered
+(`10d8:17a9`): the scenario flag `slime-stains` = `exile3:<kinds>`.
+
+### 57. Where a node's buttons sit (2026-10-07)
+
+**DECIDED: the original's.** A special node's dialog (`cThreeChoice`) lines
+its buttons up right-aligned under the text. 1997's
+`cd_create_custom_dialog` (DLOGTOOL.CPP:400) places slot 1 rightmost, then
+2, then 3, right to left, so a "Leave" in slot 1 is on the right of "Climb";
+Exile III's own dialogs have them so. OBoE's `init_buttons` (3choice.cpp:98)
+puts slot 2 rightmost, then 3, then 1. A player can see it, and replays go
+by the button's name, not its place.
 
 ## Agreements worth recording
 

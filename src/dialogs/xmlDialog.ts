@@ -276,6 +276,13 @@ export class XmlDialog implements ModalScreen {
 
   bounds(): UiRect { return this.frame; }
 
+  pressing(): boolean { return this.pressed !== null; }
+  releasePress(): void { this.pressed = null; }
+
+  /** The window's own caption, '' for the game's. */
+  title = '';
+  caption(): string { return this.title; }
+
   moveBy(dx: number, dy: number): void {
     this.frame = shiftRect(this.frame, dx, dy);
   }
@@ -757,6 +764,8 @@ export class XmlDialog implements ModalScreen {
     if (control?.kind === 'led') {
       this.setLed(name, this.getLed(name) === 'off' ? 'red' : 'off');
     }
+    // A button is drawn down while the host holds it (`pressing`).
+    if (control?.kind === 'button') this.pressed = name;
     const handler = this.handlers.get(name);
     // An LED with no handler just toggles — it never closes the dialog, as a
     // button with none does here. (preferences.xml's LEDs rely on it.)

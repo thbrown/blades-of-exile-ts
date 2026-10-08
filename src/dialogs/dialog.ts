@@ -20,7 +20,7 @@ import { SheetStore } from '../render/sheets';
 import { drawString, wrapLines } from '../render/text';
 import { CAPTION_H, captionRect, drawCaption, inRect, windowFrames, type ChromeFlavour } from '../render/windowChrome';
 import { dialogBackground, dialogTextIsWhite, tilePattern } from '../render/tiling';
-import { dialogClick } from './clickSound';
+import { dialogClick, dialogPressHoldMs } from './clickSound';
 import { PictType } from './dialogXml';
 import { drawPictAt } from './pict';
 
@@ -533,6 +533,15 @@ export interface ModalScreen {
    */
   bounds?(): UiRect;
   moveBy?(dx: number, dy: number): void;
+  /** A caption of its own for the window, in place of the game's. */
+  caption?(): string;
+  /**
+   * Whether a button is drawn pressed after the last click or key: the host
+   * holds it down a moment before acting (`dialogPressHoldMs`), then lets go
+   * with `releasePress`.
+   */
+  pressing?(): boolean;
+  releasePress?(): void;
   onKey(key: string): string | null;
   /** The mouse wheel; true if it scrolled something. */
   onWheel?(x: number, y: number, notches: number): boolean;
@@ -543,7 +552,7 @@ export interface ModalScreen {
  * resolves once the player picks a button.
  */
 /** What a window needs for a caption and to be dragged by it. */
-type Movable = Pick<ModalScreen, 'draw' | 'bounds' | 'moveBy'>;
+type Movable = Pick<ModalScreen, 'draw' | 'bounds' | 'moveBy' | 'caption'>;
 
 /** How much of a dragged window stays on the desktop (the map's `MAP_MIN_VISIBLE`). */
 const MIN_VISIBLE = 50;
@@ -614,7 +623,7 @@ export class DialogHost {
     win.draw();
     const chrome = this.chrome?.();
     const b = win.bounds?.();
-    if (chrome && b) drawCaption(this.ctx, b, chrome.title, { flavour: chrome.flavour, active });
+    if (chrome && b) drawCaption(this.ctx, b, win.caption?.() || chrome.title, { flavour: chrome.flavour, active });
   }
 
   /** Mouse moved with the button down: drag a window by its caption. */
@@ -749,9 +758,8 @@ export class DialogHost {
       return true;
     }
     if (this.screen) {
-      const name = this.screen.onClick(x, y, mods);
-      if (name === null) this.redraw();
-      else this.close(name);
+      if (this.holding) return true;
+      this.answer(this.screen, this.screen.onClick(x, y, mods));
       return true;
     }
     if (!this.current) return false;
@@ -789,9 +797,8 @@ export class DialogHost {
   /** Press one of `touchView`'s choices on the top dialog. */
   touchPress(name: string): void {
     if (this.screen) {
-      const answer = this.screen.touchPress?.(name) ?? null;
-      if (answer === null) this.redraw();
-      else this.close(answer);
+      if (this.holding) return;
+      this.answer(this.screen, this.screen.touchPress?.(name) ?? null);
       return;
     }
     const choice = this.current?.touchView().right.find((c) => c.name === name && !c.disabled);
@@ -809,9 +816,8 @@ export class DialogHost {
 
   handleKey(key: string): boolean {
     if (this.screen) {
-      const name = this.screen.onKey(key);
-      if (name === null) this.redraw();
-      else this.close(name);
+      if (this.holding) return true;
+      this.answer(this.screen, this.screen.onKey(key));
       return true;
     }
     if (!this.current) return false;
@@ -821,6 +827,27 @@ export class DialogHost {
       this.close(btn.name);
     }
     return true;
+  }
+
+  /** A button held down (`ModalScreen.pressing`): input waits until it's let go. */
+  private holding = false;
+
+  /**
+   * What a click or key on `screen` came to: `name` closes it, null leaves it
+   * up. A button it drew pressed stays down first, as 1997's
+   * `cd_press_button` holds it (DLOGTOOL.CPP:1485).
+   */
+  private answer(screen: ModalScreen, name: string | null): void {
+    const ms = screen.pressing?.() ? dialogPressHoldMs() : 0;
+    const done = (): void => {
+      screen.releasePress?.();
+      if (name === null) this.redraw();
+      else this.close(name);
+    };
+    if (ms <= 0) { done(); return; }
+    this.holding = true;
+    this.redraw();
+    setTimeout(() => { this.holding = false; done(); }, ms);
   }
 
   private close(name: string): void {

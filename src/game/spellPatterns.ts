@@ -33,6 +33,8 @@ import {
 } from './fieldEffects';
 import { isCombat } from './modes';
 import type { GameSession } from './session';
+import { FIRE_BLAST, type Spell } from '../data/spell';
+import { endBoomAnim } from './booms';
 
 /** modify_pattern — stamp `code` over every cell of the shape. */
 export function modifyPattern(pat: EffectPattern, code: number): void {
@@ -89,6 +91,19 @@ export async function placeSpellPattern(
 ): Promise<void> {
   const grid = copyPattern(
     typeof pat === 'number' ? getBuiltinPattern(pat, options.rot ?? 0) : pat);
+
+  // **`explode-spots` = `exile3`**: a fire blast asks its centre square first,
+  // as 1997's `place_spell_pattern` clips out Exile III's own targets before
+  // anything else (COMBAT.CPP:3590; E3's `1018:9a2b`). A square that takes it
+  // ends the volley — the spell's own missile and burst are never drawn —
+  // and plays its own; the pattern does nothing more (DIVERGENCES.md #27).
+  if (options.damage?.type === DamageType.FIRE
+    && session.univ.scenario.featureFlags['explode-spots'] === 'exile3'
+    && !(await session.castSpellOnSpace(center, FIRE_BLAST as Spell))) {
+    endBoomAnim();
+    session.blastIntercepted = true;
+    return;
+  }
 
   let code = 0;
   if (options.damage) {

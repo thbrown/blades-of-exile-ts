@@ -156,7 +156,11 @@ export function runAMissile(
   // The C++ blocks here for the whole flight, so whatever comes next — the hit,
   // the next monster's shot — happens after the missile lands. Booking the
   // slot on the shared timeline is how that ordering survives without blocking.
-  const dur = missileMs();
+  // A flight longer than a shot's 100 steps takes proportionally longer, as
+  // the C++'s per-step sleep makes it: Exile III's 200-step fireball at its
+  // slime pools is twice a Fireball's. Shorter ones (a volley's 35 and 60)
+  // keep this port's one pace (`MISSILE_EXTRA`).
+  const dur = missileMs() * Math.max(1, len / 100);
   const started = animBook(dur);
   // The camera work, `do_missile_anim`'s `camera_dest`/`recentered` pair: the
   // view opens on a centre that frames the shooter and the target together,

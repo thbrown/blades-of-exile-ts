@@ -105,12 +105,15 @@ export async function threeChoiceDialog(
   });
   if (full) top = Math.max(top, 8 + full.h + 8);
 
-  // init_buttons (3choice.cpp:98): right-aligned 30px past the text, slot 2
-  // rightmost, then slot 3, then slot 1 — OBoE's reversal of the original's
-  // right-to-left order, which put Leave on the right.
+  // Right-aligned 30px past the text, in 1997's order: slot 1 rightmost,
+  // then 2, then 3, right to left (`cd_create_custom_dialog`,
+  // DLOGTOOL.CPP:400), so Leave sits on the right of Climb, as in Exile
+  // III's own dialogs. OBoE's `init_buttons` (3choice.cpp:98) puts slot 2
+  // rightmost, then 3, then 1; this port did too until 2026-10-07
+  // (DIVERGENCES.md #57).
   let right = left + strWidth + 30;
   const bySlot = new Map(buttons.map((b) => [Number(b.name.replace(/^btn/, '')) - 1, b]));
-  for (const slot of [1, 2, 0]) {
+  for (const slot of [0, 1, 2]) {
     const b = bySlot.get(slot);
     if (!b) continue;
     const type = buttonType(b.label);

@@ -633,7 +633,8 @@ export function killMonst(
       ? FieldType.SFX_ASH
       : (type === MainStatus.ABSENT || type === MainStatus.STONE)
         ? null : goreField(monst.mon.race, false);
-    if (field !== null) town.setField(monst.curLoc.x, monst.curLoc.y, field);
+    // The stain builds up, as 1997's `make_sfx` has it (DIVERGENCES.md #56).
+    if (field !== null) town.makeSfx(monst.curLoc.x, monst.curLoc.y, field);
     if (monst.summonTime === 0) town.record.monstersKilled++;
   }
 

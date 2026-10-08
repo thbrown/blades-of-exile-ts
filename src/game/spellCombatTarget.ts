@@ -556,6 +556,7 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
   // and the barriers are in it too.
   const animated = !NO_VOLLEY.has(spell);
   if (animated) startBoomAnim();
+  session.blastIntercepted = false;
 
   try {
   for (let i = 0; i < targets.length; i++) {
@@ -673,7 +674,9 @@ export async function doCombatCast(session: GameSession, target: Location): Prom
   // shift an older replay's dice.
   if (ashes.at !== null) {
     const alreadyLit = deferred.some((d) => d.dam > 0 && locsEqual(d.at, ashes.at!));
-    if (!alreadyLit) {
+    // OBoE's own blast, which 1997 doesn't have: not over a square that took
+    // the blast itself (`blastIntercepted`) and played its own.
+    if (!alreadyLit && !session.blastIntercepted) {
       boomSpace(ashes.at, boomType(DamageType.FIRE), 0, 0, univ.rng,
         { xAdj: 1, uniqueRan: true });
     }

@@ -17,6 +17,7 @@ import { TerSpec } from '../src/data/terrain';
 import { FORCED_ENTRY, GameSession, PostedLabel } from '../src/game/session';
 import { ChoiceButton, SpecCtx, SpecCtxType, SpecialHost } from '../src/game/specials/context';
 import { ONCE_DONE } from '../src/game/specials/oneshot';
+import { panelText } from '../src/game/specials/ifthen';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
 import { buildOpcodeTable, parseSpecials } from '../src/fileio/specialParse';
@@ -2360,5 +2361,46 @@ describe('a node that halves health or takes magic items', () => {
     expect(a!.equip.slice(0, 4)).toEqual([false, false, false, false]);
     expect(b!.items[0]!.name).toBe('kept');
     expect(univ.town!.items.map((i) => i.variety !== ItemType.NO_ITEM)).toEqual([false, true]);
+  });
+});
+
+describe('IF_PANEL live text (panelText)', () => {
+  it("fills in a flag's value, the word it picks, and the word a square's terrain picks", () => {
+    const { univ } = withNodes({});
+    univ.party.setSdf(291, 35, 2);
+    const ter = univ.town!.record.terrain[3]![4]!;
+    const text = panelText(univ, [
+      '<text>%{sdf:291,35}</text>',
+      '<text>%{sdf:291,35|none|one|two|three}</text>',
+      '<text>%{sdf:291,35|H|Z!}</text>',
+      '<text>%{sdf:291,36|off|on}</text>',
+      `<text>%{ter:3,4,${ter}|shut|open}</text>`,
+      `<text>%{ter:3,4,${ter + 1}|shut|open}</text>`,
+      '<text>%{sdf:291,35|&amp;|}</text>',
+    ].join(''));
+    expect(text).toBe([
+      '<text>2</text>', '<text>two</text>', '<text>Z!</text>', '<text>off</text>',
+      '<text>shut</text>', '<text>open</text>', '<text></text>',
+    ].join(''));
+  });
+});
+
+describe("make_sfx's build-up (DIVERGENCES.md #56)", () => {
+  it('grows blood small to medium to large, and slime small to large', () => {
+    const { univ } = withNodes({});
+    const town = univ.town!;
+    const free = { x: univ.party.townLoc.x, y: univ.party.townLoc.y };
+    const at = (f: FieldType) => town.hasField(free.x, free.y, f);
+    town.makeSfx(free.x, free.y, FieldType.SFX_SMALL_BLOOD);
+    expect(at(FieldType.SFX_SMALL_BLOOD)).toBe(true);
+    town.makeSfx(free.x, free.y, FieldType.SFX_SMALL_BLOOD);
+    expect([at(FieldType.SFX_SMALL_BLOOD), at(FieldType.SFX_MEDIUM_BLOOD)]).toEqual([false, true]);
+    town.makeSfx(free.x, free.y, FieldType.SFX_SMALL_BLOOD);
+    expect([at(FieldType.SFX_MEDIUM_BLOOD), at(FieldType.SFX_LARGE_BLOOD)]).toEqual([false, true]);
+    expect(town.makeSfx(free.x, free.y, FieldType.SFX_SMALL_BLOOD)).toBe(false);
+    town.makeSfx(free.x, free.y, FieldType.SFX_SMALL_SLIME);
+    town.makeSfx(free.x, free.y, FieldType.SFX_SMALL_SLIME);
+    expect([at(FieldType.SFX_LARGE_BLOOD), at(FieldType.SFX_SMALL_SLIME), at(FieldType.SFX_LARGE_SLIME)])
+      .toEqual([false, false, true]);
   });
 });

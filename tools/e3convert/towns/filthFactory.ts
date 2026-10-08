@@ -67,8 +67,9 @@ function level1(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]>
     [11, [b.dialog(0x10a4), b.blockMove()]],
     // The whirlpool: everyone is gone.
     [12, [b.msg(BLOCK, 0x20), b.slayParty(0)]],
-    // The control panel (dialog 0xcc0, handled by `FUN_1008_436d`).
-    [14, [b.ledPanel(0xcc0, [
+    // The control panel (dialog 0xcc0, "Factory Control Panel", handled
+    // by `FUN_1008_436d`).
+    [14, [b.panel(0xcc0, [0x1028, 0x5d2], [
       [gates(0)],
       [b.ifFlagEq(HALTED, 0, [b.msg(BLOCK, 0x2d), ...trench(141, 210), halt])],
       [b.ifFlagAtLeast(HALTED, 1, [b.setFlag(HALTED, 0), ...trench(140, WATER)])],

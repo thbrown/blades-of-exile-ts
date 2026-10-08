@@ -371,6 +371,12 @@ describe.skipIf(!dir)('saves for E3-CHECK-IN-ORIGINAL.md', () => {
         + 'Then walk out, visit four other towns, and come back: is the lair full again?',
       make: async (q) => { scen.towns[44]!.canFind = true; await besideTown(q, 44); },
     },
+    {
+      file: 'Q32.SAV', inside: { town: 26, at: [42, 15] }, question: "#32, how the Filth Factory's control panel looks",
+      todo: 'The panel is a step west, at (41,15). Use it (or step onto it) and take a screenshot of the Factory Control Panel '
+        + 'before pressing anything. Is there an empty box under the four labels, left of Leave?',
+      make: async (q) => { scen.towns[26]!.canFind = true; await besideTown(q, 26); },
+    },
   ];
 
   it('makes every save, and each loads back here to the same place', async () => {
