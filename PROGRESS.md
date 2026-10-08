@@ -17014,3 +17014,28 @@ dice. Not chased.
 `tools/cppharness/traces/`, which isn't in git. Symlink it in. The corpus
 stands at **50 of 87, 1,122,563 draws** both before and after this round
 (not the 51 and 1,231,440 of 2026-09-13; that drop predates this round).
+
+
+### Play-test notes, fifteenth round (2026-10-07)
+
+- [x] **Captain Agrod (Krizsan) never bought a unicorn horn**, and Mervin's
+      herbs, Shirley's goods and zone 72's flower were as dead. E3's
+      scripts name a kind of item by its **ability** byte, +10
+      (`FUN_1070_06f4`); the converter put `type_flag` (+11, what stacks) in
+      the special class, so the horn was class 43 and the script asked for
+      111. The class is the ability now (pants keep `PANTS_CLASS`). And
+      `IF_HAVE_ITEM_CLASS`'s take took a whole stack for one payment: it
+      takes a charge now, as 1997 and E3 do (DIVERGENCES §60). Quest tests:
+      four horns (a stack of three and one) pay 40; herbs 200, goods 100.
+- [x] **"The job board doesn't work"**: not reproduced. All five dispatchers'
+      boards open (Krizsan's Valoda by "mission"/"purchase", the others by
+      "dispatcher"), Take gives the job, and talking to its target pays,
+      in the UI (`.scratch/jobui.mjs`, not committed) and headless; all 37
+      targets name the right person. Typing "jobs" gets the job reply, as in
+      E3 (`1020:…`, decompile line 14896: "job…" is the job button, as in
+      1997); clicking the highlighted "jobs" opens the board here, where E3
+      would give the job reply. Asked the user what was tried.
+
+**Gotcha (2026-10-07):** `towns/talkN.xml` is numbered by E3's dialogue
+block, not by town: Agrod's lines are in `talk9.xml` and he stands in
+Krizsan (towns 0–3). Find a person by `<personality>N<` in `townN.xml`.

@@ -1108,11 +1108,13 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
     const it = convertItem(old);
     it.graphicNum = 1000 + itemSheetNum * 100 + old.graphicNum;
     it.e3Item = tableRecords[k] ?? -1;
-    // E3's scripts name kinds of item by `type_flag` (unicorn horns are 111);
-    // the engine's item-class nodes read the special class.
-    if (old.typeFlag > 0) it.specialClass = old.typeFlag;
-    // Pants (variety 22), which a spot in Rentar-Ihrno's keep looks for.
-    else if (old.variety === 22) it.specialClass = PANTS_CLASS;
+    // E3's scripts name kinds of item by their **ability** byte, +10 (unicorn
+    // horns are 111): `FUN_1070_06f4` compares it, not `type_flag` at +11,
+    // which only says what stacks (a horn's is 43). The engine's item-class
+    // nodes read the special class. Pants (variety 22) are a class of the
+    // converter's, which a spot in Rentar-Ihrno's keep looks for.
+    if (old.variety === 22) it.specialClass = PANTS_CLASS;
+    else it.specialClass = e3Abilities[k] ?? 0;
     // A readable item runs its case of E3's switch when used (`notes.ts`):
     // a scenario node, through OBoE's CALL_SPECIAL ability. E3's item chart
     // (1140:0000, read by `FUN_10c0_2c92`) has 10 for all of 0xa0–0xb7:

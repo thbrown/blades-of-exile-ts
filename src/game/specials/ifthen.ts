@@ -191,7 +191,11 @@ export async function ifThenSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
     }
 
     case SpecType.IF_HAVE_ITEM_CLASS: {
-      // ex2a means "take one if found".
+      // ex2a means "take one if found": **one**, so a stack loses a charge and
+      // a single item goes whatever its charges (1997's `party_check_class`,
+      // ITEMS.CPP:1620, and Exile III's `FUN_1070_079e`). OBoE's `take_class`
+      // also takes a charge, but passes over an item with none, which is
+      // most of them (DIVERGENCES §60). This port took the whole stack.
       let found = false;
       for (const pc of party.pcs) {
         if (pc.mainStatus !== MainStatus.ALIVE) continue;
@@ -200,7 +204,8 @@ export async function ifThenSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
           if (item.variety === ItemType.NO_ITEM || item.specialClass !== spec.ex1a) continue;
           found = true;
           if (spec.ex2a > 0) {
-            takeItem(pc, i);
+            if (item.charges > 1) item.charges--;
+            else takeItem(pc, i);
             ctx.redraw = true;
           }
           break;

@@ -4923,6 +4923,53 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
     });
   });
 
+  describe('the buyers (`FUN_1070_079e`, towns/talkScripts.ts)', () => {
+    /** Empties every pack, then gives PC 0 `n` of the item (a stack where it stacks) and PC 1 one more. */
+    const stock = (q: QuestRunner, name: string, stack: number): void => {
+      for (const pc of q.party.pcs) for (const it of pc.items) it.variety = 0;
+      const k = scen.scenItems.findIndex((it) => it.fullName === name);
+      expect(k, name).toBeGreaterThanOrEqual(0);
+      giveItem(q.party.pcs[0]!, q.party, { ...scen.scenItems[k]!, ident: true, charges: stack });
+      giveItem(q.party.pcs[1]!, q.party, { ...scen.scenItems[k]!, ident: true });
+    };
+    const held = (q: QuestRunner, name: string): number => q.party.pcs.reduce((n, pc) =>
+      n + pc.items.filter((it) => it.variety !== 0 && it.fullName === name)
+        .reduce((c, it) => c + Math.max(1, it.charges), 0), 0);
+
+    it('Captain Agrod in Krizsan pays 10 gold a unicorn horn, each of a stack', async () => {
+      // E3 matches the horn by its ability byte, 111, and takes a charge at a
+      // time: a stack of three and a single horn are four horns, 40 gold.
+      const q = new QuestRunner(scen);
+      await q.enter(0);
+      stock(q, 'Unicorn Horn', 3);
+      expect(held(q, 'Unicorn Horn')).toBe(4);
+      const gold = q.party.gold;
+      const [reply] = await q.talk(/Agrod/, 'horn');
+      expect(q.party.gold - gold, reply).toBe(40);
+      expect(held(q, 'Unicorn Horn')).toBe(0);
+      // With none, he says so and pays nothing.
+      const [none] = await q.talk(/Agrod/, 'horn');
+      expect(none).not.toBe(reply);
+      expect(q.party.gold - gold).toBe(40);
+    });
+
+    it('Mervin pays 100 a package of herbs, and Shirley 50 a bundle of goods', async () => {
+      const q = new QuestRunner(scen);
+      await q.enter(141);
+      stock(q, 'Exotic Herbs', 0);
+      let gold = q.party.gold;
+      await q.talk(/Mervin/, 'herb');
+      expect(q.party.gold - gold).toBe(200);
+      expect(held(q, 'Exotic Herbs')).toBe(0);
+      await q.enter(149);
+      stock(q, 'Clothes and Goods', 0);
+      gold = q.party.gold;
+      await q.talk(/Shirley/, 'good');
+      expect(q.party.gold - gold).toBe(100);
+      expect(held(q, 'Clothes and Goods')).toBe(0);
+    });
+  });
+
   describe('as a conversation starts (`FUN_1020_1484`, towns/talkStart.ts)', () => {
     const CELL = { x: 0x12, y: 0x2f };
     const guards = (q: QuestRunner) => q.log.some((l) => /Gale guards surround you/.test(l));

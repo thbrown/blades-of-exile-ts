@@ -1327,6 +1327,18 @@ The user preferred that. The port forgets on each key or press
 (`clearSoundMemory`, main.ts). E3's swamp keeps its own, 1997-style memory
 (`GameSession.lastOneSound`). Sound only: no draws.
 
+### 60. Taking one item of a class (2026-10-07)
+
+**DECIDED: the original's.** A node that takes one item of a special class
+(`IF_HAVE_ITEM_CLASS` with ex2a set) takes **one**: a stack loses a charge,
+and a single item goes whatever its charges. That is 1997's
+`party_check_class` (ITEMS.CPP:1620) and Exile III's `FUN_1070_079e`, the
+loop its buyers run (Agrod's unicorn horns, Mervin's herbs, Shirley's
+goods). OBoE's `take_class` (party.cpp:691) takes a charge too, but its
+`has_class(…, true)` passes over an item with no charges, which is most
+items, so a node there can find nothing to take. The port had taken the
+whole item, stack and all. No draws.
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**
