@@ -435,8 +435,12 @@ export async function flyMissiles(
     ? queue.filter((m) => !locsEqual(m.dest, from)) : [];
   const flew = flying.length > 0;
   const t0 = animAt();
+  // **One sound for the volley**, not one a missile: `do_missile_anim` plays
+  // `sound_num` once, after the early-outs (boe.newgraph.cpp:429). Passing it
+  // to every `runAMissile` made Major Blessing ring out once for each PC.
+  if (flew && sound > 0) livingSound(-sound);
   for (const m of flying) {
-    runAMissile(from, m.dest, m.type, m.pathType, sound, m.xAdj, m.yAdj, numSteps, false);
+    runAMissile(from, m.dest, m.type, m.pathType, 0, m.xAdj, m.yAdj, numSteps, false);
   }
   if (flew) holdForSound(sound, t0);
   queue.length = 0;

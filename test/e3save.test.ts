@@ -207,6 +207,19 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
       .toEqual(q.party.boats.map((v) => [v.whichTown, v.loc, v.property]));
   });
 
+  it('fills the job boards of a party that never looked at one, as E3 fills them for a new party', async () => {
+    const q = new QuestRunner(scen);
+    expect(q.party.e3Jobs ?? null).toBeNull();
+    const { bytes } = exportE3Save(q.univ, defaults);
+    const p = new E3Bytes(readE3Save(bytes).party);
+    const posted = [...Array(6 * 4).keys()].filter((k) => p.i16(E3P.JOB_BOARDS + k * 0xc) !== 0);
+    expect(posted.length).toBeGreaterThan(0);
+    // And the game keeps the boards it exported.
+    const back = new QuestRunner(scen);
+    applyE3Save(bytes, back.univ, defaults);
+    expect(back.party.e3Jobs?.boards).toEqual(q.party.e3Jobs?.boards);
+  });
+
   it('carries the explored maps: towns of every size, the villages, the zones and the window', async () => {
     const q = new QuestRunner(scen);
     const marks: [number, number, number][] = [[3, 63, 1], [45, 47, 40], [90, 31, 5], [150, 47, 47]];

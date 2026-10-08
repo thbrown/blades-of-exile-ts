@@ -23,6 +23,7 @@ import {
 import { FieldType } from '../src/data/fields';
 import { PartyPreset, Player } from '../src/universe/player';
 import { MainStatus, Race, Skill, Status, Trait } from '../src/universe/skills';
+import { setLivingSound } from '../src/universe/living';
 import { Universe } from '../src/universe/universe';
 
 const opcodes = buildOpcodeTable(
@@ -219,6 +220,20 @@ describe('combat_immed_mage_cast', () => {
       expect(pc.status[Status.HASTE_SLOW]!).toBeGreaterThan(0);
     }
     expect(s.univ.transcript.at(-1)).toBe('  Party hasted.');
+  });
+
+  it('Major Blessing makes one sound for the volley, not one a PC', async () => {
+    const { s } = inCombat();
+    const heard: number[] = [];
+    setLivingSound((which) => { heard.push(which); });
+    try {
+      await combatImmedMageCast(s, 0, Spell.BLESS_MAJOR);
+    } finally {
+      setLivingSound(null);
+    }
+    // Five missiles fly (the caster's own stays put): `do_missile_anim` plays 25 once.
+    expect(heard.filter((w) => Math.abs(w) === 25)).toEqual([-25]);
+    expect(s.univ.transcript.at(-1)).toBe('  Party blessed!');
   });
 
   it('a group spell only touches hostile monsters in range and in sight', async () => {

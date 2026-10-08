@@ -7,7 +7,8 @@
  * It is only a picture, like the other touch strips: every redraw copies the
  * panel's pixels from the game canvas, and a tap is handed back to the host
  * in game-screen coordinates, which does exactly what a click on the panel
- * there does.
+ * there does. A press that the host takes as the start of a drag (the item
+ * scrollbar's thumb) follows the finger instead, and is no tap.
  */
 
 import type { UiRect } from '../render/layout';
@@ -19,6 +20,10 @@ export interface TouchSheetHost {
   source(): { canvas: HTMLCanvasElement; x: number; y: number };
   /** A tap on the panel, in game-screen coordinates. */
   tap(x: number, y: number): void;
+  /** A press: true if it starts a drag, which `drag` and `release` then follow. */
+  press(x: number, y: number): boolean;
+  drag(x: number, y: number): void;
+  release(): void;
   close(): void;
 }
 
@@ -30,6 +35,10 @@ export class TouchSheet {
   private readonly root: HTMLElement;
   private readonly view: HTMLCanvasElement;
   private shown: UiRect | null = null;
+  /** The pointer dragging, if a press started a drag. */
+  private dragging: number | null = null;
+  /** A drag just ended: the click the browser makes of it is not a tap. */
+  private swallowClick = false;
 
   constructor(private readonly host: TouchSheetHost) {
     this.root = document.createElement('div');
@@ -45,13 +54,34 @@ export class TouchSheet {
     this.view = document.createElement('canvas');
     this.view.className = 'sheet-panel';
     this.view.addEventListener('click', (ev) => {
-      const panel = this.shown;
-      if (!panel) return;
-      const box = this.view.getBoundingClientRect();
-      const x = panel.left + Math.floor((ev.clientX - box.left) * this.view.width / box.width);
-      const y = panel.top + Math.floor((ev.clientY - box.top) * this.view.height / box.height);
-      this.host.tap(x, y);
+      if (this.swallowClick) {
+        this.swallowClick = false;
+        return;
+      }
+      const at = this.toPanel(ev);
+      if (at) this.host.tap(at.x, at.y);
     });
+    this.view.addEventListener('pointerdown', (ev) => {
+      this.swallowClick = false;
+      const at = this.toPanel(ev);
+      if (!at || !this.host.press(at.x, at.y)) return;
+      this.dragging = ev.pointerId;
+      this.view.setPointerCapture(ev.pointerId);
+      ev.preventDefault();
+    });
+    this.view.addEventListener('pointermove', (ev) => {
+      if (this.dragging !== ev.pointerId) return;
+      const at = this.toPanel(ev);
+      if (at) this.host.drag(at.x, at.y);
+    });
+    for (const end of ['pointerup', 'pointercancel'] as const) {
+      this.view.addEventListener(end, (ev) => {
+        if (this.dragging !== ev.pointerId) return;
+        this.dragging = null;
+        this.swallowClick = true;
+        this.host.release();
+      });
+    }
     this.view.addEventListener('contextmenu', (ev) => ev.preventDefault());
 
     const close = document.createElement('button');
@@ -65,6 +95,17 @@ export class TouchSheet {
 
     this.root.append(this.view, close);
     document.body.append(this.root);
+  }
+
+  /** A point on the sheet, in game-screen coordinates. */
+  private toPanel(ev: { clientX: number; clientY: number }): { x: number; y: number } | null {
+    const panel = this.shown;
+    if (!panel) return null;
+    const box = this.view.getBoundingClientRect();
+    return {
+      x: panel.left + Math.floor((ev.clientX - box.left) * this.view.width / box.width),
+      y: panel.top + Math.floor((ev.clientY - box.top) * this.view.height / box.height),
+    };
   }
 
   sync(on: boolean): void {

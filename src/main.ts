@@ -99,15 +99,15 @@ import { sameTarContents } from './fileio/tarball';
 import { SnapKind, lineage, roles } from './platform/saveRetention';
 import {
   TreeInfo, createTree, exportSave, getPartyInMemory, getTree, getSnapshot, importSave, listTrees,
-  SnapInfo, getSnapInfo, latestSaves, listSnaps, newestSnapshot, appendSnapshot, setSnapshotThumb, saveStoreAvailable, setHead, setPartyActiveScenario, setPartyInMemory, renameTree, deleteTree,
+  SnapInfo, getSnapInfo, listSnaps, newestSnapshot, appendSnapshot, setSnapshotThumb, saveStoreAvailable, setHead, setPartyActiveScenario, setPartyInMemory, renameTree, deleteTree,
 } from './platform/saveStore';
 import { SaveScheduler } from './platform/saveScheduler';
-import { browseTree, exportTreeZip, importAsTree, placeOf } from './platform/saveActions';
+import { browseTree, exportTreeZip, importAsTree } from './platform/saveActions';
 import {
   setAutosaveSink,
 } from './game/autosave';
 import { MENU_SEPARATOR, MenuItem, installFullScreenButton, installMenuBar, installMenuToggle } from './platform/menu';
-import { StartupLibrary, StartupScenario, StartupSaveActions, showStartupScreen } from './platform/startup';
+import { StartupLibrary, StartupScenario, StartupSaveActions, StartupTree, showLoadGame, showStartupScreen } from './platform/startup';
 import { LibraryCatalog, libraryUrl } from './fileio/libraryCatalog';
 import {
   InstalledScenario, getInstalledScenario, installScenario, listInstalledScenarios,
@@ -320,6 +320,64 @@ function startupEntry(scen: InstalledScenario): StartupScenario {
   };
 }
 
+/** The bundled scenarios' cards, read from their headers. */
+async function bundledHeaders(): Promise<StartupScenario[]> {
+  return Promise.all(BUNDLED_SCENARIOS.map(async (id) => {
+    try {
+      const url = `${import.meta.env.BASE_URL}scenarios/${id}/scenario.xml`;
+      const hdr = readScenarioFromXml(await parseXmlDoc(await (await fetch(url)).text(), url));
+      return {
+        id, title: hdr.title, blurb: hdr.teasers.find((t) => t !== '') ?? '',
+        icon: id === EXILE3_ID ? EXILE3_CARD.icon : hdr.introPic as number | string,
+        // Made by scripts/scenario-previews.mjs; the card drops it if missing.
+        preview: id === EXILE3_ID ? EXILE3_CARD.preview : `${import.meta.env.BASE_URL}scenarios/${id}/preview.png`,
+      };
+    } catch {
+      // Exile III is converted only on the dev server; elsewhere its card
+      // is fixed, and choosing it converts it (platform/exile3.ts).
+      if (id === EXILE3_ID) return EXILE3_CARD;
+      // A scenario that won't even parse its header is still offered by id,
+      // so the screen never comes up empty because of one bad directory.
+      return { id, title: id, blurb: '' };
+    }
+  }));
+}
+
+/** A dropped file, read as `importSave` reads a picked one. */
+async function readDroppedSave(file: File): Promise<{ name: string; data: Uint8Array }> {
+  return { name: file.name.replace(/\.(exg|zip)$/i, ''), data: new Uint8Array(await file.arrayBuffer()) };
+}
+
+/** A save tree as a card on the main menu or in File › Load Game (`savedGameCards`). */
+function startupTree(
+  game: TreeInfo, known: (id: string) => { title: string; icon?: number | string } | undefined, current = false,
+): StartupTree {
+  const id = game.scenarioId;
+  const icon = known(id)?.icon;
+  const { cover } = game;
+  const saves = `${game.count} save${game.count === 1 ? '' : 's'}`;
+  const when = new Date(cover.savedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  return {
+    id: game.id,
+    scenarioId: id,
+    name: game.name,
+    // The scenario's title if it is installed, else its id — a save can
+    // name a scenario that isn't, which is the case the C++ shows "could
+    // not be found" for. A party between scenarios lists who is in it:
+    // loading one makes it the party in memory.
+    label: id === ''
+      ? `Party: ${cover.preview.pcs.filter((pc) => pc.name !== '').map((pc) => pc.name).join(', ')}`
+      : known(id)?.title ?? id,
+    detail: id === ''
+      ? 'Between scenarios'
+      : `Day ${Math.floor(cover.preview.age / 3700) + 1}${cover.place === '' ? '' : ` · ${cover.place}`}`,
+    when: `${when} · ${saves}`,
+    ...(cover.thumb ? { thumb: URL.createObjectURL(new Blob([cover.thumb as BlobPart], { type: 'image/webp' })) } : {}),
+    ...(icon !== undefined ? { icon } : {}),
+    ...(current ? { current } : {}),
+  };
+}
+
 /**
  * `?pace=` overrides the combat animation speed: 1 is normal, larger is slow
  * motion, smaller is brisk. See `combatPace` — the default is set there, and
@@ -424,25 +482,7 @@ async function main(): Promise<void> {
     hideLoadingUi();
     document.body.classList.add('starting');
     status.textContent = 'Choose a game.';
-    const headers = (await Promise.all(BUNDLED_SCENARIOS.map(async (id) => {
-      try {
-        const url = `${import.meta.env.BASE_URL}scenarios/${id}/scenario.xml`;
-        const hdr = readScenarioFromXml(await parseXmlDoc(await (await fetch(url)).text(), url));
-        return {
-          id, title: hdr.title, blurb: hdr.teasers.find((t) => t !== '') ?? '',
-          icon: id === EXILE3_ID ? EXILE3_CARD.icon : hdr.introPic as number | string,
-          // Made by scripts/scenario-previews.mjs; the card drops it if missing.
-          preview: id === EXILE3_ID ? EXILE3_CARD.preview : `${import.meta.env.BASE_URL}scenarios/${id}/preview.png`,
-        };
-      } catch {
-        // Exile III is converted only on the dev server; elsewhere its card
-        // is fixed, and choosing it converts it (platform/exile3.ts).
-        if (id === EXILE3_ID) return EXILE3_CARD;
-        // A scenario that won't even parse its header is still offered by id,
-        // so the screen never comes up empty because of one bad directory.
-        return { id, title: id, blurb: '' };
-      }
-    })));
+    const headers = await bundledHeaders();
     // The player's own library follows the bundled five.
     const added: StartupScenario[] = [];
     const installedIds = new Set<string>();
@@ -502,8 +542,8 @@ async function main(): Promise<void> {
       browse: (id) => browseTree(id, titleOf(games.find((g) => g.id === id)?.scenarioId ?? '') ?? '', true),
       rename: renameTree,
       remove: deleteTree,
-      importFile: async () => {
-        const picked = await importSave();
+      importFile: async (file) => {
+        const picked = file !== undefined ? await readDroppedSave(file) : await importSave();
         if (picked === null) return null;
         if (isE3Save(picked.data)) {
           window.sessionStorage.setItem(PENDING_E3_SAVE_KEY, JSON.stringify({
@@ -524,30 +564,7 @@ async function main(): Promise<void> {
     const choice = await showStartupScreen(document.getElementById('startup-host')!, {
       official: headers,
       added,
-      tree: games.map((game) => {
-        const id = game.scenarioId;
-        const icon = known(id)?.icon;
-        const { cover } = game;
-        const saves = `${game.count} save${game.count === 1 ? '' : 's'}`;
-        return {
-          id: game.id,
-          scenarioId: id,
-          name: game.name,
-          // The scenario's title if it is installed, else its id — a save can
-          // name a scenario that isn't, which is the case the C++ shows "could
-          // not be found" for. A party between scenarios lists who is in it:
-          // loading one makes it the party in memory.
-          label: id === ''
-            ? `Party: ${cover.preview.pcs.filter((pc) => pc.name !== '').map((pc) => pc.name).join(', ')}`
-            : titleOf(id) ?? id,
-          detail: id === ''
-            ? 'Between scenarios'
-            : `Day ${Math.floor(cover.preview.age / 3700) + 1}${cover.place === '' ? '' : ` · ${cover.place}`}`,
-          when: `${when(cover.savedAt)} · ${saves}`,
-          ...(cover.thumb ? { thumb: URL.createObjectURL(new Blob([cover.thumb as BlobPart], { type: 'image/webp' })) } : {}),
-          ...(icon !== undefined ? { icon } : {}),
-        };
-      }),
+      tree: games.map((game) => startupTree(game, known)),
       ...(saveStoreAvailable() ? { saveActions } : {}),
       ...(library ? { library } : {}),
       ...(saveStoreAvailable() ? {
@@ -1716,24 +1733,13 @@ async function main(): Promise<void> {
   /**
    * Saving and loading. The C++ hangs these off the File menu and a native file
    * picker; this port has neither, so the slots live in IndexedDB
-   * (`platform/saveStore.ts`) and the picker is a dialog. Ctrl+S saves, Ctrl+L
-   * loads, and both slot lists carry an Export/Import row so the very same
-   * `.exg` bytes can move to and from the desktop build.
+   * (`platform/saveStore.ts`) and Load Game shows them as the main menu's
+   * cards. Ctrl+S saves, Ctrl+L loads, and an import card takes the very same
+   * `.exg` bytes the desktop build writes.
    *
    * `save_party` refuses in combat (boe.actions.cpp's File menu gate), and so
    * does this: half a fight is not a resumable state.
    */
-  const treeLabel = (game: TreeInfo): string => {
-    const where = placeOf({ place: game.cover.place, townNum: game.cover.preview.townNum });
-    const day = Math.floor(game.cover.preview.age / 3700) + 1;
-    return `${game.name} — ${where}, day ${day} (${new Date(game.cover.savedAt).toLocaleString()})`;
-  };
-  /** One save, as the Load menu lists it: where, which day, and when. */
-  const snapLabel = (snap: SnapInfo): string => {
-    const where = placeOf({ place: snap.place, townNum: snap.preview.townNum });
-    const day = Math.floor(snap.preview.age / 3700) + 1;
-    return `${where}, day ${day} (${new Date(snap.savedAt).toLocaleString()})`;
-  };
 
   const canSaveNow = (): string | null => {
     if (isCombat(session.mode)) return 'Save: Not in combat.';
@@ -2106,57 +2112,60 @@ async function main(): Promise<void> {
       return false;
     }
     const games = saveStoreAvailable() ? await listTrees() : [];
-    const rows = [{ name: 'file', label: 'Import a file…' }];
-    // Each game's newest autosave and the player's own newest save, then the
-    // whole tree behind a row of its own.
-    for (const game of games) {
-      const { auto, manual } = latestSaves(await listSnaps(game.id));
-      if (auto) rows.push({ name: `snap:${game.id}:${auto.seq}`, label: `${game.name} — autosave: ${snapLabel(auto)}` });
-      if (manual) rows.push({ name: `snap:${game.id}:${manual.seq}`, label: `${game.name} — your save: ${snapLabel(manual)}` });
-      if (!auto && !manual) rows.push({ name: `tree:${game.id}`, label: treeLabel(game) });
-      if (game.count > 1) rows.push({ name: `older:${game.id}`, label: '      ↳ View all save history…' });
-    }
-    const picked = await dialogs.run({
-      text: games.length > 0 ? 'Load which saved game?' : 'No saved games in this browser.',
-      rows,
-      escapeButton: 'cancel',
-      buttons: [{ name: 'cancel', label: 'Cancel' }],
-    });
-    if (picked === 'cancel') {
-      redraw();
-      return false;
-    }
-
-    try {
-      if (picked === 'file') {
-        const chosen = await importSave();
-        if (chosen === null) {
-          redraw();
-          return false;
+    // Each card names its scenario: this one, an installed one, or a bundled
+    // one (whose headers are only fetched if a card needs them).
+    const installed = scenarioStoreAvailable() ? await listInstalledScenarios() : [];
+    const needsBundled = games.some((g) => g.scenarioId !== '' && g.scenarioId !== scen.id
+      && !installed.some((i) => i.id === g.scenarioId));
+    const bundled = needsBundled ? await bundledHeaders() : [];
+    const known = (id: string): { title: string; icon?: number | string } | undefined =>
+      id === scen.id ? { title: scen.title, icon: id === EXILE3_ID ? EXILE3_CARD.icon : scen.introPic }
+        : installed.find((i) => i.id === id) ?? bundled.find((b) => b.id === id);
+    // An Exile III save dropped or picked here, to load once the dialog is gone.
+    let e3File: { name: string; data: Uint8Array } | null = null;
+    const E3_IMPORTED = '';
+    const choice = await showLoadGame(games.map((game) => startupTree(game, known, game.id === univ.treeId)), saveStoreAvailable() ? {
+      browse: (id) => browseTree(id, known(games.find((g) => g.id === id)?.scenarioId ?? '')?.title ?? '', id !== univ.treeId),
+      rename: renameTree,
+      remove: deleteTree,
+      importFile: async (file) => {
+        const chosen = file !== undefined ? await readDroppedSave(file) : await importSave();
+        if (chosen === null) return null;
+        if (isE3Save(chosen.data)) {
+          e3File = { name: chosen.name.replace(/\.sav$/i, ''), data: chosen.data };
+          return E3_IMPORTED;
         }
-        if (isE3Save(chosen.data)) return await loadE3Save(chosen.data, chosen.name.replace(/\.sav$/i, ''));
-        // Any file becomes a tree of its own, then opens like one.
+        // Any other file becomes a tree of its own, then opens like one.
         const outcome = await importAsTree(chosen);
         if ('error' in outcome) {
-          univ.addStringToBuf(outcome.error);
+          window.alert(outcome.error);
+          return null;
+        }
+        return outcome.treeId;
+      },
+    } : undefined);
+
+    try {
+      switch (choice.kind) {
+        case 'cancel':
           redraw();
           return false;
+        case 'imported': {
+          const e3 = e3File as { name: string; data: Uint8Array } | null;
+          if (choice.treeId !== E3_IMPORTED || e3 === null) return await restoreFrom(choice.treeId);
+          if (scen.id === EXILE3_ID) return await loadE3Save(e3.data, e3.name);
+          // Only Exile III can read one: it opens there, as the main menu's import does.
+          window.sessionStorage.setItem(PENDING_E3_SAVE_KEY, JSON.stringify({ name: e3.name, data: toBase64(e3.data) }));
+          window.sessionStorage.removeItem(TREE_KEY);
+          window.location.href = urlWith('play', EXILE3_ID);
+          return true;
         }
-        return await restoreFrom(outcome.treeId);
-      }
-      if (picked.startsWith('older:')) {
-        const id = picked.slice('older:'.length);
-        // Not the game being played: that one can't be deleted from under itself.
-        const seq = await browseTree(id, scen.title, id !== univ.treeId);
-        if (seq === null || seq === 'deleted') {
-          redraw();
-          return false;
+        case 'open': {
+          // As on the main menu: the newest save by the clock, unless one was picked in the tree.
+          const seq = choice.seq ?? await newestSnapshot(choice.game.id).catch(() => null) ?? undefined;
+          return await restoreFrom(choice.game.id, seq);
         }
-        return await restoreFrom(id, seq);
       }
-      const snap = /^snap:(.+):(\d+)$/.exec(picked);
-      if (snap) return await restoreFrom(snap[1]!, Number(snap[2]));
-      return await restoreFrom(picked.slice('tree:'.length));
     } catch (err) {
       univ.addStringToBuf(`Load failed: ${String(err)}`);
       redraw();
@@ -2510,6 +2519,16 @@ async function main(): Promise<void> {
     },
     source: () => ({ canvas, x: desktop.gameX, y: desktop.gameY }),
     tap: clickPanel,
+    press: (x, y) => {
+      if (session.shop || !screen.itemSbar.startThumbDrag(x, y)) return false;
+      redraw();
+      return true;
+    },
+    drag: (_x, y) => { dragScrollThumb(y); },
+    release: () => {
+      screen.itemSbar.endDrag();
+      redraw();
+    },
     close: () => {
       sheetOpen = null;
       redraw();
@@ -3256,6 +3275,9 @@ async function main(): Promise<void> {
       // pixels wide at a phone's scale.
       // Only while the pads are actually on screen: touch controls can be on
       // by default (a touch-only pointer) at a moment the pads are hidden.
+      // A scrollbar's thumb drags, touch controls or not: the item bar is
+      // inside the inventory panel, and the sheet would take the press.
+      if (startScrollThumb(x, y)) return;
       const magnify = touchControlsOn() && touchPads?.visible() === true;
       if (magnify && inRect(WIN_RECTS.pcStats, x, y)) {
         sheetOpen = 'party';
@@ -3274,7 +3296,6 @@ async function main(): Promise<void> {
       }
       // The transcript's scrollbar is its own control too, and a shop leaves
       // it alone.
-      if (screen.textSbar.startThumbDrag(x, y)) { redraw(); return; }
       if (screen.textSbar.handleClick(x, y)) {
         sound.play(Snd.BUTTON);
         redraw();
@@ -3286,8 +3307,7 @@ async function main(): Promise<void> {
         return;
       }
       // The item scrollbar is its own control on the main window, so it is
-      // asked before the panel underneath it.
-      if (startScrollThumb(x, y)) return;
+      // asked before the panel underneath it (its thumb, above).
       if (screen.itemSbar.handleClick(x, y)) {
         sound.play(Snd.BUTTON);
         screen.itemWindow.scroll = screen.itemSbar.getPosition();

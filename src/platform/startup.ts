@@ -59,6 +59,8 @@ export interface StartupTree {
   thumb?: string;
   /** The scenario's icon, for a save with no picture. */
   icon?: number | string;
+  /** The game being played: it can't be deleted from under itself. */
+  current?: boolean;
 }
 
 /** What the saved-game cards can do beyond continuing. */
@@ -71,8 +73,12 @@ export interface StartupSaveActions {
   browse: (treeId: string) => Promise<number | null | 'deleted'>;
   rename: (treeId: string, name: string) => Promise<void>;
   remove: (treeId: string) => Promise<void>;
-  /** Import an `.exg` or a tree zip, giving the new tree's id (null: cancelled or refused). */
-  importFile: () => Promise<string | null>;
+  /**
+   * Import an `.exg`, a tree zip or an Exile III save — `file` when one was
+   * dropped on the import card, else picked — giving the new tree's id (null:
+   * cancelled, refused, or handled some other way).
+   */
+  importFile: (file?: File) => Promise<string | null>;
 }
 
 export interface StartupChoice {
@@ -239,6 +245,180 @@ function pictureElement(icon: number | string | undefined, preview: string | und
   return frame;
 }
 
+/** What a saved game's card does when picked. */
+export interface SavedGameCardHost {
+  /** Carry on from `game`: its newest save, or snapshot `seq` picked in its tree. */
+  open: (game: StartupTree, seq?: number) => void;
+  /** A file was imported as a new tree. */
+  imported: (treeId: string) => void;
+}
+
+/**
+ * The saved games as cards, one a game, and the import card last: the main
+ * menu's "Continue a saved game", and File › Load Game's (`showLoadGame`).
+ * A click on a card carries on from its newest save (by the clock, not by
+ * game time — after going back to an old save, that is the last one played),
+ * and the clock icon opens its tree, to pick an earlier point. The import card
+ * takes a click, or a file dropped on it.
+ */
+export function savedGameCards(
+  trees: readonly StartupTree[], actions: StartupSaveActions | undefined, host: SavedGameCardHost,
+): HTMLElement {
+  const list = el('div', 'startup-list startup-cards startup-saves');
+  for (const game of trees) {
+    // Not a <button>: it holds buttons of its own.
+    const card = el('div', 'startup-choice startup-card startup-save');
+    card.dataset['tree'] = game.id;
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+    const picture = pictureElement(game.icon, game.thumb);
+    if (game.current === true) picture.append(el('span', 'startup-badge current', 'Playing now'));
+    card.append(picture);
+    const words = el('span', 'startup-words');
+    const title = el('strong', undefined, game.name);
+    words.append(title);
+    words.append(el('span', 'startup-facts', game.label));
+    words.append(el('small', 'startup-save-line', game.detail));
+    words.append(el('small', 'startup-save-line', game.when));
+    card.append(words);
+    // A save names its own scenario, so picking one here is also how a
+    // party in a scenario other than the default gets opened at all.
+    const resume = (): void => { host.open(game); };
+    card.title = 'Carry on from the newest save';
+    card.addEventListener('click', resume);
+    card.addEventListener('keydown', (e) => {
+      if (e.target !== card || (e.key !== 'Enter' && e.key !== ' ')) return;
+      e.preventDefault();
+      resume();
+    });
+    if (actions !== undefined) {
+      const tools = el('span', 'startup-save-tools');
+      const iconButton = (icon: string, tip: string, action: string, run: () => void): void => {
+        const b = el('button', 'startup-icon-button') as HTMLButtonElement;
+        b.innerHTML = icon;
+        b.title = tip;
+        b.setAttribute('aria-label', tip);
+        b.dataset['action'] = action;
+        b.addEventListener('click', (e) => { e.stopPropagation(); run(); });
+        tools.append(b);
+      };
+      iconButton(HISTORY_ICON, 'Older saves: pick a point in this game to go back to', 'history', () => {
+        void actions.browse(game.id).then((seq) => {
+          if (seq === 'deleted') card.remove();
+          else if (seq !== null) host.open(game, seq);
+        });
+      });
+      iconButton(PENCIL_ICON, 'Rename this game', 'rename', () => {
+        const next = window.prompt('Name this game:', title.textContent ?? game.name)?.trim();
+        if (next === undefined || next === '' || next === title.textContent) return;
+        void actions.rename(game.id, next).then(() => { title.textContent = next; });
+      });
+      if (game.current !== true) {
+        iconButton(TRASH_ICON, 'Delete this game and all its saves', 'delete', () => {
+          if (!window.confirm(`Delete "${title.textContent ?? game.name}" and all its saves? This cannot be undone.`)) return;
+          void actions.remove(game.id).then(() => { card.remove(); });
+        });
+      }
+      picture.append(tools);
+    }
+    list.append(card);
+  }
+  // Importing is a card of its own, always the last in the grid: the same
+  // size as a game's, with an empty picture where a game has its own.
+  if (actions !== undefined) {
+    const add = el('button', 'startup-choice startup-card startup-save-import');
+    add.dataset['action'] = 'import';
+    add.title = 'An .exg file, a zip of saves, or an Exile III save — it becomes a new game here. Click to pick one, or drop it here.';
+    const frame = el('span', 'startup-picture startup-import-picture');
+    frame.append(el('span', 'startup-import-plus', '+'));
+    add.append(frame);
+    const words = el('span', 'startup-words');
+    words.append(el('strong', undefined, 'Import a saved game…'));
+    words.append(el('small', undefined, 'An .exg file, a zip of saves, or an Exile III save. Click, or drop one here.'));
+    add.append(words);
+    const run = (file?: File): void => {
+      void actions.importFile(file).then((id) => { if (id !== null) host.imported(id); });
+    };
+    add.addEventListener('click', () => { run(); });
+    // A drop target: the card lights up while a file is held over it. The
+    // counter is because dragenter and dragleave fire for every child too.
+    let over = 0;
+    const holdsFiles = (e: DragEvent): boolean => e.dataTransfer?.types.includes('Files') === true;
+    add.addEventListener('dragenter', (e) => {
+      if (!holdsFiles(e)) return;
+      e.preventDefault();
+      over++;
+      add.classList.add('drop-here');
+    });
+    add.addEventListener('dragover', (e) => {
+      if (!holdsFiles(e)) return;
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    });
+    add.addEventListener('dragleave', () => {
+      over = Math.max(0, over - 1);
+      if (over === 0) add.classList.remove('drop-here');
+    });
+    add.addEventListener('drop', (e) => {
+      e.preventDefault();
+      over = 0;
+      add.classList.remove('drop-here');
+      const file = e.dataTransfer?.files[0];
+      if (file !== undefined) run(file);
+    });
+    list.append(add);
+  }
+  return list;
+}
+
+/** What File › Load Game picked. */
+export type LoadGameChoice =
+  | { kind: 'open'; game: StartupTree; seq?: number }
+  | { kind: 'imported'; treeId: string }
+  | { kind: 'cancel' };
+
+/**
+ * File › Load Game: the main menu's saved-game cards over the game, with
+ * Cancel. Resolves once a card is picked, a file is imported, or it is
+ * closed (Cancel, Escape, or a click outside it).
+ */
+export function showLoadGame(trees: readonly StartupTree[], actions: StartupSaveActions | undefined): Promise<LoadGameChoice> {
+  installBackdrop();
+  return new Promise((resolve) => {
+    const back = el('div', 'loadgame-back');
+    const box = el('div', 'startup loadgame');
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-label', 'Load a saved game');
+    back.append(box);
+    const done = (choice: LoadGameChoice): void => {
+      back.remove();
+      window.removeEventListener('keydown', onKey, true);
+      resolve(choice);
+    };
+    const onKey = (e: KeyboardEvent): void => {
+      // A game's tree opened from here (the clock icon) has keys of its own.
+      if (document.querySelector('.stree-back') !== null) return;
+      // The game's own keys wait while this is up.
+      e.stopPropagation();
+      if (e.key === 'Escape') done({ kind: 'cancel' });
+    };
+    window.addEventListener('keydown', onKey, true);
+    back.addEventListener('click', (e) => { if (e.target === back) done({ kind: 'cancel' }); });
+    box.append(el('h2', undefined, trees.length > 0 ? 'Load a saved game' : 'No saved games in this browser'));
+    box.append(savedGameCards(trees, actions, {
+      open: (game, seq) => { done({ kind: 'open', game, ...(seq !== undefined ? { seq } : {}) }); },
+      imported: (treeId) => { done({ kind: 'imported', treeId }); },
+    }));
+    const foot = el('div', 'loadgame-foot');
+    const cancel = el('button', 'startup-party-button', 'Cancel');
+    cancel.addEventListener('click', () => { done({ kind: 'cancel' }); });
+    foot.append(cancel);
+    box.append(foot);
+    document.body.append(back);
+    cancel.focus();
+  });
+}
+
 /**
  * The main menu's two grounds, both tiles of `pixpats.png`: the granite of the
  * game's own window frame (the tile at the top left) behind the page, and the
@@ -393,87 +573,14 @@ export function showStartupScreen(host: HTMLElement, opts: StartupOptions): Prom
     }
 
     // Saved games have a card of their own too, so continuing and starting
-    // fresh read as two different choices. One card a game, however long its
-    // history: a click on the card carries on from its newest save (by the
-    // clock, not by game time — after going back to an old save, that is the
-    // last one played), and the clock icon opens its tree, to pick an earlier point.
+    // fresh read as two different choices (`savedGameCards`).
     if (tree.length > 0 || saveActions !== undefined) {
       const savesCard = el('div', 'startup startup-saves-card');
       savesCard.append(el('h2', undefined, 'Continue a saved game'));
-      const list = el('div', 'startup-list startup-cards startup-saves');
-      for (const game of tree) {
-        // Not a <button>: it holds buttons of its own.
-        const card = el('div', 'startup-choice startup-card startup-save');
-        card.dataset['tree'] = game.id;
-        card.tabIndex = 0;
-        card.setAttribute('role', 'button');
-        const picture = pictureElement(game.icon, game.thumb);
-        card.append(picture);
-        const words = el('span', 'startup-words');
-        const title = el('strong', undefined, game.name);
-        words.append(title);
-        words.append(el('span', 'startup-facts', game.label));
-        words.append(el('small', 'startup-save-line', game.detail));
-        words.append(el('small', 'startup-save-line', game.when));
-        card.append(words);
-        // A save names its own scenario, so picking one here is also how a
-        // party in a scenario other than the default gets opened at all.
-        const resume = (): void => { choose({ scenarioId: game.scenarioId, tree: { id: game.id } }); };
-        card.title = 'Carry on from the newest save';
-        card.addEventListener('click', resume);
-        card.addEventListener('keydown', (e) => {
-          if (e.target !== card || (e.key !== 'Enter' && e.key !== ' ')) return;
-          e.preventDefault();
-          resume();
-        });
-        if (saveActions !== undefined) {
-          const tools = el('span', 'startup-save-tools');
-          const iconButton = (icon: string, tip: string, action: string, run: () => void): void => {
-            const b = el('button', 'startup-icon-button') as HTMLButtonElement;
-            b.innerHTML = icon;
-            b.title = tip;
-            b.setAttribute('aria-label', tip);
-            b.dataset['action'] = action;
-            b.addEventListener('click', (e) => { e.stopPropagation(); run(); });
-            tools.append(b);
-          };
-          iconButton(HISTORY_ICON, 'Older saves: pick a point in this game to go back to', 'history', () => {
-            void saveActions.browse(game.id).then((seq) => {
-              if (seq === 'deleted') card.remove();
-              else if (seq !== null) choose({ scenarioId: game.scenarioId, tree: { id: game.id, seq } });
-            });
-          });
-          iconButton(PENCIL_ICON, 'Rename this game', 'rename', () => {
-            const next = window.prompt('Name this game:', title.textContent ?? game.name)?.trim();
-            if (next === undefined || next === '' || next === title.textContent) return;
-            void saveActions.rename(game.id, next).then(() => { title.textContent = next; });
-          });
-          iconButton(TRASH_ICON, 'Delete this game and all its saves', 'delete', () => {
-            if (!window.confirm(`Delete "${title.textContent ?? game.name}" and all its saves? This cannot be undone.`)) return;
-            void saveActions.remove(game.id).then(() => { card.remove(); });
-          });
-          picture.append(tools);
-        }
-        list.append(card);
-      }
-      // Importing is a card of its own, always the last in the grid: the same
-      // size as a game's, with an empty picture where a game has its own.
-      if (saveActions !== undefined) {
-        const add = el('button', 'startup-choice startup-card startup-save-import');
-        add.dataset['action'] = 'import';
-        add.title = 'An .exg file, a zip of saves, or an Exile III save — it becomes a new game here';
-        const frame = el('span', 'startup-picture startup-import-picture');
-        frame.append(el('span', 'startup-import-plus', '+'));
-        add.append(frame);
-        const words = el('span', 'startup-words');
-        words.append(el('strong', undefined, 'Import a saved game…'));
-        words.append(el('small', undefined, 'An .exg file, a zip of saves, or an Exile III save.'));
-        add.append(words);
-        add.addEventListener('click', () => {
-          void saveActions.importFile().then((id) => { if (id !== null) window.location.reload(); });
-        });
-        list.append(add);
-      }
+      const list = savedGameCards(tree, saveActions, {
+        open: (game, seq) => { choose({ scenarioId: game.scenarioId, tree: { id: game.id, ...(seq !== undefined ? { seq } : {}) } }); },
+        imported: () => { window.location.reload(); },
+      });
       savesCard.append(list);
       root.before(savesCard);
     }

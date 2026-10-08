@@ -2470,23 +2470,18 @@ const fileMenu = await page.evaluate(() =>
   [...document.querySelectorAll('#game-menu-bar .dropdown li')].map((li) => li.textContent));
 await page.locator('#game-menu-bar .dropdown li', { hasText: 'Open Game' }).first().click();
 await page.waitForTimeout(300);
-const pickerRow = await page.evaluate(() =>
-  // A game's newest autosave and the player's own newest save have a row each
-  // (`snap:`); VerifySlot has only the latter, "VerifySlot — your save: …".
-  window.__dialogs.active?.placedRows?.find((r) => /^(snap|tree):/.test(r.name) && r.label?.startsWith('VerifySlot'))?.rect ?? null);
+// The dialog is the main menu's cards (`showLoadGame`): VerifySlot has one.
+const pickerRow = await page.locator('.loadgame .startup-save', { hasText: 'VerifySlot' }).count() > 0 ? 'card' : null;
 let menuLoad = { picker: fileMenu, row: pickerRow, gold: null };
 if (pickerRow !== null) {
-  const box = await page.locator('#canvas').boundingBox();
-  await page.mouse.click(
-    box.x + ((pickerRow.left + pickerRow.right) / 2) * (box.width / 605),
-    box.y + ((pickerRow.top + pickerRow.bottom) / 2) * (box.height / 430));
+  await page.locator('.loadgame .startup-save', { hasText: 'VerifySlot' }).first().locator('.startup-words strong').click();
   await page.waitForTimeout(600);
   menuLoad = await page.evaluate(() => ({
     picker: null,
     row: 'clicked',
     gold: window.__univ.party.gold,
     slot: window.__univ.treeId !== null,
-    dialogGone: window.__dialogs.active === null,
+    dialogGone: window.__dialogs.active === null && document.querySelector('.loadgame') === null,
   }));
 }
 await shot('02k-menu-load');

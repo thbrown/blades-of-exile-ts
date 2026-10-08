@@ -29,7 +29,7 @@ import {
 } from './e3SaveDefaults';
 import { e3VehicleTable } from './e3SaveImport';
 import type { Vehicle } from '../data/vehicle';
-import type { E3Job } from '../game/e3Jobs';
+import { e3Jobs, e3JobsBase, type E3Job } from '../game/e3Jobs';
 import { TOWN_NUM_OUTDOORS } from '../universe/party';
 import { e3TownBlocks } from './e3SaveTown';
 import type { Player } from '../universe/player';
@@ -255,7 +255,11 @@ export function e3SaveRecordFromGame(univ: Universe, defaults: E3SaveDefaults): 
   p.setI32(E3P.TOTAL_DAM_TAKEN, party.totalDamTaken);
   p.setI16(E3P.DIRECTION, party.direction);
   for (let k = 0; k < 17; k++) p.setU8(E3P.ALCHEMY + k, party.alchemy[k] ? 1 : 0);
-  const jobs = party.e3Jobs;
+  // E3 fills the boards when it makes a party; this port waits until a board
+  // is first looked at (`e3Jobs`). A party that never looked would go out
+  // with six empty boards, and E3 only refills them every 4,000 ticks — so
+  // they are filled now, and the game keeps the boards it exported.
+  const jobs = e3JobsBase(univ) !== null ? e3Jobs(univ) : party.e3Jobs;
   if (jobs) {
     jobs.boards.forEach((board, bank) => board.forEach((j, k) => writeJob(p, E3P.JOB_BOARDS + bank * 0x30 + k * 0xc, j)));
     jobs.held.forEach((j, k) => writeJob(p, E3P.JOBS_HELD + k * 0xc, j));

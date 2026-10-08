@@ -17064,3 +17064,48 @@ Krizsan (towns 0–3). Find a person by `<personality>N<` in `townN.xml`.
       shops sell. New feature flag `start-spells` = `exile3:<mage>;<priest>`,
       written by the converter; `giveE3StartSpells` applies it wherever E3's
       start items are given (a new party, Add PC). The spells page reads it.
+
+
+### Play-test notes, sixteenth round (2026-10-07)
+
+- [x] **Krizsan's job board was empty** in `JOBS.SAV`, a save made for the
+      user to try the board (Valoda, Krizsan's dispatcher, at (45,16) in town
+      0). E3 fills all six boards when it makes a party; this port fills them
+      the first time one is looked at (`e3Jobs`), so a party that never
+      looked was exported with six empty boards — and E3 only refills them
+      every 4,000 ticks. `exportE3Save` now fills them first (the game keeps
+      what it exported). Test in `e3save.test.ts`.
+- [x] **Major Blessing played a sound for each PC.** `flyMissiles` passed
+      the volley's sound to every `runAMissile`, and each played it. The
+      whole volley is one `do_missile_anim`, which plays it once, after its
+      early-outs (boe.newgraph.cpp:429). A mistranslation, not a divergence:
+      every multi-missile spell made one noise per missile (Major Haste,
+      the group spells). Test in `spellCombat.test.ts`.
+- [x] **The inventory's scrollbar thumb wouldn't drag** with touch controls
+      on: a press anywhere on the inventory opened the touch sheet first, and
+      the sheet only took taps. The canvas now asks the scrollbar thumbs
+      before the sheet, and the sheet hands a press on the thumb to a drag
+      (`TouchSheetHost.press`/`drag`/`release`, `touch-action: none`).
+      Checked in Chromium with a mouse, touch controls on and off, and a
+      finger on the sheet.
+- [x] **File › Open Game is the main menu's cards** (`showLoadGame`): the
+      saved-game grid is `savedGameCards` in `startup.ts`, shared by both.
+      A card carries on from its newest save by the clock (as on the main
+      menu), the clock icon opens its tree, the game being played is marked
+      "Playing now" and can't be deleted. An Exile III save imported there
+      in another scenario opens Exile III, as the main menu's does.
+      verify-screen's MENU LOAD step clicks the card now.
+- [x] **The import card is a drop target**, on the main menu and in Open
+      Game: it lights up while a file is held over it, and a dropped file
+      imports as a picked one would (`importFile(file?)`).
+- [ ] **Amber slimes on the Slime Pit's island** (user: none in the
+      original, three in the port, heading south by boat): not reproduced.
+      `EXILE3_BlockedBoat.SAV` imported through the main menu in Chromium
+      has the three amber slimes on that island (slots 0–2, (18–19,46–48))
+      dead, as the save has them; the alive ones are slots 30, 43 and 44,
+      as in E3's `c_town`. Asked the user which save and which build.
+
+**Gotcha (2026-10-07):** verify-screen fails about one run in two on dice
+seeded off the clock: BOOMS (a weak hit plays 71, not 70) and ENCOUNTER (a
+fight where nobody is hurt). Same on the commit before this round. Read the
+log's step lines before blaming a change.
