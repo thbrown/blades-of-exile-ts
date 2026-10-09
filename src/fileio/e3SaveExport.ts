@@ -16,7 +16,7 @@
  */
 
 import type { Item } from '../data/item';
-import { vehicleNumbers } from '../../tools/e3convert/tables';
+import { E3_STASHES, vehicleNumbers } from '../../tools/e3convert/tables';
 import {
   E3Bytes, E3ITEM, E3P, E3PC, E3_OUT_MAPS_SIZE, E3_TOWN_MAPS_SIZE, E3_VILLAGE_MAPS_SIZE, E3_ZONES_ACROSS,
   E3_ZONE_MAP_SIZE, e3MapBit, e3TownMapAt, emptyE3Save, writeE3Save, type E3Save,
@@ -31,7 +31,7 @@ import { e3VehicleTable } from './e3SaveImport';
 import type { Vehicle } from '../data/vehicle';
 import { e3Jobs, e3JobsBase, type E3Job } from '../game/e3Jobs';
 import { TOWN_NUM_OUTDOORS } from '../universe/party';
-import { e3TownBlocks } from './e3SaveTown';
+import { e3ItemList, e3TownBlocks } from './e3SaveTown';
 import { writeE3Notes } from './e3SaveNotes';
 import type { Player } from '../universe/player';
 import { NUM_INVEN_SLOTS, NUM_SPELLS } from '../universe/player';
@@ -69,7 +69,7 @@ export function newE3PartyRecord(defaults: E3SaveDefaults): Uint8Array {
   for (let i = 0; i < 4; i++) p.setI16(E3P.CREATURE_SAVE + i * E3P.CREATURE_LIST_SIZE + 0x1590, 200);
   // FUN_1070_41a4 rolls the magic shops' stock here, and FUN_1008_3c91 the
   // job boards; the jobs are the game's, below.
-  // TODO(e3save): the shops' stock, creature_save, out_c and the stored items.
+  // TODO(e3save): the shops' stock, creature_save and out_c.
   p.setU8(E3P.M_SEEN + 0x26, 1);
   p.setU8(E3P.M_SEEN + 0x28, 1);
   p.setU8(E3P.M_SEEN + 0x4e, 1);
@@ -269,6 +269,8 @@ export function e3SaveRecordFromGame(univ: Universe, defaults: E3SaveDefaults): 
     if (key >= 1 && key <= 20) p.setI16(E3P.KEY_TIMES + 2 * (key - 1), day);
   }
   writeE3Notes(univ, p, defaults, warnings);
+  save.storedItems = E3_STASHES.map((st) => e3ItemList(party.storedItems.get(st.town) ?? [], (item) => itemToE3(defaults, item),
+    warnings, `left in ${scenario.towns[st.town]?.name ?? 'a town'}`));
   save.pcs = party.pcs.slice(0, 6).map((pc) => writePc(defaults, pc, warnings));
   // E3's new PC knows `DS:296c`/`294e`'s spells; an absent slot keeps them.
   save.pcs.forEach((rec, i) => {

@@ -17192,3 +17192,12 @@ and `TODO(e3save)`.
 **Gotcha (2026-10-08):** `e3quests.test.ts`'s "the Mind Crystal ends the
 golem plague" hangs (over 10 minutes, alone or in the full run) at
 `026d93c` too, before this round, so it isn't these changes. Not chased yet.
+- [x] **E3's three stashes, in play and in saves.** The converter had none,
+      so anything a player left in Fort Emergence was gone on return. E3's
+      leaving code (`10d8:272e`) keeps every non-preset item of town 21 in
+      two corners (x 22–28 by y 30–35, x 57 on by y 0–8), and of towns 102
+      and 111 anywhere, in the save's three stored-item lists, which entering
+      copies back (`10d8:1484`). They are now `<store-items>` rects
+      (`E3_STASHES`); **a town may have more than one** (`Scenario.storeItemRects`
+      is a list per town, an item in any is kept; BoE's own files give one).
+      The user's saves hold up to 49 items in them, all matched both ways.

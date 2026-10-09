@@ -154,7 +154,8 @@ function scenarioDumpRaw(s: Scenario): Json {
     initSpec: s.initSpec,
     specStrs: s.specStrs,
     townMods: s.townMods,
-    storeItemRects: Object.fromEntries(s.storeItemRects),
+    // The C++ keeps one rect per town, which is all a BoE scenario can give.
+    storeItemRects: Object.fromEntries([...s.storeItemRects].map(([t, rects]) => [t, rects[0]])),
     boats: s.boats.map(({ loc, sector, whichTown, exists, property }) => ({ loc, sector, whichTown, exists, property })),
     horses: s.horses.map(({ loc, sector, whichTown, exists, property }) => ({ loc, sector, whichTown, exists, property })),
   };

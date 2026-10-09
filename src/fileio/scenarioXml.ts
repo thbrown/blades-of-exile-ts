@@ -156,7 +156,7 @@ export interface ScenarioHeader {
   /** town_mods — `<town-flag>`, an SDF-driven redirect of a town number. */
   townMods: TownMod[];
   /** store_item_rects — where each town's shops keep sold-back goods. */
-  storeItemRects: Map<number, { top: number; left: number; bottom: number; right: number }>;
+  storeItemRects: Map<number, { top: number; left: number; bottom: number; right: number }[]>;
 }
 
 /** readSpecItemFromXml (fileio_scen.cpp:529). */
@@ -325,10 +325,9 @@ export function readScenarioFromXml(root: Element, fname = 'scenario.xml'): Scen
           });
         }
         else if (gt === 'store-items') {
+          // A second rect for the same town adds to the first (`Scenario.storeItemRects`).
           const town = intAttr(g, 'town');
-          if (hdr.storeItemRects.has(town))
-            throw new Error(`${fname}: two <store-items> rects for town ${town}`);
-          hdr.storeItemRects.set(town, rectFromXml(g));
+          hdr.storeItemRects.set(town, [...(hdr.storeItemRects.get(town) ?? []), rectFromXml(g)]);
         } else if (!DEFERRED_GAME.has(gt))
           throw new Error(`${fname}: bad node <${gt}> in <game>`);
       }

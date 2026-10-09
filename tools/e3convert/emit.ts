@@ -26,7 +26,7 @@ import { MonstAbil, MonstGen } from '../../src/data/monsterAbility';
 import { decodeBmp, type Rgba } from '../../src/fileio/legacy/bmp';
 import { PIC_CUSTOM_FULL } from '../../src/data/special';
 import { BG_RECTS, E3_PATTERN_SLOTS } from '../../src/render/tiling';
-import { E3_ABILITY_TO_LEGACY, E3_BREATH_RANGE, E3_RADIATE, E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3Crumbles, readE3ItemAbilities, readE3Unlocks, readE3Items, readE3Monsters, readE3PersonalityFaces, readE3RoadJoins, readE3Start, readE3StartItems, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3StartItems, type E3TerrainType, type E3Vehicle } from './tables';
+import { E3_ABILITY_TO_LEGACY, E3_BREATH_RANGE, E3_RADIATE, E3_STASHES, E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3Crumbles, readE3ItemAbilities, readE3Unlocks, readE3Items, readE3Monsters, readE3PersonalityFaces, readE3RoadJoins, readE3Start, readE3StartItems, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3StartItems, type E3TerrainType, type E3Vehicle } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3PresetItem, type E3Town } from './town';
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
 import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
@@ -944,7 +944,7 @@ function scenarioXml(
         <outdoor-start x="${outStart.sector.x}" y="${outStart.sector.y}" />
         <sector-start x="${outStart.loc.x}" y="${outStart.loc.y}" />
 ${shops.map(shopXml).join('')}${specialItems.map(specialItemXml).join('')}        <timer freq="3700">${newDay}</timer>
-${townStatesXml()}${specStrings.map((str, i) => `        <string id="${i}">${esc(str)}</string>\n`).join('')}${journal.map((str, i) => (str ? `        <journal id="${i}">${esc(str)}</journal>\n` : '')).join('')}    </game>
+${townStatesXml()}${specStrings.map((str, i) => `        <string id="${i}">${esc(str)}</string>\n`).join('')}${journal.map((str, i) => (str ? `        <journal id="${i}">${esc(str)}</journal>\n` : '')).join('')}${E3_STASHES.flatMap((st) => st.rects.map((r) => `        <store-items top="${r.top}" left="${r.left}" bottom="${r.bottom}" right="${r.right}" town="${st.town}" />\n`)).join('')}    </game>
 </scenario>
 `;
 }

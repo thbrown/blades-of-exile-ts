@@ -116,7 +116,12 @@ export interface Scenario {
    * one town number by the value of a Stuff Done Flag (boe.town.cpp:99).
    */
   townMods: TownMod[];
-  storeItemRects: Map<number, { top: number; left: number; bottom: number; right: number }>;
+  /**
+   * `store_item_rects` by `store_item_towns`: each town's storage rects. BoE
+   * gives a town one; a town may have more here (Exile III's Fort Emergence
+   * keeps two corners), and an item in any of them is kept.
+   */
+  storeItemRects: Map<number, { top: number; left: number; bottom: number; right: number }[]>;
   /** The scenario's boat/horse templates, by vehicle number (fileio_scen.cpp). */
   boats: Vehicle[];
   horses: Vehicle[];

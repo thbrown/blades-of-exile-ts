@@ -16,7 +16,7 @@
  *   over it (`applyE3TownTerrain`, `applyE3TownCreatures`,
  *   `applyE3TownItems`);
  * - the four remembered towns' creatures (`creature_save`), the wandering
- *   groups outdoors (`out_c`), the magic shops' stock and the stored items;
+ *   groups outdoors (`out_c`) and the magic shops' stock;
  * - the converter's own flags, in SDF columns 10–49 (`flags.ts`): a one-shot
  *   spot E3 erased, the daily stamps and the day counts. Only the town states
  *   (`e3TownState`) are worked out again, since they follow from the day.
@@ -27,7 +27,7 @@ import type { Item } from '../data/item';
 import { defaultItem } from '../data/item';
 import { TOWN_STATES } from '../../tools/e3convert/towns/townStates';
 import { e3DayReached, e3TownState } from '../../tools/e3convert/flags';
-import { vehicleNumbers, type E3Vehicle } from '../../tools/e3convert/tables';
+import { E3_STASHES, vehicleNumbers, type E3Vehicle } from '../../tools/e3convert/tables';
 import {
   E3Bytes, E3CREATURE, E3CTOWN, E3ITEM, E3MONST, E3TD, E3P, E3PC, E3_ZONES_ACROSS, E3_ZONE_MAP_SIZE, e3MapBit, e3TownMapAt, readE3Save, type E3Save,
 } from './e3save';
@@ -222,8 +222,7 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
   party.horses = scenario.horses.filter((v) => v.exists).map((v) => ({ ...v }));
   for (const town of scenario.towns) town.canFind = !town.isHidden;
   univ.refreshStoreItems();
-  // TODO(e3save): creature_save, out_c, the magic shops' stock and the
-  // stored items.
+  // TODO(e3save): creature_save, out_c and the magic shops' stock.
 
   const p = new E3Bytes(save.party);
   party.age = p.i32(E3P.AGE);
@@ -270,6 +269,13 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
   }
   // The journal and the notes, by E3's string numbers (`e3SaveNotes.ts`).
   readE3Notes(univ, p, defaults, warnings);
+  // The three stashes (`E3_STASHES`); an empty one is no list, as a town
+  // never left has none.
+  party.storedItems.clear();
+  E3_STASHES.forEach((st, k) => {
+    const list = readE3ItemList(univ, save.storedItems[k]!, defaults, warnings, `left in ${scenario.towns[st.town]?.name ?? 'a town'}`);
+    if (list.length) party.storedItems.set(st.town, list);
+  });
   // The converter's town states, which E3 works out on entering the town.
   // TODO(e3save): its other flags (one-shot spots, daily stamps, day counts).
   TOWN_STATES.forEach((g, k) => {
@@ -489,6 +495,12 @@ export function applyE3TownItems(univ: Universe, items: Uint8Array, defaults: E3
   const town = univ.town;
   if (!town) return [];
   const warnings: string[] = [];
+  town.items = readE3ItemList(univ, items, defaults, warnings, 'on the ground');
+  return warnings;
+}
+
+/** A list of items lying in a town (`e3ItemList`), as the engine's; `where` names them in a warning. */
+function readE3ItemList(univ: Universe, items: Uint8Array, defaults: E3SaveDefaults, warnings: string[], where: string): Item[] {
   const laid: Item[] = [];
   for (let k = 0; k < E3_TOWN_ITEMS_HELD; k++) {
     const rec = items.subarray(E3ITEM.SIZE * k, E3ITEM.SIZE * (k + 1));
@@ -496,7 +508,7 @@ export function applyE3TownItems(univ: Universe, items: Uint8Array, defaults: E3
     if (b.i16(E3ITEM.VARIETY) === 0) continue;
     const item = e3ItemToItem(univ, rec, defaults);
     if (item === null) {
-      warnings.push(`The "${b.str(E3ITEM.FULL_NAME, E3ITEM.FULL_NAME_LEN)}" on the ground has no match in the scenario.`);
+      warnings.push(`The "${b.str(E3ITEM.FULL_NAME, E3ITEM.FULL_NAME_LEN)}" ${where} has no match in the scenario.`);
       continue;
     }
     item.itemLoc = b.loc(E3ITEM.LOC);
@@ -505,6 +517,5 @@ export function applyE3TownItems(univ: Universe, items: Uint8Array, defaults: E3
     item.contained = b.u8(E3ITEM.CONTAINED) !== 0;
     laid.push(item);
   }
-  town.items = laid;
-  return warnings;
+  return laid;
 }

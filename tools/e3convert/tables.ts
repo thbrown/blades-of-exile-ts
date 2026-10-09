@@ -223,6 +223,22 @@ export function readE3MonsterRefusals(exe: Uint8Array): Set<number> {
   return out;
 }
 
+/**
+ * E3's three stashes: the towns whose dropped items are kept, and where.
+ * Leaving the town (`10d8:272e`) copies each of `t_i`'s 115 items that isn't
+ * a preset's (`+12` clear) into the stash for that town (party block
+ * `1168:84de`, `:a12b`, `:bd78`, in this order), and clears the rest;
+ * entering it (`10d8:1484`) copies the stash back before the presets go
+ * down. Fort Emergence (21) keeps only two corners, x 22–28 by y 30–35 and
+ * x 57 on by y 0–8; towns 102 and 111 keep everything. They are BoE's
+ * storage rects, a town with two among them (`Scenario.storeItemRects`).
+ */
+export const E3_STASHES: { town: number; rects: { left: number; top: number; right: number; bottom: number }[] }[] = [
+  { town: 21, rects: [{ left: 22, top: 30, right: 28, bottom: 35 }, { left: 57, top: 0, right: 63, bottom: 8 }] },
+  { town: 102, rects: [{ left: 0, top: 0, right: 63, bottom: 63 }] },
+  { town: 111, rects: [{ left: 0, top: 0, right: 63, bottom: 63 }] },
+];
+
 /** `DS:3850`: each terrain's arena kind, the first of `FUN_10d8_342b`'s tables. */
 export const E3_ARENA_KINDS = 0x3850;
 

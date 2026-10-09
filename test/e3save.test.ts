@@ -244,6 +244,31 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     expect(again.subarray(E3P.SPECIAL_NOTES, E3P.TOTAL_M_KILLED)).toEqual(save.party.subarray(E3P.SPECIAL_NOTES, E3P.TOTAL_M_KILLED));
   });
 
+  it("keeps what is left in E3's three stashes, in the game and across a save", async () => {
+    // Fort Emergence keeps two corners; towns 102 and 111 the whole town.
+    expect(scen.storeItemRects.get(21)).toEqual([{ left: 22, top: 30, right: 28, bottom: 35 }, { left: 57, top: 0, right: 63, bottom: 8 }]);
+    expect(scen.storeItemRects.get(102)).toHaveLength(1);
+    expect(scen.storeItemRects.get(111)).toHaveLength(1);
+    const q = new QuestRunner(scen);
+    await q.enter(21, { x: 58, y: 5 });
+    const sword = scen.scenItems.findIndex((it) => /Steel Broadsword/.test(it.fullName));
+    const drop = (x: number, y: number) => q.town.items.push({ ...scen.scenItems[sword]!, itemLoc: { x, y }, isSpecial: 0 });
+    drop(58, 4);
+    drop(25, 32);
+    drop(40, 20);
+    await q.enter(22);
+    expect(q.party.storedItems.get(21)?.map((it) => it.itemLoc)).toEqual([{ x: 58, y: 4 }, { x: 25, y: 32 }]);
+    const bytes = exportE3Save(q.univ, defaults).bytes;
+    const back = new QuestRunner(scen);
+    applyE3Save(bytes, back.univ, defaults);
+    expect(back.party.storedItems.get(21)?.map((it) => [it.fullName, it.itemLoc]))
+      .toEqual(q.party.storedItems.get(21)?.map((it) => [it.fullName, it.itemLoc]));
+    // Back in the fort, the two kept are lying where they were dropped.
+    await back.enter(21, { x: 58, y: 5 });
+    expect(back.town.items.filter((it) => it.fullName === scen.scenItems[sword]!.fullName).map((it) => it.itemLoc))
+      .toEqual([{ x: 58, y: 4 }, { x: 25, y: 32 }]);
+  });
+
   it('fills the job boards of a party that never looked at one, as E3 fills them for a new party', async () => {
     const q = new QuestRunner(scen);
     expect(q.party.e3Jobs ?? null).toBeNull();
@@ -459,6 +484,10 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
       // The journal, the encounter notes and the conversation notes, every one read and written back.
       expect(res.warnings.filter((w) => /journal|notes/i.test(w)), file).toEqual([]);
       expect(out.party.subarray(E3P.JOURNAL_STR, E3P.HELP_RECEIVED), file).toEqual(save.party.subarray(E3P.JOURNAL_STR, E3P.HELP_RECEIVED));
+      // The stashes: every item in, and out again in the same order and places.
+      const stash = (list: Uint8Array) => [...Array(115).keys()].map((k) => new E3Bytes(list.subarray(63 * k, 63 * k + 63)))
+        .filter((r) => r.i16(E3ITEM.VARIETY) !== 0).map((r) => [r.str(E3ITEM.FULL_NAME, E3ITEM.FULL_NAME_LEN), r.loc(E3ITEM.LOC)]);
+      save.storedItems.forEach((list, k) => expect(stash(out.storedItems[k]!), `${file} stash ${k}`).toEqual(stash(list)));
       // A reply number E3 left stale, whose string is empty, reads as nothing (e3SaveNotes.ts).
       const notes = (party: Uint8Array) => {
         const b = new E3Bytes(party.slice(E3P.SPECIAL_NOTES, E3P.TOTAL_M_KILLED));

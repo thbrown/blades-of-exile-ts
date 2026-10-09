@@ -289,13 +289,24 @@ export function e3TownBlocks(
   c.setLoc(E3CTOWN.P_LOC, party.townLoc);
   c.setStr(E3CTOWN.NAME, E3CTOWN.NAME_LEN, record.name);
 
+  const items = e3ItemList(town.items, itemToE3, warnings, 'on the ground');
+  return { cTown: c.data, data, items, miscI, sfx };
+}
+
+/**
+ * Items lying in a town as E3 lists them, 115 of 63 bytes: `t_i`, and each
+ * of the stashes (`E3_STASHES`). Each keeps its square, its preset slot plus
+ * one (`isSpecial`), and whether it is someone else's or in a container.
+ * `where` names them in a warning.
+ */
+export function e3ItemList(list: Item[], itemToE3: (item: Item) => Uint8Array | null, warnings: string[], where: string): Uint8Array {
   const items = new Uint8Array(E3_ITEM_LIST_SIZE);
   let n = 0;
-  for (const item of town.items) {
+  for (const item of list) {
     if (item.variety === 0) continue;
-    if (n === ITEMS_HELD) { warnings.push(`Exile III holds ${ITEMS_HELD} items in a town; the rest on the ground were left out.`); break; }
+    if (n === ITEMS_HELD) { warnings.push(`Exile III holds ${ITEMS_HELD} items in a town; the rest ${where} were left out.`); break; }
     const rec = itemToE3(item);
-    if (rec === null) { warnings.push(`The "${item.fullName}" on the ground isn't one of Exile III's items, and was left out.`); continue; }
+    if (rec === null) { warnings.push(`The "${item.fullName}" ${where} isn't one of Exile III's items, and was left out.`); continue; }
     const b = new E3Bytes(rec);
     b.setU8(E3ITEM.IS_SPECIAL, item.isSpecial);
     b.setU8(E3ITEM.PROPERTY, item.property ? 1 : 0);
@@ -303,5 +314,5 @@ export function e3TownBlocks(
     b.setLoc(E3ITEM.LOC, item.itemLoc);
     items.set(rec, E3ITEM.SIZE * n++);
   }
-  return { cTown: c.data, data, items, miscI, sfx };
+  return items;
 }

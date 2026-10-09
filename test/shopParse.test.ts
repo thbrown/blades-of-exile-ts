@@ -73,7 +73,7 @@ describe('reading <shop> from scenario.xml', () => {
   });
 
   it('reads the store-items rect', async () => {
-    expect(scen.storeItemRects.get(0)).toEqual({ top: 0, left: 0, bottom: 47, right: 47 });
+    expect(scen.storeItemRects.get(0)).toEqual([{ top: 0, left: 0, bottom: 47, right: 47 }]);
   });
 });
 

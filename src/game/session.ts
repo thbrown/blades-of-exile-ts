@@ -6317,12 +6317,12 @@ export class GameSession {
     // remembered (boe.town.cpp:578). `is_special == 0` is the whole filter —
     // a preset special item dropped in the stash is *not* kept, because
     // `start_town_mode` would place it again from the preset list.
-    const rect = this.univ.scenario.storeItemRects.get(party.townNum);
-    if (rect) {
+    const rects = this.univ.scenario.storeItemRects.get(party.townNum);
+    if (rects) {
       party.storedItems.set(party.townNum, town.items
         .filter((it) => it.variety !== ItemType.NO_ITEM && it.isSpecial === 0
-          && it.itemLoc.x >= rect.left && it.itemLoc.x <= rect.right
-          && it.itemLoc.y >= rect.top && it.itemLoc.y <= rect.bottom)
+          && rects.some((rect) => it.itemLoc.x >= rect.left && it.itemLoc.x <= rect.right
+            && it.itemLoc.y >= rect.top && it.itemLoc.y <= rect.bottom))
         .map((it) => ({ ...it })));
     }
 

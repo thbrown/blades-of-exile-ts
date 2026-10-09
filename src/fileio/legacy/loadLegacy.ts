@@ -224,7 +224,7 @@ function specialMap(nodes: SpecialNode[]): Map<number, SpecialNode> {
 /** `store_item_rects[store_item_towns[i]] = rect` — a map by town, -1 included. */
 function storeItemRects(old: LegacyScenario): Scenario['storeItemRects'] {
   const rects: Scenario['storeItemRects'] = new Map();
-  old.storeItemRects.forEach((rect, i) => { rects.set(old.storeItemTowns[i]!, { ...rect }); });
+  old.storeItemRects.forEach((rect, i) => { rects.set(old.storeItemTowns[i]!, [{ ...rect }]); });
   return rects;
 }
 
