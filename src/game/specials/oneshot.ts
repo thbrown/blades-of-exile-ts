@@ -5,7 +5,8 @@
  * rather than a flag: the node names an SDF, refuses to run when it already
  * holds **250**, and writes 250 on the way out. A node that couldn't complete
  * (the party had no room for the item, the player walked away) deliberately
- * skips that write so it can be tried again.
+ * skips that write so it can be tried again. (Exile III's are another
+ * convention: `e3Once`.)
  */
 
 import { SpecType } from '../../data/special';
@@ -26,6 +27,49 @@ import { SelectPcMode, runSelectPc } from '../selectPc';
 
 /** The sentinel meaning "this one-shot has fired". */
 export const ONCE_DONE = 250;
+
+/**
+ * Exile III's one-shot helpers (`FUN_10e0_0044`, the once message;
+ * `FUN_10e0_00ec`, the item dialog) aren't BoE's: they write **20**, count any
+ * flag above 0 as done, and a done one returns, so the handler goes on with
+ * whatever follows it. The converted scenario asks for that with
+ * `<once>exile3</once>`, and every ONCE node then behaves so. Found by running
+ * the EXE against the conversion (`test/e3emu.test.ts`, PROGRESS.md "EXILE3.EXE
+ * run as an oracle").
+ */
+export const E3_ONCE_DONE = 20;
+
+export function e3Once(univ: Universe): boolean {
+  return univ.scenario.featureFlags['once'] === 'exile3';
+}
+
+/** Whether a one-shot's flag says it has fired. */
+export function onceDone(univ: Universe, value: number): boolean {
+  return e3Once(univ) ? value > 0 : value === ONCE_DONE;
+}
+
+/**
+ * Exile III's `give_to_party(item, print)` (`FUN_1070_0401`, 1997's
+ * ITEMS.CPP:158): each PC in turn, weight and all, as `partyGiveItem`. With
+ * `print` it says "  Name gets Item." and, for each PC that can't, "Item too
+ * heavy to carry."; and either way `combine_things` says "(items combined)",
+ * which in 1997 it always does (ITEMS.CPP:726).
+ */
+function e3GiveToParty(univ: Universe, itemIndex: number, print: boolean): boolean {
+  const item = univ.scenario.scenItems[itemIndex];
+  if (!item) return false;
+  for (const pc of univ.party.pcs) {
+    if (pc.mainStatus !== MainStatus.ALIVE) continue;
+    const combined: string[] = [];
+    const result = giveItem(pc, univ.party, { ...item }, false, false, undefined, (l) => combined.push(l));
+    if (result.status === GiveStatus.OK) {
+      for (const line of [print ? result.message : '', ...combined]) if (line) univ.addStringToBuf(line);
+      return true;
+    }
+    if (print && result.status === GiveStatus.TOO_HEAVY) univ.addStringToBuf(result.message);
+  }
+  return false;
+}
 
 /** basic_buttons (basicbtns.cpp:18) — a node names its buttons by index. */
 export const BASIC_BUTTONS = [
@@ -162,16 +206,21 @@ export async function oneshotSpec(
   let setSd = true;
   ctx.nextSpec = spec.jumpto;
 
-  // Already fired: stop the chain dead.
-  if (party.sdLegit(spec.sd1, spec.sd2) && party.getSdf(spec.sd1, spec.sd2) === ONCE_DONE) {
-    ctx.nextSpec = -1;
+  // Already fired: stop the chain dead. (Exile III's go on: `e3Once`.)
+  const e3 = e3Once(univ);
+  if (party.sdLegit(spec.sd1, spec.sd2) && onceDone(univ, party.getSdf(spec.sd1, spec.sd2))) {
+    if (!e3) ctx.nextSpec = -1;
     return;
   }
 
   switch (spec.type) {
     case SpecType.ONCE_GIVE_ITEM:
+      // Exile III's give is `FUN_1070_0564`, `give_to_party` with print on,
+      // where BoE's is a forced give that ignores weight; `m3` 1 is
+      // `FUN_1070_05a5`, the same with print off. (One town call, `1088:19bc`,
+      // calls `give_to_party` with print off directly, and is said here.)
       if (spec.ex1a >= 0 && spec.ex1a < univ.scenario.scenItems.length
-        && !forcedGive(univ, spec.ex1a)) {
+        && !(e3 ? e3GiveToParty(univ, spec.ex1a, spec.m3 !== 1) : forcedGive(univ, spec.ex1a))) {
         // Couldn't take it — leave the flag unset so it's still here later.
         setSd = false;
         if (spec.ex2b >= 0) ctx.nextSpec = spec.ex2b;
@@ -247,7 +296,32 @@ export async function oneshotSpec(
         strs, threeChoiceButtons([9, 19, -1]), '', spec.pic, spec.pictype);
       if (picked === 0) {
         setSd = false;
-        ctx.nextSpec = -1;
+        // Exile III's Leave (`FUN_10e0_00ec`) returns, and the handler goes on.
+        if (!e3) ctx.nextSpec = -1;
+        break;
+      }
+      if (e3) {
+        // Exile III's Take: `give_to_party` with print off, and the rewards
+        // without a word; a special item already held is said and leaves the
+        // flag as it was. A full pack shows E3's dialog 0x419, which this
+        // says as BoE's give does instead. TODO(e3give): show dialog 0x419.
+        if (spec.ex1a >= 0 && !e3GiveToParty(univ, spec.ex1a, false)) {
+          univ.addStringToBuf('  Your party can\'t carry any more.');
+          setSd = false;
+          break;
+        }
+        if (spec.ex2a > 0) party.food += spec.ex2a;
+        if (spec.ex1b > 0) party.gold += spec.ex1b;
+        if (spec.m3 >= 0 && spec.m3 < 50) {
+          if (party.specItems.has(spec.m3)) {
+            univ.addStringToBuf('You already have this special item.');
+            setSd = false;
+            break;
+          }
+          party.specItems.add(spec.m3);
+          ctx.redraw = true;
+        }
+        if (spec.ex2b >= 0) ctx.nextSpec = spec.ex2b;
         break;
       }
       if (spec.ex1a >= 0 && !partyGiveItem(univ, spec.ex1a)) {
@@ -357,5 +431,5 @@ export async function oneshotSpec(
   if (checkMess) await handleMessage(univ, ctx);
   // Mark it done — unless the node bailed out and wants another chance.
   if (setSd && party.sdLegit(spec.sd1, spec.sd2))
-    party.setSdf(spec.sd1, spec.sd2, ONCE_DONE);
+    party.setSdf(spec.sd1, spec.sd2, e3 ? E3_ONCE_DONE : ONCE_DONE);
 }

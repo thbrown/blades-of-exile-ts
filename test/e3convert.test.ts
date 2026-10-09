@@ -1350,8 +1350,9 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     const node = krizsan.specials.get(pref.ex1b)!;
     expect(node.type).toBe(SpecType.ONCE_DISPLAY_MSG);
     const again = krizsan.specials.get(pref.jumpto)!;
-    expect([again.type, again.sd1, again.sd2, again.ex1a]).toEqual([SpecType.IF_SDF_EQ, node.sd1, node.sd2, 250]);
-    expect(krizsan.specials.get(again.jumpto)!.type).toBe(SpecType.DISPLAY_MSG);
+    // Still there while the one-shot's flag is 0 (it writes 20: `e3Once`).
+    expect([again.type, again.sd1, again.sd2, again.ex1a]).toEqual([SpecType.IF_SDF_EQ, node.sd1, node.sd2, 0]);
+    expect(krizsan.specials.get(again.ex1b)!.type).toBe(SpecType.DISPLAY_MSG);
     expect(krizsan.specStrs[node.m1]).toMatch(/^This is the inn's common room/);
     // A flag of the converter's own, in a column E3 never uses.
     expect([node.sd1, node.sd2]).toEqual([0, 16]);

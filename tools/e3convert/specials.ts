@@ -244,10 +244,10 @@ export function e3SpotScript(
       n = b.compile(thenOpen(terrainAt(s.loc.x, s.loc.y) >= repeatsFrom
         ? [(next) => b.node('disp-msg', { msg, pic }, next)]
         // Once, unless room descriptions repeat — and then only while the
-        // spot is still there (a one-shot node leaves its flag at 250).
+        // spot is still there (a one-shot node leaves its flag set: 20, `e3Once`).
         : [b.ifFlagEq(ROOM_DESCRIPTIONS, 0,
           [(next) => b.node('once-disp-msg', { sdf: once, msg, pic }, next)],
-          [b.ifFlagEq(once, 250, [], [(next) => b.node('disp-msg', { msg, pic }, next)])])]));
+          [b.ifFlagEq(once, 0, [(next) => b.node('disp-msg', { msg, pic }, next)])])]));
     }
     // E3 runs a town spot only on a square the party could stand on, or on
     // one of four blocked terrains — water and three walls — which it runs

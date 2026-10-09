@@ -902,6 +902,8 @@ function scenarioXml(
         <message-sounds>exile3</message-sounds>
         <bash>exile3</bash>
         <room-descriptions>exile3</room-descriptions>
+        <once>exile3</once>
+        <gifts>exile3</gifts>
         <explode-spots>exile3</explode-spots>
         <pick-lock>exile3</pick-lock>
         <crumble>exile3:${crumbles.join(',')}</crumble>

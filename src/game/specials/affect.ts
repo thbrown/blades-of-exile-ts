@@ -514,17 +514,19 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       else party.alchemy[spec.ex1a] = !spec.ex1b;
       break;
 
+    // Exile III's scripts add gold and food without a word (`<gifts>exile3</gifts>`):
+    // what they say, they say themselves.
     case SpecType.AFFECT_GOLD:
       if (spec.ex1b === 0) {
         party.gold = Math.min(MAX_GOLD, party.gold + spec.ex1a);
-        univ.addStringToBuf(`  You get ${spec.ex1a} gold.`);
+        if (univ.scenario.featureFlags['gifts'] !== 'exile3') univ.addStringToBuf(`  You get ${spec.ex1a} gold.`);
       } else party.gold = Math.max(0, party.gold - spec.ex1a);
       break;
 
     case SpecType.AFFECT_FOOD:
       if (spec.ex1b === 0) {
         party.food = Math.min(MAX_FOOD, party.food + spec.ex1a);
-        univ.addStringToBuf(`  You get ${spec.ex1a} food.`);
+        if (univ.scenario.featureFlags['gifts'] !== 'exile3') univ.addStringToBuf(`  You get ${spec.ex1a} food.`);
       } else party.food = Math.max(0, party.food - spec.ex1a);
       break;
 

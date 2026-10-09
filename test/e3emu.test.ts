@@ -107,7 +107,6 @@ function clearNameTails(pcs: Uint8Array): Uint8Array {
  */
 const KNOWN: [RegExp, string][] = [
   [/^party OUT_C/, 'an encounter group is placed by the party, not on E3\'s marker spot (script.ts, onceEncounter), and exported as its zone\'s first group'],
-  [/: E3 0→20, port 0→250$/, 'BoE\'s once-nodes mark a flag 250 where E3\'s one-shot helpers write 20'],
 ];
 
 /** How long one case may take on the port's side before it's reported and skipped. */
@@ -357,11 +356,6 @@ describe.skipIf(!hasEmu)("Exile III's own code against the converted scripts", (
         if (kept.length !== portLines.length) res.known.push(why);
         portLines = kept;
       };
-      // The engine's `if-gold` says what it took; E3's `FUN_1070_0623` doesn't.
-      drop(/^You give up \d+ (gold|food)\.$/, 'lines: the engine\'s if-gold says "You give up N gold.", E3\'s pay (FUN_1070_0623) says nothing');
-      // E3's item dialog (`FUN_10e0_00ec`) gives silently; its `give_to_pc` speaks.
-      if (!e3Lines.some((l) => / gets /.test(l)))
-        drop(/ gets .*\.$|^You get (\d+ (gold|food)|a special item)\.$/, 'lines: the engine says what an item dialog gave; E3\'s FUN_10e0_00ec gives silently');
       // Lava outdoors is E3's move (`outd_move_party`), not this check; the port's step does both.
       const lava = portLines.includes('LAVA!') && !e3Lines.includes('LAVA!');
       if (lava) drop(/^LAVA!$| takes \d+\.$/, 'lava: outdoors E3 burns in its move function, which this check doesn\'t run');
@@ -405,6 +399,25 @@ describe.skipIf(!hasEmu)("Exile III's own code against the converted scripts", (
   ].flatMap((t) => (['low', 'high'] as const).map((dice) => ({ ...t, dice }))))(
     "Vilovsky's temple (zone 5, spot 1): $label, dice $dice", async ({ answers, dice }) => {
     const r = await compare({ save: Q12(), zone: 5, x: 14, y: 37, answers, dice });
+    expect(r.diffs, [...r.diffs, 'E3:', ...r.e3, 'port:', ...r.port].join('\n')).toEqual([]);
+  }, 60000);
+
+  /**
+   * Spots the sweep found different, fixed since (PROGRESS.md, "EXILE3.EXE run
+   * as an oracle"), each taken twice: what the first visit leaves shows on the
+   * second.
+   */
+  it.each([
+    { label: 'zone 0, the ember flowers left: the swamp denizens still come', zone: 0, x: 16, y: 17, answers: 'first' as const },
+    { label: 'zone 27, the campsite left: the bandits still come', zone: 27, x: 15, y: 6, answers: 'first' as const },
+    { label: 'zone 42, the cairns\' loot, once under slot 8', zone: 42, x: 21, y: 33, answers: 'last' as const },
+    { label: 'zone 65, forty bars by weight', zone: 65, x: 10, y: 11, answers: 'last' as const },
+    { label: 'zone 32, ore that stacks: "(items combined)"', zone: 32, x: 28, y: 19, answers: 'last' as const },
+    { label: 'zone 32, 1500 gold and herbs, the gold without a word', zone: 32, x: 22, y: 7, answers: 'last' as const },
+    { label: 'zone 67, ore given silently, combined aloud', zone: 67, x: 26, y: 16, answers: 'last' as const },
+    { label: 'zone 48, 400 gold without a word', zone: 48, x: 18, y: 45, answers: 'last' as const },
+  ])('$label', async ({ zone, x, y, answers }) => {
+    const r = await compare({ save: Q12(), zone, x, y, answers, dice: 'low', visits: 2 });
     expect(r.diffs, [...r.diffs, 'E3:', ...r.e3, 'port:', ...r.port].join('\n')).toEqual([]);
   }, 60000);
 

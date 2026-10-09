@@ -17283,37 +17283,45 @@ it works and how to set up its Python.
   and `tools/e3convert/emu/report.mjs` groups what it finds. `KNOWN` in the
   test lists the differences already understood, so a sweep shows what's new.
 
-**The sweep from Q12: 3,128 runs, 3,112 agree, 0 errors.** Findings, the
-first fixed and the rest for the user to rule on:
+**The sweep from Q12 found five things, all fixed (2026-10-09)**, and now
+**all 3,128 runs agree** (only the encounter groups' placement, below, is
+left in `KNOWN`). The fixed spots are pinned cases in the test, each taken
+twice:
 
-1. **Fixed: zone 42's loot marked the wrong flag.** The cairns' 750 gold
-   (dialog 0x152d) is once under slot 8 (`1158:0a00`, pushed at
-   `10a0:29d9`), not slot 0 as transcribed.
-2. **"Leave" on an E3 item dialog ends the port's chain; E3 carries on.**
-   `giveItemDialog` is BoE's ONCE_GIVE_ITEM_DIALOG, whose Leave sets
-   `nextSpec = -1` (`oneshot.ts`); E3's `FUN_10e0_00ec` returns and the
-   handler goes on. Leaving zone 0's ember flowers skips the swamp
-   denizens' ambush E3 springs ("As you search the flowers…"); the same in
-   zones 27 (the bandit campsite) and 70 (the dead end). The steps that
-   matter are those after a `giveItemDialog` that aren't
-   `ifFlagAtLeast(spot, 1, …)`: `zones.ts` lines 52, 381, 410, 572 (a
-   message and a spell taught), 902.
-3. **E3's `give_to_pc` weighs; the port's `giveItem` counts slots.** Zone
-   65's forty bars: E3 says "Item too heavy to carry." and goes on to the
-   next PC (calling them "Metal Bar"); the port fills packs to 24 slots, so
-   the packs and the equipped slots end up different.
-4. **"(items combined)"**: E3 says it when a given item stacks (zones 15,
-   32, 67); the port doesn't.
-5. **Known, and kept out of the count (`KNOWN` in the test):** spot flags
-   250 where E3's one-shot helpers write 20 (about 100 spots; a spot below
-   10 whose own flag is exactly 20 is dead in E3, `specials.ts`, so a spot
-   marked 250 can run again, and an exported save carries 250); "  You give
-   up N gold." on every E3 payment, which `FUN_1070_0623` doesn't say; "X
-   gets Y." and "You get N gold." from item dialogs, where `FUN_10e0_00ec`
-   is silent; encounter groups placed by the party, not on the zone's
-   marker (already in `script.ts`), and exported as the zone's *first*
-   group's bytes; lava outdoors, which E3 does in its move function and
-   this check doesn't run.
+1. **Zone 42's loot marked the wrong flag.** The cairns' 750 gold (dialog
+   0x152d) is once under slot 8 (`1158:0a00`, pushed at `10a0:29d9`), not
+   slot 0 as transcribed.
+2. **E3's one-shots aren't BoE's** (DIVERGENCES #61): they write 20, count
+   any flag above 0 as done, and a done one returns so the handler goes on.
+   BoE's ONCE nodes write 250, test for 250 exactly and end the chain. Now
+   `<once>exile3</once>` (`e3Once` in `oneshot.ts`) makes the engine's do
+   E3's; the converter's two guards that read 250 (`giveItemDialog`'s lead
+   pages, the room-description spots) read "set" instead.
+3. **"Leave" on an E3 item dialog ended the port's chain**; E3's returns.
+   Leaving zone 0's ember flowers skipped the swamp denizens' ambush, and
+   zones 27 and 70 the same. Also under `e3Once`: the dialog's Take gives
+   silently (gold and food too), as `give_to_party(item, 0)` does.
+4. **E3's give weighs.** `FUN_1070_0564` is `give_to_party(item, 1)`: "Item
+   too heavy to carry.", then the next PC, and 1997's "(items combined)".
+   The port gave BoE's forced give, by slot. And **a failed give fell
+   through to its success branch** when nothing followed it: ONCE_GIVE_ITEM
+   jumps on failure only to an `ex2b` of 0 or more, so the converter's -1
+   meant "go on giving" (`failTo` in `script.ts` now ends on a `nop`).
+   Zone 65's forty bars match E3 line for line.
+5. **The port spoke where E3 is silent.** `pay` said "  You give up n
+   gold." (`FUN_1070_0623` doesn't: now an `ifGold` and a silent take), and
+   `gold(n)`/`food(n)` said "  You get n gold." (E3's scripts add to the
+   party record without a word; `<gifts>exile3</gifts>` makes AFFECT_GOLD
+   and AFFECT_FOOD give silently). Zone 67's ore is given by
+   `FUN_1070_05a5`, the silent give, which still says "(items combined)":
+   1997's `combine_things` always does.
+
+Left in `KNOWN`: encounter groups placed by the party, not on the zone's
+marker (already in `script.ts`), and exported as the zone's *first* group;
+lava outdoors, which E3 does in its move and this check doesn't run. Open
+for every scenario: 1997 says "(items combined)" and OBoE never does
+(DIVERGENCES #62). `TODO(e3give)`: a full pack at an item dialog shows E3's
+dialog 0x419.
 
 Harness lessons, any of which would make a sweep lie:
 

@@ -854,7 +854,8 @@ function zone67(b: SpecBuilder): Map<number, Step[]> {
   const Z = 67, B = block(Z), spot = (id: number) => zoneSpotFlag(Z, id);
   return new Map<number, Step[]>([
     // Silver ore (0x193) until nobody has room: E3 stops after 41.
-    [1, [b.askDialog(0x1626, [b.msg(B, 0x24), b.giveItemUntilFull(0x193, 41, FIND_COUNT), b.setFlag(spot(1), 20)])]],
+    // The ore, given without a word (`FUN_1070_05a5`, `10a8:1733`).
+    [1, [b.askDialog(0x1626, [b.msg(B, 0x24), b.giveItemUntilFull(0x193, 41, FIND_COUNT, true), b.setFlag(spot(1), 20)])]],
     [2, [b.onceEncounter(spot(2), B, 0x22, 0, 0), b.onceEncounter(spot(9), B, 0, 0, 1)]],
     [3, [b.giveItemDialog(0x1627, spot(3), 0xf1)]],
   ]);

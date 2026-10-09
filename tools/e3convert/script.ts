@@ -415,7 +415,8 @@ export class SpecBuilder {
       }, next);
       // A second visit must not replay the lead pages: guard them by the flag.
       const lead = this.leadPages(pages, last, pic);
-      return lead === last ? last : this.node('if-sdf', { sdf: flag, ex1: [250, next] }, lead);
+      // (Any value: Exile III's once-nodes write 20, `e3Once`.)
+      return lead === last ? last : this.node('if-sdf', { sdf: flag, ex1: [1, next] }, lead);
     };
   }
 
@@ -673,8 +674,8 @@ export class SpecBuilder {
    *
    * E3 skips it once the flag is above 0, and writes 20 as the group is met
    * (`10c0:4453`), which marks a spot's own flag spent (`specials.ts`), so a
-   * question asked before it isn't asked again. The engine's node writes
-   * its own 250, so the 20 follows it.
+   * question asked before it isn't asked again. The node writes 20 itself
+   * (`<once>exile3</once>`); the `setFlag` after it is the same 20 again.
    */
   onceEncounter(flag: Flag, block: number, a: number, b: number, group: number): Step {
     return this.ifFlagEq(flag, 0, [(next) => this.node('once-out-encounter', {
@@ -706,16 +707,28 @@ export class SpecBuilder {
   }
 
   /**
-   * `while (FUN_1070_0401(item) && n < max)`: the party is given `item` again
+   * `while (FUN_1070_0564(item) && n < max)`: the party is given `item` again
    * and again until nobody has room, at most `max` times, counted in `count`.
+   * `quiet` is `FUN_1070_05a5`, the same give without "gets" (zone 67's ore).
    */
-  giveItemUntilFull(item: number, max: number, count: Flag): Step {
+  giveItemUntilFull(item: number, max: number, count: Flag, quiet = false): Step {
     return (next) => {
       const head = this.reserve();
       const again = this.seq([this.incFlag(count), this.ifFlagBelow(count, max, [() => head])])(next);
-      this.fill(head, 'once-give-item', { ex1: [item, 0], ex2: [0, next] }, again);
+      this.fill(head, 'once-give-item', {
+        ex1: [item, 0], ex2: [0, this.failTo(next)], ...(quiet ? { msg: [-1, -1, 1] } : {}),
+      }, again);
       return this.setFlag(count, 0)(head);
     };
+  }
+
+  /**
+   * Where ONCE_GIVE_ITEM goes when nobody could take the item. Its `ex2b` is a
+   * jump only when it is 0 or more, so -1, "the chain ends here", would fall
+   * through to the success branch and keep giving: an end needs a node.
+   */
+  private failTo(n: number): number {
+    return n >= 0 ? n : this.node('nop', {}, -1);
   }
 
   /**
@@ -726,7 +739,7 @@ export class SpecBuilder {
     return (next) => {
       const yes = this.seq(then)(next);
       const no = this.seq(otherwise)(next);
-      return this.node('once-give-item', { ex1: [item, 0], ex2: [0, no] }, yes);
+      return this.node('once-give-item', { ex1: [item, 0], ex2: [0, this.failTo(no)] }, yes);
     };
   }
 
@@ -945,15 +958,11 @@ export class SpecBuilder {
 
   /**
    * `FUN_1070_0623(n, 1)`: take `n` gold if the party has it, and run
-   * `then`; otherwise run `otherwise`. (The engine's node also says "You give
-   * up n gold.", which E3 does not.)
+   * `then`; otherwise run `otherwise`. Silently, as E3 does.
    */
   pay(n: number, then: Step[], otherwise: Step[] = []): Step {
-    return (next) => {
-      const yes = this.seq(then)(next);
-      const no = this.seq(otherwise)(next);
-      return this.node('if-gold', { ex1: [n, yes], ex2: [1] }, no);
-    };
+    // Not IF_HAS_GOLD's own take, which says "  You give up n gold.".
+    return this.ifGold(n, [this.takeGold(n), ...then], otherwise);
   }
 
   /**

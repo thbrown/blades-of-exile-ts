@@ -91,7 +91,7 @@ import { alterSpace } from './specials/general';
 import { pushThings } from './pushThings';
 import { moveE3Walls, pushOffE3Walls } from './e3MovingWalls';
 import { e3SpDrainTick } from './e3SpDrain';
-import { ONCE_DONE } from './specials/oneshot';
+import { onceDone } from './specials/oneshot';
 import { Spell } from '../data/spell';
 import { castSpell } from './spellTown';
 import { handleTargetMode } from './targetMode';
@@ -5955,7 +5955,7 @@ export class GameSession {
       const node = at.spec < 0 ? undefined : specials.get(at.spec);
       if (!node) continue;
       if (!party.sdLegit(node.sd1, node.sd2)) continue;
-      if (party.getSdf(node.sd1, node.sd2) !== ONCE_DONE) continue;
+      if (!onceDone(this.univ, party.getSdf(node.sd1, node.sd2))) continue;
       if (!isOnMap(at)) {
         // Kept, debug print and all: a scenario with a special pinned off the
         // edge of its own map gets repaired in place, once, out loud. (The

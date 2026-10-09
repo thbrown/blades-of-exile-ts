@@ -229,6 +229,12 @@ export enum GiveEquip {
 export function giveItem(
   pc: Player, party: Party, item: Item, checkOnly = false, allowOverload = false,
   equipType: GiveEquip = GiveEquip.NONE,
+  /**
+   * Where `combine_things`' "(items combined)" goes. OBoE passes nothing from
+   * here; 1997's `give_to_pc` (ITEMS.CPP:107), which Exile III's is, always
+   * says it (`e3GiveToParty`).
+   */
+  say?: (line: string) => void,
 ): GiveResult {
   if (pc.mainStatus !== MainStatus.ALIVE)
     return { status: GiveStatus.DEAD, slot: -1, message: '' };
@@ -280,7 +286,7 @@ export function giveItem(
     // `combine_things(); sort_items();` is give_item's last act (pc.cpp:579),
     // in that order — the merge first, so the sort never has to shuffle a pile
     // that is about to disappear.
-    combineThings(pc);
+    combineThings(pc, false, say);
     sortItems(pc);
   }
   const name = item.ident ? item.fullName : item.name;

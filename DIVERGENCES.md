@@ -1346,6 +1346,36 @@ goods). OBoE's `take_class` (party.cpp:691) takes a charge too, but its
 items, so a node there can find nothing to take. The port had taken the
 whole item, stack and all. No draws.
 
+### 61. Exile III's one-shots and gives (2026-10-09)
+
+**DECIDED: Exile III's, under `<once>exile3</once>`.** Found by running the
+EXE against the conversion (`test/e3emu.test.ts`). E3's one-shot helpers
+aren't BoE's ONCE nodes: `FUN_10e0_0044` (a message) and `FUN_10e0_00ec`
+(the item dialog) count any flag above 0 as done, **write 20**, and when done
+return, so the handler goes on; BoE's write 250, test for exactly 250 and
+end the chain. A spot whose own flag is 20 is dead in E3 (`specials.ts`), so
+a port writing 250 could run it again. The item dialog's Leave returns too
+(BoE ends the chain, which skipped zone 0's ambush), its Take gives with
+`give_to_party(item, 0)` (`FUN_1070_0401`: weight, and not a word, gold and
+food included), and a special item already held says "You already have this
+special item." and leaves the flag. E3's plain give, `FUN_1070_0564`, is
+`give_to_party(item, 1)`: weighed, unlike BoE's forced ONCE_GIVE_ITEM, with
+"Item too heavy to carry." and 1997's "(items combined)". All in
+`oneshot.ts` (`e3Once`); `FUN_1070_05a5`, the silent give, is
+ONCE_GIVE_ITEM with `m3` 1, and silent or not, the give says "(items
+combined)". Separately, the converter's `pay` is a silent take, as
+`FUN_1070_0623` is, not IF_HAS_GOLD's "You give up n gold.", and
+`<gifts>exile3</gifts>` makes AFFECT_GOLD and AFFECT_FOOD give without "You
+get n gold.", as E3's scripts do. No draws.
+
+### 62. "(items combined)" (2026-10-09)
+
+**OPEN.** 1997's `give_to_pc` calls `combine_things`, which always says
+"(items combined)" (ITEMS.CPP:726); OBoE says it only when asked, and no give
+asks, so the port never says it outside Exile III (#61). A player can see
+it, so the rule above would follow 1997; it is text only, no draws. Not
+changed for BoE scenarios without a ruling.
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**
