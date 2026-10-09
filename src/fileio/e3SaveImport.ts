@@ -15,7 +15,6 @@
  *   and then its map, its creatures and its items as they were are laid
  *   over it (`applyE3TownTerrain`, `applyE3TownCreatures`,
  *   `applyE3TownItems`);
- * - the wandering groups outdoors (`out_c`);
  * - the converter's own flags, in SDF columns 10–49 (`flags.ts`): a one-shot
  *   spot E3 erased, the daily stamps and the day counts. Only the town states
  *   (`e3TownState`) are worked out again, since they follow from the day.
@@ -37,6 +36,8 @@ import {
   E3_TABLE_ITEM_SIZE, e3ItemGraphic, e3TableItemCount, unenchantedName, type E3SaveDefaults,
 } from './e3SaveDefaults';
 import { freshenForLoad } from './saveIo';
+import { OutdoorCreature } from '../universe/outdoorCreature';
+import type { OutWandering } from '../data/outdoors';
 import { e3TownSpots } from './e3SaveTown';
 import { emptyPopulation } from '../universe/party';
 import { readE3Notes } from './e3SaveNotes';
@@ -222,6 +223,63 @@ function readRemembered(univ: Universe, save: E3Save, defaults: E3SaveDefaults):
   if (save.town) spotsErased(new E3Bytes(save.town.cTown).i16(E3CTOWN.TOWN_NUM), (x, y) => save.miscI[64 * x + y] ?? 0);
 }
 
+/** `outdoor_creature_type`, 31 bytes: exists, facing, the group, its sector of the window, its square. */
+export const E3OUTC = { SIZE: 31, EXISTS: 0, DIRECTION: 1, GROUP: 3, GROUP_SIZE: 24, SECTOR: 27, LOC: 29 } as const;
+
+/**
+ * Which of the scenario's zone groups `group` (24 bytes, `zoneGroups`) is:
+ * zone `zone`'s own first, then any zone's. `[zone, k]`, `k` 0–3 a
+ * wandering group and 4–7 a special encounter; null if none is.
+ */
+export function e3ZoneGroupOf(defaults: E3SaveDefaults, group: Uint8Array, zone: number): [number, number] | null {
+  const all = defaults.zoneGroups;
+  if (!all) return null;
+  const same = (z: number, k: number) => {
+    const at = (8 * z + k) * E3OUTC.GROUP_SIZE;
+    return at + E3OUTC.GROUP_SIZE <= all.length && group.every((b, i) => all[at + i] === b);
+  };
+  const zones = Math.floor(all.length / (8 * E3OUTC.GROUP_SIZE));
+  for (const z of [zone, ...Array(zones).keys()]) for (let k = 0; k < 8; k++) if (z >= 0 && same(z, k)) return [z, k];
+  return null;
+}
+
+/** Zone `z`'s group `k` as the scenario converted it (`e3ZoneGroupOf`). */
+export function e3ZoneGroup(scenario: Scenario, z: number, k: number): OutWandering | undefined {
+  const sector = scenario.outdoors[z % E3_ZONES_ACROSS]?.[Math.floor(z / E3_ZONES_ACROSS)];
+  return k < 4 ? sector?.wandering[k] : sector?.specialEnc[k - 4];
+}
+
+/**
+ * The groups wandering outdoors (`out_c`, ten): each is a copy of a zone's
+ * group (`what_monst`), found by its bytes among the zones' as the scenario
+ * converted them, so it meets the party with the same script. One that
+ * matches none comes as its monsters alone.
+ */
+function readOutdoorGroups(univ: Universe, p: E3Bytes, defaults: E3SaveDefaults, warnings: string[]): void {
+  const { party, scenario } = univ;
+  party.outC = Array.from({ length: 10 }, (_, k) => {
+    const at = E3P.OUT_C + E3OUTC.SIZE * k;
+    const c = new OutdoorCreature();
+    c.exists = p.u8(at + E3OUTC.EXISTS) !== 0;
+    if (!c.exists) return c;
+    c.direction = p.i16(at + E3OUTC.DIRECTION);
+    c.whichSector = p.loc(at + E3OUTC.SECTOR);
+    c.mLoc = p.loc(at + E3OUTC.LOC);
+    const group = p.data.subarray(at + E3OUTC.GROUP, at + E3OUTC.GROUP + E3OUTC.GROUP_SIZE);
+    const zone = (party.outdoorCorner.y + c.whichSector.y) * E3_ZONES_ACROSS + party.outdoorCorner.x + c.whichSector.x;
+    const found = e3ZoneGroupOf(defaults, group, zone);
+    const w = found && e3ZoneGroup(scenario, ...found);
+    if (w) c.whatMonst = structuredClone(w);
+    else {
+      c.whatMonst.monst = [...group.subarray(0, 7)];
+      c.whatMonst.friendly = [...group.subarray(7, 10)];
+      c.whatMonst.cantFlee = group[12] === 1;
+      warnings.push(`A group outdoors isn't one of the scenario's, and meets the party with no words of its own.`);
+    }
+    return c;
+  });
+}
+
 /** What a converter spot flag holds once E3 has erased the spot (`readRemembered`). */
 const SPOT_ERASED = 250;
 /** `creature_list_type`'s `which_town`, after its 60 creatures; `hostile` follows. */
@@ -280,7 +338,6 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
   party.horses = scenario.horses.filter((v) => v.exists).map((v) => ({ ...v }));
   for (const town of scenario.towns) town.canFind = !town.isHidden;
   univ.refreshStoreItems();
-  // TODO(e3save): out_c.
 
   const p = new E3Bytes(save.party);
   party.age = p.i32(E3P.AGE);
@@ -299,6 +356,7 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
     if (t < E3P.CAN_FIND_TOWNS) town.canFind = p.u8(E3P.CAN_FIND_TOWN + t) !== 0;
   }
   readRemembered(univ, save, defaults);
+  readOutdoorGroups(univ, p, defaults, warnings);
   party.lightLevel = p.i16(E3P.LIGHT_LEVEL);
   party.outdoorCorner = p.loc(E3P.OUTDOOR_CORNER);
   party.iwc = p.loc(E3P.IWC);

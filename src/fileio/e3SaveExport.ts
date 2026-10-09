@@ -27,7 +27,7 @@ import {
   e3ItemFromTable, e3ItemGraphic, e3TableItemCount, e3TableItemName, E3_TABLE_ITEM_SIZE, unenchantedName,
   type E3SaveDefaults,
 } from './e3SaveDefaults';
-import { E3_LIST_WHICH_TOWN, E3_MAGIC_SHOPS, E3_MAGIC_SHOP_SLOTS, e3VehicleTable } from './e3SaveImport';
+import { E3OUTC, E3_LIST_WHICH_TOWN, E3_MAGIC_SHOPS, E3_MAGIC_SHOP_SLOTS, e3VehicleTable, e3ZoneGroup } from './e3SaveImport';
 import type { Vehicle } from '../data/vehicle';
 import { e3Jobs, e3JobsBase, type E3Job } from '../game/e3Jobs';
 import { TOWN_NUM_OUTDOORS } from '../universe/party';
@@ -69,7 +69,7 @@ export function newE3PartyRecord(defaults: E3SaveDefaults): Uint8Array {
   for (let i = 0; i < 4; i++) p.setI16(E3P.CREATURE_SAVE + i * E3P.CREATURE_LIST_SIZE + 0x1590, 200);
   // FUN_1070_41a4 rolls the magic shops' stock here, and FUN_1008_3c91 the
   // job boards; the jobs are the game's, below.
-  // TODO(e3save): out_c. The shops' stock, creature_save and setup are the game's, below.
+  // The shops' stock, creature_save, setup and out_c are the game's, below.
   p.setU8(E3P.M_SEEN + 0x26, 1);
   p.setU8(E3P.M_SEEN + 0x28, 1);
   p.setU8(E3P.M_SEEN + 0x4e, 1);
@@ -201,6 +201,36 @@ function writeRemembered(univ: Universe, save: E3Save, defaults: E3SaveDefaults,
   });
 }
 
+/** The groups wandering outdoors (`readOutdoorGroups`, in `e3SaveImport.ts`). */
+function writeOutdoorGroups(univ: Universe, p: E3Bytes, defaults: E3SaveDefaults, warnings: string[]): void {
+  const { party, scenario } = univ;
+  const all = defaults.zoneGroups;
+  party.outC.slice(0, 10).forEach((c, k) => {
+    const at = E3P.OUT_C + E3OUTC.SIZE * k;
+    if (!c.exists) return;
+    // The zone group it is a copy of: its own zone's first.
+    const zone = (party.outdoorCorner.y + c.whichSector.y) * E3_ZONES_ACROSS + party.outdoorCorner.x + c.whichSector.x;
+    const want = JSON.stringify(c.whatMonst);
+    const zones = all ? Math.floor(all.length / (8 * E3OUTC.GROUP_SIZE)) : 0;
+    let raw: Uint8Array | null = null;
+    for (const z of [zone, ...Array(zones).keys()]) {
+      for (let g = 0; g < 8 && !raw; g++) {
+        if (JSON.stringify(e3ZoneGroup(scenario, z, g)) === want) raw = all!.subarray((8 * z + g) * E3OUTC.GROUP_SIZE, (8 * z + g + 1) * E3OUTC.GROUP_SIZE);
+      }
+      if (raw) break;
+    }
+    if (!raw) {
+      warnings.push('A group outdoors isn\'t one of Exile III\'s, and was left out.');
+      return;
+    }
+    p.setU8(at + E3OUTC.EXISTS, 1);
+    p.setI16(at + E3OUTC.DIRECTION, c.direction);
+    p.data.set(raw, at + E3OUTC.GROUP);
+    p.setLoc(at + E3OUTC.SECTOR, c.whichSector);
+    p.setLoc(at + E3OUTC.LOC, c.mLoc);
+  });
+}
+
 function writeVehicles(list: Vehicle[], p: E3Bytes, at: number, table: Uint8Array): void {
   vehicleNumbers(e3VehicleTable(table)).forEach((n, k) => {
     const v = list[n];
@@ -298,6 +328,7 @@ export function e3SaveRecordFromGame(univ: Universe, defaults: E3SaveDefaults): 
   }
   writeE3Notes(univ, p, defaults, warnings);
   writeRemembered(univ, save, defaults, warnings);
+  writeOutdoorGroups(univ, p, defaults, warnings);
   for (let i = 0; i < E3_MAGIC_SHOPS; i++) {
     for (let j = 0; j < E3_MAGIC_SHOP_SLOTS; j++) {
       const item = univ.storeItem(i, j);

@@ -104,7 +104,7 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
 
   it("ships the EXE's tables the converter read", () => {
     const files = readE3Files(dir as string);
-    const fromExe = readE3SaveDefaults(files.exe, files.town);
+    const fromExe = readE3SaveDefaults(files.exe, files.town, files.outdoor);
     expect(e3SaveDefaultsToJson(defaults)).toBe(e3SaveDefaultsToJson(fromExe));
     expect(defaults.itemTable.length).toBe(415 * 59);
   });
@@ -289,6 +289,21 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     await back.enter(4, { x: 30, y: 30 });
     expect(back.town.monsters.find((m) => m.slot === victim.slot)?.isAlive).toBe(false);
     expect(back.town.monsters.filter((m) => m.isAlive).length).toBe(q.party.creatureSave[slot]!.monsters.filter((m) => m.isAlive).length);
+  });
+
+  it('carries the groups wandering outdoors, each as its zone converted it', async () => {
+    const q = new QuestRunner(scen);
+    await q.outdoorsAt(3 * 48 + 20, 6 * 48 + 30);
+    const c = q.univ.party.outC[0]!;
+    const { x, y } = q.party.outdoorCorner;
+    const sector = scen.outdoors[x + 1]![y]!;
+    const k = sector.wandering.findIndex((w) => w.monst.some((m) => m > 0));
+    expect(k).toBeGreaterThanOrEqual(0);
+    Object.assign(c, { exists: true, direction: 3, whatMonst: structuredClone(sector.wandering[k]!), whichSector: { x: 1, y: 0 }, mLoc: { x: 60, y: 20 } });
+    const back = new QuestRunner(scen);
+    expect(applyE3Save(exportE3Save(q.univ, defaults).bytes, back.univ, defaults).warnings).toEqual([]);
+    expect(back.party.outC[0]).toEqual(c);
+    expect(back.party.outC.slice(1).some((g) => g.exists)).toBe(q.party.outC.slice(1).some((g) => g.exists));
   });
 
   it("carries the magic shops' stock, so a save reloads the same wares", async () => {
@@ -553,6 +568,11 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
       });
       expect(remembered(out.party, out.setup), file).toEqual(remembered(save.party, save.setup));
       expect(o.i16(E3P.AT_WHICH_SAVE_SLOT), file).toBe(p.i16(E3P.AT_WHICH_SAVE_SLOT));
+      // The groups wandering outdoors, every one matched to its zone's and written back the same.
+      expect(res.warnings.filter((w) => /group outdoors/.test(w)), file).toEqual([]);
+      const groups = (party: Uint8Array) => [...Array(10).keys()].map((k) => party.subarray(E3P.OUT_C + 31 * k, E3P.OUT_C + 31 * k + 31))
+        .map((r) => (r[0] ? [...r] : []));
+      expect(groups(out.party), file).toEqual(groups(save.party));
       // A reply number E3 left stale, whose string is empty, reads as nothing (e3SaveNotes.ts).
       const notes = (party: Uint8Array) => {
         const b = new E3Bytes(party.slice(E3P.SPECIAL_NOTES, E3P.TOTAL_M_KILLED));

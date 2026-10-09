@@ -17220,3 +17220,10 @@ golem plague" hangs (over 10 minutes, alone or in the full run) at
       **Stale bytes:** E3 never clears an empty creature slot, nor `misc_i`
       past a smaller town's edge; the real-save test compares what play
       reads (alive, number, attitude; the fields inside the town).
+- [x] **The groups wandering outdoors** (`out_c`, ten of 31 bytes: exists,
+      facing, the group, its sector of the window, its square). A group is
+      a byte copy of its zone's (`what_monst`), so `e3save.json` now carries
+      every zone's eight groups as E3 holds them in memory (`zoneGroups`,
+      17 KB), and a saved group is matched to one, its own zone's first:
+      it comes in as that zone's converted group, scripts and all, and goes
+      out as its bytes. Every group in the user's seven saves matches.

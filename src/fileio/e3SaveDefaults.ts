@@ -17,6 +17,9 @@
  *   stats (segment 39's parallel arrays), from which `FUN_1090_0000` builds
  *   each creature's record. A copy converted before these were written has
  *   neither, and saves outdoors.
+ * - **The zones' groups** (OUTDOOR.DAT), for the wandering groups a save
+ *   holds outdoors (`out_c`), which carry the group's bytes and not which
+ *   one it was.
  * - **E3's strings**, all 12,472, which a save's notes name by number
  *   (`e3SaveNotes.ts`): message spots, scripts' own messages, the
  *   conversations. The scenario keeps only their text. A copy without them
@@ -36,12 +39,18 @@ export interface E3SaveDefaults {
   priestSpells: Uint8Array;
   townDat?: Uint8Array;
   monsterTable?: Uint8Array;
+  /**
+   * Each zone's four wandering groups then its four special encounters, 24
+   * bytes each as E3 holds them in memory (`out_c`'s groups), zone by zone
+   * (`y * 9 + x`): what an outdoor group in a save is matched against.
+   */
+  zoneGroups?: Uint8Array;
   /** E3 string `block * 300 + k`, as `FUN_10d0_523c` fetches it. */
   strings?: Map<number, string>;
 }
 
 const KEYS = ['itemTable', 'boats', 'horses', 'canFind', 'mageSpells', 'priestSpells'] as const;
-const OPTIONAL_KEYS = ['townDat', 'monsterTable'] as const;
+const OPTIONAL_KEYS = ['townDat', 'monsterTable', 'zoneGroups'] as const;
 
 function toBase64(b: Uint8Array): string {
   let s = '';
