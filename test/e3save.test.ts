@@ -34,7 +34,7 @@ import { Race, Status, Trait } from '../src/universe/skills';
 import { CreatureStatus } from '../src/universe/creature';
 import { EncNoteType } from '../src/universe/party';
 import { E3_DAILY_STAMPS, E3_DAY_COUNTS, e3SpotFlag } from '../tools/e3convert/flags';
-import { defaultItem } from '../src/data/item';
+import { ItemAbil, defaultItem } from '../src/data/item';
 
 describe('the exile3.sav container', () => {
   it('writes an outdoor save of the right size and reads it back', () => {
@@ -550,6 +550,11 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
       // The journal, the encounter notes and the conversation notes, every one read and written back.
       expect(res.warnings.filter((w) => /journal|notes/i.test(w)), file).toEqual([]);
       expect(out.party.subarray(E3P.JOURNAL_STR, E3P.HELP_RECEIVED), file).toEqual(save.party.subarray(E3P.JOURNAL_STR, E3P.HELP_RECEIVED));
+      // An enchanted item comes in as this port's enchanting leaves one: E3's
+      // ability, and the enchantment's BoE ability beside it.
+      for (const it of back.party.pcs.flatMap((pc) => pc.items).concat([...back.party.storedItems.values()].flat())) {
+        if (/ \(B\)$/.test(it.fullName)) expect([it.enchanted, it.ability, it.e3Ability], `${file} ${it.fullName}`).toEqual([true, ItemAbil.AFFECT_STATUS, 3]);
+      }
       // The stashes: every item in, and out again in the same order and places.
       const stash = (list: Uint8Array) => [...Array(115).keys()].map((k) => new E3Bytes(list.subarray(63 * k, 63 * k + 63)))
         .filter((r) => r.i16(E3ITEM.VARIETY) !== 0).map((r) => [r.str(E3ITEM.FULL_NAME, E3ITEM.FULL_NAME_LEN), r.loc(E3ITEM.LOC)]);

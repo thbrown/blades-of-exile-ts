@@ -5,6 +5,7 @@ import { GameRng } from '../src/core/rng';
 import { defaultItem, ItemAbil, ItemType } from '../src/data/item';
 import { Scenario } from '../src/data/scenario';
 import { DamageType } from '../src/data/monster';
+import { Enchant, enchantOfName, enchantWeapon } from '../src/data/enchant';
 import { E3Abil, e3ActionPoints, e3AttackAdj, e3CombatRoundItems, e3DamageResist, e3MissileHitBonus, e3OnMeleeHit, e3SpecDam } from '../src/game/e3Items';
 import { loadScenario } from '../src/fileio/loadScenario';
 import { FsSource } from '../src/fileio/source';
@@ -214,5 +215,35 @@ describe("Exile III's item rules (src/game/e3Items.ts)", () => {
     for (let i = 0; i < pc.items.length; i++) pc.items[i] = defaultItem();
     pc.items[0] = rock(117, ItemAbil.LIGHTER_OBJECT);
     expect(curWeight(pc)).toBe(0);
+  });
+});
+
+describe("Exile III's enchanting (1070:0e2e)", () => {
+  const sword = (e3Ability: number) => ({ ...defaultItem(), variety: ItemType.ONE_HANDED, fullName: 'Iron Sword', value: 10, e3Ability });
+
+  it("puts E3's ability on an E3 item, beside BoE's", () => {
+    const flaming = sword(0);
+    enchantWeapon(flaming, Enchant.FLAMING);
+    expect([flaming.fullName, flaming.ability, flaming.e3Ability]).toEqual(['Iron Sword (F!)', ItemAbil.DAMAGING_WEAPON, E3Abil.FLAMING]);
+    // The blessed blade is E3's healing potion, 8 charges of it; the shooting one a bolt of flame.
+    const blessed = sword(0);
+    enchantWeapon(blessed, Enchant.BLESSED);
+    expect([blessed.bonus, blessed.e3Ability, blessed.charges]).toEqual([1, 3, 8]);
+    const shooting = sword(0);
+    enchantWeapon(shooting, Enchant.SHOOT_FLAME);
+    expect([shooting.e3Ability, shooting.charges]).toEqual([5, 8]);
+    // A plus is only the bonus, and a BoE item keeps no E3 number.
+    const plus = sword(0);
+    enchantWeapon(plus, Enchant.PLUS_TWO);
+    expect([plus.bonus, plus.e3Ability]).toEqual([2, 0]);
+    const boe = sword(-1);
+    enchantWeapon(boe, Enchant.BLESSED);
+    expect([boe.e3Ability, boe.charges]).toEqual([-1, 0]);
+  });
+
+  it('reads the enchantment back from the name', () => {
+    expect(enchantOfName('Iron Rapier (B)')).toBe(Enchant.BLESSED);
+    expect(enchantOfName('Iron Halberd (+1)')).toBe(Enchant.PLUS_ONE);
+    expect(enchantOfName('Bronze Knife')).toBe(Enchant.NONE);
   });
 });

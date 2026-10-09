@@ -23,7 +23,8 @@
 
 import type { Location } from '../core/location';
 import type { Item } from '../data/item';
-import { defaultItem } from '../data/item';
+import { ItemAbil, defaultItem } from '../data/item';
+import { ENCHANTS, Enchant, enchantOfName } from '../data/enchant';
 import { TOWN_STATES } from '../../tools/e3convert/towns/townStates';
 import { E3_DAILY_STAMPS, E3_DAY_COUNTS, e3DayReached, e3TownState } from '../../tools/e3convert/flags';
 import { E3_STASHES, vehicleNumbers, type E3Vehicle } from '../../tools/e3convert/tables';
@@ -110,9 +111,24 @@ export function e3ItemToItem(univ: Universe, rec: Uint8Array, defaults: E3SaveDe
   // The save's own picture: E3 gives a potion one the table doesn't
   // (an unidentified Weak Strength P., 30 in the table, was 32).
   if (e3ItemGraphic(item.graphicNum) >= 0) item.graphicNum += graphic - e3ItemGraphic(item.graphicNum);
-  // An enchantment's ability (a blessed blade's 3) is E3's own code; the
-  // engine's ability stays the base item's. TODO(e3save): enchantments.
+  // An enchantment's ability (a blessed blade's 3) is E3's own code, and
+  // the save's; the BoE ability beside it is the enchantment's, as this
+  // port's own enchanting leaves it (`E3_ENCHANT_ABILITY`).
   item.e3Ability = ability;
+  const ench = base.fullName === fullName ? Enchant.NONE : enchantOfName(fullName);
+  const info = ENCHANTS[ench];
+  if (info) {
+    item.enchanted = true;
+    if (info.addAbility !== ItemAbil.NONE) {
+      item.ability = info.addAbility;
+      item.abilStrength = info.abilStrength;
+      item.abilData = info.abilData;
+    }
+    if (info.charges > 0) {
+      item.maxCharges = info.charges;
+      item.rechargeable = true;
+    }
+  }
   item.itemLevel = b.i16(E3ITEM.LEVEL);
   item.awkward = b.i8(E3ITEM.AWKWARD);
   item.bonus = b.i8(E3ITEM.BONUS);

@@ -17238,3 +17238,14 @@ golem plague" hangs (over 10 minutes, alone or in the full run) at
       remembered towns', above.) **Found:** E3 compares the whole day with
       the stamp *byte*, so from day 256 Levy pays every time;
       E3-SUSPECTED-BUGS #25, and the port's daily flag doesn't do that.
+- [x] **Enchantments**, and with them **the port's own enchanting of E3
+      items, which did nothing for three of the seven**. E3's routine
+      (`1070:0e2e`) is BoE's in BoE's order, but puts its own ability number
+      on the item: the shooting blade 5 (a bolt of flame, 8 charges), the
+      flaming one 33, and the blessed one **3, E3's healing potion, with 8
+      charges**: Used, it heals. The port gave an E3 item BoE's ability
+      only, and E3 items fight and are Used by `e3Ability`, so a flaming
+      blade bought in Exile III never burned. `enchantWeapon` now sets E3's
+      number too (`E3_ENCHANT_ABILITY`), and an enchanted item from a save
+      comes in with the enchantment's BoE ability beside E3's, as this
+      port's enchanting leaves one. **`TODO(e3save)` is empty.**

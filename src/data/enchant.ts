@@ -80,6 +80,29 @@ export const ENCHANTS: Partial<Record<Enchant, EnchantInfo>> = {
 };
 
 /**
+ * Exile III's own enchanting (`1070:0e2e`, seven arms in BoE's order, `+1`
+ * to `B`; it has no `+4`) puts E3's ability number on the item, which E3's
+ * rules read (`Item.e3Ability`, `game/e3Items.ts`, `game/e3ItemUse.ts`):
+ * the shooting blade is 5, a bolt of flame when used, 8 charges; the flaming
+ * one 33, E3's 8 + 0–5 fire on a hit; and the blessed one **3, E3's healing
+ * potion**, with 8 charges too — Used, it heals. The bonus and the value are
+ * BoE's.
+ */
+export const E3_ENCHANT_ABILITY: Partial<Record<Enchant, { ability: number; charges: number }>> = {
+  [Enchant.SHOOT_FLAME]: { ability: 5, charges: 8 },
+  [Enchant.FLAMING]: { ability: 33, charges: 0 },
+  [Enchant.BLESSED]: { ability: 3, charges: 8 },
+};
+
+/** The enchantment a name's suffix says ("Iron Rapier (B)"), or NONE. */
+export function enchantOfName(fullName: string): Enchant {
+  for (const [e, info] of Object.entries(ENCHANTS)) {
+    if (info && fullName.endsWith(` (${info.suffix})`)) return Number(e) as Enchant;
+  }
+  return Enchant.NONE;
+}
+
+/**
  * `cEnchant::adjust_value` (enchant.cpp:59) — what the item is worth
  * afterwards, and (through `place_item_button`) what the smith charges for it.
  *
@@ -133,4 +156,10 @@ export function enchantWeapon(item: Item, ench: Enchant): void {
   if (item.value > 15000) item.value = 15000;
   if (item.value < 0) item.value = 15000;
   item.fullName = storeName;
+  // An Exile III item takes E3's ability as well (`E3_ENCHANT_ABILITY`).
+  const e3 = item.e3Ability >= 0 ? E3_ENCHANT_ABILITY[ench] : undefined;
+  if (e3) {
+    item.e3Ability = e3.ability;
+    if (e3.charges > 0) item.charges = e3.charges;
+  }
 }
