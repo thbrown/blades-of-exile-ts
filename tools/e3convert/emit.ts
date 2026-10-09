@@ -913,6 +913,7 @@ function scenarioXml(
         <radiate>exile3</radiate>
         <dungeon-sound>${E3_DUNGEON_SOUND}</dungeon-sound>
         <start-sound>none</start-sound>
+        <start-journal>1</start-journal>
         <secret-doors>101,118,133</secret-doors>
         <search>exile3</search>
         <cursors>${cursors.map((c) => `${c.name}:${c.hotspot.x}:${c.hotspot.y}`).join(',')}</cursors>

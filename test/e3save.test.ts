@@ -32,6 +32,7 @@ import { e3Jobs } from '../src/game/e3Jobs';
 import { applySave, saveGame } from '../src/fileio/saveIo';
 import { Race, Status, Trait } from '../src/universe/skills';
 import { CreatureStatus } from '../src/universe/creature';
+import { EncNoteType } from '../src/universe/party';
 
 describe('the exile3.sav container', () => {
   it('writes an outdoor save of the right size and reads it back', () => {
@@ -207,6 +208,40 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     applyE3Save(bytes, back.univ, defaults);
     expect(back.party.boats.map((v) => [v.whichTown, v.loc, v.property]))
       .toEqual(q.party.boats.map((v) => [v.whichTown, v.loc, v.property]));
+  });
+
+  it('carries the journal, the encounter notes and the conversation notes, as E3 numbers them', async () => {
+    const q = new QuestRunner(scen);
+    // A new game's journal has entry 1, as `init_party` writes it.
+    expect(q.party.journal.map((e) => [e.theStr, e.day])).toEqual([[scen.journalStrs[1], 1]]);
+    const save = readE3Save(exportE3Save(q.univ, defaults).bytes);
+    const p = new E3Bytes(save.party);
+    expect([p.u8(E3P.JOURNAL_STR), p.i16(E3P.JOURNAL_DAY)]).toEqual([1, 1]);
+    // Out of order as E3 adds them; a sprite's two-part message in Guhkbar's
+    // caves (list 64); a script's own (list 14); a regular node's pair, its
+    // second empty; a paid node's chosen second reply alone (type 24); a name.
+    [[5, 3], [4, 3]].forEach(([e, day], i) => { p.setU8(E3P.JOURNAL_STR + 1 + i, e!); p.setI16(E3P.JOURNAL_DAY + 2 + 2 * i, day!); });
+    [[64, 39], [64, 40], [14, 72]].forEach(([a, b], i) => { p.setI16(E3P.SPECIAL_NOTES + 4 * i, a!); p.setI16(E3P.SPECIAL_NOTES + 4 * i + 2, b!); });
+    [[48, 41, 187, 188], [91, 0, 68, 0], [21, 21, 12, 0]].forEach(([who, town, s1, s2], i) => {
+      const at = E3P.TALK_SAVE + 7 * i;
+      p.setI16(at, who!); p.setU8(at + 2, town!); p.setI16(at + 3, s1!); p.setI16(at + 5, s2!);
+    });
+    const bytes = writeE3Save(save);
+    const back = new QuestRunner(scen);
+    expect(applyE3Save(bytes, back.univ, defaults).warnings).toEqual([]);
+    expect(back.party.journal.map((e) => e.day)).toEqual([1, 3, 3]);
+    // E3 doesn't say where; the town of list 64 whose messages hold it.
+    const sprite = back.party.specialNotes[0]!;
+    expect(sprite.theStr).toMatch(/^The tiny sprite/);
+    expect(sprite.type).toBe(EncNoteType.TOWN);
+    expect(scen.towns.find((t) => t.name === sprite.where)?.specStrs).toContain(sprite.theStr);
+    expect(back.party.specialNotes[2]!.theStr).toMatch(/^Suddenly, he remembers/);
+    expect(back.party.talkSave[1]).toMatchObject({ whoSaid: 'Strange Wizard', str2: '' });
+    expect(back.party.talkSave[1]!.str1).toMatch(/^He shakes his head/);
+    expect(back.party.talkSave[0]!.str2).toBe('');
+    const again = readE3Save(exportE3Save(back.univ, defaults).bytes).party;
+    expect(again.subarray(E3P.JOURNAL_STR, E3P.HELP_RECEIVED)).toEqual(save.party.subarray(E3P.JOURNAL_STR, E3P.HELP_RECEIVED));
+    expect(again.subarray(E3P.SPECIAL_NOTES, E3P.TOTAL_M_KILLED)).toEqual(save.party.subarray(E3P.SPECIAL_NOTES, E3P.TOTAL_M_KILLED));
   });
 
   it('fills the job boards of a party that never looked at one, as E3 fills them for a new party', async () => {
@@ -421,6 +456,23 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
       expect(out.party.subarray(E3P.KEY_TIMES, E3P.KEY_TIMES + 40), file).toEqual(save.party.subarray(E3P.KEY_TIMES, E3P.KEY_TIMES + 40));
       expect(out.party.subarray(E3P.ALCHEMY, E3P.ALCHEMY + 17), file).toEqual(save.party.subarray(E3P.ALCHEMY, E3P.ALCHEMY + 17));
       expect(out.party.subarray(E3P.JOBS_HELD, E3P.CAN_FIND_TOWN), file).toEqual(save.party.subarray(E3P.JOBS_HELD, E3P.CAN_FIND_TOWN));
+      // The journal, the encounter notes and the conversation notes, every one read and written back.
+      expect(res.warnings.filter((w) => /journal|notes/i.test(w)), file).toEqual([]);
+      expect(out.party.subarray(E3P.JOURNAL_STR, E3P.HELP_RECEIVED), file).toEqual(save.party.subarray(E3P.JOURNAL_STR, E3P.HELP_RECEIVED));
+      // A reply number E3 left stale, whose string is empty, reads as nothing (e3SaveNotes.ts).
+      const notes = (party: Uint8Array) => {
+        const b = new E3Bytes(party.slice(E3P.SPECIAL_NOTES, E3P.TOTAL_M_KILLED));
+        for (let i = 0; i < 120; i++) {
+          const at = E3P.TALK_SAVE - E3P.SPECIAL_NOTES + 7 * i, who = b.i16(at);
+          for (const r of [at + 3, at + 5]) {
+            const n = b.i16(r);
+            const id = n >= 1000 ? 15 * 300 + n - 1000 : (120 + Math.floor((who - 1) / 10)) * 300 + n;
+            if (who > 0 && n > 0 && !defaults.strings!.get(id)) b.setI16(r, 0);
+          }
+        }
+        return b.data;
+      };
+      expect(notes(out.party), file).toEqual(notes(save.party));
       if (!save.inTown) {
         expect(out.party.subarray(E3P.OUTDOOR_CORNER, E3P.BOATS), file).toEqual(save.party.subarray(E3P.OUTDOOR_CORNER, E3P.BOATS));
       }

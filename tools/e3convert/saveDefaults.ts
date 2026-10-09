@@ -5,13 +5,14 @@
 
 import type { E3SaveDefaults } from '../../src/fileio/e3SaveDefaults';
 import { E3_TABLE_ITEM_SIZE } from '../../src/fileio/e3SaveDefaults';
-import { neAutoDataSegment, readNeSegment } from './ne';
+import { neAutoDataSegment, readNeResources, readNeSegment, readStringTable } from './ne';
 import { E3_ITEM_COUNT } from './tables';
 
 /** The monsters' parallel arrays (`FUN_1090_0000` reads up to +0x1518 + 200). */
 const MONSTER_TABLE_SIZE = 0x15e0;
 
 export function readE3SaveDefaults(exe: Uint8Array, townDat?: Uint8Array): E3SaveDefaults {
+  const strings = new Map([...readStringTable(readNeResources(exe))].sort((x, y) => x[0] - y[0]));
   const ds = readNeSegment(exe, neAutoDataSegment(exe));
   const slice = (at: number, n: number) => ds.slice(at, at + n);
   return {
@@ -26,5 +27,6 @@ export function readE3SaveDefaults(exe: Uint8Array, townDat?: Uint8Array): E3Sav
     mageSpells: slice(0x294e, 30),
     ...(townDat ? { townDat } : {}),
     monsterTable: readNeSegment(exe, 39).slice(0, MONSTER_TABLE_SIZE),
+    strings,
   };
 }

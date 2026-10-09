@@ -32,6 +32,7 @@ import type { Vehicle } from '../data/vehicle';
 import { e3Jobs, e3JobsBase, type E3Job } from '../game/e3Jobs';
 import { TOWN_NUM_OUTDOORS } from '../universe/party';
 import { e3TownBlocks } from './e3SaveTown';
+import { writeE3Notes } from './e3SaveNotes';
 import type { Player } from '../universe/player';
 import { NUM_INVEN_SLOTS, NUM_SPELLS } from '../universe/player';
 import { NUM_SKILLS, Race, Trait } from '../universe/skills';
@@ -68,8 +69,7 @@ export function newE3PartyRecord(defaults: E3SaveDefaults): Uint8Array {
   for (let i = 0; i < 4; i++) p.setI16(E3P.CREATURE_SAVE + i * E3P.CREATURE_LIST_SIZE + 0x1590, 200);
   // FUN_1070_41a4 rolls the magic shops' stock here, and FUN_1008_3c91 the
   // job boards; the jobs are the game's, below.
-  // TODO(e3save): the shops' stock, creature_save, out_c, the journal, the
-  // notes and the stored items.
+  // TODO(e3save): the shops' stock, creature_save, out_c and the stored items.
   p.setU8(E3P.M_SEEN + 0x26, 1);
   p.setU8(E3P.M_SEEN + 0x28, 1);
   p.setU8(E3P.M_SEEN + 0x4e, 1);
@@ -268,6 +268,7 @@ export function e3SaveRecordFromGame(univ: Universe, defaults: E3SaveDefaults): 
   for (const [key, day] of party.keyTimes) {
     if (key >= 1 && key <= 20) p.setI16(E3P.KEY_TIMES + 2 * (key - 1), day);
   }
+  writeE3Notes(univ, p, defaults, warnings);
   save.pcs = party.pcs.slice(0, 6).map((pc) => writePc(defaults, pc, warnings));
   // E3's new PC knows `DS:296c`/`294e`'s spells; an absent slot keeps them.
   save.pcs.forEach((rec, i) => {

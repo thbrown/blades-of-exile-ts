@@ -17,6 +17,10 @@
  *   stats (segment 39's parallel arrays), from which `FUN_1090_0000` builds
  *   each creature's record. A copy converted before these were written has
  *   neither, and saves outdoors.
+ * - **E3's strings**, all 12,472, which a save's notes name by number
+ *   (`e3SaveNotes.ts`): message spots, scripts' own messages, the
+ *   conversations. The scenario keeps only their text. A copy without them
+ *   carries no notes either way.
  */
 
 import { E3ITEM } from './e3save';
@@ -32,6 +36,8 @@ export interface E3SaveDefaults {
   priestSpells: Uint8Array;
   townDat?: Uint8Array;
   monsterTable?: Uint8Array;
+  /** E3 string `block * 300 + k`, as `FUN_10d0_523c` fetches it. */
+  strings?: Map<number, string>;
 }
 
 const KEYS = ['itemTable', 'boats', 'horses', 'canFind', 'mageSpells', 'priestSpells'] as const;
@@ -52,7 +58,8 @@ function fromBase64(s: string): Uint8Array {
 
 export function e3SaveDefaultsToJson(d: E3SaveDefaults): string {
   const optional = OPTIONAL_KEYS.flatMap((k) => { const v = d[k]; return v ? [[k, toBase64(v)]] : []; });
-  return JSON.stringify(Object.fromEntries([...KEYS.map((k) => [k, toBase64(d[k])]), ...optional]));
+  const strings = d.strings ? [['strings', Object.fromEntries(d.strings)]] : [];
+  return JSON.stringify(Object.fromEntries([...KEYS.map((k) => [k, toBase64(d[k])]), ...optional, ...strings]));
 }
 
 export function e3SaveDefaultsFromJson(text: string): E3SaveDefaults {
@@ -69,6 +76,10 @@ export function e3SaveDefaultsFromJson(text: string): E3SaveDefaults {
   for (const k of OPTIONAL_KEYS) {
     const v = raw[k];
     if (typeof v === 'string') out[k] = fromBase64(v);
+  }
+  const strings = raw['strings'];
+  if (strings && typeof strings === 'object') {
+    out.strings = new Map(Object.entries(strings as Record<string, string>).map(([k, v]) => [Number(k), v]));
   }
   return out;
 }

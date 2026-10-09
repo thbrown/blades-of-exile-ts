@@ -16,9 +16,7 @@
  *   over it (`applyE3TownTerrain`, `applyE3TownCreatures`,
  *   `applyE3TownItems`);
  * - the four remembered towns' creatures (`creature_save`), the wandering
- *   groups outdoors (`out_c`), the magic shops' stock, the journal and the
- *   encounter and talk notes (E3 keeps string numbers; the engine keeps
- *   text) and the stored items;
+ *   groups outdoors (`out_c`), the magic shops' stock and the stored items;
  * - the converter's own flags, in SDF columns 10–49 (`flags.ts`): a one-shot
  *   spot E3 erased, the daily stamps and the day counts. Only the town states
  *   (`e3TownState`) are worked out again, since they follow from the day.
@@ -40,6 +38,7 @@ import {
   E3_TABLE_ITEM_SIZE, e3ItemGraphic, e3TableItemCount, unenchantedName, type E3SaveDefaults,
 } from './e3SaveDefaults';
 import { freshenForLoad } from './saveIo';
+import { readE3Notes } from './e3SaveNotes';
 import type { Vehicle } from '../data/vehicle';
 import type { E3Job } from '../game/e3Jobs';
 import { E3_JOBS_HELD, E3_JOBS_PER_BOARD, E3_JOB_BANKS, e3JobsAsLoaded } from '../game/e3Jobs';
@@ -223,8 +222,8 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
   party.horses = scenario.horses.filter((v) => v.exists).map((v) => ({ ...v }));
   for (const town of scenario.towns) town.canFind = !town.isHidden;
   univ.refreshStoreItems();
-  // TODO(e3save): creature_save, out_c, the magic shops' stock, the journal,
-  // the notes and the stored items.
+  // TODO(e3save): creature_save, out_c, the magic shops' stock and the
+  // stored items.
 
   const p = new E3Bytes(save.party);
   party.age = p.i32(E3P.AGE);
@@ -269,6 +268,8 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
     const day = p.i16(E3P.KEY_TIMES + 2 * k);
     if (day !== E3P.KEY_TIME_NEVER) party.keyTimes.set(k + 1, day);
   }
+  // The journal and the notes, by E3's string numbers (`e3SaveNotes.ts`).
+  readE3Notes(univ, p, defaults, warnings);
   // The converter's town states, which E3 works out on entering the town.
   // TODO(e3save): its other flags (one-shot spots, daily stamps, day counts).
   TOWN_STATES.forEach((g, k) => {

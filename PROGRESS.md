@@ -17172,3 +17172,23 @@ and `TODO(e3save)`.
       step check reads that flag under `lava` = `exile3` (BoE leaves it
       unused). 75 was already right, as damaging ground; emit.ts's comment
       saying E3 kept every monster off it was wrong.
+- [x] **The journal, the encounter notes and the conversation notes**
+      (`src/fileio/e3SaveNotes.ts`), both ways. E3 keeps string numbers
+      (`get_str(list, k)` = string `list * 300 + k`), the engine text, so
+      `e3save.json` now carries all 12,472 of E3's strings (1.1 MB, about
+      what it already held). The journal is entry and day; a note is one
+      string, placed in the town or zone of its list whose messages hold it;
+      a talk note is personality, town and two replies (below 1000 the
+      speaker's talk block, 1000 and up block 15). **What E3 records from a
+      node depends on its type** (the arms at `1020:2e16`): the pair
+      52 + 3j, 53 + 3j even when the second is empty, but types 1, 3, 4, 10,
+      21, 22, 24 and 28 keep only the reply they chose and clear the second.
+      All seven of the user's saves now go out with the same bytes in all
+      three lists, but for two talk notes whose second number E3 left stale
+      on an empty string. **Found on the way:** a new game's journal was
+      empty, where E3's `init_party` writes entry 1 ("Arrived at Fort
+      Emergence…"); the scenario's new `start-journal` = `1` flag does it.
+
+**Gotcha (2026-10-08):** `e3quests.test.ts`'s "the Mind Crystal ends the
+golem plague" hangs (over 10 minutes, alone or in the full run) at
+`026d93c` too, before this round, so it isn't these changes. Not chased yet.

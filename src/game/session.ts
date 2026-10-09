@@ -532,6 +532,12 @@ export class GameSession {
     // `none` predates finding that and is now belt and braces.
     const silent = this.univ.scenario.featureFlags['start-sound'] === 'none';
     this.startTownMode(this.univ.scenario.startTown, FORCED_ENTRY, true, silent);
+    // **`start-journal` = `<entry>`**: the journal starts with that entry,
+    // dated today and without a word, as Exile III's `init_party` writes
+    // entry 1 ("Arrived at Fort Emergence…", party+0x7bb2) into a new party.
+    const first = Number(this.univ.scenario.featureFlags['start-journal'] ?? -1);
+    const entry = this.univ.scenario.journalStrs[first];
+    if (first > 0 && entry) this.univ.party.addToJournal(entry, this.univ.party.calcDay(), this.univ.scenario.id);
     // put_party_in_scen runs the scenario's on-init node last (boe.party.cpp:238)
     // — **and only when it was not forced** (:230). A `debug_launch_scen` or a
     // load straight from the startup screen passes `force`, and skips the intro
