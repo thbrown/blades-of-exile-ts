@@ -1,0 +1,430 @@
+/**
+ * Exile III's own code against the converted scripts.
+ *
+ * The scripts in `tools/e3convert/towns/` were copied out of EXILE3.EXE's
+ * disassembly by hand. Here the EXE itself runs the same step, in an x86
+ * emulator (`tools/e3convert/emu/`), from the same saved game, with the same
+ * buttons pressed, and the port is given E3's own dice. Then the two are
+ * compared: what the player was shown, the `get_ran` calls asked (bounds and
+ * order are part of the spec), and every byte of the party record and the PCs
+ * that either side changed, read back through `exportE3Save`.
+ *
+ * Needs the E3 files (`findE3Dir`) and a Python with `unicorn` and
+ * `capstone`: `E3EMU_PYTHON`, else `tools/e3convert/emu/.venv` if there is
+ * one (its README says how to make it), else `python3`. It skips without them.
+ */
+
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { Scenario } from '../src/data/scenario';
+import { E3ITEM, E3P, E3PC, E3_PARTY_SIZE, E3_PC_SIZE, readE3Save } from '../src/fileio/e3save';
+import { e3SaveDefaultsFromJson, type E3SaveDefaults } from '../src/fileio/e3SaveDefaults';
+import { exportE3Save } from '../src/fileio/e3SaveExport';
+import { applyE3Save } from '../src/fileio/e3SaveImport';
+import type { Location } from '../src/core/location';
+import type { Player } from '../src/universe/player';
+import { emitScenario } from '../tools/e3convert/emitNode';
+import { findE3Dir } from '../tools/e3convert/install';
+import { QuestRunner, loadExile3 } from './support/e3Quest';
+
+const dir = findE3Dir();
+const VENV_PY = new URL('../tools/e3convert/emu/.venv/bin/python', import.meta.url).pathname;
+const PY = process.env.E3EMU_PYTHON ?? (existsSync(VENV_PY) ? VENV_PY : 'python3');
+const hasEmu = !!dir && spawnSync(PY, ['-c', 'import unicorn, capstone']).status === 0;
+const SPOT_PY = new URL('../tools/e3convert/emu/spot.py', import.meta.url).pathname;
+
+export interface SpotCase {
+  save: string;
+  zone: number;
+  x: number;
+  y: number;
+  /** Buttons by index, or every dialog's first or last. */
+  answers: number[] | 'first' | 'last';
+  /** How many times the step is taken (default 1); the second shows what the first left. */
+  visits?: number;
+  /** Every roll its least or its most, on both sides. */
+  dice: 'low' | 'high';
+}
+
+interface E3Event { kind: 'dialog' | 'msg' | 'line' | 'visit'; id?: number | number[]; text?: string | (string | null)[]; button?: number; title?: string }
+interface E3Result {
+  events: E3Event[];
+  draws: [number, number, number, number][];
+  moved: number | null;
+  error: string | null;
+  answersLeft: number;
+  before: { party: string; pcs: string };
+  after: { party: string; pcs: string };
+}
+
+/** `spot.py` on `cases`, asynchronously: a long batch must not block vitest's worker. */
+function runE3(cases: SpotCase[], dialogButtons: Record<number, number>): Promise<E3Result[]> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(PY, [SPOT_PY]);
+    const out: Buffer[] = [];
+    let err = '';
+    child.stdout.on('data', (d: Buffer) => out.push(d));
+    child.stderr.on('data', (d: Buffer) => { err = (err + d.toString()).slice(-4000); });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code !== 0) reject(new Error(`spot.py exited ${code}: ${err}`));
+      else resolve(JSON.parse(Buffer.concat(out).toString('utf8')) as E3Result[]);
+    });
+    child.stdin.end(JSON.stringify({ dialogButtons, cases }));
+  });
+}
+
+/**
+ * E3 copies a whole 63-byte table record into a pack, junk after each name's
+ * NUL included, where the port writes a clean string. Zero what follows the
+ * NUL in each item's two names (and each PC's own), so only the names compare.
+ */
+function clearNameTails(pcs: Uint8Array): Uint8Array {
+  const out = pcs.slice();
+  const clear = (at: number, len: number) => {
+    const nul = out.subarray(at, at + len).indexOf(0);
+    if (nul >= 0) out.fill(0, at + nul, at + len);
+  };
+  for (let pc = 0; pc < 6; pc++) {
+    const base = pc * E3_PC_SIZE;
+    clear(base + E3PC.NAME, E3PC.NAME_LEN);
+    for (let i = 0; i < 24; i++) {
+      const it = base + E3PC.ITEMS + i * E3ITEM.SIZE;
+      clear(it + E3ITEM.FULL_NAME, E3ITEM.FULL_NAME_LEN);
+      clear(it + E3ITEM.NAME, E3ITEM.NAME_LEN);
+    }
+  }
+  return out;
+}
+
+/**
+ * Differences already understood, and why: kept out of `diffs` so that a sweep
+ * shows what is new. Each is a finding in PROGRESS.md ("EXILE3.EXE run as an
+ * oracle"); take an entry out when its cause is fixed.
+ */
+const KNOWN: [RegExp, string][] = [
+  [/^party OUT_C/, 'an encounter group is placed by the party, not on E3\'s marker spot (script.ts, onceEncounter), and exported as its zone\'s first group'],
+  [/: E3 0→20, port 0→250$/, 'BoE\'s once-nodes mark a flag 250 where E3\'s one-shot helpers write 20'],
+];
+
+/** How long one case may take on the port's side before it's reported and skipped. */
+const PORT_CASE_MS = 20_000;
+
+const b64 = (s: string) => new Uint8Array(Buffer.from(s, 'base64'));
+
+/** Party-record bytes neither side's play decides: E3's help tips, which the port doesn't keep. */
+const IGNORED: [number, number, string][] = [
+  [E3P.HELP_RECEIVED, E3P.HELP_RECEIVED + 120, 'help tips'],
+];
+
+/**
+ * A PC's `weap_poisoned`, the slot last poisoned, means nothing while no
+ * weapon is (status 0 is 0). E3's `sort_pc_items` moves it along with the item
+ * in that slot regardless (1997's ITEMS.CPP:99), and the port, which keeps the
+ * weapon itself, writes 0; so it's compared only while a weapon is poisoned.
+ */
+function ignorePoisonSlot(e3After: Uint8Array): (o: number) => boolean {
+  return (o) => {
+    const pc = Math.floor(o / E3_PC_SIZE), f = o % E3_PC_SIZE;
+    if (f !== E3PC.WEAP_POISONED && f !== E3PC.WEAP_POISONED + 1) return false;
+    const st = pc * E3_PC_SIZE + E3PC.STATUS;
+    return e3After[st] === 0 && e3After[st + 1] === 0;
+  };
+}
+
+/** A name for party byte `o`, for a report a person reads. */
+export function partyByteName(o: number): string {
+  if (o >= E3P.FLAGS && o < E3P.FLAGS + E3P.FLAG_ROWS * 10) {
+    const f = o - E3P.FLAGS;
+    return `flag(${Math.floor(f / 10)},${f % 10}) [0x${o.toString(16)}]`;
+  }
+  if (o >= E3P.SPEC_ITEMS && o < E3P.FLAGS) return `special item ${(o - E3P.SPEC_ITEMS) >> 1}`;
+  let best: [string, number] = ['?', 0];
+  for (const [k, v] of Object.entries(E3P)) if (typeof v === 'number' && v <= o && v >= best[1] && !k.endsWith('SIZE') && !k.endsWith('ROWS') && !k.endsWith('TOWNS') && k !== 'KEY_TIME_NEVER') best = [k, v];
+  return `${best[0]}+${o - best[1]} [0x${o.toString(16)}]`;
+}
+
+export function pcByteName(o: number): string {
+  const pc = Math.floor(o / E3_PC_SIZE), f = o % E3_PC_SIZE;
+  if (f >= E3PC.SKILLS && f < E3PC.SKILLS + 60) return `pc${pc} skill ${(f - E3PC.SKILLS) >> 1}`;
+  let best: [string, number] = ['?', 0];
+  for (const [k, v] of Object.entries(E3PC)) if (typeof v === 'number' && v <= f && v >= best[1] && !k.endsWith('_LEN')) best = [k, v];
+  return `pc${pc} ${best[0]}+${f - best[1]} [+0x${f.toString(16)}]`;
+}
+
+export interface Comparison {
+  /** Things that differ: the findings. */
+  diffs: string[];
+  /** Differences of a kind already understood (`KNOWN`), with the reason. */
+  known: string[];
+  /** The `get_ran` calls, when they differ: by design, often, as the engines roll differently. */
+  dice: string[];
+  /** E3 changed it and the port has no field for it: worth knowing, not a mismatch. */
+  unmodeled: string[];
+}
+
+/**
+ * Bytes either side changed. A byte only E3 changed counts against the port if
+ * the port's export reproduces its value before the step (so the port does
+ * keep it); otherwise it's listed as unmodeled.
+ */
+function compareBytes(
+  label: string, name: (o: number) => string,
+  e3Before: Uint8Array, e3After: Uint8Array, pBefore: Uint8Array, pAfter: Uint8Array,
+  ignore: (o: number) => boolean, out: Comparison,
+): void {
+  for (let o = 0; o < e3Before.length; o++) {
+    if (ignore(o)) continue;
+    const e3Changed = e3Before[o] !== e3After[o], pChanged = pBefore[o] !== pAfter[o];
+    if (!e3Changed && !pChanged) continue;
+    const what = `${label} ${name(o)}: E3 ${e3Before[o]}→${e3After[o]}, port ${pBefore[o]}→${pAfter[o]}`;
+    if (e3Changed && !pChanged && pBefore[o] !== e3Before[o]) out.unmodeled.push(what);
+    else if (e3After[o] !== pAfter[o]) out.diffs.push(what);
+  }
+}
+
+describe.skipIf(!hasEmu)("Exile III's own code against the converted scripts", () => {
+  const out = mkdtempSync(join(tmpdir(), 'e3emu-'));
+  let scen: Scenario;
+  let defaults: E3SaveDefaults;
+  let debug: { dialogPages: Record<number, number>; dialogButtons: Record<number, number> };
+
+  beforeAll(async () => {
+    emitScenario(dir as string, out);
+    scen = await loadExile3(out);
+    defaults = e3SaveDefaultsFromJson(readFileSync(join(out, 'e3save.json'), 'utf8'));
+    debug = JSON.parse(readFileSync(join(out, 'debug.json'), 'utf8')) as typeof debug;
+  }, 120000);
+  afterAll(() => rmSync(out, { recursive: true, force: true }));
+
+  interface PortResult {
+    q: QuestRunner; asked: string[]; moved: boolean | null; before: Uint8Array[]; after: Uint8Array[];
+    /** `exportE3Save`'s, after the step, and each PC's items by name: for reading a case in full. */
+    warnings: string[]; pack: string[][];
+    /** The lines the step put in the text area, as E3's `FUN_10d0_4c8d` lines. */
+    lines: string[];
+  }
+
+  async function runPort(c: SpotCase, answers: number[]): Promise<PortResult> {
+    const q = new QuestRunner(scen);
+    applyE3Save(new Uint8Array(readFileSync(c.save)), q.univ, defaults);
+    // As File > Open does (`loadE3Save` in main.ts): the mode is the save's.
+    q.session.resumeLoadedGame();
+    await q.settle();
+    // An outdoor spot needs an outdoor party: in town mode the engine refuses
+    // every outdoor node (`outdoorSpec`), which hides half of what a spot does.
+    if (!q.session.isOutdoors) throw new Error(`${c.save} is saved in town: use an outdoor save`);
+    const zx = c.zone % 9, zy = Math.floor(c.zone / 9);
+    q.session.positionParty(zx, zy, c.x, c.y);
+    await q.settle();
+    const exported = () => {
+      const s = readE3Save(exportE3Save(q.univ, defaults).bytes);
+      const pcs = new Uint8Array(E3_PC_SIZE * 6);
+      s.pcs.forEach((p, i) => pcs.set(p, i * E3_PC_SIZE));
+      return [s.party.slice(0, E3_PARTY_SIZE), pcs];
+    };
+    const before = exported();
+    // The same extreme dice as E3's side. The port's engine rolls its own way
+    // (a BoE `if-rand` is `get_ran(1,1,100) < n` where E3 flips
+    // `get_ran(1,0,1)`), so the calls themselves are only noted.
+    const rng = q.univ.rng;
+    const real = rng.getRan.bind(rng);
+    const asked: string[] = [];
+    rng.getRan = (times: number, min: number, max: number, useUnique = false) => {
+      if (useUnique) return real(times, min, max, true);
+      asked.push(`${times},${min},${max}`);
+      return times * (c.dice === 'low' ? min : max);
+    };
+    q.log.length = 0;
+    const linesBefore = q.univ.transcriptAdded;
+    // E3's buttons, then the first button for any dialog E3 didn't show.
+    q.answer(...answers, ...Array<number>(40).fill(0));
+    const where = { ...q.party.outLoc };
+    let moved: boolean | null = null;
+    try {
+      // `check_special_terrain`, E3's `FUN_10c0_0c97`: the square's special
+      // and its terrain's effects (a fire wall, a swamp) together.
+      const session = q.session as unknown as {
+        checkSpecialTerrain(where: Location, who: Player): Promise<{ canEnter: boolean }>;
+      };
+      for (let v = 0; v < (c.visits ?? 1); v++) {
+        if (v) q.log.push('[visit]');
+        moved = (await session.checkSpecialTerrain(where, q.party.pcs[0]!)).canEnter;
+        await q.settle();
+      }
+    } finally {
+      rng.getRan = real;
+    }
+    const warnings = exportE3Save(q.univ, defaults).warnings;
+    const pack = q.party.pcs.map((pc) => pc.items.filter((it) => it && it.variety !== 0).map((it) => it.fullName ?? it.name));
+    pack.push([`outdoors ${q.session.isOutdoors}, mode ${q.session.mode}, town ${q.univ.town?.record.name ?? "-"}, gold ${q.party.gold}, outLoc ${JSON.stringify(q.party.outLoc)}, sector ${JSON.stringify(q.party.sector)}`]);
+    const lines = q.univ.transcript.slice(q.univ.transcript.length - (q.univ.transcriptAdded - linesBefore)).map((l) => l.trim());
+    return { q, asked, moved, before, after: exported(), warnings, pack, lines };
+  }
+
+  /** How many of the engine's dialogs E3's dialog `id` is shown as (`e3DialogPageTexts`). */
+  const pages = (id: number) => debug.dialogPages[id] ?? 1;
+
+  /** The buttons the port presses for E3's: an OK for each lead page, then E3's. */
+  function portAnswers(e3: E3Result): number[] {
+    return e3.events.flatMap((ev) => (ev.kind === 'dialog'
+      ? [...Array<number>(pages(ev.id as number) - 1).fill(0), ev.button!] : []));
+  }
+
+  /** E3's events as the port's log writes them, a long dialog as its pages. */
+  function e3Log(e3: E3Result): string[] {
+    return e3.events.flatMap((ev) => {
+      // E3's "Instant help" tips, which the port doesn't have (`IGNORED`).
+      if (ev.kind === 'msg' && ev.title?.startsWith('Instant help')) return [];
+      // A message slot of 0 is an empty string, which the box doesn't show.
+      if (ev.kind === 'msg' && !(ev.text as (string | null)[]).some(Boolean)) return [];
+      // E3's strings write a double quote as `_`, and often end in a space;
+      // the converter turns the one back and trims the other.
+      if (ev.kind === 'msg') return [`[msg] ${(ev.text as (string | null)[]).filter(Boolean).map((t) => t!.trim()).join(' | ').replaceAll('_', '"')}`];
+      if (ev.kind === 'visit') return ['[visit]'];
+      if (ev.kind === 'dialog') {
+        return [...Array<string>(pages(ev.id as number) - 1).fill(`[choice] dialog ${ev.id as number} (lead page) -> button 0`),
+          `[choice] dialog ${ev.id as number} -> button ${ev.button}`];
+      }
+      return [];
+    });
+  }
+
+  /** The port's log in the same terms: a choice by its button's index. */
+  function portLog(q: QuestRunner): string[] {
+    return q.log.flatMap((l) => {
+      if (l.startsWith('[msg]') || l === '[visit]') return [l];
+      const m = /^\[choice\] .* \[(.*)\] -> (.*)$/.exec(l);
+      if (m) return [`[choice] -> button ${m[1]!.split('/').indexOf(m[2]!)}`];
+      return [];
+    });
+  }
+
+  type Compared = Comparison & { case: SpotCase; e3: string[]; port: string[]; error?: string; portLog?: string[]; e3Events?: E3Event[] };
+
+  /**
+   * E3 first, all in one batch (`first`/`last` by each dialog's own count of
+   * buttons); then the port, pressing the buttons E3 pressed.
+   */
+  async function compareAll(cases: SpotCase[]): Promise<Compared[]> {
+    const e3s = await runE3(cases, debug.dialogButtons);
+    const ports: (PortResult | string)[] = [];
+    for (const [i, c] of cases.entries()) {
+      // A step that never settles (a fight waiting on a player) is a finding
+      // too, not a reason to stop the sweep.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const limit = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`no end after ${PORT_CASE_MS / 1000} s`)), PORT_CASE_MS);
+      });
+      try { ports.push(await Promise.race([runPort(c, portAnswers(e3s[i]!)), limit])); } catch (err) { ports.push(`port: ${(err as Error).message.split('\n')[0]}`); } finally { clearTimeout(timer); }
+      if (cases.length > 50 && (i + 1) % 100 === 0) console.log(`port: ${i + 1}/${cases.length}`);
+      await new Promise((r) => setImmediate(r));   // let vitest's worker talk
+    }
+    return cases.map((c, i) => {
+      const port = ports[i]!, e3 = e3s[i]!;
+      const res: Compared = { case: c, diffs: [], known: [], dice: [], unmodeled: [], e3: e3Log(e3), port: [] };
+      if (typeof port === 'string') return { ...res, error: port };
+      if (e3.error) return { ...res, error: `E3: ${e3.error}` };
+      res.port = portLog(port.q);
+      res.portLog = [...port.q.log, ...port.warnings.map((w) => `[export] ${w}`), ...port.pack.map((p, i) => `[pc${i}] ${p.join(', ')}`)];
+      res.e3Events = e3.events;
+      const e3Asked = e3.draws.map((d) => `${d[0]},${d[1]},${d[2]}`);
+      if (e3Asked.join(' ') !== port.asked.join(' '))
+        res.dice.push(`E3 get_ran(${e3Asked.join(') (')}), port get_ran(${port.asked.join(') (')})`);
+      // Messages and choices, in order; a dialog is matched by its place and button.
+      const a = res.e3.map((l) => l.replace(/dialog \d+ (\(lead page\) )?/, '')), b = res.port;
+      for (let k = 0; k < Math.max(a.length, b.length); k++) {
+        if (a[k] !== b[k]) {
+          res.diffs.push(`shown #${k}: E3 ${a[k] ?? '(nothing)'}\n            port ${b[k] ?? '(nothing)'}`);
+          break;
+        }
+      }
+      // The text area's lines, on their own: the two engines interleave them
+      // with dialogs differently, but each line should be there.
+      const e3Lines = e3.events.filter((ev) => ev.kind === 'line').map((ev) => (ev.text as string).trim()).filter(Boolean);
+      // The engine's `if-gold` says what it took; E3's `FUN_1070_0623` doesn't.
+      const portLines = port.lines.filter((l) => l && !/^You give up \d+ (gold|food)\.$/.test(l));
+      if (portLines.length !== port.lines.filter(Boolean).length)
+        res.known.push('lines: the engine\'s if-gold says "You give up N gold.", E3\'s pay (FUN_1070_0623) says nothing');
+      if (e3Lines.join('\n') !== portLines.join('\n'))
+        res.diffs.push(`lines: E3 ${JSON.stringify(e3Lines)}, port ${JSON.stringify(portLines)}`);
+      const e3Moved = e3.moved !== 0;
+      if (port.moved !== null && port.moved !== e3Moved)
+        res.diffs.push(`the step: E3 ${e3Moved ? 'goes through' : 'is blocked'}, port ${port.moved ? 'goes through' : 'is blocked'}`);
+      const ignoreParty = (o: number) => IGNORED.some(([lo, hi]) => o >= lo && o < hi);
+      compareBytes('party', partyByteName, b64(e3.before.party), b64(e3.after.party), port.before[0]!, port.after[0]!, ignoreParty, res);
+      compareBytes('pcs', pcByteName, clearNameTails(b64(e3.before.pcs)), clearNameTails(b64(e3.after.pcs)),
+        clearNameTails(port.before[1]!), clearNameTails(port.after[1]!), ignorePoisonSlot(b64(e3.after.pcs)), res);
+      for (const d of [...res.diffs]) {
+        const k = KNOWN.find(([re]) => re.test(d));
+        if (k) {
+          res.diffs.splice(res.diffs.indexOf(d), 1);
+          if (!res.known.includes(k[1])) res.known.push(k[1]);
+        }
+      }
+      return res;
+    });
+  }
+
+  async function compare(c: SpotCase): Promise<Compared> {
+    const [r] = await compareAll([c]);
+    if (r!.error) throw new Error(r!.error);
+    return r!;
+  }
+
+  /** An outdoor save (the party at the Remote Aerie, level 25, every spell): `check-saves/README.TXT`. */
+  const Q12 = () => join(dir as string, 'check-saves', 'Q12.SAV');
+
+  it.each([
+    { label: 'walks on', answers: [0] },
+    { label: 'goes in, and declines the lessons', answers: [1, 0] },
+    { label: 'goes in, and pays for the lessons', answers: [1, 1] },
+  ].flatMap((t) => (['low', 'high'] as const).map((dice) => ({ ...t, dice }))))(
+    "Vilovsky's temple (zone 5, spot 1): $label, dice $dice", async ({ answers, dice }) => {
+    const r = await compare({ save: Q12(), zone: 5, x: 14, y: 37, answers, dice });
+    expect(r.diffs, [...r.diffs, 'E3:', ...r.e3, 'port:', ...r.port].join('\n')).toEqual([]);
+  }, 60000);
+
+  /** One case, everything printed: `E3EMU_CASE=zone,x,y,answers,dice` (answers `first`, `last` or `1/0/2`). */
+  it.skipIf(!process.env.E3EMU_CASE)('one case, in full', async () => {
+    const [z, x, y, a, d] = process.env.E3EMU_CASE!.split(',');
+    const answers = a === 'first' || a === 'last' ? a : a!.split('/').map(Number);
+    const [r] = await compareAll([{
+      save: process.env.E3EMU_SAVE ?? Q12(), zone: +z!, x: +x!, y: +y!, answers, dice: (d ?? 'low') as 'low' | 'high', visits: 2,
+    }]);
+    console.log(JSON.stringify(r, null, 1));
+  }, 120000);
+
+  /**
+   * Every outdoor spot of every zone, from each of `E3EMU_SAVE` (outdoor
+   * saves, comma-separated; default Q12), with
+   * every dialog's first button and then its last, under low and high dice.
+   * Slow (minutes), so only with `E3EMU_SWEEP=1`; the report goes to
+   * `E3EMU_REPORT` (default `e3emu-report.json` in the temp dir).
+   */
+  it.skipIf(!process.env.E3EMU_SWEEP)('sweep: every outdoor spot', async () => {
+    const saves = process.env.E3EMU_SAVE?.split(',') ?? [Q12()];
+    const outdoor = readFileSync(join(dir as string, 'OUTDOOR.DAT'));
+    const only = process.env.E3EMU_ZONES?.split(',').map(Number);
+    const cases: SpotCase[] = [];
+    for (let z = 0; z < 90; z++) {
+      if (only && !only.includes(z)) continue;
+      const o = z * 0xc94;
+      for (let k = 0; k < 18; k++) {
+        if (!outdoor[o + 2340 + k]) continue;
+        const x = outdoor[o + 2304 + 2 * k]!, y = outdoor[o + 2305 + 2 * k]!;
+        for (const save of saves)
+          for (const answers of ['first', 'last'] as const)
+            for (const dice of ['low', 'high'] as const) cases.push({ save, zone: z, x, y, answers, dice, visits: 2 });
+      }
+    }
+    const results = await compareAll(cases);
+    const report = join(process.env.E3EMU_REPORT ?? join(tmpdir(), 'e3emu-report.json'));
+    writeFileSync(report, JSON.stringify(results, null, 1));
+    const bad = results.filter((r) => r.error || r.diffs.length);
+    console.log(`${cases.length} runs: ${results.length - bad.length} agree, ${bad.filter((r) => r.error).length} errors, ${bad.filter((r) => !r.error).length} differ. Report: ${report}`);
+  }, 4 * 3_600_000);
+});

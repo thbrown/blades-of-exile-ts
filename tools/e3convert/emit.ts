@@ -66,7 +66,7 @@ import { e3NoteItems, e3NoteSteps, e3StampedItems, isE3NoteAbility } from './not
 import { DAILY_FLAGS, KILL_SCRIPTS } from './towns/talkScripts';
 import { dailyPlot } from './towns/plot';
 import { townStatesXml } from './towns/townStates';
-import { SpecBuilder, partySpecItem, type ScriptSource, type Step } from './script';
+import { SpecBuilder, e3DialogPageTexts, partySpecItem, type ScriptSource, type Step } from './script';
 import { BASIC_BUTTONS } from '../../src/game/specials/oneshot';
 import type { SpecItem } from '../../src/data/quest';
 import { e3SpecialItems } from './specItems';
@@ -1279,7 +1279,16 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
       write(`towns/talk${ruin.record}.xml`, `${XML_HEAD}<dialogue boes="2.0.0">\n</dialogue>\n`);
     }
   });
-  write('debug.json', JSON.stringify(debug));
+  // E3's dialogs that the engine shows as more than one (`e3DialogPageTexts`),
+  // for a test that lines E3's dialogs up with the port's (`test/e3emu.test.ts`).
+  // And every dialog's number of buttons, which E3 returns the control id of.
+  const dialogPages: Record<number, number> = {}, dialogButtons: Record<number, number> = {};
+  for (const [id, d] of e3Src.dialogs) {
+    const n = e3DialogPageTexts(d).length;
+    if (n > 1) dialogPages[id] = n;
+    dialogButtons[id] = d.controls.filter((c) => /^[01]_\d+$/.test(c.text)).length;
+  }
+  write('debug.json', JSON.stringify({ ...debug, dialogPages, dialogButtons }));
   // What reading and writing E3's own saves needs from the EXE (src/fileio/e3SaveImport.ts).
   const saveDefaults = readE3SaveDefaults(files.exe, files.town, files.outdoor);
   write('e3save.json', e3SaveDefaultsToJson(saveDefaults));

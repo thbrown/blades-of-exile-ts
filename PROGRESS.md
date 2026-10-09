@@ -17253,3 +17253,83 @@ ran, and a `| grep` hid the "command not found". Don't wrap a check in
       number too (`E3_ENCHANT_ABILITY`), and an enchanted item from a save
       comes in with the enchantment's BoE ability beside E3's, as this
       port's enchanting leaves one. **`TODO(e3save)` is empty.**
+
+### EXILE3.EXE run as an oracle (2026-10-09)
+
+Exile III's quest logic was transcribed from disassembly by hand; until now
+the only check that the copy matched the EXE was the user trying things in
+the original (`E3-CHECK-IN-ORIGINAL.md`). **`tools/e3convert/emu/` runs the
+EXE's own code** in an x86 emulator (unicorn, real mode: the whole EXE is
+0xdabd8 bytes, so every NE segment gets a paragraph below 1 MB), and
+`test/e3emu.test.ts` holds the converted scripts against it: the same save,
+the same square, the same buttons, the same (extreme) dice, and every byte
+of the party record and PCs either side changed. The README there says how
+it works and how to set up its Python.
+
+- **What runs as E3 compiled it:** the save is loaded by E3's own
+  `load_file` (`FUN_1040_018e`), which loads the outdoor zones itself; the
+  step is `FUN_10c0_0c97` (`check_special_terrain`), so the spot's handler,
+  the terrain's effects (a fire wall curses) and the helpers under them
+  (`give_item`, `sort_pc_items`, `pay`, the journal) are all E3's. Windows,
+  the Borland runtime, the message box (`FUN_1008_3b3f`), the dialog
+  (`FUN_1070_31cd`) and `get_ran` are stubs that log and answer.
+- **Dice:** the engines roll differently (an `if-rand` is
+  `get_ran(1,1,100) < n` where E3 flips `get_ran(1,0,1)`), so a case runs
+  with every roll at its least and again at its most, on both sides.
+- **Each sweep case takes the step twice**, because what a spot leaves
+  behind (its flag, its marker gone) only shows on the second visit.
+- **Pinned cases** (Vilovsky's temple, its three paths) run with the suite;
+  `E3EMU_SWEEP=1` sweeps every outdoor spot of every zone (about 80 minutes)
+  and `tools/e3convert/emu/report.mjs` groups what it finds. `KNOWN` in the
+  test lists the differences already understood, so a sweep shows what's new.
+
+**Findings** (from the first sweeps, Q12 and Q01; none fixed yet, all for
+the user to rule on):
+
+1. **"Leave" on an E3 item dialog ends the port's chain; E3 carries on.**
+   `giveItemDialog` is BoE's ONCE_GIVE_ITEM_DIALOG, whose Leave sets
+   `nextSpec = -1` (`oneshot.ts`); E3's `FUN_10e0_00ec` returns and the
+   handler goes on. So leaving zone 0's ember flowers skips the swamp
+   denizens' ambush that E3 springs ("As you search the flowers…"), and the
+   same for zones 27 (the bandit campsite) and 70 (the dead end). Steps
+   after a `giveItemDialog` that aren't `ifFlagAtLeast(spot, 1, …)` are the
+   ones that matter: `zones.ts` lines 52, 381, 410, 572 (a message and a
+   spell taught), 902.
+2. **Spot flags: E3's one-shot helpers write 20, the engine's once-nodes
+   250** (`onceMsg`, `giveItemDialog`; `onceEncounter` already writes 20
+   after its node). A spot below 10 whose own flag is exactly 20 is dead in
+   E3 (`specials.ts`, the guard after "A spot below 10"), so a spot marked
+   250 can run again in the port, and an exported save carries 250 where E3
+   would. About 100 spots.
+3. **Every E3 payment prints "  You give up N gold."** in the port (the
+   engine's `if-gold` with a take); E3's `FUN_1070_0623` says nothing.
+4. **Encounter groups** are placed by the party in the port and on the
+   zone's marker spot in E3 (already noted in `script.ts`, `onceEncounter`),
+   and the export writes such a group as its zone's *first* group's bytes,
+   so a placed special encounter doesn't round-trip.
+
+Harness lessons, any of which would make a sweep lie:
+
+- Gotcha: **an in-town save leaves the port's outdoor nodes refused**
+  (`outdoorSpec` returns unless `isOutdoors`), and `applyE3Save` alone
+  doesn't set the mode: call `session.resumeLoadedGame()` as `loadE3Save`
+  does. Most check saves are in town; Q12, Q15, Q16, Q22, Q24, Q27, Q29 and
+  the user's POST, SLIMESV2 and THOMAIII are outdoors. Both sides now refuse
+  an in-town save.
+- E3 copies whole 63-byte item records, junk after each name's NUL
+  included; E3's strings write `"` as `_` and end in spaces; a long E3
+  dialog is several of the engine's (`debug.json`'s `dialogPages`, from
+  `e3DialogPageTexts`); its "Instant help" tips aren't the port's; and
+  `weap_poisoned` moves with `sort_pc_items` while nothing is poisoned
+  (1997's ITEMS.CPP:99). The test normalises each.
+- Hook the message *primitive* (`FUN_1008_3b3f`), not `msg`/`msg2`: 21
+  other places call it. And don't stub anything that writes the party
+  record (the journal, `FUN_1008_3780`, was stubbed at first and hid its
+  write).
+- Delay loops read `GetCurrentTime` (USER.15) as well as `GetTickCount`;
+  any clock call left constant hangs a case. A run stops after 200,000
+  Windows calls and names the loop.
+
+Next: town spots (`FUN_10c0_0c97` mode 1, from an in-town save), the
+outdoor group scripts (`FUN_10c0_06c3`), talk scripts; the other outdoor
+saves (`E3EMU_SAVE=a,b,c`) for the flag states Q12 doesn't reach.

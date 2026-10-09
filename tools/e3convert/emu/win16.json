@@ -1,0 +1,779 @@
+{
+"COMMDLG.1": [
+"GetOpenFileName",
+"pascal",
+4
+],
+"COMMDLG.2": [
+"GetSaveFileName",
+"pascal",
+4
+],
+"GDI.1": [
+"SetBkColor",
+"pascal",
+6
+],
+"GDI.2": [
+"SetBkMode",
+"pascal",
+4
+],
+"GDI.3": [
+"SetMapMode",
+"pascal",
+4
+],
+"GDI.4": [
+"SetROP2",
+"pascal",
+4
+],
+"GDI.7": [
+"SetStretchBltMode",
+"pascal",
+4
+],
+"GDI.9": [
+"SetTextColor",
+"pascal",
+6
+],
+"GDI.13": [
+"SetViewportOrg",
+"pascal",
+6
+],
+"GDI.19": [
+"LineTo",
+"pascal",
+6
+],
+"GDI.20": [
+"MoveTo",
+"pascal",
+6
+],
+"GDI.22": [
+"IntersectClipRect",
+"pascal",
+10
+],
+"GDI.24": [
+"Ellipse",
+"pascal",
+10
+],
+"GDI.27": [
+"Rectangle",
+"pascal",
+10
+],
+"GDI.35": [
+"StretchBlt",
+"pascal",
+24
+],
+"GDI.43": [
+"PaintRgn",
+"pascal",
+4
+],
+"GDI.44": [
+"SelectClipRgn",
+"pascal",
+4
+],
+"GDI.45": [
+"SelectObject",
+"pascal",
+4
+],
+"GDI.47": [
+"CombineRgn",
+"pascal",
+8
+],
+"GDI.48": [
+"CreateBitmap",
+"pascal",
+12
+],
+"GDI.51": [
+"CreateCompatibleBitmap",
+"pascal",
+6
+],
+"GDI.52": [
+"CreateCompatibleDC",
+"pascal",
+2
+],
+"GDI.55": [
+"CreateEllipticRgnIndirect",
+"pascal",
+4
+],
+"GDI.56": [
+"CreateFont",
+"pascal",
+30
+],
+"GDI.60": [
+"CreatePatternBrush",
+"pascal",
+2
+],
+"GDI.61": [
+"CreatePen",
+"pascal",
+8
+],
+"GDI.62": [
+"CreatePenIndirect",
+"pascal",
+4
+],
+"GDI.64": [
+"CreateRectRgn",
+"pascal",
+8
+],
+"GDI.66": [
+"CreateSolidBrush",
+"pascal",
+4
+],
+"GDI.68": [
+"DeleteDC",
+"pascal",
+2
+],
+"GDI.69": [
+"DeleteObject",
+"pascal",
+2
+],
+"GDI.80": [
+"GetDeviceCaps",
+"pascal",
+4
+],
+"GDI.81": [
+"GetMapMode",
+"pascal",
+2
+],
+"GDI.87": [
+"GetStockObject",
+"pascal",
+2
+],
+"GDI.90": [
+"GetTextColor",
+"pascal",
+2
+],
+"GDI.91": [
+"GetTextExtent",
+"pascal",
+8
+],
+"GDI.101": [
+"OffsetRgn",
+"pascal",
+6
+],
+"GDI.150": [
+"UnrealizeObject",
+"pascal",
+2
+],
+"GDI.172": [
+"SetRectRgn",
+"pascal",
+10
+],
+"GDI.360": [
+"CreatePalette",
+"pascal",
+4
+],
+"GDI.370": [
+"GetNearestPaletteIndex",
+"pascal",
+6
+],
+"GDI.373": [
+"SetSystemPaletteUse",
+"pascal",
+4
+],
+"GDI.375": [
+"GetSystemPaletteEntries",
+"pascal",
+10
+],
+"GDI.442": [
+"CreateDIBitmap",
+"pascal",
+20
+],
+"KERNEL.5": [
+"LocalAlloc",
+"pascal",
+4
+],
+"KERNEL.7": [
+"LocalFree",
+"pascal",
+2
+],
+"KERNEL.8": [
+"LocalLock",
+"pascal",
+2
+],
+"KERNEL.9": [
+"LocalUnlock",
+"pascal",
+2
+],
+"KERNEL.15": [
+"GlobalAlloc",
+"pascal",
+6
+],
+"KERNEL.17": [
+"GlobalFree",
+"pascal",
+2
+],
+"KERNEL.18": [
+"GlobalLock",
+"pascal",
+2
+],
+"KERNEL.19": [
+"GlobalUnlock",
+"pascal",
+2
+],
+"KERNEL.21": [
+"GlobalHandle",
+"pascal",
+2
+],
+"KERNEL.30": [
+"WaitEvent",
+"pascal",
+2
+],
+"KERNEL.36": [
+"GetCurrentTask",
+"pascal",
+0
+],
+"KERNEL.48": [
+"GetModuleUsage",
+"pascal",
+2
+],
+"KERNEL.49": [
+"GetModuleFileName",
+"pascal",
+8
+],
+"KERNEL.51": [
+"MakeProcInstance",
+"pascal",
+6
+],
+"KERNEL.52": [
+"FreeProcInstance",
+"pascal",
+4
+],
+"KERNEL.60": [
+"FindResource",
+"pascal",
+10
+],
+"KERNEL.61": [
+"LoadResource",
+"pascal",
+4
+],
+"KERNEL.62": [
+"LockResource",
+"pascal",
+2
+],
+"KERNEL.63": [
+"FreeResource",
+"pascal",
+2
+],
+"KERNEL.74": [
+"OpenFile",
+"pascal",
+10
+],
+"KERNEL.81": [
+"_lclose",
+"pascal",
+2
+],
+"KERNEL.82": [
+"_lread",
+"pascal",
+8
+],
+"KERNEL.83": [
+"_lcreat",
+"pascal",
+6
+],
+"KERNEL.84": [
+"_llseek",
+"pascal",
+8
+],
+"KERNEL.85": [
+"_lopen",
+"pascal",
+6
+],
+"KERNEL.86": [
+"_lwrite",
+"pascal",
+8
+],
+"KERNEL.91": [
+"InitTask",
+"pascal",
+0
+],
+"KERNEL.95": [
+"LoadLibrary",
+"pascal",
+4
+],
+"KERNEL.113": null,
+"KERNEL.132": [
+"GetWinFlags",
+"pascal",
+0
+],
+"KERNEL.169": [
+"GetFreeSpace",
+"pascal",
+2
+],
+"KERNEL.349": [
+"_hread",
+"pascal",
+10
+],
+"MMSYSTEM.2": [
+"sndPlaySound",
+"pascal",
+6
+],
+"MMSYSTEM.401": [
+"waveOutGetNumDevs",
+"pascal",
+0
+],
+"MMSYSTEM.402": [
+"waveOutGetDevCaps",
+"pascal",
+8
+],
+"USER.1": [
+"MessageBox",
+"pascal",
+12
+],
+"USER.5": [
+"InitApp",
+"pascal",
+2
+],
+"USER.6": [
+"PostQuitMessage",
+"pascal",
+2
+],
+"USER.10": [
+"SetTimer",
+"pascal",
+10
+],
+"USER.15": [
+"GetCurrentTime",
+"pascal",
+0
+],
+"USER.17": [
+"GetCursorPos",
+"pascal",
+4
+],
+"USER.22": [
+"SetFocus",
+"pascal",
+2
+],
+"USER.23": [
+"GetFocus",
+"pascal",
+0
+],
+"USER.32": [
+"GetWindowRect",
+"pascal",
+6
+],
+"USER.33": [
+"GetClientRect",
+"pascal",
+6
+],
+"USER.34": [
+"EnableWindow",
+"pascal",
+4
+],
+"USER.35": [
+"IsWindowEnabled",
+"pascal",
+2
+],
+"USER.36": [
+"GetWindowText",
+"pascal",
+8
+],
+"USER.37": [
+"SetWindowText",
+"pascal",
+6
+],
+"USER.39": [
+"BeginPaint",
+"pascal",
+6
+],
+"USER.40": [
+"EndPaint",
+"pascal",
+6
+],
+"USER.41": [
+"CreateWindow",
+"pascal",
+30
+],
+"USER.42": [
+"ShowWindow",
+"pascal",
+4
+],
+"USER.53": [
+"DestroyWindow",
+"pascal",
+2
+],
+"USER.56": [
+"MoveWindow",
+"pascal",
+12
+],
+"USER.57": [
+"RegisterClass",
+"pascal",
+4
+],
+"USER.62": [
+"SetScrollPos",
+"pascal",
+8
+],
+"USER.63": [
+"GetScrollPos",
+"pascal",
+4
+],
+"USER.64": [
+"SetScrollRange",
+"pascal",
+10
+],
+"USER.65": [
+"GetScrollRange",
+"pascal",
+12
+],
+"USER.66": [
+"GetDC",
+"pascal",
+2
+],
+"USER.68": [
+"ReleaseDC",
+"pascal",
+4
+],
+"USER.69": [
+"SetCursor",
+"pascal",
+2
+],
+"USER.71": [
+"ShowCursor",
+"pascal",
+2
+],
+"USER.73": [
+"SetRectEmpty",
+"pascal",
+4
+],
+"USER.76": [
+"PtInRect",
+"pascal",
+8
+],
+"USER.77": [
+"OffsetRect",
+"pascal",
+8
+],
+"USER.78": [
+"InflateRect",
+"pascal",
+8
+],
+"USER.79": [
+"IntersectRect",
+"pascal",
+12
+],
+"USER.80": [
+"UnionRect",
+"pascal",
+12
+],
+"USER.82": [
+"InvertRect",
+"pascal",
+6
+],
+"USER.85": [
+"DrawText",
+"pascal",
+14
+],
+"USER.87": [
+"DialogBox",
+"pascal",
+12
+],
+"USER.88": [
+"EndDialog",
+"pascal",
+4
+],
+"USER.89": [
+"CreateDialog",
+"pascal",
+12
+],
+"USER.91": [
+"GetDlgItem",
+"pascal",
+4
+],
+"USER.92": [
+"SetDlgItemText",
+"pascal",
+8
+],
+"USER.93": [
+"GetDlgItemText",
+"pascal",
+10
+],
+"USER.104": [
+"MessageBeep",
+"pascal",
+2
+],
+"USER.107": [
+"DefWindowProc",
+"pascal",
+10
+],
+"USER.108": [
+"GetMessage",
+"pascal",
+10
+],
+"USER.109": [
+"PeekMessage",
+"pascal",
+12
+],
+"USER.111": [
+"SendMessage",
+"pascal",
+10
+],
+"USER.113": [
+"TranslateMessage",
+"pascal",
+4
+],
+"USER.114": [
+"DispatchMessage",
+"pascal",
+4
+],
+"USER.122": [
+"CallWindowProc",
+"pascal",
+14
+],
+"USER.125": [
+"InvalidateRect",
+"pascal",
+8
+],
+"USER.133": [
+"GetWindowWord",
+"pascal",
+4
+],
+"USER.135": [
+"GetWindowLong",
+"pascal",
+4
+],
+"USER.136": [
+"SetWindowLong",
+"pascal",
+8
+],
+"USER.155": [
+"EnableMenuItem",
+"pascal",
+6
+],
+"USER.157": [
+"GetMenu",
+"pascal",
+2
+],
+"USER.159": [
+"GetSubMenu",
+"pascal",
+4
+],
+"USER.160": [
+"DrawMenuBar",
+"pascal",
+2
+],
+"USER.171": [
+"WinHelp",
+"pascal",
+12
+],
+"USER.173": [
+"LoadCursor",
+"pascal",
+6
+],
+"USER.174": [
+"LoadIcon",
+"pascal",
+6
+],
+"USER.176": [
+"LoadString",
+"pascal",
+10
+],
+"USER.177": [
+"LoadAccelerators",
+"pascal",
+6
+],
+"USER.178": [
+"TranslateAccelerator",
+"pascal",
+8
+],
+"USER.180": [
+"GetSysColor",
+"pascal",
+2
+],
+"USER.181": [
+"SetSysColors",
+"pascal",
+10
+],
+"USER.225": [
+"EnumTaskWindows",
+"pascal",
+10
+],
+"USER.232": [
+"SetWindowPos",
+"pascal",
+14
+],
+"USER.244": [
+"EqualRect",
+"pascal",
+8
+],
+"USER.267": [
+"ShowScrollBar",
+"pascal",
+6
+],
+"USER.282": [
+"SelectPalette",
+"pascal",
+6
+],
+"USER.283": [
+"RealizePalette",
+"pascal",
+2
+],
+"USER.284": [
+"GetFreeSystemResources",
+"pascal",
+2
+],
+"USER.286": [
+"GetDesktopWindow",
+"pascal",
+0
+],
+"USER.410": [
+"InsertMenu",
+"pascal",
+12
+],
+"USER.413": [
+"DeleteMenu",
+"pascal",
+6
+],
+"WIN87EM.1": null
+}

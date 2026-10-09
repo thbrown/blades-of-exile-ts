@@ -30,3 +30,7 @@ public/scenarios/exile3/
 
 # The AI player's runs: logs, screenshots, its notes and its browser profile (ai-player/README.md)
 ai-player/runs/
+
+# The E3 emulator check's Python (tools/e3convert/emu/README.md)
+tools/e3convert/emu/.venv/
+__pycache__/

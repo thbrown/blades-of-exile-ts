@@ -59,8 +59,8 @@ export class QuestRunner {
   readonly log: string[] = [];
   /** Every panel shown (`if-panel`), as its layout with the live text filled in. */
   readonly panels: string[] = [];
-  /** Answers to the next choices, as patterns on the button label; consumed in order. */
-  private answers: RegExp[] = [];
+  /** Answers to the next choices, as patterns on the button label or button indices; consumed in order. */
+  private answers: (RegExp | number)[] = [];
   private numbers: number[] = [];
   private texts: string[] = [];
   /** Who the select-PC dialog picks. */
@@ -99,7 +99,11 @@ export class QuestRunner {
         const labels = buttons.map((b) => b.label);
         let i = -1;
         const want = this.answers.shift();
-        if (want) {
+        if (typeof want === 'number') {
+          // -1 is the last button, whatever their number.
+          i = want < 0 ? labels.length - 1 : want;
+          if (i >= labels.length) throw new Error(`no button ${i} among [${labels.join(', ')}] for: ${strs.join(' | ')}\n${this.tail()}`);
+        } else if (want) {
           i = labels.findIndex((l) => want.test(l));
           if (i < 0) throw new Error(`no button matching ${want} among [${labels.join(', ')}] for: ${strs.join(' | ')}\n${this.tail()}`);
         } else {
@@ -146,8 +150,8 @@ export class QuestRunner {
     };
   }
 
-  /** Queue button answers (patterns on the label) for the next choices. */
-  answer(...labels: (string | RegExp)[]): this {
+  /** Queue button answers (patterns on the label, or a button's index) for the next choices. */
+  answer(...labels: (string | RegExp | number)[]): this {
     this.answers.push(...labels.map((l) => (typeof l === 'string' ? new RegExp(`^${l}$`, 'i') : l)));
     return this;
   }

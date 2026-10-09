@@ -58,6 +58,7 @@ node scripts/verify-party.mjs    # the party in memory, carried between scenario
 node scripts/verify-saves.mjs    # save trees: autosave ticks, the restore tree, branches, zip, E3 import
 node scripts/bench-save-ui.mjs   # what saving costs the frame rate (CHROMIUM_PATH=… for another Chromium)
 node scripts/verify-offline.mjs DIR  # the PWA: a build in DIR, played online, then with its server stopped
+E3EMU_SWEEP=1 npx vitest run test/e3emu.test.ts -t sweep   # EXILE3.EXE's own code against every outdoor spot
 ```
 
 `floating-promises.mjs` is cheap and worth the habit: **`get_ran`'s call order
@@ -72,6 +73,13 @@ exits 0 today, and it counts **case labels rather than mentions** on purpose:
 the hand-rolled version that matched bare `SpecType.NAME` was fooled for months
 by `CATEGORY_RANGES` naming its own range endpoints, which hid two real
 opcodes.
+
+`test/e3emu.test.ts` is Exile III's oracle, as the replay corpus is BoE's:
+it runs EXILE3.EXE's own handlers in an x86 emulator (`tools/e3convert/emu/`,
+whose README says how to set up its Python) from a real save, and compares
+what they show and change with the converted scripts. Its pinned cases run
+with the rest; the sweep takes minutes, so run it after changing the
+converter, and read it with `node tools/e3convert/emu/report.mjs REPORT`.
 
 `verify-screen.mjs` is the end-to-end gate — it exercises every milestone's
 demo path and fails on any console error. `SHOTS_DIR=...` chooses where the

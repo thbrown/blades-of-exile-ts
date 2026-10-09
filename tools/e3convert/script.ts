@@ -207,6 +207,28 @@ function msgPic(block: number): number {
   return block === 0xe ? ANAX_PIC : MSG_PIC;
 }
 
+/**
+ * Dialog `d`'s text controls, top to bottom, split into the pages a node
+ * shows: about `PAGE` characters and at most six paragraphs each. Every page
+ * but the last is an OK-only dialog of its own (`leadPages`), so one E3
+ * dialog is this many of the engine's (`test/e3emu.test.ts` needs to know).
+ */
+export function e3DialogPageTexts(d: E3Dialog): string[][] {
+  const texts = d.controls.filter((c) => !/^\d+_\d+$/.test(c.text)).sort((a, b) => a.y - b.y || a.x - b.x);
+  const groups: string[][] = [[]];
+  let size = 0;
+  for (const t of texts) {
+    const cur = groups[groups.length - 1]!;
+    if (cur.length > 0 && (size + t.text.length > PAGE || cur.length === 6)) {
+      groups.push([]);
+      size = 0;
+    }
+    groups[groups.length - 1]!.push(t.text);
+    size += t.text.length;
+  }
+  return groups;
+}
+
 export class SpecBuilder {
   private nodes: string[] = [];
   readonly strings: string[] = [];
@@ -352,23 +374,11 @@ export class SpecBuilder {
     const tags = d.controls.filter((c) => /^5_\d+$/.test(c.text)).sort((a, b) => a.id - b.id);
     const tag = tags.find((c) => /^5_36\d\d$/.test(c.text)) ?? tags[0];
     const pic = tag ? this.src.dialogPic?.(Number(tag.text.slice(2))) : undefined;
-    const texts = d.controls.filter((c) => !/^\d+_\d+$/.test(c.text)).sort((a, b) => a.y - b.y || a.x - b.x);
     const buttons = d.controls.filter((c) => /^[01]_\d+$/.test(c.text)).sort((a, b) => a.id - b.id)
       .map((c) => E3_BUTTONS[Number(c.text.split('_')[1])] || 'OK');
-    const groups: string[][] = [[]];
-    let size = 0;
-    for (const t of texts) {
-      const cur = groups[groups.length - 1]!;
-      if (cur.length > 0 && (size + t.text.length > PAGE || cur.length === 6)) {
-        groups.push([]);
-        size = 0;
-      }
-      groups[groups.length - 1]!.push(t.text);
-      size += t.text.length;
-    }
     // A node always reads six strings from its first, so each page is
     // padded to six with blanks.
-    const pages = groups.map((g) => {
+    const pages = e3DialogPageTexts(d).map((g) => {
       const first = this.strings.length;
       for (let i = 0; i < 6; i++) this.text(g[i] ?? '');
       return first;
