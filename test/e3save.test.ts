@@ -33,7 +33,7 @@ import { applySave, saveGame } from '../src/fileio/saveIo';
 import { Race, Status, Trait } from '../src/universe/skills';
 import { CreatureStatus } from '../src/universe/creature';
 import { EncNoteType } from '../src/universe/party';
-import { e3SpotFlag } from '../tools/e3convert/flags';
+import { E3_DAILY_STAMPS, E3_DAY_COUNTS, e3SpotFlag } from '../tools/e3convert/flags';
 import { defaultItem } from '../src/data/item';
 
 describe('the exile3.sav container', () => {
@@ -304,6 +304,23 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     expect(applyE3Save(exportE3Save(q.univ, defaults).bytes, back.univ, defaults).warnings).toEqual([]);
     expect(back.party.outC[0]).toEqual(c);
     expect(back.party.outC.slice(1).some((g) => g.exists)).toBe(q.party.outC.slice(1).some((g) => g.exists));
+  });
+
+  it("carries E3's day stamps as the converter's daily flags and day counts", async () => {
+    const q = new QuestRunner(scen);
+    q.party.age = 3700 * 30 + 5;
+    const today = q.party.calcDay();
+    const [levy, elisa] = E3_DAILY_STAMPS;
+    const ostoth = E3_DAY_COUNTS[0]!;
+    q.party.setSdf(...levy!.flag, 1);
+    q.party.setSdf(...ostoth.while, 2);
+    q.party.setSdf(...ostoth.count, 3);
+    const p = new E3Bytes(readE3Save(exportE3Save(q.univ, defaults).bytes).party);
+    // Levy paid today; Elisa not, so not today's stamp; Ostoth ordered three days ago.
+    expect([p.u8(levy!.at), p.u8(elisa!.at) === today, p.i16(ostoth.at)]).toEqual([today, false, today - 3]);
+    const back = new QuestRunner(scen);
+    applyE3Save(writeE3Save({ ...readE3Save(exportE3Save(q.univ, defaults).bytes) }), back.univ, defaults);
+    expect([back.party.getSdf(...levy!.flag), back.party.getSdf(...elisa!.flag), back.party.getSdf(...ostoth.count)]).toEqual([1, 0, 3]);
   });
 
   it("carries the magic shops' stock, so a save reloads the same wares", async () => {

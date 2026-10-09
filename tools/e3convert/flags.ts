@@ -80,6 +80,31 @@ export function e3DayCount(k: number): [number, number] {
 }
 
 /**
+ * E3's day stamps and the converter flags that stand in for them, for a
+ * save (`e3SaveImport.ts`, `e3SaveExport.ts`). A stamp is a party-record
+ * byte or word holding `calc_day()` (`FUN_10d0_548b`):
+ *
+ * - a **daily** one is compared for equality with today, the whole day
+ *   against the byte (`1020:2ef8`), and its flag is set exactly when the two
+ *   match: Levy's pay (21,7) and Elisa's rations (21,8) (`LEVY_PAID`,
+ *   `ELISA_FED`, `towns/talkScripts.ts`), Hawke's chores (102,5)
+ *   (`HAWKE_DAY`, `towns/dungeons2.ts`; `10b8:2a9d`);
+ * - a **count** is subtracted from today and read as at least `max`:
+ *   Ostoth's order, party+0x8511 (`key_times[10]`), set on ordering
+ *   (`1020:3452`) and "made" while it is 20000 or less (`1020:3426`), ready
+ *   at 4 days (`1020:347e`); `OSTOTH_DAYS`, `towns/newCotra.ts`, counts while
+ *   `OSTOTH_WEAPON` (party+0x22b) is set.
+ */
+export const E3_DAILY_STAMPS: { at: number; flag: [number, number] }[] = [
+  { at: 0x15d, flag: e3DailyFlag(0) },
+  { at: 0x15e, flag: e3DailyFlag(1) },
+  { at: 0x485, flag: e3DailyFlag(2) },
+];
+export const E3_DAY_COUNTS: { at: number; count: [number, number]; while: [number, number]; max: number; unset: number }[] = [
+  { at: 0x8511, count: e3DayCount(0), while: e3Flag(0, 0x22b - 0x84), max: 4, unset: 20000 },
+];
+
+/**
  * A converter flag holding a changing town's state, `(294, 10 + k)` for the
  * `k`th of `towns/townStates.ts`'s groups: 0–3, how many records past the
  * first the party walks into. A scenario `<town-flag>` adds it to the town

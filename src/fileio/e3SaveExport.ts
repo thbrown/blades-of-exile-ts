@@ -17,6 +17,7 @@
 
 import type { Item } from '../data/item';
 import { E3_STASHES, vehicleNumbers } from '../../tools/e3convert/tables';
+import { E3_DAILY_STAMPS, E3_DAY_COUNTS } from '../../tools/e3convert/flags';
 import {
   E3Bytes, E3ITEM, E3P, E3PC, E3_OUT_MAPS_SIZE, E3_TOWN_MAPS_SIZE, E3_VILLAGE_MAPS_SIZE, E3_ZONES_ACROSS,
   E3_ZONE_MAP_SIZE, e3MapBit, e3TownMapAt, emptyE3Save, writeE3Save, type E3Save,
@@ -288,6 +289,13 @@ export function e3SaveRecordFromGame(univ: Universe, defaults: E3SaveDefaults): 
       if (row < 300 || v !== 0) p.setU8(E3P.FLAGS + row * 10 + col, v);
     }
   }
+  // The day stamps the converter keeps as flags (`E3_DAILY_STAMPS`): today's
+  // where the flag is set, and not today's where it isn't.
+  const today = party.calcDay();
+  for (const s of E3_DAILY_STAMPS) {
+    if (party.getSdf(...s.flag)) p.setU8(s.at, today);
+    else if (p.u8(s.at) === today) p.setU8(s.at, today - 1);
+  }
   for (let t = 0; t < Math.min(200, scenario.towns.length); t++) {
     const town = scenario.towns[t]!;
     for (let i = 0; i < 64 && i < town.itemTaken.length; i++) {
@@ -325,6 +333,13 @@ export function e3SaveRecordFromGame(univ: Universe, defaults: E3SaveDefaults): 
   }
   for (const [key, day] of party.keyTimes) {
     if (key >= 1 && key <= 20) p.setI16(E3P.KEY_TIMES + 2 * (key - 1), day);
+  }
+  // A day count (`E3_DAY_COUNTS`) after the key times, one of which it is;
+  // a stamp already there that reads as the same count stays.
+  for (const c of E3_DAY_COUNTS) {
+    if (party.getSdf(...c.while) === 0) continue;
+    const count = party.getSdf(...c.count), stamp = p.i16(c.at);
+    if (!(stamp <= c.unset && Math.max(0, Math.min(c.max, today - stamp)) === count)) p.setI16(c.at, today - count);
   }
   writeE3Notes(univ, p, defaults, warnings);
   writeRemembered(univ, save, defaults, warnings);

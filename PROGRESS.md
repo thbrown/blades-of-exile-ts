@@ -17227,3 +17227,14 @@ golem plague" hangs (over 10 minutes, alone or in the full run) at
       17 KB), and a saved group is matched to one, its own zone's first:
       it comes in as that zone's converted group, scripts and all, and goes
       out as its bytes. Every group in the user's seven saves matches.
+- [x] **The converter's own flags from a save**: E3's day stamps
+      (`E3_DAILY_STAMPS`, `E3_DAY_COUNTS` in `flags.ts`). Levy's pay,
+      Elisa's rations and Hawke's chores are a stamp byte E3 compares with
+      today, and the converter's daily flag is set exactly when the two
+      match; Ostoth's order is `key_times[10]`, made at 20000 or less, and
+      his count of days is today less it, up to 4. Out again, a set flag is
+      today's stamp and a clear one not today's; a count writes its stamp
+      only when the one there reads differently. (The one-shot spots are the
+      remembered towns', above.) **Found:** E3 compares the whole day with
+      the stamp *byte*, so from day 256 Levy pays every time;
+      E3-SUSPECTED-BUGS #25, and the port's daily flag doesn't do that.

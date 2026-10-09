@@ -15,16 +15,17 @@
  *   and then its map, its creatures and its items as they were are laid
  *   over it (`applyE3TownTerrain`, `applyE3TownCreatures`,
  *   `applyE3TownItems`);
- * - the converter's own flags, in SDF columns 10–49 (`flags.ts`): a one-shot
- *   spot E3 erased, the daily stamps and the day counts. Only the town states
- *   (`e3TownState`) are worked out again, since they follow from the day.
+ * - the converter's own flags, in SDF columns 10–49 (`flags.ts`), are worked
+ *   out from what E3 keeps instead: the town states (`e3TownState`) from the
+ *   day, the day stamps from the day, a one-shot spot from its square's bit
+ *   (`readRemembered`).
  */
 
 import type { Location } from '../core/location';
 import type { Item } from '../data/item';
 import { defaultItem } from '../data/item';
 import { TOWN_STATES } from '../../tools/e3convert/towns/townStates';
-import { e3DayReached, e3TownState } from '../../tools/e3convert/flags';
+import { E3_DAILY_STAMPS, E3_DAY_COUNTS, e3DayReached, e3TownState } from '../../tools/e3convert/flags';
 import { E3_STASHES, vehicleNumbers, type E3Vehicle } from '../../tools/e3convert/tables';
 import {
   E3Bytes, E3CREATURE, E3CTOWN, E3ITEM, E3MONST, E3TD, E3P, E3PC, E3_ZONES_ACROSS, E3_ZONE_MAP_SIZE, e3MapBit, e3TownMapAt, readE3Save, type E3Save,
@@ -406,8 +407,16 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
     const list = readE3ItemList(univ, save.storedItems[k]!, defaults, warnings, `left in ${scenario.towns[st.town]?.name ?? 'a town'}`);
     if (list.length) party.storedItems.set(st.town, list);
   });
-  // The converter's town states, which E3 works out on entering the town.
-  // TODO(e3save): its other flags (one-shot spots, daily stamps, day counts).
+  // E3's day stamps, which the converter keeps as flags a new day clears
+  // and day counts (`E3_DAILY_STAMPS`, `E3_DAY_COUNTS`).
+  const today = party.calcDay();
+  for (const s of E3_DAILY_STAMPS) party.setSdf(...s.flag, p.u8(s.at) === today ? 1 : 0);
+  for (const c of E3_DAY_COUNTS) {
+    const stamp = p.i16(c.at);
+    party.setSdf(...c.count, stamp <= c.unset && party.getSdf(...c.while) > 0 ? Math.max(0, Math.min(c.max, today - stamp)) : 0);
+  }
+  // The converter's one-shot spots are `readRemembered`'s. Its town states,
+  // which E3 works out on entering the town:
   TOWN_STATES.forEach((g, k) => {
     let state = 0;
     g.days.forEach((day, i) => {
