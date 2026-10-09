@@ -17190,8 +17190,12 @@ and `TODO(e3save)`.
       Emergence…"); the scenario's new `start-journal` = `1` flag does it.
 
 **Gotcha (2026-10-08):** `e3quests.test.ts`'s "the Mind Crystal ends the
-golem plague" hangs (over 10 minutes, alone or in the full run) at
-`026d93c` too, before this round, so it isn't these changes. Not chased yet.
+golem plague" failed once in a full `npx vitest run`, after 955 s. Alone it
+passes in 3 s, five runs out of five, so it is a flake under the full run's
+load, not chased. (An earlier note here said it hung at `026d93c` too: that
+was wrong. **macOS has no `timeout`**, so `timeout 590 npx vitest …` never
+ran, and a `| grep` hid the "command not found". Don't wrap a check in
+`timeout` here.)
 - [x] **E3's three stashes, in play and in saves.** The converter had none,
       so anything a player left in Fort Emergence was gone on return. E3's
       leaving code (`10d8:272e`) keeps every non-preset item of town 21 in
