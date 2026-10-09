@@ -17105,6 +17105,39 @@ Krizsan (towns 0–3). Find a person by `<personality>N<` in `townN.xml`.
 - [x] **The import card is a drop target**, on the main menu and in Open
       Game: it lights up while a file is held over it, and a dropped file
       imports as a picked one would (`importFile(file?)`).
+- [x] **Acid hit with OBoE's green splash and sound** (2026-10-08). 1997's acid is
+      magic damage (COMBAT.CPP:4011, :2188), so E3 draws `boom_gr[3]`, the
+      blue-and-white burst with a black number. `BOOM_GR[ACID]` is 1 now
+      (DIVERGENCES §50). Its hit sound is magic's 12, not OBoE's 8.
+- [x] **A cockroach's bite turned a PC to stone** (2026-10-08). E3's
+      special skill 30 (monsters 143, 144) is a mild disease touch: 25's
+      arm at strength 2 (`1018:6516`, as 1997's COMBAT.CPP:2343), and E3's
+      own skill list says "Causes mild disease". OBoE's legacy import makes
+      30 `TOUCH_PETRIFY`, after 1997's editor's *name* for it (string 6031),
+      which neither original's code carries out. The converter now gives
+      them the disease touch (`emit.ts`). A conversion fix, not a
+      divergence. Still open: the legacy importer does the same to any
+      1997 scenario with a skill-30 monster.
+- [x] **E3's other special skills, swept** (2026-10-08). E3's own names
+      (the list at EXE 0x65e00) and its code against OBoE's legacy
+      import, skill by skill. Four more were 1997's meanings, not E3's:
+      22 (Salamander, Efreet) Martyr's Shield, 23 (Ice Drake, Ice Pudding)
+      a paralysis ray, 24 (Null Bug, Power Crystal) a dumbfounding touch,
+      35 (Alien Slime) a 20d10 killing touch. In E3 they are
+      `monst_radiate` (`1018:5a9c`), the block where 1997 reads its
+      `radiate` field: fire and ice walls on the ring round the creature
+      and antimagic on the 3×3, every turn, no roll; the Alien Slime
+      summons a slime on a 1 in 2. The same routine has summons by monster
+      number that weren't ported at all: the Naga (an Asp, 1 in 4), the
+      Dark Wyrm (a Ghast, 1 in 5), the Vahnatai Lord and Rentar-Ihrno (an
+      Eyebeast or Basilisk, 1 in 5, "Vahnatai uses Soul Crystal."). Now
+      `e3Radiate.ts` under `radiate` = `exile3`, and the converter's
+      `E3_RADIATE`. Checked and fine: 18 (E3 calls it "Paralyzing touch";
+      its code stuns, as 1997's), 36 (damage / 10), and the ranged
+      skills' range/odds tables. **The basilisks still petrify**, but by
+      1997's roll (`1018:70c4`): OBoE's gaze takes 25% of the gazer's
+      level off the PC's save, 2 for the Basilisk and 6 for the
+      Ur-Basilisk; the converter sets that to 0.
 - [ ] **Amber slimes on the Slime Pit's island** (user: none in the
       original, three in the port, heading south by boat): not reproduced.
       `EXILE3_BlockedBoat.SAV` imported through the main menu in Chromium
@@ -17116,3 +17149,12 @@ Krizsan (towns 0–3). Find a person by `<personality>N<` in `townN.xml`.
 seeded off the clock: BOOMS (a weak hit plays 71, not 70) and ENCOUNTER (a
 fight where nobody is hurt). Same on the commit before this round. Read the
 log's step lines before blaming a change.
+**Fixed (2026-10-08):** ENCOUNTER and BOOMS seed the dice themselves
+(`seedGame(1)`), and ENCOUNTER resets its guard's health and morale, as a
+guard bloodied by earlier steps fled instead of charging, and puts it three
+squares off along a clear line (three east of wherever the party stood was
+sometimes behind a wall). A third flake was
+the shop: its stock is random (and not from the game stream, so a seed
+doesn't fix it), and now and then the first row was an item worth too little
+to resell, so SOLD failed. The buy step now takes the first row that can be
+sold back. A step that reads a die should seed it.

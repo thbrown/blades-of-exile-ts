@@ -5,6 +5,8 @@
  * "Tables in the EXE").
  */
 
+import { FieldType } from '../../src/data/fields';
+import { SpellPat } from '../../src/data/pattern';
 import type { LegacyItem, LegacyMonster } from '../../src/fileio/legacy/structs';
 import { BLADBASE_ITEMS } from './bladbaseExtras';
 import { neAutoDataSegment, readNeSegment } from './ne';
@@ -430,6 +432,18 @@ export function readE3BreathDice(exe: Uint8Array): number[] {
 
 /** E3 breathes at 7 squares or closer (`1018:51f0`); 1997 and OBoE at 8. */
 export const E3_BREATH_RANGE = 7;
+
+/**
+ * E3's radiating special skills (`monst_radiate`, `1018:5a9c`): the field
+ * each places, and where. 22 fire walls and 23 ice walls go on the ring
+ * round the creature (`DS(10f8):0788`), 24 antimagic on the full 3×3
+ * (`0736`) — 1997's radiate kinds 5, 8 and 6.
+ */
+export const E3_RADIATE: Readonly<Record<number, readonly [FieldType, SpellPat]>> = {
+  22: [FieldType.WALL_FIRE, SpellPat.OPEN_SQUARE],
+  23: [FieldType.WALL_ICE, SpellPat.OPEN_SQUARE],
+  24: [FieldType.FIELD_ANTIMAGIC, SpellPat.SQUARE],
+};
 
 export const E3_ITEM_COUNT = 415;
 

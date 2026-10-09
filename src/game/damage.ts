@@ -52,16 +52,19 @@ export function hitChance(level: number): number {
 
 /**
  * boom_gr (boe.specials.cpp:61) — which hit sprite a damage type uses. 1997's
- * (SPECIALS.CPP:65, `{3,0,2,1,1,4,3,3}`) but for acid, which 1997 hasn't got:
- * **unblockable damage is the magic burst, 1**, where OBoE drew a sprite of
- * its own, 5 (DIVERGENCES.md §50). Exile III's Wound is the one a player meets.
+ * (SPECIALS.CPP:65, `{3,0,2,1,1,4,3,3}`): **unblockable damage is the magic
+ * burst, 1**, where OBoE drew a sprite of its own, 5 (DIVERGENCES.md §50).
+ * Exile III's Wound is the one a player meets. 1997 has no acid type — its
+ * acid is magic damage (`damage_pc(i,r1,3,-1)`, COMBAT.CPP:4011; :2188 for
+ * monsters) — so **acid is the magic burst too**, with its black number,
+ * where OBoE drew its green splash, 6.
  */
 const BOOM_GR: Partial<Record<DamageType, number>> = {
   [DamageType.WEAPON]: 3,
   [DamageType.FIRE]: 0,
   [DamageType.POISON]: 2,
   [DamageType.MAGIC]: 1,
-  [DamageType.ACID]: 6,
+  [DamageType.ACID]: 1,
   [DamageType.UNBLOCKABLE]: 1,
   [DamageType.COLD]: 4,
   [DamageType.UNDEAD]: 3,
@@ -72,14 +75,16 @@ const BOOM_GR: Partial<Record<DamageType, number>> = {
 /**
  * get_sound_type — the hit sound for a damage type. -1 means "the default for
  * this type"; passing 0 explicitly is how a caller forces the plain thud.
+ * **Acid sounds like magic, 12**: 1997's acid is magic damage (see
+ * `BOOM_GR`), and its hit sound table (PARTY.CPP:3384, SPECIALS.CPP:1174)
+ * gives magic 12. OBoE plays 8 (DIVERGENCES.md §50).
  */
 export function getSoundType(damType: DamageType, forced = -1): number {
   if (forced !== -1) return forced;
   switch (damType) {
     case DamageType.FIRE: case DamageType.UNBLOCKABLE: return 5;
-    case DamageType.ACID: return 8;
     case DamageType.COLD: return 7;
-    case DamageType.MAGIC: return 12;
+    case DamageType.MAGIC: case DamageType.ACID: return 12;
     case DamageType.POISON: return 11;
     default: return 0;
   }

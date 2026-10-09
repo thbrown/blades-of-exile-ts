@@ -380,6 +380,14 @@ const shopOpened = await page.evaluate(async () => {
     rows: s.shop.visible.length,
     first: s.shop.rowEntry(0)?.entry.item.fullName,
     firstCost: s.shop.rowEntry(0) && s.shop.cost(s.shop.rowEntry(0).entry),
+    // The row the buy step takes: the first the sell step can sell back. The
+    // stock is random, and now and then the first row was an item worth too
+    // little to resell (a Silver Ring of Weight), so SOLD failed.
+    // Only the eight rows on screen have letters.
+    sellable: Math.max(0, s.shop.visible.slice(0, 8).findIndex((_, r) => {
+      const item = s.shop.rowEntry(r)?.entry.item;
+      return item && !item.unsellable && Math.trunc(item.value / 2) > 0;
+    })),
   };
 });
 console.log('SHOP:', JSON.stringify(shopOpened));
@@ -395,9 +403,9 @@ const shopPainted = await page.evaluate(async () => {
 });
 console.log('SHOP PANEL COLOURS:', shopPainted);
 
-// 'a' buys the first row (shop_chars).
+// A row's letter buys it (shop_chars): 'a' the first.
 const goldBefore = await page.evaluate(() => window.__univ.party.gold);
-await press('a');
+await press(String.fromCharCode(97 + (shopOpened?.sellable ?? 0)));
 await page.waitForTimeout(200);
 const bought = await page.evaluate(async () => {
   const s = window.__session;
@@ -2043,6 +2051,9 @@ const encounter = await page.evaluate(async () => {
   const s = window.__session;
   const univ = s.univ;
   if (s.mode !== 1) return { skipped: 'not in town' };
+  // A fixed seed: the page seeds its dice off the clock, and about one run in
+  // two the fight below came out with nobody hurt.
+  univ.rng.seedGame(1);
   const monst = univ.town.monsters.find((m) => m.isAlive && !m.isFriendly)
     ?? univ.town.monsters.find((m) => m.isAlive);
   if (!monst) return { skipped: 'no monsters' };
@@ -2059,7 +2070,18 @@ const encounter = await page.evaluate(async () => {
   monst.mon.attacks = [{ dice: 4, sides: 6, type: 0 }];
   monst.mon.skill = 20;
   monst.mon.speed = 12;
-  monst.curLoc = { x: univ.party.townLoc.x + 3, y: univ.party.townLoc.y };
+  // Whatever earlier steps left it with: a creature they bloodied can be out
+  // of morale, and then it runs instead of charging.
+  monst.health = monst.maxHealth;
+  monst.morale = 10;
+  // Three squares off with nothing in between: where the party stands
+  // varies with earlier steps, and three east was sometimes behind a wall,
+  // where the guard noticed the party and never reached it.
+  const p = univ.party.townLoc;
+  const clear = [[1, 0], [-1, 0], [0, 1], [0, -1]].find(([dx, dy]) => [1, 2, 3]
+    .every((k) => !s.townIsBlocked({ x: p.x + dx * k, y: p.y + dy * k })
+      && !univ.town.monsterAt({ x: p.x + dx * k, y: p.y + dy * k }))) ?? [1, 0];
+  monst.curLoc = { x: p.x + clear[0] * 3, y: p.y + clear[1] * 3 };
   univ.party.pcs.forEach((pc) => { pc.maxHealth = 300; pc.curHealth = 300; });
   const startedAt = { ...monst.curLoc };
 
@@ -2140,6 +2162,9 @@ const booms = await page.evaluate(async () => {
   // `screen.booms` after the fact made this step fail about one run in six.
   const raised = [];
   window.__watchAnim(null, (b) => raised.push({ ...b, where: { ...b.where } }));
+  // A fixed seed, as ENCOUNTER's: off the clock, a weak hit played 71
+  // instead of 70 about one run in two.
+  univ.rng.seedGame(1);
   const monst = univ.town.monsters.find((m) => m.isAlive);
   if (!monst) return { skipped: true };
   monst.attitude = 1;
@@ -2172,6 +2197,9 @@ await shot('02c4-boom');
 const loot = await page.evaluate(async () => {
   const s = window.__session;
   const univ = s.univ;
+  // A fixed seed, as ENCOUNTER's: off the clock, a weak hit played 71
+  // instead of 70 about one run in two.
+  univ.rng.seedGame(1);
   const monst = univ.town.monsters.find((m) => m.isAlive);
   if (!monst) return { skipped: true };
   monst.attitude = 1;

@@ -1160,6 +1160,13 @@ flag and is unchanged.
   Wound — `add_missile(…, 14, …)`, sound 24, the same in all three — burst as
   explosion 5 with sound 75, which neither original plays (reported by the
   user). Now both are 1997's (`boomType`, `explosionType` in `damage.ts`).
+- **Acid is the magic burst too** (2026-10-08). 1997 has no acid damage
+  type: its acid deals magic damage (`damage_pc(i,r1,3,-1)`,
+  COMBAT.CPP:4011; `damage_monst(…, 3)`, :2188), so it draws `boom_gr[3]`,
+  the blue-and-white burst with a black number, as Exile III does (reported
+  by the user). OBoE gives acid a green splash of its own (6). It *sounds*
+  like magic too: 12, where OBoE plays 8 (`getSoundType`). 1997 also
+  resists acid as magic; that has not been looked at.
 
 Nothing here rolls a die.
 

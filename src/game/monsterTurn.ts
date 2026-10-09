@@ -36,6 +36,7 @@ import { damageMonst, damagePc, hitChance } from './damage';
 import { onHitTargetSpecial } from './weaponAbilities';
 import { ItemAbil, abilGroup, abilHarms } from '../data/item';
 import { e3CombatRoundItems } from './e3Items';
+import { e3Radiate } from './e3Radiate';
 import { FieldType } from '../data/fields';
 import { getProtLevel, hasAbilEquip } from '../universe/inventory';
 import { animSettle, bookActionPause, focusOn } from './anim';
@@ -1671,18 +1672,23 @@ export async function doMonsterTurn(session: GameSession): Promise<void> {
         // happens once per action the monster takes — the C++ puts it at the
         // bottom of the same loop, gated on the monster actually seeing its foe.
         if (target !== NO_ONE && session.canSeeLight(monst.curLoc, targSpace) < 5) {
-          // RADIATE rolls before SUMMON does, and both use the same stream —
-          // don't reorder them.
-          const radiate = monst.mon.abil[MonstAbil.RADIATE];
-          if (radiate?.active && univ.rng.getRan(1, 1, 100) < radiate.radiate.chance) {
-            await placeSpellPattern(session, radiate.radiate.pat, monst.curLoc, {
-              field: radiate.radiate.type as FieldType,
-              rot: monst.direction + 6,
-              // 7 is out of the 0-5 PC range, so nobody is credited with a kill.
-              whoHit: 7,
-            });
+          // Exile III's own block, keyed off the skill and the monster's number.
+          if (univ.scenario.featureFlags['radiate'] === 'exile3') {
+            await e3Radiate(session, monst);
+          } else {
+            // RADIATE rolls before SUMMON does, and both use the same stream —
+            // don't reorder them.
+            const radiate = monst.mon.abil[MonstAbil.RADIATE];
+            if (radiate?.active && univ.rng.getRan(1, 1, 100) < radiate.radiate.chance) {
+              await placeSpellPattern(session, radiate.radiate.pat, monst.curLoc, {
+                field: radiate.radiate.type as FieldType,
+                rot: monst.direction + 6,
+                // 7 is out of the 0-5 PC range, so nobody is credited with a kill.
+                whoHit: 7,
+              });
+            }
+            monsterSummon(session, monst);
           }
-          monsterSummon(session, monst);
         }
 
         // `if(futzing > 1) // If monster's just pissing around, give up`

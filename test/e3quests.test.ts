@@ -2032,8 +2032,9 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
 
       // Level 2: the cavern of the fumarole, and "your location has
       // suddenly changed": the lava at (14,11), between the two drake lords.
+      // The ghouls of level 2 wander, and one in the way stops the walk.
       const ambush = LAIR_ROUTES['ambush']!;
-      await walkBelts(q, ambush.slice(0, -1));
+      await walkBelts(q, ambush.slice(0, -1), /ghoul|ghast/i);
       await walkBelts(q, ambush.slice(-1), NOBODY);
       expect(q.at, q.tail()).toEqual({ x: 14, y: 11 });
       expect(q.log.at(-1)).toMatch(/Drakos, queen of drakes/);

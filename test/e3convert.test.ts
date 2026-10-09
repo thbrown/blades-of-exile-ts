@@ -12,7 +12,8 @@ import { StepSound, TerObstruct, TerSpec } from '../src/data/terrain';
 import type { Scenario } from '../src/data/scenario';
 import { ItemAbil, ItemType, useMagic } from '../src/data/item';
 import { Attitude, DamageType, MonstTime } from '../src/data/monster';
-import { MonstAbil } from '../src/data/monsterAbility';
+import { MonstAbil, MonstGen } from '../src/data/monsterAbility';
+import { e3Radiate } from '../src/game/e3Radiate';
 import { ShopItemType, ShopPrompt } from '../src/data/shop';
 import { TalkNodeType } from '../src/data/talking';
 import { SpecType, type SpecialNode } from '../src/data/special';
@@ -44,7 +45,7 @@ import {
 } from '../src/game/e3Jobs';
 import { readE3JobTables } from '../tools/e3convert/jobs';
 import { E3_COMBAT_SUMMONS, E3_TOWN_SUMMONS } from '../src/game/e3Summons';
-import { getSummonMonster } from '../src/game/monsterPlace';
+import { getSummonMonster, placeMonster } from '../src/game/monsterPlace';
 import { E3_USE_CODE } from '../src/game/e3ItemUse';
 import { GENERATORS } from '../tools/e3convert/towns/shiftingFloors';
 import { e3DayCount, e3TownState } from '../tools/e3convert/flags';
@@ -117,6 +118,67 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(breath(74)).toEqual([DamageType.COLD, 6, 7]); // 14
     expect(breath(162)).toEqual([DamageType.MAGIC, 19, 7]); // 28: 17 + 2
     expect(breath(170)).toEqual([DamageType.FIRE, 25, 7]); // 9: 23 + 2
+  });
+
+  it("gives E3's radiating creatures their fields, and none of 1997's meanings for 22–24 and 35", () => {
+    // monst_radiate (1018:5a9c): fire and ice on the ring, antimagic on the square.
+    const radiate = (m: number) => {
+      const a = scen.scenMonsters[m]!.abil[MonstAbil.RADIATE]!;
+      return a.active ? [a.radiate.type, a.radiate.pat, a.radiate.chance] : null;
+    };
+    for (const m of [127, 137]) expect(radiate(m)).toEqual([FieldType.WALL_FIRE, SpellPat.OPEN_SQUARE, 100]);
+    for (const m of [128, 129]) expect(radiate(m)).toEqual([FieldType.WALL_ICE, SpellPat.OPEN_SQUARE, 100]);
+    for (const m of [132, 164]) expect(radiate(m)).toEqual([FieldType.FIELD_ANTIMAGIC, SpellPat.SQUARE, 100]);
+    expect(radiate(142)).toBeNull();
+    // Not Martyr's Shield, a paralysis ray, a dumbfounding touch or a killing touch.
+    for (const m of [127, 128, 129, 132, 137, 142, 164]) {
+      const mon = scen.scenMonsters[m]!;
+      for (const k of [MonstAbil.MARTYRS_SHIELD, MonstAbil.KILL]) expect(mon.abil[k]!.active).toBe(false);
+      const status = mon.abil[MonstAbil.STATUS]!;
+      expect(status.active && [Status.PARALYZED, Status.DUMB].includes(status.gen.extra)).toBe(false);
+    }
+    // The basilisks' gaze is 1997's roll, with nothing taken off for the gazer (1018:70c4).
+    for (const m of [103, 104]) {
+      const a = scen.scenMonsters[m]!.abil[MonstAbil.PETRIFY]!;
+      expect([a.active, a.gen.type, a.gen.strength]).toEqual([true, MonstGen.GAZE, 0]);
+    }
+  });
+
+  it("runs E3's monst_radiate: the Alien Slime summons slimes, a Salamander rings itself with fire", async () => {
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    session.attachSpecials(new Proxy({}, { get: () => () => Promise.resolve(0) }) as never);
+    session.startTownMode(23, FORCED_ENTRY);
+    const univ = session.univ;
+    const town = univ.town!;
+    const slime = town.monsters[41]!;
+    expect(slime.number).toBe(142);
+    const alive = () => town.monsters.filter((m) => m.isAlive).length;
+    const before = alive();
+    // A 1 in 2 each time; twenty goes is sure to land one.
+    for (let i = 0; i < 20 && alive() === before; i++) await e3Radiate(session, slime);
+    expect(alive()).toBe(before + 1);
+    expect(univ.transcript).toContain('Alien slime summons aid.');
+    const summoned = town.monsters.filter((m) => m.isAlive && m.summonTime === 130);
+    expect(summoned.map((m) => m.number).every((n) => n >= 138 && n <= 141)).toBe(true);
+
+    const spot = placeMonster(session, 127, { x: 20, y: 20 }, true);
+    const salamander = town.monsters[spot]!;
+    const at = salamander.curLoc;
+    // No chance roll: E3 places them the first time, and every time.
+    await e3Radiate(session, salamander);
+    expect(town.hasField(at.x, at.y, FieldType.WALL_FIRE)).toBe(false);
+    const ring = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]] as const;
+    expect(ring.some(([dx, dy]) => town.hasField(at.x + dx, at.y + dy, FieldType.WALL_FIRE))).toBe(true);
+  });
+
+  it("gives the cockroaches E3's mild disease touch, not OBoE's petrifying one", () => {
+    // Special skill 30: 25's arm at strength 2 (1018:6516).
+    for (const m of [143, 144]) {
+      const mon = scen.scenMonsters[m]!;
+      expect(mon.abil[MonstAbil.PETRIFY]!.active).toBe(false);
+      const a = mon.abil[MonstAbil.STATUS]!;
+      expect([a.active, a.gen.extra, a.gen.strength, a.gen.odds]).toEqual([true, Status.DISEASE, 2, 667]);
+    }
   });
 
   it("enters towns by E3's town terrains, 217 to 231", () => {

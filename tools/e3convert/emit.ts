@@ -26,7 +26,7 @@ import { MonstAbil, MonstGen } from '../../src/data/monsterAbility';
 import { decodeBmp, type Rgba } from '../../src/fileio/legacy/bmp';
 import { PIC_CUSTOM_FULL } from '../../src/data/special';
 import { BG_RECTS, E3_PATTERN_SLOTS } from '../../src/render/tiling';
-import { E3_ABILITY_TO_LEGACY, E3_BREATH_RANGE, E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3Crumbles, readE3ItemAbilities, readE3Unlocks, readE3Items, readE3Monsters, readE3PersonalityFaces, readE3RoadJoins, readE3Start, readE3StartItems, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3StartItems, type E3TerrainType, type E3Vehicle } from './tables';
+import { E3_ABILITY_TO_LEGACY, E3_BREATH_RANGE, E3_RADIATE, E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3Crumbles, readE3ItemAbilities, readE3Unlocks, readE3Items, readE3Monsters, readE3PersonalityFaces, readE3RoadJoins, readE3Start, readE3StartItems, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3StartItems, type E3TerrainType, type E3Vehicle } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3PresetItem, type E3Town } from './town';
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
 import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
@@ -907,6 +907,7 @@ function scenarioXml(
         <traits>exile3</traits>
         <disease>exile3</disease>
         <summons>exile3</summons>
+        <radiate>exile3</radiate>
         <dungeon-sound>${E3_DUNGEON_SOUND}</dungeon-sound>
         <start-sound>none</start-sound>
         <secret-doors>101,118,133</secret-doors>
@@ -1033,7 +1034,32 @@ export function convertE3(read: E3Read, write: E3Write, progress: (done: number)
   const mapBase = terrainSheets.length + monsterArt.sheets.length + 1;
   e3Src.dialogPic = (tag) => e3DialogPic(tag, spritePic, mapBase);
   const monsters = legacyMonsters.map((m, n) => {
-    const mon = convertMonster(m);
+    // E3's special skill 30 is a mild disease touch: the arm for 25 at
+    // strength 2 (`1018:6516`, the same as 1997's COMBAT.CPP:2343), and E3's
+    // own list of the skills calls it "Causes mild disease". OBoE's legacy
+    // import makes 30 a petrifying touch, after 1997's editor's name for it
+    // (string 6031), which no code of either original carries out — so the
+    // cockroaches (143, 144) turned PCs to stone.
+    //
+    // 22–24 and 35 are E3's radiating skills (`monst_radiate`, 1018:5a9c;
+    // `e3Radiate.ts`), where 1997 kept a separate `radiate` field and used
+    // the numbers for Martyr's Shield, a paralysis ray, a dumbfounding touch
+    // and a killing touch — which OBoE's import gave E3's Salamander, Ice
+    // Drake and Alien Slime. 22–24 become RADIATE in E3's shape; 35, the
+    // Alien Slime's, is done by monster number and needs nothing here.
+    const skill = m.specSkill === 30 ? 25 : (E3_RADIATE[m.specSkill] || m.specSkill === 35) ? 0 : m.specSkill;
+    const mon = convertMonster({ ...m, specSkill: skill });
+    if (m.specSkill === 30) mon.abil[MonstAbil.STATUS]!.gen.strength = 2;
+    const radiate = E3_RADIATE[m.specSkill];
+    if (radiate) {
+      const a = mon.abil[MonstAbil.RADIATE]!;
+      a.active = true;
+      a.radiate = { type: radiate[0], pat: radiate[1], chance: 100 };
+    }
+    // E3's gaze (1018:70c4) is 1997's: d20 + level / 4 + bless against 14,
+    // nothing taken off for the gazer. OBoE's takes 25% of its level.
+    const petrify = mon.abil[MonstAbil.PETRIFY]!;
+    if (petrify.active) petrify.gen.strength = 0;
     // E3's attack word is 1997's, `(dice − 1) × 100 + sides`: its
     // `monster_attack` swings whenever it is positive and rolls
     // `a / 100 + 1` dice (`1018` around `:10241` of the decompile), as
