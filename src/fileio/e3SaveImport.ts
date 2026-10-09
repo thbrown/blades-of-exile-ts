@@ -16,7 +16,7 @@
  *   over it (`applyE3TownTerrain`, `applyE3TownCreatures`,
  *   `applyE3TownItems`);
  * - the four remembered towns' creatures (`creature_save`), the wandering
- *   groups outdoors (`out_c`) and the magic shops' stock;
+ *   groups outdoors (`out_c`);
  * - the converter's own flags, in SDF columns 10–49 (`flags.ts`): a one-shot
  *   spot E3 erased, the daily stamps and the day counts. Only the town states
  *   (`e3TownState`) are worked out again, since they follow from the day.
@@ -222,7 +222,7 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
   party.horses = scenario.horses.filter((v) => v.exists).map((v) => ({ ...v }));
   for (const town of scenario.towns) town.canFind = !town.isHidden;
   univ.refreshStoreItems();
-  // TODO(e3save): creature_save, out_c and the magic shops' stock.
+  // TODO(e3save): creature_save and out_c.
 
   const p = new E3Bytes(save.party);
   party.age = p.i32(E3P.AGE);
@@ -269,6 +269,19 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
   }
   // The journal and the notes, by E3's string numbers (`e3SaveNotes.ts`).
   readE3Notes(univ, p, defaults, warnings);
+  // The magic shops' stock as E3 last rolled it (`FUN_1070_41a4`, BoE's
+  // `refresh_store_items`): shop `i`'s slot `j` is the engine's random shop
+  // `i`, entry `j` (`standardShops`); a slot bought out is empty.
+  for (let i = 0; i < E3_MAGIC_SHOPS; i++) {
+    for (let j = 0; j < E3_MAGIC_SHOP_SLOTS; j++) {
+      const rec = save.party.subarray(E3P.MAGIC_STORE_ITEMS + E3ITEM.SIZE * (E3_MAGIC_SHOP_SLOTS * i + j));
+      const item = new E3Bytes(rec).i16(E3ITEM.VARIETY) === 0 ? null : e3ItemToItem(univ, rec.subarray(0, E3ITEM.SIZE), defaults);
+      if (item === null && new E3Bytes(rec).i16(E3ITEM.VARIETY) !== 0) {
+        warnings.push(`The "${new E3Bytes(rec).str(E3ITEM.FULL_NAME, E3ITEM.FULL_NAME_LEN)}" in a magic shop has no match in the scenario.`);
+      }
+      univ.setStoreItem(i, j, item ?? defaultItem());
+    }
+  }
   // The three stashes (`E3_STASHES`); an empty one is no list, as a town
   // never left has none.
   party.storedItems.clear();
@@ -381,6 +394,10 @@ export function applyE3TownDecals(univ: Universe, decals: Uint8Array): void {
     }
   }
 }
+
+/** E3's magic shops, 5 of 10 items at party+0x6ccc. */
+export const E3_MAGIC_SHOPS = 5;
+export const E3_MAGIC_SHOP_SLOTS = 10;
 
 /** `c_town`'s creature slots (`E3CREATURE`). */
 const E3_CREATURES_HELD = 60;

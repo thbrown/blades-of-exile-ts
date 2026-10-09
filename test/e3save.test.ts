@@ -33,6 +33,7 @@ import { applySave, saveGame } from '../src/fileio/saveIo';
 import { Race, Status, Trait } from '../src/universe/skills';
 import { CreatureStatus } from '../src/universe/creature';
 import { EncNoteType } from '../src/universe/party';
+import { defaultItem } from '../src/data/item';
 
 describe('the exile3.sav container', () => {
   it('writes an outdoor save of the right size and reads it back', () => {
@@ -269,6 +270,18 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
       .toEqual([{ x: 58, y: 4 }, { x: 25, y: 32 }]);
   });
 
+  it("carries the magic shops' stock, so a save reloads the same wares", async () => {
+    const q = new QuestRunner(scen);
+    const wares = (u: typeof q.univ) => [...Array(50).keys()].map((k) => u.storeItem(Math.floor(k / 10), k % 10).fullName);
+    expect(wares(q.univ).filter((n) => n !== '').length).toBeGreaterThan(0);
+    // One bought out.
+    const sold = wares(q.univ).findIndex((n) => n !== '');
+    q.univ.setStoreItem(Math.floor(sold / 10), sold % 10, defaultItem());
+    const back = new QuestRunner(scen);
+    expect(applyE3Save(exportE3Save(q.univ, defaults).bytes, back.univ, defaults).warnings).toEqual([]);
+    expect(wares(back.univ)).toEqual(wares(q.univ));
+  });
+
   it('fills the job boards of a party that never looked at one, as E3 fills them for a new party', async () => {
     const q = new QuestRunner(scen);
     expect(q.party.e3Jobs ?? null).toBeNull();
@@ -488,6 +501,22 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
       const stash = (list: Uint8Array) => [...Array(115).keys()].map((k) => new E3Bytes(list.subarray(63 * k, 63 * k + 63)))
         .filter((r) => r.i16(E3ITEM.VARIETY) !== 0).map((r) => [r.str(E3ITEM.FULL_NAME, E3ITEM.FULL_NAME_LEN), r.loc(E3ITEM.LOC)]);
       save.storedItems.forEach((list, k) => expect(stash(out.storedItems[k]!), `${file} stash ${k}`).toEqual(stash(list)));
+      // The magic shops' stock, slot by slot, every byte but what E3 leaves
+      // stale: a bought-out slot's record, the word where an item last lay,
+      // and what follows a name's NUL.
+      const shops = (party: Uint8Array) => {
+        const c = party.slice(E3P.MAGIC_STORE_ITEMS, E3P.MAGIC_STORE_ITEMS + 50 * 63);
+        for (let k = 0; k < 50; k++) {
+          if (c[63 * k] === 0 && c[63 * k + 1] === 0) c.fill(0, 63 * k, 63 * k + 63);
+          c.fill(0, 63 * k + E3ITEM.LOC, 63 * k + E3ITEM.LOC + 2);
+          const end = c.indexOf(0, 63 * k + E3ITEM.FULL_NAME);
+          if (end >= 0 && end < 63 * k + E3ITEM.FULL_NAME + 25) c.fill(0, end, 63 * k + E3ITEM.FULL_NAME + 25);
+          const e2 = c.indexOf(0, 63 * k + E3ITEM.NAME);
+          if (e2 >= 0 && e2 < 63 * k + E3ITEM.NAME + 15) c.fill(0, e2, 63 * k + E3ITEM.NAME + 15);
+        }
+        return c;
+      };
+      expect(shops(out.party), file).toEqual(shops(save.party));
       // A reply number E3 left stale, whose string is empty, reads as nothing (e3SaveNotes.ts).
       const notes = (party: Uint8Array) => {
         const b = new E3Bytes(party.slice(E3P.SPECIAL_NOTES, E3P.TOTAL_M_KILLED));

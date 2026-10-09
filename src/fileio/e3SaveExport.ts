@@ -27,7 +27,7 @@ import {
   e3ItemFromTable, e3ItemGraphic, e3TableItemCount, e3TableItemName, E3_TABLE_ITEM_SIZE, unenchantedName,
   type E3SaveDefaults,
 } from './e3SaveDefaults';
-import { e3VehicleTable } from './e3SaveImport';
+import { E3_MAGIC_SHOPS, E3_MAGIC_SHOP_SLOTS, e3VehicleTable } from './e3SaveImport';
 import type { Vehicle } from '../data/vehicle';
 import { e3Jobs, e3JobsBase, type E3Job } from '../game/e3Jobs';
 import { TOWN_NUM_OUTDOORS } from '../universe/party';
@@ -69,7 +69,7 @@ export function newE3PartyRecord(defaults: E3SaveDefaults): Uint8Array {
   for (let i = 0; i < 4; i++) p.setI16(E3P.CREATURE_SAVE + i * E3P.CREATURE_LIST_SIZE + 0x1590, 200);
   // FUN_1070_41a4 rolls the magic shops' stock here, and FUN_1008_3c91 the
   // job boards; the jobs are the game's, below.
-  // TODO(e3save): the shops' stock, creature_save and out_c.
+  // TODO(e3save): creature_save and out_c. The shops' stock is the game's, below.
   p.setU8(E3P.M_SEEN + 0x26, 1);
   p.setU8(E3P.M_SEEN + 0x28, 1);
   p.setU8(E3P.M_SEEN + 0x4e, 1);
@@ -269,6 +269,14 @@ export function e3SaveRecordFromGame(univ: Universe, defaults: E3SaveDefaults): 
     if (key >= 1 && key <= 20) p.setI16(E3P.KEY_TIMES + 2 * (key - 1), day);
   }
   writeE3Notes(univ, p, defaults, warnings);
+  for (let i = 0; i < E3_MAGIC_SHOPS; i++) {
+    for (let j = 0; j < E3_MAGIC_SHOP_SLOTS; j++) {
+      const item = univ.storeItem(i, j);
+      const rec = item.variety === 0 ? null : itemToE3(defaults, item);
+      if (rec) p.data.set(rec, E3P.MAGIC_STORE_ITEMS + E3ITEM.SIZE * (E3_MAGIC_SHOP_SLOTS * i + j));
+      else if (item.variety !== 0) warnings.push(`The "${item.fullName}" in a magic shop isn't one of Exile III's items, and was left out.`);
+    }
+  }
   save.storedItems = E3_STASHES.map((st) => e3ItemList(party.storedItems.get(st.town) ?? [], (item) => itemToE3(defaults, item),
     warnings, `left in ${scenario.towns[st.town]?.name ?? 'a town'}`));
   save.pcs = party.pcs.slice(0, 6).map((pc) => writePc(defaults, pc, warnings));

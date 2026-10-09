@@ -17201,3 +17201,8 @@ golem plague" hangs (over 10 minutes, alone or in the full run) at
       (`E3_STASHES`); **a town may have more than one** (`Scenario.storeItemRects`
       is a list per town, an item in any is kept; BoE's own files give one).
       The user's saves hold up to 49 items in them, all matched both ways.
+- [x] **The magic shops' stock** (party+0x6ccc, `item[5][10]`): E3's shop
+      `i`, slot `j` is the engine's random shop `i`, entry `j`, both ways, so
+      a loaded game sells what the saved one did and a slot bought out stays
+      empty. E3 leaves a bought-out slot's bytes behind with variety 0
+      (seen: a "Food" record); only the variety is read.

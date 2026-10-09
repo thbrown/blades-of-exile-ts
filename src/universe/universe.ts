@@ -337,7 +337,7 @@ export class Universe {
     return item;
   }
 
-  private setStoreItem(shop: number, slot: number, item: Item): void {
+  setStoreItem(shop: number, slot: number, item: Item): void {
     let byShop = this.party.magicStoreItems.get(shop);
     if (!byShop) {
       byShop = new Map();
