@@ -226,28 +226,43 @@ export function e3TownBlocks(
       sfx[DIM * x + y] = s;
     }
   }
-  // The special squares (`load_town`: each of the record's 40 with x below
-  // 100), less those E3 would have erased.
-  for (let k = 0; k < 40; k++) {
-    const x = header[0x1c + 2 * k]!, y = header[0x1d + 2 * k]!;
-    if (x >= 100 || x >= DIM || y >= DIM) continue;
-    const [row, col] = e3SpotFlag({ town: num }, k);
-    if (party.getSdf(row, col) !== 0) continue;
-    miscI[DIM * x + y] = miscI[DIM * x + y]! | 2;
+  // The special squares, less those E3 would have erased.
+  for (const { x, y, flag } of e3TownSpots(townDat, num)) {
+    if (party.getSdf(...flag) === 0) miscI[DIM * x + y] = miscI[DIM * x + y]! | 2;
   }
 
-  // The creatures: the record's slots first, then any summoned into the town.
-  const halved = party.getSdf(306, 7) !== 0;
+  // The creatures.
+  c.data.set(e3CreatureList(univ, monsterTable, data, town.monsters, warnings), E3CTOWN.CREATURES);
+  c.setI16(E3CTOWN.WHICH_TOWN, num);
+  c.setLoc(E3CTOWN.P_LOC, party.townLoc);
+  c.setStr(E3CTOWN.NAME, E3CTOWN.NAME_LEN, record.name);
+
+  const items = e3ItemList(town.items, itemToE3, warnings, 'on the ground');
+  return { cTown: c.data, data, items, miscI, sfx };
+}
+
+/**
+ * A town's creatures as E3's `creature_list_type` holds them, 60 of
+ * `E3CREATURE.SIZE`: `c_town`'s (from +0x1427), and each of the four towns
+ * the party remembers (`creature_save`, party+0x1416). The record's slots
+ * come first, each with its start from `data` (the town's `t_d`), then any
+ * creature summoned into the town, in a free slot.
+ */
+export function e3CreatureList(
+  univ: Universe, monsterTable: Uint8Array, data: Uint8Array, monsters: Creature[], warnings: string[],
+): Uint8Array {
+  const c = new E3Bytes(new Uint8Array(CREATURES_HELD * E3CREATURE.SIZE));
+  const halved = univ.party.getSdf(306, 7) !== 0;
   const bySlot = new Map<number, Creature>();
   const extra: Creature[] = [];
-  town.monsters.forEach((m, i) => {
+  monsters.forEach((m, i) => {
     const slot = m.slot >= 0 ? m.slot : i;
     if (slot < CREATURES_HELD && !bySlot.has(slot) && m.summonTime === 0) bySlot.set(slot, m);
     else if (m.isAlive) extra.push(m);
   });
   const used = new Set<number>();
   const writeCreature = (k: number, m: Creature | undefined, startRec: Uint8Array): void => {
-    const at = E3CTOWN.CREATURES + E3CREATURE.SIZE * k;
+    const at = E3CREATURE.SIZE * k;
     const number = m?.number ?? startRec[0]!;
     if (number === 0) return;
     used.add(k);
@@ -285,12 +300,22 @@ export function e3TownBlocks(
     new E3Bytes(startRec).setI16(10, -1);
     writeCreature(k, m, startRec);
   }
-  c.setI16(E3CTOWN.WHICH_TOWN, num);
-  c.setLoc(E3CTOWN.P_LOC, party.townLoc);
-  c.setStr(E3CTOWN.NAME, E3CTOWN.NAME_LEN, record.name);
+  return c.data;
+}
 
-  const items = e3ItemList(town.items, itemToE3, warnings, 'on the ground');
-  return { cTown: c.data, data, items, miscI, sfx };
+/**
+ * Town `num`'s special squares (`load_town`: each of the record's 40 with x
+ * below 100) and the converter flag that says each ran (`e3SpotFlag`): E3
+ * clears the square's `misc_i` bit 2 to erase one (`FUN_1038_0282`).
+ */
+export function e3TownSpots(townDat: Uint8Array, num: number): { x: number; y: number; flag: [number, number] }[] {
+  const header = e3TownHeader(townDat, num);
+  const out: { x: number; y: number; flag: [number, number] }[] = [];
+  for (let k = 0; k < 40; k++) {
+    const x = header[0x1c + 2 * k]!, y = header[0x1d + 2 * k]!;
+    if (x < 100 && x < DIM && y < DIM) out.push({ x, y, flag: e3SpotFlag({ town: num }, k) });
+  }
+  return out;
 }
 
 /**

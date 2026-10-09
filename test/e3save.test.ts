@@ -33,6 +33,7 @@ import { applySave, saveGame } from '../src/fileio/saveIo';
 import { Race, Status, Trait } from '../src/universe/skills';
 import { CreatureStatus } from '../src/universe/creature';
 import { EncNoteType } from '../src/universe/party';
+import { e3SpotFlag } from '../tools/e3convert/flags';
 import { defaultItem } from '../src/data/item';
 
 describe('the exile3.sav container', () => {
@@ -268,6 +269,26 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     await back.enter(21, { x: 58, y: 5 });
     expect(back.town.items.filter((it) => it.fullName === scen.scenItems[sword]!.fullName).map((it) => it.itemLoc))
       .toEqual([{ x: 58, y: 4 }, { x: 25, y: 32 }]);
+  });
+
+  it('remembers the towns the party left: the dead stay dead, and a spot that ran stays done', async () => {
+    const q = new QuestRunner(scen);
+    await q.enter(4, { x: 30, y: 30 });
+    const victim = q.town.monsters.find((m) => m.isAlive)!;
+    victim.active = CreatureStatus.DEAD;
+    const spot = q.town.record.specialLocs.findIndex((l) => l.x < 100);
+    q.party.setSdf(...e3SpotFlag({ town: 4 }, spot), 250);
+    await q.enter(22);
+    const slot = q.party.creatureSave.findIndex((pop) => pop.whichTown === 4);
+    expect(slot).toBeGreaterThanOrEqual(0);
+    const back = new QuestRunner(scen);
+    expect(applyE3Save(exportE3Save(q.univ, defaults).bytes, back.univ, defaults).warnings).toEqual([]);
+    expect(back.party.creatureSave[slot]!.whichTown).toBe(4);
+    expect(back.party.atWhichSaveSlot).toBe(q.party.atWhichSaveSlot);
+    expect(back.party.getSdf(...e3SpotFlag({ town: 4 }, spot))).toBe(250);
+    await back.enter(4, { x: 30, y: 30 });
+    expect(back.town.monsters.find((m) => m.slot === victim.slot)?.isAlive).toBe(false);
+    expect(back.town.monsters.filter((m) => m.isAlive).length).toBe(q.party.creatureSave[slot]!.monsters.filter((m) => m.isAlive).length);
   });
 
   it("carries the magic shops' stock, so a save reloads the same wares", async () => {
@@ -517,6 +538,21 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
         return c;
       };
       expect(shops(out.party), file).toEqual(shops(save.party));
+      // The four towns remembered: which, whether hostile, and who in each is
+      // alive, as what, with what attitude (an empty slot's bytes are stale);
+      // and their fields and spots, inside each town (past it, `misc_i` is
+      // whatever the last bigger town left).
+      const remembered = (party: Uint8Array, setup: Uint8Array) => [0, 1, 2, 3].map((k) => {
+        const b = new E3Bytes(party), base = E3P.CREATURE_SAVE + k * E3P.CREATURE_LIST_SIZE;
+        const town = b.i16(base + 0x1590), dim = scen.towns[town]?.maxDim ?? 0;
+        const alive = [...Array(60).keys()].map((i) => base + i * E3CREATURE.SIZE)
+          .filter((at) => b.i16(at) > 0 && b.u8(at + E3CREATURE.NUMBER) > 0)
+          .map((at) => [b.u8(at + E3CREATURE.NUMBER), b.i16(at + E3CREATURE.ATTITUDE)]);
+        const fields = [...Array(dim * dim).keys()].map((i) => setup[k * 4096 + 64 * Math.floor(i / dim) + (i % dim)]);
+        return { town, hostile: b.i16(base + 0x1592), alive, fields };
+      });
+      expect(remembered(out.party, out.setup), file).toEqual(remembered(save.party, save.setup));
+      expect(o.i16(E3P.AT_WHICH_SAVE_SLOT), file).toBe(p.i16(E3P.AT_WHICH_SAVE_SLOT));
       // A reply number E3 left stale, whose string is empty, reads as nothing (e3SaveNotes.ts).
       const notes = (party: Uint8Array) => {
         const b = new E3Bytes(party.slice(E3P.SPECIAL_NOTES, E3P.TOTAL_M_KILLED));

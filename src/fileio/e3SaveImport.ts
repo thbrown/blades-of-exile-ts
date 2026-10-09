@@ -15,8 +15,7 @@
  *   and then its map, its creatures and its items as they were are laid
  *   over it (`applyE3TownTerrain`, `applyE3TownCreatures`,
  *   `applyE3TownItems`);
- * - the four remembered towns' creatures (`creature_save`), the wandering
- *   groups outdoors (`out_c`);
+ * - the wandering groups outdoors (`out_c`);
  * - the converter's own flags, in SDF columns 10–49 (`flags.ts`): a one-shot
  *   spot E3 erased, the daily stamps and the day counts. Only the town states
  *   (`e3TownState`) are worked out again, since they follow from the day.
@@ -38,6 +37,8 @@ import {
   E3_TABLE_ITEM_SIZE, e3ItemGraphic, e3TableItemCount, unenchantedName, type E3SaveDefaults,
 } from './e3SaveDefaults';
 import { freshenForLoad } from './saveIo';
+import { e3TownSpots } from './e3SaveTown';
+import { emptyPopulation } from '../universe/party';
 import { readE3Notes } from './e3SaveNotes';
 import type { Vehicle } from '../data/vehicle';
 import type { E3Job } from '../game/e3Jobs';
@@ -186,6 +187,63 @@ function readPc(univ: Universe, pc: Player, rec: Uint8Array, defaults: E3SaveDef
   pc.direction = b.i16(E3PC.DIRECTION);
 }
 
+/**
+ * The four towns the party remembers (`creature_save`, `setup`): who in
+ * each is dead or alive, its fields, and the slot the next town takes. A
+ * one-shot spot E3 erased there, or in the town the party stands in, is
+ * marked done in its converter flag (`e3TownSpots`); 250 is what a
+ * one-shot message leaves, and a script's own once-only test asks only
+ * for not 0. Elsewhere E3 loads a town afresh, and its spots are back.
+ */
+function readRemembered(univ: Universe, save: E3Save, defaults: E3SaveDefaults): void {
+  const { party, scenario } = univ;
+  const p = new E3Bytes(save.party);
+  const spotsErased = (num: number, misc: (x: number, y: number) => number) => {
+    if (!defaults.townDat || num < 0 || num >= 200) return;
+    for (const { x, y, flag } of e3TownSpots(defaults.townDat, num)) if (!(misc(x, y) & 2)) party.setSdf(...flag, SPOT_ERASED);
+  };
+  for (let k = 0; k < 4; k++) {
+    const at = E3P.CREATURE_SAVE + k * E3P.CREATURE_LIST_SIZE;
+    const whichTown = p.i16(at + E3_LIST_WHICH_TOWN);
+    const record = scenario.towns[whichTown];
+    if (whichTown < 0 || whichTown >= 200 || !record) {
+      party.creatureSave[k] = emptyPopulation();
+      party.setup[k] = [];
+      continue;
+    }
+    const monsters = presetCreatures(univ, whichTown);
+    readE3Creatures(univ, save.party.subarray(at), monsters);
+    party.creatureSave[k] = { whichTown, hostile: p.i16(at + E3_LIST_WHICH_TOWN + 2) !== 0, monsters };
+    const misc = (x: number, y: number) => save.setup[k * 4096 + 64 * x + y] ?? 0;
+    party.setup[k] = Array.from({ length: record.maxDim }, (_, x) => Uint8Array.from({ length: record.maxDim }, (_, y) => (x < 64 && y < 64 ? misc(x, y) : 0)));
+    spotsErased(whichTown, misc);
+  }
+  party.atWhichSaveSlot = Math.max(0, Math.min(3, p.i16(E3P.AT_WHICH_SAVE_SLOT)));
+  if (save.town) spotsErased(new E3Bytes(save.town.cTown).i16(E3CTOWN.TOWN_NUM), (x, y) => save.miscI[64 * x + y] ?? 0);
+}
+
+/** What a converter spot flag holds once E3 has erased the spot (`readRemembered`). */
+const SPOT_ERASED = 250;
+/** `creature_list_type`'s `which_town`, after its 60 creatures; `hostile` follows. */
+export const E3_LIST_WHICH_TOWN = 0x1590;
+
+/** Town `num`'s creatures as its presets bring them in, by slot, gaps dead (`populateTown`). */
+function presetCreatures(univ: Universe, num: number): Creature[] {
+  const out: Creature[] = [];
+  univ.scenario.towns[num]?.creatures.forEach((preset, i) => {
+    const template = univ.scenario.scenMonsters[preset.number];
+    if (preset.number <= 0 || !template) return;
+    while (out.length < i) {
+      const gap = new Creature();
+      gap.slot = out.length;
+      gap.active = CreatureStatus.DEAD;
+      out.push(gap);
+    }
+    out.push(assignCreature(i, preset, template, univ.party.easyMode, univ.difficultyAdjust()));
+  });
+  return out;
+}
+
 function readVehicles(list: Vehicle[], p: E3Bytes, at: number, table: Uint8Array): void {
   const numbers = vehicleNumbers(e3VehicleTable(table));
   numbers.forEach((n, k) => {
@@ -222,7 +280,7 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
   party.horses = scenario.horses.filter((v) => v.exists).map((v) => ({ ...v }));
   for (const town of scenario.towns) town.canFind = !town.isHidden;
   univ.refreshStoreItems();
-  // TODO(e3save): creature_save and out_c.
+  // TODO(e3save): out_c.
 
   const p = new E3Bytes(save.party);
   party.age = p.i32(E3P.AGE);
@@ -240,6 +298,7 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
     town.monstersKilled = p.i16(E3P.M_KILLED + 2 * t);
     if (t < E3P.CAN_FIND_TOWNS) town.canFind = p.u8(E3P.CAN_FIND_TOWN + t) !== 0;
   }
+  readRemembered(univ, save, defaults);
   party.lightLevel = p.i16(E3P.LIGHT_LEVEL);
   party.outdoorCorner = p.loc(E3P.OUTDOOR_CORNER);
   party.iwc = p.loc(E3P.IWC);
@@ -420,14 +479,23 @@ const E3_CREATURES_HELD = 60;
 export function applyE3TownCreatures(univ: Universe, cTown: Uint8Array): void {
   const town = univ.town;
   if (!town) return;
-  const c = new E3Bytes(cTown);
-  town.monstHostile = c.u8(E3CTOWN.HOSTILE) !== 0;
+  town.monstHostile = new E3Bytes(cTown).u8(E3CTOWN.HOSTILE) !== 0;
+  readE3Creatures(univ, cTown.subarray(E3CTOWN.CREATURES), town.monsters);
+}
+
+/**
+ * E3's `creature_list_type` (`e3CreatureList`) laid over `monsters`, a
+ * town's creatures as the engine would bring them in, by slot: `c_town`'s
+ * onto the town as entered, or a remembered town's onto its presets.
+ */
+function readE3Creatures(univ: Universe, list: Uint8Array, monsters: Creature[]): void {
+  const c = new E3Bytes(list);
   for (let k = 0; k < E3_CREATURES_HELD; k++) {
-    const at = E3CTOWN.CREATURES + E3CREATURE.SIZE * k;
+    const at = E3CREATURE.SIZE * k;
     const number = c.u8(at + E3CREATURE.NUMBER);
     if (number === 0) continue;
     const active = c.i16(at + E3CREATURE.ACTIVE);
-    let m = town.monsters.find((x) => x.slot === k);
+    let m = monsters.find((x) => x.slot === k);
     if (!m || m.number !== number) {
       if (active === 0) {
         if (m) m.active = CreatureStatus.DEAD;
@@ -440,16 +508,16 @@ export function applyE3TownCreatures(univ: Universe, cTown: Uint8Array): void {
       preset.startAttitude = c.i16(at + E3CREATURE.ATTITUDE) as Attitude;
       preset.startLoc = c.loc(at + E3CREATURE.START + 2);
       preset.mobility = c.u8(at + E3CREATURE.MOBILE);
-      while (town.monsters.length < k) {
+      while (monsters.length < k) {
         const gap = new Creature();
-        gap.slot = town.monsters.length;
+        gap.slot = monsters.length;
         gap.active = CreatureStatus.DEAD;
-        town.monsters.push(gap);
+        monsters.push(gap);
       }
-      const index = m ? town.monsters.indexOf(m) : k;
-      m = assignCreature(k, preset, template, univ.party.easyMode, univ.difficultyAdjust(), town.monsters[index]);
-      if (index < town.monsters.length) town.monsters[index] = m;
-      else town.monsters.push(m);
+      const index = m ? monsters.indexOf(m) : k;
+      m = assignCreature(k, preset, template, univ.party.easyMode, univ.difficultyAdjust(), monsters[index]);
+      if (index < monsters.length) monsters[index] = m;
+      else monsters.push(m);
     }
     if (active === 0) {
       m.active = CreatureStatus.DEAD;

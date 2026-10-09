@@ -17206,3 +17206,17 @@ golem plague" hangs (over 10 minutes, alone or in the full run) at
       a loaded game sells what the saved one did and a slot bought out stays
       empty. E3 leaves a bought-out slot's bytes behind with variety 0
       (seen: a "Food" record); only the variety is read.
+- [x] **The four remembered towns** (`creature_save`, `setup`,
+      `at_which_save_slot`), both ways: who is dead or alive in each, as
+      what and how disposed, its fields, and the slot the next town takes.
+      A slot is `creature_list_type`, `c_town`'s layout from +0x1427, so the
+      in-town writer and reader are shared (`e3CreatureList`,
+      `readE3Creatures`); a remembered town's slots go over its presets.
+      `setup` is `misc_i`, the engine's bits exactly. **One-shot spots:** E3
+      erases one by clearing its square's bit 2 (`FUN_1038_0282`), so a
+      spot erased in a remembered town or the current one comes in as its
+      converter flag at 250, and goes out as the bit clear; elsewhere E3
+      loads a town afresh and its spots are back, so their flags start at 0.
+      **Stale bytes:** E3 never clears an empty creature slot, nor `misc_i`
+      past a smaller town's edge; the real-save test compares what play
+      reads (alive, number, attitude; the fields inside the town).

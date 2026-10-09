@@ -27,11 +27,11 @@ import {
   e3ItemFromTable, e3ItemGraphic, e3TableItemCount, e3TableItemName, E3_TABLE_ITEM_SIZE, unenchantedName,
   type E3SaveDefaults,
 } from './e3SaveDefaults';
-import { E3_MAGIC_SHOPS, E3_MAGIC_SHOP_SLOTS, e3VehicleTable } from './e3SaveImport';
+import { E3_LIST_WHICH_TOWN, E3_MAGIC_SHOPS, E3_MAGIC_SHOP_SLOTS, e3VehicleTable } from './e3SaveImport';
 import type { Vehicle } from '../data/vehicle';
 import { e3Jobs, e3JobsBase, type E3Job } from '../game/e3Jobs';
 import { TOWN_NUM_OUTDOORS } from '../universe/party';
-import { e3ItemList, e3TownBlocks } from './e3SaveTown';
+import { e3CreatureList, e3ItemList, e3TownBlocks, e3TownData, e3TownSpots } from './e3SaveTown';
 import { writeE3Notes } from './e3SaveNotes';
 import type { Player } from '../universe/player';
 import { NUM_INVEN_SLOTS, NUM_SPELLS } from '../universe/player';
@@ -69,7 +69,7 @@ export function newE3PartyRecord(defaults: E3SaveDefaults): Uint8Array {
   for (let i = 0; i < 4; i++) p.setI16(E3P.CREATURE_SAVE + i * E3P.CREATURE_LIST_SIZE + 0x1590, 200);
   // FUN_1070_41a4 rolls the magic shops' stock here, and FUN_1008_3c91 the
   // job boards; the jobs are the game's, below.
-  // TODO(e3save): creature_save and out_c. The shops' stock is the game's, below.
+  // TODO(e3save): out_c. The shops' stock, creature_save and setup are the game's, below.
   p.setU8(E3P.M_SEEN + 0x26, 1);
   p.setU8(E3P.M_SEEN + 0x28, 1);
   p.setU8(E3P.M_SEEN + 0x4e, 1);
@@ -173,6 +173,34 @@ function writePc(defaults: E3SaveDefaults, pc: Player, warnings: string[]): Uint
   return b.data;
 }
 
+/** The four towns the party remembers (`readRemembered`, in `e3SaveImport.ts`). */
+function writeRemembered(univ: Universe, save: E3Save, defaults: E3SaveDefaults, warnings: string[]): void {
+  const { party } = univ;
+  const p = new E3Bytes(save.party);
+  const { townDat, monsterTable } = defaults;
+  p.setI16(E3P.AT_WHICH_SAVE_SLOT, party.atWhichSaveSlot);
+  party.creatureSave.forEach((pop, k) => {
+    const at = E3P.CREATURE_SAVE + k * E3P.CREATURE_LIST_SIZE;
+    if (pop.whichTown < 0 || pop.whichTown >= 200) return;
+    if (!townDat || !monsterTable) {
+      if (k === 0) warnings.push('The towns the party remembers need a newer copy of Exile III; they were left out.');
+      return;
+    }
+    p.data.set(e3CreatureList(univ, monsterTable, e3TownData(townDat, pop.whichTown, () => 0), pop.monsters, warnings), at);
+    p.setI16(at + E3_LIST_WHICH_TOWN, pop.whichTown);
+    p.setI16(at + E3_LIST_WHICH_TOWN + 2, pop.hostile ? 1 : 0);
+    // The fields as the engine keeps them (the same bits as E3's `misc_i`),
+    // and a special square's bit for each spot not yet run.
+    const setup = party.setup[k] ?? [];
+    for (let x = 0; x < Math.min(64, setup.length); x++) {
+      for (let y = 0; y < Math.min(64, setup[x]!.length); y++) save.setup[k * 4096 + 64 * x + y] = setup[x]![y]! & ~2;
+    }
+    for (const { x, y, flag } of e3TownSpots(townDat, pop.whichTown)) {
+      if (party.getSdf(...flag) === 0) save.setup[k * 4096 + 64 * x + y] = save.setup[k * 4096 + 64 * x + y]! | 2;
+    }
+  });
+}
+
 function writeVehicles(list: Vehicle[], p: E3Bytes, at: number, table: Uint8Array): void {
   vehicleNumbers(e3VehicleTable(table)).forEach((n, k) => {
     const v = list[n];
@@ -269,6 +297,7 @@ export function e3SaveRecordFromGame(univ: Universe, defaults: E3SaveDefaults): 
     if (key >= 1 && key <= 20) p.setI16(E3P.KEY_TIMES + 2 * (key - 1), day);
   }
   writeE3Notes(univ, p, defaults, warnings);
+  writeRemembered(univ, save, defaults, warnings);
   for (let i = 0; i < E3_MAGIC_SHOPS; i++) {
     for (let j = 0; j < E3_MAGIC_SHOP_SLOTS; j++) {
       const item = univ.storeItem(i, j);
