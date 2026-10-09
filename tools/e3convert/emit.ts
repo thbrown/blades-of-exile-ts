@@ -343,16 +343,19 @@ function specialXml(t: E3TerrainType, id: number, hiddenAs: Map<number, number>)
     // DAMAGING, `get_ran(8,1,10)` fire (flag1 10 sides, flag2 8 dice, flag3
     // fire), sparing a party that flies, sails or is boarding a boat. Terrain
     // 76, the other "Lava", has no arm and never burns. The E3 wording and
-    // order are the `lava` feature flag's. This gives up blockage 2: a
-    // fire-immune monster may now cross it, where E3 keeps every monster off.
+    // order are the `lava` feature flag's. A creature crosses it if it is
+    // immune to fire, as BoE's damaging ground lets one, and as E3's step
+    // check does (`readE3MonsterRefusals`).
     : !sp && id === 75 ? ['dmg', 10, 8, DamageType.FIRE]
     // The squares a town creature won't step onto are E3's own list
     // (`readE3MonsterRefusals`), not its blockage 2, which a creature's step
     // never reads: the walk-through cave walls and the rune floors keep them
     // off, and floor 152 and the levers don't. Blockage 2 stays
     // BLOCK_MONSTERS, which BoE reads for the party's placement and boats, as
-    // E3 does.
-    : !sp && t.monstRefuses ? ['monst-block', -1, 0, 0]
+    // E3 does. Lava 76 keeps off only a creature that isn't immune to fire:
+    // flag1 is that damage type, which the engine reads under `lava` =
+    // `exile3` (-1 for none).
+    : !sp && t.monstRefuses ? ['monst-block', id === 76 ? DamageType.FIRE : -1, 0, 0]
     : !sp ? ['none', -1, 0, 0]
     : sp.kind === 'sign' ? ['sign', 0, 0, 0]
     : sp.kind === 'belt' ? ['belt', sp.dir, 0, 0]

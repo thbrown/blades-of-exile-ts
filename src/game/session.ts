@@ -6220,6 +6220,13 @@ export class GameSession {
         }
         break;
       case TerSpec.BLOCKED_TO_MONSTERS:
+        // Exile III's lava 76 (`lava` = `exile3`): flag1 names a damage type,
+        // and a creature immune to it crosses (E3's `1090:0285` fire bit;
+        // `readE3MonsterRefusals`). BoE leaves the flag unused.
+        if (this.univ.scenario.featureFlags['lava'] === 'exile3' && ter.flag1 >= 0
+          && m.mon.resist[ter.flag1 as DamageType] === 0) break;
+        canEnter = false;
+        break;
       case TerSpec.TOWN_ENTRANCE:
       case TerSpec.WATERFALL_CAVE:
       case TerSpec.WATERFALL_SURFACE:

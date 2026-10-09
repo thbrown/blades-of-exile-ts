@@ -17158,3 +17158,17 @@ the shop: its stock is random (and not from the game stream, so a seed
 doesn't fix it), and now and then the first row was an item worth too little
 to resell, so SOLD failed. The buy step now takes the first row that can be
 sold back. A step that reads a die should seed it.
+
+### The last Exile III TODOs: lava 76 and the save gaps (2026-10-08)
+
+At the user's word, the two E3 tags left in the inventory, `TODO(e3lava)`
+and `TODO(e3save)`.
+
+- [x] **Lava 76 lets a fire-immune creature across.** E3's step check
+      (`1090:3595`) refuses lava unless the creature's bit 8 is set, and
+      `1090:0285` sets it when the fire array (segment 39 + 5000) is 2:
+      exactly the converter's fire immunity (resist 0), 26 monsters. 76
+      now converts as `monst-block` with flag1 = fire, and the engine's
+      step check reads that flag under `lava` = `exile3` (BoE leaves it
+      unused). 75 was already right, as damaging ground; emit.ts's comment
+      saying E3 kept every monster off it was wrong.

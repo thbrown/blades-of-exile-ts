@@ -518,6 +518,23 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(res('Acolyte')[DamageType.MAGIC]).toBe(50);
   });
 
+  it('lets a fire-immune creature onto lava 76 and keeps the rest off (1090:0285)', () => {
+    expect(scen.terTypes[76]).toMatchObject({ special: TerSpec.BLOCKED_TO_MONSTERS, flag1: DamageType.FIRE });
+    // The other monster-blocking squares name no damage type.
+    expect(scen.terTypes[151]!.flag1).toBe(-1);
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    session.startTownMode(21, FORCED_ENTRY);
+    const town = session.univ.town!;
+    const lava = { x: 20, y: 21 };
+    town.record.terrain[lava.x]![lava.y] = 76;
+    const kind = (name: string) => scen.scenMonsters.findIndex((m) => m?.name === name);
+    const lizard = town.monsters[placeMonster(session, kind('Fire Lizard'), { x: 20, y: 20 }, true)]!;
+    expect(lizard.curLoc).toEqual({ x: 20, y: 20 });
+    expect(session.monstCheckSpecialTerrain(lizard, lava, 1)).toBe(true);
+    const lizard2 = town.monsters[placeMonster(session, kind('Ice Lizard'), { x: 21, y: 20 }, true)]!;
+    expect(session.monstCheckSpecialTerrain(lizard2, lava, 1)).toBe(false);
+  });
+
   it("builds outdoor arenas from E3's own tables", () => {
     // The engine's copies of FUN_10d8_342b's tables match EXILE3.EXE's.
     const exe = new Uint8Array(readFileSync(join(dir as string, 'EXILE3.EXE')));
