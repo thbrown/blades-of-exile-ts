@@ -481,7 +481,7 @@ class Game(Emu):
         return {'party': self.rb(PARTY, 0, PARTY_SIZE), 'pcs': self.rb(PARTY, PCS_AT, PC_SIZE * 6)}
 
     def put_outdoors(self, zone, x, y):
-        """The party at (x, y) of `zone`, the 2×2 window around it loaded by E3's `FUN_1040_3677`."""
+        """The party at (x, y) of `zone`, the 2×2 window around it loaded by E3's `FUN_1040_3677` and built by `FUN_1040_2dc3`."""
         zx, zy = zone % 9, zone // 9
         cx, cy = min(zx, 7), min(zy, 8)
         i, j = zx - cx, zy - cy
@@ -491,6 +491,16 @@ class Game(Emu):
         self.wb(PARTY, 0x12e8, [x, y])
         for a, b in ((1, 1), (0, 1), (1, 0), (0, 0)):
             self.call('1040:3677', cx + a, cy + b, a, b)
+        # Then what `load_file` does next (`1040:076b`, `1040:0797`): `1040:2dc3`
+        # builds the 96×96 window (`1160:5e1b`, the terrain the step tests)
+        # from the four. Without it the step tests the terrain the save left.
+        self.call('1098:07e9')
+        self.call('1040:2dc3')
+        # The window and the zone it came from agree at the party's square,
+        # or every terrain test in the step is reading something else.
+        zone_ter = self.rb(PARTY, (0xaff2 + i * 0x1928 + j * 0xc94 + x * 48 + y) & 0xffff)[0]
+        window_ter = self.rb(0x1160, 0x5e1b + (i * 48 + x) * 0x60 + j * 48 + y)[0]
+        assert zone_ter == window_ter, f'window terrain {window_ter} != zone {zone} terrain {zone_ter} at ({x},{y})'
         return i * 48 + x, j * 48 + y
 
     def step_outdoors(self, wx, wy):

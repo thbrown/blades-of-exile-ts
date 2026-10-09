@@ -567,9 +567,9 @@ function zone42(b: SpecBuilder): Map<number, Step[]> {
   const Z = 42, B = block(Z), spot = (id: number) => zoneSpotFlag(Z, id);
   return new Map<number, Step[]>([
     // Once the undead (slot 9) are laid, the loot (750 gold, once, under
-    // slot 0) and, every visit, the inscription's spell.
+    // slot 8: `1158:0a00` at `10a0:29d9`) and, every visit, the inscription's spell.
     [1, [b.ifFlagAtLeast(spot(9), 1, [
-      b.giveItemDialog(0x152d, spot(0), 0xd1, 0xabe), b.msg(B, 0x34), b.teachSpell(0x3b),
+      b.giveItemDialog(0x152d, spot(8), 0xd1, 0xabe), b.msg(B, 0x34), b.teachSpell(0x3b),
     ], [b.askDialog(0x152c, [b.onceEncounter(spot(9), B, 0, 0, 0)])])]],
     [2, [b.onceEncounter(spot(2), B, 0x35, 0x36, 1)]],
   ]);

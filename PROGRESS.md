@@ -17269,7 +17269,7 @@ it works and how to set up its Python.
 - **What runs as E3 compiled it:** the save is loaded by E3's own
   `load_file` (`FUN_1040_018e`), which loads the outdoor zones itself; the
   step is `FUN_10c0_0c97` (`check_special_terrain`), so the spot's handler,
-  the terrain's effects (a fire wall curses) and the helpers under them
+  the terrain's effects (outdoors, its few: lava is in the move) and the helpers under them
   (`give_item`, `sort_pc_items`, `pay`, the journal) are all E3's. Windows,
   the Borland runtime, the message box (`FUN_1008_3b3f`), the dialog
   (`FUN_1070_31cd`) and `get_ran` are stubs that log and answer.
@@ -17283,32 +17283,47 @@ it works and how to set up its Python.
   and `tools/e3convert/emu/report.mjs` groups what it finds. `KNOWN` in the
   test lists the differences already understood, so a sweep shows what's new.
 
-**Findings** (from the first sweeps, Q12 and Q01; none fixed yet, all for
-the user to rule on):
+**The sweep from Q12: 3,128 runs, 3,112 agree, 0 errors.** Findings, the
+first fixed and the rest for the user to rule on:
 
-1. **"Leave" on an E3 item dialog ends the port's chain; E3 carries on.**
+1. **Fixed: zone 42's loot marked the wrong flag.** The cairns' 750 gold
+   (dialog 0x152d) is once under slot 8 (`1158:0a00`, pushed at
+   `10a0:29d9`), not slot 0 as transcribed.
+2. **"Leave" on an E3 item dialog ends the port's chain; E3 carries on.**
    `giveItemDialog` is BoE's ONCE_GIVE_ITEM_DIALOG, whose Leave sets
    `nextSpec = -1` (`oneshot.ts`); E3's `FUN_10e0_00ec` returns and the
-   handler goes on. So leaving zone 0's ember flowers skips the swamp
-   denizens' ambush that E3 springs ("As you search the flowers…"), and the
-   same for zones 27 (the bandit campsite) and 70 (the dead end). Steps
-   after a `giveItemDialog` that aren't `ifFlagAtLeast(spot, 1, …)` are the
-   ones that matter: `zones.ts` lines 52, 381, 410, 572 (a message and a
-   spell taught), 902.
-2. **Spot flags: E3's one-shot helpers write 20, the engine's once-nodes
-   250** (`onceMsg`, `giveItemDialog`; `onceEncounter` already writes 20
-   after its node). A spot below 10 whose own flag is exactly 20 is dead in
-   E3 (`specials.ts`, the guard after "A spot below 10"), so a spot marked
-   250 can run again in the port, and an exported save carries 250 where E3
-   would. About 100 spots.
-3. **Every E3 payment prints "  You give up N gold."** in the port (the
-   engine's `if-gold` with a take); E3's `FUN_1070_0623` says nothing.
-4. **Encounter groups** are placed by the party in the port and on the
-   zone's marker spot in E3 (already noted in `script.ts`, `onceEncounter`),
-   and the export writes such a group as its zone's *first* group's bytes,
-   so a placed special encounter doesn't round-trip.
+   handler goes on. Leaving zone 0's ember flowers skips the swamp
+   denizens' ambush E3 springs ("As you search the flowers…"); the same in
+   zones 27 (the bandit campsite) and 70 (the dead end). The steps that
+   matter are those after a `giveItemDialog` that aren't
+   `ifFlagAtLeast(spot, 1, …)`: `zones.ts` lines 52, 381, 410, 572 (a
+   message and a spell taught), 902.
+3. **E3's `give_to_pc` weighs; the port's `giveItem` counts slots.** Zone
+   65's forty bars: E3 says "Item too heavy to carry." and goes on to the
+   next PC (calling them "Metal Bar"); the port fills packs to 24 slots, so
+   the packs and the equipped slots end up different.
+4. **"(items combined)"**: E3 says it when a given item stacks (zones 15,
+   32, 67); the port doesn't.
+5. **Known, and kept out of the count (`KNOWN` in the test):** spot flags
+   250 where E3's one-shot helpers write 20 (about 100 spots; a spot below
+   10 whose own flag is exactly 20 is dead in E3, `specials.ts`, so a spot
+   marked 250 can run again, and an exported save carries 250); "  You give
+   up N gold." on every E3 payment, which `FUN_1070_0623` doesn't say; "X
+   gets Y." and "You get N gold." from item dialogs, where `FUN_10e0_00ec`
+   is silent; encounter groups placed by the party, not on the zone's
+   marker (already in `script.ts`), and exported as the zone's *first*
+   group's bytes; lava outdoors, which E3 does in its move function and
+   this check doesn't run.
 
 Harness lessons, any of which would make a sweep lie:
+
+- Gotcha: **after moving the party, rebuild the terrain window.** E3's
+  step tests `out[96][96]` (`1160:5e1b`), which `1040:2dc3` builds from the
+  four loaded zones; `load_file` calls it, and `put_outdoors` didn't at
+  first, so every terrain test read the terrain the save was made on. A
+  "fire wall curses" finding and a "message spots repeat" finding were both
+  that. `put_outdoors` now asserts the window and the zone agree at the
+  party's square.
 
 - Gotcha: **an in-town save leaves the port's outdoor nodes refused**
   (`outdoorSpec` returns unless `isOutdoors`), and `applyE3Save` alone

@@ -246,7 +246,7 @@ describe.skipIf(!hasEmu)("Exile III's own code against the converted scripts", (
     let moved: boolean | null = null;
     try {
       // `check_special_terrain`, E3's `FUN_10c0_0c97`: the square's special
-      // and its terrain's effects (a fire wall, a swamp) together.
+      // and its terrain's effects together.
       const session = q.session as unknown as {
         checkSpecialTerrain(where: Location, who: Player): Promise<{ canEnter: boolean }>;
       };
@@ -345,19 +345,39 @@ describe.skipIf(!hasEmu)("Exile III's own code against the converted scripts", (
       // The text area's lines, on their own: the two engines interleave them
       // with dialogs differently, but each line should be there.
       const e3Lines = e3.events.filter((ev) => ev.kind === 'line').map((ev) => (ev.text as string).trim()).filter(Boolean);
+      // Moves on the world map: the two keep the 2×2 window at different
+      // corners, so the window's bytes only compare as a move.
+      const world = (p: Uint8Array) => [p[E3P.OUTDOOR_CORNER]! * 48 + p[E3P.P_LOC]!, p[E3P.OUTDOOR_CORNER + 1]! * 48 + p[E3P.P_LOC + 1]!];
+      const [e3b, e3a, pb, pa] = [b64(e3.before.party), b64(e3.after.party), port.before[0]!, port.after[0]!].map(world);
+      const e3Move = [e3a![0]! - e3b![0]!, e3a![1]! - e3b![1]!], pMove = [pa![0]! - pb![0]!, pa![1]! - pb![1]!];
+      if (e3Move.join() !== pMove.join()) res.diffs.push(`the party moves: E3 by (${e3Move.join(',')}), port by (${pMove.join(',')})`);
+      let portLines = port.lines.filter(Boolean);
+      const drop = (re: RegExp, why: string) => {
+        const kept = portLines.filter((l) => !re.test(l));
+        if (kept.length !== portLines.length) res.known.push(why);
+        portLines = kept;
+      };
       // The engine's `if-gold` says what it took; E3's `FUN_1070_0623` doesn't.
-      const portLines = port.lines.filter((l) => l && !/^You give up \d+ (gold|food)\.$/.test(l));
-      if (portLines.length !== port.lines.filter(Boolean).length)
-        res.known.push('lines: the engine\'s if-gold says "You give up N gold.", E3\'s pay (FUN_1070_0623) says nothing');
+      drop(/^You give up \d+ (gold|food)\.$/, 'lines: the engine\'s if-gold says "You give up N gold.", E3\'s pay (FUN_1070_0623) says nothing');
+      // E3's item dialog (`FUN_10e0_00ec`) gives silently; its `give_to_pc` speaks.
+      if (!e3Lines.some((l) => / gets /.test(l)))
+        drop(/ gets .*\.$|^You get (\d+ (gold|food)|a special item)\.$/, 'lines: the engine says what an item dialog gave; E3\'s FUN_10e0_00ec gives silently');
+      // Lava outdoors is E3's move (`outd_move_party`), not this check; the port's step does both.
+      const lava = portLines.includes('LAVA!') && !e3Lines.includes('LAVA!');
+      if (lava) drop(/^LAVA!$| takes \d+\.$/, 'lava: outdoors E3 burns in its move function, which this check doesn\'t run');
       if (e3Lines.join('\n') !== portLines.join('\n'))
         res.diffs.push(`lines: E3 ${JSON.stringify(e3Lines)}, port ${JSON.stringify(portLines)}`);
       const e3Moved = e3.moved !== 0;
       if (port.moved !== null && port.moved !== e3Moved)
         res.diffs.push(`the step: E3 ${e3Moved ? 'goes through' : 'is blocked'}, port ${port.moved ? 'goes through' : 'is blocked'}`);
-      const ignoreParty = (o: number) => IGNORED.some(([lo, hi]) => o >= lo && o < hi);
+      const ignoreParty = (o: number) => IGNORED.some(([lo, hi]) => o >= lo && o < hi)
+        || (o >= E3P.OUTDOOR_CORNER && o < E3P.LOC_IN_SEC + 2);
       compareBytes('party', partyByteName, b64(e3.before.party), b64(e3.after.party), port.before[0]!, port.after[0]!, ignoreParty, res);
       compareBytes('pcs', pcByteName, clearNameTails(b64(e3.before.pcs)), clearNameTails(b64(e3.after.pcs)),
         clearNameTails(port.before[1]!), clearNameTails(port.after[1]!), ignorePoisonSlot(b64(e3.after.pcs)), res);
+      if (lava) {
+        for (const d of res.diffs.filter((d) => /CUR_HEALTH|TOTAL_DAM_TAKEN|MAIN_STATUS/.test(d))) res.diffs.splice(res.diffs.indexOf(d), 1);
+      }
       for (const d of [...res.diffs]) {
         const k = KNOWN.find(([re]) => re.test(d));
         if (k) {
