@@ -17413,3 +17413,20 @@ asks "is this E3's 255" should use `E3_TER_255_ALL`, not `t === 255 || t === 256
 
 **Not run:** the E3 emulator sweep (`E3EMU_SWEEP=1`, ~80 min). Its cases
 are outdoor spots, which this round didn't change.
+
+### Hawke's Manse and Lorelei's horses, tested (2026-10-09)
+
+- `e3quests.test.ts`, "Hawke's Manse": Lyle (personality 279) refuses 7999
+  gold and sells the key (special item 15) for 8000; Lorelei's spot 11 turns
+  a keyless party away and takes a keyed one into town 102 at (26,16);
+  Marjorie's first-visit greeting sets (102,1) once; Lyle's "mans" then says
+  the house is sold. Lewis (277, scenario node 770, talk script 157) refuses
+  599 gold, sells four horses at 600, is then sold out, and a bought horse in
+  the stables can be mounted.
+- Checked for more trench-style invisible walls (a throwaway analysis of every
+  square's possible terrains against the converter's start-of-map choices):
+  every walk-into refusal is now guarded by `if-ter`; the only `if-ter`
+  checks that can never pass are E3's own mismatches, the Under Keep of
+  Tinraya's two (already noted at `towns/tinraya.ts`) and Guhkbar's Pit's
+  spot 1, which tests (22,7) (`1160:3045`) and opens (4,27). Neither blocks:
+  the other branch runs every time.

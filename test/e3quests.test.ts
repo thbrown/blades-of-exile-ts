@@ -4924,6 +4924,84 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
     });
   });
 
+  describe("Hawke's Manse", () => {
+    it("Lyle sells its key for 8000 gold, the key opens the door, and Marjorie keeps house", async () => {
+      const q = new QuestRunner(scen);
+      const KEY = partySpecItem(0x2a);
+      await q.enter(12);
+      const [dx, dy] = spot(12, 11);
+      // Locked to a party without the key (Lorelei's spot 11).
+      await q.step(dx, dy);
+      expect(q.townNum, q.tail()).toBe(12);
+      expect(q.log.at(-1), 'the door says why').toMatch(/^\[msg/);
+
+      // Internal Affairs has a mansion to sell: 8000 gold, and not a coin less.
+      q.party.gold = 7999;
+      const [mans, poor] = await q.talk(279, 'mans', 'purc');
+      expect(mans).toMatch(/Hawke's Manse.*only 8000 gold/);
+      expect(poor).toMatch(/Eight thousand gold is a huge amount/);
+      expect(q.hasSpecItem(KEY)).toBe(false);
+      expect(q.party.gold).toBe(7999);
+      q.party.gold = 9000;
+      const [bought] = await q.talk(279, 'purc');
+      expect(bought).toMatch(/simple iron key/);
+      expect(q.hasSpecItem(KEY)).toBe(true);
+      expect(q.party.gold).toBe(1000);
+
+      // The door asks, and takes the party in (town 102, at (26,16)).
+      await q.step(dx, dy);
+      expect(q.townNum, q.tail()).toBe(102);
+      expect(q.at).toEqual({ x: 0x1a, y: 0x10 });
+      expect(q.town.record.name).toMatch(/Hawke/);
+
+      // Marjorie, the housekeeper, the first time in (spot 1), and only then.
+      const [mx, my] = spot(102, 1);
+      await q.step(mx, my);
+      expect(q.party.getSdf(102, 1), q.tail()).toBe(1);
+      expect(q.log.some((l) => /for the first time, into your new home/.test(l))).toBe(true);
+      const greeted = q.log.length;
+      await q.step(mx, my);
+      expect(q.log.slice(greeted).filter((l) => l.startsWith('[msg')), 'no second greeting the same day').toEqual([]);
+
+      // Back in Lorelei, Lyle knows the house is sold.
+      await q.enter(12);
+      const [after] = await q.talk(279, 'mans');
+      expect(after).toMatch(/glad you bought the place/);
+    });
+
+    it("Lewis sells Lorelei's four horses at 600 gold each, and the party can ride them", async () => {
+      const q = new QuestRunner(scen);
+      await q.enter(12);
+      const ours = () => q.party.horses.filter((h) => h.exists && h.whichTown === 12 && !h.property);
+      expect(ours()).toEqual([]);
+      q.party.gold = 599;
+      const [poor] = await q.talk(277, 'purc');
+      expect(poor).toMatch(/Six hundred gold is the absolute minimum/);
+      expect(ours()).toEqual([]);
+      expect(q.party.gold).toBe(599);
+
+      q.party.gold = 600 * 4 + 100;
+      for (let n = 1; n <= 4; n++) {
+        const [sold] = await q.talk(277, 'purc');
+        expect(sold).toMatch(/take one of the horses in the stables/);
+        expect(ours().length, q.tail()).toBe(n);
+      }
+      expect(q.party.gold).toBe(100);
+      // Sold out: no fifth horse, and no gold taken.
+      q.party.gold = 1000;
+      const [none] = await q.talk(277, 'purc');
+      expect(none).toMatch(/cleaned out my stock/);
+      expect(ours().length).toBe(4);
+      expect(q.party.gold).toBe(1000);
+
+      // Mounted from beside one, in the stables.
+      const horse = ours()[0]!;
+      await q.step(horse.loc.x, horse.loc.y);
+      expect(q.party.inHorse, q.univ.transcript.slice(-3).join(' / ')).toBe(q.party.horses.indexOf(horse));
+      expect(q.at).toEqual(horse.loc);
+    });
+  });
+
   it("starts a new party knowing Exile III's own first spells, not all thirty", () => {
     const q = new QuestRunner(scen);
     q.session.finishNewParty();
