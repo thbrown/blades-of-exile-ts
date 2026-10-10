@@ -19,4 +19,13 @@ export class OutdoorCreature {
   whichSector: Location = loc(0, 0);
   /** Where it stands, in the 96×96 outdoor window's coordinates. */
   mLoc: Location = loc(0, 0);
+  /**
+   * The sector it was spawned in, in the world's coordinates — OBoE's
+   * `home_sector`, which OBoE declares and saves but never sets. Unlike
+   * `whichSector` it stays right as the window shifts. Exile III reads it:
+   * its group scripts are global, so a group's chains are the nodes of the
+   * zone that defined it, wherever it is met (`group-scripts` = `exile3`).
+   * Null when unknown (a save from before it was kept).
+   */
+  homeSector: Location | null = null;
 }

@@ -26,7 +26,7 @@ import { MonstAbil, MonstGen } from '../../src/data/monsterAbility';
 import { decodeBmp, type Rgba } from '../../src/fileio/legacy/bmp';
 import { PIC_CUSTOM_FULL } from '../../src/data/special';
 import { BG_RECTS, E3_PATTERN_SLOTS } from '../../src/render/tiling';
-import { E3_ABILITY_TO_LEGACY, E3_BREATH_RANGE, E3_RADIATE, E3_STASHES, E3_TERRAIN_COUNT, readE3HiddenEntrances, readE3HiddenTowns, readE3Crumbles, readE3ItemAbilities, readE3Unlocks, readE3Items, readE3Monsters, readE3PersonalityFaces, readE3RoadJoins, readE3Start, readE3StartItems, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3StartItems, type E3TerrainType, type E3Vehicle } from './tables';
+import { E3_ABILITY_TO_LEGACY, E3_BREATH_RANGE, E3_RADIATE, E3_STASHES, E3_TERRAIN_COUNT, E3_TER_255_STANDINS, readE3HiddenEntrances, readE3HiddenTowns, readE3Crumbles, readE3ItemAbilities, readE3Unlocks, readE3Items, readE3Monsters, readE3PersonalityFaces, readE3RoadJoins, readE3Start, readE3StartItems, readE3Terrain, readE3Vehicles, vehicleNumbers, type E3StartItems, type E3TerrainType, type E3Vehicle } from './tables';
 import { E3_TOWN_COUNT, readE3Towns, type E3CreatureStart, type E3PresetItem, type E3Town } from './town';
 import { dialogueXml, esc, itemsXml, monstersXml, shopXml, specialItemXml } from './xmlWrite';
 import { convertE3Talk, e3Text, readE3Talk, type E3Speaker } from './talk';
@@ -406,29 +406,54 @@ function addRoadMarks(marks: Map<string, string>, terrain: number[][], size: num
 }
 
 /**
- * Terrain 255's blockage is not the table's: E3's town loader sets
- * `blockage[255]` (`DS:1d7d`) for the towns that have it, 4 (stops movement
- * and missiles) in 22, 23 and 46 and 5 (stops sight too) in the rest
- * (10d8:04b8–04c9; 1040:0a04 does the same for a loaded game). The setting
- * outlives the town, but every town with the terrain sets it, so it is
- * per town. The engine's blockage is per terrain, so 255 takes 4 and the
- * other towns get a copy of it that blocks sight, `E3_TER_255_OPAQUE`.
+ * Terrain 255 is a different terrain in each town that has it, and the
+ * engine's terrains are global, so each kind is a terrain of its own.
+ *
+ * - **Its blockage is not the table's:** E3's town loader sets
+ *   `blockage[255]` (`DS:1d7d`), 4 (stops movement and missiles) in 22, 23
+ *   and 46 and 5 (stops sight too) in the rest (10d8:04b8–04c9; 1040:0a04
+ *   does the same for a loaded game).
+ * - **Nor is its picture** (`terrain_pic[255]`, 226, the slime pool). The
+ *   town drawing code (`1050:43ff`, the 255 arm of the switch at
+ *   `1050:4237`) picks it by town: 226 in the Slime Pit and the Agate
+ *   Tower, 228 (a heap of trash) in the Filth Factory and the roaches'
+ *   lair, 231 (a red barrier) in Castle Troglo, the caves of the Giants and
+ *   the tunnels by them, and 229 in the Tower of Shifting Floors, Rentar-
+ *   Ihrno's keep and the New Factory, but 217 (machinery) in the tower's
+ *   first floor (32) under a conveyor belt (247–250, the square to the
+ *   north). The cache loader asks for the same pictures (`1050:2ae8`).
+ *
+ * So 255 is the see-through slime pool, and each of the other pictures is a
+ * stand-in after the table that blocks sight (`E3_TER_255_STANDINS`). The
+ * picture under a belt is chosen as the town is converted: E3 decides it
+ * as it draws, so a belt moved later would change it there and not here.
  */
-const E3_TER_255_OPAQUE = E3_TERRAIN_COUNT;
 const TER_255_SEE_THROUGH = new Set([22, 23, 46]);
-const TER_255_TOWNS = new Set([22, 23, 26, 27, 28, 29, 30, 31, 32, 33, 38, 46, 54, 60, 63, 92, 103, 104, 108]);
+const TER_255_PICS = new Map<number, number>([
+  ...[22, 23, 46].map((t): [number, number] => [t, 226]),
+  ...[26, 27, 92].map((t): [number, number] => [t, 228]),
+  ...[28, 29, 30, 31, 54, 103, 104].map((t): [number, number] => [t, 231]),
+  ...[32, 33, 38, 60, 63, 108].map((t): [number, number] => [t, 229]),
+]);
+const TER_255_UNDER_BELT = 217;
 
 function withTer255(types: E3TerrainType[]): E3TerrainType[] {
   const t = types[255]!;
-  return [...types.slice(0, 255), { ...t, blockage: 4 }, { ...t, blockage: 5 }];
+  return [...types.slice(0, 255), { ...t, blockage: 4 }, ...E3_TER_255_STANDINS.map((pic) => ({ ...t, pic, blockage: 5 }))];
 }
 
 /** Town `town`'s map as the engine gets it, with terrain 255 as the loader set it. */
 function townTer255(town: number, terrain: number[][]): number[][] {
   const has = terrain.some((col) => col.includes(255));
-  if (has && !TER_255_TOWNS.has(town)) throw new Error(`town ${town} has terrain 255 but the loader never sets its blockage`);
+  const townPic = TER_255_PICS.get(town);
+  if (has && townPic === undefined) throw new Error(`town ${town} has terrain 255 but the loader never sets its blockage`);
   if (!has || TER_255_SEE_THROUGH.has(town)) return terrain;
-  return terrain.map((col) => col.map((t) => (t === 255 ? E3_TER_255_OPAQUE : t)));
+  const belt = (t: number | undefined) => t !== undefined && t >= 247 && t <= 250;
+  return terrain.map((col, x) => col.map((t, y) => {
+    if (t !== 255) return t;
+    const pic = town === 32 && belt(terrain[x]?.[y - 1]) ? TER_255_UNDER_BELT : townPic!;
+    return E3_TERRAIN_COUNT + E3_TER_255_STANDINS.indexOf(pic);
+  }));
 }
 
 /**
@@ -904,6 +929,7 @@ function scenarioXml(
         <room-descriptions>exile3</room-descriptions>
         <once>exile3</once>
         <gifts>exile3</gifts>
+        <group-scripts>exile3</group-scripts>
         <explode-spots>exile3</explode-spots>
         <pick-lock>exile3</pick-lock>
         <crumble>exile3:${crumbles.join(',')}</crumble>

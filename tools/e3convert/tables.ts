@@ -13,6 +13,15 @@ import { neAutoDataSegment, readNeSegment } from './ne';
 
 export const E3_TERRAIN_COUNT = 256;
 
+/**
+ * The pictures of terrain 255's stand-ins (`withTer255` in emit.ts), which
+ * are terrains `E3_TERRAIN_COUNT` on in this order: 255 is a different
+ * terrain in each town that has it.
+ */
+export const E3_TER_255_STANDINS = [228, 231, 229, 217];
+/** Every terrain that is E3's 255 in some town: 255 itself and its stand-ins. */
+export const E3_TER_255_ALL = [255, ...E3_TER_255_STANDINS.map((_, i) => E3_TERRAIN_COUNT + i)];
+
 export interface E3TerrainType {
   /** String `301 + id`. */
   name: string;

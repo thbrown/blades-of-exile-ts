@@ -2084,6 +2084,13 @@ const encounter = await page.evaluate(async () => {
   monst.curLoc = { x: p.x + clear[0] * 3, y: p.y + clear[1] * 3 };
   univ.party.pcs.forEach((pc) => { pc.maxHealth = 300; pc.curHealth = 300; });
   const startedAt = { ...monst.curLoc };
+  // **The rest of the town sits this out**, and is put back after. With the
+  // town hostile, a guard nearby would pick a fight with this one, and about
+  // one run in three it went after that guard instead and died there,
+  // never reaching the party. Which guards stood where was down to earlier
+  // steps, on dice seeded off the clock.
+  const benched = univ.town.monsters.filter((m) => m !== monst && m.isAlive).map((m) => [m, m.active]);
+  for (const [m] of benched) m.active = 0;
 
   // Stand still: each attempted step is a party action, so the monsters move.
   let noticed = false;
@@ -2101,8 +2108,12 @@ const encounter = await page.evaluate(async () => {
     // re-arming it until it has actually noticed, or the assertion below is
     // riding on a single roll landing under 50.
     if (!noticed) monst.active = 1;
-    await s.moveTo({ x: univ.party.townLoc.x, y: univ.party.townLoc.y - 1 });
-    await s.moveTo({ x: univ.party.townLoc.x, y: univ.party.townLoc.y + 1 });
+    const north = await s.moveTo({ x: univ.party.townLoc.x, y: univ.party.townLoc.y - 1 });
+    const south = await s.moveTo({ x: univ.party.townLoc.x, y: univ.party.townLoc.y + 1 });
+    // A refused step takes no turn, and earlier steps sometimes leave the
+    // party walled in north and south (at (12,14)), where the guard never
+    // got a turn at all: wait one out instead.
+    if (!north && !south) await s.pause();
     // The monsters' reply to those steps is queued, not immediate — it waits
     // on the animation timeline. Let it land before reading the damage, which
     // is what the input gate makes the player do anyway.
@@ -2110,6 +2121,7 @@ const encounter = await page.evaluate(async () => {
     noticed = noticed || univ.transcript.includes('Monster saw you!');
     hurt = univ.party.pcs.reduce((n, pc) => n + (300 - pc.curHealth), 0);
   }
+  for (const [m, active] of benched) m.active = active;
   window.__redraw();
   return {
     noticed, hurt, startedAt, endedAt: { ...monst.curLoc },

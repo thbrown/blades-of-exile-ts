@@ -239,6 +239,8 @@ export interface PendingSpecial {
   type: SpecCtxType;
   where: Location;
   triggerTime: number;
+  /** The outdoor sector the chain reads its nodes from, if not the party's (`SpecialVm.run`). */
+  sector?: Location | null;
 }
 
 /** `get_target_i`'s value for "the whole party" (universe.cpp:1124). */

@@ -263,9 +263,16 @@ export function e3SpotScript(
     // it didn't, and the Slime Pit's level 2 had a spot-2 square of water
     // at (20,21), the boat's only way to the western landing, that silently
     // refused every boat.
+    //
+    // And it stands only while the terrain does: E3 asks the square as it is
+    // now. Until 2026-10-09 the refusal held for good, so the four spots in
+    // the Filth Factory's trench (47–52, 34–35), water drained to filth
+    // while the flow is halted, were an invisible wall across it.
     const ter = terrainAt(s.loc.x, s.loc.y);
     if (isTown && WALK_INTO.has(ter)) {
-      if (ter === WATER) n = b.node('if-boat', { ex1: [-1, -1, b.node('block-move', { ex1: [0], ex2: [0] }, n)] }, n);
+      const allow = b.node('block-move', { ex1: [0], ex2: [0] }, n);
+      const still = ter === WATER ? b.node('if-boat', { ex1: [-1, -1, allow] }, n) : n;
+      n = b.node('if-ter', { ex1: [s.loc.x, s.loc.y], ex2: [ter, still] }, allow);
       n = b.node('block-move', { ex1: [1], ex2: [1] }, n);
     }
     marks.push({ x: s.loc.x, y: s.loc.y, node: n });

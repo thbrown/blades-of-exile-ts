@@ -192,6 +192,7 @@ export function placeOutdWandMonst(
     slot.direction = 0;
     slot.whatMonst = group;
     slot.whichSector = { ...univ.party.iwc };
+    slot.homeSector = univ.party.sector;
     // `where` arrives sector-local; the slot keeps window coordinates.
     slot.mLoc = { x: where.x, y: where.y };
     if (slot.whichSector.x === 1) slot.mLoc.x += 48;

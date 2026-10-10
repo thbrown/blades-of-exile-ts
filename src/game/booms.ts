@@ -51,6 +51,23 @@ export function boomMs(): number {
 }
 
 /**
+ * What `boom_space` holds a hit for *after its sound*, when the sound
+ * blocked: `Delay(10)` (GRAPHICS.CPP:2349; Exile III's `1050:5d1f`), and on
+ * Windows a tick is 16ms (GLOBAL.CPP:92; E3's `1048:024c`). The 300ms of
+ * `BOOM_MS` is OBoE's WASM build's stand-in *for* the sound, which it can't
+ * wait on; native OBoE waits on the sound and adds nothing. Booked on top of
+ * a blocking sound, the 300 counted the wait twice: a sword hit took 0.66s
+ * against Exile III's 0.55s. DIVERGENCES.md §63.
+ */
+export const BOOM_HOLD_MS = 160;
+
+/**
+ * `if ((sound == 6) && (fast_bang == 0)) Delay(12)` — the squish (file 55)
+ * is an asynchronous sound, so it gets 12 ticks of its own to be seen by.
+ */
+export const SQUISH_HOLD_MS = 192;
+
+/**
  * `boom_type_sound` (do_explosion_anim, boe.newgraph.cpp:562) — **a different
  * table from `SOUND_LOOKUP` above**, indexed by *boom type* rather than sound
  * type, and the source of the one noise a whole volley makes. Playing a
@@ -298,9 +315,15 @@ export function boomSpace(
   // length: a second blow in the same turn follows the first rather than
   // landing on top of it, and anything waiting on the timeline — the rest of
   // the monster's turn, the party-death announcement — waits for the blast.
-  const starts = animBook(blocks + boomMs());
+  //
+  // With nothing blocking (sounds off, or one not loaded yet) it holds for
+  // `BOOM_MS`, about 1997's own pause with sounds off: `Delay(10)` and then
+  // `GameSpeed * 3 + 4` ticks, 272ms at the default speed.
+  const hold = (soundType === 6 ? paced(SQUISH_HOLD_MS) : 0)
+    + (blocks > 0 ? blocks + paced(BOOM_HOLD_MS) : boomMs());
+  const starts = animBook(hold);
   sink?.({
-    where: { ...where }, type, damage, sound: file, starts, expires: starts + blocks + boomMs(),
+    where: { ...where }, type, damage, sound: file, starts, expires: starts + hold,
     animated: false, offset: 0, xAdj, yAdj, placeType,
   });
 }

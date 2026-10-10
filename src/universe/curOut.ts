@@ -46,6 +46,19 @@ export class CurOut {
     return this.sectorAt({ x, y }).specialSpot[x % SECTOR_SIZE]![y % SECTOR_SIZE]! === true;
   }
 
+  /**
+   * The sector whose specials and strings the running chain reads, when it
+   * isn't the party's own: set by the specials VM for the length of an
+   * Exile III group's chain (`SpecialVm.run`'s `sector`).
+   */
+  chainSector: Location | null = null;
+
+  /** The sector an outdoor chain's nodes and strings come from (`get_node`, `get_str`). */
+  get specSector(): Sector {
+    if (!this.chainSector) return this.sector;
+    return this.scen.outdoors[this.chainSector.x]?.[this.chainSector.y] ?? this.sector;
+  }
+
   /** The sector record the party is currently standing in. */
   get sector(): Sector {
     const s = this.party.sector;

@@ -31,6 +31,7 @@ import { Universe } from '../src/universe/universe';
 import { PartyPreset } from '../src/universe/player';
 import { FORCED_ENTRY, GameSession } from '../src/game/session';
 import { killMonst } from '../src/game/damage';
+import { placeOutdWandMonst } from '../src/game/wandering';
 import { makeTownHostile } from '../src/game/townAttitude';
 import { MainStatus, Race, Status } from '../src/universe/skills';
 import { Direction } from '../src/core/location';
@@ -549,7 +550,7 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
       .toEqual([E3_CAVE_PILLAR, E3_MNTN_PILLAR, E3_SURF_LAKE, E3_CAVE_LAKE]);
     // Each terrain carries its arena kind, and the scenario asks for E3's arenas.
     expect(scen.featureFlags['outdoor-arena']).toBe('exile3');
-    // (256 is the converter's copy of 255, which only towns use.)
+    // (256 on are the converter's copies of 255, which only towns use.)
     expect(scen.terTypes.slice(0, 256).map((t) => t.combatArena)).toEqual(words(0x3850, 256).map((w) => (w << 16) >> 16));
     // A grass arena is grass and E3's plants inside E3's border, and nothing
     // from BoE's numbering (BoE's border is 90, E3's swamp).
@@ -806,6 +807,30 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(scen.outdoors[2]![8]!.specialEnc[0]!.forced).toBe(true);
   });
 
+  it("runs a group's script from the zone it came from, wherever it is met", async () => {
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    const said: string[] = [];
+    session.attachSpecials(new Proxy({}, {
+      get: (_, k) => (k === 'message' ? (s: string) => { said.push(s); return Promise.resolve(); } : () => Promise.resolve(0)),
+    }) as never);
+    const univ = session.univ;
+    session.debugLeaveTown();
+    // Zone 97, (7,9): an Exile patrol (Guards, onmeet 36) that looks the
+    // party over and leaves. Spawned there, then met over the line in (8,9),
+    // whose node 36 is something else: the play-test's fifteen-Guard fight.
+    session.positionParty(7, 9, 46, 24);
+    placeOutdWandMonst(session, { x: 46, y: 20 }, scen.outdoors[7]![9]!.wandering[0]!);
+    const slot = univ.party.outC[0]!;
+    expect(slot.homeSector).toEqual({ x: 7, y: 9 });
+    univ.party.outLoc = { x: 48, y: 24 };
+    univ.party.iwc = { x: 1, y: 0 };
+    univ.party.locInSec = univ.party.globalToLocal(univ.party.outLoc);
+    expect(univ.party.sector).toEqual({ x: 8, y: 9 });
+    slot.mLoc = { x: 49, y: 24 };
+    expect(await session.checkOutdoorEncounter()).toBe(false);
+    expect(said.pop()).toMatch(/Exile soldiers patrolling this area/);
+  });
+
   it("drowns whoever stands in the Filth Factory's trench as the flow restarts", async () => {
     // The countdown's chain is the scenario node that asks for town 26.
     const chain = [...scen.scenSpecials].find(([, n]) => n.type === SpecType.IF_TOWN_NUM && n.ex1a === 26)![0];
@@ -850,6 +875,26 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(t.said).toHaveLength(2);
     expect(t.party.pcs[1]!.mainStatus).toBe(MainStatus.DEAD);
     expect(alive(t.party).filter(Boolean)).toHaveLength(5);
+  });
+
+  it("lets the party along the Filth Factory's trench once it's dry, and not before", async () => {
+    const session = new GameSession(new Universe(scen, new GameRng(), PartyPreset.DEFAULT));
+    session.attachSpecials(new Proxy({}, { get: () => () => Promise.resolve(0) }) as never);
+    session.startTownMode(26, 0);
+    await vi.waitFor(() => expect(session.specials!.busy).toBe(false));
+    const { party } = session.univ;
+    const terrain = session.univ.town!.record.terrain;
+    // Halted, the trench is filth (210); four of its squares carry spots,
+    // whose stand-in for the water's refusal used to outlast the water.
+    terrain[47]![34] = 210;
+    party.townLoc = { x: 47, y: 34 };
+    expect(await session.move(Direction.E)).toBe(false);
+    for (let x = 47; x <= 52; x++) for (const y of [34, 35]) terrain[x]![y] = 210;
+    for (let x = 48; x <= 52; x++) {
+      await session.move(Direction.E);
+      await vi.waitFor(() => expect(session.specials!.busy).toBe(false));
+      expect(party.townLoc).toEqual({ x, y: 34 });
+    }
   });
 
   it("rests at an inn as E3 does: 500 ticks, and statuses stay", () => {
@@ -1169,6 +1214,21 @@ describe.skipIf(!dir)('Exile 3 converted', () => {
     expect(has255(26, 255)).toBe(false);
     expect(scen.terTypes[255]!.blockage).toBe(TerObstruct.BLOCK_MOVE_AND_SHOOT);
     expect(scen.terTypes[256]!.blockage).toBe(TerObstruct.BLOCK_MOVE_AND_SIGHT);
+    // …and is a different picture by town, as E3's town drawing has it
+    // (1050:43ff): the slime pool, the roaches' trash, Troglo's red barrier,
+    // the tower's pipes, and its machinery under a belt.
+    const pics = (t: number) => new Set(scen.towns[t]!.terrain.flat().filter((ter) => ter >= 255)
+      .map((ter) => scen.terTypes[ter]!.picture));
+    expect(pics(23)).toEqual(new Set([1226]));
+    expect(pics(92)).toEqual(new Set([1228]));
+    expect(pics(26)).toEqual(new Set([1228]));
+    expect(pics(29)).toEqual(new Set([1231]));
+    expect(pics(103)).toEqual(new Set([1231]));
+    expect(pics(32)).toEqual(new Set([1229, 1217]));
+    expect(pics(38)).toEqual(new Set([1229]));
+    for (let t = 256; t < scen.terTypes.length; t++) {
+      expect(scen.terTypes[t]!.blockage).toBe(TerObstruct.BLOCK_MOVE_AND_SIGHT);
+    }
   });
 
   it('gives the other kill cases to the creatures that carry them', () => {

@@ -766,6 +766,10 @@ export function writeParty(file: TagFile, party: Party, scenarioId: string): voi
     putLoc(encPage, 'LOCINSECTOR', group.mLoc);
     // `home_sector` isn't modelled; the group's own sector stands in for it.
     putLoc(encPage, 'HOME', group.whichSector);
+    // This port's own: the real home sector, in the world's coordinates
+    // (`OutdoorCreature.homeSector`). A new tag, as HOME has meant the
+    // window's sector in every save written so far.
+    if (group.homeSector) putLoc(encPage, 'SPAWNED', group.homeSector);
     encPage.add('-');
     writeWandering(encPage, group.whatMonst);
   }
@@ -1026,6 +1030,7 @@ export function readParty(file: TagFile, party: Party): void {
       group.direction = readEnumTagOrNumber(dirTags, page.first('DIRECTION')?.str(0) ?? '', 0);
       takeLoc(page, 'SECTOR', group.whichSector);
       takeLoc(page, 'LOCINSECTOR', group.mLoc);
+      if (page.first('SPAWNED')) takeLoc(page, 'SPAWNED', group.homeSector = { x: 0, y: 0 });
       readWandering(page, group.whatMonst);
     } else if (page.firstKey() === 'TIMER') {
       const tag = page.first('TIMER')!;

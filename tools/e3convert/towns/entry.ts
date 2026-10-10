@@ -64,6 +64,7 @@
 
 import type { EntryScript, TownEntryScript } from '../specials';
 import { partyFlag as f, type Flag, type SpecBuilder, type Step } from '../script';
+import { E3_TER_255_ALL } from '../tables';
 import { ANAMA } from './shayder';
 import { PEDESTAL } from './slimePit';
 import { TROGLO_STAGE, TROGLO_WAR } from './castleTroglo';
@@ -138,7 +139,7 @@ const TOWN_CASES = new Map<number, EntryScript>([
     b.ifFlagAtLeast(TROGLO_STAGE, 2, [b.setTer(52, 51, 101)]),
   ]],
   ...[29, 31, 103].map((t): [number, EntryScript] => [t, (b) =>
-    [b.ifFlagAtLeast(f(0xc8a), 1, [b.replaceTerrain(255, 0), b.replaceTerrain(256, 0)])]]),
+    [b.ifFlagAtLeast(f(0xc8a), 1, E3_TER_255_ALL.map((t) => b.replaceTerrain(t, 0)))]]),
   ...[78, 79].map((t): [number, EntryScript] => [t, (b) => [b.scatterDecals(1, 5)]]),
   [32, (b) => GENERATORS.map(({ flag, x, y }) => b.ifFlagAtLeast(flag, 1, [b.setTer(x, y, 0)]))],
   [82, (b) => [b.ifEntryDir(3, 3, [b.setTer(4, 20, 0x8d)])]],

@@ -1082,7 +1082,7 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       for (const pc of q.party.pcs) { pc.level = 30; pc.maxHealth = 600; pc.curHealth = 600; }
       await q.enter(103, { x: 26, y: 17 });
       await q.clearHostiles();
-      const has255 = () => q.town.record.terrain.some((col) => col.some((t) => t === 255 || t === 256));
+      const has255 = () => q.town.record.terrain.some((col) => col.some((t) => t >= 255));
       expect(has255(), 'the barriers').toBe(true);
       const [cx, cy] = spot(103, 1);
       // The crystal's pages: what it is, then whether to smash it.

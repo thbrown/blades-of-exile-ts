@@ -1376,6 +1376,37 @@ asks, so the port never says it outside Exile III (#61). A player can see
 it, so the rule above would follow 1997; it is text only, no draws. Not
 changed for BoE scenarios without a ruling.
 
+### 63. How long a hit stays up (2026-10-09)
+
+**DECIDED: 1997's and Exile III's.** After a hit's sound, both originals'
+`boom_space` holds the sprite for `Delay(10)` (GRAPHICS.CPP:2349; E3's
+`1050:5d1f`), 160ms at 16ms a tick (GLOBAL.CPP:92, E3's `1048:024c`), and
+12 ticks more for the squish (sound type 6); with sounds off, `GameSpeed * 3
++ 4` ticks more. Native OBoE waits on the sound and adds nothing; OBoE's
+WASM build can't wait on a sound, so it sleeps 300ms instead. #51 made the
+port wait on blocking sounds as both originals do, but kept the WASM 300ms
+on top, which counted the wait twice: a sword hit held for 0.66s against E3's
+0.55s, about 2.4× its old 0.27s, and the play-testers noticed. Now a hit with a
+blocking sound holds for the sound and 160ms (`BOOM_HOLD_MS`, paced), and one
+with nothing blocking for `BOOM_MS` as before, about 1997's sounds-off pause
+at the default speed. Timing only; no draws.
+
+### 64. Whose script a wandering group runs (2026-10-09)
+
+**DECIDED: Exile III's, under `<group-scripts>exile3</group-scripts>`.**
+BoE (1997 and OBoE alike) runs an outdoor group's meet, win and flee nodes
+from the sector the party is standing in (`get_node`'s OUTDOOR arm), so a
+group that wandered over a sector line runs whatever node of the new sector
+has its number. Exile III's group scripts are global (`10c0:06c3` dispatches
+on the group's own script byte), so the converter writes each into the
+zone that defines the group, and under the flag the chain reads that zone's
+nodes and strings (`OutdoorCreature.homeSector`, `CurOut.chainSector`). The
+play-test's case: the Exile patrols of zone (7,9), met over the line in
+(8,9), ran its node 36 and attacked with fifteen Guards; E3 looks the party
+over and leaves. BoE scenarios keep BoE's rule. `homeSector` is OBoE's
+`home_sector`, which it declares and saves but never sets; this port saves it
+as `SPAWNED` (HOME has always held the window's sector here). No draws.
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**

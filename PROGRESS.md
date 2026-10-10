@@ -17356,3 +17356,60 @@ Harness lessons, any of which would make a sweep lie:
 Next: town spots (`FUN_10c0_0c97` mode 1, from an in-town save), the
 outdoor group scripts (`FUN_10c0_06c3`), talk scripts; the other outdoor
 saves (`E3EMU_SAVE=a,b,c`) for the flag states Q12 doesn't reach.
+
+### Play-test notes, seventeenth round (2026-10-09)
+
+- [x] **Fifteen-Guard patrols that should have let the party be** (north of
+      Fort Emergence, out of the passage; E3 shows "…look you over and
+      leave"). A group carries its zone's meet node *number*, and the engine
+      ran it in the zone the party stood in, as BoE does. Met a zone over,
+      zone (7,9)'s Exile patrol ran (8,9)'s node 36 and attacked; other
+      groups showed a stranger's message or vanished without a word. E3's
+      group scripts are global (`10c0:06c3`), so under the new flag
+      **`group-scripts` = `exile3`** a group's meet, win and flee chains read
+      its home zone's nodes and strings (`OutdoorCreature.homeSector`, set on
+      spawn and from an E3 save's matched zone, saved as `SPAWNED`;
+      `SpecialVm.run`'s `sector`, `CurOut.chainSector`). DIVERGENCES §64.
+      Test in `e3convert.test.ts`. Groups in a save from before this have no
+      home and keep the old rule until they're replaced.
+- [x] **"Melee is 2–4× slower"** — confirmed before fixing: since the ninth
+      round's blocking sounds (2026-10-06) a hit held for its sound *and*
+      OBoE-WASM's 300ms, the WASM build's stand-in for that very wait. A sword
+      hit went 0.27s → 0.66s (×2.4, more with a death cry); E3's is the sound
+      plus `Delay(10)`, 0.55s (`1050:5d1f`; `1048:024c` is 16ms a tick). Now
+      the sound plus 160ms (`BOOM_HOLD_MS`), 0.53s at pace 1. Still about twice
+      the speed before 2026-10-06, which never waited for the sound.
+      DIVERGENCES §63.
+- [x] **The roaches' lair showed slime pools for its walls of trash, and
+      the Troglo caves' barrier was a slime pool too.** E3's terrain 255 is a
+      different picture by town (`1050:43ff`, the 255 arm of the town
+      drawing switch, and the cache loader at `1050:2ae8`): 226 slime pool
+      (Slime Pit, Agate Tower), 228 trash (Filth Factory, the roaches), 231 a
+      red barrier (Castle Troglo and under it, the Giants' caves, the
+      Concealed Tunnel, the Barrier Cavern, Athron's lair), 229 (Shifting
+      Floors, Rentar-Ihrno's keep, the New Factory) and 217 on the tower's
+      first floor under a belt (`terrain[x][y-1]` in 247–250). The converter
+      drew 226 everywhere. 255 is now the see-through pool and 256–259 one
+      stand-in per picture (`E3_TER_255_STANDINS` in `tables.ts`); the
+      barrier-breaking scripts replace all of them (`E3_TER_255_ALL`), and an
+      E3 save's town map puts each 255 back on its own stand-in.
+- [x] **An invisible wall in the Filth Sluicing Trench** once the flow was
+      halted. The converter puts a refusal in front of every town spot on
+      water, standing in for the water; the trench drains to filth (210) and
+      four of its squares have spots, so the refusal outlived the water. It
+      now holds only while the square is still the terrain it stood in for
+      (`if-ter` on the spot's own square). Test: walking the dry trench.
+- [x] **verify-screen's ENCOUNTER step was flaky** in two ways, both made
+      more likely by the faster hits: the guard picked a fight with another
+      town guard and died before reaching the party, and earlier steps
+      sometimes left the party walled in north and south, where a refused
+      step passes no turn. The rest of the town now sits the step out, and
+      the step waits a turn when both moves are refused. Four runs since, all
+      PASS, including `?seed=2`, which walled the party in every time.
+
+**Gotcha (2026-10-09):** a converted Exile III scenario's terrain list runs
+past 255 (255 itself, then 256–259, E3's 255 per picture). Anything that
+asks "is this E3's 255" should use `E3_TER_255_ALL`, not `t === 255 || t === 256`.
+
+**Not run:** the E3 emulator sweep (`E3EMU_SWEEP=1`, ~80 min). Its cases
+are outdoor spots, which this round didn't change.

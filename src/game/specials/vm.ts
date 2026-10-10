@@ -71,7 +71,7 @@ export class SpecialsEngine {
         node = this.univ.scenario.scenSpecials.get(which);
         break;
       case SpecCtxType.OUTDOOR:
-        node = this.univ.out.sector.specials.get(which);
+        node = this.univ.out.specSector.specials.get(which);
         break;
       case SpecCtxType.TOWN:
         // `univ.departedTown` is the fallback the leave-town chain needs: it
@@ -123,12 +123,18 @@ export class SpecialsEngine {
    * party. That is the difference between `AFFECT_XP` doing nothing and
    * `award_xp` running over four PCs, and `award_xp` rolls.
    */
+  /**
+   * `sector`, when given, is the outdoor sector whose nodes and strings the
+   * chain reads in place of the party's: an Exile III group's, whose scripts
+   * belong to the zone that defined it (`OutdoorCreature.homeSector`).
+   */
   async run(
     whichMode: SpecCtx,
     whichType: SpecCtxType,
     startSpec: number,
     specLoc: Location,
     seedTarget: number | null = null,
+    sector: Location | null = null,
   ): Promise<SpecialResult> {
     if (startSpec < 0) return { a: -1, b: -1, redraw: false };
 
@@ -144,6 +150,7 @@ export class SpecialsEngine {
         type: whichType,
         where: specLoc,
         triggerTime: this.univ.party.age,
+        sector,
       });
       return { a: -1, b: -1, redraw: false };
     }
@@ -165,8 +172,10 @@ export class SpecialsEngine {
       session: this.session,
     };
     this.inProgress = true;
+    this.univ.out.chainSector = sector;
 
     if (this.endScenario) {
+      this.univ.out.chainSector = null;
       this.inProgress = false;
       return { a: -1, b: -1, redraw: false };
     }
@@ -243,6 +252,7 @@ export class SpecialsEngine {
       // markers consistent with the SDFs it managed to set.
       if (this.session.isOutdoors) this.session.eraseOutSpecials();
       else this.session.eraseTownSpecials();
+      this.univ.out.chainSector = null;
       this.inProgress = false;
     }
 
@@ -251,7 +261,7 @@ export class SpecialsEngine {
     if (pending) {
       const storeTime = this.univ.party.age;
       this.univ.party.age = pending.triggerTime;
-      const nested = await this.run(pending.mode, pending.type, pending.spec, pending.where);
+      const nested = await this.run(pending.mode, pending.type, pending.spec, pending.where, null, pending.sector ?? null);
       this.univ.party.age = Math.max(this.univ.party.age, storeTime);
       return {
         a: Math.max(ctx.retA, nested.a),

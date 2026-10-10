@@ -354,6 +354,8 @@ export class GameSession {
   arena: Town | null = null;
   /** The encounter being fought, for its on-win and on-flee specials. */
   storeWanderingSpecial: OutWandering | null = null;
+  /** The met group's home sector, for its win and flee chains (`groupScriptSector`). */
+  storeWanderingHome: Location | null = null;
   private numOutMoves = 0;
   private numTownMoves = 0;
   /** Optional; when absent the game runs silently (as tests do). */
@@ -614,6 +616,7 @@ export class GameSession {
     this.townTarget = null;
     this.arena = null;
     this.storeWanderingSpecial = null;
+    this.storeWanderingHome = null;
     this.combatActivePc = NO_ONE;
     this.spellTarget = 6;
     this.univ.curPc = 0;
@@ -932,6 +935,23 @@ export class GameSession {
    * `initiate_outdoor_combat` then gives the party one more out: an encounter
    * far below its level simply runs away.
    */
+  /**
+   * The sector a group's meet, win and flee chains read, if not the party's.
+   * BoE runs them in the sector the party stands in (`get_node`'s OUTDOOR
+   * arm), as 1997 and OBoE both do, so a group that wandered over a sector
+   * line runs whatever node of the new sector has its number. Exile III's
+   * group scripts are global (`10c0:06c3` dispatches on the group's own
+   * script byte), so the converter writes each into the zone that defines
+   * the group, and under `group-scripts` = `exile3` that zone is where they
+   * are read: a patrol of Exile soldiers met a zone over from its own still
+   * looks the party over and leaves, where the neighbour's node attacked.
+   * DIVERGENCES.md §64.
+   */
+  private groupScriptSector(home: Location | null): Location | null {
+    if (this.univ.scenario.featureFlags['group-scripts'] !== 'exile3') return null;
+    return home ? { ...home } : null;
+  }
+
   async checkOutdoorEncounter(): Promise<boolean> {
     const univ = this.univ;
     if (univ.party.inBoat >= 0) return false;
@@ -941,10 +961,12 @@ export class GameSession {
     const encounter = group.whatMonst;
     group.exists = false;
     this.storeWanderingSpecial = encounter;
+    this.storeWanderingHome = this.groupScriptSector(group.homeSector);
 
     if (encounter.specOnMeet >= 0) {
       const { blocked } = await this.runSpecial(
-        SpecCtx.OUTDOOR_ENC, SpecCtxType.OUTDOOR, encounter.specOnMeet, univ.party.locInSec);
+        SpecCtx.OUTDOOR_ENC, SpecCtxType.OUTDOOR, encounter.specOnMeet, univ.party.locInSec,
+        null, this.storeWanderingHome);
       if (blocked) return false;
     }
 
@@ -1040,7 +1062,8 @@ export class GameSession {
     this.storeWanderingSpecial = null;
     if (fled && fled.specOnFlee >= 0) {
       void this.runSpecial(
-        SpecCtx.FLEE_ENCOUNTER, SpecCtxType.OUTDOOR, fled.specOnFlee, univ.party.locInSec);
+        SpecCtx.FLEE_ENCOUNTER, SpecCtxType.OUTDOOR, fled.specOnFlee, univ.party.locInSec,
+        null, this.storeWanderingHome);
     }
   }
 
@@ -1070,7 +1093,8 @@ export class GameSession {
     this.storeWanderingSpecial = null;
     if (won && won.specOnWin >= 0) {
       void this.runSpecial(
-        SpecCtx.WIN_ENCOUNTER, SpecCtxType.OUTDOOR, won.specOnWin, univ.party.locInSec);
+        SpecCtx.WIN_ENCOUNTER, SpecCtxType.OUTDOOR, won.specOnWin, univ.party.locInSec,
+        null, this.storeWanderingHome);
     }
   }
 
@@ -2272,10 +2296,10 @@ export class GameSession {
    */
   async runSpecial(
     mode: SpecCtx, type: SpecCtxType, node: number, where: Location,
-    seedTarget: number | null = null,
+    seedTarget: number | null = null, sector: Location | null = null,
   ): Promise<{ blocked: boolean; forced: boolean }> {
     if (!this.specials || node < 0) return { blocked: false, forced: false };
-    const result = await this.specials.run(mode, type, node, where, seedTarget);
+    const result = await this.specials.run(mode, type, node, where, seedTarget, sector);
     if (result.redraw) this.onRedraw?.();
     // Every C++ path that runs a chain returns through `handle_action`, whose
     // tail is `advance_time` — so a node that ends the scenario is acted on as

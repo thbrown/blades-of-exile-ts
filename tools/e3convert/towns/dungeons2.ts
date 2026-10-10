@@ -7,6 +7,7 @@
  */
 
 import { FieldType } from '../../../src/data/fields';
+import { E3_TER_255_ALL } from '../tables';
 import { Skill } from '../../../src/universe/skills';
 import { e3DailyFlag } from '../flags';
 import { e3TownMessageBlock, type PlaceScript } from '../specials';
@@ -259,10 +260,10 @@ function barrierCavern(b: SpecBuilder): Map<number, Step[]> {
         b.setEvent(2), b.setFlag(spot(1), 1), b.dialog(0xfc0), b.damageAll(0x32, 3), b.dialog(0xfc1), b.xp(25), b.journal(0xb),
         b.bringIn(200, 1), b.setFlag(f(0xc8a), 1),
         ...[0x1bd, 0x1a1, 0x19f, 0x19e, 0x1ab].map((a) => b.setFlag(f(a), 20)),
-        // The barriers: terrain 255, which the converter makes 256 where it
-        // blocks sight (town 103 is one). Until 2026-09-30 only 255 was
-        // replaced, so they stayed up until the party came back in.
-        b.replaceTerrain(0xff, 0), b.replaceTerrain(256, 0),
+        // The barriers: terrain 255, which the converter gives a stand-in
+        // per picture (town 103's is the red barrier, 257). Until 2026-09-30
+        // only 255 was replaced, so they stayed up until the party came back in.
+        ...E3_TER_255_ALL.map((t) => b.replaceTerrain(t, 0)),
       ]),
     ])]],
     [2, [b.setFlag(spot(2), 20), b.dialog(0xfc2)]],

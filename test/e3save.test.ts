@@ -299,7 +299,7 @@ describe.skipIf(!dir)('a converted Exile III game, out to exile3.sav and back', 
     const sector = scen.outdoors[x + 1]![y]!;
     const k = sector.wandering.findIndex((w) => w.monst.some((m) => m > 0));
     expect(k).toBeGreaterThanOrEqual(0);
-    Object.assign(c, { exists: true, direction: 3, whatMonst: structuredClone(sector.wandering[k]!), whichSector: { x: 1, y: 0 }, mLoc: { x: 60, y: 20 } });
+    Object.assign(c, { exists: true, direction: 3, whatMonst: structuredClone(sector.wandering[k]!), whichSector: { x: 1, y: 0 }, mLoc: { x: 60, y: 20 }, homeSector: { x: x + 1, y } });
     const back = new QuestRunner(scen);
     expect(applyE3Save(exportE3Save(q.univ, defaults).bytes, back.univ, defaults).warnings).toEqual([]);
     expect(back.party.outC[0]).toEqual(c);

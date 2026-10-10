@@ -286,8 +286,11 @@ function readOutdoorGroups(univ: Universe, p: E3Bytes, defaults: E3SaveDefaults,
     const zone = (party.outdoorCorner.y + c.whichSector.y) * E3_ZONES_ACROSS + party.outdoorCorner.x + c.whichSector.x;
     const found = e3ZoneGroupOf(defaults, group, zone);
     const w = found && e3ZoneGroup(scenario, ...found);
-    if (w) c.whatMonst = structuredClone(w);
-    else {
+    if (w) {
+      c.whatMonst = structuredClone(w);
+      // Its scripts are the matched zone's nodes (`homeSector`).
+      c.homeSector = { x: found[0] % E3_ZONES_ACROSS, y: Math.floor(found[0] / E3_ZONES_ACROSS) };
+    } else {
       c.whatMonst.monst = [...group.subarray(0, 7)];
       c.whatMonst.friendly = [...group.subarray(7, 10)];
       c.whatMonst.cantFlee = group[12] === 1;
@@ -631,19 +634,24 @@ function readE3Creatures(univ: Universe, list: Uint8Array, monsters: Creature[])
  * a change made in the town before the save is still there after it.
  *
  * Terrain 255 goes back to whichever 255 the converter gave this town
- * (`townTer255` in `tools/e3convert/emit.ts`: one blocks sight, one doesn't).
+ * (`townTer255` in `tools/e3convert/emit.ts`: the see-through one, or a
+ * stand-in per picture). A square the town's record has as a stand-in keeps
+ * it, as the first floor of the Tower of Shifting Floors has two; one that
+ * became 255 since takes the town's commonest.
  */
 export function applyE3TownTerrain(univ: Universe, data: Uint8Array): void {
   const town = univ.town;
   if (!town) return;
   const terrain = town.record.terrain;
   const dim = Math.min(64, town.record.maxDim);
-  let ter255 = 255;
-  for (const col of terrain) for (const t of col) if (t > 255) ter255 = t;
+  const counts = new Map<number, number>();
+  for (const col of terrain) for (const t of col) if (t > 255) counts.set(t, (counts.get(t) ?? 0) + 1);
+  const ter255 = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 255;
   for (let x = 0; x < dim; x++) {
     for (let y = 0; y < dim; y++) {
       const t = data[E3TD.TERRAIN + 64 * x + y] ?? 0;
-      terrain[x]![y] = t === 255 ? ter255 : t;
+      const was = terrain[x]![y]!;
+      terrain[x]![y] = t !== 255 ? t : was > 255 ? was : ter255;
     }
   }
 }

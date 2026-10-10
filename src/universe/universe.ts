@@ -396,7 +396,7 @@ export class Universe {
     if (which === BUFFER_STR) return this.strBuf;
     if (which === -1) return null;
     const list = type === SpecCtxType.OUTDOOR
-      ? this.out.sector.specStrs
+      ? this.out.specSector.specStrs
       : type === SpecCtxType.TOWN
         ? this.town?.record.specStrs ?? []
         : this.scenario.specStrs;
