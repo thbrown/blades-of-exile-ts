@@ -107,7 +107,7 @@ store-pc
 unstore-pc
 hp-percent
 take-magic
-
+status-add
 
 
 
