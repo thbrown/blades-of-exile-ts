@@ -222,7 +222,15 @@ export class QuestRunner {
   /** Step onto (x, y) from a square beside it, as the arrow keys would (twice through a door that opens). */
   async step(x: number, y: number): Promise<void> {
     const town = this.session.isOutdoors ? -1 : this.townNum;
-    for (const [dx, dy] of STEPS) {
+    // A belt underfoot can refuse the step (`belts` = `exile3`: a step off a
+    // belt against its run), so a square off the belts comes first.
+    const onBelt = (p: Location) => this.univ.terrainType(this.town.record.terrain[p.x]![p.y]!).special === TerSpec.CONVEYOR;
+    const order = this.session.isOutdoors ? STEPS
+      : [...STEPS].sort(([ax, ay], [bx, by]) => {
+        const belt = (dx: number, dy: number) => (this.town.isOnMap(x - dx, y - dy) && onBelt({ x: x - dx, y: y - dy }) ? 1 : 0);
+        return belt(ax, ay) - belt(bx, by);
+      });
+    for (const [dx, dy] of order) {
       const from = { x: x - dx, y: y - dy };
       if (this.session.isOutdoors) {
         if (from.x < 0 || from.y < 0 || from.x > 47 || from.y > 47) continue;

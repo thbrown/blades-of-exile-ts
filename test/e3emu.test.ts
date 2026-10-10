@@ -415,7 +415,14 @@ describe.skipIf(!hasEmu)("Exile III's own code against the converted scripts", (
       const world = (p: Uint8Array) => [p[E3P.OUTDOOR_CORNER]! * 48 + p[E3P.P_LOC]!, p[E3P.OUTDOOR_CORNER + 1]! * 48 + p[E3P.P_LOC + 1]!];
       const [e3b, e3a, pb, pa] = [b64(e3.before.party), b64(e3.after.party), port.before[0]!, port.after[0]!].map(world);
       const e3Move = [e3a![0]! - e3b![0]!, e3a![1]! - e3b![1]!], pMove = [pa![0]! - pb![0]!, pa![1]! - pb![1]!];
-      if (e3Move.join() !== pMove.join()) res.diffs.push(`the party moves: E3 by (${e3Move.join(',')}), port by (${pMove.join(',')})`);
+      // A step that changes town leaves E3 half way: the new town's entrance
+      // written as the window position while the window itself (the corner)
+      // waits for the main loop, which this check doesn't run. Only the
+      // square within its sector compares then.
+      const townChanged = c.town !== undefined && e3.at !== null && e3.at[0] !== c.town;
+      const e3Pa = b64(e3.after.party), inSector = (p: Uint8Array) => [p[E3P.P_LOC]! % 48, p[E3P.P_LOC + 1]! % 48].join();
+      if (townChanged ? inSector(e3Pa) !== inSector(port.after[0]!) : e3Move.join() !== pMove.join())
+        res.diffs.push(`the party moves: E3 by (${e3Move.join(',')}), port by (${pMove.join(',')})`);
       let portLines = port.lines.filter(Boolean);
       const drop = (re: RegExp, why: string) => {
         const kept = portLines.filter((l) => !re.test(l));
@@ -433,14 +440,16 @@ describe.skipIf(!hasEmu)("Exile III's own code against the converted scripts", (
       // direction capitalised ("Blocked: North"), and a town's name under
       // "Now entering:" where the port says "You enter Lorelei.". Not yet decided.
       const reworded = (from: string[], to: string[]) => {
-        if (from.join('\n') !== to.join('\n')) res.known.push('wording: OBoE\'s "Blocked: north" and "You enter <town>.", where 1997 and E3 say "Blocked: North" and "Now entering:" / <town>');
+        if (from.join('\n') !== to.join('\n')) res.known.push('wording: OBoE\'s "Blocked: north", "You enter <town>." and "X is obliterated!", where 1997 and E3 say "Blocked: North", "Now entering:" / <town> (E3: its first 30 characters) and "X is obliterated."');
         return to;
       };
       portLines = reworded(portLines, portLines.flatMap((l) => {
         const m = /^You enter (.*)\.$/.exec(l);
-        return m ? ['Now entering:', m[1]!] : [l.replace(/^Blocked: (\w)/, (_, ch: string) => `Blocked: ${ch.toUpperCase()}`)
+        return m ? ['Now entering:', m[1]!] : [l.replace(/ is obliterated!$/, ' is obliterated.').replace(/^Blocked: (\w)/, (_, ch: string) => `Blocked: ${ch.toUpperCase()}`)
           .replace(/^(Blocked: \w+)(east|west)$/, (_, a: string, b: string) => a + b[0]!.toUpperCase() + b.slice(1))];
       }));
+      // E3's town names stop at 30 characters ("Tower of Shifting Floors (Base").
+      portLines = reworded(portLines, portLines.map((l, k) => (portLines[k - 1] === 'Now entering:' ? l.slice(0, 30) : l)));
       if (e3Lines.join('\n') !== portLines.join('\n'))
         res.diffs.push(`lines: E3 ${JSON.stringify(e3Lines)}, port ${JSON.stringify(portLines)}`);
       const e3Moved = e3.moved !== 0;
@@ -466,8 +475,18 @@ describe.skipIf(!hasEmu)("Exile III's own code against the converted scripts", (
         if (gone && !res.known.includes(GONE)) res.known.push(GONE);
         return gone;
       };
+      // A pack slot E3 emptied (`kill_pc` dropping a pack, say) has only its
+      // variety word cleared; the rest of the record stays. The export writes
+      // an empty slot as zeros. Empty is empty.
+      const emptiedSlot = (o: number) => {
+        const pc = Math.floor(o / E3_PC_SIZE), f = o % E3_PC_SIZE;
+        if (f < E3PC.ITEMS || f >= E3PC.ITEMS + 24 * E3ITEM.SIZE) return false;
+        const at = pc * E3_PC_SIZE + E3PC.ITEMS + Math.floor((f - E3PC.ITEMS) / E3ITEM.SIZE) * E3ITEM.SIZE;
+        const empty = (p: Uint8Array) => p[at] === 0 && p[at + 1] === 0;
+        return f - (at - pc * E3_PC_SIZE) > 1 && empty(e3PcsAfter) && empty(port.after[1]!);
+      };
       compareBytes('pcs', pcByteName, clearNameTails(b64(e3.before.pcs)), clearNameTails(b64(e3.after.pcs)),
-        clearNameTails(port.before[1]!), clearNameTails(port.after[1]!), (o) => ignorePoisonSlot(b64(e3.after.pcs))(o) || goneSpells(o), res);
+        clearNameTails(port.before[1]!), clearNameTails(port.after[1]!), (o) => ignorePoisonSlot(b64(e3.after.pcs))(o) || goneSpells(o) || emptiedSlot(o), res);
       if (lava) {
         for (const d of res.diffs.filter((d) => /CUR_HEALTH|TOTAL_DAM_TAKEN|MAIN_STATUS/.test(d))) res.diffs.splice(res.diffs.indexOf(d), 1);
       }

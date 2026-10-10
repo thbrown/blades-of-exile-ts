@@ -99,7 +99,7 @@ export async function placeSpellPattern(
   // and plays its own; the pattern does nothing more (DIVERGENCES.md #27).
   if (options.damage?.type === DamageType.FIRE
     && session.univ.scenario.featureFlags['explode-spots'] === 'exile3'
-    && !(await session.castSpellOnSpace(center, FIRE_BLAST as Spell))) {
+    && !(await session.castSpellOnSpace(center, FIRE_BLAST as Spell, true))) {
     endBoomAnim();
     session.blastIntercepted = true;
     return;

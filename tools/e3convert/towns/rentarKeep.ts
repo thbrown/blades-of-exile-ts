@@ -101,8 +101,9 @@ function upper(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]> 
     [12, [b.askDialog(0xe2e, [b.msg(B, 0x2d), b.swapTer(0x29, 1, 0x8c, 0x8d)])]],
     [14, down(7, 0x2e)], [15, down(6, 2)], [16, down(0x2e, 4)], [17, down(0x2a, 0x2e)],
     // The reading crystals: each goes dark after one reading, and together
-    // they explain the pedestal.
-    ...[20, 21, 22, 23, 24, 25].map((id): [number, Step[]] => [id, [b.onceSpot(id, [b.askDialog(0xd38, [
+    // they explain the pedestal. Only a reading erases one (`1078:599f`):
+    // "Leave" leaves it to be read later.
+    ...[20, 21, 22, 23, 24, 25].map((id): [number, Step[]] => [id, [b.whileSpot(id, [b.askDialog(0xd38, [
       b.switchFlag(CRYSTALS, [
         [b.msg(B, 0x2e), b.eachPc(() => [b.ifStat(101, 5, [b.drainSp(5)])])],
         [b.msg(B, 0x2e), b.eachPc(() => [b.ifStat(101, 5, [b.drainSp(5)])])],
@@ -112,6 +113,7 @@ function upper(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]> 
         [b.msg(B, 0x31, 0x35)],
       ]),
       b.incFlag(CRYSTALS),
+      b.eraseSpot(id),
     ])])]]),
     // The pedestal. Erika's duel ends as the party reaches it; without her,
     // Rentar-Ihrno teleports them away five times first.

@@ -26,7 +26,7 @@ import { drainPc, poisonWeapon } from '../itemUse';
 import { newPc } from '../createPc';
 import { DamageType } from '../../data/monster';
 import { Race } from '../../universe/skills';
-import { awardXp, hitParty } from '../damage';
+import { awardXp, hitParty, killPc } from '../damage';
 import { damageTarget } from '../combat';
 import { SpecialCtx, TARGET_PARTY, defaultTarget } from './context';
 import { SELECT_PC_CANCEL, SelectPcMode, runSelectPc } from '../selectPc';
@@ -264,6 +264,18 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       }
       ctx.redraw = true;
       break;
+
+    case SpecType.AFFECT_KILL_PC: {
+      // Exile III's `kill_pc(pc, kind)` (`FUN_10b0_9e2d`): the luck save, then
+      // the death. Only the living: a dead PC can't be killed again.
+      if (monsterTarget) break;
+      const KIND: Record<number, MainStatus> = { 0: MainStatus.DEAD, 1: MainStatus.DUST, 2: MainStatus.STONE };
+      const kind = KIND[spec.ex1a];
+      if (kind === undefined) break;
+      for (const pc of targets()) if (pc.mainStatus === MainStatus.ALIVE) killPc(univ, pc, kind);
+      ctx.redraw = true;
+      break;
+    }
 
     case SpecType.AFFECT_STATUS: {
       if (monsterTarget) break;

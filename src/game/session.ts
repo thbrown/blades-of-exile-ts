@@ -2334,12 +2334,18 @@ export class GameSession {
    */
   blastIntercepted = false;
 
-  async castSpellOnSpace(where: Location, spell: Spell): Promise<boolean> {
+  async castSpellOnSpace(where: Location, spell: Spell, onlyThisSpell = false): Promise<boolean> {
     const town = this.univ.town;
     if (!town) return true;
     for (const spot of town.record.specialLocs) {
       if (spot.x !== where.x || spot.y !== where.y) continue;
-      if (town.record.specials.get(spot.spec)?.type !== SpecType.IF_CONTEXT) return true;
+      const first = town.record.specials.get(spot.spec);
+      if (first?.type !== SpecType.IF_CONTEXT) return true;
+      // `onlyThisSpell`: only a spot that opens by asking for this very spell
+      // (TARGET, `ex1b` the spell) is asked. Exile III's fire-blast targets
+      // are a list in its code; any other IF_CONTEXT spot (a test for combat,
+      // say) re-ran on every blast that landed on it.
+      if (onlyThisSpell && (first.ex1a !== SpecCtx.TARGET || first.ex1b !== spell)) return true;
       this.spellOnSpace = spell;
       const r = await this.runSpecialRaw(SpecCtx.TARGET, SpecCtxType.TOWN, spot.spec, where);
       // The C++'s `s1` starts at **0** and the chain may never touch it; this
@@ -2642,13 +2648,22 @@ export class GameSession {
     // A moving floor refuses to be walked against. `flag1` is the direction it
     // runs; the three headings that include it are the ones it blocks.
     // (The C++'s own TODO wonders why conveyors don't work outdoors; kept.)
-    if (town && spec.special === TerSpec.CONVEYOR) {
-      const dir = spec.flag1;
+    //
+    // **`belts` = `exile3`**, a scenario's flag: Exile III asks the belt the
+    // party is *standing on* instead (`10c0:0da8`, terrains 247–250), so a
+    // step off a belt against its run is refused and a step onto one never
+    // is, and says "Can't move against belt.".
+    const e3Belts = this.univ.scenario.featureFlags['belts'] === 'exile3';
+    const beltSpec = !town ? null
+      : e3Belts ? (town.isOnMap(fromLoc.x, fromLoc.y) ? this.univ.terrainType(town.record.terrain[fromLoc.x]![fromLoc.y]!) : null)
+      : spec;
+    if (beltSpec?.special === TerSpec.CONVEYOR) {
+      const dir = beltSpec.flag1;
       if ((NO_MOVE_FROM_NORTH.has(dir) && where.y > fromLoc.y)
         || (NO_MOVE_FROM_EAST.has(dir) && where.x < fromLoc.x)
         || (NO_MOVE_FROM_SOUTH.has(dir) && where.y < fromLoc.y)
         || (NO_MOVE_FROM_WEST.has(dir) && where.x > fromLoc.x)) {
-        this.univ.addStringToBuf('The moving floor prevents you.');
+        this.univ.addStringToBuf(e3Belts ? "Can't move against belt." : 'The moving floor prevents you.');
         return stop;
       }
     }

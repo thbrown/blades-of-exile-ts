@@ -900,6 +900,7 @@ function scenarioXml(
     <feature-flags>
         <use-special-spots>exile3</use-special-spots>
         <town-spots>exile3</town-spots>
+        <belts>exile3</belts>
         <outdoor-arena>exile3</outdoor-arena>
         <road-joins>${roadJoins.join(',')}</road-joins>
         <job-boards>exile3:${jobBase}</job-boards>

@@ -173,7 +173,10 @@ export async function bashDoor(
   }
 
   const unlockAdjust = spec.flag2;
-  const fails = e3 ? r1 > spec.flag3
+  // E3 picks the door by its terrain before it looks at the roll: a door it
+  // won't let be bashed (flag3 0) fails even when a strong PC's roll comes
+  // in under 0.
+  const fails = e3 ? spec.flag3 === 0 || r1 > spec.flag3
     : unlockAdjust >= 5 || r1 > unlockAdjust * 15 + 40 || spec.flag3 !== 1;
   if (fails) {
     univ.addStringToBuf("  Didn't work.");

@@ -131,6 +131,15 @@ export enum SpecType {
    * `1078:259e` case 2).
    */
   AFFECT_STATUS_ADD = 110,
+  /**
+   * An blades-of-exile-ts opcode, not in BoE or OBoE: each target goes through
+   * `kill_pc` (`killPc`), as AFFECT_DEADNESS's kill but with the PC's luck
+   * save ("But you luck out!") and its dropped pack. `ex1a` is the kind, as
+   * AFFECT_DEADNESS's: 0 dead, 1 dust, 2 stone. Exile III kills one PC at a
+   * time this way (`FUN_10b0_9e2d`), where its whole-party `slay_party`
+   * saves no one.
+   */
+  AFFECT_KILL_PC = 111,
 
   IF_SDF = 130,
   IF_TOWN_NUM = 131,

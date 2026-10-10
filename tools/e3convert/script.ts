@@ -643,6 +643,16 @@ export class SpecBuilder {
     return (next) => this.node('death', { ex1: [kill[mode]!, 1] }, next);
   }
 
+  /**
+   * `FUN_10b0_9e2d(pc, mode)`, `kill_pc`, on the target: the PC's luck can
+   * save it ("But you luck out!", health 0), where `slayParty` saves no one.
+   * A blades-of-exile-ts opcode (`SpecType.AFFECT_KILL_PC`).
+   */
+  killPc(mode: 2 | 3 | 4): Step {
+    const kind: Record<number, number> = { 2: 0, 3: 1, 4: 2 };
+    return (next) => this.node('kill-pc', { ex1: [kind[mode]!] }, next);
+  }
+
   /** `if (FUN_1070_079e(cls))`: take one item of class `cls`, and if there was one, `then`. */
   ifTakeItemOfClass(cls: number, then: Step[], otherwise: Step[] = []): Step {
     return (next) => {
@@ -1765,6 +1775,24 @@ export class SpecBuilder {
     const flag = this.src.spotFlag?.(id);
     if (!flag) throw new Error('onceSpot needs ScriptSource.spotFlag');
     return this.ifFlagEq(flag, 0, [...steps, this.setFlag(flag, 1)]);
+  }
+
+  /**
+   * Spot `id`'s `steps` while it is still on the map, for a script that
+   * erases it (`eraseSpot`) only down one branch, where `onceSpot` erases it
+   * whatever happened.
+   */
+  whileSpot(id: number, steps: Step[]): Step {
+    const flag = this.src.spotFlag?.(id);
+    if (!flag) throw new Error('whileSpot needs ScriptSource.spotFlag');
+    return this.ifFlagEq(flag, 0, steps);
+  }
+
+  /** `FUN_1038_0282` on spot `id`, here: it never runs again. */
+  eraseSpot(id: number): Step {
+    const flag = this.src.spotFlag?.(id);
+    if (!flag) throw new Error('eraseSpot needs ScriptSource.spotFlag');
+    return this.setFlag(flag, 1);
   }
 
   /** The terrain at `(x, y)` as converted (the map before any script changes it). */

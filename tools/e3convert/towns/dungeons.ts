@@ -499,16 +499,19 @@ function guardedTunnel(b: SpecBuilder): Map<number, Step[]> {
   const armour = spot(9);
   return new Map<number, Step[]>([
     // The ethereal bridge: whoever is on it falls through (in combat, the active PC).
-    [1, [b.ifFlagEq(bridge, 0, [b.msg(B, 6), b.slayParty(3)])]],
+    // In combat only the active PC falls, and through `kill_pc`, luck and all
+    // (`1088:4f8a`); out of it the whole party (`slay_party`).
+    [1, [b.ifFlagEq(bridge, 0, [b.msg(B, 6), b.ifInCombat([b.killPc(3)], [b.slayParty(3)])])]],
     // The alarm, unless flag 0x107 says the party is expected: only while
     // creature 9 is here and not hostile already (attitude 1).
     [2, [b.ifFlagEq(f(0x107), 0, [b.ifCreature(9, 'here', [b.ifCreature(9, { attitude: 1 }, [],
       [b.msg(B, 0xa), b.makeTownHostile()])])],
       [b.msg(B, 0xb), b.setFlag(spot(2), 20)])]],
     [3, [b.onceMsg(spot(3), B, 0xc)]],
-    // Beams of light: two in three of the party turn to stone.
+    // Beams of light: two in three of the party turn to stone, each by
+    // `kill_pc` (`1088:5098`), so a lucky PC is left at 0 health instead.
     ...[4, 5, 6].map((id): [number, Step[]] => [id, [b.askDialog(0xe1c, [
-      b.msg(B, 0xd), b.eachPc(() => [b.ifChance(67, [b.slayParty(4)])]), b.setFlag(spot(id), 20),
+      b.msg(B, 0xd), b.eachPc(() => [b.ifChance(67, [b.killPc(4)])]), b.setFlag(spot(id), 20),
     ], [b.blockMove()])]]),
     [9, [b.ifFlagEq(armour, 0, [b.msg(B, 9), b.bringIn(200, 1), b.setFlag(armour, 1)],
       [b.ifFlagEq(armour, 2, [b.setTer(9, 3, 0)])])]],

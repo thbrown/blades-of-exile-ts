@@ -465,6 +465,10 @@ class Game(Emu):
         """E3's `load_file` (`FUN_1040_018e`) on the save at `path`."""
         self.paths['EXILE3.SAV'] = path
         self.call('1040:018e')
+        # A registered copy (DGROUP 0x3d3c), as the freeware release the port
+        # plays is: the shareware build refuses some crossings and portals
+        # ("Not until you're registered.").
+        self.wb(0x1178, 0x3d3c, [1])
         self.events.clear()
 
     def checkpoint(self):
@@ -516,6 +520,11 @@ class Game(Emu):
     def put_town(self, x, y):
         """The party on (x, y) of the loaded town: the square a town step leaves."""
         self.wb(0x1160, 0x29bc, [x, y])
+        # `which_combat_type` (DGROUP 0x6dc4): `do_monsters` sets it to 1 on
+        # every town turn (1997 COMBAT.CPP:1783), so a party walking in town
+        # always has it. A save loads with 0, and `make_town_hostile` (and
+        # more) does nothing at 0.
+        self.ww(0x1178, 0x6dc4, 1)
 
     def step_town(self, x, y):
         """
