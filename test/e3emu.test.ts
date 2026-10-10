@@ -89,7 +89,11 @@ function runE3(cases: SpotCase[], dialogButtons: Record<number, number>): Promis
     child.on('error', reject);
     child.on('close', (code) => {
       if (code !== 0) reject(new Error(`spot.py exited ${code}: ${err}`));
-      else resolve(JSON.parse(Buffer.concat(out).toString('utf8')) as E3Result[]);
+      // A batch's output that won't parse (or won't fit in one string) has to
+      // reject here: thrown from this handler, it leaves the promise hanging.
+      else {
+        try { resolve(JSON.parse(Buffer.concat(out).toString('utf8')) as E3Result[]); } catch (e) { reject(e as Error); }
+      }
     });
     child.stdin.end(JSON.stringify({ dialogButtons, cases }));
   });
@@ -351,10 +355,25 @@ describe.skipIf(!hasEmu)("Exile III's own code against the converted scripts", (
   type Compared = Comparison & { case: SpotCase; e3: string[]; port: string[]; error?: string; portLog?: string[]; e3Events?: E3Event[] };
 
   /**
+   * A sweep in batches of `BATCH`: each case's result carries the party and
+   * PCs before and after, about 120 KB, so the town sweep's 9,688 in one
+   * batch is over a gigabyte of JSON, more than one string holds.
+   */
+  async function compareAll(cases: SpotCase[]): Promise<Compared[]> {
+    const BATCH = 250;
+    const out: Compared[] = [];
+    for (let i = 0; i < cases.length; i += BATCH) {
+      out.push(...await compareBatch(cases.slice(i, i + BATCH)));
+      progress(`compared ${Math.min(i + BATCH, cases.length)}/${cases.length}\n`);
+    }
+    return out;
+  }
+
+  /**
    * E3 first, all in one batch (`first`/`last` by each dialog's own count of
    * buttons); then the port, pressing the buttons E3 pressed.
    */
-  async function compareAll(cases: SpotCase[]): Promise<Compared[]> {
+  async function compareBatch(cases: SpotCase[]): Promise<Compared[]> {
     const e3s = await runE3(cases, debug.dialogButtons);
     const ports: (PortResult | string)[] = [];
     for (const [i, c] of cases.entries()) {
