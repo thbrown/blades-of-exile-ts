@@ -17513,3 +17513,29 @@ each other):
       its frames and numbers run 400ms past that (`VOLLEY_LINGER_MS`); the
       numbers are centred by their width, the hit sprites' pixels being
       centred at 13.5–14px. DIVERGENCES §63.
+
+**Next session starts here (2026-10-10):**
+
+1. **Measure EXILE3.EXE's own combat timings in the emulator**, to set the
+   play-test knobs against numbers rather than "a touch fast". The user will
+   also try to record the original's combat on video and compare. Plan: hook
+   E3's delay primitive(s) in `tools/e3convert/emu/e3emu.py` (the `Delay`
+   tick wait: `1048:024c` is 16ms a tick; `GetTickCount`/`GetCurrentTime`
+   are already stubbed, a second per look) and log every wait with its
+   caller, then run, from a combat state: a melee hit (`boom_space`,
+   `1050:5d1f` holds `Delay(10)` after its sound), a miss, a death, a
+   fireball (missile flight `do_missile_anim`, then `do_explosion_anim`'s
+   eleven frames), and a monster's turn (its GameSpeed dwell and the
+   `pause(8)` after it acts). Sound lengths are the WAVs'
+   (`public/data/sounds/SNDn.wav`; blocking unless in `ALWAYS_ASYNC`).
+   Report each as ms beside the port's (`BOOM_MS`, `BOOM_LINGER_MS`,
+   `VOLLEY_EXTRA`/`VOLLEY_LINGER_MS`, `MISSILE_MS × MISSILE_EXTRA`,
+   `MONSTER_DWELL_TICKS + MONSTER_DWELL_EXTRA_TICKS`, `ACTION_PAUSE_MS`,
+   `soundWait`; all × `PACE_BASELINE` 0.9 at pace 1). Combat needs E3 in
+   combat mode, which no harness entry point sets up yet: find
+   `start_town_combat`'s address first.
+2. **The town sweep** (`E3EMU_TOWN_SWEEP=1`, 9,688 runs, every town) was
+   started 2026-10-09 against the code at `2230351` plus the split/`sqrt`
+   harness fixes; if its report (`E3EMU_REPORT`) is lost with the session,
+   rerun it (≈30–60 min) and read it with `report.mjs`. The four-town trial
+   (125, 26, 12, 102) agreed on all but the known differences.
