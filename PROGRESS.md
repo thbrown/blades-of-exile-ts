@@ -17504,3 +17504,12 @@ each other):
       `cs:c4f6`) puts 15 with 18, 22, 119, 126 and 141 on the 3×3 at
       `886a:0736`; the 2×2 (`small_square`) is Sleep Cloud's, spell 19,
       alone. E3's own spell list confirms 15 is Stinking Cloud. No change.
+- [x] **(2026-10-10) "Monsters a touch fast; hit blobs gone too soon; damage
+      numbers a smidge left; fireball too quick, its numbers gone too soon,
+      and numbers without the blast look wrong."** A monster's dwell is 11
+      ticks (`MONSTER_DWELL_EXTRA_TICKS`); a hit lingers 150ms past its slot
+      (`BOOM_LINGER_MS`, unbooked; a newer hit on its square replaces it);
+      a volley's explosion is booked for 1.5× `BOOM_MS` (`VOLLEY_EXTRA`) and
+      its frames and numbers run 400ms past that (`VOLLEY_LINGER_MS`); the
+      numbers are centred by their width, the hit sprites' pixels being
+      centred at 13.5–14px. DIVERGENCES §63.

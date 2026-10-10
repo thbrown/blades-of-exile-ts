@@ -84,9 +84,10 @@ describe('the fight', () => {
     expect(booms.length).toBe(2);
     // The second blow starts once the first's slot is over. The slot is
     // BOOM_MS (paced), not the sound's length: the sound plays on under the
-    // next blow (DIVERGENCES §63, 2026-10-09).
-    expect(booms[1]!.starts).toBeGreaterThanOrEqual(booms[0]!.expires);
-    expect(booms[0]!.expires - booms[0]!.starts).toBeCloseTo(boomMs());
+    // next blow (DIVERGENCES §63, 2026-10-09), and the sprite lingers past
+    // it (BOOM_LINGER_MS, 2026-10-10).
+    expect(booms[1]!.starts - booms[0]!.starts).toBeCloseTo(boomMs());
+    expect(booms[0]!.expires).toBeGreaterThan(booms[1]!.starts);
   });
 
   /**

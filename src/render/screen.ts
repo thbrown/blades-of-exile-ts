@@ -1289,6 +1289,11 @@ export class Screen {
     for (const boom of this.booms) {
       // Queued behind a missile still in flight — not yet.
       if (boom.starts > now) continue;
+      // A hit lingers past its slot (`BOOM_LINGER_MS`), but not under a newer
+      // one on the same square: a dual-wielder's second blow replaces the
+      // first's blob and number rather than printing over them.
+      if (this.booms.some((b) => b !== boom && b.starts > boom.starts && b.starts <= now
+        && b.where.x === boom.where.x && b.where.y === boom.where.y)) continue;
       const q = boom.where.x - center.x + TER_VIEW_CENTER;
       const row = boom.where.y - center.y + TER_VIEW_CENTER;
       if (q < 0 || row < 0 || q >= TER_VIEW_TILES || row >= TER_VIEW_TILES) continue;
@@ -1309,6 +1314,7 @@ export class Screen {
         const col = t + boom.offset;
         src = col >= 0 && col <= 7 ? { col, row: 1 + boom.type } : null;
       }
+      // A number shows only with its blast.
       if (src === null) continue;
       if (img) {
         this.ctx.drawImage(
@@ -1328,12 +1334,16 @@ export class Screen {
       // `small_bold_font`, `CreateFont(12, …, 700, …, "MS Sans Serif")` (E3's
       // handle 0x6ec4, 10e8:021e; BLADES.CPP:327). Being left-aligned, the
       // number is only centred on the splash because that font's digits are
-      // wide: at 10px a "3" sat 2px left of where E3 has it and 1px short.
+      // wide: about 7px each, so one digit at 10px in and two at 8 both
+      // centre on the square's middle. This font's digits are narrower, and
+      // at the originals' left edge the number sat left of the splash
+      // (play-test, 2026-10-10), so it is centred there by its own width.
       const text = String(boom.damage);
       const colour = boom.type === 1 || boom.type === 4 ? Colours.BLACK : Colours.WHITE;
-      const left = pos.x + 8 + (boom.damage < 10 ? 2 : 0);
+      const style = { size: 12, font: 'bold', colour } as const;
+      const left = Math.round(pos.x + TILE_W / 2 - measureString(this.ctx, text, style) / 2);
       drawString(this.ctx, { top: pos.y + 11, left, bottom: pos.y + 23, right: pos.x + TILE_W },
-        text, { size: 12, font: 'bold', colour });
+        text, style);
     }
   }
 

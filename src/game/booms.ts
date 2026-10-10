@@ -51,6 +51,34 @@ export function boomMs(): number {
 }
 
 /**
+ * How long a hit's sprite and number stay up *after* its slot, while the
+ * fight goes on: play-testing found the blobs gone too soon at `BOOM_MS`
+ * (2026-10-10), and holding the game longer for them made fights drag
+ * (DIVERGENCES §63). Not booked on the timeline, so it costs no time.
+ */
+export const BOOM_LINGER_MS = 150;
+
+/**
+ * **Play-testing, not the original.** A volley's explosion (a fireball's
+ * blast) runs its eleven frames over this many `BOOM_MS`: at one, a fireball
+ * read as too quick (2026-10-10).
+ */
+export const VOLLEY_EXTRA = 1.5;
+
+export function volleyMs(): number {
+  return paced(BOOM_MS * VOLLEY_EXTRA);
+}
+
+/**
+ * How much longer a volley's explosion stays on screen than the fight waits
+ * for it: its eleven frames, and the damage numbers on them, run over
+ * `volleyMs() + VOLLEY_LINGER_MS` while only `volleyMs()` is booked
+ * (play-testing, 2026-10-10: the numbers went too soon, and numbers left
+ * without their blast looked wrong).
+ */
+export const VOLLEY_LINGER_MS = 400;
+
+/**
  * `if ((sound == 6) && (fast_bang == 0)) Delay(12)` — the squish (file 55)
  * is an asynchronous sound, so it gets 12 ticks of its own to be seen by.
  */
@@ -79,7 +107,7 @@ export interface Boom {
   sound: number;
   /** When this boom appears, on the shared animation timeline. */
   starts: number;
-  /** When it stops being drawn. */
+  /** When it stops being drawn. A volley's eleven frames run until then. */
   expires: number;
   /**
    * True for a volley's explosion: `do_explosion_anim` plays **eight frames**
@@ -192,7 +220,8 @@ export function runBoomAnim(rng?: GameRng, onFrame?: () => void, snd = -1): void
   // One slot for the whole volley: `do_explosion_anim` draws every explosion
   // it collected in the same frames and sleeps once, so they land together —
   // after whatever the missiles booked, and before whatever comes next.
-  const starts = animBook(boomMs());
+  const span = volleyMs();
+  const starts = animBook(span);
   // `place_type == 1` scatters an explosion around its square, rolled here
   // (the C++ does it in the set-up loop of `do_explosion_anim`, before the
   // sound), which is what keeps the ordering of these two rolls per explosion.
@@ -217,7 +246,7 @@ export function runBoomAnim(rng?: GameRng, onFrame?: () => void, snd = -1): void
   if (file > 0) livingSound(-file);
   for (const boom of toPlay) {
     if (boom.type < 0 || boom.type > 6) continue;
-    sink?.({ ...boom, starts, expires: starts + boomMs() });
+    sink?.({ ...boom, starts, expires: starts + span + paced(VOLLEY_LINGER_MS) });
   }
   // **Eleven frames, and each one is a `draw_terrain(0)`**
   // (boe.newgraph.cpp:616: `for(t = 0; t < 11; t++) { ... draw_terrain(); }` —
@@ -314,7 +343,7 @@ export function boomSpace(
   const hold = (soundType === 6 ? paced(SQUISH_HOLD_MS) : 0) + boomMs();
   const starts = animBook(hold);
   sink?.({
-    where: { ...where }, type, damage, sound: file, starts, expires: starts + hold,
+    where: { ...where }, type, damage, sound: file, starts, expires: starts + hold + paced(BOOM_LINGER_MS),
     animated: false, offset: 0, xAdj, yAdj, placeType,
   });
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BOOM_MS, Boom, boomMs, boomSpace, runBoomAnim, setBoomScreen, setBoomSink, startBoomAnim,
+  BOOM_LINGER_MS, BOOM_MS, VOLLEY_LINGER_MS, Boom, boomMs, boomSpace, volleyMs, runBoomAnim, setBoomScreen, setBoomSink, startBoomAnim,
 } from '../src/game/booms';
 import { paced, soundWait } from '../src/game/anim';
 import { GameRng } from '../src/core/rng';
@@ -83,9 +83,27 @@ describe('boom_space', () => {
       setBoomSink(null);
       setLivingSound(null);
     }
-    expect(booms[0]!.expires - booms[0]!.starts).toBeCloseTo(boomMs());
-    expect(booms[1]!.expires - booms[1]!.starts).toBeCloseTo(boomMs());
+    // Seen for its slot and a linger the fight doesn't wait for.
+    const seen = boomMs() + paced(BOOM_LINGER_MS);
+    expect(booms[0]!.expires - booms[0]!.starts).toBeCloseTo(seen);
+    expect(booms[1]!.expires - booms[1]!.starts).toBeCloseTo(seen);
+    // The slot itself: the second hit starts once the first's BOOM_MS is up.
+    expect(booms[1]!.starts - booms[0]!.starts).toBeCloseTo(boomMs());
     expect(boomMs()).toBeCloseTo(paced(BOOM_MS));
+  });
+
+  it("shows a volley for volleyMs and a linger, and books only volleyMs (play-test, 2026-10-10)", () => {
+    const { booms } = capture(() => {
+      startBoomAnim();
+      boomSpace({ x: 1, y: 1 }, 3, 4, 0);
+      runBoomAnim();
+      // The next thing on the timeline waits for the frames, not the linger.
+      boomSpace({ x: 2, y: 2 }, 3, 5, 0);
+    });
+    const [blast, next] = booms;
+    expect(blast!.expires - blast!.starts).toBeCloseTo(volleyMs() + paced(VOLLEY_LINGER_MS));
+    expect(volleyMs()).toBeGreaterThan(boomMs());
+    expect(next!.starts - blast!.starts).toBeCloseTo(volleyMs());
   });
 
   it('waits for half a blocking sound, at the pace (DIVERGENCES §63)', () => {

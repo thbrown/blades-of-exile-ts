@@ -1401,7 +1401,21 @@ play-testers found fights about twice as slow as before: a sword hit 0.27s →
   half the cost, and the `-`/`=` pace keys now reach sound waits too, which
   they didn't when a wait was the sound's raw length.
 
-Timing only; no draws.
+Then (2026-10-10), by the same play-testing:
+
+- **A hit's sprite and number stay up 150ms past its slot** (`BOOM_LINGER_MS`),
+  unbooked, so the fight doesn't wait; a newer hit on the same square
+  replaces it on screen.
+- **A volley's explosion (a fireball's blast) is booked for 1.5× `BOOM_MS`**
+  (`VOLLEY_EXTRA`), and its eleven frames, with the damage numbers on them,
+  run 400ms longer than that (`VOLLEY_LINGER_MS`), unbooked.
+- **A monster's dwell is 11 ticks**, 2 past the slowest GameSpeed setting
+  (`MONSTER_DWELL_EXTRA_TICKS`).
+- **Damage numbers are centred on the hit** by their own width. Both
+  originals draw them left-aligned at 8px in (10 for one digit), centred
+  only because MS Sans Serif Bold's digits are wide; this font's are not.
+
+Timing and placement only; no draws.
 
 ### 64. Whose script a wandering group runs (2026-10-09)
 

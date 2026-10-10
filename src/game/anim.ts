@@ -220,9 +220,15 @@ export function animSchedule(fn: () => void, at: number): void {
  */
 export const MONSTER_DWELL_TICKS = 9;
 
+/**
+ * Play-testing's taste on top of the slowest dwell the original offers: at 9
+ * ticks the monsters' turns read "a touch fast" (2026-10-10).
+ */
+export const MONSTER_DWELL_EXTRA_TICKS = 2;
+
 /** The GameSpeed dwell in ms, at the current pace. */
 export function monsterPauseMs(): number {
-  return paced(MONSTER_DWELL_TICKS * TICK_MS);
+  return paced((MONSTER_DWELL_TICKS + MONSTER_DWELL_EXTRA_TICKS) * TICK_MS);
 }
 
 /**

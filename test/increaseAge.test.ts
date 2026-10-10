@@ -18,10 +18,10 @@ import {
   MISSILE_MS, Missile, runAMissile, setMissileSink,
 } from '../src/game/missileAnim';
 import {
-  Boom, boomMs, boomSpace, runBoomAnim, setBoomScreen, setBoomSink, startBoomAnim,
+  BOOM_LINGER_MS, Boom, boomMs, boomSpace, runBoomAnim, setBoomScreen, setBoomSink, startBoomAnim,
 } from '../src/game/booms';
 import {
-  FocusEvent, animBook, animClear, animPending, focusOn, setFocusSink,
+  FocusEvent, animBook, animClear, animPending, focusOn, paced, setFocusSink,
 } from '../src/game/anim';
 import {
   doPoison, handleAcid, handleDisease, increaseAgeEffects, takeFood,
@@ -259,8 +259,9 @@ describe('the animation timeline', () => {
       boomSpace({ x: 2, y: 2 }, 3, 5, 0);
     });
     expect(booms[1]!.starts - booms[0]!.starts).toBeGreaterThan(boomMs() - EPSILON);
-    // And the first is off the screen by the time the second arrives.
-    expect(booms[0]!.expires).toBeLessThanOrEqual(booms[1]!.starts + EPSILON);
+    // The first lingers past the second's start (BOOM_LINGER_MS); on the same
+    // square the screen draws only the newer (`drawBooms`).
+    expect(booms[0]!.expires).toBeLessThanOrEqual(booms[1]!.starts + paced(BOOM_LINGER_MS) + EPSILON);
   });
 
   it('a volley books one slot for everything it collected', async () => {
