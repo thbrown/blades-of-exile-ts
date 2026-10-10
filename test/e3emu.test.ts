@@ -15,7 +15,7 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -71,13 +71,21 @@ interface E3Result {
 }
 
 /** `spot.py` on `cases`, asynchronously: a long batch must not block vitest's worker. */
+/** A long sweep's progress, live, to `E3EMU_PROGRESS` (a file to `tail -f`). */
+function progress(line: string): void {
+  if (process.env.E3EMU_PROGRESS) appendFileSync(process.env.E3EMU_PROGRESS, line);
+}
+
 function runE3(cases: SpotCase[], dialogButtons: Record<number, number>): Promise<E3Result[]> {
   return new Promise((resolve, reject) => {
     const child = spawn(PY, [SPOT_PY]);
     const out: Buffer[] = [];
     let err = '';
     child.stdout.on('data', (d: Buffer) => out.push(d));
-    child.stderr.on('data', (d: Buffer) => { err = (err + d.toString()).slice(-4000); });
+    child.stderr.on('data', (d: Buffer) => {
+      err = (err + d.toString()).slice(-4000);
+      progress(d.toString());
+    });
     child.on('error', reject);
     child.on('close', (code) => {
       if (code !== 0) reject(new Error(`spot.py exited ${code}: ${err}`));
@@ -358,6 +366,7 @@ describe.skipIf(!hasEmu)("Exile III's own code against the converted scripts", (
       });
       try { ports.push(await Promise.race([runPort(c, portAnswers(e3s[i]!)), limit])); } catch (err) { ports.push(`port: ${(err as Error).message.split('\n')[0]}`); } finally { clearTimeout(timer); }
       if (cases.length > 50 && (i + 1) % 100 === 0) console.log(`port: ${i + 1}/${cases.length}`);
+      progress(`port ${i + 1}/${cases.length}\n`);
       await new Promise((r) => setImmediate(r));   // let vitest's worker talk
     }
     return cases.map((c, i) => {
@@ -554,11 +563,23 @@ describe.skipIf(!hasEmu)("Exile III's own code against the converted scripts", (
     const spots = (JSON.parse(readFileSync(join(out, 'debug.json'), 'utf8')) as { towns: Record<string, { id: number; x: number; y: number }[]> }).towns;
     const cases: SpotCase[] = [];
     const unreachable: string[] = [];
+    const unentered: string[] = [];
     for (let t = 0; t < scen.towns.length; t++) {
       if (only && !only.includes(t)) continue;
       const squares = [...new Map((spots[t] ?? []).map((s) => [`${s.x},${s.y}`, s])).values()];
       if (!squares.length) continue;
-      const { save, q } = await townSave(t);
+      // A town the port's party can't be walked into (an entry that never
+      // settles) is a finding, not the sweep's end.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const limit = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`no end after ${PORT_CASE_MS / 1000} s`)), PORT_CASE_MS);
+      });
+      let made: Awaited<ReturnType<typeof townSave>>;
+      try { made = await Promise.race([townSave(t), limit]); } catch (err) {
+        unentered.push(`town ${t}: ${(err as Error).message.split('\n')[0]}`);
+        continue;
+      } finally { clearTimeout(timer); }
+      const { save, q } = made;
       for (const s of squares) {
         const from = stepFrom(q, s.x, s.y);
         if (!from) { unreachable.push(`town ${t} (${s.x},${s.y}) spot ${s.id}`); continue; }
@@ -571,6 +592,7 @@ describe.skipIf(!hasEmu)("Exile III's own code against the converted scripts", (
     writeFileSync(report, JSON.stringify(results, null, 1));
     const bad = results.filter((r) => r.error || r.diffs.length);
     console.log(`${cases.length} runs: ${results.length - bad.length} agree, ${bad.filter((r) => r.error).length} errors, ${bad.filter((r) => !r.error).length} differ; ${unreachable.length} spots with no open square beside them. Report: ${report}`);
+    if (unentered.length) console.log(`Towns the port couldn't enter: ${unentered.join('; ')}`);
   }, 8 * 3_600_000);
 
   /** One case, everything printed: `E3EMU_CASE=zone,x,y,answers,dice` (answers `first`, `last` or `1/0/2`). */
