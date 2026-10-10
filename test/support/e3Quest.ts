@@ -74,6 +74,14 @@ export class QuestRunner {
     this.univ = new Universe(scen, new GameRng(), PartyPreset.DEFAULT);
     this.session = new GameSession(this.univ);
     this.session.attachSpecials(this.host());
+    // A locked door walked into asks what to do (main.ts's
+    // `locked-door-action`), in the order of E3's own dialog 993: Leave, Pick
+    // Lock, Bash Door (labels 60, 59, 58). Unanswered, the party leaves.
+    this.session.onLockedDoor = async (where) => {
+      const i = this.choose(['This door is locked. What do you do?'], ['Leave', 'Pick Lock', 'Bash Door']);
+      if (i === 1) this.session.pickLock(where, this.pick);
+      else if (i === 2) await this.session.bashDoor(where, this.pick);
+    };
     this.session.startNewGame();
   }
 
@@ -91,27 +99,29 @@ export class QuestRunner {
   /** The last `n` lines of the log, for a failing step's message. */
   tail(n = 12): string { return this.log.slice(-n).join('\n'); }
 
+  /** A choice, answered from the queue (`answer`), else its yes-like button, else its first. */
+  private choose(strs: string[], labels: string[]): number {
+    let i = -1;
+    const want = this.answers.shift();
+    if (typeof want === 'number') {
+      // -1 is the last button, whatever their number.
+      i = want < 0 ? labels.length - 1 : want;
+      if (i >= labels.length) throw new Error(`no button ${i} among [${labels.join(', ')}] for: ${strs.join(' | ')}\n${this.tail()}`);
+    } else if (want) {
+      i = labels.findIndex((l) => want.test(l));
+      if (i < 0) throw new Error(`no button matching ${want} among [${labels.join(', ')}] for: ${strs.join(' | ')}\n${this.tail()}`);
+    } else {
+      i = Math.max(0, labels.findIndex((l) => DEFAULT_YES.test(l)));
+    }
+    this.log.push(`[choice] ${strs.filter(Boolean).join(' | ')} [${labels.join('/')}] -> ${labels[i]}`);
+    return i;
+  }
+
   private host(): SpecialHost {
     const { session, univ } = this;
     return {
       message: async (s1, s2, title) => { this.log.push(`[msg${title ? ` ${title}` : ''}] ${[s1, s2].filter(Boolean).join(' | ')}`); },
-      choice: async (strs, buttons: ChoiceButton[]) => {
-        const labels = buttons.map((b) => b.label);
-        let i = -1;
-        const want = this.answers.shift();
-        if (typeof want === 'number') {
-          // -1 is the last button, whatever their number.
-          i = want < 0 ? labels.length - 1 : want;
-          if (i >= labels.length) throw new Error(`no button ${i} among [${labels.join(', ')}] for: ${strs.join(' | ')}\n${this.tail()}`);
-        } else if (want) {
-          i = labels.findIndex((l) => want.test(l));
-          if (i < 0) throw new Error(`no button matching ${want} among [${labels.join(', ')}] for: ${strs.join(' | ')}\n${this.tail()}`);
-        } else {
-          i = Math.max(0, labels.findIndex((l) => DEFAULT_YES.test(l)));
-        }
-        this.log.push(`[choice] ${strs.filter(Boolean).join(' | ')} [${labels.join('/')}] -> ${labels[i]}`);
-        return i;
-      },
+      choice: async (strs, buttons: ChoiceButton[]) => this.choose(strs, buttons.map((b) => b.label)),
       story: async (title) => { this.log.push(`[story] ${title}`); },
       askText: async (prompt) => { const t = this.texts.shift() ?? ''; this.log.push(`[ask] ${prompt} -> ${t}`); return t; },
       askNum: async (min, _max, prompt) => { const n = this.numbers.shift() ?? min; this.log.push(`[num] ${prompt} -> ${n}`); return n; },
@@ -209,8 +219,9 @@ export class QuestRunner {
 
   // ------------------------------------------------------------------ verbs
 
-  /** Step onto (x, y) from a square beside it, as the arrow keys would. */
+  /** Step onto (x, y) from a square beside it, as the arrow keys would (twice through a door that opens). */
   async step(x: number, y: number): Promise<void> {
+    const town = this.session.isOutdoors ? -1 : this.townNum;
     for (const [dx, dy] of STEPS) {
       const from = { x: x - dx, y: y - dy };
       if (this.session.isOutdoors) {
@@ -221,8 +232,17 @@ export class QuestRunner {
         if (!this.town.isOnMap(from.x, from.y) || this.session.townIsBlocked(from)) continue;
         this.place(from);
       }
+      const ter = () => (this.session.isOutdoors ? -1 : this.town.record.terrain[x]![y]!);
+      const before = ter();
       await this.session.moveTo({ x, y });
       await this.settle();
+      // A door that opened as it was bumped gets a second step, as a player
+      // would take: E3 runs a spot on a door only once the party walks in
+      // (`town-spots` = `exile3`).
+      if (!this.session.isOutdoors && this.townNum === town && (this.at.x !== x || this.at.y !== y) && ter() !== before) {
+        await this.session.moveTo({ x, y });
+        await this.settle();
+      }
       return;
     }
     throw new Error(`no square to step onto (${x},${y}) from`);

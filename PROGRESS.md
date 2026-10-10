@@ -17433,3 +17433,57 @@ are outdoor spots, which this round didn't change.
 - The E3 emulator sweep (`E3EMU_SWEEP=1`) at `74b20be`'s converter: 3128
   runs, 3128 agree, 0 errors, 0 differ (544 known: groups placed by the
   party). No outdoor spot blocks or passes where EXILE3.EXE doesn't.
+
+### EXILE3.EXE's own town move as the oracle (2026-10-09)
+
+The emulator check now covers towns, so "can the party walk there?" has an
+answer from E3 itself. `step_town` runs `FUN_1010_8001`, E3's whole town
+move: the square's spots and fields (`10c0:0c97` mode 1), boats and horses,
+the locked-door dialog and the terrain's blockage. It moves the party itself
+(`1160:29bc`). The test makes an in-town save per town as
+`e3checkSaves.test.ts` does (Q12's party walked in, exported), steps onto every
+town spot from an open square beside it, and compares where the party ends
+up, as `[town, x, y]`, with everything the outdoor sweep compares
+(`E3EMU_TOWN_SWEEP=1`, `E3EMU_TOWNS=…`, `E3EMU_TOWN_CASE=town,x,y,answers,dice[,visits]`).
+
+**Found and fixed:**
+
+- [x] **A spot on a closed door ran as the party bumped the door**, a step
+      before E3's. E3 runs a town spot only on a square that isn't blocked,
+      or on its four walk-into terrains (`0c97`, `FUN_1080_0cff`); BoE also
+      runs one on a door that opens when walked into. So Anaximander's report
+      (Fort Emergence (5,7)), the Pit's bier, Gebra's monks, Hawke's bedroom
+      and dozens of room descriptions on doors came as the door opened, with
+      the party still outside. New flag **`town-spots` = `exile3`**
+      (`session.ts`, `checkSpecialTerrain`). The quest runner's `step` takes
+      a second step through a door that opened, as `walk` already did; two
+      quest tests that pinned the old order now pin E3's.
+- [x] **The Filth Factory's vial (spot 2) diseased by BoE's rules.** E3 adds 4
+      to every PC's disease outright, with no save and no message
+      (`1078:259e` case 2); the converter's `diseaseAll` is `disease_pc`,
+      which saves and says "X diseased." New opcode **`status-add`**
+      (`SpecType.AFFECT_STATUS_ADD`, 110) and `addDiseaseAll`.
+- [x] **A split party's waiting square was lost in an E3 save.** E3 keeps it
+      in flags (304,1–2) (`FUN_10e0_0806`); the export now writes the port's
+      `leftAt` there, and the import reads it back (`E3P.SPLIT_LEFT_AT`).
+
+**Harness, not game:** the quest runner now answers the locked-door prompt
+(`onLockedDoor`, E3's dialog 993: Leave, Pick Lock, Bash Door; unanswered,
+Leave), so a bashed door lets the party through on both sides, as E3's does.
+The emulator gained `sscanf` (178) and `sqrt` (617, E3's distance; returned in
+ST(0) as `_pow` is), and a save that won't load is now its case's error, not
+the batch's end. A case stops visiting once the town changes or the party
+splits (the lone PC can't come back the way it went: no path from (51,16) to
+the Filth Factory's gate).
+
+**Left as OBoE's, by the user's ruling (2026-10-09)**, and listed as known
+in the test (each is OBoE's wording or order where 1997 and E3 agree with
+each other):
+
+- E3 never prints "Moved: <direction>" (EXILE3.EXE has no such string; 1997
+  does print it). The port prints it on every step.
+- "Blocked: north" (port, OBoE) against "Blocked: North" (1997, E3), and "You
+  enter Lorelei." against "Now entering:" then "Lorelei".
+- A refused town step turns the party in the port (OBoE sets `direction`
+  before its blocked test); 1997 and E3 turn it only on a step that goes
+  through. The facing decides where the PCs stand when a fight starts.

@@ -163,6 +163,13 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       for (const pc of targets()) pc.curHealth = Math.trunc((pc.curHealth * spec.ex1a) / 100);
       break;
 
+    case SpecType.AFFECT_STATUS_ADD:
+      // Exile III's `status[n] += k` on the PC record, for all six whatever
+      // their state, with no save and no line (`1078:259e` case 2).
+      if (monsterTarget || spec.ex1c < 0 || spec.ex1c > 15) break;
+      for (const pc of targets()) pc.status[spec.ex1c as Status] = (pc.status[spec.ex1c as Status] ?? 0) + spec.ex1a;
+      break;
+
     case SpecType.AFFECT_TAKE_MAGIC_ITEMS: {
       // Exile III's Great Circle (DIVERGENCES.md #22): the living PCs' packs,
       // last slot first so the compaction skips nothing, curses or not; then,

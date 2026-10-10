@@ -899,6 +899,7 @@ function scenarioXml(
     </author>
     <feature-flags>
         <use-special-spots>exile3</use-special-spots>
+        <town-spots>exile3</town-spots>
         <outdoor-arena>exile3</outdoor-arena>
         <road-joins>${roadJoins.join(',')}</road-joins>
         <job-boards>exile3:${jobBase}</job-boards>

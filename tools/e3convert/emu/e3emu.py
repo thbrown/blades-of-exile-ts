@@ -26,6 +26,7 @@ else, the logic under test, runs as compiled.
 import json
 import math
 import os
+import re
 import struct
 import sys
 
@@ -503,6 +504,28 @@ class Game(Emu):
         assert zone_ter == window_ter, f'window terrain {window_ter} != zone {zone} terrain {zone_ter} at ({x},{y})'
         return i * 48 + x, j * 48 + y
 
+    def town_num(self):
+        """`c_town.town_num` (`1160:0000`), the town an in-town save loaded."""
+        return self.rb(0x1160, 0)[0]
+
+    def town_loc(self):
+        """The party's square in town (`1160:29bc`, x then y)."""
+        x, y = self.rb(0x1160, 0x29bc, 2)
+        return x, y
+
+    def put_town(self, x, y):
+        """The party on (x, y) of the loaded town: the square a town step leaves."""
+        self.wb(0x1160, 0x29bc, [x, y])
+
+    def step_town(self, x, y):
+        """
+        `FUN_1010_8001(loc, forced)`, E3's whole town move: the square's spots
+        and fields (`FUN_10c0_0c97` mode 1, which it calls), a boat or horse
+        there, and the terrain's blockage. It moves the party itself
+        (`1160:29bc`) and returns whether the step went through.
+        """
+        return self.call('1010:8001', x | y << 8, 0) & 0xff
+
     def step_outdoors(self, wx, wy):
         """`FUN_10c0_0c97(loc, 0, 0, &spec)`, what a step outdoors runs: whether the step goes through."""
         out = alloc(self, 16)    # the `&spec` out-parameter
@@ -736,6 +759,24 @@ def rtl_sprintf(e):
     e.ret(len(s))
 
 
+def rtl_sscanf(e):
+    """`sscanf(str, fmt, ...)`: the integer conversions E3 uses (`%ld`, `%d`), each into the next far pointer."""
+    src, fmt = read_c(e, far(e, 0)).decode('latin1'), read_c(e, far(e, 2)).decode('latin1')
+    convs = re.findall(r'%(l?)([du])', fmt)
+    if not convs or re.sub(r'%l?[du]', '', fmt).strip():
+        raise ValueError(f'sscanf {fmt!r}')
+    nums = re.findall(r'[-+]?\d+', src)
+    argw, n = 4, 0
+    for (longf, _), num in zip(convs, nums):
+        p = far(e, argw)
+        argw += 2
+        v = int(num)
+        write = struct.pack('<i', v) if longf else struct.pack('<h', max(-0x8000, min(0x7fff, v)))
+        e.mu.mem_write(lin2(p), write)
+        n += 1
+    e.ret(n if nums else -1)
+
+
 def rtl_strcpy(e):
     d, s = far(e, 0), far(e, 2)
     write_c(e, d, read_c(e, s, 65535))
@@ -793,7 +834,17 @@ def pow_stub(e):
     return h, bytes([0x2e, 0xdd, 0x06]) + struct.pack('<H', slot) + b'\xcb'
 
 
-CODE_IMPORTS = {'BC450RTL.632': pow_stub}
+def sqrt_stub(e):
+    """`_sqrt(double)` (E3's distance, `1080:0000`): like `_pow`, the result goes back in ST(0)."""
+    slot = e.code_top_reserve(8)
+
+    def h(e):
+        (x,) = struct.unpack('<d', bytes(e.mu.mem_read((e.reg(UC_X86_REG_SS) << 4) + e.reg(UC_X86_REG_SP) + 4, 8)))
+        e.mu.mem_write((STUB_PARA << 4) + slot, struct.pack('<d', math.sqrt(x)))
+    return h, bytes([0x2e, 0xdd, 0x06]) + struct.pack('<H', slot) + b'\xcb'
+
+
+CODE_IMPORTS = {'BC450RTL.632': pow_stub, 'BC450RTL.617': sqrt_stub}
 
 IMPORTS = {
     'KERNEL.74': k_openfile,
@@ -801,7 +852,7 @@ IMPORTS = {
     'KERNEL.86': lambda e: k_lread(e, write=True), 'KERNEL.84': k_llseek, 'KERNEL.81': k_lclose,
     'KERNEL.15': k_globalalloc, 'KERNEL.18': k_globallock,
     'USER.13': gettickcount, 'USER.15': gettickcount, 'USER.176': u_loadstring, 'COMMDLG.1': getopenfilename,
-    'BC450RTL.176': rtl_sprintf, 'BC450RTL.184': rtl_strcpy, 'BC450RTL.197': rtl_strncpy,
+    'BC450RTL.176': rtl_sprintf, 'BC450RTL.178': rtl_sscanf, 'BC450RTL.184': rtl_strcpy, 'BC450RTL.197': rtl_strncpy,
     'BC450RTL.193': rtl_strlen, 'BC450RTL.201': rtl_strrchr, 'BC450RTL.371': rtl_fmemcpy,
     'BC450RTL.652': rtl_farmalloc, 'BC450RTL.653': rtl_farcalloc, 'BC450RTL.654': ret0,
     'BC450RTL.95': ret0,

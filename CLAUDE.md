@@ -59,6 +59,7 @@ node scripts/verify-saves.mjs    # save trees: autosave ticks, the restore tree,
 node scripts/bench-save-ui.mjs   # what saving costs the frame rate (CHROMIUM_PATH=… for another Chromium)
 node scripts/verify-offline.mjs DIR  # the PWA: a build in DIR, played online, then with its server stopped
 E3EMU_SWEEP=1 npx vitest run test/e3emu.test.ts -t sweep   # EXILE3.EXE's own code against every outdoor spot
+E3EMU_TOWN_SWEEP=1 npx vitest run test/e3emu.test.ts -t 'every town spot'   # …and every town spot, by its whole town move
 ```
 
 `floating-promises.mjs` is cheap and worth the habit: **`get_ran`'s call order
@@ -77,7 +78,9 @@ opcodes.
 `test/e3emu.test.ts` is Exile III's oracle, as the replay corpus is BoE's:
 it runs EXILE3.EXE's own handlers in an x86 emulator (`tools/e3convert/emu/`,
 whose README says how to set up its Python) from a real save, and compares
-what they show and change with the converted scripts. Its pinned cases run
+what they show and change with the converted scripts. In town it runs E3's
+whole move, so where the party ends up is E3's answer to "can I walk there?":
+the check for invisible walls. Its pinned cases run
 with the rest; the sweep takes minutes, so run it after changing the
 converter, and read it with `node tools/e3convert/emu/report.mjs REPORT`.
 

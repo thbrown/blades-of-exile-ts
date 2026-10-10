@@ -10,8 +10,10 @@ python3 -m venv tools/e3convert/emu/.venv
 tools/e3convert/emu/.venv/bin/pip install unicorn capstone
 
 npx vitest run test/e3emu.test.ts                      # the pinned cases (seconds)
-E3EMU_SWEEP=1 npx vitest run test/e3emu.test.ts -t sweep   # every outdoor spot (minutes)
+E3EMU_SWEEP=1 npx vitest run test/e3emu.test.ts -t 'every outdoor spot'   # (about 90 minutes)
+E3EMU_TOWN_SWEEP=1 npx vitest run test/e3emu.test.ts -t 'every town spot' # (E3EMU_TOWNS=12,26 for some)
 E3EMU_CASE=5,14,37,1/1,low npx vitest run test/e3emu.test.ts -t 'one case'
+E3EMU_TOWN_CASE=12,41,49,last,high npx vitest run test/e3emu.test.ts -t 'one town case'
 ```
 
 The test finds the venv by itself (`E3EMU_PYTHON` overrides it) and skips
@@ -43,7 +45,11 @@ when there's no E3 or no emulator.
   (`FUN_1040_018e`) on a save, which loads the outdoor zones and the town
   with E3's own code; `put_outdoors` sets the party's place and reloads the
   2×2 window (`FUN_1040_3677`); `step_outdoors` takes the step
-  (`FUN_10c0_0c97`, `check_special_terrain`). `checkpoint`/`restore`
+  (`FUN_10c0_0c97`, `check_special_terrain`). In town, `put_town` puts the
+  party on a square (`1160:29bc`) and `step_town` takes E3's whole town move
+  (`FUN_1010_8001`): the spots and fields (`0c97` mode 1), boats and horses,
+  the locked-door dialog (993) and the terrain's blockage, so where the
+  party ends up is E3's own answer to "can I walk there?". `checkpoint`/`restore`
   put all of memory back, so a batch loads each save once.
 - **`spot.py`** runs a batch of cases (JSON on stdin) and prints what the
   player saw, the dice asked, whether the step went through, and the party
@@ -69,9 +75,14 @@ differences.
 
 ## Limits
 
-- Outdoor spots only, so far. Town spots, talk scripts and the encounter
-  scripts (`FUN_10c0_06c3`) need their own entry points; `FUN_10c0_0c97` with
-  mode 1 is the town step.
+- Town cases need an in-town save. The test makes one per town as
+  `test/e3checkSaves.test.ts` makes its own: Q12's party walked in and
+  exported (`E3EMU_SAVES_DIR` keeps them, to run E3 on by hand). Each spot
+  is stepped onto from an open square beside it with no spot of its own; a
+  spot with no such square is skipped and counted. A case stops visiting
+  once the town changes or the party splits.
+- Talk scripts and the encounter scripts (`FUN_10c0_06c3`) need their own
+  entry points.
 - One save is one state of the world. A spot that tests a flag only shows
   the branch that save takes; other saves (`E3EMU_SAVE`) show the others.
 - The comparison stops at the end of the step. Anything E3 does on the next

@@ -2713,9 +2713,16 @@ export class GameSession {
         // square" — that's how a scenario explains a wall you can't pass.
         const node = town.record.specials.get(special);
         const forceAllowed = node?.type === SpecType.CANT_ENTER && node.ex2a > 0;
+        // **`town-spots` = `exile3`**, a scenario's flag: Exile III runs a
+        // town spot only on a square that isn't blocked, or on its four
+        // walk-into terrains (`10c0:0c97`, `FUN_1080_0cff`), which the
+        // converter marks with a CANT_ENTER head. BoE also runs one on a
+        // blocked door that opens when walked into, so a room's message
+        // showed as the party bumped its closed door, a step before E3's.
+        const e3Spots = this.univ.scenario.featureFlags['town-spots'] === 'exile3';
         const runIt = !blockedTer
-          || terType.special === TerSpec.CHANGE_WHEN_STEP_ON
-          || terType.special === TerSpec.CALL_SPECIAL
+          || (!e3Spots && terType.special === TerSpec.CHANGE_WHEN_STEP_ON)
+          || (!e3Spots && terType.special === TerSpec.CALL_SPECIAL)
           || forceAllowed
           // A boat sailing over water still trips the square it sails onto —
           // except in a legacy scenario: "Boats never triggered specials in

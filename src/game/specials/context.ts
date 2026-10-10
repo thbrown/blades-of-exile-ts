@@ -45,7 +45,7 @@ export enum SpecCat {
 const CATEGORY_RANGES: [SpecCat, SpecType, SpecType][] = [
   [SpecCat.GENERAL, SpecType.NONE, SpecType.FORGET_TOWNS],
   [SpecCat.ONCE, SpecType.ONCE_GIVE_ITEM, SpecType.ONCE_TRAP],
-  [SpecCat.AFFECT, SpecType.SELECT_TARGET, SpecType.AFFECT_TAKE_MAGIC_ITEMS],
+  [SpecCat.AFFECT, SpecType.SELECT_TARGET, SpecType.AFFECT_STATUS_ADD],
   [SpecCat.IF_THEN, SpecType.IF_SDF, SpecType.IF_PANEL],
   [SpecCat.TOWN, SpecType.MAKE_TOWN_HOSTILE, SpecType.TOWN_COPY_TERRAIN],
   [SpecCat.RECT, SpecType.RECT_PLACE_FIELD, SpecType.RECT_UNLOCK],

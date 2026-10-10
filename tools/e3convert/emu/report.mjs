@@ -5,7 +5,7 @@
 //
 //   node tools/e3convert/emu/report.mjs REPORT.json           # kinds, then spots
 //   node tools/e3convert/emu/report.mjs REPORT.json --kinds   # kinds only
-//   node tools/e3convert/emu/report.mjs REPORT.json --zone 2  # one zone's spots
+//   node tools/e3convert/emu/report.mjs REPORT.json --zone 2  # one zone's (or town's) spots
 
 import { readFileSync } from 'node:fs';
 
@@ -35,26 +35,29 @@ if (known.size) {
   console.log();
 }
 
+/** A case's place: an outdoor zone, or a town. */
+const place = (c) => (c.town !== undefined ? `town ${c.town}` : `zone ${c.zone}`);
+
 const kinds = new Map();
 for (const r of results) {
   for (const d of new Set(r.diffs.map(kind))) {
     const k = kinds.get(d) ?? { n: 0, spots: new Set() };
     k.n++;
-    k.spots.add(`${r.case.zone}:${r.case.x},${r.case.y}`);
+    k.spots.add(`${place(r.case)}:${r.case.x},${r.case.y}`);
     kinds.set(d, k);
   }
 }
 console.log('By kind (runs, spots):');
 for (const [d, k] of [...kinds].sort((a, b) => b[1].spots.size - a[1].spots.size))
   console.log(`  ${String(k.n).padStart(4)} ${String(k.spots.size).padStart(4)}  ${d}`);
-for (const r of errors) console.log(`  error at zone ${r.case.zone} (${r.case.x},${r.case.y}): ${r.error}`);
+for (const r of errors) console.log(`  error at ${place(r.case)} (${r.case.x},${r.case.y}): ${r.error}`);
 if (args.includes('--kinds')) process.exit(0);
 
 console.log('\nBy spot:');
 const bySpot = new Map();
 for (const r of results) {
-  if (!r.diffs.length || (zoneArg !== null && r.case.zone !== zoneArg)) continue;
-  const key = `zone ${r.case.zone} (${r.case.x},${r.case.y})`;
+  if (!r.diffs.length || (zoneArg !== null && r.case.zone !== zoneArg && r.case.town !== zoneArg)) continue;
+  const key = `${place(r.case)} (${r.case.x},${r.case.y})`;
   if (!bySpot.has(key)) bySpot.set(key, []);
   bySpot.get(key).push(r);
 }

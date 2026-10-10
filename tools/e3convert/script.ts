@@ -973,6 +973,15 @@ export class SpecBuilder {
     return (next) => this.node('status', { ex1: [n, 1, STATUS_DISEASE] }, next);
   }
 
+  /**
+   * Every PC's disease up by `n` outright (`status[DISEASE] += n` on each PC
+   * record), with no save and no message: the engine's `status-add`, an
+   * blades-of-exile-ts opcode (`SpecType.AFFECT_STATUS_ADD`).
+   */
+  addDiseaseAll(n: number): Step {
+    return (next) => this.node('status-add', { ex1: [n, 0, STATUS_DISEASE] }, next);
+  }
+
   /** The target is diseased by `n` (AFFECT_STATUS, BoE's `disease_pc` with its saving roll). */
   disease(n: number): Step {
     return (next) => this.node('status', { ex1: [n, 1, STATUS_DISEASE] }, next);

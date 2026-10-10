@@ -2319,10 +2319,14 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       const moved = await q.go(...ACROSS);
       expect(moved, q.tail()).toEqual(ACROSS.map(() => true));
       expect(q.at).toEqual({ x: 21, y: 40 });
-      // North: the crypt's door at (21,39) opens on the bier's sight, and a second step goes in.
+      // North: the crypt's door at (21,39) opens, and the bier is seen as a
+      // second step goes in. E3 runs the spot on the door only then
+      // (`town-spots` = `exile3`; EXILE3.EXE in the emulator agrees).
+      const said = q.log.length;
       expect(await q.go(N)).toEqual([false]);
-      expect(q.tail(1)).toMatch(/A skeleton lies on a massive marble bier/);
+      expect(q.log.slice(said)).toEqual([]);
       expect(await q.go(N)).toEqual([true]);
+      expect(q.tail(1)).toMatch(/A skeleton lies on a massive marble bier/);
       // The crossbow lies on the bier, unidentified.
       const found = (await loot(q, 19, 36, /Crossbow/));
       expect(found).toEqual(['Fury Crossbow']);
@@ -2871,8 +2875,9 @@ describe.skipIf(!dir)('Exile 3 main quests', () => {
       expect(q.at).toEqual({ x: 34, y: 36 });
       const monks = () => q.creatures(/Mad Monk/).filter((m) => m.isAlive);
       expect(monks().length).toBe(0);
+      // The first step opens the door; the monks wake as the party walks in.
       q.place({ x: 38, y: 43 });
-      await q.go(N);
+      expect(await q.go(N, N)).toEqual([false, true]);
       expect(q.tail(1)).toMatch(/they emit high shrieks and charge/);
       expect(monks().length).toBe(6);
       await q.kill(/Mad Monk/);

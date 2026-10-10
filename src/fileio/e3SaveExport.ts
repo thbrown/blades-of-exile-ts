@@ -289,6 +289,8 @@ export function e3SaveRecordFromGame(univ: Universe, defaults: E3SaveDefaults): 
       if (row < 300 || v !== 0) p.setU8(E3P.FLAGS + row * 10 + col, v);
     }
   }
+  // A split party's waiting square, which the port keeps as `leftAt`.
+  if (party.isSplit()) p.data.set([party.leftAt.x, party.leftAt.y], E3P.SPLIT_LEFT_AT);
   // The day stamps the converter keeps as flags (`E3_DAILY_STAMPS`): today's
   // where the flag is set, and not today's where it isn't.
   const today = party.calcDay();

@@ -242,6 +242,12 @@ export const E3P = {
   /** u8[310][10]: E3's flags, `stuff_done`. Flag `(a, b)` is byte `a*10 + b`. */
   FLAGS: 0x0084,
   FLAG_ROWS: 310,
+  /**
+   * u8 x, u8 y, among the flags (304,1–2): where the rest of a split party
+   * wait, the square the lone PC left (`FUN_10e0_0806`). (304,0) is set
+   * while split, (304,3) is the PC who went.
+   */
+  SPLIT_LEFT_AT: 0x0c65,
   /** u8[200][8]: a bit per preset item taken, per town. */
   ITEM_TAKEN: 0x0ca0,
   /** i16. */

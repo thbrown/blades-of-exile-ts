@@ -59,7 +59,7 @@ function level1(b: SpecBuilder, spot: (id: number) => Flag): Map<number, Step[]>
     [1, [b.askDialog(0x10a5, [b.msg(BLOCK, 0x19), b.setFlag(spot(1), 20), b.cureDiseaseAll()])]],
     // E3 adds 4 to every PC's disease outright.
     // Sound 66, not the message's usual 57.
-    [2, [b.msg(BLOCK, 0x1a, 0, undefined, 66), b.setFlag(spot(2), 20), b.diseaseAll(4)]],
+    [2, [b.msg(BLOCK, 0x1a, 0, undefined, 66), b.setFlag(spot(2), 20), b.addDiseaseAll(4)]],
     [3, [b.onceMsg(spot(3), BLOCK, 0x1b, 0x1c)]],
     [4, [b.dialog(0x10a6), b.setFlag(spot(4), 20)]],
     [5, [b.onceMsg(spot(5), BLOCK, 0x27)]],

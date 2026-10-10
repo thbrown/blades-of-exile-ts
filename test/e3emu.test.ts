@@ -23,7 +23,7 @@ import type { Scenario } from '../src/data/scenario';
 import { E3ITEM, E3P, E3PC, E3_PARTY_SIZE, E3_PC_SIZE, readE3Save } from '../src/fileio/e3save';
 import { e3SaveDefaultsFromJson, type E3SaveDefaults } from '../src/fileio/e3SaveDefaults';
 import { exportE3Save } from '../src/fileio/e3SaveExport';
-import { applyE3Save } from '../src/fileio/e3SaveImport';
+import { applyE3Save, applyE3TownCreatures, applyE3TownDecals, applyE3TownItems, applyE3TownTerrain } from '../src/fileio/e3SaveImport';
 import type { Location } from '../src/core/location';
 import type { Player } from '../src/universe/player';
 import { emitScenario } from '../tools/e3convert/emitNode';
@@ -38,7 +38,15 @@ const SPOT_PY = new URL('../tools/e3convert/emu/spot.py', import.meta.url).pathn
 
 export interface SpotCase {
   save: string;
-  zone: number;
+  /** An outdoor spot: its zone, and (x, y) in it. */
+  zone?: number;
+  /**
+   * Or a town step: the town an in-town `save` is in, the square the party
+   * steps from (put back on it before each visit), and (x, y) the square
+   * stepped onto, by E3's whole town move (`FUN_1010_8001`).
+   */
+  town?: number;
+  from?: [number, number];
   x: number;
   y: number;
   /** Buttons by index, or every dialog's first or last. */
@@ -54,6 +62,8 @@ interface E3Result {
   events: E3Event[];
   draws: [number, number, number, number][];
   moved: number | null;
+  /** A town case: where the party stands after the last visit, `[town, x, y]`. */
+  at: [number, number, number] | null;
   error: string | null;
   answersLeft: number;
   before: { party: string; pcs: string };
@@ -107,11 +117,13 @@ function clearNameTails(pcs: Uint8Array): Uint8Array {
  */
 const KNOWN: [RegExp, string][] = [
   [/^party OUT_C/, 'an encounter group is placed by the party, not on E3\'s marker spot (script.ts, onceEncounter), and exported as its zone\'s first group'],
+  [/^party DIRECTION/, 'a refused town step turns the party in the port (OBoE sets `direction` before its blocked test); 1997 and E3 turn it only on a step that goes through'],
 ];
 
 /** How long one case may take on the port's side before it's reported and skipped. */
 const PORT_CASE_MS = 20_000;
 
+const GONE = 'a PC slain "gone" keeps its spells in E3; the export writes an absent slot\'s new-PC spells';
 const b64 = (s: string) => new Uint8Array(Buffer.from(s, 'base64'));
 
 /** Party-record bytes neither side's play decides: E3's help tips, which the port doesn't keep. */
@@ -200,7 +212,7 @@ describe.skipIf(!hasEmu)("Exile III's own code against the converted scripts", (
   afterAll(() => rmSync(out, { recursive: true, force: true }));
 
   interface PortResult {
-    q: QuestRunner; asked: string[]; moved: boolean | null; before: Uint8Array[]; after: Uint8Array[];
+    q: QuestRunner; asked: string[]; moved: boolean | null; at: [number, number, number] | null; before: Uint8Array[]; after: Uint8Array[];
     /** `exportE3Save`'s, after the step, and each PC's items by name: for reading a case in full. */
     warnings: string[]; pack: string[][];
     /** The lines the step put in the text area, as E3's `FUN_10d0_4c8d` lines. */
@@ -209,16 +221,28 @@ describe.skipIf(!hasEmu)("Exile III's own code against the converted scripts", (
 
   async function runPort(c: SpotCase, answers: number[]): Promise<PortResult> {
     const q = new QuestRunner(scen);
-    applyE3Save(new Uint8Array(readFileSync(c.save)), q.univ, defaults);
-    // As File > Open does (`loadE3Save` in main.ts): the mode is the save's.
+    const res = applyE3Save(new Uint8Array(readFileSync(c.save)), q.univ, defaults);
+    // As File > Open does (`loadE3Save` in main.ts): the mode is the save's,
+    // and an in-town save brings its town back as it was.
     q.session.resumeLoadedGame();
+    if (res.town) {
+      q.session.resumeInSavedTown(res.town.num, res.town.loc);
+      applyE3TownDecals(q.univ, res.town.decals);
+      applyE3TownTerrain(q.univ, res.town.data);
+      applyE3TownCreatures(q.univ, res.town.cTown);
+      applyE3TownItems(q.univ, res.town.items, defaults);
+    }
     await q.settle();
-    // An outdoor spot needs an outdoor party: in town mode the engine refuses
-    // every outdoor node (`outdoorSpec`), which hides half of what a spot does.
-    if (!q.session.isOutdoors) throw new Error(`${c.save} is saved in town: use an outdoor save`);
-    const zx = c.zone % 9, zy = Math.floor(c.zone / 9);
-    q.session.positionParty(zx, zy, c.x, c.y);
-    await q.settle();
+    if (c.town !== undefined) {
+      if (!q.session.inTown || q.townNum !== c.town) throw new Error(`${c.save} isn't saved in town ${c.town}`);
+    } else {
+      // An outdoor spot needs an outdoor party: in town mode the engine refuses
+      // every outdoor node (`outdoorSpec`), which hides half of what a spot does.
+      if (!q.session.isOutdoors) throw new Error(`${c.save} is saved in town: use an outdoor save`);
+      const zx = c.zone! % 9, zy = Math.floor(c.zone! / 9);
+      q.session.positionParty(zx, zy, c.x, c.y);
+      await q.settle();
+    }
     const exported = () => {
       const s = readE3Save(exportE3Save(q.univ, defaults).bytes);
       const pcs = new Uint8Array(E3_PC_SIZE * 6);
@@ -243,15 +267,29 @@ describe.skipIf(!hasEmu)("Exile III's own code against the converted scripts", (
     q.answer(...answers, ...Array<number>(40).fill(0));
     const where = { ...q.party.outLoc };
     let moved: boolean | null = null;
+    let at: [number, number, number] | null = null;
     try {
       // `check_special_terrain`, E3's `FUN_10c0_0c97`: the square's special
-      // and its terrain's effects together.
+      // and its terrain's effects together. In town, the whole of
+      // `town_move_party`, as E3's `FUN_1010_8001` is: no turn passes after.
       const session = q.session as unknown as {
         checkSpecialTerrain(where: Location, who: Player): Promise<{ canEnter: boolean }>;
+        townMoveParty(destination: Location): Promise<boolean>;
       };
       for (let v = 0; v < (c.visits ?? 1); v++) {
         if (v) q.log.push('[visit]');
-        moved = (await session.checkSpecialTerrain(where, q.party.pcs[0]!)).canEnter;
+        if (c.town !== undefined) {
+          q.place({ x: c.from![0], y: c.from![1] });
+          moved = await session.townMoveParty({ x: c.x, y: c.y });
+          await q.settle();
+          // Stairs or a way out end the case in the other town, as E3's side does.
+          at = q.session.inTown ? [q.townNum, q.party.townLoc.x, q.party.townLoc.y] : null;
+          if (!q.session.inTown || q.townNum !== c.town) break;
+          // Split, as E3's side stops: no second visit for the lone PC.
+          if (q.party.isSplit()) break;
+        } else {
+          moved = (await session.checkSpecialTerrain(where, q.party.pcs[0]!)).canEnter;
+        }
         await q.settle();
       }
     } finally {
@@ -261,7 +299,7 @@ describe.skipIf(!hasEmu)("Exile III's own code against the converted scripts", (
     const pack = q.party.pcs.map((pc) => pc.items.filter((it) => it && it.variety !== 0).map((it) => it.fullName ?? it.name));
     pack.push([`outdoors ${q.session.isOutdoors}, mode ${q.session.mode}, town ${q.univ.town?.record.name ?? "-"}, gold ${q.party.gold}, outLoc ${JSON.stringify(q.party.outLoc)}, sector ${JSON.stringify(q.party.sector)}`]);
     const lines = q.univ.transcript.slice(q.univ.transcript.length - (q.univ.transcriptAdded - linesBefore)).map((l) => l.trim());
-    return { q, asked, moved, before, after: exported(), warnings, pack, lines };
+    return { q, asked, moved, at, before, after: exported(), warnings, pack, lines };
   }
 
   /** How many of the engine's dialogs E3's dialog `id` is shown as (`e3DialogPageTexts`). */
@@ -359,16 +397,49 @@ describe.skipIf(!hasEmu)("Exile III's own code against the converted scripts", (
       // Lava outdoors is E3's move (`outd_move_party`), not this check; the port's step does both.
       const lava = portLines.includes('LAVA!') && !e3Lines.includes('LAVA!');
       if (lava) drop(/^LAVA!$| takes \d+\.$/, 'lava: outdoors E3 burns in its move function, which this check doesn\'t run');
+      // BoE's town move says "Moved: north" (boe.actions.cpp); EXILE3.EXE has
+      // no such string (its only "Moved:" lines are landing and fleeing), so
+      // E3 walks in silence. A divergence a player sees, not yet decided.
+      if (c.town !== undefined) drop(/^Moved: (North|South|East|West)/i, 'E3 prints no "Moved: <direction>" line on a step: EXILE3.EXE has no such string');
+      // Two lines 1997 and E3 word alike and the port as OBoE does: the
+      // direction capitalised ("Blocked: North"), and a town's name under
+      // "Now entering:" where the port says "You enter Lorelei.". Not yet decided.
+      const reworded = (from: string[], to: string[]) => {
+        if (from.join('\n') !== to.join('\n')) res.known.push('wording: OBoE\'s "Blocked: north" and "You enter <town>.", where 1997 and E3 say "Blocked: North" and "Now entering:" / <town>');
+        return to;
+      };
+      portLines = reworded(portLines, portLines.flatMap((l) => {
+        const m = /^You enter (.*)\.$/.exec(l);
+        return m ? ['Now entering:', m[1]!] : [l.replace(/^Blocked: (\w)/, (_, ch: string) => `Blocked: ${ch.toUpperCase()}`)
+          .replace(/^(Blocked: \w+)(east|west)$/, (_, a: string, b: string) => a + b[0]!.toUpperCase() + b.slice(1))];
+      }));
       if (e3Lines.join('\n') !== portLines.join('\n'))
         res.diffs.push(`lines: E3 ${JSON.stringify(e3Lines)}, port ${JSON.stringify(portLines)}`);
       const e3Moved = e3.moved !== 0;
-      if (port.moved !== null && port.moved !== e3Moved)
+      if (c.town !== undefined) {
+        // Where the party ends up is the step's whole answer: an invisible
+        // wall, or a hole in a real one, shows here.
+        if (JSON.stringify(e3.at) !== JSON.stringify(port.at))
+          res.diffs.push(`the party ends at: E3 ${JSON.stringify(e3.at)}, port ${JSON.stringify(port.at)}`);
+      } else if (port.moved !== null && port.moved !== e3Moved)
         res.diffs.push(`the step: E3 ${e3Moved ? 'goes through' : 'is blocked'}, port ${port.moved ? 'goes through' : 'is blocked'}`);
       const ignoreParty = (o: number) => IGNORED.some(([lo, hi]) => o >= lo && o < hi)
         || (o >= E3P.OUTDOOR_CORNER && o < E3P.LOC_IN_SEC + 2);
       compareBytes('party', partyByteName, b64(e3.before.party), b64(e3.after.party), port.before[0]!, port.after[0]!, ignoreParty, res);
+      // A PC slain "gone" (main status 0, `slay_party(0)`) keeps its record in
+      // E3; the export writes an absent slot's new-PC spells (`e3SaveExport.ts`),
+      // which only a save made after the whole party is gone would show.
+      const e3PcsAfter = b64(e3.after.pcs);
+      const goneSpells = (o: number) => {
+        const pc = Math.floor(o / E3_PC_SIZE), f = o % E3_PC_SIZE;
+        if (f < E3PC.PRIEST_SPELLS || f >= E3PC.MAGE_SPELLS + 62) return false;
+        const st = pc * E3_PC_SIZE + E3PC.MAIN_STATUS;
+        const gone = e3PcsAfter[st] === 0 && e3PcsAfter[st + 1] === 0 && b64(e3.before.pcs)[st] !== 0;
+        if (gone && !res.known.includes(GONE)) res.known.push(GONE);
+        return gone;
+      };
       compareBytes('pcs', pcByteName, clearNameTails(b64(e3.before.pcs)), clearNameTails(b64(e3.after.pcs)),
-        clearNameTails(port.before[1]!), clearNameTails(port.after[1]!), ignorePoisonSlot(b64(e3.after.pcs)), res);
+        clearNameTails(port.before[1]!), clearNameTails(port.after[1]!), (o) => ignorePoisonSlot(b64(e3.after.pcs))(o) || goneSpells(o), res);
       if (lava) {
         for (const d of res.diffs.filter((d) => /CUR_HEALTH|TOTAL_DAM_TAKEN|MAIN_STATUS/.test(d))) res.diffs.splice(res.diffs.indexOf(d), 1);
       }
@@ -420,6 +491,87 @@ describe.skipIf(!hasEmu)("Exile III's own code against the converted scripts", (
     const r = await compare({ save: Q12(), zone, x, y, answers, dice: 'low', visits: 2 });
     expect(r.diffs, [...r.diffs, 'E3:', ...r.e3, 'port:', ...r.port].join('\n')).toEqual([]);
   }, 60000);
+
+  /**
+   * An in-town save of `town`, made here as `test/e3checkSaves.test.ts` makes
+   * its own: Q12's party walked in (the entry scripts run) and exported whole.
+   * Returns its path and the runner it was made from, standing where E3 will.
+   */
+  const townSaves = new Map<number, string>();
+  async function townSave(town: number): Promise<{ save: string; q: QuestRunner }> {
+    const q = new QuestRunner(scen);
+    applyE3Save(new Uint8Array(readFileSync(Q12())), q.univ, defaults);
+    q.session.resumeLoadedGame();
+    await q.settle();
+    await q.enter(town);
+    let save = townSaves.get(town);
+    if (!save) {
+      // `E3EMU_SAVES_DIR` keeps them, to run E3 on by hand (`tools/e3convert/emu/`).
+      save = join(process.env.E3EMU_SAVES_DIR ?? out, `T${town}.SAV`);
+      writeFileSync(save, exportE3Save(q.univ, defaults).bytes);
+      townSaves.set(town, save);
+    }
+    return { save, q };
+  }
+
+  /**
+   * Squares to step onto `(x, y)` from in the port's town: open, on the map,
+   * with no creature and no spot of their own (so only the step's square
+   * runs). The first is the one a case uses.
+   */
+  function stepFrom(q: QuestRunner, x: number, y: number): [number, number] | null {
+    const spots = new Set(q.town.record.specialLocs.map((l) => `${l.x},${l.y}`));
+    for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
+      const p = { x: x + dx, y: y + dy };
+      if (!q.town.isOnMap(p.x, p.y) || q.session.townIsBlocked(p) || q.town.monsterAt(p) !== null || spots.has(`${p.x},${p.y}`)) continue;
+      return [p.x, p.y];
+    }
+    return null;
+  }
+
+  /** One town step, everything printed: `E3EMU_TOWN_CASE=town,x,y,answers,dice[,visits]` (answers `first`, `last` or `1/0/2`). */
+  it.skipIf(!process.env.E3EMU_TOWN_CASE)('one town case, in full', async () => {
+    const [t, x, y, a, d, v] = process.env.E3EMU_TOWN_CASE!.split(',');
+    const answers = a === 'first' || a === 'last' ? a : (a ?? '0').split('/').map(Number);
+    const { save, q } = await townSave(+t!);
+    const from = stepFrom(q, +x!, +y!);
+    if (!from) throw new Error(`nowhere to step onto (${x},${y}) from`);
+    const [r] = await compareAll([{ save, town: +t!, from, x: +x!, y: +y!, answers, dice: (d ?? 'low') as 'low' | 'high', visits: +(v ?? 2) }]);
+    console.log(JSON.stringify(r, null, 1));
+  }, 120000);
+
+  /**
+   * Every town spot of every town (or `E3EMU_TOWNS`, comma-separated): the
+   * party walked into the town from Q12, saved there, and stepped onto each
+   * spot from an open square beside it by E3's whole town move and the
+   * port's, with every dialog's first button and then its last, under low
+   * and high dice. Where the party ends up is compared, so an invisible wall
+   * (or a hole in a real one) shows. `E3EMU_TOWN_SWEEP=1`; the report goes to
+   * `E3EMU_REPORT` (default `e3emu-town-report.json` in the temp dir).
+   */
+  it.skipIf(!process.env.E3EMU_TOWN_SWEEP)('sweep: every town spot', async () => {
+    const only = process.env.E3EMU_TOWNS?.split(',').map(Number);
+    const spots = (JSON.parse(readFileSync(join(out, 'debug.json'), 'utf8')) as { towns: Record<string, { id: number; x: number; y: number }[]> }).towns;
+    const cases: SpotCase[] = [];
+    const unreachable: string[] = [];
+    for (let t = 0; t < scen.towns.length; t++) {
+      if (only && !only.includes(t)) continue;
+      const squares = [...new Map((spots[t] ?? []).map((s) => [`${s.x},${s.y}`, s])).values()];
+      if (!squares.length) continue;
+      const { save, q } = await townSave(t);
+      for (const s of squares) {
+        const from = stepFrom(q, s.x, s.y);
+        if (!from) { unreachable.push(`town ${t} (${s.x},${s.y}) spot ${s.id}`); continue; }
+        for (const answers of ['first', 'last'] as const)
+          for (const dice of ['low', 'high'] as const) cases.push({ save, town: t, from, x: s.x, y: s.y, answers, dice, visits: 2 });
+      }
+    }
+    const results = await compareAll(cases);
+    const report = join(process.env.E3EMU_REPORT ?? join(tmpdir(), 'e3emu-town-report.json'));
+    writeFileSync(report, JSON.stringify(results, null, 1));
+    const bad = results.filter((r) => r.error || r.diffs.length);
+    console.log(`${cases.length} runs: ${results.length - bad.length} agree, ${bad.filter((r) => r.error).length} errors, ${bad.filter((r) => !r.error).length} differ; ${unreachable.length} spots with no open square beside them. Report: ${report}`);
+  }, 8 * 3_600_000);
 
   /** One case, everything printed: `E3EMU_CASE=zone,x,y,answers,dice` (answers `first`, `last` or `1/0/2`). */
   it.skipIf(!process.env.E3EMU_CASE)('one case, in full', async () => {

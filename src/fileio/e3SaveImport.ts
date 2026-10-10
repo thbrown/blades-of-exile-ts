@@ -472,6 +472,11 @@ export function applyE3SaveRecord(save: E3Save, univ: Universe, defaults: E3Save
     });
     town = { num, loc, decals: save.sfx, cTown: save.town.cTown, data: save.town.data, items: save.town.items };
   }
+  // A split party's waiting square (flags (304,1–2)), in the town it's in.
+  if (party.isSplit()) {
+    party.leftAt = { x: p.u8(E3P.SPLIT_LEFT_AT), y: p.u8(E3P.SPLIT_LEFT_AT + 1) };
+    party.leftIn = town?.num ?? -1;
+  }
   party.townNum = TOWN_NUM_OUTDOORS;
   univ.town = null;
   // The last game's window goes, or its squares would land in this one's zones.
