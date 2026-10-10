@@ -124,9 +124,10 @@ function marish(t: number): PlaceScript {
       [11, [b.dialog(0x11e5)]],
       [12, [b.dialog(0x11e6)]],
       // The ferry to Shayder (4) for 10 gold. E3 takes the gold itself, where
-      // the engine's node also says "You give up 10 gold."
+      // the engine's node also says "You give up 10 gold." The days pass
+      // before the town changes: a town change ends the chain here.
       [15, [b.askDialog(0x10b8, [b.pay(10, [
-        b.msg(B, 0x1d), b.exitTo(0, 6, 0xb, 0x1a), b.changeTown(4, 7, 0x2a), b.addAge(800),
+        b.msg(B, 0x1d), b.exitTo(0, 6, 0xb, 0x1a), b.addAge(800), b.changeTown(4, 7, 0x2a),
       ], [b.log(0x10b8, 0x3066)])]), b.blockMove()]],
     ]);
   };
@@ -150,7 +151,7 @@ function softport(t: number): PlaceScript {
       ...[6, 7, 8, 9, 10].map((id): [number, Step[]] => [id, []]),
       // The ferry to Fenris Port (132); E3 leaves the fare (133, 9) set.
       [11, [b.ifFlagEq(f(0x5bf), 0, [b.msg(B, 0x12)], [b.askDialog(0x10eb, [
-        b.msg(B, 0x13), b.exitTo(2, 5, 0x13, 0x20), b.changeTown(0x84, 0x2a, 0x18), b.addAge(800),
+        b.msg(B, 0x13), b.exitTo(2, 5, 0x13, 0x20), b.addAge(800), b.changeTown(0x84, 0x2a, 0x18),
       ])]), b.blockMove()]],
     ]);
   };
@@ -171,7 +172,7 @@ function golddale(t: number): PlaceScript {
       [8, []],
       // Libras's (141) ferry to town 142, fare (141, 1).
       [9, [b.ifFlagEq(f(0x607), 0, [b.msg(B, 3)], [b.askDialog(0x113a, [
-        b.setFlag(f(0x607), 0), b.msg(B, 2), b.exitTo(5, 8, 0x20, 0x33), b.changeTown(0x8e, 0x18, 6), b.addAge(400),
+        b.setFlag(f(0x607), 0), b.msg(B, 2), b.exitTo(5, 8, 0x20, 0x33), b.addAge(400), b.changeTown(0x8e, 0x18, 6),
       ])]), b.blockMove()]],
     ]);
   };

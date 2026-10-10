@@ -55,12 +55,12 @@ function anamaTemple(b: SpecBuilder): Map<number, Step[]> {
   /**
    * The prayer books (spots 14–17): members with a total level of at least
    * 7 × k learn priest spells 30 + 8k to 34 + 8k. Anyone else is
-   * dumbfounded, 7 each; E3 writes the status outright, where the engine's
-   * `dumbfound` allows a saving roll.
+   * dumbfounded: E3 sets every PC's to 7 outright (`10b8:1a36`), with no
+   * saving roll and no line.
    */
   const book = (k: number): Step[] => [b.askDialog(0xf47, [b.ifFlagEq(ANAMA, 3, [
     b.ifMageLoreTotal(7 * k, [b.msg(B, 0xe), ...[0, 1, 2, 3, 4].map((i) => b.teachSpell(0x82 + 8 * k + i))], [b.msg(B, 0xd)]),
-  ], [b.msg(B, 0xc), b.dumbfound(7)])])];
+  ], [b.msg(B, 0xc), b.setDumbfoundedAll(7)])])];
   return new Map<number, Step[]>([
     [1, [b.askDialog(0xf46, bed(b, B, 0xb, 500))]],
     // The barrier to the treasure: walking through makes the Anama enemies (2).

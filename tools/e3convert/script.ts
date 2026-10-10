@@ -988,6 +988,11 @@ export class SpecBuilder {
    * record), with no save and no message: the engine's `status-add`, an
    * blades-of-exile-ts opcode (`SpecType.AFFECT_STATUS_ADD`).
    */
+  /** Every PC's dumbfounding becomes `n` outright: no save, no line (`status-add` with `ex1b` 1). */
+  setDumbfoundedAll(n: number): Step {
+    return (next) => this.node('status-add', { ex1: [n, 1, STATUS_DUMB] }, next);
+  }
+
   addDiseaseAll(n: number): Step {
     return (next) => this.node('status-add', { ex1: [n, 0, STATUS_DISEASE] }, next);
   }

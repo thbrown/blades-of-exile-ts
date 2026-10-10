@@ -17564,6 +17564,60 @@ Windows 3.1/95's 55 ms clock tick, which rounds every `Delay` to whole ticks
 Nothing changed yet: DIVERGENCES §63's ruling is "faster than the originals",
 and the user is comparing against a video first.
 
+### The full town sweep, read (2026-10-10)
+
+The first full run hung twice once E3's side was done: one batch of 9,688
+results was over a gigabyte of JSON, the parse threw inside the child's
+close handler, and the promise never settled. `compareAll` now runs batches
+of 250 (and a failed parse rejects); `E3EMU_PROGRESS=FILE` logs progress
+live; four shards of towns (`E3EMU_TOWNS`) run side by side in about 20
+minutes. First result: 352 of 9,688 runs differed, at 123 spots. Found and
+fixed:
+
+- **Belts (`belts` = `exile3`).** E3 asks the belt the party *stands on*
+  (`10c0:0da8`, terrains 247–250): a step off a belt against its run is
+  refused ("Can't move against belt.") and a step onto one never is. 1997
+  asks the square being entered. The port blocked E3-legal steps onto the
+  magma belt in town 33. The tower's and the New Factory's walked routes
+  were searched again; the tower's level 2 now goes lever, panel, library,
+  stairs (the circle's end can't reach the panel under E3's rule).
+- **Krizsan**'s welcome, burn dialog and 300 gold use town 0's flags in all
+  four states (constants in `1078:0000`).
+- **A door E3 won't bash** (flag3 0: 105, 106, 122, 123, 137, 138; E3
+  picks the case by terrain before the roll, `10d8:428e`) broke when a
+  strong PC's roll came in under 0.
+- **Rentar's reading crystals** are erased only once read (`1078:599f`);
+  "Leave" used to lose the reading. New `whileSpot`/`eraseSpot` builders.
+- **`kill-pc`** (opcode 111, new): `kill_pc` with the luck save, for the
+  Guarded Tunnel's beams and its bridge in combat. `slay_party` saves no one.
+- **A fire blast asks only E3's own targets** (`castSpellOnSpace(..., true)`:
+  a spot opening with IF_CONTEXT TARGET for Fire Blast). Any other
+  IF_CONTEXT spot re-ran on each blast: the Golddale slith threw all twelve
+  fireballs in one step.
+- **A non-use object with charges weighs per charge** (DIVERGENCES #65):
+  1997 and E3 agree, OBoE dropped it. The Ursagi's gold ore (`1088:1959`)
+  now spills to the next PC, 100 gives at most, quietly.
+- **The Anama books** set every PC's dumbfounding to 7 outright
+  (`status-add` gained `ex1b` 1, set).
+- **Three ferries** passed no time: `addAge` came after `changeTown`, which
+  ends the chain.
+- **Harness**: E3 runs registered (DGROUP 0x3d3c); `which_combat_type`
+  (0x6dc4) is 1 in town, as `do_monsters` makes it, without which E3's
+  `make_town_hostile` does nothing; a town change compares only the square
+  within its sector (E3 updates the window in its main loop); an item slot
+  E3 emptied is empty (it clears only the variety word); town names compare
+  to 30 characters and "obliterated." to "obliterated!".
+
+Rerun after the fixes: **31 of 9,688 runs differ, at 13 spots, all listed
+here.** Known, not fixed: the Great Walls (37) pick the exit end from the outdoor
+position, which a teleported test party doesn't have; the New Formello damp
+room's `get_ran(1,0,3) == 1` can't be hit at either dice extreme; the
+port's "poisoned." (36) and "drained." (78) lines where E3 adds silently;
+town 23 (20,21)'s "Blocked: SouthEast" (the walk-into head's refusal is
+silent where E3's terrain refusal prints); the damage-done statistic (29);
+and the Great Circle's (62) can-find byte, 20 in E3 and 1 in the port, both
+"visible".
+
 **Next session starts here (2026-10-10):**
 
 1. **Set the combat knobs against the measurements above** and the user's
@@ -17572,8 +17626,5 @@ and the user is comparing against a video first.
    should dwell at E3's speed 1 (16 ms plus a redraw) or stay at 165 ms.
    Misses and deaths are `boom_space` too (a miss's swish is its sound), so
    the hit row covers them.
-2. **The town sweep** (`E3EMU_TOWN_SWEEP=1`, 9,688 runs, every town) was
-   started 2026-10-09 against the code at `2230351` plus the split/`sqrt`
-   harness fixes; if its report (`E3EMU_REPORT`) is lost with the session,
-   rerun it (≈30–60 min) and read it with `report.mjs`. The four-town trial
-   (125, 26, 12, 102) agreed on all but the known differences.
+2. **The town sweep's known leftovers** (above, "The full town sweep,
+   read"): the silent status changes (36, 78) and town 23's line.

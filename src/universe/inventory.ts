@@ -21,7 +21,12 @@ export enum GiveStatus {
   TOO_HEAVY = 'too-heavy',
 }
 
-/** cItem::item_weight — stacks of ammo and potions weigh per charge. */
+/**
+ * cItem::item_weight — stacks of ammo and potions weigh per charge, and so
+ * does a non-use object with charges, as 1997 has it (ITEMS.CPP:321; Exile
+ * III's `1070:094b` too). OBoE dropped that last one; a heap of ore that
+ * weighs one ore is something a player feels (DIVERGENCES.md #65).
+ */
 export function itemWeight(item: Item): number {
   if (item.variety === ItemType.NO_ITEM) return 0;
   if (item.charges > 0) {
@@ -30,6 +35,7 @@ export function itemWeight(item: Item): number {
       case ItemType.THROWN_MISSILE:
       case ItemType.POTION:
       case ItemType.BOLTS:
+      case ItemType.NON_USE_OBJECT:
         return item.charges * item.weight;
       default:
         break;

@@ -164,10 +164,12 @@ export async function affectSpec(univ: Universe, ctx: SpecialCtx): Promise<void>
       break;
 
     case SpecType.AFFECT_STATUS_ADD:
-      // Exile III's `status[n] += k` on the PC record, for all six whatever
-      // their state, with no save and no line (`1078:259e` case 2).
+      // Exile III's `status[n] += k` on the PC record (`1078:259e` case 2),
+      // or with ex1b 1 `status[n] = k` (`10b8:1a36`), for all six whatever
+      // their state, with no save and no line.
       if (monsterTarget || spec.ex1c < 0 || spec.ex1c > 15) break;
-      for (const pc of targets()) pc.status[spec.ex1c as Status] = (pc.status[spec.ex1c as Status] ?? 0) + spec.ex1a;
+      for (const pc of targets())
+        pc.status[spec.ex1c as Status] = (spec.ex1b === 1 ? 0 : pc.status[spec.ex1c as Status] ?? 0) + spec.ex1a;
       break;
 
     case SpecType.AFFECT_TAKE_MAGIC_ITEMS: {

@@ -125,8 +125,8 @@ export enum SpecType {
   AFFECT_TAKE_MAGIC_ITEMS = 109,
   /**
    * An blades-of-exile-ts opcode, not in BoE or OBoE: each target's status
-   * `ex1c` goes up by `ex1a` outright, whatever the PC's state: no save, no
-   * cap, no message. Exile III's scripts add to the PC record directly where
+   * `ex1c` goes up by `ex1a` outright (with `ex1b` 1, becomes `ex1a`),
+   * whatever the PC's state: no save, no cap, no message. Exile III's scripts add to the PC record directly where
    * BoE's AFFECT_STATUS rolls and announces (the Filth Factory's vial,
    * `1078:259e` case 2).
    */

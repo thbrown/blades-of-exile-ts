@@ -307,8 +307,10 @@ const ORE_COUNT: Flag = [291, 27];
 function ursagiLair(b: SpecBuilder): Map<number, Step[]> {
   const B = 61, spot = (id: number) => townSpotFlag(51, id);
   return new Map<number, Step[]>([
-    // Gold ore (item 404), as much as the party can carry, up to 99.
-    [1, [b.askDialog(0xdb6, [b.setFlag(spot(1), 20), b.giveItemUntilFull(0x194, 0x63, ORE_COUNT)])]],
+    // Gold ore (item 404), as much as the party can carry: `FUN_1070_0401`,
+    // which says nothing but "(items combined)", while it takes and its
+    // count (from 0, tested after the give) is under 99, so 100 at most.
+    [1, [b.askDialog(0xdb6, [b.setFlag(spot(1), 20), b.giveItemUntilFull(0x194, 100, ORE_COUNT, true)])]],
     // The avalanche behind the party.
     [2, [b.msg(B, 9), ...[0x2a, 0x2b, 0x2c].map((y) => b.setTer(7, y, 0x5f)), b.setFlag(spot(2), 20), b.setFlag(spot(3), 20)]],
     [3, [b.onceMsg(spot(3), B, 8)]],

@@ -1433,6 +1433,17 @@ over and leaves. BoE scenarios keep BoE's rule. `homeSector` is OBoE's
 `home_sector`, which it declares and saves but never sets; this port saves it
 as `SPAWNED` (HOME has always held the window's sector here). No draws.
 
+### 65. A non-use object's weight (2026-10-10)
+
+**DECIDED: the original's.** 1997's `item_weight` (ITEMS.CPP:321) counts
+charges for arrows, thrown missiles, bolts and potions, and for a non-use
+object (variety 21) with charges; Exile III's (`1070:094b`) is the same.
+OBoE's `cItem::item_weight` (item.cpp:99) leaves the non-use object out, so a
+stack of them weighs one. A player can tell: Exile III's Lair of the Ursagi
+hands out gold ore until nobody can carry more, and the town sweep found the
+port piling all of it on the first PC where E3 moves on to the next at 84.
+No draws.
+
 ## Agreements worth recording
 
 The catalogue is not only for differences. When the two references **agree**
