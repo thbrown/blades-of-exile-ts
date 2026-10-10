@@ -17430,3 +17430,6 @@ are outdoor spots, which this round didn't change.
   Tinraya's two (already noted at `towns/tinraya.ts`) and Guhkbar's Pit's
   spot 1, which tests (22,7) (`1160:3045`) and opens (4,27). Neither blocks:
   the other branch runs every time.
+- The E3 emulator sweep (`E3EMU_SWEEP=1`) at `74b20be`'s converter: 3128
+  runs, 3128 agree, 0 errors, 0 differ (544 known: groups placed by the
+  party). No outdoor spot blocks or passes where EXILE3.EXE doesn't.
