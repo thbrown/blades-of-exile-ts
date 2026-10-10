@@ -17514,26 +17514,64 @@ each other):
       numbers are centred by their width, the hit sprites' pixels being
       centred at 13.5–14px. DIVERGENCES §63.
 
+### EXILE3.EXE's combat timings, measured (2026-10-10)
+
+`tools/e3convert/emu/timings.py SAVE` runs E3's own `boom_space`
+(`1050:59c2`), `do_missile_anim` (`1098:7034`) and `do_explosion_anim`
+(`1098:7a1b`) on a virtual clock. `Delay(n)` (`1048:024c`) adds 16n ms and a
+synchronous `sndPlaySound` adds its WAV's length. Any other look at the
+clock adds 1 ms, so the busy-waits time themselves. All three are 1997's
+code, line for line. Findings:
+
+- **E3 ships at game speed 1, not 0.** `init_party` sets party+0xc7e (1997's
+  `PSD[306][6]`) to 1; the Preferences dialog moves it. Speed only touches
+  the missile's per-step `Delay(1)` (every 4th step at 1, every 3rd at 2,
+  every step at 3, never at 0), the explosion's frame `Delay(2 × (1 + speed))`,
+  and the monster dwell `pause(speed == 3 ? 9 : speed)`.
+- **A hit** is its sound, synchronous, then `Delay(10)`: a sword (sound 97,
+  162 ms) holds 322 ms, with the sprite up the whole time. The squish
+  (sound 55) is asynchronous, `Delay(12)` + `Delay(10)` = 352 ms.
+- **A missile** holds until its launch sound's `pause_len + 40`: an arrow
+  (12) 450 ms, a Fireball (11) 700 ms, at speeds 0–2; speed 3's per-step
+  delays make a 100-step arrow 1.6 s.
+- **An explosion** draws 11 frames (the sprite on frames 0–7, the damage
+  numbers with it), 64 ms each at speed 1: the blast is up about 0.5 s.
+  **Then it waits, the screen clear, until `snd_len[type] + 100` ms from its
+  start** (1500/1410/1100 for fire/cold/magic, `DS:1f54`): a Fireball's
+  blast holds the game 1.6 s, at every speed. The port has no such tail.
+- **The monster dwell is per action point**, inside the `ap` loop: every
+  step a monster takes is a redraw and `pause(speed)`, 16 ms at speed 1.
+  `pause(8)`, 128 ms, follows an action that resolved.
+
+Against the port at pace 1 (× `PACE_BASELINE` 0.9):
+
+| | E3 (speed 1) | port |
+|---|---|---|
+| sword hit, held | 322 ms | 270 (`BOOM_MS`), visible 405 |
+| squish hit, held | 352 | 443 |
+| arrow flight | 450 | 450 |
+| one-target Fireball flight | 700 | 630 |
+| Fireball blast, visible | ≈ 512 | 765 (`VOLLEY_EXTRA`, `VOLLEY_LINGER_MS`) |
+| Fireball blast, game held | 1612 | 405 |
+| monster step dwell | 16 (144 at speed 3) | 165 (`MONSTER_DWELL_TICKS` 9 + 2) |
+| after an action | 128 | 120 (`ACTION_PAUSE_MS`) |
+| other blocking sounds | 100% of the WAV | 45% (`soundWait`) |
+
+The emulator can't see drawing time on 1997 hardware: every monster step
+redraws the whole terrain, and a missile redraws 60–100 times. Nor can it see
+Windows 3.1/95's 55 ms clock tick, which rounds every `Delay` to whole ticks
+(`Delay(1)` is anywhere up to 55 ms). A video of the original settles both.
+Nothing changed yet: DIVERGENCES §63's ruling is "faster than the originals",
+and the user is comparing against a video first.
+
 **Next session starts here (2026-10-10):**
 
-1. **Measure EXILE3.EXE's own combat timings in the emulator**, to set the
-   play-test knobs against numbers rather than "a touch fast". The user will
-   also try to record the original's combat on video and compare. Plan: hook
-   E3's delay primitive(s) in `tools/e3convert/emu/e3emu.py` (the `Delay`
-   tick wait: `1048:024c` is 16ms a tick; `GetTickCount`/`GetCurrentTime`
-   are already stubbed, a second per look) and log every wait with its
-   caller, then run, from a combat state: a melee hit (`boom_space`,
-   `1050:5d1f` holds `Delay(10)` after its sound), a miss, a death, a
-   fireball (missile flight `do_missile_anim`, then `do_explosion_anim`'s
-   eleven frames), and a monster's turn (its GameSpeed dwell and the
-   `pause(8)` after it acts). Sound lengths are the WAVs'
-   (`public/data/sounds/SNDn.wav`; blocking unless in `ALWAYS_ASYNC`).
-   Report each as ms beside the port's (`BOOM_MS`, `BOOM_LINGER_MS`,
-   `VOLLEY_EXTRA`/`VOLLEY_LINGER_MS`, `MISSILE_MS × MISSILE_EXTRA`,
-   `MONSTER_DWELL_TICKS + MONSTER_DWELL_EXTRA_TICKS`, `ACTION_PAUSE_MS`,
-   `soundWait`; all × `PACE_BASELINE` 0.9 at pace 1). Combat needs E3 in
-   combat mode, which no harness entry point sets up yet: find
-   `start_town_combat`'s address first.
+1. **Set the combat knobs against the measurements above** and the user's
+   video of the original: chiefly whether a Fireball should hold the game
+   for its sound (1.6 s; the port holds 0.4) and whether monster steps
+   should dwell at E3's speed 1 (16 ms plus a redraw) or stay at 165 ms.
+   Misses and deaths are `boom_space` too (a miss's swish is its sound), so
+   the hit row covers them.
 2. **The town sweep** (`E3EMU_TOWN_SWEEP=1`, 9,688 runs, every town) was
    started 2026-10-09 against the code at `2230351` plus the split/`sqrt`
    harness fixes; if its report (`E3EMU_REPORT`) is lost with the session,

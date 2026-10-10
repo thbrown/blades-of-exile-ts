@@ -14,6 +14,7 @@ E3EMU_SWEEP=1 npx vitest run test/e3emu.test.ts -t 'every outdoor spot'   # (abo
 E3EMU_TOWN_SWEEP=1 npx vitest run test/e3emu.test.ts -t 'every town spot' # (E3EMU_TOWNS=12,26 for some)
 E3EMU_CASE=5,14,37,1/1,low npx vitest run test/e3emu.test.ts -t 'one case'
 E3EMU_TOWN_CASE=12,41,49,last,high npx vitest run test/e3emu.test.ts -t 'one town case'
+tools/e3convert/emu/.venv/bin/python tools/e3convert/emu/timings.py SAVE   # combat animation timings
 ```
 
 The test finds the venv by itself (`E3EMU_PYTHON` overrides it) and skips
@@ -54,6 +55,9 @@ when there's no E3 or no emulator.
 - **`spot.py`** runs a batch of cases (JSON on stdin) and prints what the
   player saw, the dice asked, whether the step went through, and the party
   record and the PCs before and after.
+- **`timings.py`** times E3's hit, missile and explosion animations on a
+  virtual clock (each `Delay` and synchronous sound adds its length), at
+  each game speed. PROGRESS.md has the table against the port's.
 - **`test/e3emu.test.ts`** runs each case through the port first (the
   quest runner, from the same save via `applyE3Save`), which says how many
   buttons each dialog has, then through E3 with the same buttons, and
