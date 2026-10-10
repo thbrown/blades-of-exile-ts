@@ -24,7 +24,7 @@
 import { Location } from '../core/location';
 import { GameRng } from '../core/rng';
 import { livingSound } from '../universe/living';
-import { animAt, animBook, paced } from './anim';
+import { animAt, animBook, paced, soundWait } from './anim';
 
 /**
  * sound_lookup (boom_space) — sound type to sound file. A *negative* sound
@@ -49,17 +49,6 @@ export const BOOM_MS = 300;
 export function boomMs(): number {
   return paced(BOOM_MS);
 }
-
-/**
- * What `boom_space` holds a hit for *after its sound*, when the sound
- * blocked: `Delay(10)` (GRAPHICS.CPP:2349; Exile III's `1050:5d1f`), and on
- * Windows a tick is 16ms (GLOBAL.CPP:92; E3's `1048:024c`). The 300ms of
- * `BOOM_MS` is OBoE's WASM build's stand-in *for* the sound, which it can't
- * wait on; native OBoE waits on the sound and adds nothing. Booked on top of
- * a blocking sound, the 300 counted the wait twice: a sword hit took 0.66s
- * against Exile III's 0.55s. DIVERGENCES.md §63.
- */
-export const BOOM_HOLD_MS = 160;
 
 /**
  * `if ((sound == 6) && (fast_bang == 0)) Delay(12)` — the squish (file 55)
@@ -300,14 +289,14 @@ export function boomSpace(
   // free by sleeping through the missile's flight, so `boom_space` isn't even
   // reached until the thing has landed.
   //
-  // **It blocks** (`play_sound(sound_to_play)`, boe.graphics.cpp:1584, after
-  // the sprite is drawn): the sprite stays up while it plays, and the next
-  // blow — a dual-wielder's second weapon — waits for it. So the sound is
-  // heard at the start of the slot and its length is added to it.
+  // **It blocks** in the C++ (`play_sound(sound_to_play)`,
+  // boe.graphics.cpp:1584, after the sprite is drawn): the sprite stays up
+  // while it plays. Here it is heard at the start of the hit's slot, which
+  // holds for `BOOM_MS` whatever its length (below).
   const at = animAt();
   const blocks = file > 0 ? livingSound(file, at) : 0;
   if (type < 0 || type > 6) {
-    if (blocks > 0) animBook(blocks);
+    if (blocks > 0) animBook(soundWait(blocks));
     return;
   }
   screen?.redraw(where);
@@ -316,11 +305,13 @@ export function boomSpace(
   // landing on top of it, and anything waiting on the timeline — the rest of
   // the monster's turn, the party-death announcement — waits for the blast.
   //
-  // With nothing blocking (sounds off, or one not loaded yet) it holds for
-  // `BOOM_MS`, about 1997's own pause with sounds off: `Delay(10)` and then
-  // `GameSpeed * 3 + 4` ticks, 272ms at the default speed.
-  const hold = (soundType === 6 ? paced(SQUISH_HOLD_MS) : 0)
-    + (blocks > 0 ? blocks + paced(BOOM_HOLD_MS) : boomMs());
+  // It holds for `BOOM_MS`, sound or no sound: about 1997's own pause with
+  // sounds off (`Delay(10)` and then `GameSpeed * 3 + 4` ticks, 272ms at the
+  // default speed). Both originals hold it for the whole sound and then
+  // `Delay(10)` (GRAPHICS.CPP:2349; Exile III's `1050:5d1f`), up to 0.6s a
+  // hit; play-testing found fights too slow at that, and the sound starts
+  // with the hit and plays on under the next blow. DIVERGENCES.md §63.
+  const hold = (soundType === 6 ? paced(SQUISH_HOLD_MS) : 0) + boomMs();
   const starts = animBook(hold);
   sink?.({
     where: { ...where }, type, damage, sound: file, starts, expires: starts + hold,

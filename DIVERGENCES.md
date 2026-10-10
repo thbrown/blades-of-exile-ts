@@ -1376,20 +1376,32 @@ asks, so the port never says it outside Exile III (#61). A player can see
 it, so the rule above would follow 1997; it is text only, no draws. Not
 changed for BoE scenarios without a ruling.
 
-### 63. How long a hit stays up (2026-10-09)
+### 63. How long a hit stays up, and how long a sound holds the game (2026-10-09)
 
-**DECIDED: 1997's and Exile III's.** After a hit's sound, both originals'
-`boom_space` holds the sprite for `Delay(10)` (GRAPHICS.CPP:2349; E3's
-`1050:5d1f`), 160ms at 16ms a tick (GLOBAL.CPP:92, E3's `1048:024c`), and
-12 ticks more for the squish (sound type 6); with sounds off, `GameSpeed * 3
-+ 4` ticks more. Native OBoE waits on the sound and adds nothing; OBoE's
-WASM build can't wait on a sound, so it sleeps 300ms instead. #51 made the
-port wait on blocking sounds as both originals do, but kept the WASM 300ms
-on top, which counted the wait twice: a sword hit held for 0.66s against E3's
-0.55s, about 2.4× its old 0.27s, and the play-testers noticed. Now a hit with a
-blocking sound holds for the sound and 160ms (`BOOM_HOLD_MS`, paced), and one
-with nothing blocking for `BOOM_MS` as before, about 1997's sounds-off pause
-at the default speed. Timing only; no draws.
+**DECIDED: faster than both originals, by the user's ruling after
+play-testing.** After a hit's sound, both originals' `boom_space` holds the
+sprite for `Delay(10)` (GRAPHICS.CPP:2349; E3's `1050:5d1f`), 160ms at 16ms a
+tick (GLOBAL.CPP:92, E3's `1048:024c`), and 12 ticks more for the squish
+(sound type 6); with sounds off, `GameSpeed * 3 + 4` ticks more. And every
+sound outside `always_async` blocks until it ends, misses' swishes and death
+cries included. Native OBoE waits on the sound and adds nothing; OBoE's WASM
+build can't wait on a sound, so it sleeps 300ms instead.
+
+#51 made the port block on sounds as both originals do (2026-10-06), and the
+play-testers found fights about twice as slow as before: a sword hit 0.27s →
+0.55s, every miss 0.16s more, every death cry 0.4s. Matching E3's hit exactly
+(sound + 160ms) was still too slow. So:
+
+- **A hit holds for `BOOM_MS`, paced, whatever its sound**: 0.27s at pace 1,
+  about 1997's own pause with sounds off. The sound starts with the hit and
+  plays on under the next blow.
+- **Any other blocking sound holds the game for half its length, paced**
+  (`soundWait`, `SOUND_WAIT_SHARE` in `anim.ts`). That keeps blocking's point
+  (a dual-wielder's two blows, a fireball's death cries, heard in turn) at
+  half the cost, and the `-`/`=` pace keys now reach sound waits too, which
+  they didn't when a wait was the sound's raw length.
+
+Timing only; no draws.
 
 ### 64. Whose script a wandering group runs (2026-10-09)
 

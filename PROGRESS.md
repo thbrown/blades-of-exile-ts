@@ -17487,3 +17487,20 @@ each other):
 - A refused town step turns the party in the port (OBoE sets `direction`
   before its blocked test); 1997 and E3 turn it only on a step that goes
   through. The facing decides where the PCs stand when a fight starts.
+
+### Play-test notes, eighteenth round (2026-10-09)
+
+- [x] **"Combat is still too slow."** Since the blocking sounds (2026-10-06)
+      a hit held for its whole sound and 160ms (0.41–0.57s, against 0.27s
+      before), each miss waited for its 0.16s swish, and each death cry for
+      0.4s; the `-`/`=` pace keys didn't reach any of it, a wait being the
+      sound's raw length. Now a hit holds for `BOOM_MS` (paced) whatever its
+      sound, which plays on under the next blow, and any other blocking sound
+      holds the game for half its length, paced (`soundWait`,
+      `SOUND_WAIT_SHARE`). The user's ruling, DIVERGENCES §63, rewritten.
+- [x] **"Stinking Cloud should be 2×2, not 3×3."** It is 3×3 in both
+      originals, as the port has it: 1997's `start_spell_targeting` gives
+      mage spell 15 `square`, and EXILE3.EXE's (`1018:c3d4`, its switch at
+      `cs:c4f6`) puts 15 with 18, 22, 119, 126 and 141 on the 3×3 at
+      `886a:0736`; the 2×2 (`small_square`) is Sleep Cloud's, spell 19,
+      alone. E3's own spell list confirms 15 is Stinking Cloud. No change.

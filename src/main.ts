@@ -5,7 +5,7 @@
 
 import { setBugFixes } from './game/bugFixes';
 import { registerServiceWorker } from './platform/pwa';
-import { animAt, animBook, animSchedule, combatPace, setCombatPace } from './game/anim';
+import { animAt, animBook, animSchedule, combatPace, setCombatPace, soundWait } from './game/anim';
 import { useItem } from './game/itemUse';
 import { dropItemAt, handleDropItem, handleGiveItem } from './game/giveDrop';
 import {
@@ -795,7 +795,7 @@ async function main(): Promise<void> {
   // game does next — the next blow's sound, the next death cry — waits for it.
   const playSound = (which: number, at?: number): number => {
     const blocks = sound.blockingMs(which);
-    const when = at ?? (blocks > 0 ? animBook(blocks) : animAt());
+    const when = at ?? (blocks > 0 ? animBook(soundWait(blocks)) : animAt());
     animSchedule(() => sound.play(which), when);
     return blocks;
   };

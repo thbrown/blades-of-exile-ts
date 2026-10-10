@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  BOOM_HOLD_MS, BOOM_MS, Boom, boomMs, boomSpace, runBoomAnim, setBoomScreen, setBoomSink, startBoomAnim,
+  BOOM_MS, Boom, boomMs, boomSpace, runBoomAnim, setBoomScreen, setBoomSink, startBoomAnim,
 } from '../src/game/booms';
-import { paced } from '../src/game/anim';
+import { paced, soundWait } from '../src/game/anim';
 import { GameRng } from '../src/core/rng';
 import { setLivingSound } from '../src/universe/living';
 
@@ -68,12 +68,12 @@ describe('boom_space', () => {
     expect(booms[0]!.damage).toBe(12);
   });
 
-  it('holds a hit for its blocking sound and Delay(10), not the WASM stand-in on top', () => {
+  it('holds a hit for BOOM_MS, paced, however long its sound (DIVERGENCES §63)', () => {
     const booms: Boom[] = [];
     setBoomSink((b) => booms.push(b));
     setBoomScreen(null);
     try {
-      // A sword's hit (70) that blocks for 390ms: the sound, then 160ms.
+      // A sword's hit (70), whose sound is 390ms: it plays on under the next blow.
       setLivingSound(() => 390);
       boomSpace({ x: 1, y: 1 }, 3, 5, 2);
       // Nothing blocking (sounds off): BOOM_MS, about 1997's pause then.
@@ -83,9 +83,14 @@ describe('boom_space', () => {
       setBoomSink(null);
       setLivingSound(null);
     }
-    expect(booms[0]!.expires - booms[0]!.starts).toBeCloseTo(390 + paced(BOOM_HOLD_MS));
+    expect(booms[0]!.expires - booms[0]!.starts).toBeCloseTo(boomMs());
     expect(booms[1]!.expires - booms[1]!.starts).toBeCloseTo(boomMs());
-    expect(paced(BOOM_HOLD_MS)).toBeLessThan(BOOM_MS);
+    expect(boomMs()).toBeCloseTo(paced(BOOM_MS));
+  });
+
+  it('waits for half a blocking sound, at the pace (DIVERGENCES §63)', () => {
+    expect(soundWait(400)).toBeCloseTo(paced(200));
+    expect(soundWait(0)).toBe(0);
   });
 
   it('refuses a graphic outside the seven the sheet has', async () => {

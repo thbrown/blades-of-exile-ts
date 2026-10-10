@@ -72,6 +72,21 @@ export function setCombatPace(value: number): void {
   pace = Math.max(0.1, Math.min(10, value));
 }
 
+/**
+ * How much of a blocking sound the game waits for: **half of it, at the
+ * current pace.** Both originals wait for the whole sound (`livingSound`);
+ * at that, a fight with sounds on ran at about half the speed play-testing
+ * had settled on (2026-10-09), and the pace keys couldn't touch it. Half
+ * keeps what blocking is for (a dual-wielder's two blows, a volley's death
+ * cries, heard one after another rather than all at once) and the rest of
+ * each sound plays on under the next thing. DIVERGENCES.md §63.
+ */
+export const SOUND_WAIT_SHARE = 0.5;
+
+export function soundWait(soundMs: number): number {
+  return soundMs > 0 ? paced(soundMs * SOUND_WAIT_SHARE) : 0;
+}
+
 /** A faithful duration in ms, at the current pace. */
 export function paced(ms: number): number {
   return ms * pace * PACE_BASELINE;

@@ -14,7 +14,7 @@ import { Scenario } from '../src/data/scenario';
 import { Spell } from '../src/data/spell';
 import { TerSpec } from '../src/data/terrain';
 import { animClear } from '../src/game/anim';
-import { boomSpace, setBoomSink, type Boom } from '../src/game/booms';
+import { boomMs, boomSpace, setBoomSink, type Boom } from '../src/game/booms';
 import { GameSession } from '../src/game/session';
 import { autoKeys } from '../src/dialogs/autoKeys';
 import { loadScenario } from '../src/fileio/loadScenario';
@@ -69,7 +69,7 @@ describe('the fight', () => {
    * a blocking sound books its length on the animation timeline, and a hit's
    * sprite stays up for its sound and then its own pause.
    */
-  it("holds a hit's slot for its blocking sound", () => {
+  it("gives each hit a slot of its own, the second blow after the first", () => {
     const booms: Boom[] = [];
     setBoomSink((b) => { booms.push(b); });
     setLivingSound(() => 300);
@@ -82,9 +82,11 @@ describe('the fight', () => {
       animClear();
     }
     expect(booms.length).toBe(2);
-    // The second blow starts once the first's sound and pause are over.
+    // The second blow starts once the first's slot is over. The slot is
+    // BOOM_MS (paced), not the sound's length: the sound plays on under the
+    // next blow (DIVERGENCES §63, 2026-10-09).
     expect(booms[1]!.starts).toBeGreaterThanOrEqual(booms[0]!.expires);
-    expect(booms[0]!.expires - booms[0]!.starts).toBeGreaterThan(300);
+    expect(booms[0]!.expires - booms[0]!.starts).toBeCloseTo(boomMs());
   });
 
   /**
